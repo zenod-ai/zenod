@@ -21,6 +21,14 @@ export interface ManagedAiTerminalReceipt {
   completedAt: string;
 }
 
+export type ManagedAiAdmissionNoticeKind = "paused" | "terminal";
+export type ManagedAiAdmissionNoticeState = "pending" | "sending" | "sent" | "failed";
+
+export interface ManagedAiAdmissionNotice {
+  state: ManagedAiAdmissionNoticeState;
+  updatedAt: number;
+}
+
 export interface ManagedAiAdmissionJob {
   id: string;
   tenantId: string;
@@ -34,6 +42,8 @@ export interface ManagedAiAdmissionJob {
   attempts: number;
   leaseUntil: number | null;
   terminalReceipt: ManagedAiTerminalReceipt | null;
+  pausedNotice: ManagedAiAdmissionNotice | null;
+  terminalNotice: ManagedAiAdmissionNotice | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -63,6 +73,10 @@ interface Row {
   lease_owner: string | null;
   lease_until: number | null;
   terminal_receipt: string | null;
+  paused_notice_state: ManagedAiAdmissionNoticeState | null;
+  paused_notice_updated_at: number | null;
+  terminal_notice_state: ManagedAiAdmissionNoticeState | null;
+  terminal_notice_updated_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -82,6 +96,12 @@ function job(row: Row): ManagedAiAdmissionJob {
     leaseUntil: row.lease_until,
     terminalReceipt: row.terminal_receipt
       ? JSON.parse(row.terminal_receipt) as ManagedAiTerminalReceipt
+      : null,
+    pausedNotice: row.paused_notice_state && row.paused_notice_updated_at !== null
+      ? { state: row.paused_notice_state, updatedAt: row.paused_notice_updated_at }
+      : null,
+    terminalNotice: row.terminal_notice_state && row.terminal_notice_updated_at !== null
+      ? { state: row.terminal_notice_state, updatedAt: row.terminal_notice_updated_at }
       : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -111,6 +131,7 @@ export class CustomerManagedAiAdmissionQueue {
     path: string,
     private readonly now: () => number = Date.now,
     private readonly afterProcessorBeforeReceipt?: () => void | Promise<void>,
+    private readonly beforeJournal?: () => void,
   ) {
     this.db = openZenodSqlite(path);
     this.db.exec(`
@@ -129,6 +150,10 @@ export class CustomerManagedAiAdmissionQueue {
         lease_owner TEXT,
         lease_until INTEGER,
         terminal_receipt TEXT,
+        paused_notice_state TEXT,
+        paused_notice_updated_at INTEGER,
+        terminal_notice_state TEXT,
+        terminal_notice_updated_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         UNIQUE(tenant_id, idempotency_key)
@@ -145,6 +170,18 @@ export class CustomerManagedAiAdmissionQueue {
     }
     if (!columns.has("lease_until")) {
       this.db.exec("ALTER TABLE customer_managed_ai_admission ADD COLUMN lease_until INTEGER");
+    }
+    if (!columns.has("paused_notice_state")) {
+      this.db.exec("ALTER TABLE customer_managed_ai_admission ADD COLUMN paused_notice_state TEXT");
+    }
+    if (!columns.has("paused_notice_updated_at")) {
+      this.db.exec("ALTER TABLE customer_managed_ai_admission ADD COLUMN paused_notice_updated_at INTEGER");
+    }
+    if (!columns.has("terminal_notice_state")) {
+      this.db.exec("ALTER TABLE customer_managed_ai_admission ADD COLUMN terminal_notice_state TEXT");
+    }
+    if (!columns.has("terminal_notice_updated_at")) {
+      this.db.exec("ALTER TABLE customer_managed_ai_admission ADD COLUMN terminal_notice_updated_at INTEGER");
     }
   }
 
@@ -256,19 +293,58 @@ export class CustomerManagedAiAdmissionQueue {
     return this.row(id)?.raw_body ?? null;
   }
 
+  noticeCandidates(): ManagedAiAdmissionJob[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM customer_managed_ai_admission
+       WHERE path='/internal/telegram'
+         AND (paused_notice_state='pending' OR terminal_notice_state='pending')
+       ORDER BY created_at ASC`,
+    ).all() as unknown as Row[];
+    return rows.map(job);
+  }
+
+  /**
+   * Atomically claims a provider delivery intent. A claim is deliberately
+   * attempt-once: if a process dies after Telegram accepts the message but
+   * before we persist `sent`, restart leaves `sending` untouched rather than
+   * risking a duplicate customer notice.
+   */
+  claimNotice(id: string, kind: ManagedAiAdmissionNoticeKind): ManagedAiAdmissionJob | null {
+    const prefix = kind === "paused" ? "paused" : "terminal";
+    const result = this.db.prepare(
+      `UPDATE customer_managed_ai_admission
+       SET ${prefix}_notice_state='sending', ${prefix}_notice_updated_at=?, updated_at=?
+       WHERE id=? AND ${prefix}_notice_state='pending'`,
+    ).run(this.now(), this.now(), id);
+    return Number(result.changes) === 1 ? this.get(id) : null;
+  }
+
+  completeNotice(id: string, kind: ManagedAiAdmissionNoticeKind, sent: boolean): ManagedAiAdmissionJob {
+    const prefix = kind === "paused" ? "paused" : "terminal";
+    this.db.prepare(
+      `UPDATE customer_managed_ai_admission
+       SET ${prefix}_notice_state=?, ${prefix}_notice_updated_at=?, updated_at=?
+       WHERE id=? AND ${prefix}_notice_state='sending'`,
+    ).run(sent ? "sent" : "failed", this.now(), this.now(), id);
+    const stored = this.get(id);
+    if (!stored) throw new Error("managed AI admission job disappeared during notice delivery");
+    return stored;
+  }
+
   close(): void {
     this.db.close();
   }
 
   private journal(input: ManagedAiAdmissionInput, usage: CustomerUsageProjection): ManagedAiAdmissionJob {
+    this.beforeJournal?.();
     const now = this.now();
     const initial: ManagedAiAdmissionStatus =
       usage.state === "paused" ? "paused_at_cap" : usage.state === "unavailable" ? "waiting_for_usage" : "queued";
     this.db.prepare(
       `INSERT OR IGNORE INTO customer_managed_ai_admission
        (id, tenant_id, idempotency_key, kind, method, path, content_type, raw_body,
-        status, resets_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, resets_at, paused_notice_state, paused_notice_updated_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       randomUUID(),
       input.tenantId,
@@ -280,6 +356,8 @@ export class CustomerManagedAiAdmissionQueue {
       Buffer.from(input.raw),
       initial,
       usage.resetsAt,
+      initial === "paused_at_cap" && input.path === "/internal/telegram" ? "pending" : null,
+      initial === "paused_at_cap" && input.path === "/internal/telegram" ? now : null,
       now,
       now,
     );
@@ -329,21 +407,34 @@ export class CustomerManagedAiAdmissionQueue {
   ): ManagedAiAdmissionJob {
     this.db.prepare(
       `UPDATE customer_managed_ai_admission
-       SET status=?, resets_at=?, lease_owner=NULL, lease_until=NULL, updated_at=?
+       SET status=?, resets_at=?, lease_owner=NULL, lease_until=NULL,
+           paused_notice_state=CASE
+             WHEN ?='paused_at_cap' AND path='/internal/telegram' AND paused_notice_state IS NULL THEN 'pending'
+             ELSE paused_notice_state
+           END,
+           paused_notice_updated_at=CASE
+             WHEN ?='paused_at_cap' AND path='/internal/telegram' AND paused_notice_state IS NULL THEN ?
+             ELSE paused_notice_updated_at
+           END,
+           updated_at=?
        WHERE id=? AND terminal_receipt IS NULL
          AND (status!='processing' OR lease_owner=? OR lease_until IS NULL OR lease_until<=?)`,
-    ).run(status, resetsAt, this.now(), id, this.ownerId, this.now());
+    ).run(status, resetsAt, status, status, this.now(), this.now(), id, this.ownerId, this.now());
     return this.get(id)!;
   }
 
   private completeOnce(id: string, receipt: ManagedAiTerminalReceipt): ManagedAiAdmissionJob {
     const result = this.db.prepare(
       `UPDATE customer_managed_ai_admission
-       SET status=?, terminal_receipt=?, lease_owner=NULL, lease_until=NULL, updated_at=?
+       SET status=?, terminal_receipt=?, lease_owner=NULL, lease_until=NULL,
+           terminal_notice_state=CASE WHEN path='/internal/telegram' THEN 'pending' ELSE terminal_notice_state END,
+           terminal_notice_updated_at=CASE WHEN path='/internal/telegram' THEN ? ELSE terminal_notice_updated_at END,
+           updated_at=?
        WHERE id=? AND terminal_receipt IS NULL AND status='processing' AND lease_owner=?`,
     ).run(
       receipt.state === "completed" ? "done" : "error",
       JSON.stringify(receipt),
+      this.now(),
       this.now(),
       id,
       this.ownerId,

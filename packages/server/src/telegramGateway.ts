@@ -236,9 +236,13 @@ export class TelegramGateway {
     }
     this.botUsername = me.username ?? null;
     this.state = "connected";
-    // Skip any backlog accumulated while we were down: advance the offset past
-    // the newest pending update so a restart doesn't reply to stale messages.
-    await this.primeOffset();
+    // Self-hosted installations retain the established "skip stale backlog"
+    // startup policy. Hosted managed mode must begin at Telegram's durable
+    // provider acknowledgement instead: sending a positive offset is what
+    // acknowledges older updates, and we only advance after SQLite admission.
+    if (!(this.options.managedInboundHandler && (this.options.managedInboundEnabled?.() ?? true))) {
+      await this.primeOffset();
+    }
     this.running = true;
     this.abort = new AbortController();
     this.loop = this.pollLoop();
@@ -535,9 +539,23 @@ export class TelegramGateway {
       conversationKey: normalizeTelegramId(input.chatId) || input.chatId,
     });
     if (!reply.text.trim()) throw new Error("managed Telegram task returned no reply");
-    await this.sendReply(chatId, reply.text);
-    this.spawnPeerJobPoller(reply, chatId);
     return { replyText: reply.text };
+  }
+
+  /** Deliver a notice whose durable admission intent was already claimed. */
+  async sendManagedNotice(chatId: string, text: string): Promise<void> {
+    const numericChatId = Number(chatId);
+    if (!Number.isFinite(numericChatId) || !text.trim()) {
+      throw new Error("managed Telegram notice requires a valid chat and text");
+    }
+    // Admission notices use one plain Bot API call. The general rich-reply
+    // fallback can make two provider attempts after an ambiguous rich failure,
+    // which is unsuitable for an attempt-once durable delivery intent.
+    const plain = linkifyGithubRefs(text, { markdown: false });
+    const bounded = plain.length <= PLAIN_MESSAGE_LIMIT
+      ? plain
+      : `${plain.slice(0, PLAIN_MESSAGE_LIMIT - 1)}…`;
+    await this.callApi("sendMessage", { chat_id: numericChatId, text: bounded });
   }
 
   private async handlePortedInbound(message: TelegramMessage): Promise<void> {

@@ -31,6 +31,8 @@ import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
 import type {
+  ManagedAiAdmissionJob,
+  ManagedAiAdmissionNoticeKind,
   ManagedAiAdmissionInput,
   ManagedAiRawKind,
   ManagedAiTerminalReceipt,
@@ -276,6 +278,14 @@ const HOSTED_MANAGED_SETTINGS_READS = new Set([
   "GET /api/transcription/openrouter-models",
 ]);
 
+const HOSTED_INTERNAL_CONTROL_PREFIXES = [
+  "/api/ring",
+  "/api/phylax",
+  "/api/team",
+  "/api/peers",
+  "/internal",
+] as const;
+
 const HOSTED_MANAGED_SETTING_KEYS = new Set([
   "provider",
   "anthropic_api_key",
@@ -292,9 +302,15 @@ const HOSTED_MANAGED_SETTING_KEYS = new Set([
   "whisper_model",
 ]);
 
-export function hostedCapabilityViolation(method: string, path: string): "raw_usage" | "managed_settings" | null {
+export function hostedCapabilityViolation(
+  method: string,
+  path: string,
+): "raw_usage" | "managed_settings" | "internal_controls" | null {
   const normalizedMethod = method.toUpperCase();
   if (path === "/api/usage" || path.startsWith("/api/usage/")) return "raw_usage";
+  if (HOSTED_INTERNAL_CONTROL_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+    return "internal_controls";
+  }
   const operation = `${normalizedMethod} ${path}`;
   return HOSTED_MANAGED_SETTINGS_MUTATIONS.has(operation) || HOSTED_MANAGED_SETTINGS_READS.has(operation)
     ? "managed_settings"
@@ -630,13 +646,66 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const response = await managedAiOutbox.execute(input, () => dispatchManagedInput(input));
     return { value: response, receipt: await terminalReceipt(response) };
   };
+  const managedTelegramNoticeText = (
+    job: ManagedAiAdmissionJob,
+    kind: ManagedAiAdmissionNoticeKind,
+  ): string => {
+    if (kind === "paused") {
+      return "I saved your message and queued it. I’ll process it when included AI usage is available again. Nothing was lost.";
+    }
+    if (job.terminalReceipt?.state === "completed") {
+      try {
+        const body = JSON.parse(job.terminalReceipt.body) as { replyText?: unknown };
+        if (typeof body.replyText === "string" && body.replyText.trim()) return body.replyText;
+      } catch {
+        // A malformed downstream receipt is not customer-safe success truth.
+      }
+    }
+    return "⚠️ I saved your message, but could not finish processing it. Please try again later.";
+  };
+  const deliverManagedTelegramNotice = async (
+    job: ManagedAiAdmissionJob,
+    kind: ManagedAiAdmissionNoticeKind,
+  ): Promise<void> => {
+    const claimed = customer.managedAiAdmissions.claimNotice(job.id, kind);
+    if (!claimed) return;
+    try {
+      const raw = customer.managedAiAdmissions.raw(job.id);
+      if (!raw) throw new Error("managed Telegram raw evidence disappeared");
+      const telegramInput = JSON.parse(Buffer.from(raw).toString("utf8")) as TelegramManagedInbound;
+      const runtime = runtimes.get(job.tenantId) ??
+        runtimes.forTenantStorage(job.tenantId, storage.forTenant({ id: job.tenantId }));
+      await runtime.telegram.sendManagedNotice(
+        telegramInput.chatId,
+        managedTelegramNoticeText(claimed, kind),
+      );
+      customer.managedAiAdmissions.completeNotice(job.id, kind, true);
+    } catch (error) {
+      customer.managedAiAdmissions.completeNotice(job.id, kind, false);
+      console.error(
+        `[managed-ai] Telegram ${kind} notice failed for job ${job.id}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  };
+  const reconcileManagedTelegramNotices = async (
+    jobs: ManagedAiAdmissionJob[] = customer.managedAiAdmissions.noticeCandidates(),
+  ): Promise<void> => {
+    for (const job of jobs) {
+      if (job.pausedNotice?.state === "pending") await deliverManagedTelegramNotice(job, "paused");
+      const refreshed = customer.managedAiAdmissions.get(job.id);
+      if (refreshed?.terminalNotice?.state === "pending") {
+        await deliverManagedTelegramNotice(refreshed, "terminal");
+      }
+    }
+  };
   managedTelegramAdmission = async (tenantId, telegramInput) => {
     const account = customer.accounts.resolveForTenantId(tenantId);
     if (!account?.tenant_id || (account.subscription_status !== "active" && account.subscription_status !== "past_due")) {
       throw new Error("Hosted Telegram tenant is not entitled");
     }
     const raw = new Uint8Array(Buffer.from(JSON.stringify(telegramInput), "utf8"));
-    await customer.managedAiAdmissions.submit(
+    const outcome = await customer.managedAiAdmissions.submit(
       {
         tenantId,
         idempotencyKey: `telegram:${telegramInput.chatId}:${telegramInput.messageId}`,
@@ -649,16 +718,24 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       await customer.usageForAccount(account),
       processManagedInput,
     );
+    await reconcileManagedTelegramNotices([outcome.job]);
   };
-  const resumeManagedAiAdmissions = async (): Promise<number> => customer.managedAiAdmissions.resume(
-    async (tenantId) => {
-      const account = customer.accounts.resolveForTenantId(tenantId);
-      return account
-        ? customer.usageForAccount(account)
-        : { percentageUsed: null, state: "unavailable", resetsAt: null };
-    },
-    processManagedInput,
-  );
+  const resumeManagedAiAdmissions = async (): Promise<number> => {
+    // Preserve customer-visible ordering: a queued/cap notice is reconciled
+    // before the terminal result generated by this resume pass.
+    await reconcileManagedTelegramNotices();
+    const completed = await customer.managedAiAdmissions.resume(
+      async (tenantId) => {
+        const account = customer.accounts.resolveForTenantId(tenantId);
+        return account
+          ? customer.usageForAccount(account)
+          : { percentageUsed: null, state: "unavailable", resetsAt: null };
+      },
+      processManagedInput,
+    );
+    await reconcileManagedTelegramNotices();
+    return completed;
+  };
   const admissionResumeRaw = Number(env.ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS);
   const admissionResumeMs = Number.isFinite(admissionResumeRaw) && admissionResumeRaw > 0
     ? admissionResumeRaw
@@ -763,7 +840,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         : null;
       return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
     }
-    const hostedAccount = session
+    const isCustomerAdmin = Boolean(
+      session && options.customerAdmin &&
+      session.login.toLowerCase() === options.customerAdmin.githubLogin.toLowerCase(),
+    );
+    const hostedAccount = !isCustomerAdmin && session
       ? customer.accounts.resolveForUser(session.github_id)
       : directRecord
         ? customer.accounts.resolveForTenantId(directRecord.tenant.id)

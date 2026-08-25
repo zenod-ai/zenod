@@ -47,6 +47,8 @@ export interface CustomerLayerOptions {
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
   managedAiProvider?: ManagedAiProviderClient;
   product?: CustomerProductConfig;
+  /** Test-only fault seam proving Telegram does not acknowledge before SQLite admission. */
+  managedAiAdmissionBeforeJournal?: () => void;
 }
 
 export interface CustomerLayerHost {
@@ -137,6 +139,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   });
   const managedAiAdmissions = new CustomerManagedAiAdmissionQueue(
     join(host.dataDir, "customer-managed-ai-admission.sqlite"),
+    Date.now,
+    undefined,
+    options.managedAiAdmissionBeforeJournal,
   );
   const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
     await bindCheckout(account, session);

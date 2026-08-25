@@ -41,13 +41,69 @@ describe("managed AI raw-evidence admission", () => {
         const outcome = await queue.submit(input(kind), paused, processor);
         expect(outcome).toMatchObject({
           state: "paused_at_cap",
-          job: { kind, status: "paused_at_cap", resetsAt: paused.resetsAt, attempts: 0 },
+          job: {
+            kind,
+            status: "paused_at_cap",
+            resetsAt: paused.resetsAt,
+            attempts: 0,
+          },
         });
         expect(Buffer.from(queue.raw(outcome.job.id)!).toString()).toBe(`${kind}-raw-evidence`);
       }
       expect(processor).not.toHaveBeenCalled();
     } finally {
       queue.close();
+    }
+  });
+
+  it("persists and atomically claims Telegram paused and terminal notice intents", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-managed-admission-notices-"));
+    dirs.push(dir);
+    const path = join(dir, "admission.sqlite");
+    const telegramInput = {
+      ...input("text", "telegram:42:7"),
+      path: "/internal/telegram",
+      raw: Buffer.from(JSON.stringify({ chatId: "42", messageId: "7", text: "remember this" })),
+    };
+    const now = Date.parse("2026-09-02T00:00:00.000Z");
+    const queue = new CustomerManagedAiAdmissionQueue(path, () => now);
+    const pausedOutcome = await queue.submit(telegramInput, paused, vi.fn());
+    expect(pausedOutcome.job.pausedNotice).toMatchObject({ state: "pending" });
+    expect(queue.claimNotice(pausedOutcome.job.id, "paused")?.pausedNotice).toMatchObject({ state: "sending" });
+    expect(queue.claimNotice(pausedOutcome.job.id, "paused")).toBeNull();
+    expect(queue.completeNotice(pausedOutcome.job.id, "paused", true).pausedNotice).toMatchObject({ state: "sent" });
+
+    await queue.resume(async () => normal, async () => ({
+      value: { replyText: "stored" },
+      receipt: {
+        state: "completed" as const,
+        statusCode: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ replyText: "stored" }),
+        completedAt: new Date().toISOString(),
+      },
+    }));
+    const completed = queue.get(pausedOutcome.job.id)!;
+    expect(completed.terminalNotice).toMatchObject({ state: "pending" });
+    queue.close();
+
+    const restarted = new CustomerManagedAiAdmissionQueue(path);
+    try {
+      expect(restarted.noticeCandidates()).toHaveLength(1);
+      expect(restarted.claimNotice(completed.id, "terminal")?.terminalNotice).toMatchObject({ state: "sending" });
+      // Ambiguous process death remains sending across restart and is never
+      // claimed again, preventing a duplicate Telegram message.
+      restarted.close();
+      const secondRestart = new CustomerManagedAiAdmissionQueue(path);
+      try {
+        expect(secondRestart.claimNotice(completed.id, "terminal")).toBeNull();
+        expect(secondRestart.noticeCandidates()).toHaveLength(0);
+      } finally {
+        secondRestart.close();
+      }
+    } catch (error) {
+      try { restarted.close(); } catch {}
+      throw error;
     }
   });
 

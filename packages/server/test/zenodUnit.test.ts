@@ -438,6 +438,36 @@ describe("Zenod chassis unit", () => {
           expect(denied.status, path).toBe(403);
           expect(await denied.json()).toEqual({ error: "forbidden", capability: "managed_settings" });
         }
+        for (const path of [
+          "/api/ring/status",
+          "/api/phylax/status",
+          "/api/team",
+          "/api/peers",
+          "/api/peers/codex/skill",
+          "/internal",
+          "/internal/diagnostics",
+        ]) {
+          const denied = await unit.app.request(path, { headers });
+          expect(denied.status, path).toBe(403);
+          expect(await denied.json()).toEqual({ error: "forbidden", capability: "internal_controls" });
+        }
+        for (const [method, path] of [
+          ["PUT", "/api/ring/config"],
+          ["POST", "/api/ring/route-test"],
+          ["PUT", "/api/phylax/config"],
+          ["POST", "/api/team/disable"],
+          ["PUT", "/api/peers"],
+          ["POST", "/api/peers/refresh"],
+          ["POST", "/internal/reconcile"],
+        ] as const) {
+          const denied = await unit.app.request(path, {
+            method,
+            headers: { ...headers, "content-type": "application/json" },
+            body: "{}",
+          });
+          expect(denied.status, `${method} ${path}`).toBe(403);
+          expect(await denied.json()).toEqual({ error: "forbidden", capability: "internal_controls" });
+        }
       }
       const timelineRead = await unit.app.request("/mcp/customer-token", {
         method: "POST",
@@ -453,6 +483,9 @@ describe("Zenod chassis unit", () => {
       expect(await selfHostedSettings.json()).toMatchObject({
         settings: { provider: null, openrouter_api_key: expect.stringContaining("••••") },
       });
+      expect((await unit.app.request("/api/ring/status", {
+        headers: { authorization: "Bearer selfhost-token" },
+      })).status).toBe(200);
       expect((await unit.app.request("/api/telegram/settings", {
         method: "PUT",
         headers: { authorization: "Bearer customer-token", "content-type": "application/json" },
@@ -703,6 +736,32 @@ describe("Zenod chassis unit", () => {
         "github-42",
         unit.storage.forTenant({ id: "github-42" }),
       );
+      hostedRuntime.settings.setTelegramSettings({
+        botToken: "TEST:HOSTED",
+        allowedUsers: ["42"],
+        enabled: false,
+        rich: true,
+      });
+      const telegramMessages: string[] = [];
+      const telegramFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const method = String(input).split("/").pop();
+        const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
+        if (method === "sendRichMessage") {
+          telegramMessages.push(String((body.rich_message as { markdown?: unknown })?.markdown ?? ""));
+        } else if (method === "sendMessage") {
+          telegramMessages.push(String(body.text ?? ""));
+        }
+        return new Response(JSON.stringify({ ok: true, result: { message_id: telegramMessages.length || 1 } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as unknown as typeof fetch;
+      (hostedRuntime.telegram as unknown as { options: { fetchImpl?: typeof fetch } }).options.fetchImpl = telegramFetch;
+      vi.stubEnv("ZENOD_WHISPER_FAKE_TRANSCRIPT", "transcribed managed audio");
+      const getManagedEngine = vi.spyOn(hostedRuntime, "getEngine").mockResolvedValue({
+        handleTasking: async (input: { text: string }) => ({ text: `managed Telegram reply: ${input.text}`, actions: [] }),
+        describeImage: async () => "managed image description",
+      } as unknown as Awaited<ReturnType<typeof hostedRuntime.getEngine>>);
       const managedTelegramInbound = (hostedRuntime.telegram as unknown as {
         options: { managedInboundHandler?: (input: {
           kind: "text" | "audio" | "image";
@@ -738,7 +797,13 @@ describe("Zenod chassis unit", () => {
           "github-42",
           `telegram:42:${messageId}`,
         );
-        expect(telegramJob).toMatchObject({ kind, status: "paused_at_cap", attempts: 0 });
+        expect(telegramJob).toMatchObject({
+          kind,
+          status: "paused_at_cap",
+          attempts: 0,
+          pausedNotice: { state: "sent" },
+          terminalNotice: null,
+        });
         telegramJobs.push(telegramJob!.id);
         expect(Buffer.from(unit.customerManagedAiAdmissions.raw(telegramJob!.id)!).toString("utf8"))
           .toContain(kind === "text" ? "remember from Telegram" : Buffer.from(`raw-${kind}`).toString("base64"));
@@ -754,7 +819,12 @@ describe("Zenod chassis unit", () => {
       };
       await managedTelegramInbound!(duplicateTelegramText);
       expect(unit.customerManagedAiAdmissions.getByIdempotencyKey("github-42", "telegram:42:tg-text"))
-        .toMatchObject({ id: telegramJobs[0], attempts: 0, terminalReceipt: null });
+        .toMatchObject({ id: telegramJobs[0], attempts: 0, terminalReceipt: null, pausedNotice: { state: "sent" } });
+      expect(telegramMessages).toEqual([
+        expect.stringContaining("saved your message and queued it"),
+        expect.stringContaining("saved your message and queued it"),
+        expect.stringContaining("saved your message and queued it"),
+      ]);
       const pausedJob = await unit.app.request(`/api/customer-managed-ai/jobs/${text.job.id}`, { headers: { cookie } });
       expect(await pausedJob.json()).toMatchObject({ job: { id: text.job.id, terminalReceipt: null } });
       const bearerPausedJob = await unit.app.request(`/api/customer-managed-ai/jobs/${text.job.id}`, {
@@ -770,16 +840,51 @@ describe("Zenod chassis unit", () => {
       expect(await audioJob.json()).toMatchObject({ job: { status: "error", attempts: 1, terminalReceipt: { state: "failed" } } });
       for (const telegramJobId of telegramJobs) {
         expect(unit.customerManagedAiAdmissions.get(telegramJobId)).toMatchObject({
-          status: "error",
+          status: "done",
           attempts: 1,
-          terminalReceipt: { state: "failed", statusCode: 503 },
+          terminalReceipt: { state: "completed", statusCode: 200 },
+          pausedNotice: { state: "sent" },
+          terminalNotice: { state: "sent" },
         });
       }
+      expect(telegramMessages).toHaveLength(6);
+      expect(telegramMessages.slice(3)).toEqual([
+        expect.stringContaining("managed Telegram reply: remember from Telegram"),
+        expect.stringContaining("managed Telegram reply: transcribed managed audio"),
+        expect.stringContaining("managed Telegram reply: Telegram image from @octocat"),
+      ]);
       await managedTelegramInbound!(duplicateTelegramText);
       expect(unit.customerManagedAiAdmissions.get(telegramJobs[0]!)).toMatchObject({
         attempts: 1,
-        terminalReceipt: { state: "failed", statusCode: 503 },
+        terminalReceipt: { state: "completed", statusCode: 200 },
+        terminalNotice: { state: "sent" },
       });
+      expect(telegramMessages).toHaveLength(6);
+
+      getManagedEngine.mockRejectedValueOnce(new Error("private provider detail must not escape"));
+      const failedTelegramInput = {
+        ...duplicateTelegramText,
+        messageId: "tg-failed",
+        updateId: "tg-failed",
+        text: "this processing attempt fails",
+      };
+      await managedTelegramInbound!(failedTelegramInput);
+      const failedTelegramJob = unit.customerManagedAiAdmissions.getByIdempotencyKey(
+        "github-42",
+        "telegram:42:tg-failed",
+      );
+      expect(failedTelegramJob).toMatchObject({
+        status: "error",
+        attempts: 1,
+        terminalReceipt: { state: "failed", statusCode: 503 },
+        terminalNotice: { state: "sent" },
+      });
+      expect(telegramMessages.at(-1)).toBe(
+        "⚠️ I saved your message, but could not finish processing it. Please try again later.",
+      );
+      expect(telegramMessages.at(-1)).not.toContain("private provider detail");
+      await managedTelegramInbound!(failedTelegramInput);
+      expect(telegramMessages).toHaveLength(7);
 
       const replay = await unit.app.request("/api/chat", {
         method: "POST",
@@ -789,6 +894,7 @@ describe("Zenod chassis unit", () => {
       expect(replay.status).toBe(200);
       expect(await replay.json()).toMatchObject({ text: "managed reply" });
     } finally {
+      vi.unstubAllEnvs();
       await unit.close();
     }
   });
