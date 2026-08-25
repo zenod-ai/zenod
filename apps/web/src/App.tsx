@@ -20,6 +20,7 @@ import { HostedLogin } from "@/views/HostedLogin"
 import { Settings } from "@/views/Settings"
 import { SetupWizard } from "@/views/SetupWizard"
 import { PhylaxAdminWhatsAppPairing } from "@/components/phylax-admin-channels"
+import type { ZenodEdition } from "@/views/zenod-edition"
 
 type View =
   | { kind: "loading" }
@@ -27,7 +28,7 @@ type View =
   | { kind: "login" }
   | { kind: "hosted-login" }
   | { kind: "hosted-account" }
-  | { kind: "settings"; settings: SettingsValues }
+  | { kind: "settings"; settings: SettingsValues; edition: ZenodEdition }
   | { kind: "error"; message: string }
 
 function consumeGithubReturn(): boolean {
@@ -45,10 +46,10 @@ function consumeGithubReturn(): boolean {
   return true
 }
 
-function initialTabFromHash(): "connections" | undefined {
+function initialTabFromHash(): "channels" | undefined {
   return window.location.hash === "#ring-router-products" ||
     window.location.hash === "#phylax-channels"
-    ? "connections"
+    ? "channels"
     : undefined
 }
 
@@ -62,19 +63,22 @@ function CustomerApp() {
     }
   }, [githubReturn])
 
-  const loadSettings = React.useCallback(() => {
-    api<SettingsResponse>("/api/settings")
-      .then((result) => {
-        setView({ kind: "settings", settings: result.settings })
-      })
-      .catch((err: unknown) => {
-        if (isUnauthorized(err)) {
-          setView({ kind: "login" })
-        } else {
-          setView({ kind: "error", message: errorMessage(err) })
-        }
-      })
-  }, [])
+  const loadSettings = React.useCallback(
+    (edition: ZenodEdition = "self-hosted") => {
+      api<SettingsResponse>("/api/settings")
+        .then((result) => {
+          setView({ kind: "settings", settings: result.settings, edition })
+        })
+        .catch((err: unknown) => {
+          if (isUnauthorized(err)) {
+            setView({ kind: "login" })
+          } else {
+            setView({ kind: "error", message: errorMessage(err) })
+          }
+        })
+    },
+    []
+  )
 
   const boot = React.useCallback(() => {
     api<AuthStatus>("/api/auth/status")
@@ -86,17 +90,20 @@ function CustomerApp() {
             return
           }
           const account = await fetch("/api/console/account")
-          if (window.location.pathname === "/account" || account.status === 404) {
+          if (
+            window.location.pathname === "/account" ||
+            account.status === 404
+          ) {
             setView({ kind: "hosted-account" })
             return
           }
-          loadSettings()
+          loadSettings("hosted")
           return
         }
         if (status.needsSetup) {
           setView({ kind: "setup" })
         } else {
-          loadSettings()
+          loadSettings("self-hosted")
         }
       })
       .catch((err: unknown) => {
@@ -135,19 +142,24 @@ function CustomerApp() {
           </div>
         </div>
       )}
-      {view.kind === "setup" && <SetupWizard onComplete={loadSettings} />}
-      {view.kind === "login" && <Login onSuccess={loadSettings} />}
+      {view.kind === "setup" && (
+        <SetupWizard onComplete={() => loadSettings("self-hosted")} />
+      )}
+      {view.kind === "login" && (
+        <Login onSuccess={() => loadSettings("self-hosted")} />
+      )}
       {view.kind === "hosted-login" && <HostedLogin />}
       {view.kind === "hosted-account" && <HostedAccount />}
       {view.kind === "settings" && (
         <Settings
           initialSettings={view.settings}
+          edition={view.edition}
           initialTab={
             initialTabFromHash() ??
             (githubReturn &&
-              (view.settings.provider === "openai"
-                ? view.settings.openai_api_key
-                : view.settings.anthropic_api_key) === null
+            (view.settings.provider === "openai"
+              ? view.settings.openai_api_key
+              : view.settings.anthropic_api_key) === null
               ? "keys"
               : undefined)
           }
@@ -164,11 +176,16 @@ function PhylaxAdmin() {
     <>
       <main className="mx-auto flex min-h-svh max-w-5xl flex-col gap-6 p-6 lg:p-10">
         <header className="flex flex-col gap-2 border-b pb-5">
-          <p className="text-sm font-medium text-muted-foreground">Phylax admin</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Channel number</h1>
+          <p className="text-sm font-medium text-muted-foreground">
+            Phylax admin
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Channel number
+          </h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Pair the Phylax-owned WhatsApp number, inspect session health, and review the linked number.
-            Tenant phone verification happens separately in each tenant dashboard.
+            Pair the Phylax-owned WhatsApp number, inspect session health, and
+            review the linked number. Tenant phone verification happens
+            separately in each tenant dashboard.
           </p>
         </header>
         <PhylaxAdminWhatsAppPairing />
@@ -179,7 +196,11 @@ function PhylaxAdmin() {
 }
 
 export function App() {
-  return window.location.pathname === "/admin" ? <PhylaxAdmin /> : <CustomerApp />
+  return window.location.pathname === "/admin" ? (
+    <PhylaxAdmin />
+  ) : (
+    <CustomerApp />
+  )
 }
 
 export default App
