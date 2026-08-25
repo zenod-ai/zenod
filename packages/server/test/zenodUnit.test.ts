@@ -20,6 +20,7 @@ import {
 } from "../src/zenodUnit.js";
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
+import { SETTING_KEYS } from "../src/settings.js";
 
 const tempDirs: string[] = [];
 const CHASSIS_VAULT_MASTER_KEY = "11".repeat(32);
@@ -403,6 +404,63 @@ describe("Zenod chassis unit", () => {
         { cookie },
         { authorization: "Bearer customer-token" },
       ]) {
+        const allowedCustomerSettings = new Set([
+          "instance_name",
+          "vault_repo",
+          "vault_branch",
+          "google_drive_folder_id",
+          "artifact_archive_provider",
+          "artifact_archive_drive_folder_id",
+          "telegram_enabled",
+          "telegram_allowed_users",
+          "telegram_accept_all",
+          "telegram_rich",
+        ]);
+        const hostileSettings = Object.fromEntries(
+          SETTING_KEYS
+            .filter((key) => !allowedCustomerSettings.has(key))
+            .map((key) => [key, key === "google_service_account_json" ? '{"private_key":"hostile"}' : `hostile-${key}`]),
+        );
+        const mixedSettings = await unit.app.request("/api/settings", {
+          method: "PUT",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            instance_name: "must-not-apply-atomically",
+            ...hostileSettings,
+            totally_unknown_key: "hostile-unknown",
+          }),
+        });
+        expect(mixedSettings.status).toBe(403);
+        expect(await mixedSettings.json()).toEqual({ error: "forbidden", capability: "managed_settings" });
+        expect(hostedRuntime.settings.get("instance_name")).not.toBe("must-not-apply-atomically");
+        expect(hostedRuntime.settings.get("github_token")).toBeNull();
+        expect(hostedRuntime.settings.get("telegram_bot_token")).toBeNull();
+        expect(hostedRuntime.settings.get("composio_api_key")).toBeNull();
+
+        const mistypedSettings = await unit.app.request("/api/settings", {
+          method: "PUT",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ instance_name: 42 }),
+        });
+        expect(mistypedSettings.status).toBe(403);
+        expect(await mistypedSettings.json()).toEqual({ error: "forbidden", capability: "managed_settings" });
+
+        const safeUpdate = await unit.app.request("/api/settings", {
+          method: "PUT",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ telegram_rich: "true" }),
+        });
+        expect(safeUpdate.status).toBe(200);
+        expect(hostedRuntime.settings.get("telegram_rich")).toBe("true");
+
+        const wrongMethod = await unit.app.request("/api/settings", {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: "{}",
+        });
+        expect(wrongMethod.status).toBe(403);
+        expect(await wrongMethod.json()).toEqual({ error: "forbidden", capability: "customer_capability" });
+
         const safeSettings = await unit.app.request("/api/settings", { headers });
         expect(safeSettings.status).toBe(200);
         expect(await safeSettings.json()).toEqual({
@@ -421,6 +479,9 @@ describe("Zenod chassis unit", () => {
 
         const driveStatusText = await (await unit.app.request("/api/drive/status", { headers })).text();
         expect(driveStatusText).not.toMatch(/transcriptionProvider|openrouter|paid\/model/i);
+        const safeDriveCallback = await unit.app.request("/api/drive/oauth/callback", { headers });
+        expect(safeDriveCallback.status).toBe(400);
+        expect(await safeDriveCallback.text()).toContain("invalid OAuth state");
         const authStatus = await unit.app.request("/api/auth/status", { headers });
         await expect(authStatus.json()).resolves.toMatchObject({
           needsSetup: false,
@@ -428,7 +489,34 @@ describe("Zenod chassis unit", () => {
         });
         expect(await (await unit.app.request("/api/auth/status", { headers })).text())
           .not.toMatch(/provider|model|api.?key|cost|token/i);
+        const safeAgent = await unit.app.request("/api/agent", { headers });
+        expect(safeAgent.status).toBe(200);
+        expect(await safeAgent.json()).toMatchObject({
+          name: "zenod",
+          hostedMode: "managed",
+        });
+        expect(await (await unit.app.request("/api/agent", { headers })).text())
+          .not.toMatch(/ring|provider|model|api.?key|token/i);
+        const safeVault = await unit.app.request("/api/vault", { headers });
+        expect(safeVault.status).toBe(200);
+        expect(await safeVault.json()).toMatchObject({
+          repo: "owner/customer-vault",
+          branch: "main",
+        });
+        expect(await (await unit.app.request("/api/vault", { headers })).text())
+          .not.toMatch(/provider|llmReady|cloneError|api.?key|token/i);
+        const connections = await unit.app.request("/api/connections", { headers });
+        expect(connections.status).toBe(200);
+        expect(await connections.json()).toEqual({ mcpPath: "/mcp", clients: [], grants: [] });
+        const token = await unit.app.request("/api/token", { headers });
+        expect(token.status).toBe(200);
+        expect(await token.json()).toEqual({ token: "", mcpPath: "/mcp" });
+        const githubStatus = await unit.app.request("/api/github/app/status", { headers });
+        expect(githubStatus.status).toBe(200);
+        expect(await (await unit.app.request("/api/github/app/status", { headers })).text())
+          .not.toMatch(/private.?key|api.?key|token/i);
         for (const path of [
+          "/api/keys",
           "/api/executor/settings",
           "/api/transcription/status",
           "/api/transcription/models",
@@ -468,6 +556,38 @@ describe("Zenod chassis unit", () => {
           expect(denied.status, `${method} ${path}`).toBe(403);
           expect(await denied.json()).toEqual({ error: "forbidden", capability: "internal_controls" });
         }
+        for (const [method, path] of [
+          ["GET", "/api/operating-rules"],
+          ["GET", "/api/skills"],
+          ["GET", "/api/mcp-config"],
+          ["GET", "/api/test/chat"],
+          ["GET", "/api/test/chat/hostile"],
+          ["POST", "/api/notifications/search"],
+          ["POST", "/api/notify"],
+          ["POST", "/api/vault/clean-slate"],
+          ["GET", "/api/github/app/setup?installation_id=999"],
+          ["POST", "/api/agent/github"],
+          ["POST", "/api/provision"],
+          ["POST", "/api/auth/login"],
+          ["POST", "/api/auth/setup"],
+          ["GET", "/api/future-internal-control"],
+        ] as const) {
+          const denied = await unit.app.request(path, {
+            method,
+            headers: { ...headers, "content-type": "application/json" },
+            ...(method === "POST" ? { body: "{}" } : {}),
+          });
+          if (path === "/api/auth/login" || path === "/api/auth/setup") {
+            expect(denied.status).toBe(404);
+            expect(await denied.json()).toEqual({ error: "not found" });
+            continue;
+          }
+          expect(denied.status, `${method} ${path}`).toBe(403);
+          const capability = path.startsWith("/api/agent/") || path.startsWith("/api/provision")
+            ? "internal_controls"
+            : "customer_capability";
+          expect(await denied.json()).toEqual({ error: "forbidden", capability });
+        }
       }
       const timelineRead = await unit.app.request("/mcp/customer-token", {
         method: "POST",
@@ -486,11 +606,20 @@ describe("Zenod chassis unit", () => {
       expect((await unit.app.request("/api/ring/status", {
         headers: { authorization: "Bearer selfhost-token" },
       })).status).toBe(200);
+      expect((await unit.app.request("/api/operating-rules", {
+        headers: { authorization: "Bearer selfhost-token" },
+      })).status).toBe(200);
+      expect((await unit.app.request("/api/agent/repo", {
+        method: "POST",
+        headers: { authorization: "Bearer selfhost-token", "content-type": "application/json" },
+        body: JSON.stringify({ repo: "owner/self-host-vault", branch: "main" }),
+      })).status).toBe(200);
+      expect(unit.runtimes.get("self-host")!.settings.get("vault_repo")).toBe("owner/self-host-vault");
       expect((await unit.app.request("/api/telegram/settings", {
         method: "PUT",
         headers: { authorization: "Bearer customer-token", "content-type": "application/json" },
         body: JSON.stringify({ enabled: false }),
-      })).status).toBe(200);
+      })).status).toBe(403);
 
       const start = await unit.app.request("/api/github/app/start", { headers: { cookie } });
       expect(start.status).toBe(200);
@@ -529,16 +658,19 @@ describe("Zenod chassis unit", () => {
         resetsAt: null,
       });
 
+      const unsignedSetup = await unit.app.request("/github/setup?installation_id=9999", {
+        headers: { cookie },
+      });
+      expect(unsignedSetup.status).toBe(400);
+      expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_installation_id")).toBeNull();
+
       const setup = await unit.app.request(
         `/github/setup?installation_id=4242&state=${encodeURIComponent(installUrl.searchParams.get("state")!)}`,
         { headers: { cookie } },
       );
       expect(setup.status).toBe(302);
       const setupLocation = setup.headers.get("location")!;
-      expect(setupLocation).toContain("/api/github/app/setup?installation_id=4242");
-      const finish = await unit.app.request(setupLocation, { headers: { cookie } });
-      expect(finish.status).toBe(302);
-      expect(finish.headers.get("location")).toBe("/app?github=connected");
+      expect(setupLocation).toBe("/app?github=connected");
       expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_id")).toBe("3718758");
       expect(unit.runtimes.get("github-42")!.settings.getRaw("github_app_installation_id")).toBe("4242");
 
@@ -559,6 +691,64 @@ describe("Zenod chassis unit", () => {
       }
     } finally {
       unit.close();
+    }
+  });
+
+  it("preserves raw tenant controls for the configured owner operator", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([{ token: "operator-token", tenant: { id: "github-42" } }]);
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "customer-session-secret",
+        GITHUB_OAUTH_CLIENT_ID: "client-id",
+        GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+        CHASSIS_VAULT_MASTER_KEY,
+      },
+      customer: {
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: null }),
+        },
+      },
+      customerAdmin: { githubLogin: "octocat" },
+    });
+    try {
+      unit.customerAccounts.upsert("operator", {
+        account_id: "github-42",
+        github_id: 42,
+        github_login: "octocat",
+        tier: "monthly",
+        subscription_status: "active",
+        tenant_id: "github-42",
+        tenant_slug: "octocat-42",
+        checkout_completed_at: new Date().toISOString(),
+      });
+      unit.customerTokenVault.put("github-42", "operator-token");
+      const runtime = unit.runtimes.forTenantStorage("github-42", unit.storage.forTenant({ id: "github-42" }));
+      runtime.settings.set("provider", "openrouter");
+      runtime.settings.set("openrouter_api_key", "operator-visible-tail-9876");
+      const cookie = await signInCustomer(unit);
+
+      const settings = await unit.app.request("/api/settings", { headers: { cookie } });
+      expect(settings.status).toBe(200);
+      expect(await settings.json()).toMatchObject({
+        settings: {
+          provider: "openrouter",
+          openrouter_api_key: expect.stringContaining("9876"),
+        },
+      });
+      expect((await unit.app.request("/api/operating-rules", { headers: { cookie } })).status).toBe(200);
+      expect((await unit.app.request("/api/agent/repo", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ repo: "owner/operator-vault", branch: "main" }),
+      })).status).toBe(200);
+      expect(runtime.settings.get("vault_repo")).toBe("owner/operator-vault");
+    } finally {
+      await unit.close();
     }
   });
 

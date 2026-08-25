@@ -27,6 +27,7 @@ import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
+import type { SettingKey } from "./settings.js";
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
@@ -259,65 +260,98 @@ export const ZENOD_LONG_TOOLS = {
   run_task: { pollTool: "get_task_result" },
 } as const;
 
-const HOSTED_MANAGED_SETTINGS_MUTATIONS = new Set([
-  "POST /api/settings/test-llm",
-  "PUT /api/executor/settings",
-  "POST /api/team/enable",
-  "PUT /api/phylax/config",
-  "PUT /api/whatsapp/settings",
-  "POST /api/whatsapp/pair",
-  "POST /api/whatsapp/disconnect",
-  "POST /api/whatsapp/reset-session",
-  "POST /api/token/regenerate",
-]);
-
-const HOSTED_MANAGED_SETTINGS_READS = new Set([
-  "GET /api/executor/settings",
-  "GET /api/transcription/status",
-  "GET /api/transcription/models",
-  "GET /api/transcription/openrouter-models",
-]);
-
 const HOSTED_INTERNAL_CONTROL_PREFIXES = [
+  "/api/agent/",
   "/api/ring",
   "/api/phylax",
   "/api/team",
   "/api/peers",
+  "/api/provision",
+  "/api/tenants",
+  "/api/exec",
+  "/api/executions",
+  "/api/executor",
+  "/api/journeys",
+  "/api/journey-steps",
+  "/api/tasks",
   "/internal",
 ] as const;
 
-const HOSTED_MANAGED_SETTING_KEYS = new Set([
-  "provider",
-  "anthropic_api_key",
-  "openai_api_key",
-  "openrouter_api_key",
-  "groq_api_key",
-  "model_ask",
-  "model_classify",
-  "model_vision",
-  "model_max_steps",
-  "openai_long_transcription",
-  "long_transcription_provider",
-  "openrouter_transcription_model",
-  "whisper_model",
+const HOSTED_CUSTOMER_HTTP_OPERATIONS = new Set([
+  "GET /api/agent",
+  "GET /api/auth/status",
+  "GET /api/overview",
+  "GET /api/settings",
+  "PUT /api/settings",
+  "GET /api/drive/status",
+  "GET /api/drive/oauth/start",
+  "GET /api/drive/oauth/callback",
+  "POST /api/drive/disconnect",
+  "GET /api/github/app/status",
+  "GET /api/github/app/start",
+  "GET /api/github/repos",
+  "POST /api/github/app/disconnect",
+  "GET /api/vault",
+  "POST /api/vault/sync",
+  "POST /api/vault/reclone",
+  "GET /api/vault/lint",
+  "PUT /api/vault/repository",
+  "POST /api/store",
+  "POST /api/ask",
+  "POST /api/chat",
+  "POST /api/chat/stream",
+  "POST /api/chat/voice/transcribe",
+  "GET /api/chat/history",
+  "DELETE /api/chat",
+  "GET /api/search",
+  "GET /api/note",
+  "GET /api/ingest/jobs",
+  "GET /api/token",
+  "POST /api/token/regenerate",
+  "GET /api/connections",
+  "POST /api/connections/revoke",
+  "GET /api/channels",
+  "POST /api/channels/whatsapp/challenge",
+  "POST /api/channels/whatsapp/test",
+  "POST /api/channels/whatsapp/disconnect",
+  "GET /.well-known/oauth-protected-resource",
+  "GET /.well-known/oauth-protected-resource/mcp",
+  "GET /.well-known/oauth-authorization-server",
+  "GET /.well-known/oauth-authorization-server/mcp",
+  "POST /oauth/register",
+  "GET /oauth/authorize",
+  "POST /oauth/authorize/decision",
+  "POST /oauth/token",
 ]);
+
+function hostedCustomerHttpAllowed(method: string, path: string): boolean {
+  const normalizedMethod = method.toUpperCase();
+  const operation = `${normalizedMethod} ${path}`;
+  if (HOSTED_CUSTOMER_HTTP_OPERATIONS.has(operation)) return true;
+  if ((normalizedMethod === "GET" || normalizedMethod === "POST" || normalizedMethod === "DELETE") &&
+      (path === "/mcp" || path.startsWith("/mcp/"))) return true;
+  return normalizedMethod === "POST" && /^\/api\/ingest\/jobs\/[^/]+\/(retry|cancel)$/.test(path);
+}
 
 export function hostedCapabilityViolation(
   method: string,
   path: string,
-): "raw_usage" | "managed_settings" | "internal_controls" | null {
+): "raw_usage" | "managed_settings" | "internal_controls" | "customer_capability" | null {
   const normalizedMethod = method.toUpperCase();
+  if (hostedCustomerHttpAllowed(normalizedMethod, path)) return null;
   if (path === "/api/usage" || path.startsWith("/api/usage/")) return "raw_usage";
-  if (HOSTED_INTERNAL_CONTROL_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+  if (path === "/api/keys" || path.startsWith("/api/transcription/") || path.startsWith("/api/executor/")) {
+    return "managed_settings";
+  }
+  if (HOSTED_INTERNAL_CONTROL_PREFIXES.some((prefix) =>
+    path === prefix || path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`)
+  )) {
     return "internal_controls";
   }
-  const operation = `${normalizedMethod} ${path}`;
-  return HOSTED_MANAGED_SETTINGS_MUTATIONS.has(operation) || HOSTED_MANAGED_SETTINGS_READS.has(operation)
-    ? "managed_settings"
-    : null;
+  return "customer_capability";
 }
 
-const HOSTED_CUSTOMER_SETTING_KEYS = new Set([
+const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
   "instance_name",
   "vault_repo",
   "vault_branch",
@@ -328,17 +362,26 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set([
   "telegram_allowed_users",
   "telegram_accept_all",
   "telegram_rich",
-]);
+] satisfies readonly SettingKey[]);
 
 async function projectHostedCustomerResponse(path: string, response: Response): Promise<Response> {
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
-  if (!["/api/settings", "/api/overview", "/api/drive/status", "/api/auth/status"].includes(path)) {
+  if (!["/api/agent", "/api/settings", "/api/overview", "/api/drive/status", "/api/auth/status", "/api/vault", "/api/connections"].includes(path)) {
     return response;
   }
   const body = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return response;
   let projected: Record<string, unknown>;
-  if (path === "/api/settings") {
+  if (path === "/api/agent") {
+    projected = {
+      name: body.name,
+      displayName: body.displayName,
+      tagline: body.tagline,
+      panels: Array.isArray(body.panels) ? body.panels : undefined,
+      vaultless: Boolean(body.vaultless),
+      hostedMode: "managed",
+    };
+  } else if (path === "/api/settings") {
     const settings = body.settings && typeof body.settings === "object" && !Array.isArray(body.settings)
       ? Object.fromEntries(
           Object.entries(body.settings as Record<string, unknown>)
@@ -351,6 +394,17 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
   } else if (path === "/api/drive/status") {
     const { transcriptionProvider: _transcriptionProvider, ...safeDriveStatus } = body;
     projected = safeDriveStatus;
+  } else if (path === "/api/vault") {
+    projected = {
+      repo: body.repo ?? null,
+      branch: body.branch ?? "main",
+      vaultConfigured: Boolean(body.vaultConfigured),
+      configured: Boolean(body.configured),
+      cloned: Boolean(body.cloned),
+      headSha: body.headSha ?? null,
+    };
+  } else if (path === "/api/connections") {
+    projected = { mcpPath: "/mcp", clients: [], grants: [] };
   } else {
     projected = { needsSetup: false, configured: true, hostedMode: "managed" };
   }
@@ -362,8 +416,10 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
 async function hostedSettingsBodyViolation(request: Request): Promise<boolean> {
   if (request.method.toUpperCase() !== "PUT" || new URL(request.url).pathname !== "/api/settings") return false;
   const body = await request.clone().json().catch(() => null);
-  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-  return Object.keys(body).some((key) => HOSTED_MANAGED_SETTING_KEYS.has(key));
+  if (!body || typeof body !== "object" || Array.isArray(body)) return true;
+  return Object.entries(body).some(([key, value]) =>
+    !HOSTED_CUSTOMER_SETTING_KEYS.has(key) || typeof value !== "string"
+  );
 }
 
 const MANAGED_AI_HTTP_PATHS = new Set([

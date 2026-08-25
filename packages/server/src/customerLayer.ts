@@ -306,20 +306,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const session = readCustomerSession(c, env);
     if (!session) return c.redirect("/auth/signin", 302);
     const stateRaw = c.req.query("state") ?? "";
-    if (stateRaw) {
-      const state = verifyState(stateRaw, customerStateSecret(env));
-      if (state?.mode !== "connect_repo" || state.gid !== session.github_id) {
-        return c.text("This repository connection link is invalid or expired.", 400);
-      }
+    const state = stateRaw ? verifyState(stateRaw, customerStateSecret(env)) : null;
+    if (state?.mode !== "connect_repo" || state.gid !== session.github_id) {
+      return c.text("This repository connection link is invalid or expired.", 400);
     }
     const installationId = c.req.query("installation_id");
     if (!installationId || !/^\d+$/.test(installationId)) return c.redirect("/app", 302);
-    const query = new URLSearchParams({
-      installation_id: installationId,
-      setup_action: c.req.query("setup_action") ?? "install",
-      return_to: "/app",
-    });
-    return c.redirect(`/api/github/app/setup?${query.toString()}`, 302);
+    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
+    if (!account?.tenant_id || !runtime) return c.text("Tenant runtime is unavailable.", 409);
+    runtime.settings.setRaw("github_app_installation_id", installationId);
+    runtime.invalidate();
+    return c.redirect("/app?github=connected", 302);
   });
 
   app.put("/api/vault/repository", async (c) => {
