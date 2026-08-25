@@ -49,6 +49,8 @@ export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
 export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
+export const ZENOD_WHATSAPP_VERIFICATION_REPLY =
+  "Your WhatsApp number is verified. Return to Zenod to finish setup.";
 const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
@@ -111,7 +113,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ sender, text }) {
       const verified = tenantSettings.verifyInbound(sender, text);
-      return verified ? "Your WhatsApp number is verified. Return to Phylax to finish setup." : null;
+      return verified ? ZENOD_WHATSAPP_VERIFICATION_REPLY : null;
     },
     observeCaptureJob(ticket) {
       captureTickets.observeJob(ticket, ticket.terminal);
@@ -135,7 +137,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     tokenEnvVar: "PHYLAX_API_TOKEN",
     defaultTenantName: "Self-hosted Phylax",
     panels: ["mcp", "transcription", "connections"],
-    additionalReadTools: ["channel_status"],
+    additionalReadTools: ["channel_status", "get_recent_conversation_transcript"],
     registerAdditionalTools(server, context, runtimeInstance) {
       registerTenantChannelTools(server, context, runtime, tenantSettings);
       options.registerAdditionalTools?.(server, context, runtimeInstance);
@@ -758,7 +760,7 @@ function registerTenantChannelTools(
   const delivery = runtime.delivery();
   const send = async (channel: PhylaxPortedChannel, recipient: string, text: string) => {
     if (!settings.ownsRecipient(tenantId, channel, recipient)) {
-      throw new PhylaxChannelError("delivery_error", "recipient is not bound to this tenant");
+      throw new PhylaxChannelError("delivery_error", "That recipient is not connected to this Zenod account.");
     }
     return delivery.send(channel, recipient, text);
   };
@@ -780,6 +782,9 @@ function registerTenantChannelTools(
         settings: settings.view(tenantId),
         providers: delivery.status(),
       };
+    },
+    readConversationTranscript(query) {
+      return runtime.whatsappStore.recentTranscript({ ...query, tenantId });
     },
   });
 }

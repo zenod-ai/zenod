@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 import {
   conversationId,
   SqliteStateStore,
@@ -689,6 +690,56 @@ describe("WhatsApp lifecycle", () => {
 });
 
 describe("WhatsAppGateway", () => {
+  it("sanitizes hostile ported handler and media-download failures at the gateway boundary", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-ported-safe-errors-"));
+    const state = new SqliteStateStore(join(dir, "settings.sqlite"));
+    const settings = new Settings(state);
+    settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+    const store = new WhatsAppStore(join(dir, "whatsapp.sqlite"));
+    const socket = new FakeSocket();
+    const hostile = "https://internal.example/secret?token=bearer-123 Ring Phylax MCP tool stack";
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "session"),
+      settings,
+      store,
+      getEngine: async () => fakeEngine([]),
+      portedInboundHandler: async () => {
+        throw new Error(hostile);
+      },
+      socketFactory: async () => socket,
+    });
+    try {
+      await gateway.pair();
+      await gateway.handleEvent({
+        ...audioEvent({
+          messageId: "ported-handler-hostile-1",
+          hasMedia: false,
+          mediaType: null,
+          mediaRaw: undefined,
+          body: "hello",
+        }),
+      });
+      vi.mocked(downloadContentFromMessage).mockImplementationOnce(async function* () {
+        throw new Error(hostile);
+      });
+      await gateway.handleEvent(audioEvent({ messageId: "ported-download-hostile-1" }));
+
+      expect(socket.sent.map((message) => message.text)).toEqual([
+        "⚠️ Zenod could not process that message. Please try again.",
+        "⚠️ Zenod could not process that message. Please try again.",
+      ]);
+      expect(socket.sent.map((message) => message.text).join("\n"))
+        .not.toMatch(/internal\.example|bearer-123|Ring|Phylax|MCP|tool|stack/i);
+    } finally {
+      consoleError.mockRestore();
+      await gateway.close();
+      store.close();
+      state.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("sends an automated error reply when the engine fails (never silent)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-gateway-err-"));
     const runtime = new Runtime(dir);

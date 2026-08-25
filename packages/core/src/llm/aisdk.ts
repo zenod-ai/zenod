@@ -85,6 +85,10 @@ export interface LlmUsageReport {
   cachedInputTokens: number;
   /** Cache-write input tokens (billed ~1.25x input). */
   cacheCreationInputTokens: number;
+  /** Attempt outcome. Failed rows may have zero tokens when the provider omitted usage. */
+  status?: "succeeded" | "failed";
+  /** Bounded error class for support timelines; never raw provider prose. */
+  errorCode?: string | null;
 }
 
 export interface AiLlmOptions {
@@ -583,6 +587,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       | { inputTokens?: number | undefined; outputTokens?: number | undefined; cachedInputTokens?: number | undefined }
       | undefined,
     providerMetadata: Record<string, unknown> | undefined,
+    attempt: { status?: "succeeded" | "failed"; errorCode?: string | null } = {},
   ): void {
     if (!this.onUsage) return;
     const anthropic = (providerMetadata?.anthropic ?? {}) as {
@@ -598,6 +603,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         outputTokens: usage?.outputTokens ?? 0,
         cachedInputTokens: usage?.cachedInputTokens ?? anthropic.cacheReadInputTokens ?? 0,
         cacheCreationInputTokens: anthropic.cacheCreationInputTokens ?? 0,
+        status: attempt.status ?? "succeeded",
+        ...(attempt.errorCode ? { errorCode: attempt.errorCode } : {}),
       });
     } catch {
       // Metering must never break the call path.
@@ -765,6 +772,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         .join("\n\n"),
       });
     } catch (err) {
+      this.reportUsage("classify", this.classifyModelId, undefined, undefined, {
+        status: "failed",
+        errorCode: NoObjectGeneratedError.isInstance(err) ? "structured_output_invalid" : "provider_error",
+      });
       throw loudObjectError(err, "classify");
     }
     const { object, usage, providerMetadata } = result;
@@ -798,6 +809,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         "- The page MUST wikilink at least one existing page (no orphans). Include at least one of these exact links, e.g. on a final 'Related:' line:",
         input.linkHints.length > 0 ? `  ${input.linkHints.join("  ")}` : "  (link to the most relevant folder index)",
         "- Keep the page dense and self-contained; integrate, don't append a changelog.",
+        "- For long transcripts, cover every subject assigned to this page. Preserve possibly mangled proper-noun spellings verbatim; label any normalized candidate as uncertain instead of silently replacing the source spelling.",
         "- Output ONLY the raw markdown file content. No code fences, no commentary.",
       ].join("\n"),
       prompt: [

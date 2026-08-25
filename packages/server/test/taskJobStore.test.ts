@@ -41,13 +41,24 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(after.error).toMatch(/gave up/);
   });
 
-  it("does NOT auto-resume a task/work job — only writes (task durability lives elsewhere)", () => {
+  it("does not auto-reexecute an ambiguous running chat after restart", () => {
     const path = tmpDb();
-    let store = new TaskJobStore(path);
-    const job = store.enqueue("task", { text: "run something", conversationKey: "k" });
+    let store = new TaskJobStore(path, "tenant-alpha");
+    const job = store.enqueue(
+      "chat",
+      { text: "create something", source: "whatsapp", conversationKey: "k" },
+      "tenant-alpha:whatsapp:message-1",
+    );
     store.update(job.id, { status: "running" });
-    store = new TaskJobStore(path); // restart
+    store = new TaskJobStore(path, "tenant-alpha"); // restart
     expect(store.get(job.id)!.status).toBe("interrupted");
+    const replay = store.enqueue(
+      "chat",
+      { text: "duplicate must not run", source: "whatsapp", conversationKey: "k" },
+      "tenant-alpha:whatsapp:message-1",
+    );
+    expect(replay).toMatchObject({ id: job.id, status: "interrupted", input: { text: "create something" } });
+    expect(store.nextQueued()).toBeNull();
   });
 
   it("leaves a never-started queued job queued across a restart", () => {

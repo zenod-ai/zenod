@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { BrainEngine } from "zenod";
 import { Runtime } from "../src/runtime.js";
 import { TelegramGateway, chunkText } from "../src/telegramGateway.js";
@@ -142,6 +142,36 @@ describe("chunkText", () => {
 });
 
 describe("TelegramGateway", () => {
+  it("sanitizes hostile failures at the whole ported gateway boundary", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-ported-safe-errors-"));
+    const runtime = new Runtime(dir);
+    const hostile = "https://internal.example/secret?token=bearer-123 Ring Phylax MCP tool stack";
+    const { fetchImpl, calls } = fakeBotApi(tgMessage());
+    runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: ["555"], enabled: true });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      portedInboundHandler: async () => {
+        throw new Error(hostile);
+      },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => calls.some((call) => call.method === "sendRichMessage"));
+      const rich = calls.find((call) => call.method === "sendRichMessage")?.body.rich_message as { markdown?: string };
+      const customerText = String(rich.markdown);
+      expect(customerText).toBe("⚠️ Zenod could not process that message. Please try again.");
+      expect(customerText).not.toMatch(/internal\.example|bearer-123|Ring|Phylax|MCP|tool|stack/i);
+    } finally {
+      consoleError.mockRestore();
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("serializes concurrent starts into one Telegram polling loop", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
     const runtime = new Runtime(dir);
