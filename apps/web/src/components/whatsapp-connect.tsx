@@ -18,7 +18,15 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { api, errorMessage, type WhatsAppStatus } from "@/lib/api"
+import {
+  api,
+  errorMessage,
+  type HostedChannelsResponse,
+  type HostedWhatsAppChallengeResponse,
+  type HostedWhatsAppDisconnectResponse,
+  type HostedWhatsAppTestResponse,
+  type WhatsAppStatus,
+} from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -42,6 +50,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -578,6 +587,251 @@ export function WhatsAppConnect() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      </CardFooter>
+    </Card>
+  )
+}
+
+function hostedStatusLabel(
+  status: HostedChannelsResponse["whatsapp"]["state"] | null
+): string {
+  if (!status) return "Loading"
+  if (status === "awaiting_code") return "Awaiting code"
+  if (status === "verified") return "Connected"
+  if (status === "degraded") return "Needs attention"
+  if (status === "paused") return "Paused"
+  return "Not connected"
+}
+
+function hostedBadgeVariant(
+  status: HostedChannelsResponse["whatsapp"]["state"] | null
+): React.ComponentProps<typeof Badge>["variant"] {
+  if (status === "verified") return "secondary"
+  if (status === "degraded" || status === "paused") return "destructive"
+  return "outline"
+}
+
+/** Customer-safe adapter over the existing tenant sender verification store. */
+export function HostedWhatsAppConnect({
+  initial,
+  onChanged,
+}: {
+  initial: HostedChannelsResponse | null
+  onChanged: (channels: HostedChannelsResponse) => void
+}) {
+  const [sender, setSender] = React.useState("")
+  const [challenge, setChallenge] = React.useState<
+    HostedWhatsAppChallengeResponse["challenge"] | null
+  >(null)
+  const [busy, setBusy] = React.useState<
+    "challenge" | "test" | "disconnect" | null
+  >(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  const publish = React.useCallback(
+    (next: HostedChannelsResponse) => {
+      onChanged(next)
+    },
+    [onChanged]
+  )
+
+  React.useEffect(() => {
+    if (initial?.whatsapp.state !== "awaiting_code") return
+    const timer = window.setInterval(() => {
+      void api<HostedChannelsResponse>("/api/channels")
+        .then((next) => {
+          publish(next)
+          if (next.whatsapp.state === "verified") {
+            setChallenge(null)
+            toast.success("WhatsApp connected to Zenod")
+          }
+        })
+        .catch(() => {})
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [initial?.whatsapp.state, publish])
+
+  async function createChallenge() {
+    setBusy("challenge")
+    setError(null)
+    try {
+      const result = await api<HostedWhatsAppChallengeResponse>(
+        "/api/channels/whatsapp/challenge",
+        { method: "POST", body: { sender } }
+      )
+      publish(result.channels)
+      setChallenge(result.challenge)
+      toast.success("WhatsApp verification started")
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function sendTest() {
+    setBusy("test")
+    setError(null)
+    try {
+      const result = await api<HostedWhatsAppTestResponse>(
+        "/api/channels/whatsapp/test",
+        { method: "POST" }
+      )
+      publish(result.channels)
+      toast.success("Zenod test delivered")
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function disconnect() {
+    setBusy("disconnect")
+    setError(null)
+    try {
+      const result = await api<HostedWhatsAppDisconnectResponse>(
+        "/api/channels/whatsapp/disconnect",
+        { method: "POST" }
+      )
+      publish(result.channels)
+      setChallenge(null)
+      setSender("")
+      toast.success("WhatsApp disconnected")
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const status = initial?.whatsapp ?? null
+  const connected = status?.state === "verified"
+  const awaiting = status?.state === "awaiting_code"
+
+  return (
+    <Card>
+      <CardHeader>
+        <SmartphoneIcon className="size-5 text-muted-foreground" />
+        <CardTitle className="flex items-center gap-2">
+          WhatsApp
+          <Badge variant={hostedBadgeVariant(status?.state ?? null)}>
+            {connected && <CheckIcon />}
+            {hostedStatusLabel(status?.state ?? null)}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          Included with Zenod Hosted for one verified sender.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {error && (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>WhatsApp needs attention</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {awaiting && challenge && (
+          <Alert>
+            <SendIcon />
+            <AlertTitle>Send this code from your WhatsApp</AlertTitle>
+            <AlertDescription className="flex flex-col gap-2">
+              <span>
+                Message <strong>{challenge.code}</strong> to{" "}
+                <strong>{challenge.sharedNumber}</strong>.
+              </span>
+              <span>
+                Keep this page open. Zenod will confirm the sender
+                automatically.
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {status?.senderHint && (
+          <FieldValue
+            label="Verified sender"
+            value={status.senderHint}
+            detail={
+              connected
+                ? `Last message ${timeAgo(status.lastInboundAt)}`
+                : "Verification is not complete yet"
+            }
+          />
+        )}
+
+        {!connected && !awaiting && (
+          <Field>
+            <FieldLabel htmlFor="hosted-whatsapp-sender">
+              Your WhatsApp sender number
+            </FieldLabel>
+            <Input
+              id="hosted-whatsapp-sender"
+              type="tel"
+              autoComplete="tel"
+              placeholder="+34 600 000 000"
+              value={sender}
+              onChange={(event) => setSender(event.target.value)}
+            />
+            <FieldDescription>
+              Zenod verifies only this sender. It never asks for a QR code or
+              reads your other chats.
+            </FieldDescription>
+          </Field>
+        )}
+      </CardContent>
+      <CardFooter className="flex flex-wrap gap-2">
+        {!connected && !awaiting && (
+          <Button
+            type="button"
+            onClick={() => void createChallenge()}
+            disabled={!sender.trim() || busy !== null}
+          >
+            {busy === "challenge" ? <Spinner /> : <SendIcon />}
+            Create one-time code
+          </Button>
+        )}
+        {connected && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void sendTest()}
+              disabled={busy !== null}
+            >
+              {busy === "test" ? <Spinner /> : <SendIcon />}
+              Send test
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="ghost" disabled={busy !== null}>
+                  <UnplugIcon />
+                  Disconnect
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Disconnect WhatsApp?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    New WhatsApp messages will no longer reach this Zenod.
+                    Existing memories stay in your vault.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep connected</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={() => void disconnect()}
+                  >
+                    Disconnect
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
       </CardFooter>
     </Card>
   )

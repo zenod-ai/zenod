@@ -17,11 +17,18 @@ import {
   api,
   errorMessage,
   type ConnectionsResponse,
+  type HostedChannelsResponse,
 } from "@/lib/api"
 import { CodeSnippet, CopyButton } from "@/components/copy-button"
 import { GoogleDriveConnect } from "@/components/google-drive-connect"
-import { WhatsAppConnect } from "@/components/whatsapp-connect"
-import { TelegramConnect } from "@/components/telegram-connect"
+import {
+  HostedWhatsAppConnect,
+  WhatsAppConnect,
+} from "@/components/whatsapp-connect"
+import {
+  HostedTelegramConnect,
+  TelegramConnect,
+} from "@/components/telegram-connect"
 import { PeerAgents } from "@/components/peer-agents"
 import { RingControlSurface } from "@/components/ring-control-surface"
 import { EpaminonExecutorSettings } from "@/components/epaminon-executor-settings"
@@ -68,6 +75,21 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 
 const CLAUDE_CONNECTORS_URL = "https://claude.ai/settings/connectors"
+
+export function HostedChannelsConnections({
+  channels,
+  onChanged,
+}: {
+  channels: HostedChannelsResponse | null
+  onChanged: (channels: HostedChannelsResponse) => void
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <HostedWhatsAppConnect initial={channels} onChanged={onChanged} />
+      <HostedTelegramConnect channels={channels} />
+    </div>
+  )
+}
 
 function timeAgo(epochMs: number): string {
   const seconds = Math.max(0, Math.round((Date.now() - epochMs) / 1000))

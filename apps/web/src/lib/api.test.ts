@@ -1,6 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { chatStream } from "./api"
+import { api, chatStream } from "./api"
+
+describe("api", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("preserves typed customer-safe channel errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error: {
+              code: "channels_unavailable",
+              message: "WhatsApp is temporarily unavailable. Try again shortly.",
+            },
+          },
+          { status: 503 }
+        )
+      )
+    )
+
+    await expect(api("/api/channels")).rejects.toMatchObject({
+      status: 503,
+      code: "channels_unavailable",
+      message: "WhatsApp is temporarily unavailable. Try again shortly.",
+    })
+  })
+})
 
 describe("chatStream", () => {
   afterEach(() => {

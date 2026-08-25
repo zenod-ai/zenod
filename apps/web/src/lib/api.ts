@@ -58,11 +58,18 @@ export async function api<T>(
   }
 
   if (!response.ok) {
-    const payload = data as { error?: string; code?: string } | null
+    const payload = data as {
+      error?: string | { code?: string; message?: string }
+      code?: string
+    } | null
+    const typedError =
+      payload?.error && typeof payload.error === "object" ? payload.error : null
     throw new ApiError(
       response.status,
-      payload?.error ?? response.statusText,
-      payload?.code
+      (typeof payload?.error === "string"
+        ? payload.error
+        : typedError?.message) ?? response.statusText,
+      payload?.code ?? typedError?.code
     )
   }
 
@@ -370,6 +377,52 @@ export type TelegramStatus = {
   allowedUsers: string[]
   acceptAll: boolean
   rich: boolean
+}
+
+export type HostedChannelsResponse = {
+  whatsapp: {
+    state: "off" | "awaiting_code" | "verified" | "degraded" | "paused"
+    senderHint: string | null
+    sharedNumber: string | null
+    verificationExpiresAt: number | null
+    lastInboundAt: number | null
+    lastReceiptAt: number | null
+  }
+  telegram: {
+    state: "off" | "connected" | "degraded"
+    identityHint: string | null
+  }
+}
+
+export type HostedChannelMutation = {
+  operationId: string
+  operation:
+    | "whatsapp.challenge"
+    | "whatsapp.test"
+    | "whatsapp.disconnect"
+  outcome: "succeeded" | "rejected" | "failed"
+  at: number
+}
+
+export type HostedWhatsAppChallengeResponse = {
+  channels: HostedChannelsResponse
+  challenge: {
+    code: string
+    sharedNumber: string
+    expiresAt: number
+  }
+  mutation: HostedChannelMutation
+}
+
+export type HostedWhatsAppTestResponse = {
+  channels: HostedChannelsResponse
+  receipt: { deliveredAt: number }
+  mutation: HostedChannelMutation
+}
+
+export type HostedWhatsAppDisconnectResponse = {
+  channels: HostedChannelsResponse
+  mutation: HostedChannelMutation
 }
 
 export type SettingsResponse = {

@@ -15,7 +15,12 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { api, errorMessage, type TelegramStatus } from "@/lib/api"
+import {
+  api,
+  errorMessage,
+  type HostedChannelsResponse,
+  type TelegramStatus,
+} from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -442,6 +447,55 @@ export function TelegramConnect({
           </Button>
         )}
       </CardFooter>
+    </Card>
+  )
+}
+
+/** Hosted customers see only their tenant binding, never bot/provider custody. */
+export function HostedTelegramConnect({
+  channels,
+}: {
+  channels: HostedChannelsResponse | null
+}) {
+  const state = channels?.telegram.state ?? null
+  const label =
+    state === "connected"
+      ? "Connected"
+      : state === "degraded"
+        ? "Needs attention"
+        : state === "off"
+          ? "Not connected"
+          : "Loading"
+  return (
+    <Card>
+      <CardHeader>
+        <SendIcon className="size-5 text-muted-foreground" />
+        <CardTitle className="flex items-center gap-2">
+          Telegram
+          <Badge
+            variant={
+              state === "degraded"
+                ? "destructive"
+                : state === "connected"
+                  ? "secondary"
+                  : "outline"
+            }
+          >
+            {state === "connected" && <CheckIcon />}
+            {label}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          Telegram reaches the same Zenod memory directly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          {channels?.telegram.identityHint
+            ? `Linked identity ${channels.telegram.identityHint}.`
+            : "No Telegram identity is linked to this account yet."}
+        </p>
+      </CardContent>
     </Card>
   )
 }

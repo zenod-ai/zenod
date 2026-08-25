@@ -76,4 +76,41 @@ describe("Zenod edition portal", () => {
     expect(screen.queryByText("Operating rules")).toBeNull()
     expect(screen.queryByText("Installed skills")).toBeNull()
   })
+
+  it("keeps self-hosted Channels Telegram-only with WhatsApp absent", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/overview") return Promise.resolve(overview())
+      if (path === "/api/telegram/status") {
+        return Promise.resolve({
+          enabled: false,
+          state: "disabled",
+          botUsername: null,
+          hasToken: false,
+          lastActivity: null,
+          lastError: null,
+          allowedUsers: [],
+          acceptAll: false,
+          rich: true,
+        })
+      }
+      return Promise.reject(new Error(`Unexpected API call: ${path}`))
+    })
+
+    const { container } = render(
+      <Settings
+        edition="self-hosted"
+        initialTab="channels"
+        initialSettings={{ provider: "openrouter" } as SettingsValues}
+        onLoggedOut={() => undefined}
+      />
+    )
+
+    expect(
+      await screen.findByText(
+        "Use a Telegram bot token you own to talk directly to this Zenod."
+      )
+    ).not.toBeNull()
+    expect(container.textContent).not.toMatch(/WhatsApp|Phylax|Ring/i)
+    expect(mocks.api).not.toHaveBeenCalledWith("/api/channels")
+  })
 })

@@ -619,10 +619,7 @@ export class PhylaxTenantSettingsStore {
   ): { settings: PhylaxTenantSettingsView; keyword: string } {
     const normalized = normalizeWhatsAppIdentifier(phoneNumber);
     if (!normalized) throw new Error("invalid WhatsApp phone number");
-    const collision = Object.values(this.load()).find(
-      (entry) => entry.tenantId !== tenantId && entry.phoneNumber === normalized,
-    );
-    if (collision) throw new Error("phone number is already registered");
+    this.assertPhoneAvailable(tenantId, normalized);
     const keyword = friendlyVerificationKeyword();
     this.put({
       ...this.get(tenantId),
@@ -634,6 +631,31 @@ export class PhylaxTenantSettingsStore {
       updatedAt: new Date(now).toISOString(),
     });
     return { settings: this.view(tenantId), keyword };
+  }
+
+  /** Validate one tenant's sender without mutating its existing channel configuration. */
+  assertPhoneAvailable(tenantId: string, phoneNumber: string): void {
+    const normalized = normalizeWhatsAppIdentifier(phoneNumber);
+    if (!normalized) throw new Error("invalid WhatsApp phone number");
+    const collision = Object.values(this.load()).find(
+      (entry) => entry.tenantId !== tenantId && entry.phoneNumber === normalized,
+    );
+    if (collision) throw new Error("phone number is already registered");
+  }
+
+  /** Remove only one tenant's sender binding; shared transport/session state is untouched. */
+  disconnectPhone(tenantId: string, now = Date.now()): PhylaxTenantSettingsView {
+    const current = this.get(tenantId);
+    this.put({
+      ...current,
+      phoneNumber: null,
+      verified: false,
+      numberId: "primary",
+      verificationHash: null,
+      verificationExpiresAt: null,
+      updatedAt: new Date(now).toISOString(),
+    });
+    return this.view(tenantId);
   }
 
   verifyInbound(sender: string, text: string, now = Date.now()): PhylaxTenantSettings | null {

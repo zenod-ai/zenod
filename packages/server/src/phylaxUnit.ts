@@ -13,6 +13,10 @@ import {
 } from "./captureMemoryAuthority.js";
 import { readCustomerSession } from "./customerSession.js";
 import {
+  HostedChannelMutationAuditStore,
+  mountPhylaxHostedChannelRoutes,
+} from "./hostedChannels.js";
+import {
   createPhylaxArtifactCapabilityUrl,
   phylaxArtifactCapabilitySecret,
   verifyPhylaxArtifactCapability,
@@ -72,6 +76,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     assistantUrl: env.PHYLAX_ASSISTANT_URL?.trim() || PHYLAX_DEFAULT_ASSISTANT_URL,
     ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
   });
+  const hostedChannelAudit = new HostedChannelMutationAuditStore(storage.dataDir);
   const artifactCapabilitySecret = phylaxArtifactCapabilitySecret(env);
   const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
   const captureTickets = new RingCaptureTicketProducer(
@@ -203,6 +208,12 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
         },
       },
     }, restartRequired ? 503 : 200);
+  });
+  mountPhylaxHostedChannelRoutes(app, {
+    env,
+    settings: tenantSettings,
+    runtime,
+    audit: hostedChannelAudit,
   });
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, base, env);
@@ -393,9 +404,14 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     app,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
+    hostedChannelAudit,
     ringCaptureTickets: captureTickets,
     async close() {
-      await base.close();
+      try {
+        await base.close();
+      } finally {
+        hostedChannelAudit.close();
+      }
     },
   };
 }
