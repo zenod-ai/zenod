@@ -835,6 +835,23 @@ describe("Zenod chassis unit", () => {
       expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(200);
       expect(privateFetch).toHaveBeenCalledTimes(1);
 
+      for (const headers of [
+        { cookie },
+        { authorization: "Bearer customer-token" },
+      ]) {
+        const unlisted = await unit.app.request("/api/channels/telegram/reset", {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: "{}",
+        });
+        expect(unlisted.status).toBe(403);
+        expect(await unlisted.json()).toEqual({
+          error: "forbidden",
+          capability: "customer_capability",
+        });
+      }
+      expect(privateFetch).toHaveBeenCalledTimes(1);
+
       unit.customerTokenVault.put("github-42", "second-token");
       expect((await unit.app.request("/api/channels", { headers: { cookie } })).status).toBe(401);
       expect(privateFetch).toHaveBeenCalledTimes(1);

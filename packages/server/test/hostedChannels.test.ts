@@ -623,6 +623,53 @@ describe("Hosted Zenod channel adapter", () => {
     ).toBe(true);
   });
 
+  it("projects a managed usage pause without dropping the verified sender binding", async () => {
+    const app = new Hono();
+    mountHostedChannelsCustomerRoutes(app, {
+      env: {
+        ZENOD_CHANNELS_URL: "https://channels.internal",
+        ZENOD_CHANNELS_ALLOWED_ORIGINS: "https://channels.internal",
+        ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+      },
+      resolveTenant: () => ({
+        tenantId: "tenant-paused",
+        downstreamToken: "memory-token",
+        processingPaused: true,
+      }),
+    });
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        whatsapp: {
+          state: "verified",
+          senderHint: "••••111",
+          sharedNumber: "+34 699 000 111",
+          verificationExpiresAt: null,
+          lastInboundAt: 1_787_000_000_000,
+          lastReceiptAt: 1_787_000_001_000,
+        },
+        telegram: { state: "connected", identityHint: "@jordi" },
+        downstreamToken: "must-not-leak",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const response = await app.request("/api/channels");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      whatsapp: {
+        state: "paused",
+        senderHint: "••••111",
+        sharedNumber: "+34 699 000 111",
+        verificationExpiresAt: null,
+        lastInboundAt: 1_787_000_000_000,
+        lastReceiptAt: 1_787_000_001_000,
+      },
+      telegram: { state: "connected", identityHint: "@jordi" },
+    });
+    expect(JSON.stringify(body)).not.toContain("must-not-leak");
+  });
+
   it("replays a challenge after restart without persisting its plaintext code", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "hosted-channels-replay-"));
     dirs.push(dataDir);
