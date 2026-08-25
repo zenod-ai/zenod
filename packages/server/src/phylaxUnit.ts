@@ -758,7 +758,7 @@ function registerTenantChannelTools(
   const delivery = runtime.delivery();
   const send = async (channel: PhylaxPortedChannel, recipient: string, text: string) => {
     if (!settings.ownsRecipient(tenantId, channel, recipient)) {
-      throw new PhylaxChannelError("delivery_error", "recipient is not bound to this tenant");
+      throw new PhylaxChannelError("delivery_error", "That recipient is not connected to this Zenod account.");
     }
     return delivery.send(channel, recipient, text);
   };
@@ -782,10 +782,7 @@ function registerTenantChannelTools(
       };
     },
     readConversationTranscript(query) {
-      return runtime.whatsappStore.recentTranscript(query).filter((entry) => {
-        if (!entry.messageId) return false;
-        return runtime.whatsappStore.channelAudit(entry.messageId)?.tenantId === tenantId;
-      });
+      return runtime.whatsappStore.recentTranscript({ ...query, tenantId });
     },
   });
 }

@@ -33,6 +33,7 @@ class FakeLlm implements BrainLlm {
   classifyCalls = 0;
   classifyInputs: ClassifyInput[] = [];
   failClassifyAttempts = 0;
+  classifyFailureMessage = "empty structured classification";
   composeCalls = 0;
   confidence = 0.95;
   failComposeAttempts = 0;
@@ -44,7 +45,7 @@ class FakeLlm implements BrainLlm {
   async classify(input: ClassifyInput): Promise<Classification> {
     this.classifyCalls++;
     this.classifyInputs.push(input);
-    if (this.classifyCalls <= this.failClassifyAttempts) throw new Error("empty structured classification");
+    if (this.classifyCalls <= this.failClassifyAttempts) throw new Error(this.classifyFailureMessage);
     return {
       confidence: this.confidence,
       summary: "note new insurance fact",
@@ -479,6 +480,7 @@ describe("BrainEngine", () => {
 
   it("retries an unparsable classification, then saves the raw capture to Inbox", async () => {
     llm.failClassifyAttempts = 99;
+    llm.classifyFailureMessage = "MCP bearer secret-internal-token; Ring schema dump: {prompt: hostile}";
     const content = "Remember the image text exactly: FyLax launch label.";
     const result = await engine().store({ content, source: "whatsapp", contentType: "image", verbatim: true });
 
@@ -489,6 +491,9 @@ describe("BrainEngine", () => {
     expect(log).toContain(content);
     expect(inbox).toContain(content);
     expect(inbox).toContain("Saved, but automatic filing is pending");
+    expect(inbox).toContain("classification_unavailable");
+    expect(inbox).not.toContain("secret-internal-token");
+    expect(inbox).not.toContain("Ring schema dump");
     expect((await engine().lint()).errors).toEqual([]);
   });
 

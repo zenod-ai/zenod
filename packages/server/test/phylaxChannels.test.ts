@@ -120,6 +120,140 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
+  it("journals mutation-capable Zenod chat across a foreground timeout and replays one terminal result", async () => {
+    vi.useFakeTimers();
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-durable-chat-"));
+    dirs.push(dataDir);
+    let chatCalls = 0;
+    let pollCalls = 0;
+    let resolveStalled!: (result: PeerToolResult) => void;
+    const stalled = new Promise<PeerToolResult>((resolve) => {
+      resolveStalled = resolve;
+    });
+    const terminal: PeerToolResult = {
+      content: [{ type: "text", text: "done" }],
+      structuredContent: {
+        ticket_id: "chat-job-1",
+        state: "done",
+        correlationId: "chat-job-1",
+        result: { text: "Created the approved launch record.", sources: [] },
+      },
+    };
+    const delivered: string[] = [];
+    const routes = {
+      resolve: () => ({
+        tenantId: "alpha",
+        downstreamUrl: "https://zenod.test/mcp/alpha",
+        downstreamToken: "zenod-alpha",
+        turnBindings: {
+          voice_note: { tool: "store_memory", argumentMappings: { content: { source: "transcript" as const } } },
+          text: {
+            tool: "chat_with_zenod",
+            argumentMappings: {
+              message: { source: "message" as const },
+              surface: { source: "surface" as const },
+              conversationKey: { source: "conversationKey" as const },
+            },
+          },
+          media: { tool: "ingest_memory", argumentMappings: { artifactUrl: { source: "artifactUrl" as const } } },
+        },
+      }),
+    };
+    const discoverDownstream = async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "chat",
+          mcp: "chat_with_zenod",
+          description: "Durable direct Zenod chat",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["message", "surface", "conversationKey"],
+            properties: {
+              message: { type: "string" },
+              surface: { type: "string" },
+              conversationKey: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+        }],
+      }) as const;
+    const callDownstream = async (call: PhylaxDownstreamCall): Promise<PeerToolResult> => {
+      if (call.tool === "chat_with_zenod") {
+        chatCalls += 1;
+        expect(call.arguments.idempotencyKey).toBe("alpha:whatsapp:chat-provider-1");
+        return {
+          content: [{ type: "text", text: "queued" }],
+          structuredContent: { ticket_id: "chat-job-1", state: "accepted" },
+        };
+      }
+      expect(call).toMatchObject({ tool: "get_task_result", arguments: { ticket_id: "chat-job-1" } });
+      pollCalls += 1;
+      return pollCalls === 1 ? stalled : terminal;
+    };
+    let organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes,
+      discoverDownstream,
+      captureForegroundDeadlineMs: 10,
+      capturePollIntervalMs: 1,
+      callDownstream,
+    });
+
+    try {
+      const pendingPromise = organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "chat-provider-1",
+        text: "Create the approved launch record",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      const pending = await pendingPromise;
+      expect(pending.replyText).toBe("I’m still working on that — I’ll reply here when it is finished.");
+      expect(chatCalls).toBe(1);
+
+      // Simulate the channels process stopping after Zenod accepted the job but
+      // before its foreground poll returned. The accepted job remains in the
+      // local journal; boot recovery must poll, not invoke chat again.
+      await organ.close();
+      resolveStalled(terminal);
+      organ = new PhylaxChannelsOrgan({
+        dataDir,
+        routes,
+        discoverDownstream,
+        captureForegroundDeadlineMs: 10,
+        capturePollIntervalMs: 1,
+        callDownstream,
+      });
+      organ.setTerminalReceiptDelivery(async (_channel, _recipient, text) => {
+        delivered.push(text);
+        return { sentMessageId: "wa-chat-terminal-1" };
+      });
+      await organ.resumePendingCaptures();
+      for (let attempt = 0; attempt < 10 && pollCalls < 2; attempt += 1) await Promise.resolve();
+      expect(pollCalls).toBe(2);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.waitFor(() => expect(delivered).toEqual(["Created the approved launch record."]));
+
+      const replay = await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "chat-provider-1",
+        text: "Create the approved launch record",
+      });
+      expect(replay.replyText).toBe("Created the approved launch record.");
+      expect(chatCalls).toBe(1);
+    } finally {
+      resolveStalled(terminal);
+      await vi.advanceTimersByTimeAsync(0);
+      await organ.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("dispatches a tenant voice binding mechanically, validates its live schema, and polls to a terminal receipt", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-dispatch-"));
     dirs.push(dataDir);
@@ -910,7 +1044,7 @@ describe("PhylaxChannelsOrgan", () => {
       },
     })).rejects.toMatchObject({
       code: "invalid_input",
-      message: 'binding source "filename" is unavailable for field "filename"',
+      message: "Zenod could not process that message because the channel configuration needs attention.",
     });
     expect(calls).toHaveLength(cases.length);
     await organ.close();
@@ -1499,6 +1633,49 @@ describe("PhylaxChannelsOrgan", () => {
     ]);
   });
 
+  it("never relays raw MCP, provider, schema, or Ring failure prose to the customer", async () => {
+    let mode: "thrown" | "typed" = "thrown";
+    const organ = new PhylaxChannelsOrgan({
+      dataDir: "/tmp/unused-phylax-safe-errors",
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/alpha",
+          downstreamToken: "internal-token",
+        }),
+      },
+      async callDownstream() {
+        if (mode === "thrown") {
+          throw new Error("MCP provider schema exploded inside Ring/Phylax: hostile-internal-detail");
+        }
+        return {
+          isError: true,
+          content: [{ type: "text", text: "Ring MCP 500: hostile-internal-detail" }],
+          structuredContent: {
+            error: { code: "provider_schema_error", message: "Phylax internal stack hostile-internal-detail" },
+          },
+        };
+      },
+    });
+
+    for (const failureMode of ["thrown", "typed"] as const) {
+      mode = failureMode;
+      const error = await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: `safe-error-${failureMode}`,
+        text: "hello",
+      }).catch((caught: unknown) => caught);
+      expect(error).toMatchObject({
+        code: "downstream_error",
+        message: "Zenod could not process that message. Please try again.",
+      });
+      expect((error as Error).message).not.toMatch(/MCP|provider|schema|Ring|Phylax|hostile-internal-detail/i);
+    }
+    await organ.close();
+  });
+
   it("marks the configured downstream credential healthy after a successful reply", async () => {
     const statuses: Array<[string, string, string]> = [];
     const organ = new PhylaxChannelsOrgan({
@@ -1837,6 +2014,66 @@ describe("Phylax MCP channel tools", () => {
 });
 
 describe("ported gateway integration", () => {
+  it("applies tenant transcript scope before the global limit", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-transcript-tenant-limit-"));
+    dirs.push(dataDir);
+    const store = new WhatsAppStore(join(dataDir, "whatsapp.sqlite"));
+    const record = (tenantId: string, messageId: string, timestamp: number) => {
+      store.recordInbound({
+        messageId,
+        chatId: `${tenantId}@s.whatsapp.net`,
+        senderId: `${tenantId}@s.whatsapp.net`,
+        senderName: tenantId,
+        chatName: tenantId,
+        isGroup: false,
+        timestamp,
+        body: `${tenantId} transcript ${messageId}`,
+        hasMedia: false,
+        mediaType: null,
+        mimeType: null,
+        fileName: null,
+      });
+      store.recordChannelForwarding({
+        providerMessageId: messageId,
+        tenantId,
+        senderId: tenantId,
+        downstreamDestination: "zenod-memory",
+        replyText: "ok",
+      });
+    };
+    record("alpha", "alpha-visible", 1);
+    store.recordOutboundAudit({
+      messageId: "alpha-visible",
+      chatId: "alpha@s.whatsapp.net",
+      contactId: "alpha@s.whatsapp.net",
+      bodyText: "alpha outbound receipt",
+      status: "sent",
+      sentMessageId: "alpha-outbound",
+    });
+    for (let index = 0; index < 20; index += 1) {
+      const messageId = `beta-newer-${index}`;
+      record("beta", messageId, index + 2);
+      store.recordOutboundAudit({
+        messageId,
+        chatId: "beta@s.whatsapp.net",
+        contactId: "beta@s.whatsapp.net",
+        bodyText: `beta outbound ${index}`,
+        status: "sent",
+        sentMessageId: `beta-outbound-${index}`,
+      });
+    }
+
+    const alpha = store.recentTranscript({ tenantId: "alpha", sinceMs: 0, limit: 2 });
+    expect(alpha).toHaveLength(2);
+    expect(alpha.map((entry) => entry.bodyText).sort()).toEqual([
+      "alpha outbound receipt",
+      "alpha transcript alpha-visible",
+    ]);
+    expect(JSON.stringify(alpha)).not.toContain("beta-newer");
+    expect(JSON.stringify(alpha)).not.toContain("beta outbound");
+    store.close();
+  });
+
   it("migrates an existing W-P3 audit table additively", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-recovery-migration-"));
     dirs.push(dataDir);
@@ -2912,7 +3149,8 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-safety-bound")?.state).toBe("failed"));
       expect(downstreamCalls).toBe(0);
       expect(sent[0]).toContain("queued it for transcription");
-      expect(sent[1]).toContain("100ms safety deadline");
+      expect(sent[1]).toBe("⚠️ Zenod could not finish transcribing that voice note. Please try a shorter note or try again.");
+      expect(sent.join("\n")).not.toMatch(/100ms|deadline|provider|MCP|Ring|Phylax|https?:\/\//i);
     } finally {
       await runtime.close();
     }
@@ -3032,8 +3270,9 @@ describe("ported gateway integration", () => {
         expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
       expect(sent).toEqual([
         'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
-        "⚠️ Your voice note was transcribed, but Ring’s handoff outcome is unknown. I will not retry it automatically because that could perform the request twice.",
+        "⚠️ Your voice note was transcribed, but Zenod could not confirm the final result. I will not retry it automatically because that could perform the request twice.",
       ]);
+      expect(sent.join("\n")).not.toMatch(/Ring|Phylax/i);
       expect(runtime.whatsappStore.channelAudit(event.messageId)).toBeNull();
       expect(JSON.stringify(runtime.whatsappStore.voiceJob(event.messageId))).not.toContain("ring-secret-must-not-persist");
     } finally {

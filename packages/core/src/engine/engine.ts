@@ -1325,14 +1325,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
           classifications.push(classified);
         }
         classification = mergeSegmentClassifications(classifications);
-      } catch (err) {
+      } catch {
         // Preserve the raw capture even when the classifier produces empty or
         // unparsable output twice. This is a successful save with filing
         // pending, not data loss or a false transport failure.
         await repo.discardChanges();
         const retried = await appendEvidence(vaultPath, input.content, input.source, verbatim, now(), evidenceMetadata);
         const retriedRef = `${retried.logPath}#^${retried.anchor}`;
-        const question = `Saved, but automatic filing is pending because classification failed after ${CLASSIFY_RETRIES + 1} attempts: ${(err as Error).message}`;
+        // Provider/schema prose can contain prompt fragments, credentials, or
+        // internal transport details. The durable usage ledger owns bounded
+        // diagnostic codes; the user's vault receives only this stable reason.
+        const question = `Saved, but automatic filing is pending (classification_unavailable) after ${CLASSIFY_RETRIES + 1} attempts.`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
         const sha = await repo.commitAndPush("memory: (inbox) classification pending");
         const canonicalLocation = { ...location, branch: sha };

@@ -865,6 +865,43 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
+  it("chat_with_zenod enqueues and replays one durable chat for a channel idempotency key", async () => {
+    const client = await connect();
+    const chatSpy = vi.spyOn(fakeEngine, "chat");
+    chatSpy.mockClear();
+    const args = {
+      message: "create the approved record",
+      surface: "whatsapp",
+      conversationKey: "whatsapp:34611111111",
+      idempotencyKey: "tenant-alpha:whatsapp:wamid.chat-1",
+    };
+    const first = await client.callTool({ name: "chat_with_zenod", arguments: args });
+    const replay = await client.callTool({
+      name: "chat_with_zenod",
+      arguments: { ...args, message: "a duplicate payload must not run" },
+    });
+    const firstJobId = (first.structuredContent as { jobId: string }).jobId;
+    expect((replay.structuredContent as { jobId: string }).jobId).toBe(firstJobId);
+
+    const terminal = await pollTaskTerminal(client, firstJobId);
+    expect(terminal).toMatchObject({
+      kind: "chat",
+      status: "done",
+      correlationId: firstJobId,
+      result: { text: "Re: create the approved record" },
+    });
+    const completedReplay = await client.callTool({ name: "chat_with_zenod", arguments: args });
+    expect(completedReplay.structuredContent).toMatchObject({ jobId: firstJobId, status: "done" });
+    expect(chatSpy).toHaveBeenCalledTimes(1);
+    expect(chatSpy).toHaveBeenCalledWith(
+      "create the approved record",
+      "whatsapp",
+      expect.objectContaining({ conversationKey: "whatsapp:34611111111" }),
+    );
+    chatSpy.mockRestore();
+    await client.close();
+  });
+
   it("task_brain routes instructions through the shared tasking entrypoint (async + poll)", async () => {
     const client = await connect();
     const result = (await runAsyncTool(client, "task_brain", {

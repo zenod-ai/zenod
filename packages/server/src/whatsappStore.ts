@@ -133,6 +133,8 @@ export interface WhatsAppMediaFollowUpLink {
 
 export interface WhatsAppTranscriptQuery {
   sinceMs?: number;
+  /** Internal tenant scope. Applied inside each transcript source before LIMIT. */
+  tenantId?: string;
   contactId?: string;
   chatId?: string;
   messageId?: string;
@@ -1127,7 +1129,7 @@ export class WhatsAppStore {
 
   markVoiceRingOutcomeUnknown(providerMessageId: string, now = Date.now()): void {
     const notice =
-      "⚠️ Your voice note was transcribed, but Ring’s handoff outcome is unknown. I will not retry it automatically because that could perform the request twice.";
+      "⚠️ Your voice note was transcribed, but Zenod could not confirm the final result. I will not retry it automatically because that could perform the request twice.";
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const changed = this.db.prepare(
@@ -2250,6 +2252,7 @@ export class WhatsAppStore {
     const contact = input.contactId ? normalizeWhatsAppIdentifier(input.contactId) : "";
     const chat = input.chatId ?? "";
     const message = input.messageId?.trim() ?? "";
+    const tenantId = input.tenantId?.trim() ?? "";
     const rows = this.db
       .prepare(
         `SELECT * FROM (
@@ -2263,8 +2266,13 @@ export class WhatsAppStore {
              processing_status AS status,
              media_type AS mediaType,
              NULL AS sentMessageId
-           FROM whatsapp_messages
+           FROM whatsapp_messages AS m
            WHERE received_at >= ?
+             AND (? = '' OR EXISTS (
+               SELECT 1 FROM whatsapp_channel_audit AS inbound_tenant
+               WHERE inbound_tenant.provider_message_id = m.message_id
+                 AND inbound_tenant.tenant_id = ?
+             ))
            UNION ALL
            SELECT
              'outbound' AS direction,
@@ -2276,8 +2284,13 @@ export class WhatsAppStore {
              status AS status,
              NULL AS mediaType,
              sent_message_id AS sentMessageId
-           FROM whatsapp_outbound_audit
+           FROM whatsapp_outbound_audit AS o
            WHERE created_at >= ?
+             AND (? = '' OR EXISTS (
+               SELECT 1 FROM whatsapp_channel_audit AS outbound_tenant
+               WHERE outbound_tenant.provider_message_id = o.message_id
+                 AND outbound_tenant.tenant_id = ?
+             ))
          )
          WHERE (? = '' OR REPLACE(REPLACE(REPLACE(COALESCE(contactId, ''), '@s.whatsapp.net', ''), '@lid', ''), '+', '') LIKE '%' || ? || '%')
            AND (? = '' OR chatId = ?)
@@ -2285,7 +2298,22 @@ export class WhatsAppStore {
          ORDER BY at DESC
          LIMIT ?`,
       )
-      .all(sinceMs, sinceMs, contact, contact, chat, chat, message, message, message, limit) as unknown as Array<{
+      .all(
+        sinceMs,
+        tenantId,
+        tenantId,
+        sinceMs,
+        tenantId,
+        tenantId,
+        contact,
+        contact,
+        chat,
+        chat,
+        message,
+        message,
+        message,
+        limit,
+      ) as unknown as Array<{
       direction: "inbound" | "outbound";
       at: number;
       messageId: string | null;

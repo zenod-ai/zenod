@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { MemoryContentType, StoreResult, Surface, TaskingReply, WorkResult } from "zenod";
+import type { MemoryContentType, Reply, StoreResult, Surface, TaskingReply, WorkResult } from "zenod";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
@@ -16,7 +16,7 @@ import { openZenodSqlite } from "./sqlite.js";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "task" | "work" | "store" | "media_ingest";
+export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -31,9 +31,9 @@ const MAX_CAPTURE_RESUME_ATTEMPTS = 3;
 export const TASK_JOB_LEASE_MS = 4 * 60_000;
 
 export interface TaskJobInput {
-  /** task: the instruction sent through the shared tasking loop. */
+  /** chat/task: the instruction sent through the shared conversational/tasking loop. */
   text?: string;
-  /** task: correlation/thread key; defaults to "mcp". */
+  /** chat/task: correlation/thread key; defaults to "mcp". */
   conversationKey?: string;
   /** work: the objective to accomplish. */
   objective?: string;
@@ -107,7 +107,7 @@ export interface MediaIngestReceipt {
   nextAdapterIssues?: string[];
 }
 
-export type TaskJobResult = TaskingReply | WorkResult | StoreResult | MediaIngestReceipt;
+export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt;
 
 export interface TaskJob {
   id: string;
@@ -261,8 +261,8 @@ export class TaskJobStore {
     if (normalizedKey && normalizedKey.length > 512) {
       throw new Error("idempotencyKey must be at most 512 characters");
     }
-    if (normalizedKey && kind !== "store" && kind !== "media_ingest") {
-      throw new Error("idempotencyKey is only supported for durable capture jobs");
+    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest") {
+      throw new Error("idempotencyKey is only supported for durable channel/capture jobs");
     }
 
     const id = randomUUID();

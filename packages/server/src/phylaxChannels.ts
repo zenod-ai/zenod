@@ -355,6 +355,7 @@ function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string)
 const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 4 * 60_000;
 const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
 const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
+const CHAT_PENDING_REPLY = "I’m still working on that — I’ll reply here when it is finished.";
 
 interface PhylaxCaptureJob {
   tenantId: string;
@@ -701,8 +702,12 @@ function valueFromBindingSource(
   }
 }
 
-function isAsyncCaptureTool(tool: string): tool is "store_memory" | "ingest_memory" {
-  return tool === "store_memory" || tool === "ingest_memory";
+function isDurableChannelTool(tool: string): tool is "chat_with_zenod" | "store_memory" | "ingest_memory" {
+  return tool === "chat_with_zenod" || tool === "store_memory" || tool === "ingest_memory";
+}
+
+function pendingReplyForTool(tool: string): string {
+  return tool === "chat_with_zenod" ? CHAT_PENDING_REPLY : CAPTURE_PENDING_REPLY;
 }
 
 function acceptedJobId(result: PeerToolResult): string | null {
@@ -723,7 +728,7 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): {
+function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, tool: string): {
   state: "done" | "error";
   text: string;
   evidenceRef: string | null;
@@ -735,14 +740,24 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string): 
   if (responseJobId !== expectedJobId) return null;
   const payload = objectValue(structured?.result);
   if (state !== "done" || result.isError || !payload) {
-    const error = objectValue(structured?.error);
-    const message = typeof error?.message === "string"
-      ? error.message
-      : textFromResult(result) || "The memory filing job failed.";
     return {
       state: "error",
-      text: `⚠️ I could not save that memory: ${message}`,
+      text: tool === "chat_with_zenod"
+        ? "⚠️ I could not confirm the result of that request. Please check your Zenod activity before trying it again."
+        : "⚠️ Zenod could not finish saving that memory. Please try again.",
       evidenceRef: null,
+    };
+  }
+  if (tool === "chat_with_zenod") {
+    const stored = objectValue(payload.stored);
+    const evidenceRef = typeof stored?.evidenceRef === "string" && stored.evidenceRef.trim()
+      ? stored.evidenceRef.trim()
+      : null;
+    const reply = sanitizePhylaxCustomerReply(typeof payload.text === "string" ? payload.text : "");
+    return {
+      state: "done",
+      text: reply || "Zenod finished the request, but returned no reply text.",
+      evidenceRef,
     };
   }
   const digest = objectValue(payload.digest);
@@ -888,7 +903,7 @@ export class PhylaxChannelsOrgan {
     return (this.options.discoverDownstream ?? discoverConfiguredPeer)(route);
   }
 
-  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<void> {
+  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<{ supportsIdempotencyKey: boolean }> {
     const discovery = await this.discoverDownstream(call.route);
     if (discovery.tools !== "ready") {
       throw new Error(`downstream schema discovery failed: ${discovery.error ?? "tools/list unavailable"}`);
@@ -914,6 +929,8 @@ export class PhylaxChannelsOrgan {
         .join("; ");
       throw new Error(`configured mapping no longer matches "${call.tool}" input schema${detail ? `: ${detail}` : ""}`);
     }
+    const properties = objectValue((schema as Record<string, unknown>).properties);
+    return { supportsIdempotencyKey: Boolean(properties?.idempotencyKey) };
   }
 
   private async pollCapture(
@@ -972,7 +989,7 @@ export class PhylaxChannelsOrgan {
         continue;
       }
       const result = attempt.result;
-      const terminal = terminalCaptureReceipt(result, job.jobId);
+      const terminal = terminalCaptureReceipt(result, job.jobId, job.tool);
       if (terminal) {
         this.captureJournal.terminal(job, terminal.state, terminal.text, terminal.evidenceRef);
         return { result, receipt: terminal };
@@ -1055,15 +1072,15 @@ export class PhylaxChannelsOrgan {
    */
   async stageVoice(input: PhylaxChannelInbound, expectedTenantId?: string): Promise<PhylaxStagedVoice> {
     if (input.channel !== "whatsapp" || !input.messageId?.trim() || !input.media?.bytes || !isAudioMedia(input.media)) {
-      throw new PhylaxChannelError("invalid_input", "a WhatsApp audio message with bytes and messageId is required");
+      throw new PhylaxChannelError("invalid_input", "Zenod could not read that voice note. Please try again.");
     }
     const { sender, route } = await this.resolveInboundRoute(input.channel, input.sender, input.chatId);
     if (expectedTenantId && route.tenantId !== expectedTenantId) {
-      throw new PhylaxChannelError("downstream_error", "tenant route changed before media processing");
+      throw new PhylaxChannelError("downstream_error", "Zenod could not finish processing that message. Please try again.");
     }
     const artifact = this.rememberArtifact(route.tenantId, input.media);
     if (!artifact?.path || !artifact.sha256) {
-      throw new PhylaxChannelError("invalid_input", "voice artifact could not be persisted");
+      throw new PhylaxChannelError("invalid_input", "Zenod could not retain that voice note safely. Please try again.");
     }
     return {
       tenantId: route.tenantId,
@@ -1142,7 +1159,7 @@ export class PhylaxChannelsOrgan {
   async receive(input: PhylaxChannelInbound, expectedTenantId?: string): Promise<PhylaxInboundReceipt> {
     const { sender, route } = await this.resolveInboundRoute(input.channel, input.sender, input.chatId);
     if (expectedTenantId && route.tenantId !== expectedTenantId) {
-      throw new PhylaxChannelError("downstream_error", "tenant route changed before media processing");
+      throw new PhylaxChannelError("downstream_error", "Zenod could not finish processing that message. Please try again.");
     }
 
     const artifact = input.media ? this.rememberArtifact(route.tenantId, input.media) : undefined;
@@ -1208,7 +1225,7 @@ export class PhylaxChannelsOrgan {
     }
     const text = transcription.text_transcript?.trim() || input.text?.trim() || "";
     if (!text && !artifactRef && !transcription.transcription_failed) {
-      throw new PhylaxChannelError("invalid_input", "text or media is required");
+      throw new PhylaxChannelError("invalid_input", "Please send text, a voice note, or supported media.");
     }
     const conversationKey = `${input.channel}:${sender}`;
     const turnType = captureTurnType(input);
@@ -1277,7 +1294,7 @@ export class PhylaxChannelsOrgan {
               if (value === undefined) {
                 throw new PhylaxChannelError(
                   "invalid_input",
-                  `binding source "${source.source}" is unavailable for field "${field}"`,
+                  "Zenod could not process that message because the channel configuration needs attention.",
                 );
               }
               return [[field, value]];
@@ -1292,13 +1309,13 @@ export class PhylaxChannelsOrgan {
           handoff,
         };
     const providerMessageId = input.messageId?.trim();
-    if (isAsyncCaptureTool(call.tool) && !providerMessageId) {
+    if ((call.tool === "store_memory" || call.tool === "ingest_memory") && !providerMessageId) {
       throw new PhylaxChannelError(
         "invalid_input",
-        "provider messageId is required for durable memory capture",
+        "Zenod could not establish a safe delivery identity for that message. Please try again.",
       );
     }
-    if (isAsyncCaptureTool(call.tool) && providerMessageId) {
+    if ((call.tool === "store_memory" || call.tool === "ingest_memory") && providerMessageId) {
       call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
     }
     if (call.tool === "ingest_memory" && text && call.arguments.contentHint === undefined) {
@@ -1332,14 +1349,22 @@ export class PhylaxChannelsOrgan {
     const downstreamStartedAt = Date.now();
     let downstream: PeerToolResult;
     let backgroundCaptureJob: PhylaxCaptureJob | null = null;
+    // Chat becomes durable only when the discovered, version-coherent Zenod
+    // schema explicitly advertises idempotencyKey. Legacy/custom unbound
+    // assistants remain synchronous and are never sent an invented argument.
+    let durableChat = false;
     try {
       if (binding) {
         try {
-          await this.validateBoundCall(call);
+          const validation = await this.validateBoundCall(call);
+          if (call.tool === "chat_with_zenod" && providerMessageId && validation.supportsIdempotencyKey) {
+            call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
+            durableChat = true;
+          }
         } catch (error) {
           throw new PhylaxChannelError(
             "downstream_error",
-            error instanceof Error ? error.message : "tenant binding schema validation failed",
+            "Zenod could not process that message because the channel configuration needs attention.",
             failureAudit(
               Math.max(0, Date.now() - downstreamStartedAt),
               "downstream_schema_drift",
@@ -1347,7 +1372,8 @@ export class PhylaxChannelsOrgan {
           );
         }
       }
-      const existing = isAsyncCaptureTool(call.tool) && providerMessageId
+      const durableCall = isDurableChannelTool(call.tool) && (call.tool !== "chat_with_zenod" || durableChat);
+      const existing = durableCall && providerMessageId
         ? this.captureJournal.get(route.tenantId, input.channel, providerMessageId)
         : null;
       if (existing?.state === "done" && existing.receiptText) {
@@ -1387,7 +1413,7 @@ export class PhylaxChannelsOrgan {
           };
         } else {
           downstream = {
-            content: [{ type: "text", text: CAPTURE_PENDING_REPLY }],
+            content: [{ type: "text", text: pendingReplyForTool(call.tool) }],
             structuredContent: {
               ticket_id: existing.jobId,
               jobId: existing.jobId,
@@ -1398,11 +1424,14 @@ export class PhylaxChannelsOrgan {
         }
       } else {
         downstream = await this.callDownstream(call);
-        const jobId = isAsyncCaptureTool(call.tool) && !downstream.isError
+        const jobId = durableCall && !downstream.isError
           ? acceptedJobId(downstream)
           : null;
-        if (isAsyncCaptureTool(call.tool) && !downstream.isError && !jobId) {
-          throw new Error(`${call.tool} returned no canonical ticket_id; capture cannot be polled safely`);
+        if (durableCall && !downstream.isError && !jobId) {
+          // A version-coherent Zenod surface advertises the durable contract and
+          // must return a canonical ticket. Never fall back to a second,
+          // mutation-capable synchronous call after that contract is selected.
+          throw new Error(`${call.tool} returned no canonical ticket_id; channel request cannot be polled safely`);
         }
         if (jobId && providerMessageId) {
           // Synchronous SQLite commit happens before the first await/poll.
@@ -1430,7 +1459,7 @@ export class PhylaxChannelsOrgan {
           } else {
             downstream = {
               ...downstream,
-              content: [{ type: "text", text: CAPTURE_PENDING_REPLY }],
+              content: [{ type: "text", text: pendingReplyForTool(call.tool) }],
             };
             backgroundCaptureJob = job;
           }
@@ -1449,7 +1478,7 @@ export class PhylaxChannelsOrgan {
       }
       throw new PhylaxChannelError(
         "downstream_error",
-        error instanceof Error ? error.message : "tenant downstream request failed",
+        "Zenod could not process that message. Please try again.",
         failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
         call.tool === "store_memory" && providerMessageId ? "idempotent_capture" : null,
       );
@@ -1479,7 +1508,7 @@ export class PhylaxChannelsOrgan {
     if (!replyText) {
       throw new PhylaxChannelError(
         "downstream_error",
-        "tenant downstream returned no reply",
+        "Zenod finished the request but returned no reply. Please try again.",
         failureAudit(downstreamMs, "downstream_empty_reply", audit),
       );
     }
@@ -1520,14 +1549,14 @@ export class PhylaxChannelsOrgan {
   ): Promise<{ sender: string; route: PhylaxTenantRoute }> {
     const sender = normalizedSender(channel, senderValue);
     if (!sender || !chatId.trim()) {
-      throw new PhylaxChannelError("invalid_input", "sender and chatId are required");
+      throw new PhylaxChannelError("invalid_input", "Zenod could not identify this conversation.");
     }
     const route = await this.options.routes.resolve(channel, sender);
     if (!route) {
-      throw new PhylaxChannelError("unmatched_sender", "sender is not registered to a Phylax tenant");
+      throw new PhylaxChannelError("unmatched_sender", "This channel is not connected to a Zenod account.");
     }
     if (!route.downstreamUrl.trim() || !route.downstreamToken.trim()) {
-      throw new PhylaxChannelError("downstream_error", "tenant downstream is not configured");
+      throw new PhylaxChannelError("downstream_error", "Your Zenod connection needs attention. Open Zenod settings and reconnect it.");
     }
     return { sender, route };
   }
@@ -1551,17 +1580,17 @@ export class PhylaxChannelsOrgan {
     const path = join(tenantDir, file);
     writeFileSync(path, Buffer.from(media.bytes), { flag: "wx", mode: 0o600 });
     if (!this.options.artifactUrl) {
-      throw new PhylaxChannelError("invalid_input", "artifact URL resolver is required for channel media");
+      throw new PhylaxChannelError("invalid_input", "Zenod could not prepare that media safely. Please try again.");
     }
     const reference = this.options.artifactUrl(tenantId, file);
     let parsed: URL;
     try {
       parsed = new URL(reference);
     } catch {
-      throw new PhylaxChannelError("invalid_input", "artifact_ref must be a unit-token-fetchable URL");
+      throw new PhylaxChannelError("invalid_input", "Zenod could not prepare that media safely. Please try again.");
     }
     if (parsed.protocol !== "https:" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
-      throw new PhylaxChannelError("invalid_input", "artifact_ref must use https");
+      throw new PhylaxChannelError("invalid_input", "Zenod could not prepare that media safely. Please try again.");
     }
     return { ref: parsed.toString(), path, sha256: createHash("sha256").update(media.bytes).digest("hex") };
   }
@@ -1569,14 +1598,12 @@ export class PhylaxChannelsOrgan {
 
 function downstreamCredentialRejectedError(
   audit: PhylaxFailureAudit,
-  target: "memory" | "assistant",
+  _target: "memory" | "assistant",
   retryableCapture: boolean,
 ): PhylaxChannelError {
   return new PhylaxChannelError(
     "downstream_error",
-    target === "memory"
-      ? "Your Zenod memory connection needs attention. Open Zenod settings and reconnect it."
-      : "Your Ring connection needs attention. Open Phylax settings and replace the Ring MCP URL and bearer token, then retry.",
+    "Your Zenod connection needs attention. Open Zenod settings and reconnect it.",
     audit,
     retryableCapture ? "idempotent_capture" : null,
   );
@@ -1586,7 +1613,7 @@ function assistantRoute(route: PhylaxTenantRoute): PhylaxTenantRoute {
   if (!route.assistantUrl?.trim() || !route.assistantToken?.trim()) {
     throw new PhylaxChannelError(
       "downstream_error",
-      "tenant assistant downstream is not configured",
+      "The connected assistant needs attention. Open its settings and reconnect it.",
     );
   }
   return {
