@@ -100,6 +100,20 @@
     .sequence-row:first-child { border-top: 0; }
     .sequence-n { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #081323; background: var(--blue); font-weight: 900; }
     .decision { padding: 24px; border: 2px solid var(--blue); border-radius: var(--radius); background: #101b2b; }
+    .vps { margin-top: 20px; padding: 20px; border: 2px solid #465770; border-radius: 20px; background: #0e141d; }
+    .vps-title { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 15px; color: #cbd6e7; font-size: .82rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+    .containers { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .container-card { padding: 22px; border: 1px solid #3976bd; border-radius: 15px; background: #121d2c; }
+    .container-card h3 { color: #dceaff; }
+    .container-card.separate { border-color: #5a626e; border-style: dashed; opacity: .8; }
+    .container-number { color: var(--blue); font-size: .75rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+    .external-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+    .external { padding: 13px; border: 1px dashed var(--line); border-radius: 11px; color: var(--muted); text-align: center; }
+    .portal-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .portal-item { padding: 17px; border: 1px solid var(--line); border-radius: 12px; background: #111720; }
+    .bar { height: 10px; overflow: hidden; border-radius: 99px; background: #252d39; }
+    .bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--green)); }
+    .formula { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #0e131b; font: 700 .95rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #dce9ff; }
     footer { margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
     @media (max-width: 820px) {
       .card, .card.wide { grid-column: 1 / -1; }
@@ -112,6 +126,7 @@
       .service { grid-template-columns: 1fr; }
       .sequence-row { grid-template-columns: 36px 1fr; }
       .sequence-row > :last-child { grid-column: 2; }
+      .containers, .portal-map, .external-grid { grid-template-columns: 1fr; }
     }
     @media print {
       :root { color-scheme: light; --bg: #fff; --panel: #fff; --panel-2: #fff; --ink: #111; --muted: #555; --line: #ccc; }
@@ -183,58 +198,83 @@
         <span class="status next">Public beta</span>
         <h3>Zenod Hosted</h3>
         <div class="price">€9<span style="font-size:1rem;letter-spacing:0">/month + VAT</span></div>
-        <p class="muted">One subscription. No API keys, MCP wiring, or Phylax account required.</p>
-        <ul><li>Managed Zenod memory</li><li>Web + MCP + Telegram</li><li>WhatsApp for one verified sender</li><li>Locked budget models and a visible monthly allowance</li></ul>
+        <p class="muted">One subscription. No customer API key, no manual MCP plumbing, and no Phylax account required.</p>
+        <ul><li>Managed Zenod memory and included model usage</li><li>A ready-to-copy MCP URL, bearer token, and Codex/Claude commands</li><li>Web + Telegram + WhatsApp for one verified sender</li><li>Locked budget models and a visible monthly allowance</li></ul>
       </article>
     </div>
     <div class="plain"><strong>Why €9 rather than €5 + an add-on?</strong> It is the simplest customer and billing journey, and it leaves more room for WhatsApp transcription and early support. The existing €5/€50 offer was calculated without WhatsApp speech-to-text and has only thin support margin. After beta evidence, Zenod can split a €5 base and €4 WhatsApp add-on if demand justifies the extra entitlement and billing machinery.</div>
   </section>
 
   <section>
-    <h2>How it is deployed today</h2>
+    <h2>Two different “tokens”</h2>
     <div class="compare">
-      <article class="card full">
-        <span class="status now">Customer-visible</span>
-        <div class="stack">
-          <div class="service"><div class="service-name">zenod.dev</div><div>Public landing and current €5/month, €50/year, self-hosted-free positioning.</div></div>
-          <div class="service"><div class="service-name">cloud.zenod.dev</div><div>Hosted Zenod customer app, GitHub login, billing/account, vault and MCP settings. Separate Zenod MT container and <code>/data</code> volume.</div></div>
-          <div class="service removed"><div class="service-name">phylax.zenod.dev</div><div>Separate customer UI for phone verification, manual Zenod MCP URL/token, tool discovery, bindings, transcription provider, and a Phylax MCP endpoint.</div></div>
-          <div class="service removed"><div class="service-name">ring.zenod.dev</div><div>Separate multi-agent product currently used by the Zenod number for ordinary text.</div></div>
-        </div>
-      </article>
-      <article class="card full">
-        <span class="status now">Operations-visible</span>
-        <div class="stack">
-          <div class="service"><div class="service-name">Zenod MT</div><div>Image <code>7365dbc</code>; tenant memory engines, MCP tools, model calls, GitHub vault commits; persistent <code>/data</code>.</div></div>
-          <div class="service"><div class="service-name">Phylax runtime</div><div>Image <code>399b3a8</code>; shared WhatsApp Web session, sender verification, transcription, capture journal, delivery audit; separate persistent <code>/data</code>.</div></div>
-          <div class="service"><div class="service-name">Ring</div><div>Image <code>0be407a</code>; own tenant/chat state and generic routing/reply gate; separate persistent <code>/data</code>.</div></div>
-          <div class="service internal"><div class="service-name">Network</div><div>All three services are separate containers on <code>dokploy-network</code>, port 8080, with independent volumes and release SHAs.</div></div>
-        </div>
-      </article>
+      <article class="card full"><h3>1 · MCP bearer token</h3><p>This is an access credential, not a usage unit. Zenod is fundamentally an MCP server. Hosted Zenod creates the endpoint and token automatically, then shows the user the URL, token, and copyable setup commands for Codex, Claude Code, or another MCP client.</p><p class="good"><strong>Product promise:</strong> no manual infrastructure wiring—not “no MCP.”</p></article>
+      <article class="card full"><h3>2 · LLM/audio usage</h3><p>These are the provider-billed text, image, cached-input, and transcription units. The hosted price should include them through one Zenod-managed OpenRouter account and a visible monthly allowance. The customer should not need an OpenRouter key for the standard hosted plan.</p><p class="good"><strong>Product promise:</strong> one bill, with a clear warning and hard limit.</p></article>
     </div>
   </section>
 
   <section>
-    <h2>How it should be deployed</h2>
-    <div class="architecture">
-      <div class="node good-node"><strong>zenod.dev</strong><br><span class="muted">Landing, checkout, legal</span></div>
-      <div class="arrow">→</div>
-      <div class="node good-node"><strong>Zenod app</strong><br><span class="muted">One account, dashboard, memory, channels</span></div>
-      <div class="arrow">→</div>
-      <div class="node good-node"><strong>Zenod MT</strong><br><span class="muted">Tenant memory and vault</span></div>
-    </div>
-    <div class="architecture">
-      <div class="node"><strong>WhatsApp provider</strong><br><span class="muted">One shared Zenod number</span></div>
-      <div class="arrow">→</div>
-      <div class="node"><strong>Internal channel runtime</strong><br><span class="muted">Formerly “Phylax”; no public product UI</span></div>
-      <div class="arrow">→</div>
-      <div class="node"><strong>Zenod MT</strong><br><span class="muted">Direct tenant-scoped memory tools</span></div>
-    </div>
+    <h2>What Jordi’s Zenod usage actually cost</h2>
     <div class="grid">
-      <article class="card wide"><h3>Keep two internal containers</h3><p>Do not merge the WhatsApp session process into Zenod MT for launch. Separate persistence and restart boundaries protect the phone session from memory deploys and protect memory tenants from channel faults.</p></article>
-      <article class="card wide"><h3>Expose one product surface</h3><p>Remove the public Phylax tenant dashboard and product links. Keep a protected operator-only channel health page. Ring is neither called nor provisioned for a Zenod subscription.</p></article>
-      <article class="card wide"><h3>Automatic internal binding</h3><p>At hosted tenant creation, mint a memory-scoped Zenod credential and register it with the channel runtime over the private network. Apply fixed Zenod bindings; customers never paste URLs, tokens, or tool schemas.</p></article>
-      <article class="card wide"><h3>Provider progression</h3><p>Use the current shared-number adapter only for a capped beta with explicit operational risk. Before uncapped/general availability, move the transport seam to the official Meta WhatsApp Cloud API without changing the Zenod customer journey.</p></article>
+      <article class="card"><div class="metric">$0.044</div><div class="muted">LLM estimate · previous calendar week, 17–23 August</div></article>
+      <article class="card"><div class="metric">$0.180</div><div class="muted">LLM estimate · rolling seven days ending 25 August</div></article>
+      <article class="card"><div class="metric">$0.152</div><div class="muted">one 50.5-minute voice transcription in that rolling window</div></article>
+      <article class="card wide"><h3>Rolling seven-day total</h3><div class="price">$0.332</div><p class="muted">About $1.44/month if that exact pace continued for 4.345 weeks.</p><div class="bar"><span style="width:72%"></span></div></article>
+      <article class="card wide"><h3>Recorded work</h3><p><strong>20</strong> text/vision model calls and <strong>215,309</strong> recorded token units, including cached input, plus <strong>50.5 minutes</strong> of audio.</p><p class="muted">The previous calendar week was much quieter; the long voice note landed on 24 August, just outside it.</p></article>
+    </div>
+    <div class="formula" style="margin-top:16px">$0.180 text/vision ledger + (50.54 minutes × $0.003/minute) = $0.332 rolling seven-day provider cost</div>
+    <div class="plain"><strong>Confidence:</strong> this is an evidence-backed cost estimate, not an OpenRouter invoice. Zenod’s tenant ledger is directional, but repricing the recorded Grok 4.3, MiniMax M3, and Gemini Flash-Lite tokens at current OpenRouter rates lands within about one percent of the ledger. The voice price is OpenRouter’s published Voxtral Mini Transcribe rate.</div>
+  </section>
+
+  <section>
+    <h2>Recommended included usage</h2>
+    <div class="decision">
+      <div class="eyebrow">Revised beta recommendation</div>
+      <h3>€9/month + VAT includes up to $2/month of model and transcription usage</h3>
+      <p>All channels share the same allowance. Warn at $1.60; stop paid provider processing at $2.00; reset monthly; no surprise overage. At Jordi’s recent rolling pace, the allowance covers roughly 1.4× the projected month.</p>
+      <p>If the cap is reached, Zenod preserves incoming text/audio/images as queued raw evidence but pauses transcription, AI filing, and AI answers until reset. It must never lose a memory or silently generate an extra bill.</p>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <article class="card wide"><h3>Hosted beta</h3><p>Zenod supplies and pays for OpenRouter. The customer sees calls, tokens/audio minutes, estimated provider spend, allowance remaining, and reset date in <em>Usage</em>.</p></article>
+      <article class="card wide"><h3>Open source</h3><p>The user supplies their own OpenRouter/OpenAI/Anthropic/Groq key and pays the provider directly. Local transcription remains an advanced self-host option.</p></article>
+      <article class="card full"><h3>Can a customer use their ChatGPT subscription?</h3><p>Not for this launch. OpenAI currently bills ChatGPT subscriptions and API usage separately, so a Plus/Pro/Business subscription cannot be treated as Zenod API credit. A future first-party connector or supported account authorization could be explored, but the hosted beta must not depend on it.</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Literal VPS deployment today</h2>
+    <div class="vps">
+      <div class="vps-title"><span>Alpha9 VPS · Dokploy network</span><span>3 product services currently touch the Zenod phone journey</span></div>
+      <div class="containers">
+        <article class="container-card"><div class="container-number">Container / service 1</div><h3><code>zenod-mt-fxpzoo</code></h3><p><strong>Public hosts:</strong> <code>zenod.dev</code> and <code>cloud.zenod.dev</code>.</p><p>One container already serves the website, legal/checkout routes, GitHub login, hosted account, customer dashboard, API, MCP endpoint, tenant memory engines, usage ledger, and GitHub-vault operations.</p><p><strong>Image:</strong> <code>7365dbc</code> · <strong>volume:</strong> <code>zenod-mt-data:/data</code> · <strong>replicas:</strong> 1/1.</p></article>
+        <article class="container-card"><div class="container-number">Container / service 2</div><h3><code>app-index-back-end-panel-6zm3qg</code></h3><p><strong>Public host today:</strong> <code>phylax.zenod.dev</code>.</p><p>The channel runtime: shared WhatsApp session, sender verification, audio upload/transcription call, capture jobs, retry/coalescing, delivery, and channel audit. It also exposes the separate customer/admin UI that should disappear from the Zenod product.</p><p><strong>Image:</strong> <code>399b3a8</code> · <strong>volume:</strong> <code>phylax-data:/data</code> · <strong>replicas:</strong> 1/1.</p></article>
+        <article class="container-card separate"><div class="container-number">Container / service 3 · remove from path</div><h3><code>ring-ycxjwn</code></h3><p><strong>Public host:</strong> <code>ring.zenod.dev</code>.</p><p>Generic multi-agent chat/router and reply gate. Ordinary Zenod WhatsApp text currently detours through it. Ring keeps its own service and data but stops participating in Zenod.</p><p><strong>Image:</strong> <code>0be407a</code> · <strong>volume:</strong> <code>ring-data:/data</code> · <strong>replicas:</strong> 1/1.</p></article>
+        <article class="container-card separate"><div class="container-number">Shared VPS infrastructure · not a Zenod product container</div><h3>Dokploy + Traefik</h3><p>Traefik terminates HTTPS and routes hostnames. Dokploy deploys and monitors the services. They exist independently of Zenod and are not counted as Zenod application services.</p><p>All three current product containers expose port 8080 internally and join <code>dokploy-network</code>.</p></article>
+      </div>
+    </div>
+    <div class="plain"><strong>Important correction:</strong> the public website and the hosted app are not two containers today. Both <code>zenod.dev</code> and <code>cloud.zenod.dev</code> resolve to the same live Zenod SHA, <code>7365dbc</code>.</div>
+  </section>
+
+  <section>
+    <h2>Proposed VPS deployment: exactly 2 Zenod services</h2>
+    <div class="vps">
+      <div class="vps-title"><span>Alpha9 VPS · Zenod product boundary</span><span>2 containers · 2 persistent volumes</span></div>
+      <div class="containers">
+        <article class="container-card"><div class="container-number">Zenod service 1 · public</div><h3><code>zenod</code></h3><p><strong>Hosts:</strong> <code>zenod.dev</code> and <code>cloud.zenod.dev</code>.</p><p>Website + checkout + account + complete customer portal + API + MCP server + multi-tenant memory runtime + usage/allowance enforcement + GitHub vault integration.</p><p><strong>Persistent volume:</strong> tenant settings, encrypted secrets, SQLite ledgers/jobs, cached vault worktrees and operational state.</p></article>
+        <article class="container-card"><div class="container-number">Zenod service 2 · private channel worker</div><h3><code>zenod-channels</code></h3><p><strong>No public customer UI or product hostname.</strong> Only provider-facing webhook/session traffic where required and private calls from the Zenod service.</p><p>Shared Zenod WhatsApp number + sender verification + media handling + transcription dispatch + durable capture polling + outbound delivery + channel audit.</p><p><strong>Persistent volume:</strong> WhatsApp session, provider-message journal, media staging and delivery audit.</p></article>
+      </div>
+      <div class="external-grid">
+        <div class="external"><strong>OpenRouter</strong><br>LLMs + active voice transcription<br><em>outside VPS</em></div>
+        <div class="external"><strong>GitHub</strong><br>OAuth + customer vault repository<br><em>outside VPS</em></div>
+        <div class="external"><strong>Stripe</strong><br>Checkout + subscription portal<br><em>outside VPS</em></div>
+        <div class="external"><strong>WhatsApp network</strong><br>Shared Zenod number<br><em>outside VPS</em></div>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <article class="card wide"><h3>Where are the website and app?</h3><p>Inside the public <code>zenod</code> service. Traefik sends both <code>zenod.dev</code> and <code>cloud.zenod.dev</code> to it. They can remain separate hostnames while sharing one release and process.</p></article>
+      <article class="card wide"><h3>Where are the LLMs?</h3><p>Not on the VPS. Hosted Zenod calls OpenRouter for text/vision models. The live founder tenant currently uses Grok 4.3, MiniMax M3, and Gemini 3.1 Flash-Lite. Voice transcription currently calls OpenRouter’s Voxtral Mini Transcribe.</p></article>
+      <article class="card wide"><h3>Where is customer data?</h3><p>Operational state and job/audit databases live in the two VPS volumes. The durable user vault is Markdown in the customer’s GitHub repository, with local working copies used by the Zenod service.</p></article>
+      <article class="card wide"><h3>What happens to Ring?</h3><p>It remains a third, separate VPS service only if Zenod later commercializes Ring. It is outside the Zenod product boundary, subscription, request path, deployment gate, and customer support journey.</p></article>
     </div>
   </section>
 
@@ -258,16 +298,29 @@
       <div class="sequence-row"><div class="sequence-n">3</div><strong>Open Channels</strong><div>In the Zenod dashboard, WhatsApp says “Included · Off.” Click <em>Enable WhatsApp</em>.</div></div>
       <div class="sequence-row"><div class="sequence-n">4</div><strong>Verify your sender</strong><div>Enter your phone number. Zenod displays its shared WhatsApp number and a one-time code. Send the code from that phone.</div></div>
       <div class="sequence-row"><div class="sequence-n">5</div><strong>First-memory test</strong><div>Zenod asks the user to send a short voice note, saves it, and returns a grounded receipt. The activation screen turns green only after this end-to-end test passes.</div></div>
-      <div class="sequence-row"><div class="sequence-n">6</div><strong>Use Zenod</strong><div>Every channel reaches the same tenant memory. Text may save or answer from memory; voice/media capture directly. No Ring, no Phylax vocabulary, no MCP wiring.</div></div>
+      <div class="sequence-row"><div class="sequence-n">6</div><strong>Use Zenod</strong><div>Every channel reaches the same tenant memory. Text may save or answer from memory; voice/media capture directly. The MCP endpoint remains a first-class product surface, with ready-to-copy client configuration. No Ring or Phylax vocabulary appears.</div></div>
     </div>
   </section>
 
   <section>
-    <h2>Dashboard mockup for approval</h2>
+    <h2>The Zenod portal already exists</h2>
+    <p class="lede">This is not a new dashboard from scratch. The current multi-tenant UI already has the core hosted product. The final iteration reorganizes and completes it.</p>
+    <div class="portal-map">
+      <article class="portal-item"><h3>Connect · exists</h3><p class="muted">MCP URL, bearer token, copy buttons, Codex and Claude Code commands, GitHub-vault connection, seven-day usage summary.</p></article>
+      <article class="portal-item"><h3>Vault · exists</h3><p class="muted">Inspect vault connection/state and the repository-backed memory surface.</p></article>
+      <article class="portal-item"><h3>Usage · exists</h3><p class="muted">Calls, tokens and estimated provider cost. Extend it with the combined hosted allowance and audio minutes.</p></article>
+      <article class="portal-item"><h3>Settings · exists</h3><p class="muted">Keys/models, operating rules and skills. In managed hosted mode, provider internals become read-only or advanced.</p></article>
+      <article class="portal-item"><h3>Account · exists</h3><p class="muted">Subscription state, billing portal, credit/usage, MCP endpoint and connected memory repository.</p></article>
+      <article class="portal-item" style="border-color:#3976bd"><h3>Channels · add</h3><p class="muted">Bring WhatsApp sender verification and Telegram status into Zenod. This replaces the separate Phylax customer UI.</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Complete portal mockup for approval</h2>
     <div class="browser">
       <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/settings/channels</span></div>
       <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Memory</div><div class="nav-item">Ask</div><div class="nav-item active">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Account</div></aside>
+        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item active">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
         <div class="screen">
           <div class="screen-label">Settings / Channels</div>
           <h3>Talk to Zenod anywhere</h3>
@@ -285,15 +338,42 @@
       </div>
     </div>
     <div class="browser" style="margin-top:24px">
+      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/connect</span></div>
+      <div class="app-shell">
+        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item active">Connect / MCP</div><div class="nav-item">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
+        <div class="screen">
+          <div class="screen-label">Connect / MCP</div>
+          <h3>Connect your agent to this memory</h3>
+          <p style="color:#69717e">Your hosted MCP server is ready. Copy one command or use the endpoint directly.</p>
+          <div class="screen-card"><div class="screen-label">MCP URL</div><div class="input">https://cloud.zenod.dev/mcp/••••••••</div><div class="screen-label" style="margin-top:16px">Bearer token</div><div class="input">••••••••••••••••</div><div class="button">Copy connection</div></div>
+          <div class="screen-card"><strong>Codex</strong><div class="input" style="font-family:ui-monospace,monospace">codex mcp add zenod --url https://cloud.zenod.dev/mcp/•••</div><strong style="display:block;margin-top:14px">Claude Code</strong><div class="input" style="font-family:ui-monospace,monospace">claude mcp add --transport http zenod …</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="browser" style="margin-top:24px">
       <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/settings/channels/whatsapp</span></div>
       <div class="app-shell">
-        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Memory</div><div class="nav-item">Ask</div><div class="nav-item active">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Account</div></aside>
+        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item active">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item">Settings</div><div class="nav-item">Account</div></aside>
         <div class="screen">
           <div class="screen-label">Enable WhatsApp</div>
           <h3>Send this code to Zenod</h3>
           <p style="color:#69717e">From <strong>+34 6•• ••• •••</strong>, open WhatsApp and message the Zenod number below.</p>
           <div class="screen-card"><div class="screen-label">Zenod on WhatsApp</div><div style="font-size:1.35rem;font-weight:850;margin-top:7px">+34 ••• ••• •••</div><div class="screen-label" style="margin-top:18px">One-time code</div><div style="font:800 2rem ui-monospace,monospace;letter-spacing:.08em;margin-top:7px">42-OTTER</div><div class="button green">Open WhatsApp</div></div>
           <p style="color:#69717e;margin-top:14px">Waiting for your message… This verifies possession; it does not link or scan your WhatsApp account.</p>
+        </div>
+      </div>
+    </div>
+    <div class="browser" style="margin-top:24px">
+      <div class="browser-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">cloud.zenod.dev/app/settings</span></div>
+      <div class="app-shell">
+        <aside class="sidebar"><div class="brand">zenod</div><div class="nav-item">Overview</div><div class="nav-item">Connect / MCP</div><div class="nav-item">Channels</div><div class="nav-item">Vault</div><div class="nav-item">Usage</div><div class="nav-item active">Settings</div><div class="nav-item">Account</div></aside>
+        <div class="screen">
+          <div class="screen-label">Settings</div>
+          <h3>Your Zenod</h3>
+          <p style="color:#69717e">Configure the memory product—not its internal infrastructure.</p>
+          <div class="screen-card"><strong>Memory repository</strong><p style="color:#69717e">Connected to <strong>AlfaBlok/my-memory</strong> through the Zenod GitHub App.</p><span class="button">Change repository</span></div>
+          <div class="screen-card"><strong>AI &amp; included usage</strong><p style="color:#69717e">Managed by Zenod · $0.33 of $2.00 used · resets 1 September</p><div class="bar"><span style="width:16.6%"></span></div><p style="color:#69717e;margin-top:10px">Advanced: use your own provider key instead — deferred until after beta.</p></div>
+          <div class="screen-card"><strong>Operating rules &amp; skills</strong><p style="color:#69717e">Edit how Zenod files memories, preferred language, installed memory skills, and response style.</p><span class="button">Edit rules</span></div>
         </div>
       </div>
     </div>
@@ -306,7 +386,7 @@
       <article class="step"><span class="status now">Provision</span><h3>Make hosted checkout create the whole product</h3><p>After a hosted subscription provisions the Zenod tenant, automatically mint a channel-scoped credential and register a private tenant binding. Apply fixed, versioned Zenod bindings. The customer never sees a downstream URL, bearer token, tool discovery, assistant URL, Ring ticket, or transcription-provider form.</p></article>
       <article class="step"><span class="status now">Route</span><h3>Make every channel reach Zenod directly</h3><p>Text calls <code>chat_with_zenod</code>; voice calls <code>store_memory</code>; images/files call <code>ingest_memory</code>. Remove <code>chat_with_ring</code> from the Zenod product default and migration. Ring code and data remain intact for the separate Ring product.</p></article>
       <article class="step"><span class="status next">Reliability</span><h3>Land the eight audited remediations</h3><p>Durable job/receipt state, no false timeout failure, bounded classifier fallback, failed-media retry, long-note segmentation, authoritative transcript audit, separate operation/delivery states, and no internal identifiers in customer replies.</p></article>
-      <article class="step"><span class="status next">Commerce</span><h3>Implement one beta entitlement</h3><p>Replace the current monthly/yearly-only offer with one hosted-beta monthly plan, managed model allowance, one verified WhatsApp sender, and visible usage/stop behavior. Keep paid signup fail-closed until the price and limits are explicitly approved and proved.</p></article>
+      <article class="step"><span class="status next">Commerce</span><h3>Implement one beta entitlement</h3><p>Replace the current monthly/yearly-only offer with one hosted-beta monthly plan, a shared $2/month OpenRouter model/transcription allowance, one verified WhatsApp sender, and visible warning/stop/reset behavior. Keep paid signup fail-closed until the price and limits are explicitly approved and proved.</p></article>
       <article class="step"><span class="status gate">Proof</span><h3>Ship one version-coherent release candidate</h3><p>Build Zenod MT and the internal channel runtime from the same main commit, deploy immutable images, migrate the founder binding without resetting the WhatsApp session, run the full channel journey, then invite a small stranger cohort.</p></article>
     </div>
     <div class="plain"><strong>No destructive cleanup is required.</strong> Existing Phylax/Ring data, code, volumes, and histories stay in place. This iteration changes ownership, defaults, customer surfaces, and routing. Old routes can be retained as internal compatibility paths while Zenod tenants migrate.</div>
@@ -430,6 +510,7 @@
   <footer>
     <p><strong>Evidence window:</strong> the 48 hours preceding 25 August 2026. Authoritative stores inspected read-only: Phylax WhatsApp/capture records, Ring tenant conversation records, and Zenod MT task/usage records.</p>
     <p><strong>Observed deployed images:</strong> Phylax <code>399b3a8</code>, Ring <code>0be407a</code>, Zenod MT <code>7365dbc</code>. Repository <code>main</code> at audit start: <code>7a6efbc</code>. Merged code is not treated as deployed proof.</p>
+    <p><strong>Usage sources:</strong> tenant-scoped Zenod and channel audit ledgers, current OpenRouter list pricing for <a href="https://openrouter.ai/x-ai/grok-4.3/pricing">Grok 4.3</a>, <a href="https://openrouter.ai/minimax/minimax-m3/pricing">MiniMax M3</a>, <a href="https://openrouter.ai/google/gemini-3.1-flash-lite/pricing">Gemini 3.1 Flash-Lite</a>, and <a href="https://openrouter.ai/mistralai/voxtral-mini-transcribe/pricing">Voxtral Mini Transcribe</a>. ChatGPT/API separation: <a href="https://help.openai.com/en/articles/8156019">OpenAI Help Center</a>.</p>
     <p><strong>Safety:</strong> this report does not authorize or perform a production deployment, WhatsApp-session mutation, billing action, signup opening, deletion, or public promotion.</p>
   </footer>
 </main>
