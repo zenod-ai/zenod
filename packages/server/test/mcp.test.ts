@@ -474,6 +474,20 @@ describe("MCP endpoint", () => {
       now - 5 * 60 * 1000,
     );
     runtime.usageStore.record(
+      {
+        operation: "classify",
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        status: "failed",
+        errorCode: "provider_unavailable",
+      },
+      now - 2 * 60 * 1000,
+    );
+    runtime.usageStore.record(
       { operation: "compose", provider: "openai", model: "gpt-5", inputTokens: 999, outputTokens: 111, cachedInputTokens: 0, cacheCreationInputTokens: 0 },
       now - 8 * 24 * 60 * 60 * 1000, // outside a 120m window
     );
@@ -485,9 +499,16 @@ describe("MCP endpoint", () => {
       .join("\n");
     expect(text).toContain("compose — anthropic/claude-opus-4-8");
     expect(text).toContain("classify — anthropic/claude-haiku-4-5");
+    expect(text).toContain("failed:provider_unavailable");
     expect(text).not.toContain("gpt-5"); // outside the window
-    const calls = (result.structuredContent as { calls: Array<{ operation: string }> }).calls;
-    expect(calls[0]?.operation).toBe("compose"); // newest first
+    const calls = (result.structuredContent as {
+      calls: Array<{ operation: string; status: string; errorCode: string | null }>;
+    }).calls;
+    expect(calls[0]).toMatchObject({
+      operation: "classify",
+      status: "failed",
+      errorCode: "provider_unavailable",
+    }); // newest first
     expect(calls.at(-1)?.operation).toBe("classify");
 
     const filtered = await client.callTool({ name: "read_llm_timeline", arguments: { windowMinutes: 120, operation: "compose" } });
@@ -841,6 +862,43 @@ describe("MCP endpoint", () => {
     const humanText = result.content.find((item) => item.type === "text")?.text ?? "";
     expect(humanText).toBe("Re: do you have a digest backlog tool?");
     expect(humanText).not.toMatch(/correlationId:|conversationId:|toolEvents:/);
+    await client.close();
+  });
+
+  it("chat_with_zenod enqueues and replays one durable chat for a channel idempotency key", async () => {
+    const client = await connect();
+    const chatSpy = vi.spyOn(fakeEngine, "chat");
+    chatSpy.mockClear();
+    const args = {
+      message: "create the approved record",
+      surface: "whatsapp",
+      conversationKey: "whatsapp:34611111111",
+      idempotencyKey: "tenant-alpha:whatsapp:wamid.chat-1",
+    };
+    const first = await client.callTool({ name: "chat_with_zenod", arguments: args });
+    const replay = await client.callTool({
+      name: "chat_with_zenod",
+      arguments: { ...args, message: "a duplicate payload must not run" },
+    });
+    const firstJobId = (first.structuredContent as { jobId: string }).jobId;
+    expect((replay.structuredContent as { jobId: string }).jobId).toBe(firstJobId);
+
+    const terminal = await pollTaskTerminal(client, firstJobId);
+    expect(terminal).toMatchObject({
+      kind: "chat",
+      status: "done",
+      correlationId: firstJobId,
+      result: { text: "Re: create the approved record" },
+    });
+    const completedReplay = await client.callTool({ name: "chat_with_zenod", arguments: args });
+    expect(completedReplay.structuredContent).toMatchObject({ jobId: firstJobId, status: "done" });
+    expect(chatSpy).toHaveBeenCalledTimes(1);
+    expect(chatSpy).toHaveBeenCalledWith(
+      "create the approved record",
+      "whatsapp",
+      expect.objectContaining({ conversationKey: "whatsapp:34611111111" }),
+    );
+    chatSpy.mockRestore();
     await client.close();
   });
 

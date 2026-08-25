@@ -33,6 +33,38 @@ function normalizedWhatsAppSenderTimestamp(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+function safeVoiceTranscriptionFailure(code: string | null | undefined): string {
+  switch (code?.trim().toLowerCase()) {
+    case "no_speech":
+      return "⚠️ Zenod could not find speech in that voice note. Please try again.";
+    case "timeout":
+      return "⚠️ Zenod could not finish transcribing that voice note. Please try a shorter note or try again.";
+    case "disabled":
+    case "not_configured":
+    case "unavailable":
+    default:
+      return "⚠️ Voice transcription is unavailable right now. Please try again later.";
+  }
+}
+
+/** Keep typed audit/retry state while exposing only bounded Zenod copy. */
+function safePortedChannelError(error: unknown): PhylaxChannelError {
+  if (!(error instanceof PhylaxChannelError)) {
+    return new PhylaxChannelError(
+      "downstream_error",
+      "Zenod could not process that message. Please try again.",
+    );
+  }
+  const message = error.code === "unmatched_sender"
+    ? "This channel is not connected to a Zenod account."
+    : error.code === "invalid_input"
+      ? "Zenod could not read that message safely. Please check it and try again."
+      : error.code === "delivery_error"
+        ? "Zenod could not deliver that reply. Please try again."
+        : "Zenod could not process that message. Please try again.";
+  return new PhylaxChannelError(error.code, message, error.audit, error.retryDisposition);
+}
+
 /**
  * The shipped channels organ, mounted without the old fused BrainEngine path.
  * It directly composes the existing Baileys store/session gateway, Telegram
@@ -168,7 +200,7 @@ export class PhylaxPortedRuntime {
             }
             this.voiceAbortControllers.get(cancelled.providerMessageId)?.abort();
             return {
-              replyText: `Cancelled transcription ${cancelled.providerMessageId}. Nothing was sent to Ring.`,
+              replyText: "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
             };
           }
           const confirmed = this.whatsappStore.confirmLatestVoiceJob(tenantId, conversationKey);
@@ -177,8 +209,8 @@ export class PhylaxPortedRuntime {
           }
           return {
             replyText:
-              `Confirmed transcription ${confirmed.providerMessageId}. It is queued and may take a while. `
-              + 'Send “cancel transcription” to cancel it before Ring handoff starts.',
+              "Confirmed the voice transcription. It is queued and may take a while. "
+              + 'Send “cancel transcription” to cancel it before Zenod starts filing it.',
             afterReply: () => this.kickVoiceWorker(),
           };
         }
@@ -329,7 +361,7 @@ export class PhylaxPortedRuntime {
               });
             }
             if (mediaClaim) this.whatsappStore.completeMediaCoalescing(mediaClaim.canonicalProviderMessageId, "failed");
-            throw error;
+            throw safePortedChannelError(error);
           }
         })();
         if (mediaClaim) this.mediaInFlight.set(mediaClaim.canonicalProviderMessageId, forwarding);
@@ -370,28 +402,32 @@ export class PhylaxPortedRuntime {
       getEngine: unavailableEngine,
       dataDir: join(dataDir, "telegram"),
       portedInboundHandler: async ({ sender, chatId, messageId, text, media, transcription }) => {
-        const forwarded = await this.organ.receive({
-          channel: "telegram",
-          sender,
-          chatId,
-          messageId,
-          text,
-          ...(media ? { media } : {}),
-          ...(transcription
-            ? {
-                transcription: {
-                  ...(text ? { text_transcript: text } : {}),
-                  ...(transcription.provider ? { transcription_source: transcription.provider } : {}),
-                  ...(transcription.failed ? { transcription_failed: transcription.failed } : {}),
-                },
-              }
-            : {}),
-        });
-        this.observeCaptureJob("telegram", messageId, forwarded);
-        return {
-          replyText: forwarded.replyText,
-          ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
-        };
+        try {
+          const forwarded = await this.organ.receive({
+            channel: "telegram",
+            sender,
+            chatId,
+            messageId,
+            text,
+            ...(media ? { media } : {}),
+            ...(transcription
+              ? {
+                  transcription: {
+                    ...(text ? { text_transcript: text } : {}),
+                    ...(transcription.provider ? { transcription_source: transcription.provider } : {}),
+                    ...(transcription.failed ? { transcription_failed: transcription.failed } : {}),
+                  },
+                }
+              : {}),
+          });
+          this.observeCaptureJob("telegram", messageId, forwarded);
+          return {
+            replyText: forwarded.replyText,
+            ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
+          };
+        } catch (error) {
+          throw safePortedChannelError(error);
+        }
       },
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
     });
@@ -460,10 +496,9 @@ export class PhylaxPortedRuntime {
           }, controller.signal);
           if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") continue;
           if (transcription.transcription_failed || !transcription.text_transcript?.trim()) {
-            const message = transcription.transcription_failed?.message ?? "transcription returned no text";
             this.whatsappStore.queueVoiceFailureReply(
               job.providerMessageId,
-              `⚠️ I could not transcribe that voice note: ${message}`,
+              safeVoiceTranscriptionFailure(transcription.transcription_failed?.code),
             );
             await this.whatsapp.drainMediaRecovery();
             continue;
@@ -530,7 +565,6 @@ export class PhylaxPortedRuntime {
           this.whatsappStore.requeueInterruptedVoiceJob(job.providerMessageId);
           continue;
         }
-        const message = error instanceof Error ? error.message : String(error);
         if (current?.state === "forwarding") {
           if (
             error instanceof PhylaxChannelError
@@ -538,7 +572,7 @@ export class PhylaxPortedRuntime {
           ) {
             this.whatsappStore.deferIdempotentVoiceCapture(
               job.providerMessageId,
-              "⚠️ Your voice note was transcribed, but Zenod has not returned a save receipt. The transcript is safely retained in Phylax; retry after the memory connection is repaired is idempotent and cannot create a second memory.",
+              "⚠️ Your voice note was transcribed, but Zenod has not returned a save receipt. The transcript is safely retained; retry after the connection is repaired cannot create a second memory.",
             );
           } else {
             this.whatsappStore.markVoiceRingOutcomeUnknown(job.providerMessageId);
@@ -546,7 +580,7 @@ export class PhylaxPortedRuntime {
         } else {
           this.whatsappStore.queueVoiceFailureReply(
             job.providerMessageId,
-            `⚠️ I could not process that voice note: ${message}`,
+            "⚠️ Zenod could not process that voice note. Please try again.",
           );
         }
         await this.whatsapp.drainMediaRecovery();

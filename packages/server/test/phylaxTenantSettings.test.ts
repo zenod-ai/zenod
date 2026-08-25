@@ -34,7 +34,7 @@ async function setup(defaults: { ringTicketUrl?: string | null } = {}) {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
-  it("defaults standalone voice to verbatim capture, media to ingest, and ordinary text to Ring", async () => {
+  it("defaults standalone voice to verbatim capture, media to ingest, and ordinary text directly to Zenod", async () => {
     const { store } = await setup();
 
     expect(store.get("alpha")).toMatchObject({
@@ -53,7 +53,7 @@ describe("PhylaxTenantSettingsStore", () => {
           },
         },
         text: {
-          tool: "chat_with_ring",
+          tool: "chat_with_zenod",
           argumentMappings: {
             message: { source: "message" },
             surface: { source: "surface" },
@@ -87,7 +87,7 @@ describe("PhylaxTenantSettingsStore", () => {
       ...assistant.turnBindings,
       voice_note: assistant.turnBindings.text,
     });
-    expect(resolvePhylaxTurnBinding(assistant, "text").tool).toBe("chat_with_ring");
+    expect(resolvePhylaxTurnBinding(assistant, "text").tool).toBe("chat_with_zenod");
     expect(resolvePhylaxTurnBinding(assistant, "media").tool).toBe("ingest_memory");
     expect(store.get("alpha").voiceDefault).toBe("capture");
   });
@@ -157,7 +157,7 @@ describe("PhylaxTenantSettingsStore", () => {
         voiceDefault: "assistant",
         turnBindings: {
           voice_note: { tool: "store_memory" },
-          text: { tool: "chat_with_ring" },
+          text: { tool: "chat_with_zenod" },
           media: { tool: "ingest_memory" },
         },
       },
@@ -236,6 +236,44 @@ describe("PhylaxTenantSettingsStore", () => {
         },
       },
     });
+  });
+
+  it("migrates only the generated legacy Ring text binding at read time and keeps rollback data intact", async () => {
+    const { store } = await setup();
+    const generatedLegacy = {
+      tool: "chat_with_ring",
+      argumentMappings: {
+        message: { source: "message" },
+        surface: { source: "surface" },
+        conversationKey: { source: "conversationKey" },
+      },
+    } as const;
+    await writeFile(store.path, JSON.stringify({
+      alpha: {
+        tenantId: "alpha",
+        turnBindings: {
+          ...defaultPhylaxTurnBindings(),
+          text: generatedLegacy,
+        },
+      },
+      ringProduct: {
+        tenantId: "ringProduct",
+        turnBindings: {
+          ...defaultPhylaxTurnBindings(),
+          text: {
+            tool: "chat_with_ring",
+            argumentMappings: { message: { source: "transcript" } },
+          },
+        },
+      },
+    }));
+
+    expect(store.get("alpha").turnBindings.text.tool).toBe("chat_with_zenod");
+    expect(store.get("ringProduct").turnBindings.text).toEqual({
+      tool: "chat_with_ring",
+      argumentMappings: { message: { source: "transcript" } },
+    });
+    expect(await readFile(store.path, "utf8")).toContain('"tool":"chat_with_ring"');
   });
 
   it("verifies only the claimed normalized sender using its one-time inbound keyword", async () => {

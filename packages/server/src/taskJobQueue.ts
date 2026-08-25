@@ -90,7 +90,15 @@ export class TaskJobQueue {
     leaseHeartbeat.unref?.();
     try {
       let completed = false;
-      if (job.kind === "task") {
+      if (job.kind === "chat") {
+        const engine = await this.getEngine();
+        const result = await engine.chat(
+          job.input.text ?? "",
+          job.input.source ?? "mcp",
+          { conversationKey: job.input.conversationKey ?? "mcp" },
+        );
+        completed = this.store.updateClaimed(job.id, { status: "done", result });
+      } else if (job.kind === "task") {
         const engine = await this.getEngine();
         const result = await engine.handleTasking({
           text: job.input.text ?? "",

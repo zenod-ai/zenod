@@ -585,14 +585,16 @@ describe("Ring capture context ticket", () => {
       expect(whatsappSend).toHaveBeenCalledTimes(1);
       expect(whatsappSend).toHaveBeenCalledWith(
         "34611111111",
-        expect.stringContaining("Log/2026-07-29.md#^production-wa"),
+        expect.stringContaining("Areas/Production WhatsApp.md"),
         "wa-production-capture",
       );
       expect(telegramSend).toHaveBeenCalledTimes(1);
       expect(telegramSend).toHaveBeenCalledWith(
         "7711",
-        expect.stringContaining("Log/2026-07-29.md#^production-tg"),
+        expect.stringContaining("Areas/Production Telegram.md"),
       );
+      expect(JSON.stringify(whatsappSend.mock.calls)).not.toContain("Log/2026-07-29.md#^production-wa");
+      expect(JSON.stringify(telegramSend.mock.calls)).not.toContain("Log/2026-07-29.md#^production-tg");
       expect(phylax.phylaxTenantSettings.downstreamCredentials("tenant-alpha")).toEqual({
         url: memoryEndpoint.url,
         token: memoryToken,

@@ -97,6 +97,8 @@ export interface UsageCall {
   cachedInputTokens: number;
   cacheCreationInputTokens: number;
   costUsd: number;
+  status: "succeeded" | "failed";
+  errorCode: string | null;
 }
 
 export interface UsageTimelineQuery {
@@ -153,6 +155,13 @@ export class UsageStore {
       CREATE INDEX IF NOT EXISTS llm_usage_ts ON llm_usage(ts);
       CREATE INDEX IF NOT EXISTS llm_usage_op ON llm_usage(operation, ts);
     `);
+    const columns = this.db.prepare("PRAGMA table_info(llm_usage)").all() as unknown as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "status")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN status TEXT NOT NULL DEFAULT 'succeeded'");
+    }
+    if (!columns.some((column) => column.name === "error_code")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN error_code TEXT");
+    }
     this.backfillCosts();
   }
 
@@ -190,8 +199,8 @@ export class UsageStore {
     this.db
       .prepare(
         `INSERT INTO llm_usage
-           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         now,
@@ -203,6 +212,8 @@ export class UsageStore {
         report.cachedInputTokens,
         report.cacheCreationInputTokens,
         estimateCostUsd(report),
+        report.status ?? "succeeded",
+        report.errorCode ?? null,
       );
   }
 
@@ -248,7 +259,7 @@ export class UsageStore {
     const rows = this.db
       .prepare(
         `SELECT ts, operation, provider, model, input_tokens, output_tokens,
-                cached_input_tokens, cache_creation_input_tokens, cost_usd
+                cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code
          FROM llm_usage WHERE ${clauses.join(" AND ")}
          ORDER BY ts DESC, id DESC
          LIMIT ?`,
@@ -263,6 +274,8 @@ export class UsageStore {
       cached_input_tokens: number;
       cache_creation_input_tokens: number;
       cost_usd: number;
+      status: "succeeded" | "failed";
+      error_code: string | null;
     }>;
     return rows.map((row) => ({
       ts: row.ts,
@@ -274,6 +287,8 @@ export class UsageStore {
       cachedInputTokens: row.cached_input_tokens,
       cacheCreationInputTokens: row.cache_creation_input_tokens,
       costUsd: row.cost_usd ?? 0,
+      status: row.status === "failed" ? "failed" : "succeeded",
+      errorCode: row.error_code,
     }));
   }
 

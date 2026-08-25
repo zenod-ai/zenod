@@ -8,6 +8,7 @@ import {
   type DriveSourceTools,
   type MemoryContentType,
   type MemoryEntry,
+  type Reply,
   type StoreResult,
   type Surface,
   type TaskingReply,
@@ -640,17 +641,35 @@ export function buildMcpServer(
     {
       title: `Chat with ${agentName}`,
       description:
-        "Send a natural-language prompt through this agent's engine.chat loop (the same loop used by web and WhatsApp) — the agent reasons with its own tools and returns a reply. For a backlog agent this engages its backlog brain (query/triage/create/edit issues); for a memory agent, the vault. Supports an explicit conversationKey/testRunId for isolated multi-turn sessions and self-tests. Returns reply text, sources, tool events, and a correlation id written to the chat audit log.",
+        "Send a natural-language prompt through this agent's engine.chat loop (the same loop used by web and WhatsApp) — the agent reasons with its own tools and returns a reply. For a backlog agent this engages its backlog brain (query/triage/create/edit issues); for a memory agent, the vault. Supports an explicit conversationKey/testRunId for isolated multi-turn sessions and self-tests. Channel callers may supply an idempotencyKey to enqueue a durable job and poll get_task_result, preventing a foreground timeout after a mutation from becoming a false failure or duplicate replay.",
       inputSchema: {
         message: z.string().min(1).describe("Natural-language prompt to send to the agent"),
         surface: z.enum(["cli", "mcp", "whatsapp", "web", "drive"]).optional().describe("Surface label to run as. Defaults to mcp."),
         conversationKey: z.string().min(1).optional().describe("Stable key for multi-turn test context"),
         testRunId: z.string().min(1).optional().describe("Optional caller-supplied test run grouping id"),
+        idempotencyKey: z.string().min(1).max(512).optional().describe("Stable channel message key; when present, enqueue durable chat and poll get_task_result"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ message, surface, conversationKey, testRunId }) => {
+    async ({ message, surface, conversationKey, testRunId, idempotencyKey }) => {
       if (!recordChatTestRun) throw new Error("chat test audit store is not configured");
+      if (idempotencyKey) {
+        if (!taskJobs) {
+          return {
+            content: [{ type: "text", text: "Durable Zenod chat is unavailable on this instance." }],
+            structuredContent: {
+              error: { code: "durable_chat_unavailable", message: "Durable Zenod chat is unavailable on this instance." },
+            },
+            isError: true,
+          };
+        }
+        const input: TaskJobInput = {
+          text: message,
+          source: surface ?? "mcp",
+          ...(conversationKey ? { conversationKey } : {}),
+        };
+        return enqueuedResponse(taskJobs.enqueue("chat", input, idempotencyKey));
+      }
       const result = await runSyntheticChat({
         request: { message, ...(surface ? { surface } : {}), ...(conversationKey ? { conversationKey } : {}), ...(testRunId ? { testRunId } : {}) },
         defaultSurface: "mcp",
@@ -1338,7 +1357,9 @@ export function buildMcpServer(
         }
         const resultText =
           job.status === "done" && job.result
-              ? job.kind === "task"
+              ? job.kind === "chat"
+                ? (job.result as Reply).text
+                : job.kind === "task"
                 ? formatTaskingReply(job.result as TaskingReply)
                 : job.kind === "store"
                   ? formatStoreResult(job.result as StoreResult)
@@ -1359,6 +1380,7 @@ export function buildMcpServer(
             ticket_id: job.id,
             jobId: job.id,
             kind: job.kind,
+            ...(job.kind === "chat" ? { correlationId: job.id } : {}),
             status: job.status,
             state,
             result: job.result ?? null,
