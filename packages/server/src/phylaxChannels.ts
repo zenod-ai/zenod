@@ -370,6 +370,7 @@ interface PhylaxCaptureJob {
   receiptText: string | null;
   evidenceRef: string | null;
   deliveredAt: number | null;
+  deliveryCompletedAt: number | null;
 }
 
 /**
@@ -400,6 +401,7 @@ class PhylaxCaptureJournal {
         receipt_text TEXT,
         evidence_ref TEXT,
         delivered_at INTEGER,
+        delivery_completed_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (tenant_id, channel, provider_message_id)
@@ -428,9 +430,13 @@ class PhylaxCaptureJournal {
       CREATE INDEX IF NOT EXISTS idx_phylax_capture_receipts_lookup
         ON phylax_capture_receipts(tenant_id, channel, conversation_key, provider_receipt_message_id);
     `);
+    const jobColumns = this.db.prepare("PRAGMA table_info(phylax_capture_jobs)").all() as unknown as Array<{ name: string }>;
+    if (!jobColumns.some((column) => column.name === "delivery_completed_at")) {
+      this.db.exec("ALTER TABLE phylax_capture_jobs ADD COLUMN delivery_completed_at INTEGER");
+    }
   }
 
-  accepted(input: Omit<PhylaxCaptureJob, "state" | "receiptText" | "evidenceRef" | "deliveredAt">): PhylaxCaptureJob {
+  accepted(input: Omit<PhylaxCaptureJob, "state" | "receiptText" | "evidenceRef" | "deliveredAt" | "deliveryCompletedAt">): PhylaxCaptureJob {
     const now = Date.now();
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -476,7 +482,7 @@ class PhylaxCaptureJournal {
     const row = this.db.prepare(
       `SELECT tenant_id, channel, provider_message_id, sender, chat_id,
               conversation_key, tool, job_id, state, receipt_text,
-              evidence_ref, delivered_at
+              evidence_ref, delivered_at, delivery_completed_at
        FROM phylax_capture_jobs
        WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?`,
     ).get(tenantId, channel, providerMessageId) as Record<string, unknown> | undefined;
@@ -487,7 +493,7 @@ class PhylaxCaptureJournal {
     return (this.db.prepare(
       `SELECT tenant_id, channel, provider_message_id, sender, chat_id,
               conversation_key, tool, job_id, state, receipt_text,
-              evidence_ref, delivered_at
+              evidence_ref, delivered_at, delivery_completed_at
        FROM phylax_capture_jobs
        WHERE state = 'polling'
        ORDER BY created_at`,
@@ -498,17 +504,11 @@ class PhylaxCaptureJournal {
     return (this.db.prepare(
       `SELECT jobs.tenant_id, jobs.channel, jobs.provider_message_id, jobs.sender, jobs.chat_id,
               jobs.conversation_key, jobs.tool, jobs.job_id, jobs.state, jobs.receipt_text,
-              jobs.evidence_ref, jobs.delivered_at
+              jobs.evidence_ref, jobs.delivered_at, jobs.delivery_completed_at
        FROM phylax_capture_jobs AS jobs
-       WHERE jobs.state = 'done'
-         AND jobs.evidence_ref IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1
-           FROM phylax_capture_receipts AS receipts
-           WHERE receipts.tenant_id = jobs.tenant_id
-             AND receipts.channel = jobs.channel
-             AND receipts.capture_provider_message_id = jobs.provider_message_id
-         )
+       WHERE jobs.state IN ('done', 'error')
+         AND jobs.receipt_text IS NOT NULL
+         AND jobs.delivery_completed_at IS NULL
        ORDER BY jobs.created_at`,
     ).all() as unknown as Record<string, unknown>[]).map(captureJobFromRow);
   }
@@ -557,7 +557,8 @@ class PhylaxCaptureJournal {
       `UPDATE phylax_capture_jobs
        SET delivered_at = ?, updated_at = ?
        WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?
-         AND delivered_at IS NULL`,
+         AND delivered_at IS NULL
+         AND delivery_completed_at IS NULL`,
     ).run(Date.now(), Date.now(), job.tenantId, job.channel, job.providerMessageId);
     return Number(result.changes) === 1;
   }
@@ -578,23 +579,38 @@ class PhylaxCaptureJournal {
   ): boolean {
     const job = this.get(tenantId, channel, captureProviderMessageId);
     const receiptId = providerReceiptMessageId.trim();
-    if (job?.state !== "done" || !job.evidenceRef || !receiptId) return false;
-    this.db.prepare(
-      `INSERT INTO phylax_capture_receipts (
-         tenant_id, channel, conversation_key, provider_receipt_message_id,
-         capture_provider_message_id, evidence_ref, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (tenant_id, channel, provider_receipt_message_id) DO NOTHING`,
-    ).run(
-      tenantId,
-      channel,
-      job.conversationKey,
-      receiptId,
-      captureProviderMessageId,
-      job.evidenceRef,
-      Date.now(),
-    );
-    return true;
+    if (!job || !["done", "error"].includes(job.state) || !job.receiptText || !receiptId) return false;
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (job.state === "done" && job.evidenceRef) {
+        this.db.prepare(
+          `INSERT INTO phylax_capture_receipts (
+             tenant_id, channel, conversation_key, provider_receipt_message_id,
+             capture_provider_message_id, evidence_ref, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (tenant_id, channel, provider_receipt_message_id) DO NOTHING`,
+        ).run(
+          tenantId,
+          channel,
+          job.conversationKey,
+          receiptId,
+          captureProviderMessageId,
+          job.evidenceRef,
+          now,
+        );
+      }
+      this.db.prepare(
+        `UPDATE phylax_capture_jobs
+         SET delivery_completed_at = COALESCE(delivery_completed_at, ?), updated_at = ?
+         WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?`,
+      ).run(now, now, tenantId, channel, captureProviderMessageId);
+      this.db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   evidenceForReceipt(
@@ -635,6 +651,7 @@ function captureJobFromRow(row: Record<string, unknown>): PhylaxCaptureJob {
     receiptText: typeof row.receipt_text === "string" ? row.receipt_text : null,
     evidenceRef: typeof row.evidence_ref === "string" ? row.evidence_ref : null,
     deliveredAt: typeof row.delivered_at === "number" ? row.delivered_at : null,
+    deliveryCompletedAt: typeof row.delivery_completed_at === "number" ? row.delivery_completed_at : null,
   };
 }
 
@@ -840,7 +857,7 @@ export class PhylaxChannelsOrgan {
     providerMessageId: string,
   ): boolean {
     const job = this.captureJournal.get(tenantId, channel, providerMessageId);
-    return job?.state === "done" && Boolean(job.evidenceRef);
+    return Boolean(job && ["done", "error"].includes(job.state) && job.receiptText);
   }
 
   recordCaptureReceiptDelivery(
@@ -1019,7 +1036,7 @@ export class PhylaxChannelsOrgan {
         const completed = await this.pollCapture(job, route, { sender: job.sender }, null);
         if (!completed || !completed.receipt) return;
         const current = this.captureJournal.get(job.tenantId, job.channel, job.providerMessageId);
-        if (!current || current.deliveredAt !== null || !this.terminalReceiptDelivery) return;
+        if (!current || current.deliveryCompletedAt !== null || current.deliveredAt !== null || !this.terminalReceiptDelivery) return;
         // W-P4 convention: claim the provider boundary durably before the send;
         // a crash after this point is ambiguous and must not duplicate a reply.
         if (!this.captureJournal.claimDelivery(job)) return;
@@ -1029,14 +1046,12 @@ export class PhylaxChannelsOrgan {
           completed.receipt.text,
           job.providerMessageId,
         );
-        if (completed.receipt.state === "done" && completed.receipt.evidenceRef) {
-          this.captureJournal.recordReceiptDelivery(
-            job.tenantId,
-            job.channel,
-            job.providerMessageId,
-            delivery.sentMessageId,
-          );
-        }
+        this.captureJournal.recordReceiptDelivery(
+          job.tenantId,
+          job.channel,
+          job.providerMessageId,
+          delivery.sentMessageId,
+        );
       } catch (error) {
         console.error(`[phylax] capture poll ${job.jobId} failed:`, error);
       }

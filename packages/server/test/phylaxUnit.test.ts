@@ -23,6 +23,7 @@ import {
   parsePhylaxSettingsUpdate,
   parsePhylaxTranscriptionCheck,
   parsePhylaxTranscriptionKeyRemoval,
+  ZENOD_WHATSAPP_VERIFICATION_REPLY,
 } from "../src/phylaxUnit.js";
 import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 import { resolveServerMode } from "../src/serverMode.js";
@@ -40,6 +41,12 @@ afterEach(async () => {
 });
 
 describe("Phylax customer unit mount", () => {
+  it("pins the verification handoff to bounded Zenod-only customer copy", () => {
+    expect(ZENOD_WHATSAPP_VERIFICATION_REPLY)
+      .toBe("Your WhatsApp number is verified. Return to Zenod to finish setup.");
+    expect(ZENOD_WHATSAPP_VERIFICATION_REPLY).not.toMatch(/Phylax|Ring|MCP|tool|https?:\/\//i);
+  });
+
   it("restarts only sustained restartable outages or stale workers", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-29T16:00:00.000Z"));

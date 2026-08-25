@@ -1281,15 +1281,102 @@ describe("PhylaxChannelsOrgan", () => {
     await recovered.close();
   });
 
-  it("re-enters a claimed terminal delivery with no outbox and preserves one provider ID across the next crash", async () => {
+  it("recovers one terminal chat receipt after a crash before outbox creation without requiring evidence", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-chat-terminal-pre-outbox-"));
+    dirs.push(dataDir);
+    const sourceMessageId = "provider-chat-terminal-pre-outbox-1";
+    const receiptText = "Zenod found the launch note.";
+    const route = {
+      tenantId: "alpha",
+      downstreamUrl: "https://zenod.test/mcp/memory",
+      downstreamToken: "memory-scope-only",
+    };
+    const schema = new PhylaxChannelsOrgan({ dataDir, routes: { resolve: () => route } });
+    await schema.close();
+    const journal = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+    const now = Date.now();
+    journal.prepare(
+      `INSERT INTO phylax_capture_jobs (
+         tenant_id, channel, provider_message_id, sender, chat_id,
+         conversation_key, tool, job_id, state, receipt_text, evidence_ref,
+         delivered_at, created_at, updated_at
+       ) VALUES (?, 'whatsapp', ?, ?, ?, ?, 'chat_with_zenod', ?, 'done', ?, NULL, NULL, ?, ?)`,
+    ).run(
+      "alpha",
+      sourceMessageId,
+      "34611111111",
+      "34611111111@s.whatsapp.net",
+      "whatsapp:34611111111",
+      "job-chat-terminal-pre-outbox-1",
+      receiptText,
+      now,
+      now,
+    );
+    journal.close();
+    const seededWhatsApp = new WhatsAppStore(phylaxWhatsAppPaths(dataDir).store);
+    seededWhatsApp.recordChannelForwarding({
+      providerMessageId: sourceMessageId,
+      tenantId: "alpha",
+      senderId: "34611111111",
+      downstreamDestination: "zenod.test#tenant:alpha",
+      replyText: receiptText,
+    });
+    seededWhatsApp.close();
+
+    const attempts: string[] = [];
+    const socketFactory = async () => ({
+      ev: { on() {} },
+      user: { id: "34999999999@s.whatsapp.net" },
+      async sendMessage(_jid: string, content: { text?: string }, options?: { messageId?: string }) {
+        expect(content.text).toBe(receiptText);
+        const id = options?.messageId ?? "";
+        attempts.push(id);
+        return { key: { id } };
+      },
+    });
+    const first = new PhylaxPortedRuntime(
+      dataDir,
+      new PhylaxChannelsOrgan({ dataDir, routes: { resolve: () => route } }),
+      {},
+      { whatsappSocketFactory: socketFactory },
+    );
+    first.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await first.start();
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).not.toBe("");
+    await first.close();
+
+    const completed = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
+    expect(completed.prepare(
+      `SELECT delivery_completed_at AS deliveryCompletedAt
+       FROM phylax_capture_jobs WHERE provider_message_id = ?`,
+    ).get(sourceMessageId)).toMatchObject({ deliveryCompletedAt: expect.any(Number) });
+    expect((completed.prepare(
+      `SELECT COUNT(*) AS count FROM phylax_capture_receipts
+       WHERE capture_provider_message_id = ?`,
+    ).get(sourceMessageId) as { count: number }).count).toBe(0);
+    completed.close();
+
+    const restarted = new PhylaxPortedRuntime(
+      dataDir,
+      new PhylaxChannelsOrgan({ dataDir, routes: { resolve: () => route } }),
+      {},
+      { whatsappSocketFactory: socketFactory },
+    );
+    try {
+      await restarted.start();
+      await restarted.organ.resumePendingCaptures();
+      expect(attempts).toHaveLength(1);
+    } finally {
+      await restarted.close();
+    }
+  });
+
+  it("replays one terminal chat receipt after provider send crashes before outbox completion", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-terminal-pre-outbox-crash-"));
     dirs.push(dataDir);
     const sourceMessageId = "provider-terminal-pre-outbox-1";
-    const receiptText = [
-      "Saved ✓",
-      "Recap: Restart the claimed receipt.",
-      "Evidence: Log/2026-07-29.md#^terminal-pre-outbox-1",
-    ].join("\n");
+    const receiptText = "Zenod finished the restart-safe chat request.";
     const route = {
       tenantId: "alpha",
       downstreamUrl: "https://zenod.test/mcp/memory",
@@ -1310,7 +1397,7 @@ describe("PhylaxChannelsOrgan", () => {
          tenant_id, channel, provider_message_id, sender, chat_id,
          conversation_key, tool, job_id, state, receipt_text, evidence_ref,
          delivered_at, created_at, updated_at
-       ) VALUES (?, 'whatsapp', ?, ?, ?, ?, 'store_memory', ?, 'done', ?, ?, ?, ?, ?)`,
+       ) VALUES (?, 'whatsapp', ?, ?, ?, ?, 'chat_with_zenod', ?, 'done', ?, NULL, ?, ?, ?)`,
     ).run(
       "alpha",
       sourceMessageId,
@@ -1319,7 +1406,6 @@ describe("PhylaxChannelsOrgan", () => {
       "whatsapp:34611111111",
       "job-terminal-pre-outbox-1",
       receiptText,
-      "Log/2026-07-29.md#^terminal-pre-outbox-1",
       now,
       now,
       now,
@@ -1384,6 +1470,10 @@ describe("PhylaxChannelsOrgan", () => {
        WHERE tenant_id = 'alpha' AND channel = 'whatsapp'
          AND capture_provider_message_id = ?`,
     ).get(sourceMessageId) as { count: number }).count).toBe(0);
+    expect(afterFirstCrash.prepare(
+      `SELECT delivery_completed_at AS deliveryCompletedAt
+       FROM phylax_capture_jobs WHERE provider_message_id = ?`,
+    ).get(sourceMessageId)).toMatchObject({ deliveryCompletedAt: null });
     afterFirstCrash.close();
 
     const restarted = new PhylaxPortedRuntime(
@@ -1416,16 +1506,15 @@ describe("PhylaxChannelsOrgan", () => {
         outboundStatus: "sent",
       });
       const mapped = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
-      expect(mapped.prepare(
-        `SELECT provider_receipt_message_id AS providerReceiptMessageId,
-           evidence_ref AS evidenceRef
-         FROM phylax_capture_receipts
+      expect((mapped.prepare(
+        `SELECT COUNT(*) AS count FROM phylax_capture_receipts
          WHERE tenant_id = 'alpha' AND channel = 'whatsapp'
            AND capture_provider_message_id = ?`,
-      ).all(sourceMessageId)).toEqual([{
-        providerReceiptMessageId: attempts[0],
-        evidenceRef: "Log/2026-07-29.md#^terminal-pre-outbox-1",
-      }]);
+      ).get(sourceMessageId) as { count: number }).count).toBe(0);
+      expect(mapped.prepare(
+        `SELECT delivery_completed_at AS deliveryCompletedAt
+         FROM phylax_capture_jobs WHERE provider_message_id = ?`,
+      ).get(sourceMessageId)).toMatchObject({ deliveryCompletedAt: expect.any(Number) });
       mapped.close();
 
       await restarted.organ.resumePendingCaptures();

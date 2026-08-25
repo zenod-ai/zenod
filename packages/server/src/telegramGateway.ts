@@ -453,7 +453,9 @@ export class TelegramGateway {
       if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
       await this.sendReply(chatId, forwarded.replyText);
     } catch (error) {
-      await this.sendReply(chatId, `⚠️ ${error instanceof Error ? error.message : String(error)}`).catch(() => {});
+      const detail = error instanceof Error ? error.message : String(error);
+      await this.sendReply(chatId, "⚠️ Zenod could not process that message. Please try again.").catch(() => {});
+      console.error(`[telegram] ported inbound failed for chat ${chatId}: ${detail}`);
     }
   }
 
