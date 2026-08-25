@@ -491,10 +491,15 @@ describe("Zenod chassis unit", () => {
           .not.toMatch(/provider|model|api.?key|cost|token/i);
         const safeAgent = await unit.app.request("/api/agent", { headers });
         expect(safeAgent.status).toBe(200);
-        expect(await safeAgent.json()).toMatchObject({
+        const safeAgentBody = await safeAgent.json() as { panels: string[] } & Record<string, unknown>;
+        expect(safeAgentBody).toMatchObject({
           name: "zenod",
           hostedMode: "managed",
         });
+        expect(safeAgentBody.panels).toEqual(["overview", "connect", "channels", "vault", "usage", "account"]);
+        for (const hiddenPanel of ["keys", "transcription", "costs", "test"]) {
+          expect(safeAgentBody.panels).not.toContain(hiddenPanel);
+        }
         expect(await (await unit.app.request("/api/agent", { headers })).text())
           .not.toMatch(/ring|provider|model|api.?key|token/i);
         const safeVault = await unit.app.request("/api/vault", { headers });

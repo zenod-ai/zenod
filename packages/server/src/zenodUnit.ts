@@ -364,6 +364,17 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
   "telegram_rich",
 ] satisfies readonly SettingKey[]);
 
+// Must stay aligned with the Hosted edition profile in the customer portal.
+// These are product sections, not the chassis settings-panel capabilities.
+const HOSTED_CUSTOMER_PANELS = Object.freeze([
+  "overview",
+  "connect",
+  "channels",
+  "vault",
+  "usage",
+  "account",
+] as const);
+
 async function projectHostedCustomerResponse(path: string, response: Response): Promise<Response> {
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
   if (!["/api/agent", "/api/settings", "/api/overview", "/api/drive/status", "/api/auth/status", "/api/vault", "/api/connections"].includes(path)) {
@@ -377,7 +388,7 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
       name: body.name,
       displayName: body.displayName,
       tagline: body.tagline,
-      panels: Array.isArray(body.panels) ? body.panels : undefined,
+      panels: HOSTED_CUSTOMER_PANELS,
       vaultless: Boolean(body.vaultless),
       hostedMode: "managed",
     };
