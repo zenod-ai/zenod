@@ -265,6 +265,62 @@ describe("TelegramGateway", () => {
     }
   });
 
+  it.each([
+    ["text", tgMessage(), false],
+    ["audio", tgMessage({ text: undefined, voice: { file_id: "AUDIO123", file_unique_id: "audio-1", mime_type: "audio/ogg" } }), true],
+    ["image", tgMessage({ text: undefined, photo: [{ file_id: "IMAGE123", width: 10, height: 10 }] }), true],
+  ] as const)("admits Hosted Telegram %s raw evidence before advancing the update offset", async (kind, message, hasMedia) => {
+    const dir = await mkdtemp(join(tmpdir(), `zenod-telegram-managed-${kind}-`));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(message);
+    runtime.settings.setTelegramSettings({ botToken: `MANAGED:${kind}`, allowedUsers: ["555"], enabled: true });
+    const admitted: Array<{ kind: string; updateId: string; media?: { dataBase64: string } }> = [];
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => {
+        throw new Error("paid engine must remain behind admission");
+      },
+      fetchImpl,
+      managedInboundHandler: async (input) => { admitted.push(input); },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => admitted.length === 1 && calls.some((call) => call.method === "getUpdates" && call.body.offset === 101));
+      expect(admitted[0]).toMatchObject({ kind, updateId: "100", chatId: "555", messageId: "7" });
+      expect(Boolean(admitted[0]!.media?.dataBase64)).toBe(hasMedia);
+      expect(calls.filter((call) => call.method === "getFile").length).toBe(hasMedia ? 1 : 0);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not advance the Hosted Telegram offset when durable admission fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-managed-admission-failure-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(tgMessage());
+    runtime.settings.setTelegramSettings({ botToken: "MANAGED:FAIL", allowedUsers: ["555"], enabled: true });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => { throw new Error("paid engine must not run"); },
+      fetchImpl,
+      pollErrorDelayMs: 1,
+      managedInboundHandler: async () => { throw new Error("admission sqlite unavailable"); },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => calls.filter((call) => call.method === "getUpdates" && call.body.offset === 0).length >= 2);
+      expect(calls.some((call) => call.method === "getUpdates" && call.body.offset === 101)).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("transcribes a voice note and routes the transcript through handleTasking", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-"));
     const runtime = new Runtime(dir);

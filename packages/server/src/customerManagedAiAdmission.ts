@@ -110,6 +110,7 @@ export class CustomerManagedAiAdmissionQueue {
   constructor(
     path: string,
     private readonly now: () => number = Date.now,
+    private readonly afterProcessorBeforeReceipt?: () => void | Promise<void>,
   ) {
     this.db = openZenodSqlite(path);
     this.db.exec(`
@@ -167,11 +168,17 @@ export class CustomerManagedAiAdmissionQueue {
     }
     if (!this.claim(existing.id)) return { state: "processing", job: this.get(existing.id)! };
     const heartbeat = this.startHeartbeat(existing.id);
+    let receiptFaultSeamReached = false;
     try {
       const result = await processor(this.input(existing.id));
+      receiptFaultSeamReached = true;
+      await this.afterProcessorBeforeReceipt?.();
       const completed = this.completeOnce(existing.id, result.receipt);
       return { state: "processed", job: completed, value: result.value };
     } catch {
+      // A test-only process-death seam must leave the durable processing claim
+      // intact so restart/lease recovery exercises the real crash window.
+      if (receiptFaultSeamReached && this.afterProcessorBeforeReceipt) throw new Error("simulated admission process death");
       const receipt: ManagedAiTerminalReceipt = {
         state: "failed",
         statusCode: 503,
@@ -235,6 +242,13 @@ export class CustomerManagedAiAdmissionQueue {
     const row = this.db.prepare(
       `SELECT * FROM customer_managed_ai_admission WHERE id=? AND tenant_id=?`,
     ).get(id, tenantId) as unknown as Row | undefined;
+    return row ? job(row) : null;
+  }
+
+  getByIdempotencyKey(tenantId: string, idempotencyKey: string): ManagedAiAdmissionJob | null {
+    const row = this.db.prepare(
+      `SELECT * FROM customer_managed_ai_admission WHERE tenant_id=? AND idempotency_key=?`,
+    ).get(tenantId, idempotencyKey) as unknown as Row | undefined;
     return row ? job(row) : null;
   }
 

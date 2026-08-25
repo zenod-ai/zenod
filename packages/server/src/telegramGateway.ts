@@ -66,6 +66,17 @@ export interface TelegramPortedInbound {
 }
 
 export type TelegramPortedInboundHandler = (input: TelegramPortedInbound) => Promise<{ replyText: string }>;
+export interface TelegramManagedInbound {
+  kind: "text" | "audio" | "image";
+  sender: string;
+  chatId: string;
+  messageId: string;
+  updateId: string;
+  text: string;
+  capturedAt: string;
+  media?: { dataBase64: string; mimeType: string; fileName: string };
+}
+export type TelegramManagedInboundHandler = (input: TelegramManagedInbound) => Promise<void>;
 interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
@@ -121,6 +132,9 @@ export class TelegramGateway {
       dataDir?: string;
       fetchImpl?: typeof fetch;
       portedInboundHandler?: TelegramPortedInboundHandler;
+      managedInboundHandler?: TelegramManagedInboundHandler;
+      managedInboundEnabled?: () => boolean;
+      pollErrorDelayMs?: number;
     },
   ) {}
 
@@ -278,20 +292,23 @@ export class TelegramGateway {
           this.lastError = null;
         }
         for (const update of updates ?? []) {
+          if (update.message) await this.handleMessage(update.message, update.update_id);
+          // An update is acknowledged only after its raw managed-channel event
+          // has reached the durable admission journal. If admission throws, the
+          // offset remains unchanged and Telegram redelivers the same update.
           this.offset = update.update_id + 1;
-          if (update.message) await this.handleMessage(update.message);
         }
       } catch (err) {
         if (!this.running) break; // aborted by close()
         this.state = "error";
         this.lastError = err instanceof Error ? err.message : String(err);
         console.error("[telegram] poll failed:", this.lastError);
-        await this.delay(3000); // brief backoff before retrying
+        await this.delay(this.options.pollErrorDelayMs ?? 3000); // brief backoff before retrying
       }
     }
   }
 
-  private async handleMessage(message: TelegramMessage): Promise<void> {
+  private async handleMessage(message: TelegramMessage, updateId: number): Promise<void> {
     this.lastActivity = Date.now();
     const chatId = message.chat.id;
     const from = message.from;
@@ -305,6 +322,11 @@ export class TelegramGateway {
 
     // Remember this owner's chat so the monitor can push proactive pings here.
     this.rememberChat(chatId);
+
+    if (this.options.managedInboundHandler && (this.options.managedInboundEnabled?.() ?? true)) {
+      await this.handleManagedInbound(message, updateId);
+      return;
+    }
 
     if (this.options.portedInboundHandler) {
       await this.handlePortedInbound(message);
@@ -420,6 +442,102 @@ export class TelegramGateway {
     } finally {
       clearInterval(keepTyping);
     }
+  }
+
+  private async handleManagedInbound(message: TelegramMessage, updateId: number): Promise<void> {
+    const chatId = message.chat.id;
+    const sender = message.from?.username
+      ? `@${message.from.username}`
+      : message.from?.first_name || String(message.from?.id ?? chatId);
+    const text = (message.text ?? message.caption ?? "").trim();
+    const voice = message.voice ?? message.audio;
+    const imageFileId =
+      message.photo?.at(-1)?.file_id ??
+      (message.document?.mime_type?.startsWith("image/") ? message.document.file_id : null);
+    let input: TelegramManagedInbound;
+    if (voice?.file_id) {
+      const downloaded = await this.downloadFile(voice.file_id);
+      input = {
+        kind: "audio",
+        sender,
+        chatId: String(chatId),
+        messageId: String(message.message_id),
+        updateId: String(updateId),
+        text,
+        capturedAt: new Date(message.date * 1000).toISOString(),
+        media: {
+          dataBase64: downloaded.data.toString("base64"),
+          mimeType: voice.mime_type ?? "audio/ogg",
+          fileName: `${voice.file_unique_id ?? voice.file_id}.${downloaded.ext}`,
+        },
+      };
+    } else if (imageFileId) {
+      const downloaded = await this.downloadFile(imageFileId);
+      input = {
+        kind: "image",
+        sender,
+        chatId: String(chatId),
+        messageId: String(message.message_id),
+        updateId: String(updateId),
+        text,
+        capturedAt: new Date(message.date * 1000).toISOString(),
+        media: {
+          dataBase64: downloaded.data.toString("base64"),
+          mimeType: message.document?.mime_type ?? "image/jpeg",
+          fileName: message.document?.file_name ?? `telegram-image-${message.message_id}.${downloaded.ext}`,
+        },
+      };
+    } else {
+      input = {
+        kind: "text",
+        sender,
+        chatId: String(chatId),
+        messageId: String(message.message_id),
+        updateId: String(updateId),
+        text,
+        capturedAt: new Date(message.date * 1000).toISOString(),
+      };
+    }
+    await this.options.managedInboundHandler!(input);
+  }
+
+  /** Execute an event that was already admitted and durably retained. */
+  async processManagedInbound(input: TelegramManagedInbound): Promise<{ replyText: string }> {
+    const chatId = Number(input.chatId);
+    if (!Number.isFinite(chatId)) throw new Error("managed Telegram chat id is invalid");
+    await this.sendChatAction(chatId, "typing");
+    const engine = await this.options.getEngine();
+    let taskText = input.text.trim();
+    if (input.kind === "audio") {
+      if (!input.media) throw new Error("managed Telegram audio bytes are missing");
+      const transcription = await transcribeChannelAudio(
+        this.options.settings,
+        Buffer.from(input.media.dataBase64, "base64"),
+        input.media.fileName,
+      );
+      if (!transcription.success || !transcription.transcript) {
+        throw new Error(transcription.error || "transcription returned no text");
+      }
+      taskText = transcription.transcript;
+    } else if (input.kind === "image") {
+      if (!input.media) throw new Error("managed Telegram image bytes are missing");
+      const description = await engine.describeImage(
+        new Uint8Array(Buffer.from(input.media.dataBase64, "base64")),
+        input.media.mimeType,
+      );
+      const captionLine = taskText ? `\nCaption: ${taskText}\n\n` : "\n\n";
+      taskText = `Telegram image from ${input.sender}:${captionLine}${description}`;
+    }
+    if (!taskText) throw new Error("managed Telegram message contains no supported content");
+    const reply = await engine.handleTasking({
+      text: taskText,
+      surface: "telegram",
+      conversationKey: normalizeTelegramId(input.chatId) || input.chatId,
+    });
+    if (!reply.text.trim()) throw new Error("managed Telegram task returned no reply");
+    await this.sendReply(chatId, reply.text);
+    this.spawnPeerJobPoller(reply, chatId);
+    return { replyText: reply.text };
   }
 
   private async handlePortedInbound(message: TelegramMessage): Promise<void> {

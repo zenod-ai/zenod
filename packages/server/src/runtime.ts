@@ -89,6 +89,7 @@ import { Settings, type Provider } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
 import { TelegramGateway } from "./telegramGateway.js";
+import type { TelegramManagedInboundHandler } from "./telegramGateway.js";
 import { evidence, type ToolResponse, toolResponse } from "./toolOutput.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 
@@ -274,6 +275,8 @@ export class Runtime {
       credentialVault?: CredentialVault;
       credentialMasterKey?: string;
       settingFallbacks?: Readonly<Record<string, string>>;
+      managedTelegramInbound?: TelegramManagedInboundHandler;
+      managedTelegramInboundEnabled?: () => boolean;
     } = {},
   ) {
     this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"), options.tenantId ?? "standalone");
@@ -305,6 +308,8 @@ export class Runtime {
       settings: this.settings,
       getEngine: () => this.getEngine(),
       dataDir: join(dataDir, "telegram"),
+      ...(options.managedTelegramInbound ? { managedInboundHandler: options.managedTelegramInbound } : {}),
+      ...(options.managedTelegramInboundEnabled ? { managedInboundEnabled: options.managedTelegramInboundEnabled } : {}),
     });
     // The IngestStore constructor marks any job left mid-flight by a restart
     // as "interrupted"; resume() then drains anything still queued.

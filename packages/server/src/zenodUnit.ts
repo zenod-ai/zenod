@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HttpBindings } from "@hono/node-server";
 import { createHash, randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { Hono, type MiddlewareHandler } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
@@ -26,6 +27,7 @@ import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
+import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
 import type {
@@ -33,6 +35,7 @@ import type {
   ManagedAiRawKind,
   ManagedAiTerminalReceipt,
 } from "./customerManagedAiAdmission.js";
+import { ManagedAiDownstreamOutbox } from "./customerManagedAiOutbox.js";
 import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
@@ -62,6 +65,8 @@ export class ZenodRuntimePool {
     private readonly sharedGithubApp: SharedGithubApp | null = null,
     private readonly agent: AgentDefinition = ZENOD_AGENT,
     private readonly appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">,
+    private readonly managedTelegramInbound?: (tenantId: string, input: TelegramManagedInbound) => Promise<void>,
+    private readonly managedTelegramTenant?: (tenantId: string) => boolean,
   ) {}
 
   forContext(context: UnitContext): Runtime {
@@ -89,6 +94,12 @@ export class ZenodRuntimePool {
       settingFallbacks: {
         ...sharedGithubSettingFallbacks(this.sharedGithubApp),
       },
+      ...(this.managedTelegramInbound
+        ? { managedTelegramInbound: (input) => this.managedTelegramInbound!(tenantId, input) }
+        : {}),
+      ...(this.managedTelegramTenant
+        ? { managedTelegramInboundEnabled: () => this.managedTelegramTenant!(tenantId) }
+        : {}),
     });
     if (runtime.settings.get("artifact_archive_provider") === null) {
       runtime.settings.set(
@@ -258,6 +269,13 @@ const HOSTED_MANAGED_SETTINGS_MUTATIONS = new Set([
   "POST /api/token/regenerate",
 ]);
 
+const HOSTED_MANAGED_SETTINGS_READS = new Set([
+  "GET /api/executor/settings",
+  "GET /api/transcription/status",
+  "GET /api/transcription/models",
+  "GET /api/transcription/openrouter-models",
+]);
+
 const HOSTED_MANAGED_SETTING_KEYS = new Set([
   "provider",
   "anthropic_api_key",
@@ -277,7 +295,52 @@ const HOSTED_MANAGED_SETTING_KEYS = new Set([
 export function hostedCapabilityViolation(method: string, path: string): "raw_usage" | "managed_settings" | null {
   const normalizedMethod = method.toUpperCase();
   if (path === "/api/usage" || path.startsWith("/api/usage/")) return "raw_usage";
-  return HOSTED_MANAGED_SETTINGS_MUTATIONS.has(`${normalizedMethod} ${path}`) ? "managed_settings" : null;
+  const operation = `${normalizedMethod} ${path}`;
+  return HOSTED_MANAGED_SETTINGS_MUTATIONS.has(operation) || HOSTED_MANAGED_SETTINGS_READS.has(operation)
+    ? "managed_settings"
+    : null;
+}
+
+const HOSTED_CUSTOMER_SETTING_KEYS = new Set([
+  "instance_name",
+  "vault_repo",
+  "vault_branch",
+  "google_drive_folder_id",
+  "artifact_archive_provider",
+  "artifact_archive_drive_folder_id",
+  "telegram_enabled",
+  "telegram_allowed_users",
+  "telegram_accept_all",
+  "telegram_rich",
+]);
+
+async function projectHostedCustomerResponse(path: string, response: Response): Promise<Response> {
+  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
+  if (!["/api/settings", "/api/overview", "/api/drive/status", "/api/auth/status"].includes(path)) {
+    return response;
+  }
+  const body = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return response;
+  let projected: Record<string, unknown>;
+  if (path === "/api/settings") {
+    const settings = body.settings && typeof body.settings === "object" && !Array.isArray(body.settings)
+      ? Object.fromEntries(
+          Object.entries(body.settings as Record<string, unknown>)
+            .filter(([key]) => HOSTED_CUSTOMER_SETTING_KEYS.has(key)),
+        )
+      : {};
+    projected = { settings, configured: true, hostedManagedAi: true };
+  } else if (path === "/api/overview") {
+    projected = { ...body, usage: null };
+  } else if (path === "/api/drive/status") {
+    const { transcriptionProvider: _transcriptionProvider, ...safeDriveStatus } = body;
+    projected = safeDriveStatus;
+  } else {
+    projected = { needsSetup: false, configured: true, hostedMode: "managed" };
+  }
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return Response.json(projected, { status: response.status, headers });
 }
 
 async function hostedSettingsBodyViolation(request: Request): Promise<boolean> {
@@ -329,6 +392,18 @@ function managedAiMcpEnvelope(raw: Uint8Array): {
     };
   } catch {
     return { paid: false, id: null, kind: "text", tool: null };
+  }
+}
+
+function hostedSensitiveMcpRead(raw: Uint8Array): boolean {
+  try {
+    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
+      method?: unknown;
+      params?: { name?: unknown };
+    };
+    return payload.method === "tools/call" && payload.params?.name === "read_llm_timeline";
+  } catch {
+    return false;
   }
 }
 
@@ -400,7 +475,19 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       busyTimeoutMs: 30_000,
     });
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
-  const runtimes = new ZenodRuntimePool(env, sharedGithubApp, agent, options.appOptionsForTenant);
+  let managedTelegramAdmission: ((tenantId: string, input: TelegramManagedInbound) => Promise<void>) | null = null;
+  let isHostedTelegramTenant: (tenantId: string) => boolean = () => false;
+  const runtimes = new ZenodRuntimePool(
+    env,
+    sharedGithubApp,
+    agent,
+    options.appOptionsForTenant,
+    async (tenantId, input) => {
+      if (!managedTelegramAdmission) throw new Error("Hosted Telegram admission is not initialized");
+      await managedTelegramAdmission(tenantId, input);
+    },
+    (tenantId) => isHostedTelegramTenant(tenantId),
+  );
   const unit = createUnit({
     name: unitName,
     version: VERSION,
@@ -499,6 +586,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       product: options.customerProduct ?? options.customer?.product,
     },
   );
+  const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
+  isHostedTelegramTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
   const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
     const account = customer.accounts.resolveForTenantId(input.tenantId);
     const token = account ? customer.tokenVault.get(account.account_id) : null;
@@ -512,6 +601,13 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       (account.subscription_status !== "active" && account.subscription_status !== "past_due")
     ) {
       return Response.json({ error: "managed Hosted tenant is unavailable" }, { status: 401 });
+    }
+    if (input.path === "/internal/telegram") {
+      const runtime = runtimes.get(input.tenantId) ??
+        runtimes.forTenantStorage(input.tenantId, storage.forTenant({ id: input.tenantId }));
+      if (!runtime) return Response.json({ error: "managed Hosted tenant runtime is unavailable" }, { status: 503 });
+      const telegramInput = JSON.parse(Buffer.from(input.raw).toString("utf8")) as TelegramManagedInbound;
+      return Response.json(await runtime.telegram.processManagedInbound(telegramInput));
     }
     const storedUrl = new URL(input.path, "http://zenod.internal");
     const targetPath = storedUrl.pathname === "/mcp"
@@ -531,8 +627,28 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     }));
   };
   const processManagedInput = async (input: ManagedAiAdmissionInput) => {
-    const response = await dispatchManagedInput(input);
+    const response = await managedAiOutbox.execute(input, () => dispatchManagedInput(input));
     return { value: response, receipt: await terminalReceipt(response) };
+  };
+  managedTelegramAdmission = async (tenantId, telegramInput) => {
+    const account = customer.accounts.resolveForTenantId(tenantId);
+    if (!account?.tenant_id || (account.subscription_status !== "active" && account.subscription_status !== "past_due")) {
+      throw new Error("Hosted Telegram tenant is not entitled");
+    }
+    const raw = new Uint8Array(Buffer.from(JSON.stringify(telegramInput), "utf8"));
+    await customer.managedAiAdmissions.submit(
+      {
+        tenantId,
+        idempotencyKey: `telegram:${telegramInput.chatId}:${telegramInput.messageId}`,
+        kind: telegramInput.kind,
+        method: "POST",
+        path: "/internal/telegram",
+        contentType: "application/json",
+        raw,
+      },
+      await customer.usageForAccount(account),
+      processManagedInput,
+    );
   };
   const resumeManagedAiAdmissions = async (): Promise<number> => customer.managedAiAdmissions.resume(
     async (tenantId) => {
@@ -658,10 +774,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const managedSettingsBodyViolation = hostedAccount
       ? await hostedSettingsBodyViolation(c.req.raw)
       : false;
-    if (capabilityViolation || managedSettingsBodyViolation) {
+    const hostedMcpReadViolation = hostedAccount &&
+      c.req.method === "POST" &&
+      (c.req.path === "/mcp" || c.req.path.startsWith("/mcp/"))
+      ? hostedSensitiveMcpRead(new Uint8Array(await c.req.raw.clone().arrayBuffer()))
+      : false;
+    if (capabilityViolation || managedSettingsBodyViolation || hostedMcpReadViolation) {
       return c.json({
         error: "forbidden",
-        capability: capabilityViolation ?? "managed_settings",
+        capability: capabilityViolation ?? (hostedMcpReadViolation ? "raw_usage" : "managed_settings"),
       }, 403);
     }
     let downstreamRequest = c.req.raw;
@@ -750,7 +871,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         }, 202);
       }
     }
-    return unit.app.fetch(downstreamRequest, c.env);
+    const response = await unit.app.fetch(downstreamRequest, c.env);
+    return hostedAccount && c.req.method === "GET"
+      ? projectHostedCustomerResponse(c.req.path, response)
+      : response;
   });
   return {
     ...unit,
@@ -760,6 +884,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     tenantStore,
     customerAccounts: customer.accounts,
     customerTokenVault: customer.tokenVault,
+    customerManagedAiAdmissions: customer.managedAiAdmissions,
     resumeManagedAiAdmissions,
     async close() {
       const failures: unknown[] = [];
@@ -770,6 +895,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
             if (admissionResumeTimer) clearInterval(admissionResumeTimer);
           }),
           Promise.resolve().then(() => customer.close()),
+          Promise.resolve().then(() => managedAiOutbox.close()),
           runtimes.close(),
         ])
       ) {

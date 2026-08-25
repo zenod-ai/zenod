@@ -7,6 +7,7 @@ import {
   type ManagedAiAdmissionInput,
   type ManagedAiRawKind,
 } from "../src/customerManagedAiAdmission.js";
+import { ManagedAiDownstreamOutbox } from "../src/customerManagedAiOutbox.js";
 
 const dirs: string[] = [];
 
@@ -148,6 +149,58 @@ describe("managed AI raw-evidence admission", () => {
       });
     } finally {
       queue.close();
+    }
+  });
+
+  it("recovers commit-before-admission-receipt through the durable outbox without a second invocation", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-managed-admission-crash-window-"));
+    dirs.push(dir);
+    const admissionPath = join(dir, "admission.sqlite");
+    const outboxPath = join(dir, "outbox.sqlite");
+    let now = 1_000;
+    const outbox = new ManagedAiDownstreamOutbox(outboxPath, { now: () => now });
+    const paidInvocation = vi.fn(async () => Response.json({ stored: true }));
+    const processor = async (admitted: ManagedAiAdmissionInput) => {
+      const response = await outbox.execute(admitted, paidInvocation);
+      const body = await response.clone().text();
+      return {
+        value: response,
+        receipt: {
+          state: response.ok ? "completed" as const : "failed" as const,
+          statusCode: response.status,
+          contentType: response.headers.get("content-type"),
+          body,
+          completedAt: new Date(now).toISOString(),
+        },
+      };
+    };
+    const crashing = new CustomerManagedAiAdmissionQueue(
+      admissionPath,
+      () => now,
+      () => { throw new Error("fault after downstream commit"); },
+    );
+    await expect(crashing.submit(input("text", "crash-window"), normal, processor))
+      .rejects.toThrow("simulated admission process death");
+    const stranded = crashing.getByIdempotencyKey("tenant-42", "crash-window")!;
+    expect(stranded).toMatchObject({ status: "processing", terminalReceipt: null, attempts: 1 });
+    crashing.close();
+
+    now += 5 * 60_000 + 1;
+    const restarted = new CustomerManagedAiAdmissionQueue(admissionPath, () => now);
+    try {
+      expect(await restarted.resume(async () => normal, processor)).toBe(1);
+      expect(paidInvocation).toHaveBeenCalledTimes(1);
+      expect(restarted.get(stranded.id)).toMatchObject({
+        status: "done",
+        attempts: 2,
+        terminalReceipt: { state: "completed", statusCode: 200 },
+      });
+      const replay = await restarted.submit(input("text", "crash-window"), normal, processor);
+      expect(replay).toMatchObject({ state: "replayed", job: { id: stranded.id } });
+      expect(paidInvocation).toHaveBeenCalledTimes(1);
+    } finally {
+      restarted.close();
+      outbox.close();
     }
   });
 });
