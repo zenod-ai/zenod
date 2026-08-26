@@ -17,11 +17,18 @@ import {
   api,
   errorMessage,
   type ConnectionsResponse,
+  type HostedChannelsResponse,
 } from "@/lib/api"
 import { CodeSnippet, CopyButton } from "@/components/copy-button"
 import { GoogleDriveConnect } from "@/components/google-drive-connect"
-import { WhatsAppConnect } from "@/components/whatsapp-connect"
-import { TelegramConnect } from "@/components/telegram-connect"
+import {
+  HostedWhatsAppConnect,
+  WhatsAppConnect,
+} from "@/components/whatsapp-connect"
+import {
+  HostedTelegramConnect,
+  TelegramConnect,
+} from "@/components/telegram-connect"
 import { PeerAgents } from "@/components/peer-agents"
 import { RingControlSurface } from "@/components/ring-control-surface"
 import { EpaminonExecutorSettings } from "@/components/epaminon-executor-settings"
@@ -68,6 +75,21 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 
 const CLAUDE_CONNECTORS_URL = "https://claude.ai/settings/connectors"
+
+export function HostedChannelsConnections({
+  channels,
+  onChanged,
+}: {
+  channels: HostedChannelsResponse | null
+  onChanged: (channels: HostedChannelsResponse) => void
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <HostedWhatsAppConnect initial={channels} onChanged={onChanged} />
+      <HostedTelegramConnect channels={channels} onChanged={onChanged} />
+    </div>
+  )
+}
 
 function timeAgo(epochMs: number): string {
   const seconds = Math.max(0, Math.round((Date.now() - epochMs) / 1000))
@@ -116,7 +138,9 @@ export function ConnectionsTab() {
 
   React.useEffect(() => {
     let cancelled = false
-    api<{ name?: string; vaultless?: boolean; hostedMode?: "ring" | null }>("/api/agent")
+    api<{ name?: string; vaultless?: boolean; hostedMode?: "ring" | null }>(
+      "/api/agent"
+    )
       .then((result) => {
         if (!cancelled) {
           setRingMode(Boolean(result.vaultless))
@@ -197,11 +221,17 @@ export function ConnectionsTab() {
 
   async function handleRevoke(clientId: string) {
     try {
-      await api("/api/connections/revoke", { method: "POST", body: { clientId } })
+      await api("/api/connections/revoke", {
+        method: "POST",
+        body: { clientId },
+      })
       setData((previous) =>
         previous === null
           ? previous
-          : { ...previous, grants: previous.grants.filter((g) => g.clientId !== clientId) }
+          : {
+              ...previous,
+              grants: previous.grants.filter((g) => g.clientId !== clientId),
+            }
       )
       toast.success("Access revoked")
     } catch (err) {
@@ -220,8 +250,9 @@ export function ConnectionsTab() {
         <CardHeader>
           <CardTitle>GitHub</CardTitle>
           <CardDescription>
-            Connect GitHub once here. The Console uses it to provision the agents it enables
-            (so they can reach their repos) — connect-once, the shared-connection model.
+            Connect GitHub once here. The Console uses it to provision the
+            agents it enables (so they can reach their repos) — connect-once,
+            the shared-connection model.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -235,8 +266,9 @@ export function ConnectionsTab() {
             <CardHeader>
               <CardTitle>Managed Phylax channels</CardTitle>
               <CardDescription>
-                WhatsApp and Telegram use the hosted provider connection. Channel health,
-                sender policy, and delivery receipts are managed here without device QR pairing.
+                WhatsApp and Telegram use the hosted provider connection.
+                Channel health, sender policy, and delivery receipts are managed
+                here without device QR pairing.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -373,8 +405,8 @@ export function ConnectionsTab() {
             code={`URL: ${codexDesktopUrl}\nBearer token env var: ${codexDesktopEnvVar}`}
           />
           <p className="text-sm text-muted-foreground">
-            The actual token must be set in the environment of the Codex
-            process before Codex starts. A shell{" "}
+            The actual token must be set in the environment of the Codex process
+            before Codex starts. A shell{" "}
             <span className="font-mono">export</span> only lasts for that shell
             session and child processes.
           </p>

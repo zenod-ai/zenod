@@ -13,6 +13,10 @@ import {
 } from "./captureMemoryAuthority.js";
 import { readCustomerSession } from "./customerSession.js";
 import {
+  HostedChannelMutationAuditStore,
+  mountPhylaxHostedChannelRoutes,
+} from "./hostedChannels.js";
+import {
   createPhylaxArtifactCapabilityUrl,
   phylaxArtifactCapabilitySecret,
   verifyPhylaxArtifactCapability,
@@ -51,6 +55,8 @@ export const PHYLAX_DEFAULT_RING_TICKET_URL = "https://ring.zenod.dev/mcp";
 export const PHYLAX_DEFAULT_ASSISTANT_URL = "https://ring.zenod.dev/mcp";
 export const ZENOD_WHATSAPP_VERIFICATION_REPLY =
   "Your WhatsApp number is verified. Return to Zenod to finish setup.";
+export const ZENOD_TELEGRAM_VERIFICATION_REPLY =
+  "Your Telegram identity is verified. Return to Zenod to finish setup.";
 const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
@@ -72,6 +78,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     assistantUrl: env.PHYLAX_ASSISTANT_URL?.trim() || PHYLAX_DEFAULT_ASSISTANT_URL,
     ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
   });
+  const hostedChannelAudit = new HostedChannelMutationAuditStore(storage.dataDir);
   const artifactCapabilitySecret = phylaxArtifactCapabilitySecret(env);
   const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
   const captureTickets = new RingCaptureTicketProducer(
@@ -111,9 +118,24 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     artifactCapabilitySecret,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
-    verifyInbound({ sender, text }) {
-      const verified = tenantSettings.verifyInbound(sender, text);
-      return verified ? ZENOD_WHATSAPP_VERIFICATION_REPLY : null;
+    verifyInbound({ channel, sender, username, text }) {
+      const verified =
+        channel === "whatsapp"
+          ? tenantSettings.verifyInboundReceipt(sender, text)
+          : tenantSettings.verifyTelegramInbound(sender, text, username);
+      if (verified && !verified.replayed) {
+        hostedChannelAudit.recordVerification(
+          channel,
+          verified.settings.tenantId,
+          sender,
+          tenantSettings.bindingRevision(verified.settings.tenantId, channel),
+        );
+      }
+      return verified
+        ? channel === "whatsapp"
+          ? ZENOD_WHATSAPP_VERIFICATION_REPLY
+          : ZENOD_TELEGRAM_VERIFICATION_REPLY
+        : null;
     },
     observeCaptureJob(ticket) {
       captureTickets.observeJob(ticket, ticket.terminal);
@@ -203,6 +225,12 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
         },
       },
     }, restartRequired ? 503 : 200);
+  });
+  mountPhylaxHostedChannelRoutes(app, {
+    env,
+    settings: tenantSettings,
+    runtime,
+    audit: hostedChannelAudit,
   });
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, base, env);
@@ -393,9 +421,14 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     app,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
+    hostedChannelAudit,
     ringCaptureTickets: captureTickets,
     async close() {
-      await base.close();
+      try {
+        await base.close();
+      } finally {
+        hostedChannelAudit.close();
+      }
     },
   };
 }
@@ -437,6 +470,7 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
     "voiceDefault",
     "turnBindings",
     "telegramBinding",
+    "telegramLegacyBinding",
     "notificationPrefs",
   ]);
   const unknown = Object.keys(record).find((key) => !allowed.has(key));
@@ -492,6 +526,9 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
       ? { turnBindings: record.turnBindings as PhylaxSettingsUpdate["turnBindings"] }
       : {}),
     ...(record.telegramBinding !== undefined ? { telegramBinding: optionalString(record, "telegramBinding", 256) } : {}),
+    ...(record.telegramLegacyBinding !== undefined
+      ? { telegramLegacyBinding: optionalString(record, "telegramLegacyBinding", 256) }
+      : {}),
     ...(notificationPrefs ? { notificationPrefs } : {}),
   };
 }

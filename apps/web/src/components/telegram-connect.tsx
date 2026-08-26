@@ -15,8 +15,32 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { api, errorMessage, type TelegramStatus } from "@/lib/api"
+import {
+  ApiError,
+  api,
+  errorMessage,
+  type HostedChannelsResponse,
+  type HostedTelegramConnectResponse,
+  type HostedTelegramDisconnectResponse,
+  type HostedTelegramTestResponse,
+  type TelegramStatus,
+} from "@/lib/api"
+import {
+  clearHostedChannelOperation,
+  hostedChannelOperationKey,
+} from "@/lib/hosted-channel-operations"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -440,6 +464,318 @@ export function TelegramConnect({
             )}
             Disconnect
           </Button>
+        )}
+      </CardFooter>
+    </Card>
+  )
+}
+
+/** Hosted customers see only their tenant binding, never bot/provider custody. */
+export function HostedTelegramConnect({
+  channels,
+  onChanged,
+}: {
+  channels: HostedChannelsResponse | null
+  onChanged: (channels: HostedChannelsResponse) => void
+}) {
+  const [identity, setIdentity] = React.useState("")
+  const [challenge, setChallenge] = React.useState<
+    HostedTelegramConnectResponse["challenge"] | null
+  >(null)
+  const [busy, setBusy] = React.useState<
+    "connect" | "test" | "disconnect" | null
+  >(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const state = channels?.telegram.state ?? null
+  const label =
+    state === "connected"
+      ? "Connected"
+      : state === "degraded"
+        ? "Needs attention"
+        : state === "awaiting_code"
+          ? "Awaiting code"
+          : state === "off"
+            ? "Not connected"
+            : "Loading"
+
+  React.useEffect(() => {
+    if (state !== "awaiting_code") return
+    const timer = window.setInterval(() => {
+      void api<HostedChannelsResponse>("/api/channels")
+        .then((next) => {
+          onChanged(next)
+          if (next.telegram.state === "connected") {
+            setChallenge(null)
+            clearHostedChannelOperation("telegram.connect")
+            toast.success("Telegram connected to Zenod")
+          }
+        })
+        .catch(() => {})
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [onChanged, state])
+
+  async function connect(resetOperation = false) {
+    setBusy("connect")
+    setError(null)
+    try {
+      const result = await api<HostedTelegramConnectResponse>(
+        "/api/channels/telegram/connect",
+        {
+          method: "POST",
+          body: {
+            ...(identity.trim() ? { identity } : {}),
+            operationId: await hostedChannelOperationKey(
+              "telegram.connect",
+              channels?.telegram.revision ?? "0",
+              identity.trim() || undefined,
+              resetOperation
+            ),
+          },
+        }
+      )
+      onChanged(result.channels)
+      setChallenge(result.challenge)
+      toast.success("Telegram verification started")
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
+        clearHostedChannelOperation("telegram.connect")
+      setError(errorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function sendTest() {
+    setBusy("test")
+    setError(null)
+    try {
+      const result = await api<HostedTelegramTestResponse>(
+        "/api/channels/telegram/test",
+        {
+          method: "POST",
+          body: {
+            operationId: await hostedChannelOperationKey(
+              "telegram.test",
+              channels?.telegram.revision ?? "0"
+            ),
+          },
+        }
+      )
+      onChanged(result.channels)
+      clearHostedChannelOperation("telegram.test")
+      toast.success("Telegram test delivered")
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
+        clearHostedChannelOperation("telegram.test")
+      setError(errorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function disconnect() {
+    setBusy("disconnect")
+    setError(null)
+    try {
+      const result = await api<HostedTelegramDisconnectResponse>(
+        "/api/channels/telegram/disconnect",
+        {
+          method: "POST",
+          body: {
+            operationId: await hostedChannelOperationKey(
+              "telegram.disconnect",
+              channels?.telegram.revision ?? "0"
+            ),
+          },
+        }
+      )
+      onChanged(result.channels)
+      clearHostedChannelOperation("telegram.disconnect")
+      clearHostedChannelOperation("telegram.connect")
+      setChallenge(null)
+      setIdentity("")
+      toast.success("Telegram disconnected")
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
+        clearHostedChannelOperation("telegram.disconnect")
+      setError(errorMessage(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <SendIcon className="size-5 text-muted-foreground" />
+        <CardTitle className="flex items-center gap-2">
+          Telegram
+          <Badge
+            variant={
+              state === "degraded"
+                ? "destructive"
+                : state === "connected"
+                  ? "secondary"
+                  : "outline"
+            }
+          >
+            {state === "connected" && <CheckIcon />}
+            {label}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          Telegram reaches the same Zenod memory directly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {error && (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>Telegram needs attention</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {state === "degraded" && (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>Your identity is still connected</AlertTitle>
+            <AlertDescription>
+              Delivery needs attention. The tenant binding is preserved; send a
+              test after the shared Telegram service recovers.
+            </AlertDescription>
+          </Alert>
+        )}
+        {state === "awaiting_code" && challenge && (
+          <Alert>
+            <SendIcon />
+            <AlertTitle>Send this code from your Telegram identity</AlertTitle>
+            <AlertDescription>
+              Message <strong>{challenge.code}</strong> to the Zenod Telegram
+              bot from {channels?.telegram.identityHint ?? "that identity"}.
+              Zenod activates only after that exact identity replies.
+            </AlertDescription>
+          </Alert>
+        )}
+        {state === "awaiting_code" && !challenge && (
+          <Alert>
+            <SendIcon />
+            <AlertTitle>Telegram verification is still waiting</AlertTitle>
+            <AlertDescription>
+              Show the same code again, issue a new one, or cancel setup. Zenod
+              has not activated this identity yet.
+            </AlertDescription>
+          </Alert>
+        )}
+        <p className="text-sm text-muted-foreground">
+          {channels?.telegram.identityHint
+            ? state === "awaiting_code"
+              ? `Pending identity ${channels.telegram.identityHint}.`
+              : `Linked identity ${channels.telegram.identityHint}.`
+            : "No Telegram identity is linked to this account yet."}
+        </p>
+        {state === "off" && (
+          <Field>
+            <FieldLabel htmlFor="hosted-telegram-identity">
+              Your Telegram username or chat ID
+            </FieldLabel>
+            <Input
+              id="hosted-telegram-identity"
+              value={identity}
+              placeholder="@your_username"
+              onChange={(event) => setIdentity(event.target.value)}
+            />
+            <FieldDescription>
+              This identity is linked only to your Zenod tenant.
+            </FieldDescription>
+          </Field>
+        )}
+      </CardContent>
+      <CardFooter className="flex flex-wrap gap-2">
+        {state === "off" ? (
+          <Button
+            type="button"
+            onClick={() => void connect(false)}
+            disabled={!identity.trim() || busy !== null}
+          >
+            {busy === "connect" ? <Spinner /> : <SendIcon />}
+            Connect Telegram
+          </Button>
+        ) : state === "awaiting_code" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void connect(false)}
+              disabled={busy !== null}
+            >
+              {busy === "connect" ? <Spinner /> : <RefreshCwIcon />}
+              Show code again
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void connect(true)}
+              disabled={busy !== null}
+            >
+              Issue new code
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void disconnect()}
+              disabled={busy !== null}
+            >
+              Cancel setup
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void sendTest()}
+              disabled={busy !== null}
+            >
+              {busy === "test" ? <Spinner /> : <SendIcon />}
+              Send test
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="ghost" disabled={busy !== null}>
+                  <UnplugIcon />
+                  Disconnect
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Disconnect Telegram?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    New Telegram messages will no longer reach this Zenod.
+                    Existing memories remain in your vault.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep connected</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={() => void disconnect()}
+                  >
+                    Disconnect Telegram
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
         )}
       </CardFooter>
     </Card>

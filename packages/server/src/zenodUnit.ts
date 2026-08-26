@@ -41,6 +41,10 @@ import type {
 import { ManagedAiDownstreamOutbox } from "./customerManagedAiOutbox.js";
 import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
+import {
+  hostedChannelsConfigured,
+  mountHostedChannelsCustomerRoutes,
+} from "./hostedChannels.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
@@ -314,6 +318,9 @@ const HOSTED_CUSTOMER_HTTP_OPERATIONS = new Set([
   "POST /api/channels/whatsapp/challenge",
   "POST /api/channels/whatsapp/test",
   "POST /api/channels/whatsapp/disconnect",
+  "POST /api/channels/telegram/connect",
+  "POST /api/channels/telegram/test",
+  "POST /api/channels/telegram/disconnect",
   "GET /.well-known/oauth-protected-resource",
   "GET /.well-known/oauth-protected-resource/mcp",
   "GET /.well-known/oauth-authorization-server",
@@ -849,6 +856,47 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   app.get("/api/health", (c) =>
     c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
+  if (agent.name === "zenod" && hostedChannelsConfigured(env)) {
+    mountHostedChannelsCustomerRoutes(app, {
+      env,
+      routeVisible(c) {
+        const session = readCustomerSession(c, env);
+        return Boolean(
+          session && customer.accounts.resolveForUser(session.github_id),
+        );
+      },
+      async resolveTenant(c) {
+        const session = readCustomerSession(c, env);
+        if (!session) return null;
+        const account = customer.accounts.resolveActiveTenantForUser(session.github_id);
+        const downstreamToken = account
+          ? customer.tokenVault.get(account.account_id)
+          : null;
+        const record = downstreamToken
+          ? await tenantStore.resolveTokenHash(hashToken(downstreamToken))
+          : null;
+        if (
+          !account?.tenant_id ||
+          !downstreamToken ||
+          !record ||
+          record.tenant.id !== account.tenant_id ||
+          (record.status ?? "active") !== "active" ||
+          (account.subscription_status !== "active" &&
+            account.subscription_status !== "past_due")
+        ) return null;
+        return {
+          tenantId: account.tenant_id,
+          downstreamToken,
+          processingPaused:
+            (account as { managed_ai_status?: string }).managed_ai_status ===
+            "paused",
+        };
+      },
+    });
+  } else if (agent.name === "zenod") {
+    app.all("/api/channels", (c) => c.json({ error: "not found" }, 404));
+    app.all("/api/channels/*", (c) => c.json({ error: "not found" }, 404));
+  }
   if (options.customerAdmin) {
     const admin = options.customerAdmin;
     const adminOnly: MiddlewareHandler<{ Bindings: HttpBindings }> = async (c, next) => {

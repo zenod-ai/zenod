@@ -34,6 +34,46 @@ async function setup(defaults: { ringTicketUrl?: string | null } = {}) {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
+  it("preserves legacy Telegram handle data for private-admin reverify without making it routable", async () => {
+    const { dataDir, storage, store } = await setup();
+    const legacy = {
+      ...store.get("legacy-tenant"),
+      telegramBinding: "@Legacy_Owner",
+    } as Record<string, unknown>;
+    delete legacy.telegramLegacyBinding;
+    await writeFile(
+      join(dataDir, "phylax-tenant-settings.json"),
+      JSON.stringify({ "legacy-tenant": legacy }),
+      "utf8",
+    );
+
+    const restarted = new PhylaxTenantSettingsStore(dataDir, storage);
+    expect(restarted.view("legacy-tenant")).toMatchObject({
+      telegramBinding: null,
+      telegramLegacyBinding: "legacy_owner",
+    });
+    expect(restarted.resolve("telegram", "@Legacy_Owner")).toBeNull();
+    expect(restarted.resolve("telegram", "733333333")).toBeNull();
+
+    restarted.update("legacy-tenant", { voiceDefault: "assistant" });
+    const persisted = JSON.parse(
+      await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8"),
+    ) as Record<string, Record<string, unknown>>;
+    expect(persisted["legacy-tenant"]).toMatchObject({
+      telegramBinding: null,
+      telegramLegacyBinding: "legacy_owner",
+      voiceDefault: "assistant",
+    });
+
+    restarted.update("legacy-tenant", {
+      telegramLegacyBinding: "@Reverify_Owner",
+    });
+    expect(restarted.view("legacy-tenant")).toMatchObject({
+      telegramBinding: null,
+      telegramLegacyBinding: "reverify_owner",
+    });
+  });
+
   it("defaults standalone voice to verbatim capture, media to ingest, and ordinary text directly to Zenod", async () => {
     const { store } = await setup();
 
@@ -282,10 +322,174 @@ describe("PhylaxTenantSettingsStore", () => {
     expect(registration.settings).toMatchObject({ phoneNumber: "34611111111", verified: false, numberId: "number-1" });
     expect(registration.keyword).toMatch(/^\d{2}-[a-z]+$/);
     expect(registration.keyword).toBe(registration.keyword.toLowerCase());
-    expect(store.verifyInbound("34622222222@s.whatsapp.net", registration.keyword, 2_000)).toBeNull();
-    expect(store.verifyInbound("34611111111@s.whatsapp.net", "99-wrong", 2_000)).toBeNull();
-    expect(store.verifyInbound("+34 611 111 111@s.whatsapp.net", registration.keyword.toUpperCase(), 2_000)).toMatchObject({ tenantId: "alpha", verified: true });
-    expect(store.verifyInbound("34611111111", registration.keyword, 2_001)).toBeNull();
+    expect(
+      store.verifyInbound(
+        "34622222222@s.whatsapp.net",
+        registration.keyword,
+        2_000,
+      ),
+    ).toBeNull();
+    expect(
+      store.verifyInbound("34611111111@s.whatsapp.net", "99-wrong", 2_000),
+    ).toBeNull();
+    expect(
+      store.verifyInbound(
+        "+34 611 111 111@s.whatsapp.net",
+        registration.keyword.toUpperCase(),
+        2_000,
+      ),
+    ).toMatchObject({ tenantId: "alpha", verified: true });
+    expect(
+      store.verifyInboundReceipt("34611111111", registration.keyword, 2_001),
+    ).toMatchObject({
+      settings: { tenantId: "alpha", verified: true },
+      replayed: true,
+    });
+  });
+
+  it("keeps Telegram pending until the exact identity proves ownership", async () => {
+    const { store } = await setup();
+    store.update("alpha", {
+      downstreamUrl: "https://memory.test/mcp",
+      downstreamToken: "alpha-memory-token",
+    });
+    const registration = store.registerTelegram(
+      "alpha",
+      "@jordi_test",
+      1_000,
+      "42-otter",
+    );
+    expect(registration.settings).toMatchObject({
+      telegramBinding: null,
+      telegramPendingIdentity: "jordi_test",
+      telegramVerificationExpiresAt: 1_801_000,
+    });
+    expect(store.resolve("telegram", "@jordi_test")).toBeNull();
+    expect(
+      store.verifyTelegramInbound("700000001", "42-otter", "@other_user", 2_000),
+    ).toBeNull();
+    expect(
+      store.verifyTelegramInbound("733333333", "99-wrong", "@jordi_test", 2_000),
+    ).toBeNull();
+    expect(
+      store.verifyTelegramInbound("733333333", "42-otter", "@jordi_test", 2_000),
+    ).toMatchObject({
+      settings: {
+        tenantId: "alpha",
+        telegramBinding: "733333333",
+        telegramIdentityHint: "jordi_test",
+      },
+      replayed: false,
+    });
+    expect(store.resolve("telegram", "@jordi_test")).toBeNull();
+    expect(store.resolve("telegram", "733333333")).toMatchObject({
+      tenantId: "alpha",
+      downstreamToken: "alpha-memory-token",
+    });
+    expect(
+      store.verifyTelegramInbound("733333333", "42-otter", "@renamed_owner", 2_001),
+    ).toMatchObject({ replayed: true });
+    expect(store.resolve("telegram", "744444444")).toBeNull();
+
+    store.update("beta", {
+      downstreamUrl: "https://memory.test/mcp",
+      downstreamToken: "beta-memory-token",
+    });
+    store.registerTelegram("beta", "766666666", 3_000, "43-raven");
+    expect(
+      store.verifyTelegramInbound(
+        "766666666",
+        "43-raven",
+        "@friendly_display",
+        3_001,
+      ),
+    ).toMatchObject({
+      settings: {
+        tenantId: "beta",
+        telegramBinding: "766666666",
+        telegramIdentityHint: "friendly_display",
+      },
+      replayed: false,
+    });
+    expect(store.resolve("telegram", "766666666")).toMatchObject({
+      tenantId: "beta",
+    });
+  });
+
+  it("isolates pending and immutable Telegram identities across tenants and survives restart", async () => {
+    const { dataDir, storage, store } = await setup();
+    store.registerTelegram("alpha", "@unique_owner", 1_000, "55-raven");
+    expect(() =>
+      store.registerTelegram("beta", "@unique_owner", 1_001, "66-panda"),
+    ).toThrow("Telegram identity is already registered");
+    const reopenedStorage = new ChassisStorage({
+      dataDir,
+      vaultEncryptionKey: MASTER_KEY,
+    });
+    const reopened = new PhylaxTenantSettingsStore(dataDir, reopenedStorage);
+    expect(reopened.resolve("telegram", "@unique_owner")).toBeNull();
+    const results = await Promise.all([
+      Promise.resolve(
+        reopened.verifyTelegramInbound("755555555", "55-raven", "@unique_owner", 2_000),
+      ),
+      Promise.resolve(
+        reopened.verifyTelegramInbound("755555555", "55-raven", "@unique_owner", 2_001),
+      ),
+    ]);
+    expect(results).toEqual([
+      expect.objectContaining({ replayed: false }),
+      expect.objectContaining({ replayed: true }),
+    ]);
+    expect(reopened.resolve("telegram", "@unique_owner")).toBeNull();
+    reopened.registerTelegram("beta", "@different_owner", 2_002, "66-panda");
+    expect(() =>
+      reopened.verifyTelegramInbound(
+        "755555555",
+        "66-panda",
+        "@different_owner",
+        2_003,
+      ),
+    ).toThrow("Telegram numeric identity is already registered");
+  });
+
+  it("releases expired pending WhatsApp and Telegram reservations for another tenant", async () => {
+    const { store } = await setup();
+    store.registerPhone("alpha", "+34 611 111 111", "primary", 1_000, "42-otter");
+    expect(() =>
+      store.registerPhone("beta", "+34 611 111 111", "primary", 1_001, "43-raven"),
+    ).toThrow("phone number is already registered");
+    expect(
+      store.registerPhone(
+        "beta",
+        "+34 611 111 111",
+        "primary",
+        1_801_001,
+        "44-panda",
+      ).settings,
+    ).toMatchObject({ phoneNumber: "34611111111", verified: false });
+    expect(store.get("alpha")).toMatchObject({
+      phoneNumber: null,
+      verificationHash: null,
+      verificationExpiresAt: null,
+    });
+
+    store.registerTelegram("alpha", "@expired_owner", 2_000, "55-raven");
+    expect(() =>
+      store.registerTelegram("beta", "@expired_owner", 2_001, "56-panda"),
+    ).toThrow("Telegram identity is already registered");
+    expect(
+      store.registerTelegram(
+        "beta",
+        "@expired_owner",
+        1_802_001,
+        "57-otter",
+      ).settings,
+    ).toMatchObject({ telegramPendingIdentity: "expired_owner" });
+    expect(store.get("alpha")).toMatchObject({
+      telegramPendingIdentity: null,
+      telegramVerificationHash: null,
+      telegramVerificationExpiresAt: null,
+    });
   });
 
   it("keeps two tenants' routes, downstream tokens and transcription keys isolated", async () => {

@@ -477,7 +477,7 @@ describe("Ring capture context ticket", () => {
       downstreamToken: memoryToken,
       ringTicketUrl: ringEndpoint.url,
       ringTicketToken: ringToken,
-      telegramBinding: "@alpha",
+      telegramBinding: "755555555",
     });
     // Keep the real Zenod queue authority and MCP surface, but prevent its
     // worker from consuming these controlled jobs before Phylax crosses from
@@ -527,7 +527,7 @@ describe("Ring capture context ticket", () => {
       },
       {
         channel: "telegram" as const,
-        sender: "@alpha",
+        sender: "755555555",
         chatId: "7711",
         providerMessageId: "tg-production-capture",
         evidenceRef: "Log/2026-07-29.md#^production-tg",
@@ -537,7 +537,7 @@ describe("Ring capture context ticket", () => {
     try {
       for (const capture of cases) {
         const conversationKey = capture.channel === "telegram"
-          ? "telegram:alpha"
+          ? `telegram:${capture.sender}`
           : `whatsapp:${capture.sender}`;
         const cid = conversationId(capture.channel, conversationKey);
         const receipt = await phylax.phylaxRuntime.organ.receive({

@@ -1,12 +1,22 @@
 export class ApiError extends Error {
   readonly status: number
   readonly code: string | undefined
+  readonly retryDisposition:
+    | "retry_same_operation"
+    | "retry_new_operation"
+    | undefined
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    retryDisposition?: "retry_same_operation" | "retry_new_operation"
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    this.retryDisposition = retryDisposition
   }
 }
 
@@ -58,11 +68,25 @@ export async function api<T>(
   }
 
   if (!response.ok) {
-    const payload = data as { error?: string; code?: string } | null
+    const payload = data as {
+      error?:
+        | string
+        | {
+            code?: string
+            message?: string
+            retryDisposition?: "retry_same_operation" | "retry_new_operation"
+          }
+      code?: string
+    } | null
+    const typedError =
+      payload?.error && typeof payload.error === "object" ? payload.error : null
     throw new ApiError(
       response.status,
-      payload?.error ?? response.statusText,
-      payload?.code
+      (typeof payload?.error === "string"
+        ? payload.error
+        : typedError?.message) ?? response.statusText,
+      payload?.code ?? typedError?.code,
+      typedError?.retryDisposition
     )
   }
 
@@ -372,6 +396,68 @@ export type TelegramStatus = {
   rich: boolean
 }
 
+export type HostedChannelsResponse = {
+  whatsapp: {
+    state: "off" | "awaiting_code" | "verified" | "degraded" | "paused"
+    senderHint: string | null
+    sharedNumber: string | null
+    verificationExpiresAt: number | null
+    lastInboundAt: number | null
+    lastReceiptAt: number | null
+    revision: string
+  }
+  telegram: {
+    state: "off" | "awaiting_code" | "connected" | "degraded"
+    identityHint: string | null
+    verificationExpiresAt: number | null
+    revision: string
+  }
+}
+
+export type HostedChannelMutation = {
+  operationId: string
+  operation:
+    | "whatsapp.challenge"
+    | "whatsapp.verify"
+    | "whatsapp.test"
+    | "whatsapp.disconnect"
+    | "telegram.connect"
+    | "telegram.verify"
+    | "telegram.test"
+    | "telegram.disconnect"
+  outcome: "succeeded" | "rejected" | "failed"
+  at: number
+}
+
+export type HostedWhatsAppChallengeResponse = {
+  channels: HostedChannelsResponse
+  challenge: {
+    code: string
+    sharedNumber: string
+    expiresAt: number
+  }
+  mutation: HostedChannelMutation
+}
+
+export type HostedWhatsAppTestResponse = {
+  channels: HostedChannelsResponse
+  receipt: { deliveredAt: number }
+  mutation: HostedChannelMutation
+}
+
+export type HostedWhatsAppDisconnectResponse = {
+  channels: HostedChannelsResponse
+  mutation: HostedChannelMutation
+}
+
+export type HostedTelegramConnectResponse = {
+  channels: HostedChannelsResponse
+  challenge: { code: string; expiresAt: number }
+  mutation: HostedChannelMutation
+}
+export type HostedTelegramTestResponse = HostedWhatsAppTestResponse
+export type HostedTelegramDisconnectResponse = HostedWhatsAppDisconnectResponse
+
 export type SettingsResponse = {
   settings: SettingsValues
   configured: boolean
@@ -575,7 +661,12 @@ export async function chatStream(
     if (!trimmed) return
     const event = JSON.parse(trimmed) as
       | { type: "delta"; text: string }
-      | { type: "tool"; phase: ChatToolEvent["phase"]; tool: string; label: string }
+      | {
+          type: "tool"
+          phase: ChatToolEvent["phase"]
+          tool: string
+          label: string
+        }
       | {
           type: "done"
           text: string
@@ -587,7 +678,11 @@ export async function chatStream(
     if (event.type === "ping") return // keep-alive; nothing to render
     if (event.type === "delta") pendingDeltas.push(event.text)
     else if (event.type === "tool")
-      handlers.onTool?.({ phase: event.phase, tool: event.tool, label: event.label })
+      handlers.onTool?.({
+        phase: event.phase,
+        tool: event.tool,
+        label: event.label,
+      })
     else if (event.type === "done") {
       // The final event is the host-gated authority. Never expose an earlier model
       // delta that the gate replaced; replay natural chunks only when they exactly
@@ -602,7 +697,8 @@ export async function chatStream(
         sources: event.sources,
         ...(event.stored ? { stored: event.stored } : {}),
       })
-    } else if (event.type === "error") throw new ApiError(503, event.message, event.code)
+    } else if (event.type === "error")
+      throw new ApiError(503, event.message, event.code)
   }
 
   for (;;) {
