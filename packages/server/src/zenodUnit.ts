@@ -379,6 +379,8 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
   "vault_repo",
   "vault_branch",
   "artifact_archive_provider",
+  "google_oauth_client_id",
+  "google_oauth_client_secret",
   "telegram_enabled",
   "telegram_allowed_users",
   "telegram_accept_all",
@@ -399,6 +401,7 @@ const HOSTED_CUSTOMER_PANELS = Object.freeze([
 export const HOSTED_DRIVE_STATUS_PUBLIC_KEYS = Object.freeze([
   "configured",
   "oauthAvailable",
+  "oauthClientConfigured",
   "accountEmail",
   "folderId",
   "archiveConfigured",
@@ -407,8 +410,9 @@ export const HOSTED_DRIVE_STATUS_PUBLIC_KEYS = Object.freeze([
 
 function projectHostedDriveStatus(
   body: Record<string, unknown>,
+  oauthAvailable: boolean,
 ): Record<(typeof HOSTED_DRIVE_STATUS_PUBLIC_KEYS)[number], unknown> {
-  const oauthAvailable = body.oauthClientConfigured === true;
+  const oauthClientConfigured = body.oauthClientConfigured === true;
   const configured = body.configured === true && body.authMode === "oauth";
   const folderId = typeof body.folderId === "string" && body.folderId.trim()
     ? body.folderId
@@ -421,6 +425,8 @@ function projectHostedDriveStatus(
     ? null
     : !oauthAvailable
       ? "Google Drive connection is unavailable."
+      : !oauthClientConfigured
+        ? "Add this tenant's Google OAuth client ID and client secret to connect Google Drive."
       : !configured
         ? "Connect Google Drive to enable archive/export copies."
         : !folderId
@@ -429,6 +435,7 @@ function projectHostedDriveStatus(
   return {
     configured,
     oauthAvailable,
+    oauthClientConfigured,
     accountEmail,
     folderId,
     archiveConfigured,
@@ -436,7 +443,11 @@ function projectHostedDriveStatus(
   };
 }
 
-async function projectHostedCustomerResponse(path: string, response: Response): Promise<Response> {
+async function projectHostedCustomerResponse(
+  path: string,
+  response: Response,
+  hostedDriveAllowed: boolean,
+): Promise<Response> {
   if (
     path === "/api/drive/oauth/start" &&
     response.status === 400 &&
@@ -447,11 +458,18 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
       const headers = new Headers(response.headers);
       headers.delete("content-length");
       headers.set("cache-control", "no-store");
+      if (!hostedDriveAllowed) {
+        return Response.json({
+          error: "google_drive_oauth_unavailable",
+          message: "Google Drive connection is unavailable for this tenant.",
+          oauthAvailable: false,
+        }, { status: 503, headers });
+      }
       return Response.json({
-        error: "google_drive_oauth_unavailable",
-        message: "Google Drive connection is unavailable. Contact the Zenod operator.",
+        error: "google_drive_oauth_credentials_required",
+        message: "Save this tenant's Google OAuth client ID and client secret first.",
         oauthAvailable: false,
-      }, { status: 503, headers });
+      }, { status: 400, headers });
     }
   }
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
@@ -481,7 +499,7 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
   } else if (path === "/api/overview") {
     projected = { ...body, usage: null };
   } else if (path === "/api/drive/status") {
-    projected = projectHostedDriveStatus(body);
+    projected = projectHostedDriveStatus(body, hostedDriveAllowed);
   } else if (path === "/api/vault") {
     projected = {
       repo: body.repo ?? null,
@@ -1183,8 +1201,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       }
     }
     const response = await unit.app.fetch(downstreamRequest, c.env);
-    return hostedAccount && c.req.method === "GET"
-      ? projectHostedCustomerResponse(c.req.path, response)
+    const hostedDriveAllowed = admissionAccount?.tenant_id
+      ? runtimes.get(admissionAccount.tenant_id)?.settings.googleDriveTenantCredentialsAllowed() === true
+      : false;
+    return hostedAccount &&
+      (c.req.method === "GET" || (c.req.method === "PUT" && c.req.path === "/api/settings"))
+      ? projectHostedCustomerResponse(c.req.path, response, hostedDriveAllowed)
       : response;
   });
   return {

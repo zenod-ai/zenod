@@ -650,6 +650,12 @@ export class Settings {
     return { mode: "hosted-managed", credentials: null };
   }
 
+  /** Whether this Hosted tenant may configure its own OAuth client pair. */
+  googleDriveTenantCredentialsAllowed(): boolean {
+    const authority = this.googleDriveOAuthAuthoritySource?.();
+    return authority?.mode === "hosted-managed" && authority.tenantCredentialsAllowed === true;
+  }
+
   /** Configured whisper transcription quality; defaults to large-v3-turbo. */
   whisperModel(): string {
     return this.get("whisper_model") || "large-v3-turbo";

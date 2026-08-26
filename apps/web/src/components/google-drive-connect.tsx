@@ -148,7 +148,7 @@ export function GoogleDriveConnect({
         setStatus(result)
         setLoadError(null)
         setFolderId((previous) => previous || (result.folderId ?? ""))
-        if ("oauthClientId" in result) {
+        if (!hosted && "oauthClientId" in result) {
           setOauthClientId(
             (previous) => previous || (result.oauthClientId ?? "")
           )
@@ -157,7 +157,7 @@ export function GoogleDriveConnect({
       .catch((err: unknown) => {
         setLoadError(errorMessage(err))
       })
-  }, [])
+  }, [hosted])
 
   React.useEffect(() => {
     void loadStatus()
@@ -211,16 +211,16 @@ export function GoogleDriveConnect({
   async function handleOAuthConnect() {
     setConnecting(true)
     try {
-      if (!hosted) {
-        const body: Record<string, string> = {
-          google_drive_folder_id: folderId,
-        }
-        if (oauthClientId.trim() !== "") {
-          body.google_oauth_client_id = oauthClientId.trim()
-        }
-        if (oauthClientSecret.trim() !== "") {
-          body.google_oauth_client_secret = oauthClientSecret
-        }
+      const body: Record<string, string> = hosted
+        ? {}
+        : { google_drive_folder_id: folderId }
+      if (oauthClientId.trim() !== "") {
+        body.google_oauth_client_id = oauthClientId.trim()
+      }
+      if (oauthClientSecret.trim() !== "") {
+        body.google_oauth_client_secret = oauthClientSecret
+      }
+      if (Object.keys(body).length > 0) {
         await api<SettingsResponse>("/api/settings", {
           method: "PUT",
           body,
@@ -345,8 +345,7 @@ export function GoogleDriveConnect({
           <>
             {hostedStatus?.oauthAvailable === false && (
               <p className="text-sm text-destructive">
-                Google Drive connection is unavailable. Contact the Zenod
-                operator.
+                Google Drive connection is unavailable for this tenant.
               </p>
             )}
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
@@ -364,10 +363,78 @@ export function GoogleDriveConnect({
                 already stored in Google Drive.
               </p>
             </div>
+            <div className="flex flex-col gap-3">
+              <Step n={1}>
+                In this tenant&apos;s Google Cloud project, create an{" "}
+                <strong>OAuth client</strong> for a web application, add{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {window.location.origin}/api/drive/oauth/callback
+                </code>{" "}
+                as an authorized redirect URI, and enable the{" "}
+                <strong>Google Drive API</strong>.
+                <span className="mt-1 flex flex-wrap gap-3">
+                  <a
+                    className="inline-flex items-center gap-1 text-foreground underline underline-offset-4"
+                    href={CONSOLE_OAUTH_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    OAuth clients <ExternalLinkIcon className="size-3" />
+                  </a>
+                  <a
+                    className="inline-flex items-center gap-1 text-foreground underline underline-offset-4"
+                    href={CONSOLE_DRIVE_API_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Enable Drive API <ExternalLinkIcon className="size-3" />
+                  </a>
+                </span>
+              </Step>
+              <Step n={2}>
+                Paste this tenant&apos;s client ID and client secret, then connect
+                the Google account whose Drive should hold its Zenod archive.
+              </Step>
+            </div>
             <FieldDescription>
               After consent, the managed archive folder is ready automatically.
               There is no folder to select.
             </FieldDescription>
+
+            <Field>
+              <FieldLabel htmlFor="hosted-drive-oauth-client-id">
+                OAuth client ID
+              </FieldLabel>
+              <Input
+                id="hosted-drive-oauth-client-id"
+                autoComplete="off"
+                placeholder="1234567890-abc.apps.googleusercontent.com"
+                value={oauthClientId}
+                onChange={(event) => setOauthClientId(event.target.value)}
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="hosted-drive-oauth-client-secret">
+                OAuth client secret
+              </FieldLabel>
+              <Input
+                id="hosted-drive-oauth-client-secret"
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  hostedStatus?.oauthClientConfigured
+                    ? "saved; leave blank to keep it"
+                    : "GOCSPX-..."
+                }
+                value={oauthClientSecret}
+                onChange={(event) => setOauthClientSecret(event.target.value)}
+              />
+              <FieldDescription>
+                Stored only for this Zenod tenant. Leave blank to keep an
+                already saved secret.
+              </FieldDescription>
+            </Field>
           </>
         )}
 
