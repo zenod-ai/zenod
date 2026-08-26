@@ -12,6 +12,8 @@ Reconciled `main`: `a412dd0a369931f38b707a907264ed828908604b`
 
 Exact source candidate: `f4a1746eab3fef0e08ba933a30ed658e627e93d2`
 
+ZAL-20 Hosted Drive correction source: `f314a55e8a304986867597e8a1da4ef94ff273cd`
+
 Evidence snapshot commit: `e2dc43ad04f6a72d59e1e56c4d382d8e24ade10e`
 
 Integration target: `main`
@@ -36,7 +38,7 @@ Existing architecture, product surfaces, APIs, settings storage and suites remai
 - The authority is resolved on every operation. Only one unambiguous account in `active` or `past_due` state with an active tenant-token record receives it. Canceled, paused, null/checkout, suspended, deleted or ambiguous state fails closed immediately, including after a runtime has already been cached.
 - Each Hosted tenant continues to own only its OAuth state, refresh token, connected account email and selected folder. The tests prove a second Hosted tenant cannot read the first tenant's state or refresh token.
 - A fresh Hosted tenant can start OAuth immediately when both operator variables exist. When either is absent, status truthfully returns `oauthAvailable: false`, the Connect button is disabled, and OAuth start returns a customer-safe `503 google_drive_oauth_unavailable` response.
-- Hosted UI renders managed connect/status/disconnect and the supported folder control only. Self-hosted UI and raw API retain the existing BYO OAuth client ID/secret, service-account fallback, test/save, provider/transcription and folder behavior.
+- ZAL-20 narrows Hosted Drive to an archive/export-only destination: the UI renders managed connect/status/disconnect with no folder control, inbox, source, list, ingest, or Picker promise. Zenod creates one tenant-specific private folder automatically. Self-hosted UI and raw API retain the existing BYO OAuth client ID/secret, service-account fallback, test/save, provider/transcription and folder behavior.
 
 Acceptance scaffolding added for this boundary:
 
@@ -147,7 +149,7 @@ npm exec -w @zenod/server -- vitest run test/customerLayer.test.ts test/customer
 
 The prior responsive run served built `apps/web/dist` with `node scripts/zal17-portal-fixture.mjs` on loopback, opened `/hosted` and `/self-hosted`, set 360x900, 736x900 and 1024x900 viewports, reloaded, and inspected Vault & sources and Channels. There is an exact zero-line `apps/web` diff from that run's source SHA to this source candidate. At this candidate, the web bundle was rebuilt and Browser Control re-opened both editions at 1496px, rechecked the same two sections and observed `scrollWidth === innerWidth`. `browser-qa.json` separates the carried-forward responsive matrix from this candidate's recheck.
 
-Observed: exact viewport widths matched scroll widths; Hosted showed managed OAuth/folder controls without forbidden or internal copy; self-host retained OAuth client/secret/service-account controls; Hosted Channels showed WhatsApp without Ring/Phylax copy; self-host Channels showed no WhatsApp.
+Observed on the ZAL-20 correction source: exact viewport widths matched scroll widths; Hosted showed managed OAuth with archive/export-only copy, no folder control, and no Drive inbox/source promise; self-host retained OAuth client/secret/service-account/folder controls and source copy; Hosted Channels showed WhatsApp without Ring/Phylax copy; self-host Channels showed no WhatsApp.
 
 No screenshot artifact is claimed. These are presentation and visible-copy observations only. They do not prove an uninterrupted signed customer journey or real backend/provider operation.
 
