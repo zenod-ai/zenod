@@ -2,13 +2,13 @@
 
 Status: active
 Created: 2026-07-09
-Updated: 2026-08-20
+Updated: 2026-08-26
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `131b80c` plus current Foundation and Zenod Alpha spine working tree
+Last reconciled commit: `19be22b` plus current Foundation and Zenod Alpha spine working tree
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Zenod Alpha economics integrated; exact priced usage contract at Jordi human gate
-Last verified: 2026-08-20 17:41 CEST
+Phase: Zenod paid-beta implementation integrated; read-only production preflight merged; single-price correction active
+Last verified: 2026-08-26 CEST
 Integration target: `main`
-Fresh base commit: `131b80cf67f37b31ec32b7476b1b4725a47b7ffd` on `main`; ZAL-1/ZAL-2/ZAL-3/ZAL-3E evidence is integrated
-Next action: Jordi replies `APPROVE ECONOMICS CONTRACT` for the exact managed/BYOK contract in the active child spine, or names the assumption to revise; the child delivery manager then creates the smallest implementation batch.
-Blockers: the exact priced usage contract requires Jordi's approval. Managed inference additionally requires credential/key lifecycle, entitlements/model lock, fail-closed allowance enforcement/UX, and provider-ledger reconciliation before it can launch. Production mutation, live billing, signup opening, WhatsApp-session changes, and external promotion remain separate later gates.
+Fresh base commit: `19be22b143f59b144a5315f5f4578b1e0651f007` on `main`; minimum Hosted/self-host implementation, local beta proof, and corrected read-only production preflight are integrated
+Next action: execute [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) from current `main` to replace Zenod's legacy €5/month and €50/year surfaces with the approved single €9/month plus VAT contract; preserve existing subscriptions and shared billing functionality; perform no Stripe or production mutation.
+Blockers: candidate `91b4e7d` must not deploy because its public site, Hosted Account, Terms, checkout parser, and readiness rule still expose the superseded €5/€50 monthly/yearly offer. Production deployment, backups, credentials/config, OpenRouter reconciliation, Google OAuth, live channel sessions, real-card billing, signup opening, and external promotion remain separate exact human gates.
 
 ## Bootstrap Map
 
@@ -165,12 +165,14 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | 2026-08-16 | Treat memory + execution as the strategic product direction, with an explicit store-only / store-and-execute choice. | Voice capture is already useful; binding it to a configured Codex harness, repo, and spine closes the loop from intent to work without making every capture executable authority. | [`^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21) |
 | 2026-08-16 | Keep the launch-readiness backlog separate from the future execution-lane backlog. | Grounded recall, packaging, onboarding, website truth, and alpha support must be made shippable now; repo/spine selection, execution authority, Codex reportback, and artifact hosting form a distinct larger epic. | 2026-08-15 voice-note pair and this rollup |
 | 2026-08-20 | Treat priced usage economics as a prerequisite to the Zenod Alpha offer decision. | A monthly or annual price is incomplete until included workload, limit behavior, cost exposure, BYOK treatment, and break-even margins are explicit. | [ZAL-3E #1069](https://github.com/zenod-ai/zenod/issues/1069) and the active child spine |
+| 2026-08-25 | Approve one Zenod Hosted plan at €9/month plus VAT with managed usage and WhatsApp included. | The simplest sellable product is Zenod itself across MCP, Telegram, and Hosted WhatsApp; provider economics and the hidden Phylax service remain operator concerns. | Binding child-spine product decision and `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/ui-contract.html` |
+| 2026-08-26 | Do not deploy the locally proved candidate until its legacy €5/month and €50/year contract is corrected. | Read-only preflight showed code/product/legal/readiness drift despite the functional candidate passing local acceptance. A code-only correction is safer than deploying twice or misrepresenting the approved offer. | [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061), [PR #1089](https://github.com/zenod-ai/zenod/pull/1089), and [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) |
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | decision-ready / human gate | Jordi approves or revises exact economics contract | [ZAL-3E PR #1071](https://github.com/zenod-ai/zenod/pull/1071) plus earlier ZAL PRs merged | `131b80c` | Child DoD covers readiness truth, recap regression, economically defined offer, production gate, stranger acceptance, promotion draft, and resumable state. | [#1069 manager acceptance](https://github.com/zenod-ai/zenod/issues/1069#issuecomment-5358203918); reproducible economics integrated; recommended contract awaits approval. | 2026-08-20 17:41 CEST | Jordi replies `APPROVE ECONOMICS CONTRACT` or names the assumption to revise. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | active / pricing correction | [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) corrects approved product truth before a new preflight digest | Minimum chain and ZAL-17/ZAL-4 docs merged; `codex/zal-18-single-price-contract` | `19be22b` | Child DoD covers readiness truth, recap regression, the approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | ZAL-17 local candidate passed; ZAL-4 read-only packet merged as `19be22b` and blocks deployment of `91b4e7d` on exact pricing drift. | 2026-08-26 CEST | Deliver and independently review #1090 without Stripe or production mutation; then refresh the immutable candidate/preflight packet. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -194,7 +196,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | Product intent or acceptance change | Jordi | Proposed behavior changes the EpicSpine contract or rollout acceptance | Approve the revised intent or criteria | Documentation and validation inside existing scope |
 | Public release or registry submission | Jordi | Publishing beyond the existing AlfaBlok GitHub repository and Pages site | Approve target registry and release posture | Local package, README, deck, and repository updates |
 | Destructive, privileged, or irreversible action | Jordi | Credentials, deletion, production mutation, or irreversible external action is required | Approve the exact action and target | Read-only investigation and reversible preparation |
-| Alpha package and public promise | Jordi | Integrated ZAL-3E economics defines the exact managed/BYOK contract | Reply `APPROVE ECONOMICS CONTRACT` for managed €5/month or €50/year plus VAT with $0.50 monthly provider cap/80% warning/100% stop/no overage and BYOK €4/month plus VAT/no included AI/no annual alpha plan; or name an assumption to revise. | Readiness testing and draft-only launch materials |
+| Alpha package and public promise | Jordi | Satisfied 2026-08-25 through the binding product/UI review | Approved: one €9/month plus VAT Zenod Hosted plan with managed usage and WhatsApp included; provider economics hidden; Phylax is the existing private Channels service; Ring absent from Zenod; MCP first-class; self-host remains free/BYO/Telegram. | Local implementation and validation inside this contract; production, billing, credentials, sessions, signup, and promotion remain separately gated. |
 | External promotion | Jordi | A Reddit/X/email draft is ready | Approve the exact final content and destination | Research, strategy, and drafts |
 | Voice-triggered execution authority | Jordi | The proposed execution child spine is ready to move beyond design | Approve the store+execute interaction, repo/spine confirmation rule, pricing posture, and mutation gates | Read-only design and local prototypes |
 
@@ -210,7 +212,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 - Treat `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` as the sole active alpha delivery board; do not select work from the global open-issue list.
 - On “continue,” execute the active child spine's single next action and remain the delivery manager/spine steward.
-- Preserve the active child's exact economics human gate; after approval, route its smallest implementation batch, production gate, stranger acceptance, and promotion through the revised dependency order.
+- Preserve the approved one-plan €9 Zenod contract. Route [#1090](https://github.com/zenod-ai/zenod/issues/1090) as the smallest correction before refreshing the production candidate; do not reopen product economics or deploy the legacy-priced image.
 - Create the separate voice-note-to-Codex child EpicSpine only after the alpha offer is accepted.
 - Create GitHub issues for the draft ledger rows.
 - Treat `EPIC-0-FOUNDATION-SPINE.md` as the meta Epic 0 spine; `EPIC-0-STORY.md` is story-owned and read-only unless explicitly delegated.
@@ -221,7 +223,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Worker Queue
 
-- Alpha implementation/diagnostic work is dispatchable only from `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`; no ticket worker is active while the economics contract awaits Jordi's choice.
+- Alpha implementation/diagnostic work is dispatchable only from `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`; ZAL-18 is the active bounded pricing-contract worker from current `main`.
 - Add explicit Write Scope to the chosen child epic spine.
 - Ensure its Issue Ledger links to GitHub issues or marks drafts clearly.
 - Add Handoff Journal and Proposed Cross-Spine Updates sections if missing.
@@ -249,6 +251,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-08-26 - Epic 0 worker - Read-only preflight integrated; single-price correction dispatched
+
+Action: accepted corrected ZAL-4 documentation PR #1089 and merged it as `19be22b`. The packet authorizes no external mutation and proves candidate `91b4e7d` must not deploy because Zenod's public site, Hosted Account, Terms, checkout, and readiness contract still present the superseded €5/month and €50/year offer. Jordi's binding product decision is already one €9/month plus VAT Hosted plan with managed usage and WhatsApp included. Created [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) as the narrow reuse-first correction.
+
+Evidence: [ZAL-4 durable packet](./evidence/zenod-production-readiness-preflight-2026-08-26/README.md), corrected [PR #1089](https://github.com/zenod-ai/zenod/pull/1089), and independent exact-head review. Production remains unchanged, signup false, and readiness 503.
+
+Next action: implement and review ZAL-18 from exact `main` `19be22b`, preserving historical subscriptions and all shared billing functionality. Do not create or select a Stripe price, deploy, alter configuration, charge a card, or open signup. After integration, publish a fresh immutable image and refresh the read-only packet only under the later named gates.
+
+Assignment identity: Epic 0 Foundation planner (`Jordi + current bound Codex task`); Zenod Alpha delivery manager; ZAL-18-single-price-contract-worker
+
+Branch / latest commit: `main` at `19be22b`; worker branch `codex/zal-18-single-price-contract`
+
+Last verified: 2026-08-26 CEST
 
 ### 2026-08-20 - Epic 0 worker - Zenod Alpha economics integrated; human gate ready
 
