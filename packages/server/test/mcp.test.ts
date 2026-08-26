@@ -216,6 +216,10 @@ describe("MCP endpoint", () => {
       "store_memory",
       "task_brain",
     ]);
+    const ingestMemory = tools.find((tool) => tool.name === "ingest_memory")!;
+    expect(ingestMemory.description).toContain("Drive file refs");
+    expect((ingestMemory.inputSchema.properties?.bytesRef as { description?: string }).description)
+      .toContain("Drive id");
     await client.close();
   });
 
@@ -929,6 +933,97 @@ describe("MCP endpoint", () => {
     expect(digest.candidates[0]?.source_refs[0]?.path).toBe("Log/2026-06-13.md#^e-test");
     expect(digest.written).toEqual([]);
     await client.close();
+  });
+});
+
+describe("Hosted archive-only MCP media admission", () => {
+  it("ZAL-20 Hosted archive-only Drive journey rejects every Drive ref before enqueue, provider access, or source read", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-hosted-drive-admission-"));
+    const runtime = new Runtime(dir, undefined, {
+      seedFromEnv: false,
+      googleDriveOAuthAuthority: () => ({
+        mode: "hosted-managed",
+        credentials: { clientId: "operator-client", clientSecret: "operator-secret" },
+      }),
+    });
+    runtime.settings.setRaw("api_token", "hosted-mcp-token");
+    runtime.settings.setRaw("google_oauth_refresh_token", "hosted-refresh-token");
+    const engine = {
+      store: vi.fn(),
+      describeImage: vi.fn(),
+    } as unknown as BrainEngine;
+    runtime.getEngine = vi.fn(async () => engine);
+    const nativeFetch = globalThis.fetch;
+    const providerFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("http://127.0.0.1:")) return nativeFetch(input, init);
+      throw new Error("Hosted Drive provider/source access must not occur");
+    });
+    vi.stubGlobal("fetch", providerFetch);
+    const token = runtime.settings.apiToken();
+    const server = serve({ fetch: createApp(runtime).fetch, port: 0 });
+    const { port } = server.address() as AddressInfo;
+    const client = new Client({ name: "hosted-drive-admission", version: "1" });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${port}/mcp`),
+        { requestInit: { headers: { Authorization: `Bearer ${token}` } } },
+      ));
+      const { tools } = await client.listTools();
+      const ingestMemory = tools.find((tool) => tool.name === "ingest_memory")!;
+      expect(ingestMemory.description).toContain("Hosted Google Drive is archive/export-only");
+      expect(ingestMemory.description).not.toMatch(/Use this .*Drive file refs/i);
+      expect((ingestMemory.inputSchema.properties?.bytesRef as { description?: string }).description)
+        .toContain("Hosted Drive file references are rejected");
+
+      for (const bytesRef of [
+        "drive:file-1",
+        "gdrive:file-2",
+        "google-drive:file-3",
+        "drive://file/file-4",
+      ]) {
+        const rejected = await client.callTool({
+          name: "ingest_memory",
+          arguments: { mediaType: "document", bytesRef },
+        });
+        expect(rejected.isError, bytesRef).toBe(true);
+        expect(rejected.structuredContent, bytesRef).toEqual({
+          code: "hosted_drive_source_disabled",
+          message: "Hosted Google Drive is archive/export-only and cannot be used as an ingest_memory source.",
+        });
+      }
+
+      expect(() => runtime.taskJobQueue.enqueue("media_ingest", {
+        mediaType: "document",
+        bytesRef: "drive:direct-queue-bypass",
+      })).toThrow("Hosted Google Drive is archive/export-only");
+
+      expect(runtime.taskJobStore.recent()).toEqual([]);
+      const preexisting = runtime.taskJobStore.enqueue("media_ingest", {
+        mediaType: "document",
+        bytesRef: "drive:preexisting-restart-job",
+      });
+      runtime.taskJobQueue.resume();
+      let recovered = runtime.taskJobStore.get(preexisting.id);
+      for (let i = 0; i < 50 && recovered?.status !== "error"; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        recovered = runtime.taskJobStore.get(preexisting.id);
+      }
+      expect(recovered).toMatchObject({
+        status: "error",
+        error: "Hosted Google Drive is archive/export-only and cannot be used as an ingest_memory source.",
+      });
+      expect(providerFetch.mock.calls.every(([input]) => String(input).startsWith("http://127.0.0.1:")))
+        .toBe(true);
+      expect(runtime.getEngine).not.toHaveBeenCalled();
+      expect(engine.store).not.toHaveBeenCalled();
+      expect(engine.describeImage).not.toHaveBeenCalled();
+    } finally {
+      await client.close().catch(() => undefined);
+      server.close();
+      await runtime.close();
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

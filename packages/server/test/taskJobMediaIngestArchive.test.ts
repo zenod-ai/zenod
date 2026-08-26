@@ -262,6 +262,75 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     store.close();
   });
 
+  it("ZAL-20 self-hosted Drive journey preserves ingest_memory Drive references", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-selfhost-drive-ref-"));
+    dirs.push(dir);
+    const archiveDir = join(dir, "archive");
+    const settings = {
+      get: (key: string) =>
+        ({
+          artifact_archive_provider: "local",
+          artifact_archive_local_dir: archiveDir,
+          google_oauth_client_id: "selfhost-client",
+          google_oauth_client_secret: "selfhost-secret",
+        })[key] ?? null,
+      getRaw: (key: string) => key === "google_oauth_refresh_token" ? "selfhost-refresh" : null,
+      googleDriveOAuthAuthority: () => ({ mode: "self-hosted" as const }),
+    } as unknown as Settings;
+    const providerFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://oauth2.googleapis.com/token") {
+        return Response.json({ access_token: "selfhost-access", expires_in: 3600 });
+      }
+      if (url.includes("/drive/v3/files/selfhost-doc") && new URL(url).searchParams.get("alt") === "media") {
+        return new Response("Self-hosted Drive source remains supported.", {
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (url.includes("/drive/v3/files/selfhost-doc")) {
+        return Response.json({
+          id: "selfhost-doc",
+          name: "source.txt",
+          mimeType: "text/plain",
+          webViewLink: "https://drive.google.com/file/d/selfhost-doc/view",
+        });
+      }
+      throw new Error(`unexpected provider request: ${url}`);
+    });
+    vi.stubGlobal("fetch", providerFetch);
+    const stored: StoreInput[] = [];
+    const engine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-08-26.md#^e-selfhost-drive",
+          pagesTouched: ["Areas/Self-hosted.md"],
+          commitSha: "e".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "document",
+      bytesRef: "drive://file/selfhost-doc",
+    });
+    let done = store.get(job.id);
+    for (let i = 0; i < 50 && done?.status !== "done"; i += 1) {
+      await sleep(10);
+      done = store.get(job.id);
+    }
+
+    expect(done?.status).toBe("done");
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).toContain("Self-hosted Drive source remains supported.");
+    expect(providerFetch).toHaveBeenCalled();
+    await queue.close();
+    store.close();
+  });
+
   it("extracts embedded text from a PDF ingest job and records digest receipts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-ingest-pdf-"));
     dirs.push(dir);

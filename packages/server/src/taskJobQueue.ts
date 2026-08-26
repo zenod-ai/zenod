@@ -36,6 +36,8 @@ export class TaskJobQueue {
   /** Enqueue a job and start draining; returns immediately with the queued job. */
   enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob {
     if (this.closed) throw new Error("TaskJobQueue is closed");
+    const rejection = this.admit(kind, input);
+    if (rejection) throw new Error(rejection.message);
     const job = this.store.enqueue(kind, input, idempotencyKey);
     this.requestDrain();
     return job;
@@ -47,6 +49,21 @@ export class TaskJobQueue {
 
   recent(limit?: number): TaskJob[] {
     return this.store.recent(limit);
+  }
+
+  /** Fail closed before durable admission or source/provider access. */
+  admit(kind: TaskJobKind, input: TaskJobInput): TaskJobAdmissionRejection | null {
+    if (
+      kind === "media_ingest" &&
+      isDriveFileReference(input.bytesRef) &&
+      this.settings?.googleDriveOAuthAuthority().mode === "hosted-managed"
+    ) {
+      return {
+        code: "hosted_drive_source_disabled",
+        message: "Hosted Google Drive is archive/export-only and cannot be used as an ingest_memory source.",
+      };
+    }
+    return null;
   }
 
   /** Resume after boot: pick up anything still queued. */
@@ -119,6 +136,8 @@ export class TaskJobQueue {
         });
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else if (job.kind === "media_ingest") {
+        const rejection = this.admit(job.kind, job.input);
+        if (rejection) throw new Error(rejection.message);
         if (!this.settings) {
           completed = this.store.updateClaimed(job.id, {
             status: "done",
@@ -452,9 +471,20 @@ function receiptSource(input: TaskJobInput): MediaIngestReceipt["source"] {
   };
 }
 
+const DRIVE_FILE_REFERENCE_PREFIXES = ["drive://file/", "drive:", "google-drive:", "gdrive:"] as const;
+
+export interface TaskJobAdmissionRejection {
+  code: "hosted_drive_source_disabled";
+  message: string;
+}
+
+export function isDriveFileReference(bytesRef: string | undefined): boolean {
+  return Boolean(bytesRef && DRIVE_FILE_REFERENCE_PREFIXES.some((prefix) => bytesRef.startsWith(prefix)));
+}
+
 function driveFileIdFromRef(bytesRef: string | undefined): string | null {
   if (!bytesRef) return null;
-  for (const prefix of ["drive://file/", "drive:", "google-drive:", "gdrive:"]) {
+  for (const prefix of DRIVE_FILE_REFERENCE_PREFIXES) {
     if (bytesRef.startsWith(prefix)) return bytesRef.slice(prefix.length);
   }
   return null;

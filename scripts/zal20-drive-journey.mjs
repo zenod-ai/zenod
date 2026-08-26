@@ -9,12 +9,14 @@ const args = [
   "run",
   "test/zenodUnit.test.ts",
   "test/drive.test.ts",
+  "test/mcp.test.ts",
+  "test/taskJobMediaIngestArchive.test.ts",
   "-t",
   "ZAL-20 .* Drive journey",
 ];
 const command = "npm run acceptance:zal20:drive";
 const testCommand =
-  'npm exec -w @zenod/server -- vitest run test/zenodUnit.test.ts test/drive.test.ts -t "ZAL-20 .* Drive journey"';
+  'npm exec -w @zenod/server -- vitest run test/zenodUnit.test.ts test/drive.test.ts test/mcp.test.ts test/taskJobMediaIngestArchive.test.ts -t "ZAL-20 .* Drive journey"';
 const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
