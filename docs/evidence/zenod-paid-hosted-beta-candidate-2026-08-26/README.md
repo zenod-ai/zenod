@@ -1,143 +1,189 @@
 # ZAL-17 — paid Hosted beta candidate evidence
 
-Date: 2026-08-26  
-Issue: `#1083`  
-Branch: `codex/zal-17-beta-acceptance`  
-Original bound base: `f3c84c9`  
-Reconciled `main`: `a412dd0a369931f38b707a907264ed828908604b`  
-Exact tested candidate: `c7d85741b3cf3ef2069af0dfded4c4184250ff1b`  
+Date: 2026-08-26
+
+Issue: `#1083`
+
+Branch: `codex/zal-17-beta-acceptance`
+
+Original bound base: `f3c84c9`
+
+Reconciled `main`: `a412dd0a369931f38b707a907264ed828908604b`
+
+Exact source candidate: `7eec30486a729c8fdce6827d09d46d7217cacaa4`
+
+Evidence snapshot commit: `EVIDENCE_SNAPSHOT_SHA`
+
 Integration target: `main`
+
+Superseded candidate/evidence pair: `c7d85741b3cf3ef2069af0dfded4c4184250ff1b` / `50c69a3e2776e53538aad96754996bcdda0d0473`
 
 ## Verdict
 
-**PASS as the smallest local candidate for a credential-backed staging beta. NOT production proof and NOT authorization to deploy.**
+**PASS as the smallest local candidate for a credential-backed staging beta. This is not production proof and is not authorization to deploy.**
 
-The exact candidate SHA passes the full local regression, focused Hosted/channel acceptance, typecheck, build, schema, changed-file lint, API projection, and responsive browser gates. No live channel, provider, Stripe, signup, billing card, tenant, credential, deployment, or production state was used or changed.
+The source candidate passes the full local regression, focused Hosted/channel acceptance, a bounded managed-Drive integration journey, typecheck, build, schema, changed-file lint, exact Hosted response projection, and presentation-only responsive browser checks. No live channel, provider, Stripe, signup, billing card, tenant, credential, deployment, or production state was used or changed.
 
-Credential-backed staging proof remains mandatory before calling the beta operational. The explicit blockers are listed below.
+Credential-backed staging proof remains mandatory before calling the beta operational. The local Drive callback crosses a mocked Google token/userinfo boundary. The built-portal browser fixture is presentation-only; it does not prove an uninterrupted real account, OAuth, channel, provider, billing, or staging journey.
 
 ## What changed
 
-Existing implementation and existing suites were reused. There is one product fix:
+Existing architecture, product surfaces, APIs, settings storage and suites remain in place. The only net-new acceptance fix is the Hosted Google Drive boundary:
 
-- `GoogleDriveConnect` now receives the existing edition value.
-- Hosted renders only the managed Google OAuth connect/status/disconnect journey and the supported Drive folder ID control.
-- Hosted does not poll the private transcription status route and does not render customer OAuth client credentials, service-account JSON, local paths, provider/model/API-key/raw-token/dollar/cost controls or copy.
-- Hosted OAuth setup writes only `google_drive_folder_id` and `artifact_archive_provider`, which are already in the Hosted customer allowlist.
-- Self-hosted retains the pre-existing OAuth client ID/secret, service-account fallback, test/save, local transcription, provider and model presentation.
+- Hosted `/api/drive/status` now returns an exact six-field customer schema: `configured`, `oauthAvailable`, `accountEmail`, `folderId`, `archiveConfigured`, and `archiveReason`.
+- The projection removes `oauthClientId`, `clientEmail`, service-account mode/material, provider/transcription data and every unlisted internal field, even when the tenant runtime contains hostile values.
+- The public Zenod service accepts operator-owned shared `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` configuration for entitled Hosted tenant runtimes only. Environment seeding remains disabled. The client ID/secret are read-only fallbacks and are not copied into tenant settings or the tenant credential database.
+- Each Hosted tenant continues to own only its OAuth state, refresh token, connected account email and selected folder. The tests prove a second Hosted tenant cannot read the first tenant's state or refresh token.
+- A fresh Hosted tenant can start OAuth immediately when both operator variables exist. When either is absent, status truthfully returns `oauthAvailable: false`, the Connect button is disabled, and OAuth start returns a customer-safe `503 google_drive_oauth_unavailable` response.
+- Hosted UI renders managed connect/status/disconnect and the supported folder control only. Self-hosted UI and raw API retain the existing BYO OAuth client ID/secret, service-account fallback, test/save, provider/transcription and folder behavior.
 
-The other additions are acceptance scaffolding only:
+Acceptance scaffolding added for this boundary:
 
-- component and edition-propagation regressions;
-- one API assertion for the exact Hosted Drive settings body under signed cookie and bearer capabilities;
-- `scripts/zal17-portal-fixture.mjs`, a local-only fixture for exercising the built portal in both editions without credentials or external calls;
-- this evidence record.
+- `scripts/zal17-drive-journey.mjs` and root `npm run acceptance:zal17:drive` provide one reproducible terminal receipt;
+- cookie and bearer Hosted new-tenant journeys with a mocked Google HTTP boundary;
+- an exact self-hosted BYO journey;
+- hostile projection, missing-config, tenant-isolation and component regressions;
+- a presentation-only built-portal fixture and durable browser observation log.
 
-No service, flow, database schema, signup path, billing behavior, tenant model, channel routing, Ring behavior or customer product name was added or redesigned.
+No service, database schema, signup path, billing behavior, tenant model, channel routing, Ring behavior or customer product name was added or redesigned.
 
 ## Candidate configuration and service matrix
 
-Secrets below are variable names only. Values must come from the approved staging secret store and must never be committed or printed.
+Secret names below are variable names only. Values must come from the approved staging secret store and must never be committed or printed.
 
-| Edition | Runtime services | Customer surface | Required staging configuration | Persistent state |
+| Edition | Runtime services | Google Drive configuration | Customer surface | Persistent state |
 | --- | --- | --- | --- | --- |
-| Hosted | **2 services** from one immutable Zenod image: public `AGENT=zenod`; private existing `AGENT=phylax` Channels runtime | One Zenod product. Public portal exposes Overview, Connect/MCP, Channels, Vault & sources, managed Usage and Account. No customer Phylax or Ring product copy. | Public: `AGENT=zenod`, `PORT`, `ZENOD_DATA_DIR`, `CUSTOMER_APP_URL`, GitHub OAuth variables, `ACCOUNT_STATE_SECRET`, `CHASSIS_VAULT_MASTER_KEY`, `ZENOD_MANAGED_AI_ENABLED=1`, `OPENROUTER_PROVISIONING_KEY`, managed limit/warn variables, approved Stripe test variables when signup is exercised, `ZENOD_CHANNELS_URL`, exact `ZENOD_CHANNELS_ALLOWED_ORIGINS`, shared `ZENOD_CHANNELS_PRIVATE_TOKEN`, optional explicit `ZENOD_CHANNELS_MEMORY_URL`. Private Channels: `AGENT=phylax`, `PORT`, `ZENOD_DATA_DIR`, `CHASSIS_VAULT_MASTER_KEY`, the same private-token value, and existing approved WhatsApp/Telegram transport configuration. | Separate durable `/data` volume per service. The private Channels volume owns the WhatsApp session; the Zenod volume owns accounts, vault and managed admission/receipt journals. |
-| Self-hosted | **1 Zenod service**. No private Channels dependency. | Overview, Connect/MCP, Telegram-only Channels, Vault & sources, raw Usage and operator Settings. WhatsApp is absent. | `AGENT=zenod`, `PORT`, `ZENOD_DATA_DIR=/data`, `ZENOD_AWAIT_PROVISION=0`, vault repository/branch and GitHub credential or GitHub App configuration, operator-selected provider plus its matching key, optional Telegram bot configuration. | One durable `/data` volume plus the configured vault repository. |
+| Hosted | **2 services** from one immutable Zenod image: public `AGENT=zenod`; private existing `AGENT=phylax` Channels runtime | Public service operator config must include both `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. The Google client must authorize the public `/api/drive/oauth/callback` URL. No tenant DB pre-seed is required or allowed. Status is unavailable/fail-closed when the pair is incomplete. | One Zenod product: Overview, Connect/MCP, Channels, Vault & sources, managed Usage and Account. No customer Phylax or Ring copy. | Public Zenod volume owns accounts, vault, per-tenant OAuth state/refresh token/email/folder and managed receipts. Private Channels volume owns the WhatsApp session. Shared Google client credentials remain service configuration, not tenant state. |
+| Self-hosted | **1 Zenod service**; no private Channels dependency | Existing BYO flow is unchanged: the operator supplies OAuth client ID/secret through the self-host settings surface, or uses the existing service-account fallback. Shared Hosted Google variables are not injected into an unentitled self-host tenant. | Overview, Connect/MCP, Telegram-only Channels, Vault & sources, raw Usage and operator Settings. WhatsApp is absent. | One durable `/data` volume plus the configured vault repository. |
 
-The private service is the existing Phylax runtime selected from the shared code/image. It is called **Channels** in the Zenod customer journey. Ring is not on the customer path and is not required for direct Zenod text/voice/media capture.
+Other required Hosted public-service configuration remains: `AGENT=zenod`, `PORT`, `ZENOD_DATA_DIR`, `CUSTOMER_APP_URL`, GitHub OAuth variables, `ACCOUNT_STATE_SECRET`, `CHASSIS_VAULT_MASTER_KEY`, managed-AI variables, approved Stripe test variables only when signup is gated for exercise, `ZENOD_CHANNELS_URL`, exact `ZENOD_CHANNELS_ALLOWED_ORIGINS`, shared `ZENOD_CHANNELS_PRIVATE_TOKEN`, and optional explicit `ZENOD_CHANNELS_MEMORY_URL`.
+
+The private service remains the existing Phylax runtime selected from the shared code/image. It is called **Channels** in the Zenod customer journey. Ring is not on the customer path and is not required for direct Zenod text/voice/media capture.
+
+### Config-health contract
+
+| Condition | Hosted status | Hosted start | Storage effect |
+| --- | --- | --- | --- |
+| Both operator Google variables exist, tenant not connected | `oauthAvailable: true`, `configured: false` | `302` to Google consent | random tenant OAuth state only; no client credential seed |
+| Both exist, mocked callback completes | safe connected email/folder fields only | callback `302` to portal | encrypted tenant refresh token/email; shared client credentials remain fallback-only |
+| Either operator variable is absent | `oauthAvailable: false`, safe customer reason | `503 google_drive_oauth_unavailable` | none |
+| Self-host BYO variables absent | existing raw self-host status | existing `400 save the Google OAuth client ID and secret first` | none |
 
 ### Immutable image and version pin plan
 
-1. Build candidate `c7d85741b3cf3ef2069af0dfded4c4184250ff1b` in CI from a clean checkout.
-2. Publish one image and record both the source SHA and returned registry digest.
-3. Pin both Hosted services to the same immutable reference, for example `ghcr.io/zenod-ai/zenod@sha256:<registry-returned-digest>`. The placeholder is intentionally not a claimed digest.
-4. Record service name, image digest, `GIT_SHA`, configuration revision and volume identity in the staging receipt.
-5. Reject rollout if the two services have different source SHAs/digests or if `/healthz`/reported `GIT_SHA` does not match the receipt.
+1. Build source candidate `7eec30486a729c8fdce6827d09d46d7217cacaa4` in CI from a clean checkout.
+2. Publish one image and record both the source SHA and registry-returned digest.
+3. Pin both Hosted services to the same immutable reference, for example `ghcr.io/zenod-ai/zenod@sha256:<registry-returned-digest>`; this placeholder is not a claimed digest.
+4. Record service name, image digest, `GIT_SHA`, configuration revision, Google redirect URI and volume identity in the staging receipt.
+5. Reject rollout if the two services differ in source/digest or reported `GIT_SHA`.
 
-The current repository compose files are historical/operator inputs, not proof of this exact two-service staging deployment. Building, publishing and pinning the real digest is a staging blocker.
+The repository compose files are historical/operator inputs, not proof of this exact two-service staging deployment. Building, publishing and pinning the real digest remains a staging blocker.
 
-## Acceptance matrix
+## Acceptance matrix and proof classification
 
-| Contract | Local proof at the candidate SHA | Result |
+| Contract | Local evidence | Classification | Result |
+| --- | --- | --- | --- |
+| Signed Hosted account/auth and hostile cookie/bearer capability | `customerLayer.test.ts`, `customerAccounts.test.ts`, `zenodUnit.test.ts` | local integration/contract | PASS |
+| Exact Hosted Drive public schema under hostile fields | `zenodUnit.test.ts` asserts exact keys/body for cookie and bearer | local integration | PASS |
+| New Hosted tenant folder/start/callback/status/disconnect/error | `npm run acceptance:zal17:drive`; Google token/userinfo HTTP mocked | local integration with mocked provider boundary | PASS |
+| Operator config absent and no client DB pre-seed | `zenodUnit.test.ts` config-health and state assertions | local integration | PASS |
+| Self-host BYO raw status/start/callback/disconnect/error unchanged | `drive.test.ts` via the same journey command | local integration with mocked provider boundary | PASS |
+| Hosted repository/GitHub App, vault and MCP | `githubApp.test.ts`, `mcp.test.ts`, `zenodUnit.test.ts` | local integration/contract | PASS |
+| Customer-safe managed usage; no provider/model/key/raw-token/dollar leak | managed-AI suites, `zenodUnit.test.ts`, web tests | local integration/contract | PASS |
+| Cap/raw admission, restart/replay and terminal receipts | `customerManagedAiAdmission.test.ts`, `customerManagedAiOutbox.test.ts`, `customerManagedAi.test.ts` | local integration/synthetic authority | PASS |
+| Hosted Telegram lifecycle/private admission/group denial | `telegram.test.ts`, `hostedChannels.test.ts`, `zenodUnit.test.ts` | local synthetic transport | PASS locally/synthetic |
+| Private Channels facade and direct Zenod WhatsApp text/voice/media | Hosted/Phylax/WhatsApp suites | local synthetic transport | PASS locally/synthetic |
+| Channel retry/idempotency/identity collision/tenant isolation | Hosted/Phylax/WhatsApp/Telegram suites | local synthetic transport | PASS locally/synthetic |
+| Hosted no Ring/Phylax/internal/provider copy; self-host no WhatsApp | web tests and `browser-qa.json` | component + presentation-only browser fixture | PASS for local presentation |
+| Responsive edition presentation at 360/736/1024 | `browser-qa.json` | presentation-only browser fixture | PASS; no overflow observed |
+| Credential-backed Google/channel/provider/billing | not run; requires approved staging secrets/actions | staging-only | BLOCKED BY HUMAN GATES |
+
+## Exact journey and command/file matrix
+
+The primary bounded journey is reproducible with:
+
+```sh
+npm run acceptance:zal17:drive
+```
+
+It runs:
+
+```sh
+npm exec -w @zenod/server -- vitest run test/zenodUnit.test.ts test/drive.test.ts -t "ZAL-17 .* Drive journey"
+```
+
+Terminal receipt at the source candidate:
+
+```text
+ZAL17_DRIVE_JOURNEY_RECEIPT {"schemaVersion":1,"acceptance":"ZAL-17 managed Drive journeys","status":"pass","sourceSha":"7eec30486a729c8fdce6827d09d46d7217cacaa4","command":"npm run acceptance:zal17:drive","testCommand":"npm exec -w @zenod/server -- vitest run test/zenodUnit.test.ts test/drive.test.ts -t \"ZAL-17 .* Drive journey\"","boundary":"local integration with mocked Google token and userinfo HTTP; no credentials, staging, or live mutation"}
+```
+
+| File/command | What it proves | Result |
 | --- | --- | --- |
-| Signed Hosted account/auth, account isolation and hostile cookie/bearer capability | `customerLayer.test.ts`, `customerAccounts.test.ts`, `zenodUnit.test.ts` | PASS |
-| Hosted repository/GitHub App, Drive, vault and MCP | `githubApp.test.ts`, `drive.test.ts`, `mcp.test.ts`, `zenodUnit.test.ts` | PASS |
-| Customer-safe managed usage; no provider/model/key/raw-token/dollar leakage | `customerManagedAi*.test.ts`, `zenodUnit.test.ts`, `hosted-usage-card.test.tsx`, browser fixture sweep | PASS |
-| Managed cap/raw admission, restart/replay and terminal receipts | `customerManagedAiAdmission.test.ts`, `customerManagedAiOutbox.test.ts`, `customerManagedAi.test.ts`, `zenodUnit.test.ts` | PASS |
-| Hosted Telegram lifecycle, private admission and group denial | `telegram.test.ts`, `hostedChannels.test.ts`, `zenodUnit.test.ts` | PASS locally/synthetic |
-| Private Channels facade and direct Zenod WhatsApp text/voice/media path | `hostedChannels.test.ts`, `phylaxTenantSettings.test.ts`, `phylaxChannels.test.ts`, `phylaxUnit.test.ts`, `whatsapp.test.ts`, `zenodUnit.test.ts` | PASS locally/synthetic |
-| Channel retry/idempotency, receipt replay, identity collision and tenant isolation | Hosted/Phylax/WhatsApp/Telegram focused suites above | PASS locally/synthetic |
-| Hosted has no Ring/Phylax customer copy or internal controls | `zenodUnit.test.ts`, `HostedChannelsPanel.test.tsx`, edition tests, browser fixture sweep | PASS |
-| Self-host keeps provider/MCP/vault/raw usage and Telegram; no WhatsApp surface | `zenodUnit.test.ts`, edition/navigation/component tests, browser fixture sweep | PASS |
-| Hosted Drive projection uses only safe routes/keys; self-host behavior remains | `google-drive-connect.test.tsx`, `Settings.drive-connect.test.tsx`, `zenodUnit.test.ts`, browser fixture sweep | PASS |
-| Full regression/build/type/schema | exact commands below | PASS |
+| `packages/server/test/zenodUnit.test.ts` | exact cookie+bearer safe projection, managed operator fallback, new tenant start/callback/status/folder/disconnect/error, no DB seed, tenant isolation, missing config health | PASS |
+| `packages/server/test/drive.test.ts` | self-host raw/BYO start/callback/status/disconnect/original config error | PASS |
+| `apps/web/src/components/google-drive-connect.test.tsx` | Hosted managed-only/missing-config UI and preserved self-host operator UI | PASS |
+| `scripts/zal17-drive-journey.mjs` | reproducible bounded journey and terminal JSON receipt | PASS |
+| `scripts/zal17-portal-fixture.mjs` | inert edition responses for built-portal presentation QA | fixture only; not operational proof |
+| `browser-qa.json` | exact responsive observations/procedure and downgraded visual boundary | PASS for presentation only |
+| exact 15-file server command listed below | Hosted/customer/managed-AI/Channels/Phylax/WhatsApp/Telegram/MCP/Drive/GitHub regression | PASS: 15 files, 297 tests |
+| `npm test -w web` | complete configured customer-web suite | PASS: 13 files, 70 tests |
+| `npm test` | all workspaces, 194 script assertions and schema check | PASS; core 31 files/527 pass/6 skip; scripts 194 pass |
+| `npm run typecheck` | configured workspaces | PASS |
+| `npm run build` | core, chassis, server, customer web and public site | PASS; existing Vite chunk warning only |
+| `npm run schemas:check` | 27 self-contained tool schemas, no writes | PASS |
+| changed-file web ESLint | changed web TS/TSX only | PASS |
+| `git diff --check origin/main..HEAD` | source/evidence whitespace | PASS after this evidence update |
 
-## Responsive browser evidence
+Exact 15-file server command:
 
-The built `apps/web/dist` was served by `node scripts/zal17-portal-fixture.mjs` on loopback only. The fixture uses inert sample responses and makes no external request.
+```sh
+npm exec -w @zenod/server -- vitest run test/customerLayer.test.ts test/customerAccounts.test.ts test/customerManagedAi.test.ts test/customerManagedAiAdmission.test.ts test/customerManagedAiOutbox.test.ts test/hostedChannels.test.ts test/phylaxTenantSettings.test.ts test/phylaxChannels.test.ts test/phylaxUnit.test.ts test/whatsapp.test.ts test/telegram.test.ts test/mcp.test.ts test/drive.test.ts test/githubApp.test.ts test/zenodUnit.test.ts
+```
 
-| Edition / Vault | Width | `scrollWidth` | Required controls | Forbidden-copy result |
-| --- | ---: | ---: | --- | --- |
-| Hosted | 360 | 360 | managed OAuth + folder ID present | none found |
-| Hosted | 736 | 736 | managed OAuth + folder ID present | none found |
-| Hosted | 1024 | 1024 | managed OAuth + folder ID present | none found |
-| Self-hosted | 360 | 360 | existing OAuth client, service account, test/save and local transcription controls present | operator controls intentionally present |
-| Self-hosted | 736 | 736 | same | operator controls intentionally present |
-| Self-hosted | 1024 | 1024 | same | operator controls intentionally present |
+### Browser procedure and claim boundary
 
-Hosted forbidden-copy checks covered OAuth client secret, service account, private provider/model, OpenRouter, whisper/model names, API key, raw token, dollar and per-minute-cost copy. The approved customer MCP credential remains a customer-facing Connect/MCP capability and is not classified as a provider-secret leak.
+The built `apps/web/dist` was served by `node scripts/zal17-portal-fixture.mjs` on loopback. Browser Control opened `/hosted` and `/self-hosted`, set 360x900, 736x900 and 1024x900 viewports, reloaded, and inspected Vault & sources and Channels. The durable results are in `browser-qa.json`.
 
-Earlier in the same candidate pass, Overview, Connect/MCP, Channels, Vault, Usage and edition navigation were exercised at the same three widths. Hosted showed the six approved tabs; self-hosted showed its six operator tabs; no tested page overflowed horizontally; self-hosted Channels contained no WhatsApp surface.
+Observed: exact viewport widths matched scroll widths; Hosted showed managed OAuth/folder controls without forbidden or internal copy; self-host retained OAuth client/secret/service-account controls; Hosted Channels showed WhatsApp without Ring/Phylax copy; self-host Channels showed no WhatsApp.
 
-## Exact commands and results
+No screenshot artifact is claimed. These are presentation and visible-copy observations only. They do not prove an uninterrupted signed customer journey or real backend/provider operation.
 
-All terminal PASS commands below were rerun with a clean worktree at `c7d85741b3cf3ef2069af0dfded4c4184250ff1b`.
+### Lint baseline disclosure
 
-| Command | Result |
-| --- | --- |
-| `npm ci` | PASS; dependency install from the committed lockfile; no source/lock change |
-| `npm test` | PASS across every workspace, 194 script assertions and schema check. Core summary: 31 files, 527 passed, 6 skipped. Schema: 27 self-contained tool schemas. |
-| focused 15-file server acceptance command covering customer, managed AI, Hosted Channels, Phylax, WhatsApp, Telegram, MCP, Drive and GitHub App | PASS: 15 files, 295 tests |
-| `npm test -w web` | PASS: 13 files, 69 tests |
-| `npm run typecheck` | PASS across all configured workspaces |
-| `npm run build` | PASS for core, chassis, server, customer web and public site; existing Vite chunk-size warning only |
-| `npm run schemas:check` | PASS: 27 self-contained schemas, no files written |
-| changed-file ESLint plus `git diff --check` | PASS |
+The repository has no root lint script. `npm run lint -w web` reports six pre-existing errors in `KeysTab.tsx`, `McpConfigTab.tsx`, `OperatingRulesTab.tsx` and `SkillSettingsTab.tsx`. None is changed by ZAL-17; direct ESLint of all changed web TS/TSX files passes.
 
-Lint baseline disclosure:
+### CI receipt
 
-- The repository has no root `lint` script.
-- `npm run lint -w web` reports six pre-existing errors in `KeysTab.tsx`, `McpConfigTab.tsx`, `OperatingRulesTab.tsx` and `SkillSettingsTab.tsx`.
-- None is in a ZAL-17 changed file; direct ESLint of all changed TS/TSX files passes.
+Source-candidate CI: `https://github.com/zenod-ai/zenod/actions/runs/32917545930/job/98024307572` — **PASS in 3m35s** for exact source candidate `7eec30486a729c8fdce6827d09d46d7217cacaa4`. The workflow ran clean checkout/install, root build, Docker build-check and root tests.
 
 ## Rollback
 
-Rollback is non-destructive and preserves all data/functionality:
+Rollback is non-destructive and requires no schema or data migration:
 
 1. Stop the staging rollout; do not delete either volume or reset a WhatsApp session.
 2. Restore the previously recorded immutable image digest to **both** Hosted services.
-3. Keep the same volume mounts and secret/config revision unless the incident is explicitly configuration-related.
-4. If managed AI authority is suspect, disable its staging flag so it fails closed; do not mint/delete keys as part of code rollback.
-5. Verify `/healthz`, expected `GIT_SHA`, customer auth projection, private Channels transport status and synthetic text/voice/media receipt flow.
-6. If only the ZAL-17 source delta must be removed, revert candidate commit `c7d8574`; no schema/data migration or deletion is required.
+3. Keep the same volume mounts and secret/config revision. An older image may ignore the new shared Google variables; that truthfully makes Hosted Drive unavailable rather than deleting tenant data.
+4. Do not delete tenant refresh tokens, OAuth emails, folders or other credential-vault records during code rollback. A user-invoked Drive disconnect remains the only flow here that clears that tenant's Drive refresh/email/folder state.
+5. If managed AI authority is suspect, disable its staging flag so it fails closed; do not mint/delete keys as part of code rollback.
+6. Verify `/healthz`, expected `GIT_SHA`, customer-safe Drive config health, private Channels transport status and synthetic text/voice/media receipts.
+7. If only the new source delta must be removed, revert source commit `7eec304`; no schema/data migration or deletion is required.
 
 ## Explicit staging-only blockers and residual risks
 
-These are blockers to a real Hosted beta claim, not failures hidden by the local verdict:
-
-1. **Immutable image receipt:** CI must build/publish candidate `c7d8574`, return the real digest and prove both services run that digest.
-2. **Version-coherent two-service staging:** public Zenod and private Channels must be configured with an exact private origin allowlist and matching secret, then restarted and observed without losing persistent receipts or WhatsApp session state.
-3. **Real managed AI authority:** with approved staging credentials, prove tenant key provision, configured cap, raw admission at cap, restart/resume, terminal receipts and safe customer projection. No OpenRouter key or cap was mutated here.
-4. **Real billing/signup:** with Stripe test-mode approval, prove signed checkout/webhook/account state and the paid Hosted entitlement. No Stripe endpoint, customer, price, card or subscription was used here.
-5. **Real Telegram:** prove private DM activation, text/voice/media delivery, group denial and lost-response replay with an approved staging bot/identity.
-6. **Real WhatsApp:** prove the existing shared session receives and returns text/voice/media through the direct Zenod path, preserves identity/tenant isolation, handles retry/idempotency, and recovers across process restart. No QR pairing or WhatsApp message was performed here.
-7. **Drive OAuth credentials:** prove the managed Hosted Google OAuth redirect/callback/connect/disconnect journey with staging credentials and a disposable approved folder. Local proof covers routing, allowlist and presentation, not a Google authorization grant.
-8. **Backup/restore:** take and verify staging backups of both `/data` volumes before rollout; prove rollback to the prior digest without deleting data or functionality.
-9. **Existing lint debt:** six unrelated web lint errors remain. They do not invalidate the changed-file acceptance gate but should stay visible as repository debt.
-10. **Bundle warning:** the customer web bundle remains above Vite's default chunk warning threshold. This is not a functional acceptance failure but remains a performance risk for public beta monitoring.
+1. **Immutable image receipt:** CI must publish the source candidate and return the real registry digest; both Hosted services must report the same digest/SHA.
+2. **Version-coherent two-service staging:** public Zenod and private Channels require the exact private origin allowlist/token and preserved volumes/session.
+3. **Real Google OAuth:** configure the two operator variables and approved redirect URI, then prove new-tenant consent/callback/status/folder/disconnect and restart against a disposable staging account/folder. No Google grant occurred locally.
+4. **Real managed AI authority:** prove tenant provision/cap/raw admission/restart/terminal receipt/safe projection with approved staging credentials. No OpenRouter key or cap was mutated here.
+5. **Real billing/signup:** prove signed checkout/webhook/account state with Stripe test-mode approval. No Stripe customer, card or subscription was used.
+6. **Real Telegram:** prove private-DM text/voice/media, group denial and lost-response replay with an approved staging bot/identity.
+7. **Real WhatsApp:** prove direct Zenod text/voice/media, identity/tenant isolation, retry/idempotency and restart recovery without re-pairing. No QR pairing or message occurred here.
+8. **Backup/restore:** verify backups of both `/data` volumes before rollout and prove non-destructive digest rollback.
+9. **Existing lint debt:** six unrelated web lint errors remain visible repository debt.
+10. **Bundle warning:** the customer web bundle remains above Vite's default chunk warning threshold and needs public-beta monitoring.
 
 Production deploy, public signup, live Stripe, real-card billing, credential rotation, tenant/session/routing mutation and destructive cleanup remain closed human gates.
 
 ## Handoff decision
 
-Advance `c7d85741b3cf3ef2069af0dfded4c4184250ff1b` only to an approved, credential-backed staging exercise. Do not describe local synthetic channel/provider/billing coverage as live proof. A beta/go-live decision requires receipts for blockers 1–8 on the same pinned image digest.
+Advance source candidate `7eec30486a729c8fdce6827d09d46d7217cacaa4` only to an approved credential-backed staging exercise. Do not describe local mocked/synthetic/browser coverage as live proof. A beta/go-live decision requires receipts for blockers 1–8 on the same pinned image digest.
