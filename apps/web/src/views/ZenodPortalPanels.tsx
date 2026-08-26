@@ -155,7 +155,9 @@ export function ZenodOverview({
             <FolderGit2Icon className="size-5 text-muted-foreground" />
             <CardTitle>Vault &amp; sources</CardTitle>
             <CardDescription>
-              GitHub memory plus optional Google Drive.
+              {hosted
+                ? "GitHub is the source; Drive is an optional archive/export destination."
+                : "GitHub memory plus optional Google Drive."}
             </CardDescription>
           </CardHeader>
           <CardContent>

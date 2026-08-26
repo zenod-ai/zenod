@@ -175,13 +175,17 @@ function registerZenodTools(
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
   buildMcpServer(
     () => runtime.getEngine(),
-    () => buildDriveTools(settings, runtime.ingestQueue),
+    settings.googleDriveOAuthAuthority().mode === "hosted-managed"
+      ? undefined
+      : () => buildDriveTools(settings, runtime.ingestQueue),
     () => runtime.cleanSlate(),
     (input) => chatTestAudit.recordChatTestRun(input),
     {
       enqueue: (kind, input, idempotencyKey) => runtime.taskJobQueue.enqueue(kind, input, idempotencyKey),
       get: (id) => runtime.taskJobQueue.get(id),
       recent: (limit) => runtime.taskJobQueue.recent(limit),
+      admit: (kind, input) => runtime.taskJobQueue.admit(kind, input),
+      hostedArchiveOnlyDrive: settings.googleDriveOAuthAuthority().mode === "hosted-managed",
     },
     (input) => editGithubIssue(settings, input),
     (input) => createGithubIssue(settings, input),
@@ -374,9 +378,7 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
   "instance_name",
   "vault_repo",
   "vault_branch",
-  "google_drive_folder_id",
   "artifact_archive_provider",
-  "artifact_archive_drive_folder_id",
   "telegram_enabled",
   "telegram_allowed_users",
   "telegram_accept_all",
@@ -420,9 +422,9 @@ function projectHostedDriveStatus(
     : !oauthAvailable
       ? "Google Drive connection is unavailable."
       : !configured
-        ? "Connect Google Drive to enable archived media links."
+        ? "Connect Google Drive to enable archive/export copies."
         : !folderId
-          ? "Choose a Zenod Drive folder to enable archived media links."
+          ? "Reconnect Google Drive so Zenod can prepare its managed archive folder."
           : "Google Drive archiving is not ready.";
   return {
     configured,

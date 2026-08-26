@@ -22,6 +22,7 @@ import {
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { driveAuthFromSettings } from "../src/drive.js";
+import { buildDriveTools } from "../src/driveTools.js";
 import { SETTING_KEYS } from "../src/settings.js";
 
 const tempDirs: string[] = [];
@@ -491,9 +492,7 @@ describe("Zenod chassis unit", () => {
           "instance_name",
           "vault_repo",
           "vault_branch",
-          "google_drive_folder_id",
           "artifact_archive_provider",
-          "artifact_archive_drive_folder_id",
           "telegram_enabled",
           "telegram_allowed_users",
           "telegram_accept_all",
@@ -536,7 +535,7 @@ describe("Zenod chassis unit", () => {
         expect(safeUpdate.status).toBe(200);
         expect(hostedRuntime.settings.get("telegram_rich")).toBe("true");
 
-        const safeDriveUpdate = await unit.app.request("/api/settings", {
+        const forbiddenDriveFolderUpdate = await unit.app.request("/api/settings", {
           method: "PUT",
           headers: { ...headers, "content-type": "application/json" },
           body: JSON.stringify({
@@ -544,9 +543,12 @@ describe("Zenod chassis unit", () => {
             artifact_archive_provider: "drive",
           }),
         });
-        expect(safeDriveUpdate.status).toBe(200);
-        expect(hostedRuntime.settings.get("google_drive_folder_id")).toBe("hosted-folder");
-        expect(hostedRuntime.settings.get("artifact_archive_provider")).toBe("drive");
+        expect(forbiddenDriveFolderUpdate.status).toBe(403);
+        expect(await forbiddenDriveFolderUpdate.json()).toEqual({
+          error: "forbidden",
+          capability: "managed_settings",
+        });
+        expect(hostedRuntime.settings.get("google_drive_folder_id")).toBeNull();
 
         const wrongMethod = await unit.app.request("/api/settings", {
           method: "POST",
@@ -580,9 +582,9 @@ describe("Zenod chassis unit", () => {
           configured: true,
           oauthAvailable: true,
           accountEmail: "customer@example.com",
-          folderId: "hosted-folder",
-          archiveConfigured: true,
-          archiveReason: null,
+          folderId: null,
+          archiveConfigured: false,
+          archiveReason: "Reconnect Google Drive so Zenod can prepare its managed archive folder.",
         });
         expect(JSON.stringify(driveStatusBody)).not.toMatch(
           /oauthClientId|clientEmail|service.account|provider|transcription|internal|hostile|private.key|refresh.token|paid\/model|openrouter/i,
@@ -807,13 +809,16 @@ describe("Zenod chassis unit", () => {
     }
   });
 
-  it("ZAL-17 Hosted managed Drive journey uses operator OAuth authority over preserved hostile tenant credentials", async () => {
+  it("ZAL-20 Hosted managed Drive journey uses drive.file, creates or recovers one folder, and survives restart", async () => {
     const dataDir = await tempDir();
     const { unit, cookie } = await createHostedDriveCustomer(dataDir, {
       clientId: "operator-google-client-id",
       clientSecret: "operator-google-client-secret",
     });
     const providerRequests: string[] = [];
+    let managedFolderExists = false;
+    let managedFolderName = "";
+    let managedFolderMarker = "";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -841,12 +846,49 @@ describe("Zenod chassis unit", () => {
           );
           return Response.json({ email: "customer@example.com" });
         }
+        if (url.startsWith("https://www.googleapis.com/drive/v3/files?")) {
+          expect(new Headers(init?.headers).get("authorization")).toBe(
+            "Bearer mocked-google-access-token",
+          );
+          if ((init?.method ?? "GET") === "POST") {
+            managedFolderExists = true;
+            const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+            const appProperties = body.appProperties as Record<string, string>;
+            managedFolderMarker = appProperties.zenodManagedRoot;
+            managedFolderName = String(body.name);
+            expect(managedFolderMarker).toMatch(/^v2:[A-Za-z0-9_-]{20,64}$/);
+            expect(managedFolderName).toBe(`Zenod archive ${managedFolderMarker.slice(3, 13)}`);
+            expect(managedFolderName).not.toMatch(/github|customer|example\.com/i);
+            expect(body).toMatchObject({ mimeType: "application/vnd.google-apps.folder" });
+            return Response.json({
+              id: "hosted-managed-folder",
+              name: managedFolderName,
+              mimeType: "application/vnd.google-apps.folder",
+              appProperties: { zenodManagedRoot: managedFolderMarker },
+              capabilities: { canAddChildren: true },
+            });
+          }
+          const query = new URL(url).searchParams.get("q") ?? "";
+          expect(query).toContain("appProperties has");
+          if (managedFolderMarker) expect(query).toContain(managedFolderMarker);
+          return Response.json({
+            files: managedFolderExists
+              ? [{
+                  id: "hosted-managed-folder",
+                  name: managedFolderName,
+                  mimeType: "application/vnd.google-apps.folder",
+                  appProperties: { zenodManagedRoot: managedFolderMarker },
+                  capabilities: { canAddChildren: true },
+                }]
+              : [],
+          });
+        }
         throw new Error(`unexpected mocked Google request: ${url}`);
       }),
     );
 
     try {
-      const runtime = unit.runtimes.forTenantStorage(
+      let runtime = unit.runtimes.forTenantStorage(
         "github-42",
         unit.storage.forTenant({ id: "github-42" }),
       );
@@ -880,12 +922,17 @@ describe("Zenod chassis unit", () => {
         },
       });
       expect(driveAuthFromSettings(runtime.settings)).toBeNull();
+      expect(buildDriveTools(runtime.settings, runtime.ingestQueue)).toBeUndefined();
 
       const authCases = [
         { name: "cookie", headers: { cookie } },
         { name: "bearer", headers: { authorization: "Bearer customer-token" } },
       ];
       for (const authCase of authCases) {
+        runtime = unit.runtimes.forTenantStorage(
+          "github-42",
+          unit.storage.forTenant({ id: "github-42" }),
+        );
         const statusBefore = await unit.app.request("/api/drive/status", {
           headers: authCase.headers,
         });
@@ -898,10 +945,10 @@ describe("Zenod chassis unit", () => {
           accountEmail: null,
           folderId: null,
           archiveConfigured: false,
-          archiveReason: "Connect Google Drive to enable archived media links.",
+          archiveReason: "Connect Google Drive to enable archive/export copies.",
         });
 
-        const saveFolder = await unit.app.request("/api/settings", {
+        const arbitraryFolder = await unit.app.request("/api/settings", {
           method: "PUT",
           headers: { ...authCase.headers, "content-type": "application/json" },
           body: JSON.stringify({
@@ -909,7 +956,8 @@ describe("Zenod chassis unit", () => {
             artifact_archive_provider: "drive",
           }),
         });
-        expect(saveFolder.status, authCase.name).toBe(200);
+        expect(arbitraryFolder.status, authCase.name).toBe(403);
+        expect(runtime.settings.get("google_drive_folder_id")).toBeNull();
 
         const start = await unit.app.request(
           "https://cloud.zenod.test/api/drive/oauth/start",
@@ -920,6 +968,13 @@ describe("Zenod chassis unit", () => {
         expect(consentUrl.origin).toBe("https://accounts.google.com");
         expect(consentUrl.searchParams.get("client_id")).toBe(
           "operator-google-client-id",
+        );
+        expect(consentUrl.searchParams.get("scope")?.split(" ").sort()).toEqual([
+          "https://www.googleapis.com/auth/drive.file",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ]);
+        expect(consentUrl.searchParams.get("scope")?.split(" ")).not.toContain(
+          "https://www.googleapis.com/auth/drive",
         );
         expect(consentUrl.toString()).not.toContain("hostile-tenant-client-id");
         expect(consentUrl.toString()).not.toContain("hostile-tenant-client-secret");
@@ -938,6 +993,15 @@ describe("Zenod chassis unit", () => {
         expect(runtime.settings.getRaw("google_oauth_email")).toBe(
           "customer@example.com",
         );
+        expect(runtime.settings.get("google_drive_folder_id")).toBe(
+          "hosted-managed-folder",
+        );
+        expect(runtime.settings.get("artifact_archive_drive_folder_id")).toBe(
+          "hosted-managed-folder",
+        );
+        expect(runtime.settings.get("artifact_archive_provider")).toBe("drive");
+        const tenantMarker = runtime.settings.getRaw("google_drive_managed_folder_marker");
+        expect(tenantMarker).toMatch(/^[A-Za-z0-9_-]{20,64}$/);
         expect(driveAuthFromSettings(runtime.settings)).toEqual({
           kind: "oauth",
           clientId: "operator-google-client-id",
@@ -952,16 +1016,18 @@ describe("Zenod chassis unit", () => {
           "operator-google-client-secret",
         );
 
+        await unit.runtimes.close();
         const connected = await unit.app.request("/api/drive/status", {
           headers: authCase.headers,
         });
+        runtime = unit.runtimes.get("github-42")!;
         const connectedBody = await connected.json() as Record<string, unknown>;
         expect(Object.keys(connectedBody).sort()).toEqual(expectedHostedDriveStatusKeys);
         expect(connectedBody).toEqual({
           configured: true,
           oauthAvailable: true,
           accountEmail: "customer@example.com",
-          folderId: `${authCase.name}-folder`,
+          folderId: "hosted-managed-folder",
           archiveConfigured: true,
           archiveReason: null,
         });
@@ -969,15 +1035,19 @@ describe("Zenod chassis unit", () => {
           /operator-google|client.secret|refresh.token|provider|transcription|service.account/i,
         );
 
+        const providerRequestCountBeforeDisconnect = providerRequests.length;
         const disconnect = await unit.app.request("/api/drive/disconnect", {
           method: "POST",
           headers: authCase.headers,
         });
         expect(disconnect.status, authCase.name).toBe(200);
+        expect(providerRequests).toHaveLength(providerRequestCountBeforeDisconnect);
         await expect(disconnect.json()).resolves.toEqual({ ok: true });
         expect(runtime.settings.getRaw("google_oauth_refresh_token")).toBeNull();
         expect(runtime.settings.getRaw("google_oauth_email")).toBeNull();
         expect(runtime.settings.get("google_drive_folder_id")).toBeNull();
+        expect(runtime.settings.get("artifact_archive_drive_folder_id")).toBeNull();
+        expect(runtime.settings.getRaw("google_drive_managed_folder_marker")).toBe(tenantMarker);
         expect(runtime.settings.getRaw("google_oauth_client_id")).toBe(
           "hostile-tenant-client-id",
         );
@@ -994,6 +1064,8 @@ describe("Zenod chassis unit", () => {
       expect(otherRuntime.state.getSetting("google_oauth_client_id")).toBeNull();
       expect(otherRuntime.settings.getRaw("google_oauth_refresh_token")).toBeNull();
       expect(otherRuntime.settings.getRaw("google_oauth_email")).toBeNull();
+      expect(otherRuntime.settings.get("google_drive_folder_id")).toBeNull();
+      expect(otherRuntime.settings.get("artifact_archive_drive_folder_id")).toBeNull();
       expect(otherRuntime.settings.googleDriveOAuthAuthority()).toEqual({
         mode: "hosted-managed",
         credentials: {
@@ -1001,12 +1073,12 @@ describe("Zenod chassis unit", () => {
           clientSecret: "operator-google-client-secret",
         },
       });
-      expect(providerRequests).toEqual([
-        "https://oauth2.googleapis.com/token",
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-        "https://oauth2.googleapis.com/token",
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-      ]);
+      expect(providerRequests.filter((url) => url === "https://oauth2.googleapis.com/token"))
+        .toHaveLength(2);
+      expect(providerRequests.filter((url) => url.includes("/oauth2/v2/userinfo")))
+        .toHaveLength(2);
+      expect(providerRequests.filter((url) => url.includes("/drive/v3/files?") && url.includes("supportsAllDrives")))
+        .toHaveLength(3);
 
       const invalidCallback = await unit.app.request(
         "https://cloud.zenod.test/api/drive/oauth/callback?code=bad&state=bad",
@@ -1021,7 +1093,261 @@ describe("Zenod chassis unit", () => {
     }
   });
 
-  it("ZAL-17 Hosted managed Drive journey reports missing operator OAuth config safely", async () => {
+  it("ZAL-20 Hosted isolated Drive journey separates same-account tenants and rejects stale stored folders", async () => {
+    const dataDir = await tempDir();
+    const { unit, cookie } = await createHostedDriveCustomer(dataDir, {
+      clientId: "operator-google-client-id",
+      clientSecret: "operator-google-client-secret",
+    });
+    type ManagedFolder = {
+      id: string;
+      name: string;
+      mimeType: string;
+      appProperties: Record<string, string>;
+      capabilities: { canAddChildren: boolean };
+    };
+    const foldersByMarker = new Map<string, ManagedFolder>();
+    const providerRequests: Array<{ url: string; method: string }> = [];
+    let createdCount = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      providerRequests.push({ url, method });
+      if (url === "https://oauth2.googleapis.com/token") {
+        const body = new URLSearchParams(String(init?.body));
+        return Response.json({
+          access_token: "shared-google-account-access-token",
+          refresh_token: `refresh-${body.get("code")}`,
+        });
+      }
+      if (url === "https://www.googleapis.com/oauth2/v2/userinfo") {
+        return Response.json({ email: "same-google-account@example.com" });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/arbitrary-folder?")) {
+        return Response.json({
+          id: "arbitrary-folder",
+          name: "Zenod archive attacker",
+          mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodManagedRoot: "v2:attacker_marker_value_123" },
+          capabilities: { canAddChildren: true },
+        });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/stale-folder?")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/unwritable-folder?")) {
+        const folder = [...foldersByMarker.values()][0];
+        return Response.json({ ...folder, id: "unwritable-folder", capabilities: { canAddChildren: false } });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/")) {
+        const id = decodeURIComponent(new URL(url).pathname.split("/").pop()!);
+        const folder = [...foldersByMarker.values()].find((candidate) => candidate.id === id);
+        return folder ? Response.json(folder) : new Response("not found", { status: 404 });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files?")) {
+        if (method === "POST") {
+          const body = JSON.parse(String(init?.body)) as {
+            name: string;
+            mimeType: string;
+            appProperties: Record<string, string>;
+          };
+          const marker = body.appProperties.zenodManagedRoot;
+          const folder: ManagedFolder = {
+            id: `tenant-folder-${++createdCount}`,
+            name: body.name,
+            mimeType: body.mimeType,
+            appProperties: body.appProperties,
+            capabilities: { canAddChildren: true },
+          };
+          expect(marker).toMatch(/^v2:[A-Za-z0-9_-]{20,64}$/);
+          expect(folder.name).toBe(`Zenod archive ${marker.slice(3, 13)}`);
+          expect(folder.name).not.toMatch(/github|same-google|example\.com/i);
+          foldersByMarker.set(marker, folder);
+          return Response.json(folder);
+        }
+        const query = new URL(url).searchParams.get("q") ?? "";
+        const marker = query.match(/value='([^']+)'/)?.[1];
+        return Response.json({ files: marker ? [foldersByMarker.get(marker)].filter(Boolean) : [] });
+      }
+      throw new Error(`unexpected mocked Google request: ${url}`);
+    }));
+
+    try {
+      const runtime42 = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      const runtime99 = unit.runtimes.forTenantStorage(
+        "github-99",
+        unit.storage.forTenant({ id: "github-99" }),
+      );
+      runtime42.settings.set("google_drive_folder_id", "arbitrary-folder");
+      runtime42.settings.set("artifact_archive_drive_folder_id", "arbitrary-folder");
+
+      const connect = async (
+        headers: Record<string, string>,
+        code: string,
+        runtime: typeof runtime42,
+      ) => {
+        const start = await unit.app.request("https://cloud.zenod.test/api/drive/oauth/start", { headers });
+        expect(start.status).toBe(302);
+        const consent = new URL(start.headers.get("location")!);
+        expect(consent.searchParams.get("scope")?.split(" ").sort()).toEqual([
+          "https://www.googleapis.com/auth/drive.file",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ]);
+        const state = runtime.settings.getRaw("google_oauth_state")!;
+        const callback = await unit.app.request(
+          `https://cloud.zenod.test/api/drive/oauth/callback?code=${code}&state=${encodeURIComponent(state)}`,
+          { headers },
+        );
+        expect(callback.status).toBe(302);
+      };
+
+      await connect({ cookie }, "cookie-tenant-42", runtime42);
+      const marker42 = runtime42.settings.getRaw("google_drive_managed_folder_marker")!;
+      const folder42 = runtime42.settings.get("google_drive_folder_id")!;
+      expect(folder42).toBe("tenant-folder-1");
+      expect(folder42).not.toBe("arbitrary-folder");
+      expect(runtime42.settings.get("artifact_archive_drive_folder_id")).toBe(folder42);
+      expect(buildDriveTools(runtime42.settings, runtime42.ingestQueue)).toBeUndefined();
+
+      await unit.runtimes.close();
+      const restarted42 = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      expect(restarted42.settings.getRaw("google_drive_managed_folder_marker")).toBe(marker42);
+      restarted42.settings.set("google_drive_folder_id", "stale-folder");
+      restarted42.settings.set("artifact_archive_drive_folder_id", "stale-folder");
+      await connect({ authorization: "Bearer customer-token" }, "bearer-tenant-42", restarted42);
+      expect(restarted42.settings.get("google_drive_folder_id")).toBe(folder42);
+      expect(restarted42.settings.getRaw("google_drive_managed_folder_marker")).toBe(marker42);
+      expect(createdCount).toBe(1);
+
+      restarted42.settings.set("google_drive_folder_id", "unwritable-folder");
+      restarted42.settings.set("artifact_archive_drive_folder_id", "unwritable-folder");
+      await connect({ authorization: "Bearer customer-token" }, "unwritable-tenant-42", restarted42);
+      expect(restarted42.settings.get("google_drive_folder_id")).toBe(folder42);
+      expect(createdCount).toBe(1);
+
+      const restarted99 = unit.runtimes.forTenantStorage(
+        "github-99",
+        unit.storage.forTenant({ id: "github-99" }),
+      );
+      await connect({ authorization: "Bearer other-token" }, "bearer-tenant-99", restarted99);
+      const marker99 = restarted99.settings.getRaw("google_drive_managed_folder_marker")!;
+      const folder99 = restarted99.settings.get("google_drive_folder_id")!;
+      expect(restarted99.settings.getRaw("google_oauth_email")).toBe("same-google-account@example.com");
+      expect(restarted42.settings.getRaw("google_oauth_email")).toBe("same-google-account@example.com");
+      expect(marker99).not.toBe(marker42);
+      expect(folder99).toBe("tenant-folder-2");
+      expect(folder99).not.toBe(folder42);
+      expect(createdCount).toBe(2);
+
+      const requestsBeforeDisconnect = providerRequests.length;
+      const disconnect = await unit.app.request("/api/drive/disconnect", {
+        method: "POST",
+        headers: { authorization: "Bearer customer-token" },
+      });
+      expect(disconnect.status).toBe(200);
+      expect(providerRequests).toHaveLength(requestsBeforeDisconnect);
+      expect(restarted42.settings.get("google_drive_folder_id")).toBeNull();
+      expect(restarted42.settings.get("artifact_archive_drive_folder_id")).toBeNull();
+      expect(restarted42.settings.getRaw("google_drive_managed_folder_marker")).toBe(marker42);
+      expect(foldersByMarker).toHaveLength(2);
+
+      const safeStatus = await unit.app.request("/api/drive/status", {
+        headers: { authorization: "Bearer other-token" },
+      });
+      const safeStatusText = await safeStatus.text();
+      expect(safeStatusText).not.toContain(marker42);
+      expect(safeStatusText).not.toContain(marker99);
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("ZAL-20 Hosted managed Drive journey bounds OAuth and folder provider errors without persisting secrets", async () => {
+    const scenarios = ["token", "folder"] as const;
+    for (const scenario of scenarios) {
+      const dataDir = await tempDir();
+      const { unit, cookie } = await createHostedDriveCustomer(dataDir, {
+        clientId: "operator-google-client-id",
+        clientSecret: "operator-google-client-secret",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url === "https://oauth2.googleapis.com/token") {
+            return scenario === "token"
+              ? new Response("provider-leaked-token-detail", { status: 500 })
+              : Response.json({
+                  access_token: "ephemeral-access-token",
+                  refresh_token: "must-not-persist-refresh-token",
+                });
+          }
+          if (url === "https://www.googleapis.com/oauth2/v2/userinfo") {
+            return Response.json({ email: "customer@example.com" });
+          }
+          if (url.startsWith("https://www.googleapis.com/drive/v3/files?")) {
+            return new Response("provider-leaked-folder-detail", { status: 503 });
+          }
+          throw new Error(`unexpected mocked Google request: ${url}`);
+        }),
+      );
+      try {
+        const runtime = unit.runtimes.forTenantStorage(
+          "github-42",
+          unit.storage.forTenant({ id: "github-42" }),
+        );
+        const start = await unit.app.request(
+          "https://cloud.zenod.test/api/drive/oauth/start",
+          { headers: { cookie } },
+        );
+        const state = runtime.settings.getRaw("google_oauth_state")!;
+        expect(start.status).toBe(302);
+        const callback = await unit.app.request(
+          `https://cloud.zenod.test/api/drive/oauth/callback?code=mocked-google-code&state=${encodeURIComponent(state)}`,
+          { headers: { cookie } },
+        );
+        expect(callback.status, scenario).toBe(502);
+        const responseText = await callback.text();
+        expect(responseText).toMatch(/Google Drive connection failed/i);
+        expect(responseText).not.toMatch(
+          /provider-leaked|operator-google|ephemeral-access|must-not-persist|client.secret|refresh.token/i,
+        );
+        expect(runtime.settings.getRaw("google_oauth_state")).toBeNull();
+        expect(runtime.settings.getRaw("google_oauth_refresh_token")).toBeNull();
+        expect(runtime.settings.getRaw("google_oauth_email")).toBeNull();
+        expect(runtime.settings.get("google_drive_folder_id")).toBeNull();
+        expect(runtime.settings.get("artifact_archive_drive_folder_id")).toBeNull();
+        expect(runtime.state.getSetting("google_oauth_client_secret")).toBeNull();
+      } finally {
+        await unit.close();
+        vi.unstubAllGlobals();
+      }
+    }
+
+    const dataDir = await tempDir();
+    const { unit, cookie } = await createHostedDriveCustomer(dataDir, {
+      clientId: "operator-google-client-id",
+      clientSecret: "operator-google-client-secret",
+    });
+    try {
+      const denied = await unit.app.request(
+        "https://cloud.zenod.test/api/drive/oauth/callback?error=provider-leaked-consent-detail",
+        { headers: { cookie } },
+      );
+      expect(denied.status).toBe(400);
+      expect(await denied.text()).toBe("Google Drive connection was not completed.");
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("ZAL-20 Hosted managed Drive journey reports missing operator OAuth config safely", async () => {
     const dataDir = await tempDir();
     const { unit, cookie } = await createHostedDriveCustomer(dataDir);
     try {
@@ -1083,7 +1409,7 @@ describe("Zenod chassis unit", () => {
     }
   });
 
-  it("ZAL-17 Hosted managed Drive journey fails closed on cached lifecycle changes", async () => {
+  it("ZAL-20 Hosted managed Drive journey fails closed on cached lifecycle changes", async () => {
     const dataDir = await tempDir();
     const { unit, tenants } = await createHostedDriveCustomer(dataDir, {
       clientId: "operator-google-client-id",

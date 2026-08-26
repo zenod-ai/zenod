@@ -188,7 +188,7 @@ function apiResponse(request, response, pathname) {
           accountEmail: null,
           folderId: null,
           archiveConfigured: false,
-          archiveReason: "Connect Google Drive to enable archived media links.",
+          archiveReason: "Connect Google Drive to enable archive/export copies.",
         }
       : {
           configured: false,

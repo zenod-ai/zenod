@@ -46,6 +46,7 @@ import {
 import { buildMcpServer } from "./mcp.js";
 import { buildMeshGatewayServer, type ConsoleChatRequest } from "./meshGateway.js";
 import {
+  DriveClient,
   driveAuthFromSettings,
   driveClientFromSettings,
   exchangeGoogleDriveOAuthCode,
@@ -91,6 +92,19 @@ import {
   PeerSkillStore,
   type PeerSkillFileInput,
 } from "./peerSkillStore.js";
+
+const HOSTED_DRIVE_MARKER_SETTING = "google_drive_managed_folder_marker";
+
+function hostedDriveTenantMarker(settings: Runtime["settings"]): string {
+  const existing = settings.getRaw(HOSTED_DRIVE_MARKER_SETTING);
+  if (existing && /^[A-Za-z0-9_-]{20,64}$/.test(existing)) return existing;
+  // Settings are physically tenant-scoped. Persist a random, opaque marker so
+  // even two Zenod tenants authorizing the same Google account never share a
+  // managed archive folder or expose a tenant/customer identifier to Google.
+  const created = randomBytes(18).toString("base64url");
+  settings.setRaw(HOSTED_DRIVE_MARKER_SETTING, created);
+  return created;
+}
 
 // #532/#548 — the running commit SHA for /api/health. Prefer an explicit GIT_SHA env
 // (GHCR/CI builds pass it); otherwise fall back to the `.gitsha` file the Docker build
@@ -2025,13 +2039,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const state = randomBytes(24).toString("base64url");
     settings.setRaw("google_oauth_state", state);
     const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
-    return c.redirect(googleDriveOAuthUrl({ clientId, redirectUri, state }));
+    return c.redirect(googleDriveOAuthUrl({ clientId, redirectUri, state, mode: authority.mode }));
   });
 
   app.get("/api/drive/oauth/callback", async (c) => {
     const url = new URL(c.req.url);
     const error = url.searchParams.get("error");
-    if (error) return c.text(`Google Drive connection failed: ${error}`, 400);
+    if (error) {
+      return settings.googleDriveOAuthAuthority().mode === "hosted-managed"
+        ? c.text("Google Drive connection was not completed.", 400)
+        : c.text(`Google Drive connection failed: ${error}`, 400);
+    }
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     if (!code || !state || state !== settings.getRaw("google_oauth_state")) {
@@ -2047,9 +2065,43 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       : settings.get("google_oauth_client_secret");
     if (!clientId || !clientSecret) return c.text("Google Drive connection failed: OAuth client is not configured", 400);
     const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
-    const result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+    let result: Awaited<ReturnType<typeof exchangeGoogleDriveOAuthCode>>;
+    if (authority.mode === "hosted-managed") {
+      try {
+        result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+      } catch {
+        return c.text("Google Drive connection failed. Please try again.", 502);
+      }
+    } else {
+      result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+    }
+    let managedFolderId: string | null = null;
+    if (authority.mode === "hosted-managed") {
+      try {
+        const client = new DriveClient(
+          {
+            kind: "oauth",
+            clientId,
+            clientSecret,
+            refreshToken: result.refreshToken,
+            email: result.email,
+          },
+          result.accessToken ? { accessToken: result.accessToken } : undefined,
+        );
+        managedFolderId = await client.ensureManagedRootFolder(
+          hostedDriveTenantMarker(settings),
+          settings.get("google_drive_folder_id"),
+        );
+      } catch {
+        return c.text("Google Drive connection failed: Zenod could not prepare its folder. Please try again.", 502);
+      }
+    }
     settings.setRaw("google_oauth_refresh_token", result.refreshToken);
     settings.setRaw("google_oauth_email", result.email ?? "");
+    if (managedFolderId) {
+      settings.set("google_drive_folder_id", managedFolderId);
+      settings.set("artifact_archive_drive_folder_id", managedFolderId);
+    }
     settings.set("artifact_archive_provider", "drive");
     runtime.invalidate();
     if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
@@ -2057,11 +2109,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.post("/api/drive/disconnect", (c) => {
+    const hostedManaged = settings.googleDriveOAuthAuthority().mode === "hosted-managed";
     settings.set("google_service_account_json", "");
     settings.setRaw("google_oauth_refresh_token", "");
     settings.setRaw("google_oauth_email", "");
     settings.setRaw("google_oauth_state", "");
     settings.set("google_drive_folder_id", "");
+    if (hostedManaged) settings.set("artifact_archive_drive_folder_id", "");
     runtime.invalidate();
     return c.json({ ok: true });
   });
@@ -2959,6 +3013,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
             enqueue: (kind, input, idempotencyKey) => runtime.taskJobQueue.enqueue(kind, input, idempotencyKey),
             get: (id) => runtime.taskJobQueue.get(id),
             recent: (limit) => runtime.taskJobQueue.recent(limit),
+            admit: (kind, input) => runtime.taskJobQueue.admit(kind, input),
+            hostedArchiveOnlyDrive: settings.googleDriveOAuthAuthority().mode === "hosted-managed",
           },
           (input) => editGithubIssue(settings, input),
           (input) => createGithubIssue(settings, input),

@@ -661,7 +661,7 @@ describe("drive tools + API", () => {
     expect(body.transcriptionProvider).toBe("local whisper.cpp for long notes");
   });
 
-  it("ZAL-17 self-hosted BYO Drive journey preserves raw start, callback, status, disconnect, and config error", async () => {
+  it("ZAL-20 self-hosted BYO Drive journey preserves raw start, callback, status, disconnect, and config error", async () => {
     vi.stubGlobal("fetch", stubFetch());
     runtime.settings.set("google_service_account_json", SA_JSON);
     runtime.settings.set("google_oauth_client_id", "client-id");
@@ -680,6 +680,10 @@ describe("drive tools + API", () => {
     expect(start.status).toBe(302);
     const location = start.headers.get("location")!;
     expect(location).toContain("accounts.google.com");
+    expect(new URL(location).searchParams.get("scope")?.split(" ").sort()).toEqual([
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/userinfo.email",
+    ]);
     const state = runtime.settings.getRaw("google_oauth_state")!;
     expect(location).toContain(encodeURIComponent(state));
 

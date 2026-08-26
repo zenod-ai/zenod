@@ -72,6 +72,9 @@ export interface TaskJobs {
   enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob;
   get(id: string): TaskJob | null;
   recent?(limit?: number): TaskJob[];
+  admit?(kind: TaskJobKind, input: TaskJobInput): { code: string; message: string } | null;
+  /** Hosted public beta uses Drive only as an archive/export destination. */
+  hostedArchiveOnlyDrive?: boolean;
 }
 
 export interface MediaIngestJobs {
@@ -1134,13 +1137,22 @@ export function buildMcpServer(
     },
   );
 
+  const hostedArchiveOnlyDrive = taskJobs?.hostedArchiveOnlyDrive === true;
   server.registerTool(
     "ingest_memory",
     {
       title: "Ingest memory artifact",
-      description:
-        "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
-      inputSchema: INGEST_MEMORY_SHAPE,
+      description: hostedArchiveOnlyDrive
+        ? "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, or staged transport handles that the user wants remembered. Hosted Google Drive is archive/export-only, so Drive file references are not accepted as sources. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs."
+        : "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
+      inputSchema: hostedArchiveOnlyDrive
+        ? {
+            ...INGEST_MEMORY_SHAPE,
+            bytesRef: z.string().min(1).optional().describe(
+              "Opaque reference to bytes already staged by the caller/transport, such as an object-store key or channel media handle. Hosted Drive file references are rejected.",
+            ),
+          }
+        : INGEST_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints, idempotencyKey }) => {
@@ -1164,6 +1176,14 @@ export function buildMcpServer(
         ...(senderTimestamp ? { senderTimestamp } : {}),
         ...(hints ? { mediaHints: hints } : {}),
       };
+      const rejection = taskJobs?.admit?.("media_ingest", input);
+      if (rejection) {
+        return {
+          content: [{ type: "text", text: rejection.message }],
+          structuredContent: rejection,
+          isError: true,
+        };
+      }
       if (taskJobs) {
         const job = taskJobs.enqueue("media_ingest", input, idempotencyKey);
         return enqueuedResponse(job);
