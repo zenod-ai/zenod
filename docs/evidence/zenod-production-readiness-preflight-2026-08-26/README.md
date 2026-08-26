@@ -16,11 +16,11 @@ Integrated candidate merge: `91b4e7da173f5932ff6d1d8b48c3e6db6c05269e`
 
 ## Verdict
 
-**READY FOR AN EXPLICITLY APPROVED, SIGNUP-CLOSED TWO-SERVICE DEPLOYMENT PREP; NOT READY FOR A BILLING DRILL OR PUBLIC SIGNUP.**
+**READY FOR PR #1089 DOCUMENTATION MERGE ONLY. DO NOT DEPLOY IMAGE `91b4e7d`.**
 
-The approved application candidate is already published as one immutable GHCR image. The target applications, current rollback images, volumes, private network, public origins, current fail-closed signup state, and redacted environment delta are known. No production or provider state was changed during this preflight.
+The locally accepted application candidate is published as one immutable GHCR image, but it is not an approved deployment candidate. The target applications, current rollback images, volumes, private network, public origins, current fail-closed signup state, and preliminary redacted environment delta are known. No production or provider state was changed during this preflight.
 
-There is one release-contract blocker that must not be hidden: the candidate public site, Hosted account links, billing parser, Terms, readiness check, and current live Stripe price variables still implement **€5 monthly plus €50 yearly**, while the approved beta contract is **one €9/month plus VAT plan**. The image may be deployed with signup and tester checkout closed for credential-backed staging, but it may not be used for a billing drill or public sale until that bounded pricing contract is corrected and reviewed.
+There is one release-contract blocker that must not be hidden: the candidate public site, Hosted account links, billing parser, Terms, readiness check, and current live Stripe price variables still implement **€5 monthly plus €50 yearly**, while the approved beta contract is **one €9/month plus VAT plan**. Deploying `91b4e7d` would continue exposing the wrong public pricing and legal contract even with checkout closed. The strong recommendation is to merge this documentation only, correct the product contract in code, publish a new immutable digest, and evaluate that future digest in a fresh preflight.
 
 ## No-mutation boundary
 
@@ -43,11 +43,11 @@ The `main` image publish workflow succeeded for the integrated merge in [GitHub 
 | Source candidate proved by ZAL-17 | `f4a1746eab3fef0e08ba933a30ed658e627e93d2` |
 | Integrated merge built by GHCR workflow | `91b4e7da173f5932ff6d1d8b48c3e6db6c05269e` |
 | Immutable tag | `ghcr.io/zenod-ai/zenod:sha-91b4e7d` |
-| OCI index digest to approve and pin | `sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde` |
+| Observed OCI index digest; not approved for deploy | `sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde` |
 | Linux/amd64 image manifest | `sha256:3d09be2a00f5c7d3d4642e98ae09f772f1dc512f848994971ee9e92b65a8caad` |
-| Proposed exact reference | `ghcr.io/zenod-ai/zenod:sha-91b4e7d@sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde` |
+| Observed immutable reference; do not deploy | `ghcr.io/zenod-ai/zenod:sha-91b4e7d@sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde` |
 
-The source candidate and integrated merge differ only by evidence/merge history, not the application source proved by ZAL-17. Both Hosted services must use the exact proposed reference and report the full integrated merge SHA from `/api/health`. The current explicit `GIT_SHA` runtime overrides must be removed during the approved rollout so they cannot mask the SHA baked into the immutable image.
+The source candidate and integrated merge differ only by evidence/merge history, not the application source proved by ZAL-17. This receipt makes the artifact auditable; it does not approve it. A future pricing-corrected digest must be separately named, re-preflighted and approved for both services. At that future configuration gate, the current explicit `GIT_SHA` runtime overrides should be removed so they cannot mask the SHA baked into the immutable image.
 
 ## Exact Dokploy and VPS target
 
@@ -55,13 +55,13 @@ Dokploy base: `https://dokploy.polyqu.com/api`
 
 VPS: `hetzner_vps_1` / `49.13.24.121`
 
-| Scope | Exact target | Current state | Proposed state |
+| Scope | Exact target | Current state | Future intended topology; not approved here |
 | --- | --- | --- | --- |
 | Project | `zenod` · `FWSR0dSSjeOSjPsIsMty3` | exists | unchanged |
 | Environment | `production` · `5BPzY3n4l6eSctYuUqXFN` | exists | unchanged |
-| Public service | application `zenod-mt` · `2dkayH_eAur427leH64MT`; Swarm service `zenod-mt-fxpzoo` | 1/1 | 1/1, `AGENT=zenod`, candidate digest |
+| Public service | application `zenod-mt` · `2dkayH_eAur427leH64MT`; Swarm service `zenod-mt-fxpzoo` | 1/1 | 1/1, public Zenod role, future pricing-corrected digest |
 | Public volume | `zenod-mt-data:/data` | present, about 1.6 GB | preserve in place |
-| Private Channels service | existing application `phylax` · `urbFsgl6eImbQ4MTIZl5N`; Swarm service `app-index-back-end-panel-6zm3qg` | 1/1 | 1/1, `AGENT=phylax`, same candidate digest |
+| Private Channels service | existing application `phylax` · `urbFsgl6eImbQ4MTIZl5N`; Swarm service `app-index-back-end-panel-6zm3qg` | 1/1 | 1/1, private Phylax role, same future pricing-corrected digest |
 | Private Channels volume | `phylax-data:/data` | present, about 2.3 GB; owns WhatsApp session/journal | preserve in place; never reset/re-pair as part of rollout |
 | Shared network | `dokploy-network` · `0k299mqvlih0w59gstyl5nvi1` | both services attached | unchanged |
 | Customer origins | `https://zenod.dev`, `https://cloud.zenod.dev` | public | unchanged |
@@ -70,7 +70,7 @@ VPS: `hetzner_vps_1` / `49.13.24.121`
 | Private Channels origin | `http://app-index-back-end-panel-6zm3qg:8080` | public container reached `/healthz` with 200 | configure only as the public service's allowed private Channels origin |
 | Ring | application `ring` · `hkdStWh6zfJ9d-uohdJHt`; service `ring-ycxjwn`; volume `ring-data` | separate 1/1 legacy product | excluded from Zenod routing and untouched |
 
-This is exactly **two Zenod Hosted runtime services from one codebase/image**: public Zenod and the existing private Phylax runtime presented to customers only as Channels. It does not create a third service or a new Channels codebase.
+The future topology remains exactly **two Zenod Hosted runtime services from one codebase/image**: public Zenod and the existing private Phylax runtime presented to customers only as Channels. It does not create a third service or a new Channels codebase. This topology statement is not deployment approval.
 
 ## Current rollback images
 
@@ -80,7 +80,7 @@ This is exactly **two Zenod Hosted runtime services from one codebase/image**: p
 | Private Channels | `399b3a8dc07154008553702b9c9d689ba92cb63b` | `sha256:f8284f7db77866d7bdef735c62ef3f5185b5b4327092f9646986ce880f2e5159` | `ghcr.io/zenod-ai/zenod:sha-399b3a8@sha256:f8284f7db77866d7bdef735c62ef3f5185b5b4327092f9646986ce880f2e5159` |
 | Ring, excluded/preserved | `0be407a10ff5cd50c306398f919009b4d8fc5734` | `sha256:18a95f2507bbd43e28fd5c2de80a1066c50a21bf03e86948dd6e36c33b0509c4` | no rollout action |
 
-The live Zenod/Channels images are currently version-skewed. The proposed rollout makes only the two Zenod Hosted services version-coherent. Ring remains separate.
+The live Zenod/Channels images are currently version-skewed. A future pricing-corrected rollout should make only the two Zenod Hosted services version-coherent. Ring remains separate.
 
 ## Redacted environment-key delta
 
@@ -91,7 +91,7 @@ Statuses below are key presence/action only. No value is included.
 | Key | Current | Required action |
 | --- | --- | --- |
 | `AGENT` | absent | add as explicit public Zenod mode |
-| `GIT_SHA` | present | remove runtime override; use baked candidate SHA |
+| `GIT_SHA` | present | future pricing-corrected deploy: remove runtime override and use the image-baked SHA |
 | `NODE_ENV` | present | retain |
 | `PORT` | present | retain |
 | `ZENOD_DATA_DIR` | present | retain |
@@ -104,6 +104,7 @@ Statuses below are key presence/action only. No value is included.
 | `GITHUB_OAUTH_CLIENT_ID` | present | retain |
 | `GITHUB_OAUTH_CLIENT_SECRET` | present | retain |
 | `GITHUB_OAUTH_CALLBACK_URL` | present | retain after callback check |
+| `ZENOD_PUBLIC_SITE_HOST` | present and non-empty | optional for boot: `isPublicSiteHost` defaults to `zenod.dev` when neither a route option nor this key is supplied; retain the explicit key in a future exact delta so `zenod.dev` serves the public site and other Zenod hosts serve the app without relying on the fallback |
 | `GOOGLE_OAUTH_CLIENT_ID` | absent | add from approved operator credential store |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | absent | add from approved operator credential store |
 | `ZENOD_MANAGED_AI_ENABLED` | absent | add only with explicit provider-mutation approval |
@@ -116,7 +117,7 @@ Statuses below are key presence/action only. No value is included.
 | `ZENOD_CHANNELS_ALLOWED_ORIGINS` | absent | add exact private-origin allowlist |
 | `ZENOD_CHANNELS_PRIVATE_TOKEN` | absent | create in approved secret store and add; same secret on both services |
 | `ZENOD_CHANNELS_MEMORY_URL` | absent | add explicit public MCP authority origin |
-| `STRIPE_MODE` | present | retain for signup-closed staging only |
+| `STRIPE_MODE` | present | no change authorized by this docs merge; future exact delta must state its status |
 | `STRIPE_SECRET_KEY` | present | retain; do not rotate |
 | `STRIPE_WEBHOOK_SECRET` | present | retain; do not rotate |
 | `STRIPE_WEBHOOK_ENDPOINT_ID` | present | retain |
@@ -128,7 +129,7 @@ Statuses below are key presence/action only. No value is included.
 | `ZENOD_SUPPORT_EMAIL` | present | retain |
 | `ZENOD_LEGAL_VERSION` | absent | add only after the current legal package is reviewed |
 | `ZENOD_PUBLIC_PAID_SIGNUP` | present; endpoint confirms closed | keep fail-closed |
-| `ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS` | present | clear for initial closed deploy; restore an exact tester only at the separately approved billing drill |
+| `ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS` | present | no change authorized; a future closed-deploy delta should close tester checkout, and a later billing gate must name any exact tester |
 | `ZENOD_BACKUP_RESTORE_VERIFIED_AT` | present and currently accepted by old single-volume readiness | do not reuse for two-volume rollout; set only after fresh public + Channels restore evidence |
 | `ZENOD_STRIPE_WEBHOOK_VERIFIED_AT` | present and current by endpoint | do not change prospectively |
 | `ZENOD_STRIPE_PORTAL_VERIFIED_AT` | present and current by endpoint | do not change prospectively |
@@ -143,7 +144,7 @@ No conventional local Google OAuth credential-store item was discoverable by key
 | --- | --- | --- |
 | `AGENT` | absent | add explicit `phylax` mode |
 | `ZENOD_UNIT` | present | retain for backward-compatible mode selection during this rollout |
-| `GIT_SHA` | present | remove runtime override; use baked candidate SHA |
+| `GIT_SHA` | present | future pricing-corrected deploy: remove runtime override and use the image-baked SHA |
 | `NODE_ENV` | present | retain |
 | `PORT` | present | retain |
 | `ZENOD_DATA_DIR` | present | retain |
@@ -160,7 +161,7 @@ No conventional local Google OAuth credential-store item was discoverable by key
 | `TELEGRAM_RICH` | present | retain |
 | `OPENROUTER_API_KEY` / `GROQ_API_KEY` / `OPENAI_API_KEY` | absent | no addition required for the default local transcription path; any managed cloud transcription key is a separate design and credential gate |
 
-All other existing keys remain byte-for-byte preserved unless a later redacted delta explicitly names them. The rollout must not overwrite the complete environment from a reconstructed template.
+All other existing keys remain byte-for-byte preserved unless a later redacted delta explicitly names them. No environment change is authorized by this document. A future rollout must not overwrite the complete environment from a reconstructed template.
 
 ## Current fail-closed production truth
 
@@ -178,7 +179,7 @@ The three current readiness failures are `legal_version`, `stripe_profile`, and 
 
 The host currently contains one approximately 1.5 GB Zenod archive/checksum pair dated 2026-08-14. No separate Phylax/Channels archive was discoverable. The public volume is about 1.6 GB and the private Channels volume about 2.3 GB. The old readiness timestamp therefore cannot be treated as proof for this two-volume candidate.
 
-After exact backup approval and immediately before deployment:
+The first future gate is to define the independent encrypted destination, retention, restore ownership and exact copy/verification procedure without quiescing anything. Only after that definition is approved may a separate backup-quiesce gate authorize the following steps:
 
 1. Resolve and record the exact one-replica container names for `zenod-mt-fxpzoo` and `app-index-back-end-panel-6zm3qg`; verify their `/data` mounts are respectively `zenod-mt-data` and `phylax-data`.
 2. Save a mode-0600 operator-only rollback snapshot outside the repository containing the complete current Dokploy configuration. The evidence packet retains only key names and status.
@@ -200,19 +201,24 @@ After exact backup approval and immediately before deployment:
 
 If an incident requires data restore, restore the verified archive into a **new** explicitly named volume, run `scripts/verify-zenod-data.mjs`, change only the affected service mount after approval, and retain the original volume until application, MCP, tenant-isolation, and Channels checks pass. Never untar over the live source volume and never delete the original as part of rollback.
 
-## Staged rollout and smoke matrix
+## Future independent gates and smoke matrix
+
+These gates are intentionally independent. Approval of one does not authorize the next.
 
 | Stage | Gate | Actions / evidence | Pass condition | Failure action |
 | --- | --- | --- | --- | --- |
-| 0 · current preflight | read-only | exact images/digests, target IDs, volumes, network, origins, key presence, registry receipt, public/private health | this packet is reproducible; signup remains closed | stop; no mutation |
-| 1 · backup | separate backup/quiesce approval | fresh verified public and Channels archives plus checksums and independent copy | both restore verifiers pass; both services return healthy; no session reset | resume exact task; do not deploy |
-| 2 · private candidate | deployment/config approval | snapshot config; add approved private delta; pin existing Phylax app to candidate digest | `/api/health` reports `phylax` and full candidate merge SHA; worker/transport health acceptable; same `phylax-data` mount | restore private rollback digest/config; keep volume/session |
-| 3 · public candidate | same deployment/config approval | add approved public delta; pin `zenod-mt` to same digest; keep signup/test checkout closed | `/healthz` and `/api/health` 200 with full candidate SHA; readiness remains non-200/closed; customer site and legal identities correct | restore public rollback digest/config first, then private if required |
-| 4 · closed non-financial proof | explicit credential/provider/channel test approvals as applicable | GitHub sign-in/account; unauthenticated MCP rejected; existing tenant initialize/list/read; two-tenant isolation; Google config/start/callback/folder/disconnect with disposable account; managed AI cap/journal/restart; private Channels status and approved text/voice/media/replay without QR reset | exact receipts on same two-service digest; no provider/internal metadata leak; no Ring path; raw evidence retained at cap | disable affected capability fail-closed and/or digest rollback; preserve data/session/keys for audit |
-| 5 · billing proof | separate exact Stripe/profile/real-card approval, after pricing correction | signed webhook, profile, portal, one approved €9 real-card purchase, idempotent tenant/key provisioning, MCP proof, cancel/refund handling | current evidence times set only after each success; tester remains exact allowlist | close checkout, refund/cancel as approved, preserve audit |
-| 6 · public signup | separate exact `ZENOD_PUBLIC_PAID_SIGNUP=1` approval | enable only on the named digest after every readiness/product check is green | startup succeeds, readiness 200, non-allowlisted checkout opens at approved €9 contract | immediately set signup closed; rollback if product/runtime checks fail |
+| 0 · docs merge | `APPROVE PR #1089 DOCS MERGE ONLY` | merge the packet/runbook only | exact docs land on `main`; zero external mutation | do not merge if review finds drift |
+| 1 · off-host backup definition | separate planning approval | name encrypted destination, retention, copy, restore owner and verification procedure | complete non-secret procedure is reviewable; no workload pause | revise procedure |
+| 2 · backup quiesce | separate operational approval | fresh verified public and Channels archives plus checksums and independent copy | both restore verifiers pass; both services return healthy; no session reset | resume exact task; do not deploy |
+| 3 · credentials and exact config plan | separate credential/config-planning approval | name credential/token source or generation ceremony and publish redacted exact non-secret environment values for a future delta | every source, key status and non-secret value is reviewable; no config changed | keep capability absent/fail-closed |
+| 4 · future pricing-corrected closed deploy | separate config/deploy approval for a **new digest**, not `91b4e7d` | snapshot config; apply approved delta; pin private then public to the named future digest; keep signup/test checkout closed | both services report the future SHA; health, public identity, MCP auth/isolation and rollback checks pass | restore captured config/digests; preserve volumes/session |
+| 5 · OpenRouter reconciliation | separate provider-mutation approval | enable authoritative reconciliation against the exact approved account cohort | bounded child-key/cap/replay receipts with no duplicate or orphan | disable managed AI fail-closed; preserve audit |
+| 6 · Google OAuth | separate Google grant/test approval | register callback and use a disposable account/folder for start/callback/status/folder/disconnect | exact tenant-isolated receipts; no operator credential leak | revoke disposable grant if approved; preserve tenant evidence |
+| 7 · real Channels | separate send/session approval | approved WhatsApp and Telegram text/voice/media, lost-response replay and restart recovery without QR reset | direct Zenod path, no Ring, correct tenant, exactly-once receipts | stop sends; preserve session/journal; rollback only if required |
+| 8 · €9 real-card billing | separate Stripe/profile/real-card approval | signed webhook, profile, portal, one approved €9 purchase, idempotent provisioning, MCP proof, cancel/refund | current evidence times set only after success | close checkout, refund/cancel as approved, preserve audit |
+| 9 · public signup | separate exact `ZENOD_PUBLIC_PAID_SIGNUP=1` approval | enable only on the named future digest after every readiness/product check is green | startup succeeds, readiness 200, non-allowlisted checkout opens at approved €9 contract | immediately close signup; rollback if product/runtime checks fail |
 
-Required exact non-financial probes after the closed deployment include:
+Required exact non-financial probes after a future approved closed deployment include:
 
 - both services report the same full merge SHA and registry digest;
 - public origin and legal page identity, not merely HTTP 200;
@@ -246,18 +252,32 @@ The candidate contains no required schema/data migration, so normal rollback mus
 3. **Managed AI activation has external effects:** the provisioning credential is available in the operator store but absent from Dokploy. Enabling it starts authoritative reconciliation and may mint, cap, disable, or resume child keys for existing active/past-due accounts. Approval must explicitly include this effect.
 4. **Channels secret is new:** the shared private token does not exist in either service and must be generated/stored through an approved secret path. Deploying private Phylax restarts/reconnects the existing transport even though it must not reset the session.
 5. **Two-volume backup is missing:** the only discovered archive predates this rollout and no separate Channels backup was found. The off-host destination is unnamed.
-6. **Live images are skewed:** public and private services currently run different SHAs. Rollout must pin both; transient deploy and rollback ordering matters.
+6. **Live images are skewed:** public and private services currently run different SHAs. A future pricing-corrected rollout must pin both; transient deploy and rollback ordering matters.
 7. **Credential-backed journeys remain unproved:** ZAL-17 used mocked Google, synthetic Channels/Telegram/WhatsApp, and local managed-AI boundaries.
 8. **Private service still has a public legacy origin:** preserve it for non-destructive rollback, but do not present it as a product. Removing it is a separate domain/access decision.
 9. **Current readiness is necessary but incomplete:** it reports 10/13, but its single backup timestamp and monthly/yearly price check do not encode the new two-service/single-plan contract.
-10. **Real-card, public signup, route/session changes, and publication remain separate gates.** A closed deployment approval authorizes none of them unless explicitly named.
+10. **Every external action remains independently gated.** Documentation merge, backup-definition, backup-quiesce, credential/config planning, future closed deploy, OpenRouter reconciliation, Google OAuth, channel sends/session work, €9 real-card billing and public signup may not be bundled.
 
-## Exact human approval request
+## Current exact human gate
 
-The next safe approval is:
+The only current approval request is:
 
-> **APPROVE ZAL-4 CLOSED DEPLOYMENT PREP** for candidate merge `91b4e7da173f5932ff6d1d8b48c3e6db6c05269e`, pinned on both Dokploy applications `2dkayH_eAur427leH64MT` and `urbFsgl6eImbQ4MTIZl5N` to OCI digest `sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde`, preserving `zenod-mt-data`, `phylax-data`, the existing WhatsApp session, all legacy records, and Ring. Approve the redacted key delta in this packet, fresh verified backups of both volumes, and rollback to public digest `sha256:33320f2435d98f2c02014f9486999b526440899226e4322bc508fd2c647dcf5d` plus private digest `sha256:f8284f7db77866d7bdef735c62ef3f5185b5b4327092f9646986ce880f2e5159`. Keep public signup and tester checkout closed. Do not run billing, send channel test messages, reset/pair a session, create Google grants, or enable OpenRouter reconciliation unless separately named.
+> **APPROVE PR #1089 DOCS MERGE ONLY**
 
-Because the Google credential source, independent backup destination, Channels token creation, and pricing correction are still unresolved, the operator must restate the final concrete configuration plan after those inputs exist. **This packet is not itself approval.**
+This authorizes merging the three documentation/evidence files in PR #1089 and nothing else. It authorizes zero Dokploy, backup, quiesce, environment, credential, token, deploy, provider, Google, channel, billing, signup, route, session, data or verification-timestamp mutation.
 
-Real-card billing and `ZENOD_PUBLIC_PAID_SIGNUP=1` require later, separate exact approvals.
+## Future gate order
+
+After the docs merge, future approvals must be requested separately and in this order:
+
+1. define the off-host backup destination, retention and restore procedure;
+2. authorize exact backup quiesce/verification for both volumes;
+3. approve credential/token generation or source plus redacted exact non-secret environment values;
+4. approve configuration and signup-closed deployment of a **future pricing-corrected immutable digest**;
+5. approve OpenRouter reconciliation and child-key effects;
+6. approve Google OAuth grant and disposable-account test;
+7. approve real WhatsApp/Telegram sends or session-affecting work;
+8. approve one €9 real-card billing drill and refund/cancel handling; and
+9. approve public signup.
+
+Each request must restate its exact target, effect, rollback and evidence. Approval of an earlier gate never authorizes a later one.

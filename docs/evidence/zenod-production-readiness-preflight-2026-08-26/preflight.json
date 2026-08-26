@@ -3,13 +3,17 @@
   "date": "2026-08-26",
   "issue": 1061,
   "mode": "read-only",
+  "currentGate": "APPROVE PR #1089 DOCS MERGE ONLY",
+  "externalActionsAuthorized": [],
+  "deploymentRecommendation": "do-not-deploy-91b4e7d; produce and re-preflight a pricing-corrected immutable digest",
   "candidate": {
     "sourceSha": "f4a1746eab3fef0e08ba933a30ed658e627e93d2",
     "mergeSha": "91b4e7da173f5932ff6d1d8b48c3e6db6c05269e",
     "tag": "ghcr.io/zenod-ai/zenod:sha-91b4e7d",
     "indexDigest": "sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde",
     "linuxAmd64Manifest": "sha256:3d09be2a00f5c7d3d4642e98ae09f772f1dc512f848994971ee9e92b65a8caad",
-    "publishRun": "https://github.com/zenod-ai/zenod/actions/runs/32920326399"
+    "publishRun": "https://github.com/zenod-ai/zenod/actions/runs/32920326399",
+    "deploymentApproved": false
   },
   "target": {
     "project": { "id": "FWSR0dSSjeOSjPsIsMty3", "name": "zenod" },
@@ -40,6 +44,27 @@
     "total": 13,
     "failedCheckIds": ["legal_version", "stripe_profile", "live_billing_journey"]
   },
+  "environmentKeys": {
+    "public": {
+      "ZENOD_PUBLIC_SITE_HOST": {
+        "current": "present-nonempty",
+        "requirement": "optional-for-boot",
+        "codeDefault": "zenod.dev",
+        "futureAction": "retain-explicitly-in-reviewed-delta"
+      }
+    }
+  },
+  "futureIndependentGates": [
+    "define off-host backup destination, retention, restore owner and procedure",
+    "authorize exact backup quiesce and verification for both volumes",
+    "approve credential and token generation or source plus redacted exact non-secret environment values",
+    "approve configuration and signup-closed deployment of a future pricing-corrected immutable digest",
+    "approve OpenRouter reconciliation and child-key effects",
+    "approve Google OAuth grant and disposable-account test",
+    "approve real WhatsApp and Telegram sends or session-affecting work",
+    "approve one EUR 9 real-card billing drill and refund or cancellation handling",
+    "approve public signup"
+  ],
   "releaseBlockers": [
     "candidate and live billing contract still implement EUR 5 monthly plus EUR 50 yearly instead of the approved single EUR 9 monthly plan",
     "Google OAuth operator credentials and callback registration are unresolved",

@@ -13,13 +13,35 @@ The current exact read-only preflight, target IDs, image/rollback digests and re
 
 ## Current commercial blocker
 
-The approved beta product is one €9/month plus VAT Hosted plan. The current candidate still contains the legacy €5/month and €50/year site, checkout tiers, Terms, price variables and monthly/yearly readiness requirement. Therefore:
+The approved beta product is one €9/month plus VAT Hosted plan. Candidate `91b4e7d` still contains the legacy €5/month and €50/year site, checkout tiers, Terms, price variables and monthly/yearly readiness requirement. Therefore:
 
-- a candidate may be deployed only with signup and tester checkout closed;
+- do not deploy `91b4e7d`, even with signup and tester checkout closed, because it would continue publishing the wrong product and legal contract;
 - no billing drill may run against the legacy price contract; and
-- public signup may not open until a reviewed correction makes the site, account, Terms, checkout parser, Stripe prices and readiness rule agree on the approved product.
+- a future immutable digest may be considered only after a reviewed correction makes the site, account, Terms, checkout parser, Stripe prices and readiness rule agree on the approved product.
 
 Do not work around this by silently reusing a legacy price ID or assigning one price to both tiers.
+
+## Current and future human gates
+
+The only current approval request is:
+
+> **APPROVE PR #1089 DOCS MERGE ONLY**
+
+This authorizes merging documentation and evidence only. It authorizes zero production, backup, quiesce, environment, credential, token, deploy, provider, Google, channel, billing, signup, route, session, data or verification-timestamp mutation.
+
+Future approvals are independent and must be requested separately in this order:
+
+1. define the off-host backup destination, retention and restore procedure;
+2. authorize exact backup quiesce/verification for both volumes;
+3. approve credential/token generation or source plus redacted exact non-secret environment values;
+4. approve configuration and signup-closed deployment of a future pricing-corrected immutable digest;
+5. approve OpenRouter reconciliation and child-key effects;
+6. approve Google OAuth grant and disposable-account test;
+7. approve real WhatsApp/Telegram sends or session-affecting work;
+8. approve one €9 real-card billing drill and refund/cancel handling; and
+9. approve public signup.
+
+Approval of one gate never authorizes the next.
 
 ## Production resources
 
@@ -41,11 +63,11 @@ The webhook must subscribe to `checkout.session.completed`, `customer.subscripti
 
 ## Required environment boundary
 
-Never print secret values. Capture a mode-0600 complete pre-change environment snapshot outside the repository, then apply a reviewed key delta. Preserve every unnamed existing key.
+The following is a future configuration boundary, not an approved delta. Never print secret values. At a later configuration-planning gate, capture a mode-0600 complete pre-change environment snapshot outside the repository, publish only key status and exact non-secret values for review, and preserve every unnamed existing key.
 
 ### Public Zenod
 
-Required baseline and retained authority keys:
+Baseline and retained authority keys (the public-site host is optional as noted below):
 
 ```text
 AGENT
@@ -63,6 +85,8 @@ GITHUB_OAUTH_CLIENT_SECRET
 GITHUB_OAUTH_CALLBACK_URL
 ZENOD_PUBLIC_SITE_HOST
 ```
+
+`ZENOD_PUBLIC_SITE_HOST` is currently present and non-empty. It is optional for boot: `isPublicSiteHost` defaults to `zenod.dev` when neither a route option nor this environment key is supplied. Retain the explicit key in a future exact delta so host routing does not rely on the fallback.
 
 Hosted Drive requires operator-owned keys on public Zenod only:
 
@@ -113,7 +137,7 @@ ZENOD_PUBLIC_PAID_SIGNUP
 ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS
 ```
 
-The price keys are blocked until the candidate is corrected to the approved one-plan contract. Keep `ZENOD_PUBLIC_PAID_SIGNUP` closed and the tester allowlist empty during the initial closed deployment.
+The price keys are blocked until a future candidate is corrected to the approved one-plan contract. No environment change is authorized by this docs merge. A future closed-deploy delta must keep `ZENOD_PUBLIC_PAID_SIGNUP` closed and the tester allowlist empty.
 
 ### Private existing Phylax / Channels
 
@@ -134,7 +158,7 @@ Preserve the current Telegram, Phylax, customer/admin and domain keys byte-for-b
 
 ### SHA reporting
 
-Remove the current service-level `GIT_SHA` overrides when pinning the candidate. The immutable image already bakes the full merge SHA; an old runtime override would make `/api/health` lie about the deployed version.
+At a future pricing-corrected deployment gate, remove the current service-level `GIT_SHA` overrides. Immutable images bake the full merge SHA; an old runtime override would make `/api/health` lie about the deployed version.
 
 ## Verification timestamps
 
@@ -146,21 +170,23 @@ Do not set any `*_VERIFIED_AT` value prospectively. Set it to the UTC completion
 - `ZENOD_STRIPE_PROFILE_VERIFIED_AT`: Stripe checkout/portal show the correct legal business, support email, website, Terms and Privacy links.
 - `ZENOD_LIVE_BILLING_VERIFIED_AT`: after the pricing correction, one separately approved real-card €9 purchase completed, provisioned exactly one tenant and managed-AI authority, returned a working MCP URL, opened the billing portal, and was refunded/cancelled as intended.
 
-## Deploy with signup and checkout closed
+## Future pricing-corrected deploy with signup and checkout closed
 
-1. Obtain Jordi's exact approval of the candidate OCI digest, both Dokploy applications, the redacted key delta, backup destination, backup/quiesce step and rollback references.
+Do not use this procedure with `91b4e7d`. After the pricing correction produces a new immutable digest and the earlier independent gates have completed:
+
+1. Obtain Jordi's exact approval of the future OCI digest, both Dokploy applications, the redacted exact key/non-secret-value delta and rollback references.
 2. Record both currently deployed immutable images, complete operator-only environment snapshots, domains, mounts, service names, volume identities and private network.
 3. Complete the two-volume backup and isolated restore drill below.
-4. Pin the private existing Phylax application to the candidate digest first, preserving its volume and session. Verify private `/api/health` reports `phylax`, the full candidate SHA, acceptable worker/transport health and no session reset.
+4. Pin the private existing Phylax application to the approved future digest first, preserving its volume and session. Verify private `/api/health` reports `phylax`, the full future SHA, acceptable worker/transport health and no session reset.
 5. Pin public `zenod-mt` to the same digest second. Verify `/healthz`, `/api/health`, the landing page, Terms, Privacy and Data Handling by identity, not merely status.
 6. Confirm `/api/public/production-readiness` remains non-200 and reports signup closed. An unauthenticated MCP request must be rejected; an existing tenant token must initialize, list tools and call a read-only tool without crossing tenant boundaries.
 7. Run only the separately approved credential/channel/provider probes from the preflight matrix. Do not pair/reset WhatsApp, send test messages, create Google grants or enable OpenRouter reconciliation unless the approval names that effect.
 
-Both services must report the same full merge SHA. Reject or roll back a version-skewed rollout.
+Both services must report the same full future merge SHA. Reject or roll back a version-skewed rollout.
 
 ## Two-volume cold backup and restore drill
 
-Run on the VPS only after backup/quiesce approval. Resolve the exact one-replica container names immediately before each command. The script verifies that the named container owns the named `/data` volume, pauses the exact Swarm task, atomically finalizes the archive, resumes the workload, creates a mode-0600 checksum, restores into a disposable writable volume, parses every JSON file, runs SQLite `integrity_check`, and probes health.
+First define and approve the independent encrypted destination, retention, restore owner and copy/verification procedure without pausing anything. Then request a separate backup-quiesce approval. Only after that approval may an operator run these commands on the VPS. Resolve the exact one-replica container names immediately before each command. The script verifies that the named container owns the named `/data` volume, pauses the exact Swarm task, atomically finalizes the archive, resumes the workload, creates a mode-0600 checksum, restores into a disposable writable volume, parses every JSON file, runs SQLite `integrity_check`, and probes health.
 
 Use separate archive directories:
 
