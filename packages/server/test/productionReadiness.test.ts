@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 import {
   assertPublicSignupIsReady,
@@ -27,6 +29,17 @@ const readyEnv: NodeJS.ProcessEnv = {
 };
 
 describe("production readiness gate", () => {
+  it("pins the current one-plan Terms and legal version", async () => {
+    const terms = await readFile(
+      new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
+      "utf8",
+    );
+    expect(terms).toContain("Version 2026-08-26");
+    expect(terms).toContain("€9 per month plus applicable VAT");
+    expect(terms).toContain("managed AI usage and WhatsApp access");
+    expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i);
+  });
+
   it("opens paid signup only when every live requirement is evidenced", () => {
     const now = new Date("2026-08-13T00:00:00.000Z");
     expect(productionReadinessReport(readyEnv, now)).toMatchObject({ ready: true, publicPaidSignup: true });

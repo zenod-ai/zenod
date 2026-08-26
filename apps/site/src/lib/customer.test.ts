@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -110,13 +109,5 @@ describe("customer route contracts", () => {
     await expect(createHostedCheckout("monthly", fetcher)).rejects.toBeInstanceOf(
       SignInRequiredError,
     )
-  })
-
-  it("pins the current one-plan Terms and legal version", async () => {
-    const terms = await readFile(new URL("../../public/legal/terms.html", import.meta.url), "utf8")
-    expect(terms).toContain("Version 2026-08-26")
-    expect(terms).toContain("€9 per month plus applicable VAT")
-    expect(terms).toContain("managed AI usage and WhatsApp access")
-    expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i)
   })
 })
