@@ -26,6 +26,11 @@ mounted_volume=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination 
 
 image_ref=$(docker inspect --format '{{.Config.Image}}' "$container_name")
 [[ -n "$image_ref" ]] || { echo "Cannot resolve the container image" >&2; exit 2; }
+verify_image=${ZENOD_VERIFY_IMAGE:-$image_ref}
+docker image inspect "$verify_image" >/dev/null 2>&1 || {
+  echo "Cannot resolve the verifier image" >&2
+  exit 2
+}
 swarm_service=$(docker inspect --format '{{ index .Config.Labels "com.docker.swarm.service.name" }}' "$container_name")
 [[ "$swarm_service" != "<no value>" ]] || swarm_service=""
 service_replicas=""
@@ -85,8 +90,10 @@ docker run --rm \
   --volume "${archive_dir}:/archive" \
   "$image_ref" sh -c "cd /source && tar -czf /archive/${archive_name}.partial ."
 mv -- "$pending_path" "$archive_path"
+chmod 0600 "$archive_path"
 restore_workload
 sha256sum "$archive_path" >"${archive_path}.sha256"
+chmod 0600 "${archive_path}.sha256"
 tar -tzf "$archive_path" >/dev/null
 
 docker volume create "$restore_volume" >/dev/null
@@ -98,7 +105,7 @@ docker run --rm \
 # SQLite databases captured in WAL mode may need writable temporary -shm state
 # during integrity_check. Only the disposable restore volume is writable here;
 # the source archive remains mounted read-only above.
-docker run --rm --volume "${restore_volume}:/data" "$image_ref" \
+docker run --rm --volume "${restore_volume}:/data" "$verify_image" \
   node /app/scripts/verify-zenod-data.mjs /data
 
 docker volume rm "$restore_volume" >/dev/null
