@@ -21,4 +21,11 @@ describe("public Zenod offer", () => {
       /€5|€50|yearly|annual|\b(?:Phylax|Ring|OpenRouter)\b|provider cost|token budget/i,
     )
   })
+
+  it("qualifies infrastructure and provider-key ownership by edition", () => {
+    const copy = page.replace(/\s+/g, " ")
+    expect(copy).toMatch(/Self-hosted runs on your server with your AI provider key/i)
+    expect(copy).toMatch(/Hosted manages the service for you/i)
+    expect(copy).not.toMatch(/your GitHub account, on your server, with your API keys/i)
+  })
 })

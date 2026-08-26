@@ -520,7 +520,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
               {
                 icon: KeyRoundIcon,
                 title: "You hold the keys",
-                body: "Your vault is a plain markdown git repo in your GitHub account, on your server, with your API keys. Open it in Obsidian any time. Export with zero loss — it's just files.",
+                body: "Your vault is a plain markdown git repo in your GitHub account. Self-hosted runs on your server with your AI provider key; Hosted manages the service for you. Open it in Obsidian any time. Export with zero loss — it's just files.",
               },
               {
                 icon: GitCommitIcon,
