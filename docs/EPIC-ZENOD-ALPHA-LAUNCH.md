@@ -80,11 +80,11 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: Minimum implementation chain ZAL-7 through ZAL-10 integrated; ZAL-17 release-candidate proof is dispatchable
+Phase: Minimum implementation chain ZAL-7 through ZAL-10 integrated; ZAL-17 local release-candidate proof running
 Last verified: 2026-08-26 CEST
 Integration target: `main`
-Fresh base commit: `a845360` on `main`
-Next action: dispatch [ZAL-17 #1083](https://github.com/zenod-ai/zenod/issues/1083) from current `main` to prove the complete local Hosted/self-host candidate on one named SHA; do not deploy or open any live gate.
+Fresh base commit: `f3c84c9` on `main`
+Next action: reconcile ZAL-17's exact-SHA local acceptance packet; if green, prepare the read-only ZAL-4 production-gate packet without deploying or opening signup.
 Blockers: no blocker to local implementation. The existing multi-tenant portal, customer auth/account/billing/MCP/vault integrations, channel components, Phylax runtime, and usage stores are the starting product—not replacement targets. Full owner-admin analytics [#1077–#1082](https://github.com/zenod-ai/zenod/issues/1077) are post-core-beta enhancements. Production mutation, live billing, signup opening, WhatsApp-session/routing change, and external promotion remain separately gated.
 
 ## Role Goals
@@ -176,7 +176,7 @@ The repository's global issue list is not the alpha board. It contains many hist
 | [#1080](https://github.com/zenod-ai/zenod/issues/1080) | Ticket worker | unassigned | ZAL-14 · Reuse existing gateway events for owner channel health | deferred / proposed | post-core-beta; #1074, #1077 | `codex/zal-14-channel-health` | `fa41246` | Existing gateway/audit events produce truthful transport health and traffic. | Approved health destination preserved; not a launch dependency. | 2026-08-25 CEST | Revisit after core-beta proof. |
 | [#1081](https://github.com/zenod-ai/zenod/issues/1081) | Ticket worker | unassigned | ZAL-15 · Reuse existing journals and task stores for job/error analytics | deferred / proposed | post-core-beta; #1074, #1077 | `codex/zal-15-job-errors` | `fa41246` | Existing journals/tasks produce reconciled analytics and typed idempotent retry. | Approved error destination preserved; core reliability remains in #1074. | 2026-08-25 CEST | Revisit after core-beta proof. |
 | [#1082](https://github.com/zenod-ai/zenod/issues/1082) | Ticket worker | unassigned | ZAL-16 · Extend existing billing/readiness sources for owner system health | deferred / proposed | post-core-beta; #1077 and later sources | `codex/zal-16-billing-system-health` | `fa41246` | Existing billing/readiness sources compose into truthful guarded owner views. | Approved system-health destination preserved; not a launch dependency. | 2026-08-25 CEST | Revisit after core-beta proof. |
-| [#1083](https://github.com/zenod-ai/zenod/issues/1083) | Tester / integrator | unassigned | ZAL-17 · Prove the minimum paid Hosted beta release candidate | ready / proposed | #1073–#1076, then #1061 | `codex/zal-17-beta-acceptance` | `a845360` | Existing Hosted account/MCP/vault plus managed usage/direct WhatsApp and supported self-host regression pass on one named SHA. | ZAL-7 through ZAL-10 are integrated and exact merged-main channel/policy/admission evidence is green; full admin #1077–#1082 remains out of scope. | 2026-08-26 CEST | Dispatch local candidate proof; no deployment, live credentials, billing, signup, or channel mutation. |
+| [#1083](https://github.com/zenod-ai/zenod/issues/1083) | Tester / integrator | ZAL-17-beta-acceptance-tester | ZAL-17 · Prove the minimum paid Hosted beta release candidate | running | #1073–#1076, then #1061 | `codex/zal-17-beta-acceptance` | `f3c84c9` | Existing Hosted account/MCP/vault plus managed usage/direct WhatsApp and supported self-host regression pass on one named SHA. | Dedicated worktree dispatched from current `main`; local-only acceptance/config/version/rollback evidence scope and every live-system gate are recorded on #1083. | 2026-08-26 CEST | Tester runs complete local matrix and posts durable evidence/structured handoff; steward independently reviews before production-gate packet. |
 
 ## Branch And Integration
 
@@ -255,9 +255,9 @@ Next: dispatch ZAL-17 from current `main` to prove Hosted account/repo/vault/MCP
 
 Risks: all current proof is local/synthetic. Real private-DM Telegram activation/send, group denial, WhatsApp/Telegram proxy-lost replay, preserved legacy-handle reverify, provider key cap/reset, Stripe authority, and actual private Channels configuration remain staging acceptance gates. Production, signup, billing, credentials, and live sessions/routes remain closed.
 
-Assignment identity: Zenod Alpha delivery manager; ZAL-17 beta-acceptance tester (next dispatch)
+Assignment identity: Zenod Alpha delivery manager; ZAL-17-beta-acceptance-tester
 
-Branch / latest commit: `main` at `a845360`; no release-candidate branch yet
+Branch / latest commit: `main` at `f3c84c9`; ZAL-17 `codex/zal-17-beta-acceptance` at base `f3c84c9`
 
 Last verified: 2026-08-26 CEST
 
