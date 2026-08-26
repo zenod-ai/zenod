@@ -12,7 +12,7 @@ Reconciled `main`: `a412dd0a369931f38b707a907264ed828908604b`
 
 Exact source candidate: `f4a1746eab3fef0e08ba933a30ed658e627e93d2`
 
-Evidence snapshot commit: pending the receipt-only follow-up commit
+Evidence snapshot commit: `e2dc43ad04f6a72d59e1e56c4d382d8e24ade10e`
 
 Integration target: `main`
 
@@ -157,7 +157,7 @@ The repository has no root lint script. `npm run lint --workspaces --if-present`
 
 ### CI receipt
 
-Source-candidate CI: pending for exact source candidate `f4a1746eab3fef0e08ba933a30ed658e627e93d2`. The final receipt must link the clean checkout/install, root build, Docker build-check and root tests before staging handoff.
+Source-candidate CI: `https://github.com/zenod-ai/zenod/actions/runs/32919411966/job/98029805645` — **PASS in 3m53s** for exact source candidate `f4a1746eab3fef0e08ba933a30ed658e627e93d2`. The workflow ran clean checkout/install, root build, Docker build-check and root tests. The only annotation is the workflow runner's Node 20 action deprecation notice; it is not a test failure.
 
 ## Rollback
 
