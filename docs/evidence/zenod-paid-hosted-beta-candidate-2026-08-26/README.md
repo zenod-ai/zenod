@@ -12,7 +12,7 @@ Reconciled `main`: `a412dd0a369931f38b707a907264ed828908604b`
 
 Exact source candidate: `7eec30486a729c8fdce6827d09d46d7217cacaa4`
 
-Evidence snapshot commit: `EVIDENCE_SNAPSHOT_SHA`
+Evidence snapshot commit: `9fab0fb329cfa2c4ca9785b82e62479c3aa78267`
 
 Integration target: `main`
 
