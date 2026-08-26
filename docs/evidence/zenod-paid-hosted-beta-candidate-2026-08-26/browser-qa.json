@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "f4a1746eab3fef0e08ba933a30ed658e627e93d2",
+  "executedAt": "2026-08-26T01:00:00Z",
+  "kind": "presentation-only built-portal browser QA",
+  "boundary": "Loopback fixture with inert sample responses. This is not auth, OAuth, channel, provider, billing, staging, or production proof.",
+  "procedure": [
+    "npm run build -w web",
+    "node scripts/zal17-portal-fixture.mjs",
+    "Open http://127.0.0.1:4174/hosted and http://127.0.0.1:4174/self-hosted in Browser Control",
+    "Set viewport to 360x900, 736x900, then 1024x900; reload; inspect Vault & sources and Channels",
+    "Reset the viewport override and stop the loopback fixture"
+  ],
+  "responsiveMatrixSourceSha": "7eec30486a729c8fdce6827d09d46d7217cacaa4",
+  "responsiveCarryForward": "git diff 7eec30486a729c8fdce6827d09d46d7217cacaa4..f4a1746eab3fef0e08ba933a30ed658e627e93d2 -- apps/web produced zero lines, so the width matrix below applies to unchanged UI source. It is not represented as a newly executed width run.",
+  "currentSourceRecheck": {
+    "executedAt": "2026-08-26T01:33:22Z",
+    "viewportWidth": 1496,
+    "hostedInnerWidth": 1496,
+    "hostedScrollWidth": 1496,
+    "selfHostedInnerWidth": 1496,
+    "selfHostedScrollWidth": 1496,
+    "hostedVaultManagedOnly": true,
+    "hostedWhatsAppVisible": true,
+    "hostedForbiddenCopyFound": false,
+    "selfHostedVaultByoControlsVisible": true,
+    "selfHostedWhatsAppVisible": false,
+    "internalRingOrPhylaxCopyFound": false
+  },
+  "hostedForbiddenCopyPattern": "OAuth client ID|OAuth client secret|service account|private/provider-model|openrouter|whisper.cpp|large-v3-turbo|API key|raw token|dollar/cost copy|per-minute cost|Phylax|Ring",
+  "vaultResults": [
+    { "edition": "hosted", "width": 360, "innerWidth": 360, "scrollWidth": 360, "folderControl": true, "managedOAuthControl": true, "forbiddenCopyFound": false },
+    { "edition": "hosted", "width": 736, "innerWidth": 736, "scrollWidth": 736, "folderControl": true, "managedOAuthControl": true, "forbiddenCopyFound": false },
+    { "edition": "hosted", "width": 1024, "innerWidth": 1024, "scrollWidth": 1024, "folderControl": true, "managedOAuthControl": true, "forbiddenCopyFound": false },
+    { "edition": "self-hosted", "width": 360, "innerWidth": 360, "scrollWidth": 360, "folderControl": true, "oauthClientId": true, "oauthClientSecret": true, "serviceAccount": true },
+    { "edition": "self-hosted", "width": 736, "innerWidth": 736, "scrollWidth": 736, "folderControl": true, "oauthClientId": true, "oauthClientSecret": true, "serviceAccount": true },
+    { "edition": "self-hosted", "width": 1024, "innerWidth": 1024, "scrollWidth": 1024, "folderControl": true, "oauthClientId": true, "oauthClientSecret": true, "serviceAccount": true }
+  ],
+  "channelResults": [
+    { "edition": "hosted", "width": 360, "innerWidth": 360, "scrollWidth": 360, "whatsappVisible": true, "internalCopyFound": false },
+    { "edition": "hosted", "width": 736, "innerWidth": 736, "scrollWidth": 736, "whatsappVisible": true, "internalCopyFound": false },
+    { "edition": "hosted", "width": 1024, "innerWidth": 1024, "scrollWidth": 1024, "whatsappVisible": true, "internalCopyFound": false },
+    { "edition": "self-hosted", "width": 360, "innerWidth": 360, "scrollWidth": 360, "whatsappVisible": false, "internalCopyFound": false },
+    { "edition": "self-hosted", "width": 736, "innerWidth": 736, "scrollWidth": 736, "whatsappVisible": false, "internalCopyFound": false },
+    { "edition": "self-hosted", "width": 1024, "innerWidth": 1024, "scrollWidth": 1024, "whatsappVisible": false, "internalCopyFound": false }
+  ],
+  "screenshots": [],
+  "screenshotNote": "No screenshot artifact is claimed. Durable observations are recorded above; visual claims are limited to responsive presentation and visible-copy checks."
+}

@@ -234,6 +234,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     dirs.push(dir);
     const settings = {
       get: (key: string) => key === "artifact_archive_provider" ? "drive" : null,
+      googleDriveOAuthAuthority: () => ({ mode: "self-hosted" as const }),
     } as unknown as Settings;
     const engine = { store: vi.fn(), describeImage: vi.fn() } as unknown as BrainEngine;
     const store = new TaskJobStore(join(dir, "tasks.sqlite"));

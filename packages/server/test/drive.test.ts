@@ -661,11 +661,12 @@ describe("drive tools + API", () => {
     expect(body.transcriptionProvider).toBe("local whisper.cpp for long notes");
   });
 
-  it("connects Google Drive OAuth through start/callback and prefers OAuth for Drive", async () => {
+  it("ZAL-17 self-hosted BYO Drive journey preserves raw start, callback, status, disconnect, and config error", async () => {
     vi.stubGlobal("fetch", stubFetch());
     runtime.settings.set("google_service_account_json", SA_JSON);
     runtime.settings.set("google_oauth_client_id", "client-id");
     runtime.settings.set("google_oauth_client_secret", "client-secret");
+    runtime.settings.set("google_drive_folder_id", "self-host-folder");
     runtime.settings.set("artifact_archive_provider", "local");
     runtime.settings.setAdminPassword("hunter2hunter2");
     const app = createApp(runtime);
@@ -696,6 +697,33 @@ describe("drive tools + API", () => {
     expect(body.configured).toBe(true);
     expect(body.authMode).toBe("oauth");
     expect(body.oauthEmail).toBe("jordi@example.com");
+    expect(body.oauthClientConfigured).toBe(true);
+    expect(body.oauthClientId).toBe("client-id");
+    expect(body.clientEmail).toBe("zenod@test-project.iam.gserviceaccount.com");
+    expect(body.folderId).toBe("self-host-folder");
+    expect(body).toHaveProperty("transcriptionProvider");
+
+    const disconnect = await app.request("/api/drive/disconnect", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(disconnect.status).toBe(200);
+    await expect(disconnect.json()).resolves.toEqual({ ok: true });
+    expect(runtime.settings.getRaw("google_oauth_refresh_token")).toBeNull();
+    expect(runtime.settings.getRaw("google_oauth_email")).toBeNull();
+    expect(runtime.settings.get("google_drive_folder_id")).toBeNull();
+    expect(runtime.settings.get("google_oauth_client_id")).toBe("client-id");
+    expect(runtime.settings.get("google_oauth_client_secret")).toBe("client-secret");
+
+    runtime.settings.set("google_oauth_client_id", "");
+    runtime.settings.set("google_oauth_client_secret", "");
+    const missingConfig = await app.request("/api/drive/oauth/start", {
+      headers: { cookie },
+    });
+    expect(missingConfig.status).toBe(400);
+    await expect(missingConfig.json()).resolves.toEqual({
+      error: "save the Google OAuth client ID and secret first",
+    });
   });
 
   it("exposes OpenRouter as the long-note and Groq fallback provider", async () => {

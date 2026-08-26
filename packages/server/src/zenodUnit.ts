@@ -27,7 +27,10 @@ import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
-import type { SettingKey } from "./settings.js";
+import type {
+  GoogleDriveOAuthAuthority,
+  SettingKey,
+} from "./settings.js";
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
@@ -73,7 +76,10 @@ export class ZenodRuntimePool {
     private readonly agent: AgentDefinition = ZENOD_AGENT,
     private readonly appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">,
     private readonly managedTelegramInbound?: (tenantId: string, input: TelegramManagedInbound) => Promise<void>,
-    private readonly managedTelegramTenant?: (tenantId: string) => boolean,
+    private readonly hostedCustomerTenant?: (tenantId: string) => boolean,
+    private readonly googleDriveOAuthAuthorityForTenant?: (
+      tenantId: string,
+    ) => GoogleDriveOAuthAuthority,
   ) {}
 
   forContext(context: UnitContext): Runtime {
@@ -101,11 +107,17 @@ export class ZenodRuntimePool {
       settingFallbacks: {
         ...sharedGithubSettingFallbacks(this.sharedGithubApp),
       },
+      ...(this.googleDriveOAuthAuthorityForTenant
+        ? {
+            googleDriveOAuthAuthority: () =>
+              this.googleDriveOAuthAuthorityForTenant!(tenantId),
+          }
+        : {}),
       ...(this.managedTelegramInbound
         ? { managedTelegramInbound: (input) => this.managedTelegramInbound!(tenantId, input) }
         : {}),
-      ...(this.managedTelegramTenant
-        ? { managedTelegramInboundEnabled: () => this.managedTelegramTenant!(tenantId) }
+      ...(this.hostedCustomerTenant
+        ? { managedTelegramInboundEnabled: () => this.hostedCustomerTenant!(tenantId) }
         : {}),
     });
     if (runtime.settings.get("artifact_archive_provider") === null) {
@@ -382,7 +394,64 @@ const HOSTED_CUSTOMER_PANELS = Object.freeze([
   "account",
 ] as const);
 
+export const HOSTED_DRIVE_STATUS_PUBLIC_KEYS = Object.freeze([
+  "configured",
+  "oauthAvailable",
+  "accountEmail",
+  "folderId",
+  "archiveConfigured",
+  "archiveReason",
+] as const);
+
+function projectHostedDriveStatus(
+  body: Record<string, unknown>,
+): Record<(typeof HOSTED_DRIVE_STATUS_PUBLIC_KEYS)[number], unknown> {
+  const oauthAvailable = body.oauthClientConfigured === true;
+  const configured = body.configured === true && body.authMode === "oauth";
+  const folderId = typeof body.folderId === "string" && body.folderId.trim()
+    ? body.folderId
+    : null;
+  const archiveConfigured = configured && body.archiveConfigured === true;
+  const accountEmail = configured && typeof body.oauthEmail === "string"
+    ? body.oauthEmail
+    : null;
+  const archiveReason = archiveConfigured
+    ? null
+    : !oauthAvailable
+      ? "Google Drive connection is unavailable."
+      : !configured
+        ? "Connect Google Drive to enable archived media links."
+        : !folderId
+          ? "Choose a Zenod Drive folder to enable archived media links."
+          : "Google Drive archiving is not ready.";
+  return {
+    configured,
+    oauthAvailable,
+    accountEmail,
+    folderId,
+    archiveConfigured,
+    archiveReason,
+  };
+}
+
 async function projectHostedCustomerResponse(path: string, response: Response): Promise<Response> {
+  if (
+    path === "/api/drive/oauth/start" &&
+    response.status === 400 &&
+    response.headers.get("content-type")?.includes("application/json")
+  ) {
+    const body = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
+    if (body?.error === "save the Google OAuth client ID and secret first") {
+      const headers = new Headers(response.headers);
+      headers.delete("content-length");
+      headers.set("cache-control", "no-store");
+      return Response.json({
+        error: "google_drive_oauth_unavailable",
+        message: "Google Drive connection is unavailable. Contact the Zenod operator.",
+        oauthAvailable: false,
+      }, { status: 503, headers });
+    }
+  }
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
   if (!["/api/agent", "/api/settings", "/api/overview", "/api/drive/status", "/api/auth/status", "/api/vault", "/api/connections"].includes(path)) {
     return response;
@@ -410,8 +479,7 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
   } else if (path === "/api/overview") {
     projected = { ...body, usage: null };
   } else if (path === "/api/drive/status") {
-    const { transcriptionProvider: _transcriptionProvider, ...safeDriveStatus } = body;
-    projected = safeDriveStatus;
+    projected = projectHostedDriveStatus(body);
   } else if (path === "/api/vault") {
     projected = {
       repo: body.repo ?? null,
@@ -566,7 +634,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     });
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
   let managedTelegramAdmission: ((tenantId: string, input: TelegramManagedInbound) => Promise<void>) | null = null;
-  let isHostedTelegramTenant: (tenantId: string) => boolean = () => false;
+  let isHostedCustomerTenant: (tenantId: string) => boolean = () => false;
+  let googleDriveOAuthAuthorityForTenant: (
+    tenantId: string,
+  ) => GoogleDriveOAuthAuthority = () => ({ mode: "self-hosted" });
   const runtimes = new ZenodRuntimePool(
     env,
     sharedGithubApp,
@@ -576,7 +647,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       if (!managedTelegramAdmission) throw new Error("Hosted Telegram admission is not initialized");
       await managedTelegramAdmission(tenantId, input);
     },
-    (tenantId) => isHostedTelegramTenant(tenantId),
+    (tenantId) => isHostedCustomerTenant(tenantId),
+    (tenantId) => googleDriveOAuthAuthorityForTenant(tenantId),
   );
   const unit = createUnit({
     name: unitName,
@@ -677,7 +749,37 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
   );
   const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
-  isHostedTelegramTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  googleDriveOAuthAuthorityForTenant = (tenantId) => {
+    const accounts = customer.accounts.list().filter(
+      (candidate) => candidate.tenant_id === tenantId,
+    );
+    if (accounts.length === 0) return { mode: "self-hosted" };
+    if (accounts.length !== 1) {
+      return { mode: "hosted-managed", credentials: null };
+    }
+    const account = accounts[0]!;
+    const entitled = account.subscription_status === "active" ||
+      account.subscription_status === "past_due";
+    const token = customer.tokenVault.get(account.account_id);
+    const tenantRecord = token
+      ? tenantStore.resolveTokenHash(hashToken(token))
+      : null;
+    const synchronousRecord = tenantRecord && typeof tenantRecord === "object" &&
+      !("then" in tenantRecord)
+      ? tenantRecord
+      : null;
+    const tenantActive = synchronousRecord?.tenant.id === tenantId &&
+      (synchronousRecord.status ?? "active") === "active";
+    const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
+    const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+    return {
+      mode: "hosted-managed",
+      credentials: entitled && tenantActive && clientId && clientSecret
+        ? { clientId, clientSecret }
+        : null,
+    };
+  };
   const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
     const account = customer.accounts.resolveForTenantId(input.tenantId);
     const token = account ? customer.tokenVault.get(account.account_id) : null;

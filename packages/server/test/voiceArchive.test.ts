@@ -10,6 +10,8 @@ import {
 } from "../src/voiceArchive.js";
 import type { Settings } from "../src/settings.js";
 
+const selfHostedDriveAuthority = () => ({ mode: "self-hosted" as const });
+
 describe("voice archive keep-detection", () => {
   it("treats a capture_note action as a keep", () => {
     expect(agentKeptNote({ actions: [{ tool: "search_vault" }, { tool: "capture_note" }] })).toBe(true);
@@ -52,7 +54,10 @@ describe("imageArchiveFilename", () => {
 
 describe("archiveVoiceNote", () => {
   it("no-ops (returns null) when Drive is not configured", async () => {
-    const settings = { get: () => null } as unknown as Settings;
+    const settings = {
+      get: () => null,
+      googleDriveOAuthAuthority: selfHostedDriveAuthority,
+    } as unknown as Settings;
     const result = await archiveVoiceNote(settings, {
       data: Buffer.from("audio"),
       filename: "voice.ogg",
@@ -70,6 +75,7 @@ describe("archiveVoiceNote", () => {
     const settings = {
       get: (key: string) => values[key] ?? null,
       getRaw: (key: string) => values[key] ?? null,
+      googleDriveOAuthAuthority: selfHostedDriveAuthority,
     } as unknown as Settings;
 
     expect(driveArchiveUnavailableReason(settings)).toBe("missing Zenod Drive folder ID.");
@@ -78,7 +84,10 @@ describe("archiveVoiceNote", () => {
 
 describe("archiveImage", () => {
   it("no-ops (returns null) when Drive is not configured", async () => {
-    const settings = { get: () => null } as unknown as Settings;
+    const settings = {
+      get: () => null,
+      googleDriveOAuthAuthority: selfHostedDriveAuthority,
+    } as unknown as Settings;
     const result = await archiveImage(settings, {
       data: Buffer.from("image"),
       filename: "image.jpg",

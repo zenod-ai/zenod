@@ -4,7 +4,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({ api: vi.fn() }))
+const mocks = vi.hoisted(() => ({ api: vi.fn(), drive: vi.fn() }))
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -16,7 +16,10 @@ vi.mock("@/views/DashboardOverview", () => ({
 }))
 
 vi.mock("@/components/google-drive-connect", () => ({
-  GoogleDriveConnect: () => <div>Google Drive connector</div>,
+  GoogleDriveConnect: (props: { edition?: string }) => {
+    mocks.drive(props)
+    return <div>Google Drive connector</div>
+  },
 }))
 
 vi.mock("@/views/settings/VaultTab", () => ({
@@ -29,6 +32,7 @@ import { Settings } from "./Settings"
 afterEach(() => {
   cleanup()
   mocks.api.mockReset()
+  mocks.drive.mockReset()
 })
 
 describe("Zenod vault and sources", () => {
@@ -54,5 +58,27 @@ describe("Zenod vault and sources", () => {
     })
 
     expect(screen.getByText("Google Drive connector")).not.toBeNull()
+    expect(mocks.drive).toHaveBeenCalledWith({ edition: "self-hosted" })
+  })
+
+  it("passes the Hosted edition into the existing Drive connector", async () => {
+    mocks.api.mockResolvedValue({
+      unit: { name: "zenod" },
+      tenant: { id: "tenant-1", name: "Memory tenant" },
+      usage: null,
+    })
+
+    render(
+      <Settings
+        initialSettings={{ provider: "openrouter" } as SettingsValues}
+        initialTab="vault"
+        edition="hosted"
+        onLoggedOut={() => undefined}
+      />
+    )
+
+    await waitFor(() => {
+      expect(mocks.drive).toHaveBeenCalledWith({ edition: "hosted" })
+    })
   })
 })

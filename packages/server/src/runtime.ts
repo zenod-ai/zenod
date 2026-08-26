@@ -85,7 +85,11 @@ import {
   V4_GET_ISSUE_SHAPE,
   V4_LIST_ISSUES_SHAPE,
 } from "./mcpToolSchemas.js";
-import { Settings, type Provider } from "./settings.js";
+import {
+  Settings,
+  type GoogleDriveOAuthAuthoritySource,
+  type Provider,
+} from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
 import { TelegramGateway } from "./telegramGateway.js";
@@ -275,6 +279,7 @@ export class Runtime {
       credentialVault?: CredentialVault;
       credentialMasterKey?: string;
       settingFallbacks?: Readonly<Record<string, string>>;
+      googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
       managedTelegramInbound?: TelegramManagedInboundHandler;
       managedTelegramInboundEnabled?: () => boolean;
     } = {},
@@ -288,7 +293,12 @@ export class Runtime {
         tenantId: options.tenantId ?? "standalone",
         masterKey: options.credentialMasterKey,
       });
-    this.settings = new Settings(this.state, this.credentialVault, options.settingFallbacks);
+    this.settings = new Settings(
+      this.state,
+      this.credentialVault,
+      options.settingFallbacks,
+      options.googleDriveOAuthAuthority,
+    );
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
