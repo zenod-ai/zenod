@@ -87,6 +87,7 @@ interface LegacyCredentialSnapshot {
   keyPath: string;
   credentials: DecryptedLegacyCredential[];
   references: CredentialReference[];
+  unresolvedReferences: CredentialReference[];
 }
 
 interface CredentialMigrationMarker {
@@ -193,6 +194,14 @@ function openMigratedChassisVault(
   try {
     if (snapshot) {
       importLegacyCredentials(vault, storage.tenant.id, snapshot.credentials);
+      if (snapshot.unresolvedReferences.length > 0) {
+        // A dangling legacy settings handle is not recoverable from the legacy
+        // database. Keep both sources untouched, expose any independently
+        // recoverable credentials through chassis custody, and let the missing
+        // secret fail closed at materialization time. Retrying construction is
+        // safe because importing the matching rows is idempotent.
+        return vault;
+      }
       verifyCredentialReferences(vault, storage.tenant.id, references);
       const markerCredentials = snapshot.credentials.map(({ key, handle }) => ({ key, handle }));
       verifyMigrationMarkerCredentials(vault, storage.tenant.id, markerCredentials);
@@ -217,7 +226,6 @@ function openMigratedChassisVault(
       return vault;
     }
 
-    verifyCredentialReferences(vault, storage.tenant.id, references);
     const marker = readCredentialMigrationMarker(vault);
     if (marker?.state === "pending_scrub") {
       verifyMigrationMarkerCredentials(vault, storage.tenant.id, marker.credentials);
@@ -227,7 +235,6 @@ function openMigratedChassisVault(
       vault = storage.vault(vaultName);
       vaultOpen = true;
       verifyMigrationMarkerCredentials(vault, storage.tenant.id, marker.credentials);
-      verifyCredentialReferences(vault, storage.tenant.id, references);
       vault.set(
         CHASSIS_MIGRATION_MARKER,
         JSON.stringify({ ...marker, state: "complete" }),
@@ -344,14 +351,12 @@ function readLegacyCredentialSnapshot(
   }
   const rows = rawRows.map(normalizeLegacyCredentialRow);
   const references = readCredentialReferences(rootDir);
-  for (const reference of references) {
-    if (!rows.some((row) => row.key === reference.key && row.handle === reference.handle)) {
-      throw new Error(`legacy credential handle ${reference.handle} has no matching ${reference.key} row`);
-    }
-  }
+  const unresolvedReferences = references.filter(
+    (reference) => !rows.some((row) => row.key === reference.key && row.handle === reference.handle),
+  );
   const keyPath = join(rootDir, LOCAL_KEY_FILE);
   if (rows.length === 0) {
-    return { databasePath, keyPath, credentials: [], references };
+    return { databasePath, keyPath, credentials: [], references, unresolvedReferences };
   }
 
   const tenantIds = [...new Set(rows.map((row) => row.tenantId))];
@@ -411,7 +416,7 @@ function readLegacyCredentialSnapshot(
   if (credentials.some((entry) => !entry.value)) {
     throw new Error("legacy credential migration found an empty credential value");
   }
-  return { databasePath, keyPath, credentials, references };
+  return { databasePath, keyPath, credentials, references, unresolvedReferences };
 }
 
 function normalizeLegacyCredentialRow(row: {

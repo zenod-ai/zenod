@@ -726,6 +726,93 @@ describe("hosted customer layer", () => {
     reopened.close();
   });
 
+  it("keeps the established MCP token valid when account binding is reconciled after a secret change", async () => {
+    const layerOptions = () => ({
+      env,
+      stripe,
+      tenantStore: tenants,
+      identity: {
+        authorizeUrl: (state: string) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+        exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+      },
+    });
+    const first = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      layerOptions(),
+    );
+    const firstCookie = await signInCookie(first.app);
+    await first.app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie: firstCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    expect((await first.app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid" },
+      body: "{}",
+    })).status).toBe(200);
+    const establishedToken = first.tokenVault.get(customerAccountId(42));
+    expect(establishedToken).toMatch(/^zenod_[a-f0-9]{48}$/);
+    await first.close();
+
+    env = { ...env, ACCOUNT_STATE_SECRET: "replacement-state-secret" };
+    session = checkoutSession({
+      id: "cs_reconciled_customer",
+      subscription: "sub_reconciled_customer",
+    });
+    authoritativeSubscription = {
+      ...authoritativeSubscription,
+      id: "sub_reconciled_customer",
+    } as Stripe.Subscription;
+    const reconciled = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      layerOptions(),
+    );
+    try {
+      const reconciledCookie = await signInCookie(reconciled.app);
+      reconciled.accounts.upsert(session.id, {
+        account_id: customerAccountId(42),
+        github_id: 42,
+        github_login: "octocat",
+        tier: "monthly",
+        stripe_client_reference_id: customerAccountId(42),
+        subscription_status: "checkout_pending",
+        claimed_at: new Date(Date.now() + 1_000).toISOString(),
+      });
+      const webhook = await reconciled.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(await webhook.json()).toEqual({ received: true, result: "completed" });
+
+      const reconciledToken = reconciled.tokenVault.get(customerAccountId(42));
+      expect(reconciledToken).toMatch(/^zenod_[a-f0-9]{48}$/);
+      expect(reconciledToken).not.toBe(establishedToken);
+      const establishedRecord = tenants.resolveTokenHash(hashToken(establishedToken!));
+      expect(establishedRecord).toMatchObject({
+        tenant: { id: customerAccountId(42) },
+        status: "active",
+      });
+      expect(establishedRecord?.profile ?? null).toBeNull();
+      const reconciledRecord = tenants.resolveTokenHash(hashToken(reconciledToken!));
+      expect(reconciledRecord).toMatchObject({
+        tenant: { id: customerAccountId(42) },
+        status: "active",
+      });
+      expect(reconciledRecord?.profile ?? null).toBeNull();
+      const account = await reconciled.app.request("/api/console/account", {
+        headers: { cookie: reconciledCookie },
+      });
+      expect(await account.json()).toMatchObject({
+        token: reconciledToken,
+        mcp_url: `${DESTINATION}/mcp/${reconciledToken}`,
+      });
+    } finally {
+      await reconciled.close();
+    }
+  });
+
   it("rejects invalid signatures and live events in TEST webhook mode", async () => {
     const app = customerApp();
     vi.mocked(stripe.webhooks.constructEvent).mockImplementationOnce(() => {

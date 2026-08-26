@@ -70,6 +70,8 @@ export type GoogleDriveOAuthAuthority =
   | {
       mode: "hosted-managed";
       credentials: GoogleDriveOAuthClientCredentials | null;
+      /** Hosted entitlement permits this tenant's own complete OAuth client pair. */
+      tenantCredentialsAllowed?: boolean;
     };
 
 export type GoogleDriveOAuthAuthoritySource = () => GoogleDriveOAuthAuthority;
@@ -630,7 +632,28 @@ export class Settings {
   }
 
   googleDriveOAuthAuthority(): GoogleDriveOAuthAuthority {
-    return this.googleDriveOAuthAuthoritySource?.() ?? { mode: "self-hosted" };
+    const authority = this.googleDriveOAuthAuthoritySource?.() ?? { mode: "self-hosted" };
+    if (authority.mode === "self-hosted") return authority;
+    if (authority.credentials) {
+      return { mode: "hosted-managed", credentials: authority.credentials };
+    }
+    if (authority.tenantCredentialsAllowed) {
+      const clientId = this.get("google_oauth_client_id");
+      const clientSecret = this.get("google_oauth_client_secret");
+      if (clientId && clientSecret) {
+        return {
+          mode: "hosted-managed",
+          credentials: { clientId, clientSecret },
+        };
+      }
+    }
+    return { mode: "hosted-managed", credentials: null };
+  }
+
+  /** Whether this Hosted tenant may configure its own OAuth client pair. */
+  googleDriveTenantCredentialsAllowed(): boolean {
+    const authority = this.googleDriveOAuthAuthoritySource?.();
+    return authority?.mode === "hosted-managed" && authority.tenantCredentialsAllowed === true;
   }
 
   /** Configured whisper transcription quality; defaults to large-v3-turbo. */

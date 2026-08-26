@@ -251,6 +251,7 @@ export type DriveStatus = {
 export type HostedDriveStatus = {
   configured: boolean
   oauthAvailable: boolean
+  oauthClientConfigured: boolean
   accountEmail: string | null
   folderId: string | null
   archiveConfigured: boolean

@@ -379,6 +379,8 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
   "vault_repo",
   "vault_branch",
   "artifact_archive_provider",
+  "google_oauth_client_id",
+  "google_oauth_client_secret",
   "telegram_enabled",
   "telegram_allowed_users",
   "telegram_accept_all",
@@ -399,6 +401,7 @@ const HOSTED_CUSTOMER_PANELS = Object.freeze([
 export const HOSTED_DRIVE_STATUS_PUBLIC_KEYS = Object.freeze([
   "configured",
   "oauthAvailable",
+  "oauthClientConfigured",
   "accountEmail",
   "folderId",
   "archiveConfigured",
@@ -407,8 +410,9 @@ export const HOSTED_DRIVE_STATUS_PUBLIC_KEYS = Object.freeze([
 
 function projectHostedDriveStatus(
   body: Record<string, unknown>,
+  oauthAvailable: boolean,
 ): Record<(typeof HOSTED_DRIVE_STATUS_PUBLIC_KEYS)[number], unknown> {
-  const oauthAvailable = body.oauthClientConfigured === true;
+  const oauthClientConfigured = body.oauthClientConfigured === true;
   const configured = body.configured === true && body.authMode === "oauth";
   const folderId = typeof body.folderId === "string" && body.folderId.trim()
     ? body.folderId
@@ -421,6 +425,8 @@ function projectHostedDriveStatus(
     ? null
     : !oauthAvailable
       ? "Google Drive connection is unavailable."
+      : !oauthClientConfigured
+        ? "Add this tenant's Google OAuth client ID and client secret to connect Google Drive."
       : !configured
         ? "Connect Google Drive to enable archive/export copies."
         : !folderId
@@ -429,6 +435,7 @@ function projectHostedDriveStatus(
   return {
     configured,
     oauthAvailable,
+    oauthClientConfigured,
     accountEmail,
     folderId,
     archiveConfigured,
@@ -436,7 +443,12 @@ function projectHostedDriveStatus(
   };
 }
 
-async function projectHostedCustomerResponse(path: string, response: Response): Promise<Response> {
+async function projectHostedCustomerResponse(
+  path: string,
+  response: Response,
+  hostedDriveAllowed: boolean,
+  directToken: string | null,
+): Promise<Response> {
   if (
     path === "/api/drive/oauth/start" &&
     response.status === 400 &&
@@ -447,11 +459,18 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
       const headers = new Headers(response.headers);
       headers.delete("content-length");
       headers.set("cache-control", "no-store");
+      if (!hostedDriveAllowed) {
+        return Response.json({
+          error: "google_drive_oauth_unavailable",
+          message: "Google Drive connection is unavailable for this tenant.",
+          oauthAvailable: false,
+        }, { status: 503, headers });
+      }
       return Response.json({
-        error: "google_drive_oauth_unavailable",
-        message: "Google Drive connection is unavailable. Contact the Zenod operator.",
+        error: "google_drive_oauth_credentials_required",
+        message: "Save this tenant's Google OAuth client ID and client secret first.",
         oauthAvailable: false,
-      }, { status: 503, headers });
+      }, { status: 400, headers });
     }
   }
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
@@ -481,7 +500,7 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
   } else if (path === "/api/overview") {
     projected = { ...body, usage: null };
   } else if (path === "/api/drive/status") {
-    projected = projectHostedDriveStatus(body);
+    projected = projectHostedDriveStatus(body, hostedDriveAllowed);
   } else if (path === "/api/vault") {
     projected = {
       repo: body.repo ?? null,
@@ -492,7 +511,12 @@ async function projectHostedCustomerResponse(path: string, response: Response): 
       headSha: body.headSha ?? null,
     };
   } else if (path === "/api/connections") {
-    projected = { mcpPath: "/mcp", clients: [], grants: [] };
+    projected = {
+      token: directToken ?? "",
+      mcpPath: directToken ? `/mcp/${directToken}` : "/mcp",
+      clients: [],
+      grants: [],
+    };
   } else {
     projected = { needsSetup: false, configured: true, hostedMode: "managed" };
   }
@@ -526,6 +550,10 @@ const MANAGED_AI_MCP_TOOLS = new Set([
   "run_task",
   "store_memory",
   "task_brain",
+]);
+const MEMORY_CHANNEL_DURABLE_CAPTURE_TOOLS = new Set([
+  "ingest_memory",
+  "store_memory",
 ]);
 
 function managedAiMcpEnvelope(raw: Uint8Array): {
@@ -773,13 +801,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       : null;
     const tenantActive = synchronousRecord?.tenant.id === tenantId &&
       (synchronousRecord.status ?? "active") === "active";
-    const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
-    const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
     return {
       mode: "hosted-managed",
-      credentials: entitled && tenantActive && clientId && clientSecret
-        ? { clientId, clientSecret }
-        : null,
+      credentials: null,
+      ...(entitled && tenantActive ? { tenantCredentialsAllowed: true } : {}),
     };
   };
   const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
@@ -1137,7 +1162,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       const profiledMcpAllowed = !directRecord?.profile ||
         (directRecord.profile === "memory-channel" && mcp.tool !== null &&
           (MEMORY_CHANNEL_MCP_TOOLS as readonly string[]).includes(mcp.tool));
-      const paid = (isMcp ? mcp.paid && profiledMcpAllowed : MANAGED_AI_HTTP_PATHS.has(c.req.path));
+      // The authenticated memory-channel profile is already bound to Zenod's
+      // durable TaskJobQueue contract. Let store/ingest return that canonical
+      // ticket immediately; wrapping the MCP exchange in the outer usage queue
+      // turns a valid tools/call response into a generic HTTP 202 and strands
+      // Phylax without the job id it needs to poll safely.
+      const durableMemoryChannelCapture = isMcp &&
+        directRecord?.profile === "memory-channel" &&
+        mcp.tool !== null &&
+        MEMORY_CHANNEL_DURABLE_CAPTURE_TOOLS.has(mcp.tool);
+      const paid = !durableMemoryChannelCapture &&
+        (isMcp ? mcp.paid && profiledMcpAllowed : MANAGED_AI_HTTP_PATHS.has(c.req.path));
       if (paid) {
         const requestUrl = new URL(c.req.url);
         const storedPath = `${isMcp ? "/mcp" : requestUrl.pathname}${requestUrl.search}`;
@@ -1172,8 +1207,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       }
     }
     const response = await unit.app.fetch(downstreamRequest, c.env);
-    return hostedAccount && c.req.method === "GET"
-      ? projectHostedCustomerResponse(c.req.path, response)
+    const hostedDriveAllowed = admissionAccount?.tenant_id
+      ? runtimes.get(admissionAccount.tenant_id)?.settings.googleDriveTenantCredentialsAllowed() === true
+      : false;
+    const canonicalDirectToken = session && hostedAccount
+      ? customer.tokenVault.get(hostedAccount.account_id)
+      : null;
+    return hostedAccount &&
+      (c.req.method === "GET" || (c.req.method === "PUT" && c.req.path === "/api/settings"))
+      ? projectHostedCustomerResponse(c.req.path, response, hostedDriveAllowed, canonicalDirectToken)
       : response;
   });
   return {

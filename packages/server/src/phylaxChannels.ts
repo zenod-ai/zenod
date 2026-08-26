@@ -1368,6 +1368,7 @@ export class PhylaxChannelsOrgan {
     // schema explicitly advertises idempotencyKey. Legacy/custom unbound
     // assistants remain synchronous and are never sent an invented argument.
     let durableChat = false;
+    let durableCall = false;
     try {
       if (binding) {
         try {
@@ -1387,7 +1388,7 @@ export class PhylaxChannelsOrgan {
           );
         }
       }
-      const durableCall = isDurableChannelTool(call.tool) && (call.tool !== "chat_with_zenod" || durableChat);
+      durableCall = isDurableChannelTool(call.tool) && (call.tool !== "chat_with_zenod" || durableChat);
       const existing = durableCall && providerMessageId
         ? this.captureJournal.get(route.tenantId, input.channel, providerMessageId)
         : null;
@@ -1517,6 +1518,7 @@ export class PhylaxChannelsOrgan {
         "downstream_error",
         "Zenod could not process that message. Please try again.",
         failureAudit(downstreamMs, failureCode, audit),
+        durableCall && providerMessageId ? "idempotent_capture" : null,
       );
     }
     const replyText = sanitizePhylaxCustomerReply(textFromResult(downstream));

@@ -191,6 +191,11 @@ export interface TenantProvisioningStore extends TenantTokenStore {
     tenantId: string,
     status: TenantStatus,
   ): Promise<TenantTokenRecord | null> | TenantTokenRecord | null;
+  /** Restore a known full-access hash without changing the primary token. */
+  preserveTenantTokenHash?(
+    tenantId: string,
+    tokenHash: string,
+  ): Promise<TenantTokenRecord | null> | TenantTokenRecord | null;
 }
 
 export interface MemoryTenantStore extends TenantProvisioningStore {
@@ -204,6 +209,10 @@ export interface MemoryTenantStore extends TenantProvisioningStore {
   setTenantStatus(
     tenantId: string,
     status: TenantStatus,
+  ): TenantTokenRecord | null;
+  preserveTenantTokenHash(
+    tenantId: string,
+    tokenHash: string,
   ): TenantTokenRecord | null;
   snapshot(): TenantTokenRecord[];
 }
@@ -380,8 +389,10 @@ export function createMemoryTenantStore(
   const store: MemoryTenantStore = {
     put(input) {
       const tokenHash = hashToken(input.token);
-      const existing = byTenant.get(input.tenant.id);
-      if (existing) byHash.delete(existing.tokenHash);
+      const bound = byHash.get(tokenHash);
+      if (bound && bound.tenant.id !== input.tenant.id) {
+        throw new Error("token is already bound to another tenant");
+      }
       const record: TenantTokenRecord = {
         tokenHash,
         tenant: { ...input.tenant },
@@ -422,6 +433,14 @@ export function createMemoryTenantStore(
       const id = tenantId.trim();
       const existing = id ? byTenant.get(id) : null;
       if (!existing) return null;
+      for (const [tokenHash, credential] of byHash) {
+        if (
+          credential.tenant.id === id &&
+          (credential.profile === null || credential.profile === undefined)
+        ) {
+          byHash.delete(tokenHash);
+        }
+      }
       return store.provisionTenant({
         tenant: existing.tenant,
         status: "active",
@@ -460,6 +479,34 @@ export function createMemoryTenantStore(
       };
       byTenant.set(id, record);
       return cloneTenantRecord(record);
+    },
+
+    preserveTenantTokenHash(tenantId, tokenHash) {
+      const id = tenantId.trim();
+      const normalizedHash = tokenHash.trim().toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(normalizedHash)) {
+        throw new Error("token hash must be a SHA-256 hex digest");
+      }
+      const existing = id ? byTenant.get(id) : null;
+      if (!existing) return null;
+      const credential = byHash.get(normalizedHash);
+      if (credential) {
+        if (
+          credential.tenant.id !== id ||
+          (credential.profile !== null && credential.profile !== undefined)
+        ) {
+          throw new Error("token hash is already bound to another credential");
+        }
+        return cloneTenantRecord(credential);
+      }
+      const preserved: TenantTokenRecord = {
+        ...existing,
+        tokenHash: normalizedHash,
+        tenant: { ...existing.tenant },
+        profile: null,
+      };
+      byHash.set(normalizedHash, preserved);
+      return cloneTenantRecord(preserved);
     },
 
     snapshot() {

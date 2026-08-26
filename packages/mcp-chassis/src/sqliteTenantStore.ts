@@ -61,6 +61,14 @@ export class SqliteTenantStore implements TenantProvisioningStore {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_tenants_token_hash ON tenants (token_hash);
+      CREATE TABLE IF NOT EXISTS tenant_primary_token_aliases (
+        token_hash TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_tenant_primary_token_aliases_tenant_id
+        ON tenant_primary_token_aliases (tenant_id);
       CREATE TABLE IF NOT EXISTS tenant_token_aliases (
         token_hash TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,
@@ -83,6 +91,16 @@ export class SqliteTenantStore implements TenantProvisioningStore {
       )
       .get(normalized) as TenantRow | undefined;
     if (row) return rowToRecord(row);
+    const primaryAlias = this.db
+      .prepare(
+        `SELECT tenants.tenant_id, tenants.name, tenants.plan, tenants.quota,
+                aliases.token_hash, tenants.status, tenants.expires_at, NULL AS profile
+         FROM tenant_primary_token_aliases AS aliases
+         JOIN tenants ON tenants.tenant_id = aliases.tenant_id
+         WHERE aliases.token_hash = ?`,
+      )
+      .get(normalized) as TenantRow | undefined;
+    if (primaryAlias) return rowToRecord(primaryAlias);
     const alias = this.db
       .prepare(
         `SELECT tenants.tenant_id, tenants.name, tenants.plan, tenants.quota,
@@ -111,7 +129,7 @@ export class SqliteTenantStore implements TenantProvisioningStore {
       tenant,
       status: input.status ?? "active",
       expiresAt: input.expiresAt ?? null,
-    });
+    }, true);
     return { token, record };
   }
 
@@ -121,7 +139,7 @@ export class SqliteTenantStore implements TenantProvisioningStore {
       tenant: normalizeTenantContext(input.tenant),
       status: input.status ?? "active",
       expiresAt: input.expiresAt ?? null,
-    });
+    }, true);
   }
 
   rotateTenantToken(tenantId: string): ProvisionTenantResult | null {
@@ -133,7 +151,7 @@ export class SqliteTenantStore implements TenantProvisioningStore {
       tenant: existing.tenant,
       status: "active",
       expiresAt: existing.expiresAt ?? null,
-    });
+    }, false);
     return { token, record };
   }
 
@@ -181,6 +199,37 @@ export class SqliteTenantStore implements TenantProvisioningStore {
     return this.writeRecord({ ...existing, status });
   }
 
+  preserveTenantTokenHash(
+    tenantId: string,
+    tokenHash: string,
+  ): TenantTokenRecord | null {
+    const existing = this.findTenant(tenantId);
+    if (!existing) return null;
+    const normalizedHash = normalizeTokenHash(tokenHash);
+    const bound = this.resolveTokenHash(normalizedHash);
+    if (bound) {
+      if (
+        bound.tenant.id !== existing.tenant.id ||
+        (bound.profile !== null && bound.profile !== undefined)
+      ) {
+        throw new Error("token hash is already bound to another credential");
+      }
+      return bound;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO tenant_primary_token_aliases (token_hash, tenant_id, created_at)
+         VALUES (?, ?, ?)`,
+      )
+      .run(normalizedHash, existing.tenant.id, Date.now());
+    return {
+      ...existing,
+      tokenHash: normalizedHash,
+      tenant: { ...existing.tenant },
+      profile: null,
+    };
+  }
+
   snapshot(): TenantTokenRecord[] {
     const rows = this.db
       .prepare(
@@ -207,14 +256,48 @@ export class SqliteTenantStore implements TenantProvisioningStore {
     return row ? rowToRecord(row) : null;
   }
 
-  private writeRecord(record: TenantTokenRecord): TenantTokenRecord {
+  private writeRecord(
+    record: TenantTokenRecord,
+    preservePriorPrimary = true,
+  ): TenantTokenRecord {
     const tenant = normalizeTenantContext(record.tenant);
     const tokenHash = normalizeTokenHash(record.tokenHash);
     const status = record.status ?? "active";
     const expiresAt = normalizeExpiresAt(record.expiresAt);
     const now = Date.now();
+    const bound = this.resolveTokenHash(tokenHash);
+    if (
+      bound &&
+      (bound.tenant.id !== tenant.id ||
+        (bound.profile !== null && bound.profile !== undefined))
+    ) {
+      throw new Error("token hash is already bound to another credential");
+    }
     this.db.exec("BEGIN IMMEDIATE");
     try {
+      const prior = this.db
+        .prepare("SELECT token_hash FROM tenants WHERE tenant_id = ?")
+        .get(tenant.id) as { token_hash: string } | undefined;
+      if (prior?.token_hash !== tokenHash) {
+        if (preservePriorPrimary && prior) {
+          this.db
+            .prepare(
+              `INSERT OR IGNORE INTO tenant_primary_token_aliases
+                 (token_hash, tenant_id, created_at)
+               VALUES (?, ?, ?)`,
+            )
+            .run(prior.token_hash, tenant.id, now);
+        } else if (!preservePriorPrimary) {
+          this.db
+            .prepare("DELETE FROM tenant_primary_token_aliases WHERE tenant_id = ?")
+            .run(tenant.id);
+        }
+        this.db
+          .prepare(
+            "DELETE FROM tenant_primary_token_aliases WHERE tenant_id = ? AND token_hash = ?",
+          )
+          .run(tenant.id, tokenHash);
+      }
       this.db
         .prepare(
           `INSERT INTO tenants (

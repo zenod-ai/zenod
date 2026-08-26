@@ -32,10 +32,11 @@ const selfHostedDriveStatus = {
 const hostedDriveStatus = {
   configured: false,
   oauthAvailable: true,
+  oauthClientConfigured: false,
   accountEmail: null,
   folderId: null,
   archiveConfigured: false,
-  archiveReason: "Connect Google Drive to enable archive/export copies.",
+  archiveReason: "Add this tenant's Google OAuth client ID and client secret to connect Google Drive.",
 }
 
 afterEach(() => {
@@ -44,7 +45,7 @@ afterEach(() => {
 })
 
 describe("GoogleDriveConnect edition projection", () => {
-  it("shows only managed OAuth and an automatically managed folder to Hosted customers", async () => {
+  it("shows tenant-owned OAuth and an automatically managed folder to Hosted customers", async () => {
     mocks.api.mockImplementation(async (path: string) => {
       if (path === "/api/drive/status") return hostedDriveStatus
       throw new Error(`unexpected Hosted request: ${path}`)
@@ -66,15 +67,18 @@ describe("GoogleDriveConnect edition projection", () => {
       /does not use Google Drive as an inbox or memory source/i
     )
     expect(document.body.textContent).toMatch(/There is no folder to select/i)
+    expect(screen.getByLabelText("OAuth client ID")).not.toBeNull()
+    expect(screen.getByLabelText("OAuth client secret")).not.toBeNull()
+    expect(document.body.textContent).toMatch(/Stored only for this Zenod tenant/i)
 
     const copy = document.body.textContent ?? ""
     expect(copy).not.toMatch(
-      /OAuth client ID|OAuth client secret|service account|private\/provider-model|whisper\.cpp|large-v3-turbo|API key|per-minute cost|list or transcribe/i
+      /service account|private\/provider-model|whisper\.cpp|large-v3-turbo|per-minute cost|list or transcribe/i
     )
     expect(mocks.api).not.toHaveBeenCalledWith("/api/transcription/status")
   })
 
-  it("shows truthful Hosted config health without exposing operator credentials", async () => {
+  it("shows truthful tenant health without exposing internal settings", async () => {
     mocks.api.mockImplementation(async (path: string) => {
       if (path === "/api/drive/status") {
         return {
@@ -95,14 +99,35 @@ describe("GoogleDriveConnect edition projection", () => {
       name: "Connect with Google",
     })
     expect(connect.hasAttribute("disabled")).toBe(true)
-    expect(
-      screen.getByText(
-        "Google Drive connection is unavailable. Contact the Zenod operator."
-      )
-    ).not.toBeNull()
+    expect(screen.getByLabelText("OAuth client ID")).not.toBeNull()
+    expect(screen.getByLabelText("OAuth client secret")).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(/operator/i)
+    expect(document.body.textContent).toMatch(/Google Drive connection is unavailable for this tenant/i)
     expect(document.body.textContent).not.toMatch(
       /must-never-render|internal-service-account|private\/provider-model/i
     )
+  })
+
+  it("shows only a saved-secret placeholder for an existing tenant OAuth pair", async () => {
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === "/api/drive/status") {
+        return {
+          ...hostedDriveStatus,
+          oauthAvailable: true,
+          oauthClientConfigured: true,
+          oauthClientId: "must-never-render",
+          oauthClientSecret: "must-never-render-secret",
+        }
+      }
+      throw new Error(`unexpected Hosted request: ${path}`)
+    })
+
+    render(<GoogleDriveConnect edition="hosted" />)
+
+    const secret = await screen.findByLabelText("OAuth client secret")
+    expect(secret.getAttribute("placeholder")).toBe("saved; leave blank to keep it")
+    expect((secret as HTMLInputElement).value).toBe("")
+    expect(document.body.textContent).not.toMatch(/must-never-render/i)
   })
 
   it("preserves the existing self-hosted credential and transcription controls", async () => {
