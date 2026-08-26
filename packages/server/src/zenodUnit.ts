@@ -527,6 +527,10 @@ const MANAGED_AI_MCP_TOOLS = new Set([
   "store_memory",
   "task_brain",
 ]);
+const MEMORY_CHANNEL_DURABLE_CAPTURE_TOOLS = new Set([
+  "ingest_memory",
+  "store_memory",
+]);
 
 function managedAiMcpEnvelope(raw: Uint8Array): {
   paid: boolean;
@@ -1137,7 +1141,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       const profiledMcpAllowed = !directRecord?.profile ||
         (directRecord.profile === "memory-channel" && mcp.tool !== null &&
           (MEMORY_CHANNEL_MCP_TOOLS as readonly string[]).includes(mcp.tool));
-      const paid = (isMcp ? mcp.paid && profiledMcpAllowed : MANAGED_AI_HTTP_PATHS.has(c.req.path));
+      // The authenticated memory-channel profile is already bound to Zenod's
+      // durable TaskJobQueue contract. Let store/ingest return that canonical
+      // ticket immediately; wrapping the MCP exchange in the outer usage queue
+      // turns a valid tools/call response into a generic HTTP 202 and strands
+      // Phylax without the job id it needs to poll safely.
+      const durableMemoryChannelCapture = isMcp &&
+        directRecord?.profile === "memory-channel" &&
+        mcp.tool !== null &&
+        MEMORY_CHANNEL_DURABLE_CAPTURE_TOOLS.has(mcp.tool);
+      const paid = !durableMemoryChannelCapture &&
+        (isMcp ? mcp.paid && profiledMcpAllowed : MANAGED_AI_HTTP_PATHS.has(c.req.path));
       if (paid) {
         const requestUrl = new URL(c.req.url);
         const storedPath = `${isMcp ? "/mcp" : requestUrl.pathname}${requestUrl.search}`;

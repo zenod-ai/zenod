@@ -3369,7 +3369,7 @@ describe("ported gateway integration", () => {
     }
   });
 
-  it("retains an idempotent Zenod voice capture across credential repair and delivers its terminal receipt", async () => {
+  it("retains an idempotent Zenod voice capture when MCP returns isError and delivers its terminal receipt after repair", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-capture-credential-repair-"));
     dirs.push(dataDir);
     const sent: string[] = [];
@@ -3427,7 +3427,10 @@ describe("ported gateway integration", () => {
         if (call.tool === "store_memory") {
           storeKeys.push(String(call.arguments.idempotencyKey));
           if (!memoryAvailable) {
-            throw new Error('Streamable HTTP error: {"error":"unauthorized"}');
+            return {
+              isError: true,
+              content: [{ type: "text", text: "Could not reach Zenod: MCP request did not return a canonical response" }],
+            };
           }
           return {
             content: [{ type: "text", text: "queued" }],
@@ -3504,6 +3507,159 @@ describe("ported gateway integration", () => {
         kind: "forwarded_reply",
         state: "recovered_replied",
       });
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  it("files three overlapping WhatsApp voice notes once each with distinct stable provider keys and one final receipt", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-overlapping-voice-captures-"));
+    dirs.push(dataDir);
+    const sent: string[] = [];
+    const storeKeys: string[] = [];
+    const storeAttempts = new Map<string, number>();
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: {
+            voice_note: {
+              tool: "store_memory",
+              argumentMappings: { content: { source: "transcript" } },
+            },
+            text: { tool: "chat_with_ring", argumentMappings: {} },
+            media: { tool: "ingest_memory", argumentMappings: {} },
+          },
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) =>
+        `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe({ bytes }) {
+          return {
+            text_transcript: `transcript for ${Buffer.from(bytes).toString("utf8")}`,
+            transcription_source: "test-stt",
+          };
+        },
+      },
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "store_memory",
+          arg: "input",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content", "idempotencyKey"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        if (call.tool === "store_memory") {
+          const key = String(call.arguments.idempotencyKey);
+          storeKeys.push(key);
+          storeAttempts.set(key, (storeAttempts.get(key) ?? 0) + 1);
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: {
+              ticket_id: `job:${key}`,
+              jobId: `job:${key}`,
+              kind: "store",
+              status: "queued",
+              state: "accepted",
+            },
+          };
+        }
+        expect(call.tool).toBe("get_task_result");
+        const ticketId = String(call.arguments.ticket_id);
+        const key = ticketId.slice("job:".length);
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: ticketId,
+            jobId: ticketId,
+            kind: "store",
+            status: "done",
+            state: "done",
+            result: {
+              recap: `Saved ${key}`,
+              evidenceRef: `Log/2026-08-26.md#^${createHash("sha256").update(key).digest("hex").slice(0, 8)}`,
+              pagesTouched: ["Inbox/Voice Notes.md"],
+              commitSha: createHash("sha256").update(`commit:${key}`).digest("hex"),
+              githubUrls: [],
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+      sleep: async () => {},
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {
+      PHYLAX_VOICE_PROGRESS_DELAY_MS: "30000",
+    }, {
+      probeVoiceDuration: async () => 60,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: `overlap-receipt-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    const messageIds = ["voice-overlap-1", "voice-overlap-2", "voice-overlap-3"];
+    const event = (messageId: string): WhatsAppInboundEvent => ({
+      messageId,
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "",
+      hasMedia: true,
+      mediaType: "ptt",
+      mimeType: "audio/ogg",
+      fileName: null,
+      mediaRaw: { testBytes: messageId },
+    });
+    try {
+      await Promise.all(messageIds.map((messageId) => runtime.whatsapp.handleEvent(event(messageId))));
+      await vi.waitFor(() => {
+        for (const messageId of messageIds) {
+          expect(runtime.whatsappStore.voiceJob(messageId)?.state).toBe("completed");
+        }
+      });
+      const expectedKeys = messageIds.map((messageId) => `alpha:whatsapp:${messageId}`);
+      expect([...storeKeys].sort()).toEqual([...expectedKeys].sort());
+      expect(storeAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 1])));
+      expect(sent.filter((text) => text.includes("Saved ✓"))).toHaveLength(3);
+      expect(sent.filter((text) => text.includes("could not confirm the final result"))).toHaveLength(0);
+      for (const messageId of messageIds) {
+        expect(runtime.whatsappStore.voiceJob(messageId)?.state).not.toBe("ring_outcome_unknown");
+        expect(runtime.whatsappStore.mediaRecovery(messageId)).toMatchObject({
+          kind: "forwarded_reply",
+          state: "recovered_replied",
+        });
+      }
+
+      // Provider redelivery is deduplicated by the existing WhatsApp journal;
+      // it must not enqueue or send a second terminal receipt.
+      await Promise.all(messageIds.map((messageId) => runtime.whatsapp.handleEvent(event(messageId))));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(storeAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 1])));
+      expect(sent.filter((text) => text.includes("Saved ✓"))).toHaveLength(3);
     } finally {
       await runtime.close();
     }

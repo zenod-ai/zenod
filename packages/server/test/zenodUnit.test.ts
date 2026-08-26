@@ -1983,6 +1983,136 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("lets the Hosted memory-channel profile enqueue durable captures before managed-AI admission", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([
+      { token: "hosted-primary-token", tenant: { id: "github-42" } },
+    ]);
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      controlPlane: { token: "control-secret" },
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "customer-session-secret",
+        GITHUB_OAUTH_CLIENT_ID: "client-id",
+        GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+        CHASSIS_VAULT_MASTER_KEY,
+        ZENOD_MANAGED_AI_ENABLED: "1",
+        OPENROUTER_PROVISIONING_KEY: "provider-management-key",
+        ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS: "600000",
+      },
+      customer: {
+        managedAiProvider: {
+          listKeys: vi.fn(async () => []),
+          createKey: vi.fn(async () => {
+            throw new Error("capture admission test must not provision a provider key");
+          }),
+          updateKey: vi.fn(async () => undefined),
+        },
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: null }),
+        },
+      },
+    });
+    unit.customerAccounts.upsert("active", {
+      account_id: "github-42",
+      github_id: 42,
+      github_login: "octocat",
+      tier: "monthly",
+      subscription_status: "active",
+      tenant_id: "github-42",
+      tenant_slug: "octocat-42",
+      checkout_completed_at: new Date().toISOString(),
+    });
+    unit.customerTokenVault.put("github-42", "hosted-primary-token");
+    const issued = await unit.app.request("/api/tenants/github-42/tokens", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer control-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ profile: "memory-channel" }),
+    });
+    expect(issued.status).toBe(200);
+    const memoryToken = ((await issued.json()) as { token: string }).token;
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
+    });
+    const client = new Client({ name: "hosted-memory-channel-capture", version: "1" });
+    try {
+      const address = server.address() as AddressInfo;
+      const endpoint = new URL(`http://127.0.0.1:${address.port}/mcp/${memoryToken}`);
+      await client.connect(new StreamableHTTPClientTransport(endpoint, {
+        requestInit: { headers: { authorization: `Bearer ${memoryToken}` } },
+      }));
+
+      const stored = await client.callTool({
+        name: "store_memory",
+        arguments: {
+          content: "first overlapping voice transcript",
+          source: "whatsapp",
+          sourceId: "wa-memory-1",
+          idempotencyKey: "github-42:whatsapp:wa-memory-1",
+        },
+      });
+      expect(stored.isError).not.toBe(true);
+      expect(stored.structuredContent).toMatchObject({
+        kind: "store",
+        status: "queued",
+        state: "accepted",
+        poll: { name: "get_task_result", inputField: "ticket_id" },
+      });
+      expect((stored.structuredContent as { ticket_id?: unknown }).ticket_id).toEqual(expect.any(String));
+
+      const ingested = await client.callTool({
+        name: "ingest_memory",
+        arguments: {
+          mediaType: "image",
+          bytesRef: "whatsapp:wa-media-1",
+          filename: "wa-media-1.png",
+          idempotencyKey: "github-42:whatsapp:wa-media-1",
+        },
+      });
+      expect(ingested.isError).not.toBe(true);
+      expect(ingested.structuredContent).toMatchObject({
+        kind: "media_ingest",
+        status: "queued",
+        state: "accepted",
+        poll: { name: "get_task_result", inputField: "ticket_id" },
+      });
+      expect((ingested.structuredContent as { ticket_id?: unknown }).ticket_id).toEqual(expect.any(String));
+
+      // Other paid memory-channel tools still use the existing outer admission
+      // policy. With no managed provider usage available, ask_brain is retained
+      // there instead of bypassing the allowance boundary.
+      const admittedAsk = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${memoryToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "ask-still-admitted",
+          method: "tools/call",
+          params: { name: "ask_brain", arguments: { question: "What did I save?" } },
+        }),
+      });
+      expect(admittedAsk.status).toBe(202);
+      expect(await admittedAsk.json()).toMatchObject({
+        state: "waiting_for_usage",
+        job: { status: "waiting_for_usage" },
+      });
+    } finally {
+      await client.close().catch(() => {});
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await unit.close();
+    }
+  });
+
   it("rotates the bound token, updates the customer endpoint, and invalidates the old token", async () => {
     const dataDir = await tempDir();
     const tenants = createMemoryTenantStore([{ token: "old-token", tenant: { id: "github-42" } }]);
