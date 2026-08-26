@@ -922,9 +922,12 @@ export class PhylaxChannelsOrgan {
     return (this.options.discoverDownstream ?? discoverConfiguredPeer)(route);
   }
 
-  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<{
+  private async validateBoundCall(
+    call: PhylaxDownstreamCall,
+    optionalTranscriptionUsage?: Record<string, unknown>,
+  ): Promise<{
     supportsIdempotencyKey: boolean;
-    supportsTranscriptionUsage: boolean;
+    transcriptionUsage: Record<string, unknown> | null;
   }> {
     const discovery = await this.discoverDownstream(call.route);
     if (discovery.tools !== "ready") {
@@ -952,9 +955,13 @@ export class PhylaxChannelsOrgan {
       throw new Error(`configured mapping no longer matches "${call.tool}" input schema${detail ? `: ${detail}` : ""}`);
     }
     const properties = objectValue((schema as Record<string, unknown>).properties);
+    const transcriptionUsage = optionalTranscriptionUsage && properties?.transcriptionUsage &&
+      validate({ ...call.arguments, transcriptionUsage: optionalTranscriptionUsage })
+      ? optionalTranscriptionUsage
+      : null;
     return {
       supportsIdempotencyKey: Boolean(properties?.idempotencyKey),
-      supportsTranscriptionUsage: Boolean(properties?.transcriptionUsage),
+      transcriptionUsage,
     };
   }
 
@@ -1384,16 +1391,19 @@ export class PhylaxChannelsOrgan {
     try {
       if (binding) {
         try {
-          const validation = await this.validateBoundCall(call);
+          const validation = await this.validateBoundCall(
+            call,
+            call.tool === "store_memory" ? handoff.transcription_usage : undefined,
+          );
           if (call.tool === "chat_with_zenod" && providerMessageId && validation.supportsIdempotencyKey) {
             call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
             durableChat = true;
           }
-          if (call.tool === "store_memory" && handoff.transcription_usage && validation.supportsTranscriptionUsage) {
+          if (call.tool === "store_memory" && validation.transcriptionUsage) {
             // Metering is optional and version-coherent. A Phylax-first rollout
             // must still capture the memory when the older Zenod schema does
             // not yet advertise this additive field.
-            call.arguments.transcriptionUsage = handoff.transcription_usage;
+            call.arguments.transcriptionUsage = validation.transcriptionUsage;
           }
         } catch (error) {
           throw new PhylaxChannelError(
