@@ -1,6 +1,8 @@
+import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  consumePendingHostedTier,
   createHostedCheckout,
   PRICING_OPTIONS,
   readCustomerSession,
@@ -10,7 +12,31 @@ import {
 
 describe("customer route contracts", () => {
   it("exposes exactly the approved pricing options", () => {
-    expect(PRICING_OPTIONS.map(({ name }) => name)).toEqual(["Self-hosted", "Monthly", "Yearly"])
+    expect(PRICING_OPTIONS).toEqual([
+      expect.objectContaining({ name: "Self-hosted", price: "Free", tier: null }),
+      expect.objectContaining({
+        name: "Hosted",
+        price: "€9",
+        cadence: "per month + VAT",
+        tier: "monthly",
+      }),
+    ])
+    expect(JSON.stringify(PRICING_OPTIONS)).not.toMatch(/€5|€50|yearly|annual|OpenRouter|token|dollar/i)
+    expect(JSON.stringify(PRICING_OPTIONS)).toMatch(/managed AI usage and WhatsApp included/i)
+  })
+
+  it("consumes only the monthly pending checkout and discards stale yearly state", () => {
+    const pending = new Map<string, string>([["checkout", "yearly"]])
+    const storage = {
+      getItem: (key: string) => pending.get(key) ?? null,
+      removeItem: (key: string) => pending.delete(key),
+    }
+    expect(consumePendingHostedTier(storage, "checkout")).toBeNull()
+    expect(pending.has("checkout")).toBe(false)
+
+    pending.set("checkout", "monthly")
+    expect(consumePendingHostedTier(storage, "checkout")).toBe("monthly")
+    expect(pending.has("checkout")).toBe(false)
   })
 
   it("treats an unauthorized session response as logged out", async () => {
@@ -60,7 +86,7 @@ describe("customer route contracts", () => {
       .fn<typeof fetch>()
       .mockResolvedValue(Response.json({ url: "https://checkout.stripe.test/session" }))
 
-    await expect(createHostedCheckout("yearly", fetcher)).resolves.toBe(
+    await expect(createHostedCheckout("monthly", fetcher)).resolves.toBe(
       "https://checkout.stripe.test/session",
     )
     expect(fetcher).toHaveBeenCalledWith(
@@ -70,7 +96,7 @@ describe("customer route contracts", () => {
         body: JSON.stringify({
           product: "zenod",
           unit: "zenod",
-          tier: "yearly",
+          tier: "monthly",
         }),
       }),
     )
@@ -84,5 +110,13 @@ describe("customer route contracts", () => {
     await expect(createHostedCheckout("monthly", fetcher)).rejects.toBeInstanceOf(
       SignInRequiredError,
     )
+  })
+
+  it("pins the current one-plan Terms and legal version", async () => {
+    const terms = await readFile(new URL("../../public/legal/terms.html", import.meta.url), "utf8")
+    expect(terms).toContain("Version 2026-08-26")
+    expect(terms).toContain("€9 per month plus applicable VAT")
+    expect(terms).toContain("managed AI usage and WhatsApp access")
+    expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i)
   })
 })

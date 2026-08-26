@@ -11,6 +11,7 @@ import {
   applyCustomerInvoiceEvent,
   applyCustomerSubscriptionEvent,
   loadCustomerBillingConfig,
+  newCheckoutTiersForProduct,
   resolveCheckoutTier,
   type CustomerStripeClient,
   type CustomerProductConfig,
@@ -434,7 +435,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.json({ error: "an active subscription already exists" }, 409);
     }
     if (!stripe) return c.json({ error: "checkout is not configured" }, 503);
-    const resolved = resolveCheckoutTier(tierInput, billing);
+    const resolved = resolveCheckoutTier(tierInput, billing, newCheckoutTiersForProduct(product));
     if ("error" in resolved) return c.json({ error: resolved.error }, 400);
     const session = await createCustomerCheckout(stripe, accounts, billing, owner, resolved, product);
     return c.json({ id: session.id, url: session.url, product: product.product, tier: resolved.tier });

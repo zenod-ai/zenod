@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import alexandria from "@/assets/alexandria.jpg"
 import zenodPlate from "@/assets/zenod-plate.jpg"
 import {
+  consumePendingHostedTier,
   createHostedCheckout,
   DASHBOARD_URL,
   type CustomerSession,
@@ -141,7 +142,7 @@ interface CustomerJourney {
 }
 
 function isPaidTier(value: string | null): value is PaidTier {
-  return value === "monthly" || value === "yearly"
+  return value === "monthly"
 }
 
 function useCustomerJourney(): CustomerJourney {
@@ -176,9 +177,8 @@ function useCustomerJourney(): CustomerJourney {
         setSession(customer)
         setLoading(false)
 
-        const pending = window.sessionStorage.getItem(PENDING_TIER_KEY)
+        const pending = consumePendingHostedTier(window.sessionStorage, PENDING_TIER_KEY)
         if (customer && isPaidTier(pending)) {
-          window.sessionStorage.removeItem(PENDING_TIER_KEY)
           void beginCheckout(pending)
         }
       })
@@ -285,7 +285,7 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
   return (
     <section id="pricing" className="scroll-mt-20 border-b border-border px-6 py-20 sm:px-12">
       <SectionHeading kicker="Simple pricing" title="Keep the library. Choose who runs it." />
-      <div className="grid border border-border lg:grid-cols-3">
+      <div className="grid border border-border lg:grid-cols-2">
         {PRICING_OPTIONS.map((plan, index) => (
           <article
             key={plan.name}
@@ -320,7 +320,7 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
                   {customer.busyTier === plan.tier
                     ? "Opening checkout…"
                     : customer.paidSignupReady
-                      ? `Choose ${plan.tier}`
+                      ? "Choose Hosted"
                       : "Hosted beta opening soon"}
                   <ArrowUpRightIcon data-icon="inline-end" />
                 </Button>
@@ -488,7 +488,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
               </Button>
             </div>
             <p className="label-caps mt-4 text-muted-foreground/70">
-              Self-host free forever · hosted monthly or yearly
+              Self-host free forever · Hosted €9/month + VAT
             </p>
           </div>
         </section>

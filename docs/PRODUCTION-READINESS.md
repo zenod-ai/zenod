@@ -17,7 +17,7 @@ The approved beta product is one €9/month plus VAT Hosted plan. Candidate `91b
 
 - do not deploy `91b4e7d`, even with signup and tester checkout closed, because it would continue publishing the wrong product and legal contract;
 - no billing drill may run against the legacy price contract; and
-- a future immutable digest may be considered only after a reviewed correction makes the site, account, Terms, checkout parser, Stripe prices and readiness rule agree on the approved product.
+- a future immutable digest may be considered only after a reviewed correction makes the site, account, Terms, checkout parser, one operator-supplied monthly Stripe price reference and readiness rule agree on the approved product.
 
 Do not work around this by silently reusing a legacy price ID or assigning one price to both tiers.
 
@@ -127,7 +127,6 @@ STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 STRIPE_WEBHOOK_ENDPOINT_ID
 PRICE_MONTHLY
-PRICE_YEARLY
 STRIPE_PORTAL_CONFIGURATION_ID
 STRIPE_TAX_MODE
 STRIPE_AUTOMATIC_TAX
@@ -137,7 +136,7 @@ ZENOD_PUBLIC_PAID_SIGNUP
 ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS
 ```
 
-The price keys are blocked until a future candidate is corrected to the approved one-plan contract. No environment change is authorized by this docs merge. A future closed-deploy delta must keep `ZENOD_PUBLIC_PAID_SIGNUP` closed and the tester allowlist empty.
+`PRICE_MONTHLY` is the sole price reference required for new Zenod checkout. Any existing `PRICE_YEARLY` value is legacy configuration: preserve it in pre-change snapshots and do not delete or reinterpret it, but Zenod readiness and new checkout do not depend on it. The monthly reference remains blocked until Jordi separately approves the exact live €9 Stripe price. No environment change is authorized by this runbook. A future closed-deploy delta must keep `ZENOD_PUBLIC_PAID_SIGNUP` closed and the tester allowlist empty.
 
 ### Private existing Phylax / Channels
 

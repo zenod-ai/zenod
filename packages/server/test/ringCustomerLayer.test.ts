@@ -14,6 +14,7 @@ const env = {
   PRICE_MONTHLY: "price_monthly",
   PRICE_YEARLY: "price_yearly",
   STRIPE_MODE: "test",
+  ZENOD_ALLOW_TEST_CHECKOUT: "1",
 } as NodeJS.ProcessEnv;
 
 function fixture() {
@@ -93,6 +94,21 @@ describe("Ring customer-layer duplicate", () => {
     expect(checkoutInput()?.success_url).toBe(
       "https://ring.zenod.dev/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
     );
+  });
+
+  it("preserves Ring yearly checkout while Zenod moves to one new-customer interval", async () => {
+    const { layer, checkoutInput } = fixture();
+    const state = signState({ mode: "signin", rh: "ring.zenod.dev" }, env.ACCOUNT_STATE_SECRET!);
+    const callback = await layer.app.request(`/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`);
+    const cookie = callback.headers.get("set-cookie")!;
+    const checkout = await layer.app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "yearly" }),
+    });
+    expect(checkout.status).toBe(200);
+    expect(await checkout.json()).toMatchObject({ product: "ring", tier: "yearly" });
+    expect(checkoutInput()?.line_items).toEqual([{ price: "price_yearly", quantity: 1 }]);
   });
 
   it("turns a signed TEST webhook into a local Ring tenant row", async () => {

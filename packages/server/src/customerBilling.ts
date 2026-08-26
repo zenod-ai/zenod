@@ -46,6 +46,14 @@ export interface CustomerProductConfig {
   unit: string;
   defaultDomain: string;
   signInToLanding?: boolean;
+  /** Intervals offered to new customers. Existing account tiers remain valid historical data. */
+  newCheckoutTiers?: readonly CheckoutTier[];
+}
+
+const ALL_CHECKOUT_TIERS: readonly CheckoutTier[] = ["monthly", "yearly"];
+
+export function newCheckoutTiersForProduct(product: CustomerProductConfig): readonly CheckoutTier[] {
+  return product.newCheckoutTiers ?? (product.product === "zenod" ? ["monthly"] : ALL_CHECKOUT_TIERS);
 }
 
 export function loadCustomerBillingConfig(
@@ -69,11 +77,15 @@ export function loadCustomerBillingConfig(
 export function resolveCheckoutTier(
   input: unknown,
   config: CustomerBillingConfig,
+  allowedTiers: readonly CheckoutTier[] = ALL_CHECKOUT_TIERS,
 ): { tier: CheckoutTier; price: string } | { error: string } {
   const raw = String(input || "monthly").toLowerCase();
   const tier = raw === "starter" ? "monthly" : raw === "pro" ? "yearly" : raw;
   if (tier !== "monthly" && tier !== "yearly") {
-    return { error: `unknown tier "${raw}" (use monthly|yearly)` };
+    return { error: `unknown tier "${raw}" (use ${allowedTiers.join("|")})` };
+  }
+  if (!allowedTiers.includes(tier)) {
+    return { error: `tier "${tier}" is not available for new checkout` };
   }
   const price = config.prices[tier];
   if (!price) return { error: `tier "${tier}" has no price configured` };

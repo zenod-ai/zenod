@@ -18,7 +18,6 @@ const readyEnv: NodeJS.ProcessEnv = {
   ZENOD_STRIPE_PROFILE_VERIFIED_AT: "2026-08-12T00:00:00.000Z",
   ZENOD_LIVE_BILLING_VERIFIED_AT: "2026-08-12T00:00:00.000Z",
   PRICE_MONTHLY: "price_monthly_live",
-  PRICE_YEARLY: "price_yearly_live",
   STRIPE_TAX_MODE: "automatic",
   STRIPE_AUTOMATIC_TAX: "1",
   ZENOD_LEGAL_VERSION,
@@ -33,6 +32,25 @@ describe("production readiness gate", () => {
     expect(productionReadinessReport(readyEnv, now)).toMatchObject({ ready: true, publicPaidSignup: true });
     expect(checkoutEnabled(readyEnv)).toBe(true);
     expect(() => assertPublicSignupIsReady(readyEnv)).not.toThrow();
+    expect(productionReadinessReport(readyEnv, now).checks.find((check) => check.id === "stripe_prices")).toEqual({
+      id: "stripe_prices",
+      ok: true,
+      detail: "The monthly Hosted price is configured",
+    });
+  });
+
+  it("does not accept a legacy yearly price in place of the monthly Hosted price", () => {
+    const report = productionReadinessReport({
+      ...readyEnv,
+      PRICE_MONTHLY: undefined,
+      PRICE_YEARLY: "price_legacy_yearly",
+    }, new Date("2026-08-13T00:00:00.000Z"));
+    expect(report.ready).toBe(false);
+    expect(report.checks.find((check) => check.id === "stripe_prices")).toEqual({
+      id: "stripe_prices",
+      ok: false,
+      detail: "The monthly Hosted price is missing",
+    });
   });
 
   it("fails closed for test Stripe, stale restore evidence, or an unreviewed legal version", () => {

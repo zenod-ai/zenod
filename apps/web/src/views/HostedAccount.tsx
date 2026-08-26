@@ -58,6 +58,12 @@ function CopyButton({ value }: { value: string }) {
   )
 }
 
+function subscriptionLabel(tier: string | null): string {
+  if (tier === "yearly") return "Legacy yearly subscription"
+  if (tier === "monthly") return "Zenod Hosted monthly subscription"
+  return "Plan pending"
+}
+
 export function HostedAccount() {
   const [me, setMe] = React.useState<Me | null>(null)
   const [account, setAccount] = React.useState<Account | null>(null)
@@ -137,14 +143,11 @@ export function HostedAccount() {
         <section className="border border-border p-8 text-center">
           <h2 className="text-lg font-semibold">Choose your Zenod plan</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Checkout stays bound to this GitHub account. Your dashboard opens after the subscription is active.
+            Zenod Hosted is €9/month plus VAT, with managed AI usage and WhatsApp included. Checkout stays bound to this GitHub account.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button asChild className="rounded-none">
-              <a href="/buy?tier=monthly">Subscribe monthly</a>
-            </Button>
-            <Button asChild variant="outline" className="rounded-none">
-              <a href="/buy?tier=yearly">Subscribe yearly</a>
+              <a href="/buy?tier=monthly">Subscribe for €9/month + VAT</a>
             </Button>
           </div>
         </section>
@@ -154,7 +157,7 @@ export function HostedAccount() {
             <Card className="rounded-none">
               <CardHeader>
                 <CardTitle>Subscription</CardTitle>
-                <CardDescription>{account.tier ?? "Plan pending"}</CardDescription>
+                <CardDescription>{subscriptionLabel(account.tier)}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm font-medium capitalize">{account.subscription_status?.replace("_", " ") ?? "Pending"}</p>
