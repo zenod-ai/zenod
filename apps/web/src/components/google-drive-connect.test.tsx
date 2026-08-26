@@ -16,7 +16,7 @@ vi.mock("sonner", () => ({
 
 import { GoogleDriveConnect } from "./google-drive-connect"
 
-const driveStatus = {
+const selfHostedDriveStatus = {
   configured: false,
   authMode: null,
   clientEmail: null,
@@ -29,6 +29,15 @@ const driveStatus = {
   transcriptionProvider: "private/provider-model",
 }
 
+const hostedDriveStatus = {
+  configured: false,
+  oauthAvailable: true,
+  accountEmail: null,
+  folderId: null,
+  archiveConfigured: false,
+  archiveReason: "Connect Google Drive to enable archived media links.",
+}
+
 afterEach(() => {
   cleanup()
   mocks.api.mockReset()
@@ -37,7 +46,7 @@ afterEach(() => {
 describe("GoogleDriveConnect edition projection", () => {
   it("shows only managed OAuth and folder controls to Hosted customers", async () => {
     mocks.api.mockImplementation(async (path: string) => {
-      if (path === "/api/drive/status") return driveStatus
+      if (path === "/api/drive/status") return hostedDriveStatus
       throw new Error(`unexpected Hosted request: ${path}`)
     })
 
@@ -60,9 +69,40 @@ describe("GoogleDriveConnect edition projection", () => {
     expect(mocks.api).not.toHaveBeenCalledWith("/api/transcription/status")
   })
 
+  it("shows truthful Hosted config health without exposing operator credentials", async () => {
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === "/api/drive/status") {
+        return {
+          ...hostedDriveStatus,
+          oauthAvailable: false,
+          archiveReason: "Google Drive connection is unavailable.",
+          oauthClientId: "must-never-render",
+          clientEmail: "internal-service-account@example.invalid",
+          transcriptionProvider: "private/provider-model",
+        }
+      }
+      throw new Error(`unexpected Hosted request: ${path}`)
+    })
+
+    render(<GoogleDriveConnect edition="hosted" />)
+
+    const connect = await screen.findByRole("button", {
+      name: "Connect with Google",
+    })
+    expect(connect.hasAttribute("disabled")).toBe(true)
+    expect(
+      screen.getByText(
+        "Google Drive connection is unavailable. Contact the Zenod operator."
+      )
+    ).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(
+      /must-never-render|internal-service-account|private\/provider-model/i
+    )
+  })
+
   it("preserves the existing self-hosted credential and transcription controls", async () => {
     mocks.api.mockImplementation(async (path: string) => {
-      if (path === "/api/drive/status") return driveStatus
+      if (path === "/api/drive/status") return selfHostedDriveStatus
       if (path === "/api/transcription/status") {
         return {
           ready: true,

@@ -286,9 +286,9 @@ export class DriveClient {
 }
 
 export function driveAuthFromSettings(settings: Settings): DriveAuth | null {
-  const clientId = settings.get("google_oauth_client_id");
-  const clientSecret = settings.get("google_oauth_client_secret");
   const rawSettings = settings as Settings & { getRaw?: (key: string) => string | null };
+  const clientId = rawSettings.getRaw?.("google_oauth_client_id") ?? settings.get("google_oauth_client_id");
+  const clientSecret = rawSettings.getRaw?.("google_oauth_client_secret") ?? settings.get("google_oauth_client_secret");
   const refreshToken = rawSettings.getRaw?.("google_oauth_refresh_token") ?? null;
   if (clientId && clientSecret && refreshToken) {
     return { kind: "oauth", clientId, clientSecret, refreshToken, email: rawSettings.getRaw?.("google_oauth_email") ?? null };

@@ -12,6 +12,7 @@ import {
   api,
   errorMessage,
   type DriveStatus,
+  type HostedDriveStatus,
   type SettingsResponse,
   type TestResult,
   type TranscriptionStatus,
@@ -101,7 +102,9 @@ export function GoogleDriveConnect({
   edition?: ZenodEdition
 }) {
   const hosted = edition === "hosted"
-  const [status, setStatus] = React.useState<DriveStatus | null>(null)
+  const [status, setStatus] = React.useState<
+    DriveStatus | HostedDriveStatus | null
+  >(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [setupOpen, setSetupOpen] = React.useState(false)
   const [oauthClientId, setOauthClientId] = React.useState("")
@@ -140,12 +143,16 @@ export function GoogleDriveConnect({
   }, [hosted])
 
   const loadStatus = React.useCallback(() => {
-    return api<DriveStatus>("/api/drive/status")
+    return api<DriveStatus | HostedDriveStatus>("/api/drive/status")
       .then((result) => {
         setStatus(result)
         setLoadError(null)
         setFolderId((previous) => previous || (result.folderId ?? ""))
-        setOauthClientId((previous) => previous || (result.oauthClientId ?? ""))
+        if ("oauthClientId" in result) {
+          setOauthClientId(
+            (previous) => previous || (result.oauthClientId ?? "")
+          )
+        }
       })
       .catch((err: unknown) => {
         setLoadError(errorMessage(err))
@@ -243,10 +250,13 @@ export function GoogleDriveConnect({
 
   const connected = Boolean(status?.configured)
   const showSetup = !connected || setupOpen
-  const connectedLabel =
-    status?.authMode === "oauth"
-      ? status.oauthEmail || "Google OAuth user"
-      : status?.clientEmail
+  const hostedStatus = status && "oauthAvailable" in status ? status : null
+  const selfHostedStatus = status && "authMode" in status ? status : null
+  const connectedLabel = hosted
+    ? hostedStatus?.accountEmail || "Connected Google account"
+    : selfHostedStatus?.authMode === "oauth"
+      ? selfHostedStatus.oauthEmail || "Google OAuth user"
+      : selfHostedStatus?.clientEmail
 
   return (
     <Card>
@@ -274,7 +284,7 @@ export function GoogleDriveConnect({
         {connected && connectedLabel && (
           <Field>
             <FieldLabel>
-              {hosted || status?.authMode === "oauth"
+              {hosted || selfHostedStatus?.authMode === "oauth"
                 ? "Connected Google account"
                 : "Connected service account"}
             </FieldLabel>
@@ -289,12 +299,13 @@ export function GoogleDriveConnect({
                 "Zenod uses this account only for the Drive folder you connect."
               ) : (
                 <>
-                  {status?.authMode === "oauth"
+                  {selfHostedStatus?.authMode === "oauth"
                     ? "Uploads use this Google account's Drive quota."
                     : "Any folder shared with this email is visible to Zeno."}{" "}
                   Voice notes are transcribed on this server with{" "}
-                  {status?.transcriptionProvider ?? "local whisper.cpp"} — no
-                  API key, no per-minute cost.
+                  {selfHostedStatus?.transcriptionProvider ??
+                    "local whisper.cpp"}{" "}
+                  — no API key, no per-minute cost.
                 </>
               )}
             </FieldDescription>
@@ -333,6 +344,12 @@ export function GoogleDriveConnect({
 
         {showSetup && hosted && (
           <>
+            {hostedStatus?.oauthAvailable === false && (
+              <p className="text-sm text-destructive">
+                Google Drive connection is unavailable. Contact the Zenod
+                operator.
+              </p>
+            )}
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
               <p>
                 Connect your Google account through Zenod. Hosted credentials
@@ -426,7 +443,7 @@ export function GoogleDriveConnect({
                 type="password"
                 autoComplete="off"
                 placeholder={
-                  status?.oauthClientConfigured
+                  selfHostedStatus?.oauthClientConfigured
                     ? "saved; leave blank to keep it"
                     : "GOCSPX-..."
                 }
@@ -528,7 +545,9 @@ export function GoogleDriveConnect({
           <>
             <Button
               type="button"
-              disabled={connecting}
+              disabled={
+                connecting || (hosted && hostedStatus?.oauthAvailable === false)
+              }
               onClick={handleOAuthConnect}
             >
               {connecting ? <Spinner /> : <LogInIcon data-icon="inline-start" />}

@@ -1968,9 +1968,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         clientEmail = null;
       }
     }
+    const oauthClientId = settings.getRaw("google_oauth_client_id");
+    const oauthClientSecret = settings.getRaw("google_oauth_client_secret");
     const oauthConfigured = Boolean(
-      settings.get("google_oauth_client_id") &&
-        settings.get("google_oauth_client_secret") &&
+      oauthClientId &&
+        oauthClientSecret &&
         settings.getRaw("google_oauth_refresh_token"),
     );
     const archiveReason = driveArchiveUnavailableReason(settings);
@@ -1981,8 +1983,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       authMode: oauthConfigured ? "oauth" : clientEmail ? "service_account" : null,
       clientEmail,
       oauthEmail: settings.getRaw("google_oauth_email"),
-      oauthClientConfigured: Boolean(settings.get("google_oauth_client_id") && settings.get("google_oauth_client_secret")),
-      oauthClientId: settings.get("google_oauth_client_id"),
+      oauthClientConfigured: Boolean(oauthClientId && oauthClientSecret),
+      oauthClientId,
       folderId: settings.get("google_drive_folder_id"),
       transcriptionProvider: [
         settings.get("groq_api_key") ? "groq for notes up to 5 min" : null,
@@ -1998,8 +2000,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.get("/api/drive/oauth/start", (c) => {
-    const clientId = settings.get("google_oauth_client_id");
-    const clientSecret = settings.get("google_oauth_client_secret");
+    const clientId = settings.getRaw("google_oauth_client_id");
+    const clientSecret = settings.getRaw("google_oauth_client_secret");
     if (!clientId || !clientSecret) return c.json({ error: "save the Google OAuth client ID and secret first" }, 400);
     const state = randomBytes(24).toString("base64url");
     settings.setRaw("google_oauth_state", state);
@@ -2017,8 +2019,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       return c.text("Google Drive connection failed: invalid OAuth state", 400);
     }
     settings.setRaw("google_oauth_state", "");
-    const clientId = settings.get("google_oauth_client_id");
-    const clientSecret = settings.get("google_oauth_client_secret");
+    const clientId = settings.getRaw("google_oauth_client_id");
+    const clientSecret = settings.getRaw("google_oauth_client_secret");
     if (!clientId || !clientSecret) return c.text("Google Drive connection failed: OAuth client is not configured", 400);
     const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
     const result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });

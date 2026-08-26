@@ -602,8 +602,8 @@ export class Settings {
   driveConfigured(): boolean {
     return Boolean(
       this.get("google_service_account_json") ||
-        (this.get("google_oauth_client_id") &&
-          this.get("google_oauth_client_secret") &&
+        (this.getRaw("google_oauth_client_id") &&
+          this.getRaw("google_oauth_client_secret") &&
           this.getRaw("google_oauth_refresh_token")),
     );
   }

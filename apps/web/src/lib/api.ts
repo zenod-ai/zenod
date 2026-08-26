@@ -247,6 +247,16 @@ export type DriveStatus = {
   transcriptionProvider: string | null
 }
 
+/** Exact customer-safe projection returned by Hosted `/api/drive/status`. */
+export type HostedDriveStatus = {
+  configured: boolean
+  oauthAvailable: boolean
+  accountEmail: string | null
+  folderId: string | null
+  archiveConfigured: boolean
+  archiveReason: string | null
+}
+
 export type TranscriptionStatus = {
   model: string
   ready: boolean

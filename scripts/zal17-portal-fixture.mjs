@@ -181,18 +181,27 @@ function apiResponse(request, response, pathname) {
     });
   }
   if (pathname === "/api/drive/status") {
-    return json(response, {
-      configured: false,
-      archiveConfigured: false,
-      archiveReason: null,
-      authMode: null,
-      clientEmail: null,
-      oauthEmail: null,
-      oauthClientConfigured: false,
-      oauthClientId: null,
-      folderId: null,
-      transcriptionProvider: hosted ? null : "openrouter",
-    });
+    return json(response, hosted
+      ? {
+          configured: false,
+          oauthAvailable: true,
+          accountEmail: null,
+          folderId: null,
+          archiveConfigured: false,
+          archiveReason: "Connect Google Drive to enable archived media links.",
+        }
+      : {
+          configured: false,
+          archiveConfigured: false,
+          archiveReason: null,
+          authMode: null,
+          clientEmail: null,
+          oauthEmail: null,
+          oauthClientConfigured: false,
+          oauthClientId: null,
+          folderId: null,
+          transcriptionProvider: "openrouter",
+        });
   }
   if (pathname === "/api/transcription/status") {
     return json(response, {
