@@ -397,6 +397,7 @@ describe("Zenod chassis unit", () => {
         managed_ai_key_hash: "historical-child-hash",
         managed_ai_key_name: "zenod-tenant:octocat-42",
       });
+      unit.customerTokenVault.put("github-42", "hosted-token");
       const hosted = unit.runtimes.forTenantStorage(
         "github-42",
         unit.storage.forTenant({ id: "github-42" }),
@@ -410,6 +411,19 @@ describe("Zenod chassis unit", () => {
       expect(hosted.settings.apiKeyForProvider("anthropic")).toBeNull();
       expect(hosted.settings.get("openrouter_api_key")).toBe("historical-child-secret");
       expect(JSON.stringify(hosted.settings.masked())).not.toContain("operator-runtime-secret");
+
+      unit.customerAccounts.upsert("hosted", { subscription_status: "canceled" });
+      expect(hosted.settings.provider()).toBe("openrouter");
+      expect(hosted.settings.activeApiKey()).toBeNull();
+      expect(hosted.settings.get("openrouter_api_key")).toBe("historical-child-secret");
+      unit.customerAccounts.upsert("hosted", { subscription_status: "active" });
+      expect(hosted.settings.activeApiKey()).toBe("operator-runtime-secret");
+
+      await tenants.setTenantStatus("github-42", "suspended");
+      expect(hosted.settings.provider()).toBe("openrouter");
+      expect(hosted.settings.activeApiKey()).toBeNull();
+      await tenants.setTenantStatus("github-42", "active");
+      expect(hosted.settings.activeApiKey()).toBe("operator-runtime-secret");
 
       const selfHosted = unit.runtimes.forTenantStorage(
         "self-host",

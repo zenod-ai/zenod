@@ -29,6 +29,7 @@ import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
 import type {
   GoogleDriveOAuthAuthority,
+  ProviderCredentialAuthority,
   SettingKey,
 } from "./settings.js";
 import type { TelegramManagedInbound } from "./telegramGateway.js";
@@ -77,6 +78,9 @@ export class ZenodRuntimePool {
     private readonly appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">,
     private readonly managedTelegramInbound?: (tenantId: string, input: TelegramManagedInbound) => Promise<void>,
     private readonly hostedCustomerTenant?: (tenantId: string) => boolean,
+    private readonly providerCredentialAuthorityForTenant?: (
+      tenantId: string,
+    ) => ProviderCredentialAuthority,
     private readonly googleDriveOAuthAuthorityForTenant?: (
       tenantId: string,
     ) => GoogleDriveOAuthAuthority,
@@ -113,17 +117,10 @@ export class ZenodRuntimePool {
               this.googleDriveOAuthAuthorityForTenant!(tenantId),
           }
         : {}),
-      ...(this.hostedCustomerTenant
+      ...(this.providerCredentialAuthorityForTenant
         ? {
-            providerCredentialAuthority: () => this.hostedCustomerTenant!(tenantId)
-              ? {
-                  mode: "hosted-managed" as const,
-                  provider: "openrouter" as const,
-                  apiKey: this.env.ZENOD_MANAGED_AI_ENABLED === "1"
-                    ? this.env.OPENROUTER_API_KEY?.trim() || null
-                    : null,
-                }
-              : { mode: "self-hosted" as const },
+            providerCredentialAuthority: () =>
+              this.providerCredentialAuthorityForTenant!(tenantId),
           }
         : {}),
       ...(this.managedTelegramInbound
@@ -661,6 +658,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
   let managedTelegramAdmission: ((tenantId: string, input: TelegramManagedInbound) => Promise<void>) | null = null;
   let isHostedCustomerTenant: (tenantId: string) => boolean = () => false;
+  let providerCredentialAuthorityForTenant: (
+    tenantId: string,
+  ) => ProviderCredentialAuthority = () => ({ mode: "self-hosted" });
   let googleDriveOAuthAuthorityForTenant: (
     tenantId: string,
   ) => GoogleDriveOAuthAuthority = () => ({ mode: "self-hosted" });
@@ -674,6 +674,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       await managedTelegramAdmission(tenantId, input);
     },
     (tenantId) => isHostedCustomerTenant(tenantId),
+    (tenantId) => providerCredentialAuthorityForTenant(tenantId),
     (tenantId) => googleDriveOAuthAuthorityForTenant(tenantId),
   );
   const unit = createUnit({
@@ -776,6 +777,35 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   );
   const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  providerCredentialAuthorityForTenant = (tenantId) => {
+    const accounts = customer.accounts.list().filter(
+      (candidate) => candidate.tenant_id === tenantId,
+    );
+    if (accounts.length === 0) return { mode: "self-hosted" };
+    if (accounts.length !== 1) {
+      return { mode: "hosted-managed", provider: "openrouter", apiKey: null };
+    }
+    const account = accounts[0]!;
+    const entitled = account.subscription_status === "active" ||
+      account.subscription_status === "past_due";
+    const token = customer.tokenVault.get(account.account_id);
+    const tenantRecord = token
+      ? tenantStore.resolveTokenHash(hashToken(token))
+      : null;
+    const synchronousRecord = tenantRecord && typeof tenantRecord === "object" &&
+      !("then" in tenantRecord)
+      ? tenantRecord
+      : null;
+    const tenantActive = synchronousRecord?.tenant.id === tenantId &&
+      (synchronousRecord.status ?? "active") === "active";
+    return {
+      mode: "hosted-managed",
+      provider: "openrouter",
+      apiKey: entitled && tenantActive && env.ZENOD_MANAGED_AI_ENABLED === "1"
+        ? env.OPENROUTER_API_KEY?.trim() || null
+        : null,
+    };
+  };
   googleDriveOAuthAuthorityForTenant = (tenantId) => {
     const accounts = customer.accounts.list().filter(
       (candidate) => candidate.tenant_id === tenantId,
