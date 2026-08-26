@@ -408,6 +408,70 @@ describe("tenant credential custody", () => {
     }
   });
 
+  it("starts with a dangling legacy handle without changing legacy settings or credential rows", async () => {
+    const dataRoot = await tempDir("legacy-dangling-handle");
+    const tenantRoot = join(dataRoot, "github-63050995");
+    await mkdir(tenantRoot);
+    const standalone = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "legacy-github-63050995",
+    });
+    standalone.settings.set("github_token", "ghp_still_recoverable");
+    standalone.settings.set("google_oauth_client_secret", "google_secret_missing_row");
+    const githubHandle = standalone.state.getSetting("github_token")!;
+    const missingHandle = standalone.state.getSetting("google_oauth_client_secret")!;
+    standalone.close();
+
+    const legacy = new DatabaseSync(join(tenantRoot, "vault.sqlite"));
+    legacy.prepare("DELETE FROM credential_entries WHERE key_name = 'google_oauth_client_secret'").run();
+    legacy.close();
+    const settingsBefore = await readFile(join(tenantRoot, "zenod.sqlite"));
+    const legacyRowsBefore = new DatabaseSync(join(tenantRoot, "vault.sqlite"), { readOnly: true });
+    const rowsBefore = legacyRowsBefore
+      .prepare("SELECT handle, tenant_id, key_name, ciphertext, iv, auth_tag, created_at, updated_at FROM credential_entries ORDER BY key_name")
+      .all();
+    legacyRowsBefore.close();
+
+    const storage = new ChassisStorage({
+      dataDir: dataRoot,
+      vaultEncryptionKey: CHASSIS_VAULT_MASTER_KEY,
+    }).forTenant({ id: "github-63050995" });
+    const runtime = new Runtime(tenantRoot, undefined, {
+      seedFromEnv: false,
+      tenantId: "github-63050995",
+      credentialVault: new ChassisCredentialVault(storage),
+    });
+    try {
+      expect(runtime.state.getSetting("google_oauth_client_secret")).toBe(missingHandle);
+      expect(runtime.settings.get("google_oauth_client_secret")).toBeNull();
+      expect(runtime.state.getSetting("github_token")).toBe(githubHandle);
+      expect(runtime.settings.get("github_token")).toBe("ghp_still_recoverable");
+    } finally {
+      runtime.close();
+    }
+
+    expect(await readFile(join(tenantRoot, "zenod.sqlite"))).toEqual(settingsBefore);
+    const chassis = storage.vault();
+    try {
+      expect(chassis.get("zenod.credential.github_token")).toContain(githubHandle);
+      expect(chassis.get("zenod.credential.google_oauth_client_secret")).toBeNull();
+      expect(chassis.get("zenod.credential-migration.v1")).toBeNull();
+    } finally {
+      chassis.close();
+    }
+    const legacyRowsAfter = new DatabaseSync(join(tenantRoot, "vault.sqlite"), { readOnly: true });
+    try {
+      expect(
+        legacyRowsAfter
+          .prepare("SELECT handle, tenant_id, key_name, ciphertext, iv, auth_tag, created_at, updated_at FROM credential_entries ORDER BY key_name")
+          .all(),
+      ).toEqual(rowsBefore);
+    } finally {
+      legacyRowsAfter.close();
+    }
+    expect(await stat(join(tenantRoot, ".zenod-vault-key"))).toMatchObject({ size: 32 });
+  });
+
   it("keeps the local key when pending-scrub metadata cannot verify the complete imported set", async () => {
     const dataRoot = await tempDir("legacy-pending-incomplete");
     const tenantRoot = join(dataRoot, "tenant-pending-incomplete");
