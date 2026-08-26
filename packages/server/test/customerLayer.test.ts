@@ -260,17 +260,25 @@ describe("hosted customer layer", () => {
 
   });
 
-  it("rejects new Zenod yearly checkout before calling Stripe", async () => {
+  it("rejects retired aliases and yearly for new Zenod checkout before calling Stripe", async () => {
     const app = customerApp();
     const cookie = await signInCookie(app);
-    const checkout = await app.request("/create-checkout-session", {
-      method: "POST",
-      headers: { cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: "yearly" }),
-    });
-    expect(checkout.status).toBe(400);
-    expect(await checkout.json()).toEqual({ error: 'tier "yearly" is not available for new checkout' });
-    expect(createdParams).toBeNull();
+    const rejected = new Map([
+      ["starter", 'unknown tier "starter" (use monthly)'],
+      ["pro", 'unknown tier "pro" (use monthly)'],
+      ["yearly", 'tier "yearly" is not available for new checkout'],
+    ]);
+
+    for (const [tier, error] of rejected) {
+      const checkout = await app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      expect(checkout.status).toBe(400);
+      expect(await checkout.json()).toEqual({ error });
+      expect(createdParams).toBeNull();
+    }
 
     const unknown = await app.request("/create-checkout-session", {
       method: "POST",

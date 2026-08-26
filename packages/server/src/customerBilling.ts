@@ -51,9 +51,28 @@ export interface CustomerProductConfig {
 }
 
 const ALL_CHECKOUT_TIERS: readonly CheckoutTier[] = ["monthly", "yearly"];
+const LEGACY_CHECKOUT_ALIASES: Readonly<Record<string, CheckoutTier | undefined>> = {
+  starter: "monthly",
+  pro: "yearly",
+};
+const NO_CHECKOUT_ALIASES: Readonly<Record<string, CheckoutTier | undefined>> = {};
 
-export function newCheckoutTiersForProduct(product: CustomerProductConfig): readonly CheckoutTier[] {
-  return product.newCheckoutTiers ?? (product.product === "zenod" ? ["monthly"] : ALL_CHECKOUT_TIERS);
+export interface NewCheckoutPolicy {
+  allowedTiers: readonly CheckoutTier[];
+  aliases: Readonly<Record<string, CheckoutTier | undefined>>;
+}
+
+const DEFAULT_CHECKOUT_POLICY: NewCheckoutPolicy = {
+  allowedTiers: ALL_CHECKOUT_TIERS,
+  aliases: LEGACY_CHECKOUT_ALIASES,
+};
+
+export function newCheckoutPolicyForProduct(product: CustomerProductConfig): NewCheckoutPolicy {
+  const zenod = product.product === "zenod";
+  return {
+    allowedTiers: product.newCheckoutTiers ?? (zenod ? ["monthly"] : ALL_CHECKOUT_TIERS),
+    aliases: zenod ? NO_CHECKOUT_ALIASES : LEGACY_CHECKOUT_ALIASES,
+  };
 }
 
 export function loadCustomerBillingConfig(
@@ -77,14 +96,14 @@ export function loadCustomerBillingConfig(
 export function resolveCheckoutTier(
   input: unknown,
   config: CustomerBillingConfig,
-  allowedTiers: readonly CheckoutTier[] = ALL_CHECKOUT_TIERS,
+  policy: NewCheckoutPolicy = DEFAULT_CHECKOUT_POLICY,
 ): { tier: CheckoutTier; price: string } | { error: string } {
   const raw = String(input || "monthly").toLowerCase();
-  const tier = raw === "starter" ? "monthly" : raw === "pro" ? "yearly" : raw;
-  if (tier !== "monthly" && tier !== "yearly") {
-    return { error: `unknown tier "${raw}" (use ${allowedTiers.join("|")})` };
+  const tier = raw === "monthly" || raw === "yearly" ? raw : policy.aliases[raw];
+  if (!tier) {
+    return { error: `unknown tier "${raw}" (use ${policy.allowedTiers.join("|")})` };
   }
-  if (!allowedTiers.includes(tier)) {
+  if (!policy.allowedTiers.includes(tier)) {
     return { error: `tier "${tier}" is not available for new checkout` };
   }
   const price = config.prices[tier];

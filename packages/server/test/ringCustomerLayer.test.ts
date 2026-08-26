@@ -96,19 +96,22 @@ describe("Ring customer-layer duplicate", () => {
     );
   });
 
-  it("preserves Ring yearly checkout while Zenod moves to one new-customer interval", async () => {
+  it("preserves Ring yearly checkout and its legacy pro alias", async () => {
     const { layer, checkoutInput } = fixture();
     const state = signState({ mode: "signin", rh: "ring.zenod.dev" }, env.ACCOUNT_STATE_SECRET!);
     const callback = await layer.app.request(`/auth/github/callback?code=ok&state=${encodeURIComponent(state)}`);
     const cookie = callback.headers.get("set-cookie")!;
-    const checkout = await layer.app.request("/create-checkout-session", {
-      method: "POST",
-      headers: { cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: "yearly" }),
-    });
-    expect(checkout.status).toBe(200);
-    expect(await checkout.json()).toMatchObject({ product: "ring", tier: "yearly" });
-    expect(checkoutInput()?.line_items).toEqual([{ price: "price_yearly", quantity: 1 }]);
+
+    for (const tier of ["yearly", "pro"]) {
+      const checkout = await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      expect(checkout.status).toBe(200);
+      expect(await checkout.json()).toMatchObject({ product: "ring", tier: "yearly" });
+      expect(checkoutInput()?.line_items).toEqual([{ price: "price_yearly", quantity: 1 }]);
+    }
   });
 
   it("turns a signed TEST webhook into a local Ring tenant row", async () => {
