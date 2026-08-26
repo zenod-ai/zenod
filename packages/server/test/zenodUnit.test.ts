@@ -2064,7 +2064,7 @@ describe("Zenod chassis unit", () => {
         GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
         CHASSIS_VAULT_MASTER_KEY,
         ZENOD_MANAGED_AI_ENABLED: "1",
-        OPENROUTER_PROVISIONING_KEY: "provider-management-key",
+        OPENROUTER_API_KEY: "operator-runtime-key",
         ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS: "600000",
       },
       customer: {
@@ -2113,6 +2113,17 @@ describe("Zenod chassis unit", () => {
         requestInit: { headers: { authorization: `Bearer ${memoryToken}` } },
       }));
 
+      const hostedRuntime = unit.runtimes.get("github-42")!;
+      hostedRuntime.usageStore.record({
+        operation: "ask",
+        provider: "openrouter",
+        model: "mistral/test",
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      });
+
       const stored = await client.callTool({
         name: "store_memory",
         arguments: {
@@ -2150,8 +2161,8 @@ describe("Zenod chassis unit", () => {
       expect((ingested.structuredContent as { ticket_id?: unknown }).ticket_id).toEqual(expect.any(String));
 
       // Other paid memory-channel tools still use the existing outer admission
-      // policy. With no managed provider usage available, ask_brain is retained
-      // there instead of bypassing the allowance boundary.
+      // policy. At the tenant's combined allowance, ask_brain pauses there
+      // instead of bypassing the allowance boundary.
       const admittedAsk = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -2168,8 +2179,8 @@ describe("Zenod chassis unit", () => {
       });
       expect(admittedAsk.status).toBe(202);
       expect(await admittedAsk.json()).toMatchObject({
-        state: "waiting_for_usage",
-        job: { status: "waiting_for_usage" },
+        state: "paused_at_cap",
+        job: { status: "paused_at_cap" },
       });
     } finally {
       await client.close().catch(() => {});
