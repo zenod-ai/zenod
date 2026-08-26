@@ -62,7 +62,8 @@ const settings = {
       },
     },
   },
-  telegramBinding: null,
+  telegramBinding: null as string | null,
+  telegramLegacyBinding: null as string | null,
   notificationPrefs: { whatsapp: true, telegram: false },
 }
 
@@ -197,6 +198,27 @@ afterEach(() => {
 })
 
 describe("Phylax tenant transcription settings", () => {
+  it("represents a preserved legacy Telegram handle with an explicit private-DM reverify action", async () => {
+    mockApi({
+      telegramBinding: null,
+      telegramLegacyBinding: "legacy_owner",
+    })
+    render(<PhylaxTenantSettings />)
+
+    expect(
+      (
+        (await screen.findByLabelText(
+          "Legacy Telegram handle"
+        )) as HTMLInputElement
+      ).value
+    ).toBe("legacy_owner")
+    expect(
+      screen.getByText(
+        "This legacy handle is preserved but is not routable. Reverify it from Zenod Hosted Channels in a private Telegram DM."
+      )
+    ).not.toBeNull()
+  })
+
   it("shows validated local models and the OpenRouter transcription catalog", async () => {
     mockApi()
     render(<PhylaxTenantSettings />)
@@ -482,10 +504,9 @@ describe("Phylax tenant transcription settings", () => {
     fireEvent.change(screen.getByLabelText("voice_note mode source"), {
       target: { value: "constant" },
     })
-    fireEvent.change(
-      screen.getByLabelText("voice_note mode constant JSON"),
-      { target: { value: '"upsert"' } }
-    )
+    fireEvent.change(screen.getByLabelText("voice_note mode constant JSON"), {
+      target: { value: '"upsert"' },
+    })
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }))
 
     await waitFor(() => {

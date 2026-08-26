@@ -15,7 +15,9 @@ describe("api", () => {
           {
             error: {
               code: "channels_unavailable",
-              message: "WhatsApp is temporarily unavailable. Try again shortly.",
+              message:
+                "WhatsApp is temporarily unavailable. Try again shortly.",
+              retryDisposition: "retry_same_operation",
             },
           },
           { status: 503 }
@@ -26,6 +28,7 @@ describe("api", () => {
     await expect(api("/api/channels")).rejects.toMatchObject({
       status: 503,
       code: "channels_unavailable",
+      retryDisposition: "retry_same_operation",
       message: "WhatsApp is temporarily unavailable. Try again shortly.",
     })
   })
@@ -74,15 +77,17 @@ describe("chatStream", () => {
   it("preserves a safe structured stream error without exposing provider internals", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          `${JSON.stringify({
-            type: "error",
-            code: "model_budget_exhausted",
-            message: "The Council model key reached its provider spending limit. No connected tool ran.",
-          })}\n`,
-          { status: 200 }
-        )
+      vi.fn(
+        async () =>
+          new Response(
+            `${JSON.stringify({
+              type: "error",
+              code: "model_budget_exhausted",
+              message:
+                "The Council model key reached its provider spending limit. No connected tool ran.",
+            })}\n`,
+            { status: 200 }
+          )
       )
     )
 

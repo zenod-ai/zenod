@@ -371,6 +371,50 @@ describe("TelegramGateway", () => {
     }
   });
 
+  it.each([
+    ["group", tgMessage({ chat: { id: -1001, type: "group" } })],
+    ["supergroup", tgMessage({ chat: { id: -1002, type: "supergroup" } })],
+    ["channel", tgMessage({ chat: { id: -1003, type: "channel" } })],
+    ["private id mismatch", tgMessage({ chat: { id: 999, type: "private" } })],
+  ] as const)("denies Hosted managed Telegram input from %s scope", async (label, message) => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-managed-dm-boundary-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(message);
+    runtime.settings.setTelegramSettings({
+      botToken: `MANAGED:DENY:${label}`,
+      allowedUsers: [],
+      acceptAll: true,
+      enabled: true,
+    });
+    const admitted = vi.fn();
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      managedInboundHandler: admitted,
+    });
+    try {
+      await gateway.start();
+      await waitFor(() =>
+        calls.some(
+          (call) => call.method === "getUpdates" && call.body.offset === 101,
+        ),
+      );
+      expect(admitted).not.toHaveBeenCalled();
+      expect(
+        calls.some((call) =>
+          ["sendMessage", "sendRichMessage", "sendChatAction"].includes(
+            call.method,
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("does not advance the Hosted Telegram offset when durable admission fails", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-managed-admission-failure-"));
     const runtime = new Runtime(dir);

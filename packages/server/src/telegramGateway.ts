@@ -320,6 +320,22 @@ export class TelegramGateway {
     const chatId = message.chat.id;
     const from = message.from;
     const settings = this.settings();
+    const managedInboundEnabled = Boolean(
+      this.options.managedInboundHandler &&
+        (this.options.managedInboundEnabled?.() ?? true),
+    );
+    const tenantBoundInbound = managedInboundEnabled || Boolean(this.options.portedInboundHandler);
+
+    // Hosted tenant ownership can only be proven in a direct conversation with
+    // the immutable Telegram user. Group/channel chat ids are shared scopes and
+    // must never verify, resolve, dispatch, or receive a tenant reply.
+    if (
+      tenantBoundInbound &&
+      (message.chat.type !== "private" || from?.id !== chatId)
+    ) {
+      console.info("[telegram] ignored non-private tenant-bound update");
+      return;
+    }
 
     if (!userIsAllowed({ id: from?.id, username: from?.username }, settings)) {
       const who = from?.username ? `@${from.username}` : String(from?.id ?? "unknown");
@@ -330,7 +346,7 @@ export class TelegramGateway {
     // Remember this owner's chat so the monitor can push proactive pings here.
     this.rememberChat(chatId);
 
-    if (this.options.managedInboundHandler && (this.options.managedInboundEnabled?.() ?? true)) {
+    if (managedInboundEnabled) {
       await this.handleManagedInbound(message, updateId);
       return;
     }

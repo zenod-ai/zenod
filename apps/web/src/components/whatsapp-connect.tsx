@@ -681,7 +681,10 @@ export function HostedWhatsAppConnect({
       setChallenge(result.challenge)
       toast.success("WhatsApp verification started")
     } catch (err) {
-      if (err instanceof ApiError)
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
         clearHostedChannelOperation("whatsapp.challenge")
       setError(errorMessage(err))
     } finally {
@@ -709,7 +712,10 @@ export function HostedWhatsAppConnect({
       clearHostedChannelOperation("whatsapp.test")
       toast.success("Zenod test delivered")
     } catch (err) {
-      if (err instanceof ApiError)
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
         clearHostedChannelOperation("whatsapp.test")
       setError(errorMessage(err))
     } finally {
@@ -740,7 +746,10 @@ export function HostedWhatsAppConnect({
       setSender("")
       toast.success("WhatsApp disconnected")
     } catch (err) {
-      if (err instanceof ApiError)
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
         clearHostedChannelOperation("whatsapp.disconnect")
       setError(errorMessage(err))
     } finally {

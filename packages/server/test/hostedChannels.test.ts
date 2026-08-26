@@ -594,6 +594,7 @@ describe("Hosted Zenod channel adapter", () => {
       error: {
         code: "channels_unavailable",
         message: "Channels are temporarily unavailable. Try again shortly.",
+        retryDisposition: "retry_same_operation",
       },
     });
 
@@ -639,6 +640,7 @@ describe("Hosted Zenod channel adapter", () => {
       error: {
         code: "channels_unavailable",
         message: "Channels are temporarily unavailable. Try again shortly.",
+        retryDisposition: "retry_new_operation",
       },
       mutation: {
         operationId: "public-test-hostile",
@@ -678,6 +680,97 @@ describe("Hosted Zenod channel adapter", () => {
       }),
     ).toBe(true);
   });
+
+  it.each([
+    [
+      "WhatsApp",
+      "/api/channels/whatsapp/challenge",
+      "/whatsapp/challenge",
+      { operationId: "proxy-lost-whatsapp", sender: "+34 611 111 111" },
+      "registerPhone",
+    ],
+    [
+      "Telegram",
+      "/api/channels/telegram/connect",
+      "/telegram/connect",
+      { operationId: "proxy-lost-telegram", identity: "@proxy_owner" },
+      "registerTelegram",
+    ],
+  ] as const)(
+    "replays the same %s operation after a proxy-lost private response with one side effect",
+    async (_label, publicPath, privateSuffix, body, sideEffect) => {
+      const dataDir = await mkdtemp(join(tmpdir(), "hosted-proxy-lost-"));
+      dirs.push(dataDir);
+      const unit = createPhylaxUnit({
+        dataDir,
+        tenantStore: createMemoryTenantStore(),
+        env: {
+          CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+          ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+        },
+      });
+      vi.spyOn(unit.phylaxRuntime.whatsapp, "status").mockReturnValue(
+        connectedTransportStatus(unit.phylaxRuntime.whatsapp.status()),
+      );
+      const effect = vi.spyOn(unit.phylaxTenantSettings, sideEffect);
+      const app = new Hono();
+      mountHostedChannelsCustomerRoutes(app, {
+        env: {
+          CUSTOMER_APP_URL: "https://cloud.zenod.dev",
+          ZENOD_CHANNELS_URL: "http://private-channels:8080",
+          ZENOD_CHANNELS_ALLOWED_ORIGINS: "http://private-channels:8080",
+          ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+        },
+        resolveTenant: () => ({
+          tenantId: "tenant-proxy-lost",
+          downstreamToken: "tenant-memory-token",
+        }),
+      });
+      let loseResponse = true;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (url, init) => {
+          const response = await unit.app.request(String(url), init);
+          if (loseResponse && String(url).endsWith(privateSuffix)) {
+            loseResponse = false;
+            await response.arrayBuffer();
+            throw new Error("proxy response was lost after private commit");
+          }
+          return response;
+        }),
+      );
+      try {
+        const request = () =>
+          app.request(publicPath, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-tenant": "alpha",
+            },
+            body: JSON.stringify(body),
+          });
+        const lost = await request();
+        expect(lost.status).toBe(503);
+        expect(await lost.json()).toMatchObject({
+          error: {
+            code: "channels_unavailable",
+            retryDisposition: "retry_same_operation",
+          },
+          mutation: { operationId: body.operationId },
+        });
+
+        const replay = await request();
+        expect(replay.status).toBe(200);
+        expect(await replay.json()).toMatchObject({
+          mutation: { operationId: body.operationId, outcome: "succeeded" },
+          challenge: { code: expect.stringMatching(/^\d{2}-[a-z]{2,24}$/) },
+        });
+        expect(effect).toHaveBeenCalledTimes(1);
+      } finally {
+        await unit.close();
+      }
+    },
+  );
 
   it("projects a managed usage pause without dropping the verified sender binding", async () => {
     const app = new Hono();
@@ -1069,6 +1162,158 @@ describe("Hosted Zenod channel adapter", () => {
       ).toHaveLength(2);
     } finally {
       await second.close();
+    }
+  });
+
+  it("accepts Hosted Telegram verification and routing only from an identity-matched private DM", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "hosted-telegram-dm-only-"));
+    dirs.push(dataDir);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        ZENOD_CHANNELS_PRIVATE_TOKEN: PRIVATE_TOKEN,
+      },
+    });
+    unit.phylaxRuntime.settings.setTelegramSettings({
+      acceptAll: true,
+      allowedUsers: [],
+    });
+    const connect = async (
+      tenantId: string,
+      operationId: string,
+      identity: string,
+    ) => {
+      const response = await unit.app.request(
+        `/internal/zenod/channels/${tenantId}/telegram/connect`,
+        {
+          method: "POST",
+          headers: authorization(),
+          body: JSON.stringify({
+            operationId,
+            identity,
+            downstreamUrl: "https://cloud.zenod.dev/mcp",
+            downstreamToken: "memory-token",
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()).challenge.code as string;
+    };
+    const usernameCode = await connect(
+      "tenant-dm-username",
+      "telegram-dm-username",
+      "@private_owner",
+    );
+    const numericCode = await connect(
+      "tenant-dm-numeric",
+      "telegram-dm-numeric",
+      "744444444",
+    );
+    const gateway = unit.phylaxRuntime.telegram as unknown as {
+      handleMessage(message: Record<string, unknown>, updateId: number): Promise<void>;
+      sendChatAction(chatId: number, action: string): Promise<void>;
+      sendReply(chatId: number, text: string): Promise<void>;
+    };
+    const sendChatAction = vi
+      .spyOn(gateway, "sendChatAction")
+      .mockResolvedValue();
+    const sendReply = vi.spyOn(gateway, "sendReply").mockResolvedValue();
+    const receive = vi
+      .spyOn(unit.phylaxRuntime.organ, "receive")
+      .mockImplementation(async (input) =>
+        ({
+          tenantId: "tenant-dm-username",
+          sender: input.sender,
+          replyText: "stored privately",
+          downstream: { structuredContent: null },
+          handoff: null,
+          artifactSha256: null,
+          downstreamDestination: "https://cloud.zenod.dev/mcp",
+          downstreamCorrelationId: null,
+          downstreamReceipt: null,
+          timing: {
+            transcriptionQueueWaitMs: null,
+            transcriptionRuntimeMs: null,
+            downstreamMs: 1,
+          },
+          evidence: [],
+        }) as never,
+      );
+    const message = (
+      text: string,
+      fromId: number,
+      username: string,
+      chatId: number,
+      chatType: string,
+      messageId: number,
+    ) => ({
+      message_id: messageId,
+      date: 1_700_000_000,
+      from: { id: fromId, username },
+      chat: { id: chatId, type: chatType },
+      text,
+    });
+    try {
+      await gateway.handleMessage(
+        message(usernameCode, 733333333, "private_owner", -1001, "supergroup", 1),
+        1,
+      );
+      await gateway.handleMessage(
+        message(numericCode, 744444444, "numeric_owner", -1002, "group", 2),
+        2,
+      );
+      expect(
+        unit.phylaxTenantSettings.get("tenant-dm-username").telegramBinding,
+      ).toBeNull();
+      expect(
+        unit.phylaxTenantSettings.get("tenant-dm-numeric").telegramBinding,
+      ).toBeNull();
+      expect(receive).not.toHaveBeenCalled();
+      expect(sendReply).not.toHaveBeenCalled();
+
+      await gateway.handleMessage(
+        message(usernameCode, 733333333, "private_owner", 733333333, "private", 3),
+        3,
+      );
+      expect(
+        unit.phylaxTenantSettings.get("tenant-dm-username").telegramBinding,
+      ).toBe("733333333");
+      expect(sendReply).toHaveBeenCalledWith(
+        733333333,
+        ZENOD_TELEGRAM_VERIFICATION_REPLY,
+      );
+      expect(receive).not.toHaveBeenCalled();
+
+      await gateway.handleMessage(
+        message("group task", 733333333, "private_owner", -1001, "channel", 4),
+        4,
+      );
+      await gateway.handleMessage(
+        message("mismatch task", 733333333, "private_owner", 799999999, "private", 5),
+        5,
+      );
+      expect(receive).not.toHaveBeenCalled();
+      expect(sendReply).toHaveBeenCalledTimes(1);
+
+      await gateway.handleMessage(
+        message("private task", 733333333, "renamed_owner", 733333333, "private", 6),
+        6,
+      );
+      expect(receive).toHaveBeenCalledTimes(1);
+      expect(receive).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: "telegram",
+          sender: "733333333",
+          chatId: "733333333",
+          text: "private task",
+        }),
+      );
+      expect(sendReply).toHaveBeenLastCalledWith(733333333, "stored privately");
+      expect(sendChatAction).toHaveBeenCalledWith(733333333, "typing");
+    } finally {
+      await unit.close();
     }
   });
 });

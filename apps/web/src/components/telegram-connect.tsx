@@ -538,7 +538,10 @@ export function HostedTelegramConnect({
       setChallenge(result.challenge)
       toast.success("Telegram verification started")
     } catch (err) {
-      if (err instanceof ApiError)
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
         clearHostedChannelOperation("telegram.connect")
       setError(errorMessage(err))
     } finally {
@@ -566,7 +569,10 @@ export function HostedTelegramConnect({
       clearHostedChannelOperation("telegram.test")
       toast.success("Telegram test delivered")
     } catch (err) {
-      if (err instanceof ApiError)
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
         clearHostedChannelOperation("telegram.test")
       setError(errorMessage(err))
     } finally {
@@ -597,7 +603,10 @@ export function HostedTelegramConnect({
       setIdentity("")
       toast.success("Telegram disconnected")
     } catch (err) {
-      if (err instanceof ApiError)
+      if (
+        err instanceof ApiError &&
+        err.retryDisposition !== "retry_same_operation"
+      )
         clearHostedChannelOperation("telegram.disconnect")
       setError(errorMessage(err))
     } finally {

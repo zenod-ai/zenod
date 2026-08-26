@@ -34,6 +34,46 @@ async function setup(defaults: { ringTicketUrl?: string | null } = {}) {
 }
 
 describe("PhylaxTenantSettingsStore", () => {
+  it("preserves legacy Telegram handle data for private-admin reverify without making it routable", async () => {
+    const { dataDir, storage, store } = await setup();
+    const legacy = {
+      ...store.get("legacy-tenant"),
+      telegramBinding: "@Legacy_Owner",
+    } as Record<string, unknown>;
+    delete legacy.telegramLegacyBinding;
+    await writeFile(
+      join(dataDir, "phylax-tenant-settings.json"),
+      JSON.stringify({ "legacy-tenant": legacy }),
+      "utf8",
+    );
+
+    const restarted = new PhylaxTenantSettingsStore(dataDir, storage);
+    expect(restarted.view("legacy-tenant")).toMatchObject({
+      telegramBinding: null,
+      telegramLegacyBinding: "legacy_owner",
+    });
+    expect(restarted.resolve("telegram", "@Legacy_Owner")).toBeNull();
+    expect(restarted.resolve("telegram", "733333333")).toBeNull();
+
+    restarted.update("legacy-tenant", { voiceDefault: "assistant" });
+    const persisted = JSON.parse(
+      await readFile(join(dataDir, "phylax-tenant-settings.json"), "utf8"),
+    ) as Record<string, Record<string, unknown>>;
+    expect(persisted["legacy-tenant"]).toMatchObject({
+      telegramBinding: null,
+      telegramLegacyBinding: "legacy_owner",
+      voiceDefault: "assistant",
+    });
+
+    restarted.update("legacy-tenant", {
+      telegramLegacyBinding: "@Reverify_Owner",
+    });
+    expect(restarted.view("legacy-tenant")).toMatchObject({
+      telegramBinding: null,
+      telegramLegacyBinding: "reverify_owner",
+    });
+  });
+
   it("defaults standalone voice to verbatim capture, media to ingest, and ordinary text directly to Zenod", async () => {
     const { store } = await setup();
 

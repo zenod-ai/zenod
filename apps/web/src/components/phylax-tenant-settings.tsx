@@ -81,6 +81,7 @@ type Settings = {
   voiceDefault: VoiceDefault
   turnBindings: TurnBindings
   telegramBinding: string | null
+  telegramLegacyBinding: string | null
   notificationPrefs: { whatsapp: boolean; telegram: boolean }
 }
 
@@ -279,12 +280,18 @@ function mappingSchemaError(
 ): string | null {
   if (schemaValue === true) return null
   if (schemaValue === false) return `${field} is rejected by its live schema`
-  if (!schemaValue || typeof schemaValue !== "object" || Array.isArray(schemaValue)) {
+  if (
+    !schemaValue ||
+    typeof schemaValue !== "object" ||
+    Array.isArray(schemaValue)
+  ) {
     return `${field} advertises a malformed field schema`
   }
   const schema = schemaValue as Record<string, unknown>
   const valueType =
-    source.source === "constant" ? jsonValueType(source.value ?? null) : "string"
+    source.source === "constant"
+      ? jsonValueType(source.value ?? null)
+      : "string"
   const advertisedType = schema.type
   const acceptedTypes =
     typeof advertisedType === "string"
@@ -433,7 +440,7 @@ export function PhylaxTenantSettings() {
   const [keyword, setKeyword] = React.useState<string | null>(null)
   const [downstreamUrl, setDownstreamUrl] = React.useState("")
   const [downstreamToken, setDownstreamToken] = React.useState("")
-  const [telegramBinding, setTelegramBinding] = React.useState("")
+  const [telegramLegacyBinding, setTelegramLegacyBinding] = React.useState("")
   const [transcriptionKey, setTranscriptionKey] = React.useState("")
   const [transcriptionModel, setTranscriptionModel] = React.useState("")
   const [provider, setProvider] =
@@ -468,7 +475,7 @@ export function PhylaxTenantSettings() {
     setData(next)
     setPhone(next.settings.phoneNumber ?? "")
     setDownstreamUrl(next.settings.downstreamUrl ?? "")
-    setTelegramBinding(next.settings.telegramBinding ?? "")
+    setTelegramLegacyBinding(next.settings.telegramLegacyBinding ?? "")
     setProvider(next.settings.transcriptionProvider)
     setTranscriptionModel(next.settings.transcriptionModel ?? "")
     setTranscriptionEnabled(next.settings.transcriptionEnabled)
@@ -644,7 +651,7 @@ export function PhylaxTenantSettings() {
           ...(transcriptionKey.trim()
             ? { transcriptionKey: transcriptionKey.trim() }
             : {}),
-          telegramBinding,
+          telegramLegacyBinding,
           notificationPrefs: {
             whatsapp: whatsappNotify,
             telegram: telegramNotify,
@@ -1434,17 +1441,28 @@ export function PhylaxTenantSettings() {
         <CardHeader>
           <CardTitle>Telegram and notifications</CardTitle>
           <CardDescription>
-            Bind the Telegram identity handled by the ported Phylax bot.
+            Preserve legacy private-admin handles while new Hosted delivery is
+            activated through a verified private DM.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Field>
-            <FieldLabel>Telegram handle</FieldLabel>
+            <FieldLabel htmlFor="phylax-telegram-legacy">
+              Legacy Telegram handle
+            </FieldLabel>
             <Input
-              value={telegramBinding}
-              onChange={(e) => setTelegramBinding(e.target.value)}
+              id="phylax-telegram-legacy"
+              value={telegramLegacyBinding}
+              onChange={(e) => setTelegramLegacyBinding(e.target.value)}
               placeholder="@username"
             />
+            <FieldDescription>
+              {data.settings.telegramBinding
+                ? `Verified numeric chat ID ${data.settings.telegramBinding} is active.`
+                : telegramLegacyBinding
+                  ? "This legacy handle is preserved but is not routable. Reverify it from Zenod Hosted Channels in a private Telegram DM."
+                  : "Use Zenod Hosted Channels to create a verified numeric Telegram binding."}
+            </FieldDescription>
           </Field>
           <div className="flex gap-5 text-sm">
             <label>

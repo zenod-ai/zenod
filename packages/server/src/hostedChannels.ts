@@ -95,6 +95,7 @@ export interface HostedChannelErrorResponse {
       | "operation_in_progress"
       | "channels_unavailable";
     message: string;
+    retryDisposition?: "retry_same_operation" | "retry_new_operation";
   };
   mutation?: HostedChannelMutationOutcome;
 }
@@ -524,7 +525,14 @@ function failure(
   at = Date.now(),
 ): HostedChannelErrorResponse {
   return {
-    error: { code, message },
+    error: {
+      code,
+      message,
+      retryDisposition:
+        code === "operation_in_progress"
+          ? "retry_same_operation"
+          : "retry_new_operation",
+    },
     mutation: { operationId, operation, outcome, at },
   };
 }
@@ -1316,13 +1324,20 @@ function projectError(
   )
     return null;
   const code = error.code as HostedChannelErrorResponse["error"]["code"];
+  const retryDisposition =
+    error.retryDisposition === "retry_same_operation" ||
+    error.retryDisposition === "retry_new_operation"
+      ? error.retryDisposition
+      : code === "operation_in_progress"
+        ? "retry_same_operation"
+        : "retry_new_operation";
   const mutation =
     expected && root.mutation
       ? projectMutation(root.mutation, expected, expectedId)
       : null;
   if (expected && !mutation) return null;
   return {
-    error: { code, message: publicErrorMessage(code) },
+    error: { code, message: publicErrorMessage(code), retryDisposition },
     ...(mutation ? { mutation } : {}),
   };
 }
@@ -1439,6 +1454,7 @@ async function proxyChannels(
       error: {
         code: "channels_unavailable",
         message: "Channels are temporarily unavailable. Try again shortly.",
+        retryDisposition: "retry_same_operation",
       },
       ...(unavailableMutation ? { mutation: unavailableMutation } : {}),
     } satisfies HostedChannelErrorResponse,

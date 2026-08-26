@@ -470,6 +470,7 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
     "voiceDefault",
     "turnBindings",
     "telegramBinding",
+    "telegramLegacyBinding",
     "notificationPrefs",
   ]);
   const unknown = Object.keys(record).find((key) => !allowed.has(key));
@@ -525,6 +526,9 @@ export function parsePhylaxSettingsUpdate(value: unknown): PhylaxSettingsUpdate 
       ? { turnBindings: record.turnBindings as PhylaxSettingsUpdate["turnBindings"] }
       : {}),
     ...(record.telegramBinding !== undefined ? { telegramBinding: optionalString(record, "telegramBinding", 256) } : {}),
+    ...(record.telegramLegacyBinding !== undefined
+      ? { telegramLegacyBinding: optionalString(record, "telegramLegacyBinding", 256) }
+      : {}),
     ...(notificationPrefs ? { notificationPrefs } : {}),
   };
 }

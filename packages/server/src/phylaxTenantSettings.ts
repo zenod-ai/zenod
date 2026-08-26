@@ -101,6 +101,8 @@ export interface PhylaxTenantSettings {
   telegramBinding: string | null;
   /** Mutable username retained only for customer-facing display. */
   telegramIdentityHint: string | null;
+  /** Preserved pre-verification private-admin handle; never routable. */
+  telegramLegacyBinding: string | null;
   telegramPendingIdentity: string | null;
   telegramVerificationHash: string | null;
   telegramVerificationExpiresAt: number | null;
@@ -396,6 +398,7 @@ function defaultSettings(
     turnBindings: defaultPhylaxTurnBindings(),
     telegramBinding: null,
     telegramIdentityHint: null,
+    telegramLegacyBinding: null,
     telegramPendingIdentity: null,
     telegramVerificationHash: null,
     telegramVerificationExpiresAt: null,
@@ -454,16 +457,30 @@ export class PhylaxTenantSettingsStore {
 
   get(tenantId: string): PhylaxTenantSettings {
     const stored = this.load()[tenantId];
-    return stored
-      ? {
-          ...defaultSettings(tenantId, this.defaultAssistantUrl, this.defaultRingTicketUrl),
-          ...stored,
-          voiceDefault: stored.voiceDefault === "assistant" ? "assistant" : "capture",
-          turnBindings: normalizedStoredTurnBindings(stored.turnBindings),
-          downstreamCredentialStatus: stored.downstreamCredentialStatus ?? "unknown",
-          downstreamCredentialCheckedAt: stored.downstreamCredentialCheckedAt ?? null,
-        }
-      : defaultSettings(tenantId, this.defaultAssistantUrl, this.defaultRingTicketUrl);
+    if (!stored)
+      return defaultSettings(
+        tenantId,
+        this.defaultAssistantUrl,
+        this.defaultRingTicketUrl,
+      );
+    const activeTelegramBinding = normalizedTelegramNumericIdentity(
+      stored.telegramBinding,
+    );
+    const legacyTelegramBinding =
+      stored.telegramLegacyBinding ??
+      (stored.telegramBinding && !activeTelegramBinding
+        ? normalizeTelegramEntry(stored.telegramBinding)
+        : null);
+    return {
+      ...defaultSettings(tenantId, this.defaultAssistantUrl, this.defaultRingTicketUrl),
+      ...stored,
+      telegramBinding: activeTelegramBinding,
+      telegramLegacyBinding: legacyTelegramBinding || null,
+      voiceDefault: stored.voiceDefault === "assistant" ? "assistant" : "capture",
+      turnBindings: normalizedStoredTurnBindings(stored.turnBindings),
+      downstreamCredentialStatus: stored.downstreamCredentialStatus ?? "unknown",
+      downstreamCredentialCheckedAt: stored.downstreamCredentialCheckedAt ?? null,
+    };
   }
 
   view(tenantId: string): PhylaxTenantSettingsView {
@@ -538,6 +555,7 @@ export class PhylaxTenantSettingsStore {
       voiceDefault?: PhylaxVoiceDefault;
       turnBindings?: Partial<Record<PhylaxTurnType, PhylaxTurnBinding>>;
       telegramBinding?: string | null;
+      telegramLegacyBinding?: string | null;
       notificationPrefs?: Partial<PhylaxTenantSettings["notificationPrefs"]>;
     },
   ): PhylaxTenantSettingsView {
@@ -563,11 +581,26 @@ export class PhylaxTenantSettingsStore {
       : currentRingTicketUrl;
     const downstreamCredentialChanged = nextDownstreamUrl !== currentDownstreamUrl
       || (input.downstreamToken !== undefined && input.downstreamToken !== null);
-    const nextTelegramBinding = input.telegramBinding !== undefined
-      ? input.telegramBinding?.trim()
-        ? normalizedTelegramNumericIdentity(input.telegramBinding)
-        : null
-      : current.telegramBinding;
+    const numericTelegramInput = input.telegramBinding?.trim()
+      ? normalizedTelegramNumericIdentity(input.telegramBinding)
+      : null;
+    const hasActiveTelegramInput =
+      input.telegramBinding !== undefined &&
+      (!input.telegramBinding?.trim() || numericTelegramInput !== null);
+    if (numericTelegramInput) {
+      this.assertTelegramAvailable(tenantId, numericTelegramInput);
+    }
+    const legacyInput = input.telegramLegacyBinding !== undefined
+      ? input.telegramLegacyBinding
+      : input.telegramBinding?.trim() && !numericTelegramInput
+        ? input.telegramBinding
+        : undefined;
+    const nextLegacyTelegramBinding =
+      legacyInput !== undefined
+        ? legacyInput?.trim()
+          ? normalizeTelegramEntry(legacyInput)
+          : null
+        : current.telegramLegacyBinding;
     const next: PhylaxTenantSettings = {
       ...current,
       downstreamUrl: null,
@@ -580,10 +613,23 @@ export class PhylaxTenantSettingsStore {
             downstreamCredentialRevision: randomBytes(16).toString("hex"),
           }
         : {}),
-      ...(input.telegramBinding !== undefined
+      ...(legacyInput !== undefined
         ? {
-            telegramBinding: nextTelegramBinding,
-            telegramIdentityHint: nextTelegramBinding ? current.telegramIdentityHint : null,
+            // The private admin field is migration metadata only. A routable
+            // Hosted binding is created exclusively by inbound DM proof.
+            telegramLegacyBinding: nextLegacyTelegramBinding,
+          }
+        : {}),
+      ...(hasActiveTelegramInput
+        ? {
+            // Keep the established private Phylax numeric-admin path working.
+            // Hosted customer activation never calls this path: it must prove
+            // ownership through registerTelegram + an inbound private DM.
+            telegramBinding: numericTelegramInput,
+            telegramIdentityHint: numericTelegramInput
+              ? current.telegramIdentityHint
+              : null,
+            telegramBindingRevision: randomBytes(16).toString("hex"),
           }
         : {}),
       ...(input.transcriptionEnabled !== undefined ? { transcriptionEnabled: input.transcriptionEnabled } : {}),
@@ -596,7 +642,8 @@ export class PhylaxTenantSettingsStore {
       notificationPrefs: { ...current.notificationPrefs, ...(input.notificationPrefs ?? {}) },
       updatedAt: new Date().toISOString(),
     };
-    if (input.telegramBinding?.trim() && !nextTelegramBinding) throw new Error("invalid Telegram binding");
+    if (legacyInput?.trim() && !nextLegacyTelegramBinding)
+      throw new Error("invalid Telegram legacy binding");
     if (input.transcriptionKey !== undefined && input.transcriptionKey !== null) {
       const provider = input.transcriptionProvider ?? current.transcriptionProvider;
       if (provider === "local") throw new Error("local transcription does not use a provider key");
@@ -777,6 +824,7 @@ export class PhylaxTenantSettingsStore {
       ...current,
       telegramBinding: null,
       telegramIdentityHint: null,
+      telegramLegacyBinding: null,
       telegramPendingIdentity: null,
       telegramVerificationHash: null,
       telegramVerificationExpiresAt: null,
@@ -863,6 +911,7 @@ export class PhylaxTenantSettingsStore {
       ...entry,
       telegramBinding: observedId,
       telegramIdentityHint: observedUsername || pendingDisplay,
+      telegramLegacyBinding: null,
       telegramPendingIdentity: null,
       telegramBindingRevision: randomBytes(16).toString("hex"),
       notificationPrefs: { ...entry.notificationPrefs, telegram: true },

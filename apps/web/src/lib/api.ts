@@ -1,12 +1,22 @@
 export class ApiError extends Error {
   readonly status: number
   readonly code: string | undefined
+  readonly retryDisposition:
+    | "retry_same_operation"
+    | "retry_new_operation"
+    | undefined
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    retryDisposition?: "retry_same_operation" | "retry_new_operation"
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    this.retryDisposition = retryDisposition
   }
 }
 
@@ -59,7 +69,13 @@ export async function api<T>(
 
   if (!response.ok) {
     const payload = data as {
-      error?: string | { code?: string; message?: string }
+      error?:
+        | string
+        | {
+            code?: string
+            message?: string
+            retryDisposition?: "retry_same_operation" | "retry_new_operation"
+          }
       code?: string
     } | null
     const typedError =
@@ -69,7 +85,8 @@ export async function api<T>(
       (typeof payload?.error === "string"
         ? payload.error
         : typedError?.message) ?? response.statusText,
-      payload?.code ?? typedError?.code
+      payload?.code ?? typedError?.code,
+      typedError?.retryDisposition
     )
   }
 

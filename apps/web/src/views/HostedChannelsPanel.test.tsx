@@ -377,14 +377,18 @@ describe("Hosted Zenod channels", () => {
     render(<HostedChannelsPanel />)
     const input = await screen.findByLabelText("Your WhatsApp sender number")
     fireEvent.change(input, { target: { value: "+34 611 111 111" } })
-    fireEvent.click(screen.getByRole("button", { name: "Create one-time code" }))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create one-time code" })
+    )
     expect(
       await screen.findByText(
         "That sender is already connected to another Zenod account."
       )
     ).not.toBeNull()
     fireEvent.change(input, { target: { value: "+34 622 222 222" } })
-    fireEvent.click(screen.getByRole("button", { name: "Create one-time code" }))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create one-time code" })
+    )
     expect(await screen.findByText("42-otter")).not.toBeNull()
     expect(operationIds).toHaveLength(2)
     expect(operationIds[1]).not.toBe(operationIds[0])
@@ -403,8 +407,7 @@ describe("Hosted Zenod channels", () => {
     const operationIds: string[] = []
     mocks.api.mockImplementation(
       (path: string, request?: { body?: unknown }) => {
-        if (path === "/api/channels" && !request)
-          return Promise.resolve(allOff)
+        if (path === "/api/channels" && !request) return Promise.resolve(allOff)
         if (path === "/api/channels/telegram/connect") {
           const body = request?.body as { operationId: string }
           operationIds.push(body.operationId)
@@ -457,7 +460,7 @@ describe("Hosted Zenod channels", () => {
     expect(operationIds[1]).not.toBe(operationIds[0])
   })
 
-  it("rotates typed terminal failures but retains ambiguous lost-response operation keys", async () => {
+  it("rotates authoritative terminal failures but retains proxy and network-lost WhatsApp keys", async () => {
     const run = async (firstError: Error) => {
       const operationIds: string[] = []
       mocks.api.mockImplementation(
@@ -514,7 +517,8 @@ describe("Hosted Zenod channels", () => {
       new ApiError(
         503,
         "Channels are temporarily unavailable. Try again shortly.",
-        "channels_unavailable"
+        "channels_unavailable",
+        "retry_new_operation"
       )
     )
     expect(typed[1]).not.toBe(typed[0])
@@ -522,8 +526,87 @@ describe("Hosted Zenod channels", () => {
     cleanup()
     mocks.api.mockReset()
     window.localStorage.clear()
-    const ambiguous = await run(new Error("Network response was lost"))
-    expect(ambiguous[1]).toBe(ambiguous[0])
+    const proxyLost = await run(
+      new ApiError(
+        503,
+        "Channels are temporarily unavailable. Try again shortly.",
+        "channels_unavailable",
+        "retry_same_operation"
+      )
+    )
+    expect(proxyLost[1]).toBe(proxyLost[0])
+
+    cleanup()
+    mocks.api.mockReset()
+    window.localStorage.clear()
+    const networkLost = await run(new Error("Network response was lost"))
+    expect(networkLost[1]).toBe(networkLost[0])
+  })
+
+  it("retains the Telegram operation across an ambiguous proxy 503 and replays it", async () => {
+    const allOff: HostedChannelsResponse = {
+      ...off,
+      telegram: {
+        state: "off",
+        identityHint: null,
+        verificationExpiresAt: null,
+        revision: "tg-proxy-off",
+      },
+    }
+    const operationIds: string[] = []
+    mocks.api.mockImplementation(
+      (path: string, request?: { body?: unknown }) => {
+        if (path === "/api/channels" && !request) return Promise.resolve(allOff)
+        if (path === "/api/channels/telegram/connect") {
+          const body = request?.body as { operationId: string }
+          operationIds.push(body.operationId)
+          if (operationIds.length === 1) {
+            return Promise.reject(
+              new ApiError(
+                503,
+                "Channels are temporarily unavailable. Try again shortly.",
+                "channels_unavailable",
+                "retry_same_operation"
+              )
+            )
+          }
+          return Promise.resolve({
+            channels: {
+              ...allOff,
+              telegram: {
+                state: "awaiting_code",
+                identityHint: "@proxy_owner",
+                verificationExpiresAt: Date.now() + 60_000,
+                revision: "tg-proxy-awaiting",
+              },
+            },
+            challenge: { code: "77-otter", expiresAt: Date.now() + 60_000 },
+            mutation: {
+              operationId: body.operationId,
+              operation: "telegram.connect",
+              outcome: "succeeded",
+              at: Date.now(),
+            },
+          })
+        }
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      }
+    )
+    render(<HostedChannelsPanel />)
+    fireEvent.change(
+      await screen.findByLabelText("Your Telegram username or chat ID"),
+      { target: { value: "@proxy_owner" } }
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }))
+    expect(
+      await screen.findByText(
+        "Channels are temporarily unavailable. Try again shortly."
+      )
+    ).not.toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }))
+    expect(await screen.findByText("77-otter")).not.toBeNull()
+    expect(operationIds).toHaveLength(2)
+    expect(operationIds[1]).toBe(operationIds[0])
   })
 
   it("retires stale browser operation keys across both lifecycle directions without phone PII", async () => {
