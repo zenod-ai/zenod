@@ -43,6 +43,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import type { ZenodEdition } from "@/views/zenod-edition"
 
 const CONSOLE_DRIVE_API_URL =
   "https://console.cloud.google.com/apis/library/drive.googleapis.com"
@@ -93,12 +94,13 @@ function Step({
   )
 }
 
-/**
- * Connect Google Drive for a self-hosted instance. The primary path is user
- * OAuth, so uploads use the user's Drive quota. Service accounts remain as an
- * advanced fallback for Shared Drive setups.
- */
-export function GoogleDriveConnect() {
+/** Connect Drive with a managed projection in Hosted and operator controls in self-host. */
+export function GoogleDriveConnect({
+  edition = "self-hosted",
+}: {
+  edition?: ZenodEdition
+}) {
+  const hosted = edition === "hosted"
   const [status, setStatus] = React.useState<DriveStatus | null>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [setupOpen, setSetupOpen] = React.useState(false)
@@ -116,6 +118,7 @@ export function GoogleDriveConnect() {
   // Poll the transcription model while it downloads, so "preparing model" shows
   // as setup progress. The fetch is cheap; we stop once it's ready or errors.
   React.useEffect(() => {
+    if (hosted) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = () => {
@@ -134,7 +137,7 @@ export function GoogleDriveConnect() {
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [])
+  }, [hosted])
 
   const loadStatus = React.useCallback(() => {
     return api<DriveStatus>("/api/drive/status")
@@ -204,10 +207,12 @@ export function GoogleDriveConnect() {
       const body: Record<string, string> = {
         google_drive_folder_id: folderId,
       }
-      if (oauthClientId.trim() !== "") {
+      if (hosted) {
+        body.artifact_archive_provider = "drive"
+      } else if (oauthClientId.trim() !== "") {
         body.google_oauth_client_id = oauthClientId.trim()
       }
-      if (oauthClientSecret.trim() !== "") {
+      if (!hosted && oauthClientSecret.trim() !== "") {
         body.google_oauth_client_secret = oauthClientSecret
       }
       await api<SettingsResponse>("/api/settings", {
@@ -269,7 +274,7 @@ export function GoogleDriveConnect() {
         {connected && connectedLabel && (
           <Field>
             <FieldLabel>
-              {status?.authMode === "oauth"
+              {hosted || status?.authMode === "oauth"
                 ? "Connected Google account"
                 : "Connected service account"}
             </FieldLabel>
@@ -280,12 +285,18 @@ export function GoogleDriveConnect() {
               <CopyButton value={connectedLabel} />
             </div>
             <FieldDescription>
-              {status?.authMode === "oauth"
-                ? "Uploads use this Google account's Drive quota."
-                : "Any folder shared with this email is visible to Zeno."}{" "}
-              Voice notes are transcribed on this server with{" "}
-              {status?.transcriptionProvider ?? "local whisper.cpp"} — no API
-              key, no per-minute cost.
+              {hosted ? (
+                "Zenod uses this account only for the Drive folder you connect."
+              ) : (
+                <>
+                  {status?.authMode === "oauth"
+                    ? "Uploads use this Google account's Drive quota."
+                    : "Any folder shared with this email is visible to Zeno."}{" "}
+                  Voice notes are transcribed on this server with{" "}
+                  {status?.transcriptionProvider ?? "local whisper.cpp"} — no
+                  API key, no per-minute cost.
+                </>
+              )}
             </FieldDescription>
             {status?.archiveConfigured === false && (
               <FieldDescription className="text-destructive">
@@ -293,7 +304,7 @@ export function GoogleDriveConnect() {
                 connection has a Zenod Drive folder ID: {status.archiveReason}
               </FieldDescription>
             )}
-            {model && (
+            {!hosted && model && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {model.error ? (
                   <span className="text-destructive">
@@ -320,7 +331,39 @@ export function GoogleDriveConnect() {
           </Field>
         )}
 
-        {showSetup && (
+        {showSetup && hosted && (
+          <>
+            <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+              <p>
+                Connect your Google account through Zenod. Hosted credentials
+                and managed processing stay private; you only choose the Drive
+                folder Zenod may use.
+              </p>
+              <p>
+                Disconnecting removes Zenod access and never deletes files
+                already stored in Google Drive.
+              </p>
+            </div>
+            <Field>
+              <FieldLabel htmlFor="drive-folder-id">
+                Zenod Drive folder ID
+              </FieldLabel>
+              <Input
+                id="drive-folder-id"
+                autoComplete="off"
+                placeholder="the part after /folders/ in the folder URL"
+                value={folderId}
+                onChange={(event) => setFolderId(event.target.value)}
+              />
+              <FieldDescription>
+                Use one folder. Zeno creates Inbox/ and Archive/ subfolders
+                inside it as needed.
+              </FieldDescription>
+            </Field>
+          </>
+        )}
+
+        {showSetup && !hosted && (
           <>
             <div className="flex flex-col gap-3">
               <Step n={1}>
@@ -491,19 +534,23 @@ export function GoogleDriveConnect() {
               {connecting ? <Spinner /> : <LogInIcon data-icon="inline-start" />}
               Connect with Google
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={testing}
-              onClick={handleTest}
-            >
-              {testing ? <Spinner /> : <PlugZapIcon data-icon="inline-start" />}
-              Test
-            </Button>
-            <Button type="button" disabled={saving} onClick={handleSave}>
-              {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
-              {connected ? "Save changes" : "Connect Google Drive"}
-            </Button>
+            {!hosted && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={testing}
+                  onClick={handleTest}
+                >
+                  {testing ? <Spinner /> : <PlugZapIcon data-icon="inline-start" />}
+                  Test
+                </Button>
+                <Button type="button" disabled={saving} onClick={handleSave}>
+                  {saving ? <Spinner /> : <SaveIcon data-icon="inline-start" />}
+                  {connected ? "Save changes" : "Connect Google Drive"}
+                </Button>
+              </>
+            )}
             {connected && (
               <Button
                 type="button"
@@ -540,8 +587,9 @@ export function GoogleDriveConnect() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Disconnect Google Drive?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Zenod forgets the service-account key and Zeno loses access
-                  to your Drive files. Nothing changes in your Drive.
+                  {hosted
+                    ? "Zenod loses access to your Drive folder. Nothing changes in Google Drive."
+                    : "Zenod forgets the service-account key and Zeno loses access to your Drive files. Nothing changes in your Drive."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

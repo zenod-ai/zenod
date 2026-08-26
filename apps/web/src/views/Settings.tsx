@@ -332,7 +332,7 @@ export function Settings({
                 allowReclone={edition === "self-hosted"}
                 edition={edition}
               />
-              <GoogleDriveConnect />
+              <GoogleDriveConnect edition={edition} />
             </div>
           </TabsContent>
           <TabsContent value="usage" className="mt-4">

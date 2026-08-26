@@ -455,6 +455,18 @@ describe("Zenod chassis unit", () => {
         expect(safeUpdate.status).toBe(200);
         expect(hostedRuntime.settings.get("telegram_rich")).toBe("true");
 
+        const safeDriveUpdate = await unit.app.request("/api/settings", {
+          method: "PUT",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            google_drive_folder_id: "hosted-folder",
+            artifact_archive_provider: "drive",
+          }),
+        });
+        expect(safeDriveUpdate.status).toBe(200);
+        expect(hostedRuntime.settings.get("google_drive_folder_id")).toBe("hosted-folder");
+        expect(hostedRuntime.settings.get("artifact_archive_provider")).toBe("drive");
+
         const wrongMethod = await unit.app.request("/api/settings", {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
