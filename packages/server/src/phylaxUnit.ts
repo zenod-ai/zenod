@@ -699,7 +699,7 @@ function createTenantOrgan(
         const result = await transcribeAudio(
           Buffer.from(input.bytes),
           input.fileName ?? "voice.ogg",
-          phylaxTranscriptionOptions(transcription, env, input.signal),
+          phylaxTranscriptionOptions(transcription, env, input.signal, input.durationSeconds),
         );
         if (!result.success || !result.transcript?.trim()) {
           return {
@@ -711,10 +711,22 @@ function createTenantOrgan(
             },
           };
         }
+        const [provider = transcription.provider, ...modelParts] = (result.provider ?? transcription.provider).trim().split(/\s+/);
+        const model = modelParts.join(" ").trim() || transcription.model?.trim() || undefined;
         return {
           text_transcript: result.transcript.trim(),
           ...(result.provider ? { transcription_source: result.provider } : {}),
           ...(result.timing ? { transcription_timing: result.timing } : {}),
+          ...(input.durationSeconds !== null && input.durationSeconds !== undefined
+            ? {
+                transcription_usage: {
+                  provider,
+                  ...(model ? { model } : {}),
+                  audio_seconds: input.durationSeconds,
+                  billable_units: 1,
+                },
+              }
+            : {}),
         };
       },
     },
@@ -751,6 +763,7 @@ export function phylaxTranscriptionOptions(
   },
   env: NodeJS.ProcessEnv,
   signal: AbortSignal,
+  durationSeconds?: number | null,
 ): Exclude<TranscribeOptions, (percent: number) => void> {
   const requestedLocalModel = transcription.provider === "local" ? transcription.model?.trim() : null;
   const configuredLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
@@ -773,6 +786,7 @@ export function phylaxTranscriptionOptions(
     allowLocalFallback: transcription.provider === "local",
     signal,
     includeTiming: true,
+    ...(durationSeconds !== undefined && durationSeconds !== null ? { durationSeconds } : {}),
   };
 }
 

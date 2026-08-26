@@ -99,6 +99,56 @@ export interface UsageCall {
   costUsd: number;
   status: "succeeded" | "failed";
   errorCode: string | null;
+  /** Operator-only cost provenance. Hosted customer usage never returns this. */
+  metadata: Record<string, unknown> | null;
+}
+
+export interface TranscriptionUsageReport {
+  /** Stable channel event identity, normally the existing store_memory idempotency key. */
+  eventKey: string;
+  provider: string;
+  model?: string | null;
+  audioSeconds: number;
+}
+
+/**
+ * Deterministic duration estimates for the duration-billed models already in
+ * Zenod's OpenRouter transcription catalog. OpenRouter's transcription response
+ * does not include the charged amount, so this is explicitly operator-estimated
+ * cost, never provider truth. Token-billed/unknown models return null rather
+ * than fabricating a price.
+ */
+const TRANSCRIPTION_USD_PER_MINUTE = new Map<string, number>([
+  ["mistralai/voxtral-mini-transcribe", 0.003],
+  ["microsoft/mai-transcribe-1.5", 0.36],
+  ["nvidia/parakeet-tdt-0.6b-v3", 0.0015],
+  ["qwen/qwen3-asr-flash-2026-02-10", 0.000035],
+  ["google/chirp-3", 0.016],
+  ["openai/whisper-large-v3-turbo", 0.04],
+  ["openai/whisper-large-v3", 0.0015],
+  ["openai/whisper-1", 0.006],
+]);
+
+export function estimateTranscriptionCostUsd(input: {
+  provider: string;
+  model?: string | null;
+  audioSeconds: number;
+}): { costUsd: number | null; rateUsdPerMinute: number | null; basis: "duration_estimate" | "service_included" | "unavailable" } {
+  const provider = input.provider.trim().toLowerCase();
+  const seconds = Number.isFinite(input.audioSeconds) ? Math.max(0, input.audioSeconds) : 0;
+  if (provider === "local" || provider === "whisper.cpp") {
+    return { costUsd: 0, rateUsdPerMinute: 0, basis: "service_included" };
+  }
+  const model = input.model?.trim().toLowerCase() || (provider === "openai" ? "openai/whisper-1" : "");
+  const rateUsdPerMinute = TRANSCRIPTION_USD_PER_MINUTE.get(model) ?? null;
+  if (rateUsdPerMinute === null) {
+    return { costUsd: null, rateUsdPerMinute: null, basis: "unavailable" };
+  }
+  return {
+    costUsd: seconds / 60 * rateUsdPerMinute,
+    rateUsdPerMinute,
+    basis: "duration_estimate",
+  };
 }
 
 export interface UsageTimelineQuery {
@@ -162,6 +212,18 @@ export class UsageStore {
     if (!columns.some((column) => column.name === "error_code")) {
       this.db.exec("ALTER TABLE llm_usage ADD COLUMN error_code TEXT");
     }
+    if (!columns.some((column) => column.name === "cost_basis")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN cost_basis TEXT NOT NULL DEFAULT 'token_estimate'");
+    }
+    if (!columns.some((column) => column.name === "event_key")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN event_key TEXT");
+    }
+    if (!columns.some((column) => column.name === "metadata_json")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN metadata_json TEXT");
+    }
+    this.db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS llm_usage_event_key ON llm_usage(event_key) WHERE event_key IS NOT NULL",
+    );
     this.backfillCosts();
   }
 
@@ -177,7 +239,8 @@ export class UsageStore {
       .prepare(
         `SELECT id, operation, provider, model AS key, input_tokens, output_tokens,
                 cached_input_tokens, cache_creation_input_tokens, cost_usd
-         FROM llm_usage`,
+         FROM llm_usage
+         WHERE cost_basis='token_estimate'`,
       )
       .all() as unknown as Array<AggRow & { id: number; operation: string; provider: string }>;
     const update = this.db.prepare(`UPDATE llm_usage SET cost_usd = ? WHERE id = ?`);
@@ -215,6 +278,46 @@ export class UsageStore {
         report.status ?? "succeeded",
         report.errorCode ?? null,
       );
+  }
+
+  /**
+   * Books Phylax's already-completed transcription into this tenant runtime's
+   * existing usage ledger. The stable event key makes concurrent/retried channel
+   * delivery exactly-once. Unknown provider pricing is retained as an operator
+   * event with cost 0 and `estimate_unavailable=true`; it is never presented as
+   * provider-billed truth.
+   */
+  recordTranscription(report: TranscriptionUsageReport, now: number = Date.now()): boolean {
+    const eventKey = report.eventKey.trim();
+    const provider = report.provider.trim().toLowerCase();
+    const model = report.model?.trim() || "unknown";
+    if (!eventKey) throw new Error("transcription usage event key is required");
+    if (!provider) throw new Error("transcription usage provider is required");
+    if (!Number.isFinite(report.audioSeconds) || report.audioSeconds < 0) {
+      throw new Error("transcription usage audioSeconds must be a non-negative finite number");
+    }
+    const estimate = estimateTranscriptionCostUsd(report);
+    const result = this.db.prepare(
+      `INSERT OR IGNORE INTO llm_usage
+       (ts, operation, provider, model, input_tokens, output_tokens,
+        cached_input_tokens, cache_creation_input_tokens, cost_usd, status,
+        error_code, cost_basis, event_key, metadata_json)
+       VALUES (?, 'transcription.audio', ?, ?, 0, 0, 0, 0, ?, 'succeeded', NULL, ?, ?, ?)`,
+    ).run(
+      now,
+      provider,
+      model,
+      estimate.costUsd ?? 0,
+      estimate.basis,
+      `transcription:${eventKey}`,
+      JSON.stringify({
+        audioSeconds: report.audioSeconds,
+        rateUsdPerMinute: estimate.rateUsdPerMinute,
+        estimatedCostUsd: estimate.costUsd,
+        estimateUnavailable: estimate.costUsd === null,
+      }),
+    );
+    return Number(result.changes) === 1;
   }
 
   private aggregate(column: "operation" | "model", since: number): UsageBucket[] {
@@ -259,7 +362,8 @@ export class UsageStore {
     const rows = this.db
       .prepare(
         `SELECT ts, operation, provider, model, input_tokens, output_tokens,
-                cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code
+                cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code,
+                metadata_json
          FROM llm_usage WHERE ${clauses.join(" AND ")}
          ORDER BY ts DESC, id DESC
          LIMIT ?`,
@@ -276,6 +380,7 @@ export class UsageStore {
       cost_usd: number;
       status: "succeeded" | "failed";
       error_code: string | null;
+      metadata_json: string | null;
     }>;
     return rows.map((row) => ({
       ts: row.ts,
@@ -289,6 +394,9 @@ export class UsageStore {
       costUsd: row.cost_usd ?? 0,
       status: row.status === "failed" ? "failed" : "succeeded",
       errorCode: row.error_code,
+      metadata: row.metadata_json
+        ? JSON.parse(row.metadata_json) as Record<string, unknown>
+        : null,
     }));
   }
 

@@ -120,6 +120,100 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
+  it("rides transcription metering on the existing idempotent memory call", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-usage-handoff-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "tenant-alpha",
+          downstreamUrl: "https://zenod.test/mcp/alpha",
+          downstreamToken: "memory-channel-token",
+          turnBindings: {
+            voice_note: { tool: "store_memory", argumentMappings: { content: { source: "transcript" } } },
+            text: { tool: "chat_with_zenod", argumentMappings: { message: { source: "message" } } },
+            media: { tool: "ingest_memory", argumentMappings: { artifactUrl: { source: "artifactUrl" } } },
+          },
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "store",
+          mcp: "store_memory",
+          description: "Store memory",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["content"],
+            properties: {
+              content: { type: "string" },
+              idempotencyKey: { type: "string" },
+              transcriptionUsage: { type: "object" },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        if (call.tool === "get_task_result") {
+          return {
+            content: [{ type: "text", text: "saved" }],
+            structuredContent: {
+              ticket_id: "store-job-1",
+              status: "done",
+              state: "done",
+              result: { evidenceRef: "Log/2026-08-26.md#^e-usage" },
+            },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "queued" }],
+          structuredContent: { ticket_id: "store-job-1", status: "queued", state: "accepted" },
+        };
+      },
+    });
+    try {
+      await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "voice-provider-1",
+        media: { artifactRef: "https://phylax.test/artifacts/tenant-alpha/voice.ogg", mimeType: "audio/ogg" },
+        transcription: {
+          text_transcript: "Remember the launch decision.",
+          transcription_source: "openrouter mistralai/voxtral-mini-transcribe",
+          transcription_usage: {
+            provider: "openrouter",
+            model: "mistralai/voxtral-mini-transcribe",
+            audio_seconds: 75,
+            billable_units: 1,
+          },
+        },
+      });
+      expect(calls.filter((call) => call.tool === "store_memory")).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        tool: "store_memory",
+        arguments: {
+          content: "Remember the launch decision.",
+          idempotencyKey: "tenant-alpha:whatsapp:voice-provider-1",
+          transcriptionUsage: {
+            provider: "openrouter",
+            model: "mistralai/voxtral-mini-transcribe",
+            audio_seconds: 75,
+            billable_units: 1,
+          },
+        },
+      });
+    } finally {
+      await organ.close();
+    }
+  });
+
   it("journals mutation-capable Zenod chat across a foreground timeout and replays one terminal result", async () => {
     vi.useFakeTimers();
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-durable-chat-"));
@@ -2009,11 +2103,13 @@ describe("PhylaxChannelsOrgan", () => {
       { provider: "openrouter", model: "openai/whisper-large-v3-turbo", key: "tenant-key" },
       { OPENROUTER_API_KEY: "must-not-leak" },
       signal,
+      75,
     )).toMatchObject({
       groqApiKey: "",
       openaiApiKey: "",
       openrouterApiKey: "tenant-key",
       allowLocalFallback: false,
+      durationSeconds: 75,
     });
   });
 

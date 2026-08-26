@@ -183,6 +183,7 @@ function registerZenodTools(
   runtime: Runtime,
   agent: AgentDefinition = ZENOD_AGENT,
   chatInterceptor?: ChatTurnInterceptor,
+  credentialProfile: string | null = null,
 ): void {
   const { settings } = runtime;
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
@@ -199,6 +200,12 @@ function registerZenodTools(
       recent: (limit) => runtime.taskJobQueue.recent(limit),
       admit: (kind, input) => runtime.taskJobQueue.admit(kind, input),
       hostedArchiveOnlyDrive: settings.googleDriveOAuthAuthority().mode === "hosted-managed",
+      ...(credentialProfile === "memory-channel"
+        ? {
+            bookTranscriptionUsage: (input: Parameters<typeof runtime.usageStore.recordTranscription>[0]) =>
+              runtime.usageStore.recordTranscription(input),
+          }
+        : {}),
     },
     (input) => editGithubIssue(settings, input),
     (input) => createGithubIssue(settings, input),
@@ -729,7 +736,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     tools(server, context) {
       const runtime = runtimes.forContext(context);
       const chatInterceptor = options.appOptionsForTenant?.(context.tenant!.id, runtime).chatInterceptor;
-      registerZenodTools(server, runtime, agent, chatInterceptor);
+      registerZenodTools(server, runtime, agent, chatInterceptor, context.credentialProfile);
       options.registerAdditionalTools?.(server, context, runtime);
     },
     routes(routes) {

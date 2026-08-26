@@ -2403,6 +2403,8 @@ describe("Zenod chassis unit", () => {
       expect(primaryTools.map((tool) => tool.name)).not.toContain(
         "get_recent_conversation_transcript",
       );
+      expect((await alpha.listTools()).tools.find((tool) => tool.name === "store_memory")?.inputSchema)
+        .toMatchObject({ properties: { transcriptionUsage: {} } });
       expect(primaryTools.find((tool) => tool.name === "search_memory")?.inputSchema)
         .toMatchObject({
           properties: {
@@ -2427,6 +2429,48 @@ describe("Zenod chassis unit", () => {
       });
       expect(denied.isError).toBe(true);
       expect(JSON.stringify(denied)).toMatch(/not found/i);
+
+      const alphaRuntime = unit.runtimes.get("tenant-alpha")!;
+      const originalRecord = alphaRuntime.usageStore.recordTranscription.bind(alphaRuntime.usageStore);
+      let reportingAttempts = 0;
+      vi.spyOn(alphaRuntime.usageStore, "recordTranscription").mockImplementation((input, now) => {
+        reportingAttempts += 1;
+        if (reportingAttempts === 1) throw new Error("temporary accounting write failure");
+        return originalRecord(input, now);
+      });
+      const voiceArguments = {
+        content: "Remember this voice transcript.",
+        source: "whatsapp",
+        contentType: "voice_note",
+        idempotencyKey: "tenant-alpha:whatsapp:voice-usage-1",
+        transcriptionUsage: {
+          provider: "openrouter",
+          model: "mistralai/voxtral-mini-transcribe",
+          audio_seconds: 60,
+          billable_units: 1,
+        },
+      };
+      const firstStore = await alpha.callTool({ name: "store_memory", arguments: voiceArguments });
+      const retriedStore = await alpha.callTool({ name: "store_memory", arguments: voiceArguments });
+      expect(firstStore.structuredContent).toMatchObject({ state: "accepted" });
+      expect(retriedStore.structuredContent).toMatchObject({
+        state: "accepted",
+        ticket_id: (firstStore.structuredContent as { ticket_id: string }).ticket_id,
+      });
+      expect(reportingAttempts).toBe(2);
+      expect(alphaRuntime.usageStore.summary(0).byOperation).toContainEqual(expect.objectContaining({
+        key: "transcription.audio",
+        calls: 1,
+        costUsd: 0.003,
+      }));
+
+      const betaStore = await beta.callTool({
+        name: "store_memory",
+        arguments: { ...voiceArguments, idempotencyKey: "tenant-beta:whatsapp:voice-usage-1" },
+      });
+      expect(betaStore.structuredContent).toMatchObject({ state: "accepted" });
+      expect(unit.runtimes.get("tenant-beta")!.usageStore.summary(0).byOperation)
+        .toContainEqual(expect.objectContaining({ key: "transcription.audio", calls: 1, costUsd: 0.003 }));
 
       const mismatch = await fetch(`${base}/mcp/${alphaScoped}`, {
         method: "POST",

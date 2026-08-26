@@ -505,6 +505,7 @@ export class PhylaxPortedRuntime {
             bytes,
             mimeType: job.mimeType,
             fileName: job.fileName,
+            durationSeconds: job.durationSeconds,
           }, controller.signal);
           if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") continue;
           if (transcription.transcription_failed || !transcription.text_transcript?.trim()) {

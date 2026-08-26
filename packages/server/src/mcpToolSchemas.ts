@@ -62,6 +62,20 @@ export const STORE_MEMORY_SHAPE = {
     .describe("Optional caller-stable key. Retries return the original durable job and receipt."),
 };
 
+/**
+ * Extra metering metadata accepted only on the existing least-privilege
+ * `memory-channel` credential. It deliberately carries no price: Zenod applies
+ * its documented duration estimate in the tenant's own usage ledger.
+ */
+export const CHANNEL_TRANSCRIPTION_USAGE_SHAPE = z
+  .object({
+    provider: z.string().trim().min(1).max(128),
+    model: z.string().trim().min(1).max(256).optional(),
+    audio_seconds: z.number().finite().nonnegative(),
+    billable_units: z.number().int().positive().optional(),
+  })
+  .strict();
+
 export const INGEST_MEMORY_SHAPE = {
   mediaType: z
     .enum(["audio", "screenshot", "image", "pdf", "document", "link"])

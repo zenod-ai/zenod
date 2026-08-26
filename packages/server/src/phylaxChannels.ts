@@ -87,6 +87,8 @@ export interface PhylaxChannelTranscriber {
     bytes: Uint8Array;
     mimeType: string | null;
     fileName: string | null;
+    /** Existing media-duration probe; never substitute provider runtime. */
+    durationSeconds?: number | null;
     signal: AbortSignal;
   }): Promise<PhylaxTranscriptionReceipt>;
 }
@@ -1114,7 +1116,10 @@ export class PhylaxChannelsOrgan {
   }
 
   async transcribeStagedVoice(
-    voice: Pick<PhylaxStagedVoice, "tenantId" | "mimeType" | "fileName"> & { bytes: Uint8Array },
+    voice: Pick<PhylaxStagedVoice, "tenantId" | "mimeType" | "fileName"> & {
+      bytes: Uint8Array;
+      durationSeconds?: number | null;
+    },
     signal: AbortSignal,
   ): Promise<PhylaxTranscriptionReceipt> {
     if (!this.options.transcriber) {
@@ -1133,6 +1138,7 @@ export class PhylaxChannelsOrgan {
         bytes: voice.bytes,
         mimeType: voice.mimeType,
         fileName: voice.fileName,
+        ...(voice.durationSeconds !== undefined ? { durationSeconds: voice.durationSeconds } : {}),
         signal: controller.signal,
       });
     } catch (error) {
@@ -1332,6 +1338,11 @@ export class PhylaxChannelsOrgan {
     }
     if ((call.tool === "store_memory" || call.tool === "ingest_memory") && providerMessageId) {
       call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
+    }
+    if (call.tool === "store_memory" && handoff.transcription_usage) {
+      // Usage rides the already-authenticated, already-idempotent memory call.
+      // There is no second queue, credential, or tenant identifier in the payload.
+      call.arguments.transcriptionUsage = handoff.transcription_usage;
     }
     if (call.tool === "ingest_memory" && text && call.arguments.contentHint === undefined) {
       call.arguments.contentHint = text;

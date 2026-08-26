@@ -59,6 +59,7 @@ import {
   RUN_ISSUE_SHAPE,
   RUN_EPHEMERAL_TASK_SHAPE,
   STORE_MEMORY_SHAPE,
+  CHANNEL_TRANSCRIPTION_USAGE_SHAPE,
 } from "./mcpToolSchemas.js";
 import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
 
@@ -75,6 +76,13 @@ export interface TaskJobs {
   admit?(kind: TaskJobKind, input: TaskJobInput): { code: string; message: string } | null;
   /** Hosted public beta uses Drive only as an archive/export destination. */
   hostedArchiveOnlyDrive?: boolean;
+  /** Memory-channel only: book Phylax STT after the durable store job exists. */
+  bookTranscriptionUsage?: (input: {
+    eventKey: string;
+    provider: string;
+    model?: string;
+    audioSeconds: number;
+  }) => void;
 }
 
 export interface MediaIngestJobs {
@@ -1095,10 +1103,10 @@ export function buildMcpServer(
       title: "Store memory",
       description:
         "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and commits to GitHub. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. Use for anything the user wants remembered: facts, decisions, events, preferences. ASYNC: the librarian pipeline runs classify + compose LLM calls and a git commit (slower for longer memories), so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved receipt, evidence ref, pages touched, commit SHA, and filing disposition.",
-      inputSchema: STORE_MEMORY_SHAPE,
+      inputSchema: { ...STORE_MEMORY_SHAPE, transcriptionUsage: CHANNEL_TRANSCRIPTION_USAGE_SHAPE.optional() },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ content, hints, verbatim, source, contentType, capturedAt, sourceId, idempotencyKey }) => {
+    async ({ content, hints, verbatim, source, contentType, capturedAt, sourceId, idempotencyKey, transcriptionUsage }) => {
       const input: TaskJobInput = {
         content,
         ...(hints ? { hints } : {}),
@@ -1110,6 +1118,20 @@ export function buildMcpServer(
       };
       if (taskJobs) {
         const job = taskJobs.enqueue("store", input, idempotencyKey);
+        // Custody comes first. Metering is best-effort and retryable through the
+        // same idempotent channel call; it can never erase or reject the memory.
+        if (idempotencyKey && transcriptionUsage && taskJobs.bookTranscriptionUsage) {
+          try {
+            taskJobs.bookTranscriptionUsage({
+              eventKey: idempotencyKey,
+              provider: transcriptionUsage.provider,
+              ...(transcriptionUsage.model ? { model: transcriptionUsage.model } : {}),
+              audioSeconds: transcriptionUsage.audio_seconds,
+            });
+          } catch {
+            // The durable channel retry re-attempts this exact idempotent report.
+          }
+        }
         return enqueuedResponse(job);
       }
       if (idempotencyKey) {
