@@ -46,6 +46,7 @@ import {
 import { buildMcpServer } from "./mcp.js";
 import { buildMeshGatewayServer, type ConsoleChatRequest } from "./meshGateway.js";
 import {
+  DriveClient,
   driveAuthFromSettings,
   driveClientFromSettings,
   exchangeGoogleDriveOAuthCode,
@@ -2025,13 +2026,17 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const state = randomBytes(24).toString("base64url");
     settings.setRaw("google_oauth_state", state);
     const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
-    return c.redirect(googleDriveOAuthUrl({ clientId, redirectUri, state }));
+    return c.redirect(googleDriveOAuthUrl({ clientId, redirectUri, state, mode: authority.mode }));
   });
 
   app.get("/api/drive/oauth/callback", async (c) => {
     const url = new URL(c.req.url);
     const error = url.searchParams.get("error");
-    if (error) return c.text(`Google Drive connection failed: ${error}`, 400);
+    if (error) {
+      return settings.googleDriveOAuthAuthority().mode === "hosted-managed"
+        ? c.text("Google Drive connection was not completed.", 400)
+        : c.text(`Google Drive connection failed: ${error}`, 400);
+    }
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     if (!code || !state || state !== settings.getRaw("google_oauth_state")) {
@@ -2047,9 +2052,42 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       : settings.get("google_oauth_client_secret");
     if (!clientId || !clientSecret) return c.text("Google Drive connection failed: OAuth client is not configured", 400);
     const redirectUri = new URL("/api/drive/oauth/callback", publicBaseUrl(c)).toString();
-    const result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+    let result: Awaited<ReturnType<typeof exchangeGoogleDriveOAuthCode>>;
+    if (authority.mode === "hosted-managed") {
+      try {
+        result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+      } catch {
+        return c.text("Google Drive connection failed. Please try again.", 502);
+      }
+    } else {
+      result = await exchangeGoogleDriveOAuthCode({ clientId, clientSecret, code, redirectUri });
+    }
+    let managedFolderId: string | null = null;
+    if (authority.mode === "hosted-managed") {
+      try {
+        const client = new DriveClient(
+          {
+            kind: "oauth",
+            clientId,
+            clientSecret,
+            refreshToken: result.refreshToken,
+            email: result.email,
+          },
+          result.accessToken ? { accessToken: result.accessToken } : undefined,
+        );
+        managedFolderId = await client.ensureManagedRootFolder(
+          settings.get("google_drive_folder_id"),
+        );
+      } catch {
+        return c.text("Google Drive connection failed: Zenod could not prepare its folder. Please try again.", 502);
+      }
+    }
     settings.setRaw("google_oauth_refresh_token", result.refreshToken);
     settings.setRaw("google_oauth_email", result.email ?? "");
+    if (managedFolderId) {
+      settings.set("google_drive_folder_id", managedFolderId);
+      settings.set("artifact_archive_drive_folder_id", managedFolderId);
+    }
     settings.set("artifact_archive_provider", "drive");
     runtime.invalidate();
     if (settings.driveConfigured()) void prepareModel(settings.whisperModel());
@@ -2057,11 +2095,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   });
 
   app.post("/api/drive/disconnect", (c) => {
+    const hostedManaged = settings.googleDriveOAuthAuthority().mode === "hosted-managed";
     settings.set("google_service_account_json", "");
     settings.setRaw("google_oauth_refresh_token", "");
     settings.setRaw("google_oauth_email", "");
     settings.setRaw("google_oauth_state", "");
     settings.set("google_drive_folder_id", "");
+    if (hostedManaged) settings.set("artifact_archive_drive_folder_id", "");
     runtime.invalidate();
     return c.json({ ok: true });
   });

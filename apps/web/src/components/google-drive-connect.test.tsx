@@ -44,7 +44,7 @@ afterEach(() => {
 })
 
 describe("GoogleDriveConnect edition projection", () => {
-  it("shows only managed OAuth and folder controls to Hosted customers", async () => {
+  it("shows only managed OAuth and an automatically managed folder to Hosted customers", async () => {
     mocks.api.mockImplementation(async (path: string) => {
       if (path === "/api/drive/status") return hostedDriveStatus
       throw new Error(`unexpected Hosted request: ${path}`)
@@ -52,15 +52,19 @@ describe("GoogleDriveConnect edition projection", () => {
 
     render(<GoogleDriveConnect edition="hosted" />)
 
-    await screen.findByLabelText("Zenod Drive folder ID")
+    await screen.findByRole("button", { name: "Connect with Google" })
     expect(
       screen.getByRole("button", { name: "Connect with Google" })
     ).not.toBeNull()
     expect(
       screen.getByText(
-        /Hosted credentials and managed processing stay private/i
+        /creates or recovers one app-owned folder automatically/i
       )
     ).not.toBeNull()
+    expect(screen.queryByLabelText("Zenod Drive folder ID")).toBeNull()
+    expect(document.body.textContent).toMatch(
+      /only requests access to files created or opened with Zenod/i
+    )
 
     const copy = document.body.textContent ?? ""
     expect(copy).not.toMatch(

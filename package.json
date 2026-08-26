@@ -16,6 +16,7 @@
     "schemas:check": "node scripts/build-tool-output-schemas.mjs --check",
     "schemas:build": "node scripts/build-tool-output-schemas.mjs",
     "acceptance:zal17:drive": "node scripts/zal17-drive-journey.mjs",
+    "acceptance:zal20:drive": "node scripts/zal20-drive-journey.mjs",
     "dev:web": "npm run dev -w web",
     "dev:site": "npm run dev -w site",
     "build:site": "npm run build -w site",

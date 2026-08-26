@@ -211,21 +211,21 @@ export function GoogleDriveConnect({
   async function handleOAuthConnect() {
     setConnecting(true)
     try {
-      const body: Record<string, string> = {
-        google_drive_folder_id: folderId,
+      if (!hosted) {
+        const body: Record<string, string> = {
+          google_drive_folder_id: folderId,
+        }
+        if (oauthClientId.trim() !== "") {
+          body.google_oauth_client_id = oauthClientId.trim()
+        }
+        if (oauthClientSecret.trim() !== "") {
+          body.google_oauth_client_secret = oauthClientSecret
+        }
+        await api<SettingsResponse>("/api/settings", {
+          method: "PUT",
+          body,
+        })
       }
-      if (hosted) {
-        body.artifact_archive_provider = "drive"
-      } else if (oauthClientId.trim() !== "") {
-        body.google_oauth_client_id = oauthClientId.trim()
-      }
-      if (!hosted && oauthClientSecret.trim() !== "") {
-        body.google_oauth_client_secret = oauthClientSecret
-      }
-      await api<SettingsResponse>("/api/settings", {
-        method: "PUT",
-        body,
-      })
       window.location.assign("/api/drive/oauth/start")
     } catch (err) {
       toast.error("Could not start Google OAuth", {
@@ -275,9 +275,9 @@ export function GoogleDriveConnect({
           )}
         </CardTitle>
         <CardDescription>
-          Pick one Zenod Drive folder. Drop voice notes or documents there, or
-          in its Inbox/ subfolder, and ask Zeno to transcribe them — Zeno
-          creates archive subfolders inside that same folder.
+          {hosted
+            ? "Zenod creates one private app folder for voice notes, documents, and archived media."
+            : "Pick one Zenod Drive folder. Drop voice notes or documents there, or in its Inbox/ subfolder, and ask Zeno to transcribe them — Zeno creates archive subfolders inside that same folder."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -296,7 +296,7 @@ export function GoogleDriveConnect({
             </div>
             <FieldDescription>
               {hosted ? (
-                "Zenod uses this account only for the Drive folder you connect."
+                "Zenod uses this account only for the app folder it created."
               ) : (
                 <>
                   {selfHostedStatus?.authMode === "oauth"
@@ -311,8 +311,7 @@ export function GoogleDriveConnect({
             </FieldDescription>
             {status?.archiveConfigured === false && (
               <FieldDescription className="text-destructive">
-                WhatsApp media receipts will not include Drive links until this
-                connection has a Zenod Drive folder ID: {status.archiveReason}
+                WhatsApp media receipts will not include Drive links yet: {status.archiveReason}
               </FieldDescription>
             )}
             {!hosted && model && (
@@ -352,31 +351,19 @@ export function GoogleDriveConnect({
             )}
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
               <p>
-                Connect your Google account through Zenod. Hosted credentials
-                and managed processing stay private; you only choose the Drive
-                folder Zenod may use.
+                Connect your Google account through Zenod. Zenod creates or
+                recovers one app-owned folder automatically and only requests
+                access to files created or opened with Zenod.
               </p>
               <p>
                 Disconnecting removes Zenod access and never deletes files
                 already stored in Google Drive.
               </p>
             </div>
-            <Field>
-              <FieldLabel htmlFor="drive-folder-id">
-                Zenod Drive folder ID
-              </FieldLabel>
-              <Input
-                id="drive-folder-id"
-                autoComplete="off"
-                placeholder="the part after /folders/ in the folder URL"
-                value={folderId}
-                onChange={(event) => setFolderId(event.target.value)}
-              />
-              <FieldDescription>
-                Use one folder. Zeno creates Inbox/ and Archive/ subfolders
-                inside it as needed.
-              </FieldDescription>
-            </Field>
+            <FieldDescription>
+              After consent, your Zenod folder is ready automatically. Zeno
+              creates Inbox/ and Archive/ subfolders inside it as needed.
+            </FieldDescription>
           </>
         )}
 

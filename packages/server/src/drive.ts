@@ -11,13 +11,17 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-// Full (not readonly) scope: ingestion archives consumed files into an
-// Archive/ subfolder. The service account still only ever sees what the
-// user explicitly shared with it.
+// Self-hosted OAuth and service-account setups retain their existing full-Drive
+// behavior. Hosted uses drive.file instead: it can only see files Zenod creates
+// or the customer explicitly opens with Zenod.
 const SCOPE = "https://www.googleapis.com/auth/drive";
-const OAUTH_SCOPE = `${SCOPE} https://www.googleapis.com/auth/userinfo.email`;
+const HOSTED_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const USERINFO_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,parents";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+const MANAGED_ROOT_NAME = "Zenod";
+const MANAGED_ROOT_PROPERTY_KEY = "zenodManagedRoot";
+const MANAGED_ROOT_PROPERTY_VALUE = "v1";
 
 export interface ServiceAccount {
   client_email: string;
@@ -64,9 +68,16 @@ export class DriveClient {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
 
-  constructor(auth: string | DriveAuth) {
+  constructor(
+    auth: string | DriveAuth,
+    initialToken?: { accessToken: string; expiresInSeconds?: number },
+  ) {
     this.auth = typeof auth === "string" ? { kind: "service_account", serviceAccountJson: auth } : auth;
     this.account = this.auth.kind === "service_account" ? parseServiceAccount(this.auth.serviceAccountJson) : null;
+    if (initialToken?.accessToken) {
+      this.accessToken = initialToken.accessToken;
+      this.tokenExpiresAt = Date.now() + (initialToken.expiresInSeconds ?? 3600) * 1000;
+    }
   }
 
   get accountLabel(): string {
@@ -230,6 +241,53 @@ export class DriveClient {
   }
 
   /**
+   * Reuse a writable stored Hosted root when possible, otherwise recover the
+   * app-owned root by its private marker or create it in My Drive. With
+   * drive.file, the query can only see files this OAuth client created/opened.
+   */
+  async ensureManagedRootFolder(storedFolderId?: string | null): Promise<string> {
+    if (storedFolderId) {
+      const stored = await this.getFile(storedFolderId).catch(() => null);
+      if (
+        stored?.mimeType === FOLDER_MIME &&
+        await this.canWrite(storedFolderId).catch(() => false)
+      ) {
+        return storedFolderId;
+      }
+    }
+
+    const marker = `${MANAGED_ROOT_PROPERTY_KEY}='${MANAGED_ROOT_PROPERTY_VALUE}'`;
+    const response = await this.request("/files", {
+      q: `trashed = false and mimeType = '${FOLDER_MIME}' and appProperties has { key='${MANAGED_ROOT_PROPERTY_KEY}' and value='${MANAGED_ROOT_PROPERTY_VALUE}' }`,
+      orderBy: "createdTime asc",
+      pageSize: "10",
+      spaces: "drive",
+      fields: `files(${FILE_FIELDS},appProperties)`,
+    });
+    const data = (await response.json()) as { files?: DriveFile[] };
+    const recovered = data.files?.find((file) => file.name === MANAGED_ROOT_NAME) ?? data.files?.[0];
+    if (recovered?.id) return recovered.id;
+
+    const created = await this.request(
+      "/files",
+      { fields: FILE_FIELDS },
+      {
+        method: "POST",
+        body: {
+          name: MANAGED_ROOT_NAME,
+          mimeType: FOLDER_MIME,
+          appProperties: { [MANAGED_ROOT_PROPERTY_KEY]: MANAGED_ROOT_PROPERTY_VALUE },
+        },
+      },
+    );
+    const folder = (await created.json()) as { id?: unknown };
+    if (typeof folder.id !== "string" || !folder.id) {
+      throw new Error(`Drive API did not return the ${marker} folder ID`);
+    }
+    return folder.id;
+  }
+
+  /**
    * Upload a new binary file into a folder. Uses the multipart upload endpoint
    * (metadata + media in one request), which the JSON-only `request()` helper
    * can't express, so it builds the multipart/related body and fetches directly.
@@ -316,12 +374,20 @@ export function driveClientFromSettings(settings: Settings): DriveClient | null 
 }
 
 /** Build the Google consent-screen URL for the Connect button. */
-export function googleDriveOAuthUrl(input: { clientId: string; redirectUri: string; state: string }): string {
+export function googleDriveOAuthUrl(input: {
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  mode?: "self-hosted" | "hosted-managed";
+}): string {
   const url = new URL(GOOGLE_AUTH_URL);
   url.searchParams.set("client_id", input.clientId);
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", OAUTH_SCOPE);
+  url.searchParams.set(
+    "scope",
+    `${input.mode === "hosted-managed" ? HOSTED_SCOPE : SCOPE} ${USERINFO_EMAIL_SCOPE}`,
+  );
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("prompt", "consent");
   url.searchParams.set("state", input.state);
@@ -333,7 +399,7 @@ export async function exchangeGoogleDriveOAuthCode(input: {
   clientSecret: string;
   code: string;
   redirectUri: string;
-}): Promise<{ refreshToken: string; email: string | null }> {
+}): Promise<{ refreshToken: string; accessToken: string | null; email: string | null }> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -355,7 +421,7 @@ export async function exchangeGoogleDriveOAuthCode(input: {
   }
   let email: string | null = null;
   if (data.access_token) email = await fetchGoogleUserEmail(data.access_token).catch(() => null);
-  return { refreshToken: data.refresh_token, email };
+  return { refreshToken: data.refresh_token, accessToken: data.access_token ?? null, email };
 }
 
 async function fetchGoogleUserEmail(accessToken: string): Promise<string | null> {
