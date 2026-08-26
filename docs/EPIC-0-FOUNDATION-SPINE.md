@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `19be22b` plus current Foundation and Zenod Alpha spine working tree
+Last reconciled commit: `ba5e9c1` plus current Foundation and Zenod Alpha spine working tree
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Zenod paid-beta implementation integrated; read-only production preflight merged; single-price correction active
+Phase: Zenod paid-beta and single-price contract integrated; refreshed read-only production packet next
 Last verified: 2026-08-26 CEST
 Integration target: `main`
-Fresh base commit: `19be22b143f59b144a5315f5f4578b1e0651f007` on `main`; minimum Hosted/self-host implementation, local beta proof, and corrected read-only production preflight are integrated
-Next action: execute [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) from current `main` to replace Zenod's legacy €5/month and €50/year surfaces with the approved single €9/month plus VAT contract; preserve existing subscriptions and shared billing functionality; perform no Stripe or production mutation.
-Blockers: candidate `91b4e7d` must not deploy because its public site, Hosted Account, Terms, checkout parser, and readiness rule still expose the superseded €5/€50 monthly/yearly offer. Production deployment, backups, credentials/config, OpenRouter reconciliation, Google OAuth, live channel sessions, real-card billing, signup opening, and external promotion remain separate exact human gates.
+Fresh base commit: `ba5e9c10ff6466e357568fe9d495913af8047631` on `main`; the reviewed single €9/month contract is integrated and the repository's existing main-push workflow is building its immutable image
+Next action: after the automatic image publish completes, refresh ZAL-4's packet read-only with the exact new OCI/amd64 digest and current pricing/legal/readiness truth, then stop at the first unresolved production input; do not deploy or mutate configuration.
+Blockers: deployment still requires a named off-host backup destination and verified backups, exact credential/token sources and non-secret configuration values, a separately approved live €9 Stripe price, and an explicit immutable-image/Dokploy/rollback approval. OpenRouter reconciliation, Google OAuth, live channel sessions, real-card billing, signup opening, and external promotion remain later exact gates.
 
 ## Bootstrap Map
 
@@ -172,7 +172,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | active / pricing correction | [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) corrects approved product truth before a new preflight digest | Minimum chain and ZAL-17/ZAL-4 docs merged; `codex/zal-18-single-price-contract` | `19be22b` | Child DoD covers readiness truth, recap regression, the approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | ZAL-17 local candidate passed; ZAL-4 read-only packet merged as `19be22b` and blocks deployment of `91b4e7d` on exact pricing drift. | 2026-08-26 CEST | Deliver and independently review #1090 without Stripe or production mutation; then refresh the immutable candidate/preflight packet. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | active / preflight refresh | Automatic immutable image for current `main`, then read-only ZAL-4 reconciliation | [ZAL-18 PR #1091](https://github.com/zenod-ai/zenod/pull/1091) merged; ZAL-4 packet on `main` | `ba5e9c1` | Child DoD covers readiness truth, recap regression, the approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | ZAL-18 passed two review loops and clean CI; exact merged-main shared/site/web/typecheck validation passed; no live mutation. | 2026-08-26 CEST | Record the automatically published digest and refresh #1061 read-only; stop before backup/config/deploy/provider/channel/billing/signup mutation. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -251,6 +251,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-08-26 - Epic 0 worker - Single €9 contract integrated; immutable candidate refresh next
+
+Action: accepted ZAL-18 after an initial clean-CI head was returned for one reviewer-found retired-alias defect. The corrected head rejects `starter`, `pro`, and `yearly` for new Zenod checkout before Stripe while preserving historical yearly accounts and non-Zenod aliases/yearly checkout. PR #1091 merged as `ba5e9c1`; issue #1090 is complete. Site, Hosted Account, Terms, checkout, and readiness now agree on one €9/month plus VAT contract with managed usage and WhatsApp included.
+
+Evidence: exact-head clean CI, two independent review passes, and merged-main validation: 42 shared billing/readiness tests, site 7/7, web 72/72, all-workspace typecheck, and diff check. No Stripe, Dokploy, configuration, credential, channel, billing, signup, backup, or production mutation occurred.
+
+Next action: consume the repository's normal automatic main image publication read-only and refresh the ZAL-4 packet with its exact immutable digest and corrected product/legal/readiness truth. Stop before any backup quiesce, credential/token creation, environment change, deploy, provider reconciliation, OAuth grant, channel send, real-card billing, or signup action.
+
+Assignment identity: Epic 0 Foundation planner (`Jordi + current bound Codex task`); Zenod Alpha delivery manager; ZAL-4-production-readiness-operator
+
+Branch / latest commit: `main` at `ba5e9c1`; ZAL-4 docs branch to be refreshed only after the automatic digest is terminal
+
+Last verified: 2026-08-26 CEST
 
 ### 2026-08-26 - Epic 0 worker - Read-only preflight integrated; single-price correction dispatched
 
