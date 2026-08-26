@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-08-26",
+  "issue": 1061,
+  "mode": "read-only",
+  "candidate": {
+    "sourceSha": "f4a1746eab3fef0e08ba933a30ed658e627e93d2",
+    "mergeSha": "91b4e7da173f5932ff6d1d8b48c3e6db6c05269e",
+    "tag": "ghcr.io/zenod-ai/zenod:sha-91b4e7d",
+    "indexDigest": "sha256:7d28e02d21a26300955c21173cf1992290c8cfe5de565d2fe47e91353812bcde",
+    "linuxAmd64Manifest": "sha256:3d09be2a00f5c7d3d4642e98ae09f772f1dc512f848994971ee9e92b65a8caad",
+    "publishRun": "https://github.com/zenod-ai/zenod/actions/runs/32920326399"
+  },
+  "target": {
+    "project": { "id": "FWSR0dSSjeOSjPsIsMty3", "name": "zenod" },
+    "environment": { "id": "5BPzY3n4l6eSctYuUqXFN", "name": "production" },
+    "public": {
+      "applicationId": "2dkayH_eAur427leH64MT",
+      "applicationName": "zenod-mt",
+      "service": "zenod-mt-fxpzoo",
+      "volume": "zenod-mt-data",
+      "rollbackSha": "7365dbc1c7d869f6c78ee010e47e998f87091c4d",
+      "rollbackDigest": "sha256:33320f2435d98f2c02014f9486999b526440899226e4322bc508fd2c647dcf5d"
+    },
+    "channels": {
+      "applicationId": "urbFsgl6eImbQ4MTIZl5N",
+      "applicationName": "phylax",
+      "service": "app-index-back-end-panel-6zm3qg",
+      "volume": "phylax-data",
+      "privateOrigin": "http://app-index-back-end-panel-6zm3qg:8080",
+      "rollbackSha": "399b3a8dc07154008553702b9c9d689ba92cb63b",
+      "rollbackDigest": "sha256:f8284f7db77866d7bdef735c62ef3f5185b5b4327092f9646986ce880f2e5159"
+    },
+    "network": { "id": "0k299mqvlih0w59gstyl5nvi1", "name": "dokploy-network" }
+  },
+  "currentReadiness": {
+    "httpStatus": 503,
+    "publicPaidSignup": false,
+    "passed": 10,
+    "total": 13,
+    "failedCheckIds": ["legal_version", "stripe_profile", "live_billing_journey"]
+  },
+  "releaseBlockers": [
+    "candidate and live billing contract still implement EUR 5 monthly plus EUR 50 yearly instead of the approved single EUR 9 monthly plan",
+    "Google OAuth operator credentials and callback registration are unresolved",
+    "shared Channels private token is not installed",
+    "fresh verified backups of both public and Channels volumes plus an independent copy are missing",
+    "credential-backed Google, managed AI, Telegram, and WhatsApp journeys are not yet proved"
+  ],
+  "mutationsPerformed": []
+}
