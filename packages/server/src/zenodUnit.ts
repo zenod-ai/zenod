@@ -113,6 +113,19 @@ export class ZenodRuntimePool {
               this.googleDriveOAuthAuthorityForTenant!(tenantId),
           }
         : {}),
+      ...(this.hostedCustomerTenant
+        ? {
+            providerCredentialAuthority: () => this.hostedCustomerTenant!(tenantId)
+              ? {
+                  mode: "hosted-managed" as const,
+                  provider: "openrouter" as const,
+                  apiKey: this.env.ZENOD_MANAGED_AI_ENABLED === "1"
+                    ? this.env.OPENROUTER_API_KEY?.trim() || null
+                    : null,
+                }
+              : { mode: "self-hosted" as const },
+          }
+        : {}),
       ...(this.managedTelegramInbound
         ? { managedTelegramInbound: (input) => this.managedTelegramInbound!(tenantId, input) }
         : {}),
@@ -992,12 +1005,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           (account.subscription_status !== "active" &&
             account.subscription_status !== "past_due")
         ) return null;
+        const usage = await customer.usageForAccount(account);
         return {
           tenantId: account.tenant_id,
           downstreamToken,
-          processingPaused:
-            (account as { managed_ai_status?: string }).managed_ai_status ===
-            "paused",
+          processingPaused: usage.state === "paused",
         };
       },
     });

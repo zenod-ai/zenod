@@ -88,6 +88,7 @@ import {
 import {
   Settings,
   type GoogleDriveOAuthAuthoritySource,
+  type ProviderCredentialAuthoritySource,
   type Provider,
 } from "./settings.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
@@ -280,6 +281,7 @@ export class Runtime {
       credentialMasterKey?: string;
       settingFallbacks?: Readonly<Record<string, string>>;
       googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
+      providerCredentialAuthority?: ProviderCredentialAuthoritySource;
       managedTelegramInbound?: TelegramManagedInboundHandler;
       managedTelegramInboundEnabled?: () => boolean;
     } = {},
@@ -298,6 +300,7 @@ export class Runtime {
       this.credentialVault,
       options.settingFallbacks,
       options.googleDriveOAuthAuthority,
+      options.providerCredentialAuthority,
     );
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));

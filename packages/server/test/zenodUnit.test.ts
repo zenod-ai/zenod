@@ -369,6 +369,71 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("uses an operator credential only for Hosted runtimes while self-host remains BYOK", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([
+      { token: "hosted-token", tenant: { id: "github-42" } },
+      { token: "self-token", tenant: { id: "self-host" } },
+    ]);
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "customer-session-secret",
+        CHASSIS_VAULT_MASTER_KEY,
+        ZENOD_MANAGED_AI_ENABLED: "1",
+        OPENROUTER_API_KEY: "operator-runtime-secret",
+      },
+    });
+    try {
+      unit.customerAccounts.upsert("hosted", {
+        account_id: "github-42",
+        github_id: 42,
+        github_login: "octocat",
+        subscription_status: "active",
+        tenant_id: "github-42",
+        tenant_slug: "octocat-42",
+        managed_ai_key_hash: "historical-child-hash",
+        managed_ai_key_name: "zenod-tenant:octocat-42",
+      });
+      const hosted = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      hosted.settings.set("provider", "anthropic");
+      hosted.settings.set("openrouter_api_key", "historical-child-secret");
+      hosted.settings.set("anthropic_api_key", "tenant-attempted-override");
+
+      expect(hosted.settings.provider()).toBe("openrouter");
+      expect(hosted.settings.activeApiKey()).toBe("operator-runtime-secret");
+      expect(hosted.settings.apiKeyForProvider("anthropic")).toBeNull();
+      expect(hosted.settings.get("openrouter_api_key")).toBe("historical-child-secret");
+      expect(JSON.stringify(hosted.settings.masked())).not.toContain("operator-runtime-secret");
+
+      const selfHosted = unit.runtimes.forTenantStorage(
+        "self-host",
+        unit.storage.forTenant({ id: "self-host" }),
+      );
+      selfHosted.settings.set("provider", "anthropic");
+      selfHosted.settings.set("anthropic_api_key", "self-host-byok-secret");
+      expect(selfHosted.settings.provider()).toBe("anthropic");
+      expect(selfHosted.settings.activeApiKey()).toBe("self-host-byok-secret");
+      expect(selfHosted.settings.apiKeyForProvider("openrouter")).toBeNull();
+
+      const customerSettings = await unit.app.request("/api/settings", {
+        headers: { authorization: "Bearer hosted-token" },
+      });
+      expect(customerSettings.status).toBe(200);
+      const serialized = JSON.stringify(await customerSettings.json());
+      expect(serialized).not.toContain("operator-runtime-secret");
+      expect(serialized).not.toContain("historical-child-secret");
+      expect(serialized).not.toContain("tenant-attempted-override");
+    } finally {
+      unit.close();
+    }
+  });
+
   it("delegates a signed-in customer browser session to only its bound tenant", async () => {
     const dataDir = await tempDir();
     await writeFile(
@@ -1722,24 +1787,11 @@ describe("Zenod chassis unit", () => {
   it("admits Hosted text, audio, and image evidence at the cap and resumes each job idempotently", async () => {
     const dataDir = await tempDir();
     const tenants = createMemoryTenantStore([{ token: "hosted-token", tenant: { id: "github-42" } }]);
-    let atCap = true;
+    let managedUsageNow = Date.parse("2026-08-26T20:00:00.000Z");
     const provider: ManagedAiProviderClient = {
-      listKeys: vi.fn(async () => [{
-        name: "zenod-tenant:octocat-42",
-        slug: "octocat-42",
-        hash: "hosted-key-hash",
-        limit: 2,
-        usage: atCap ? 2 : 0.25,
-        usage_monthly: atCap ? 2 : 0.25,
-        byok_usage_monthly: 0,
-        limit_remaining: atCap ? 0 : 1.75,
-        disabled: false,
-        limit_reset: "monthly",
-        include_byok_in_limit: true,
-        reset_at: "2026-08-01T00:00:00.000Z",
-      }]),
+      listKeys: vi.fn(async () => { throw new Error("must not list child keys in admission test"); }),
       createKey: vi.fn(async () => { throw new Error("must not provision in admission test"); }),
-      updateKey: vi.fn(async () => undefined),
+      updateKey: vi.fn(async () => { throw new Error("must not update child keys in admission test"); }),
     };
     const unit = createZenodUnit({
       dataDir,
@@ -1751,11 +1803,12 @@ describe("Zenod chassis unit", () => {
         GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
         CHASSIS_VAULT_MASTER_KEY,
         ZENOD_MANAGED_AI_ENABLED: "1",
-        OPENROUTER_PROVISIONING_KEY: "provider-management-key",
+        OPENROUTER_API_KEY: "operator-runtime-key",
         ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS: "600000",
       },
       customer: {
         managedAiProvider: provider,
+        now: () => managedUsageNow,
         identity: {
           authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
           exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: null }),
@@ -1779,6 +1832,19 @@ describe("Zenod chassis unit", () => {
       });
       unit.customerTokenVault.put("github-42", "hosted-token");
       const cookie = await signInCustomer(unit);
+      const hostedRuntime = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      hostedRuntime.usageStore.record({
+        operation: "ask",
+        provider: "openrouter",
+        model: "mistral/test",
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      }, Date.parse("2026-08-10T00:00:00.000Z"));
       const submit = async (path: string, idempotencyKey: string, contentType: string, body: BodyInit) => {
         const response = await unit.app.request(path, {
           method: "POST",
@@ -1816,10 +1882,6 @@ describe("Zenod chassis unit", () => {
         JSON.stringify({ message: "remember this" }),
       );
       expect(duplicate.job.id).toBe(text.job.id);
-      const hostedRuntime = unit.runtimes.forTenantStorage(
-        "github-42",
-        unit.storage.forTenant({ id: "github-42" }),
-      );
       hostedRuntime.settings.setTelegramSettings({
         botToken: "TEST:HOSTED",
         allowedUsers: ["42"],
@@ -1916,7 +1978,7 @@ describe("Zenod chassis unit", () => {
       });
       expect(await bearerPausedJob.json()).toMatchObject({ job: { id: text.job.id, terminalReceipt: null } });
 
-      atCap = false;
+      managedUsageNow = Date.parse("2026-09-01T00:00:00.000Z");
       expect(await unit.resumeManagedAiAdmissions()).toBe(6);
       const textJob = await unit.app.request(`/api/customer-managed-ai/jobs/${text.job.id}`, { headers: { cookie } });
       const audioJob = await unit.app.request(`/api/customer-managed-ai/jobs/${audio.job.id}`, { headers: { cookie } });
@@ -1977,6 +2039,9 @@ describe("Zenod chassis unit", () => {
       });
       expect(replay.status).toBe(200);
       expect(await replay.json()).toMatchObject({ text: "managed reply" });
+      expect(provider.listKeys).not.toHaveBeenCalled();
+      expect(provider.createKey).not.toHaveBeenCalled();
+      expect(provider.updateKey).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllEnvs();
       await unit.close();

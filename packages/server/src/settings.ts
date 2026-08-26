@@ -74,6 +74,16 @@ export type GoogleDriveOAuthAuthority =
 
 export type GoogleDriveOAuthAuthoritySource = () => GoogleDriveOAuthAuthority;
 
+export type ProviderCredentialAuthority =
+  | { mode: "self-hosted" }
+  | {
+      mode: "hosted-managed";
+      provider: Provider;
+      apiKey: string | null;
+    };
+
+export type ProviderCredentialAuthoritySource = () => ProviderCredentialAuthority;
+
 export interface RingTenantConfig {
   enabled: boolean;
   tenantSlug: string | null;
@@ -187,6 +197,7 @@ export class Settings {
     private readonly credentialVault?: CredentialVault,
     private readonly rawFallbacks: Readonly<Record<string, string>> = {},
     private readonly googleDriveOAuthAuthoritySource?: GoogleDriveOAuthAuthoritySource,
+    private readonly providerCredentialAuthoritySource?: ProviderCredentialAuthoritySource,
   ) {
     this.migrateCredentialSecrets();
   }
@@ -604,13 +615,28 @@ export class Settings {
 
   /** Active model provider — defaults to Anthropic. */
   provider(): Provider {
+    const authority = this.providerCredentialAuthority();
+    if (authority.mode === "hosted-managed") return authority.provider;
     const value = this.get("provider");
     return value === "openai" || value === "openrouter" || value === "groq" ? value : "anthropic";
   }
 
   /** The API key for the active provider. */
   activeApiKey(): string | null {
-    return this.get(PROVIDER_KEY[this.provider()]);
+    return this.apiKeyForProvider(this.provider());
+  }
+
+  /** Runtime-only credential authority. Hosted secrets never enter tenant settings. */
+  apiKeyForProvider(provider: Provider): string | null {
+    const authority = this.providerCredentialAuthority();
+    if (authority.mode === "hosted-managed") {
+      return authority.provider === provider ? authority.apiKey : null;
+    }
+    return this.get(PROVIDER_KEY[provider]);
+  }
+
+  providerCredentialAuthority(): ProviderCredentialAuthority {
+    return this.providerCredentialAuthoritySource?.() ?? { mode: "self-hosted" };
   }
 
   /** Google Drive is connected: service account, or Google user OAuth. */
@@ -640,13 +666,13 @@ export class Settings {
 
   /** Long voice notes use OpenAI transcription by default when a key exists. */
   useOpenAiForLongTranscription(): boolean {
-    return Boolean(this.get("openai_api_key") && this.get("openai_long_transcription") !== "false");
+    return Boolean(this.apiKeyForProvider("openai") && this.get("openai_long_transcription") !== "false");
   }
 
   longTranscriptionProvider(): "openrouter" | "openai" | "local" {
     const value = this.get("long_transcription_provider");
     if (value === "openrouter" || value === "openai" || value === "local") return value;
-    if (this.get("openrouter_api_key")) return "openrouter";
+    if (this.apiKeyForProvider("openrouter")) return "openrouter";
     return this.useOpenAiForLongTranscription() ? "openai" : "local";
   }
 
@@ -751,9 +777,9 @@ export class Settings {
    * whisper-large-v3-turbo tier), else the OpenAI key. Null = no transcription.
    */
   transcriptionKey(): { provider: "groq" | "openai"; apiKey: string } | null {
-    const groq = this.get("groq_api_key");
+    const groq = this.apiKeyForProvider("groq");
     if (groq) return { provider: "groq", apiKey: groq };
-    const openai = this.get("openai_api_key");
+    const openai = this.apiKeyForProvider("openai");
     if (openai) return { provider: "openai", apiKey: openai };
     return null;
   }

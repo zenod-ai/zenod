@@ -17,14 +17,13 @@ import {
   type CustomerProductConfig,
 } from "./customerBilling.js";
 import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
-import { projectCustomerUsage } from "./customerMetering.js";
 import {
-  createOpenRouterManagedAiClient,
-  CustomerManagedAiAuditStore,
-  CustomerManagedAiLifecycle,
-  loadManagedAiConfig,
-  type ManagedAiProviderClient,
-} from "./customerManagedAi.js";
+  currentUtcMonthlyWindowStart,
+  loadHostedUsageConfig,
+  projectCustomerUsage,
+  projectCustomerUsageFromLedger,
+} from "./customerMetering.js";
+import type { ManagedAiProviderClient } from "./customerManagedAi.js";
 import { CustomerManagedAiAdmissionQueue } from "./customerManagedAiAdmission.js";
 import { clearCustomerSession, issueCustomerSession, readCustomerSession } from "./customerSession.js";
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
@@ -46,10 +45,13 @@ export interface CustomerLayerOptions {
   stripe?: CustomerStripeClient;
   tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
+  /** @deprecated Compatibility-only test seam. Hosted no longer calls provider child-key APIs. */
   managedAiProvider?: ManagedAiProviderClient;
   product?: CustomerProductConfig;
   /** Test-only fault seam proving Telegram does not acknowledge before SQLite admission. */
   managedAiAdmissionBeforeJournal?: () => void;
+  /** Test-only clock seam for monthly tenant usage windows. */
+  now?: () => number;
 }
 
 export interface CustomerLayerHost {
@@ -126,21 +128,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       tenantStore: options.tenantStore,
       tokenVault,
     });
-  const managedAiConfig = loadManagedAiConfig(env);
-  const managedAiProvider =
-    product.product === "zenod" && managedAiConfig.enabled && managedAiConfig.provisioningKey
-      ? options.managedAiProvider ?? createOpenRouterManagedAiClient(managedAiConfig.provisioningKey)
-      : null;
-  const managedAi = new CustomerManagedAiLifecycle({
-    accounts,
-    runtimeForAccount: (account) => host.runtimeForAccount?.(account) ?? null,
-    config: managedAiConfig,
-    provider: managedAiProvider,
-    audit: new CustomerManagedAiAuditStore(host.dataDir),
-  });
+  const hostedUsageConfig = product.product === "zenod"
+    ? loadHostedUsageConfig(env)
+    : { enabled: false, operatorKey: null, monthlyAllowanceUsd: 2, warnPercent: 80 };
+  const now = options.now ?? Date.now;
   const managedAiAdmissions = new CustomerManagedAiAdmissionQueue(
     join(host.dataDir, "customer-managed-ai-admission.sqlite"),
-    Date.now,
+    now,
     undefined,
     options.managedAiAdmissionBeforeJournal,
   );
@@ -155,8 +149,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (options.tenantStore) {
       await options.tenantStore.setTenantStatus(account.tenant_id, entitled ? "active" : "suspended");
     }
-    const managedOutcome = await managedAi.setSubscriptionAccess(account, entitled);
-    if (managedOutcome.state === "orphaned") throw new Error("managed AI child key requires operator recovery");
     return accounts.get(account.session_id) ?? account;
   };
   const refreshAuthoritativeSubscription = async (
@@ -178,21 +170,19 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     await refreshAuthoritativeSubscription(account, subscriptionId),
   );
   const usageForAccount = async (account: CustomerAccount) => {
-    if (!managedAiProvider || !account.tenant_slug) {
-      return projectCustomerUsage(null, managedAiConfig.warnPercent);
+    if (!hostedUsageConfig.enabled || !account.tenant_id) {
+      return projectCustomerUsage(null, hostedUsageConfig.warnPercent);
     }
-    try {
-      const keys = await managedAiProvider.listKeys();
-      const key = account.managed_ai_key_hash
-        ? keys.find((candidate) => candidate.hash === account.managed_ai_key_hash) ?? null
-        : keys.find((candidate) => candidate.slug === account.tenant_slug) ?? null;
-      return projectCustomerUsage(
-        key,
-        managedAiConfig.warnPercent,
-      );
-    } catch {
-      return projectCustomerUsage(null, managedAiConfig.warnPercent);
-    }
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return projectCustomerUsage(null, hostedUsageConfig.warnPercent);
+    const at = now();
+    const summary = runtime.usageStore.summary(currentUtcMonthlyWindowStart(at));
+    return projectCustomerUsageFromLedger(
+      summary,
+      account.managed_ai_limit_override_usd ?? hostedUsageConfig.monthlyAllowanceUsd,
+      hostedUsageConfig.warnPercent,
+      at,
+    );
   };
   const reconcileManagedAiAccounts = async (): Promise<void> => {
     const failures: unknown[] = [];
@@ -215,10 +205,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const reconcileIntervalMs = Number.isFinite(reconcileIntervalRaw) && reconcileIntervalRaw > 0
     ? reconcileIntervalRaw
     : 5 * 60_000;
-  const reconcileTimer = managedAiProvider
+  const reconcileTimer = hostedUsageConfig.enabled
     ? setInterval(() => {
         void reconcileManagedAiAccounts().catch((error) => {
-          console.error("[managed-ai] periodic reconciliation failed:", error);
+          console.error("[hosted-usage] periodic entitlement reconciliation failed:", error);
         });
       }, reconcileIntervalMs)
     : null;
@@ -548,7 +538,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app,
     accounts,
     tokenVault,
-    managedAi,
     usageForAccount,
     managedAiAdmissions,
     reconcileEntitlement,
@@ -556,7 +545,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     close() {
       if (reconcileTimer) clearInterval(reconcileTimer);
       managedAiAdmissions.close();
-      managedAi.close();
     },
   };
 }

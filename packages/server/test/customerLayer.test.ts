@@ -446,94 +446,104 @@ describe("hosted customer layer", () => {
     }
   });
 
-  it("provisions one managed child key after tenant binding and projects customer-safe usage", async () => {
+  it("projects isolated monthly tenant ledgers without creating or reconciling child keys", async () => {
     env.ZENOD_MANAGED_AI_ENABLED = "1";
     env.ZENOD_MANAGED_AI_LIMIT_USD = "2";
-    env.OPENROUTER_PROVISIONING_KEY = "provisioning-test";
-    const keys: Awaited<ReturnType<ManagedAiProviderClient["listKeys"]>> = [];
+    env.OPENROUTER_API_KEY = "operator-runtime-key";
+    let now = Date.parse("2026-08-26T20:00:00.000Z");
     const provider: ManagedAiProviderClient = {
-      listKeys: vi.fn(async () => keys.map((key) => ({ ...key }))),
-      createKey: vi.fn(async (input) => {
-        keys.push({
-          name: input.name,
-          slug: "octocat-42",
-          hash: "managed-hash",
-          limit: input.limit,
-          usage: 0.33,
-          usage_monthly: 0.33,
-          byok_usage_monthly: 0,
-          limit_remaining: 1.67,
-          disabled: false,
-          limit_reset: input.limitReset,
-          include_byok_in_limit: input.includeByokInLimit,
-          reset_at: "2026-09-01T00:00:00.000Z",
-        });
-        return {
-          key: "sk-or-managed-test",
-          hash: "managed-hash",
-          name: input.name,
-          limit: input.limit,
-          limitReset: input.limitReset,
-        };
-      }),
-      updateKey: vi.fn(async () => undefined),
+      listKeys: vi.fn(async () => { throw new Error("provider key API must stay dormant"); }),
+      createKey: vi.fn(async () => { throw new Error("provider key API must stay dormant"); }),
+      updateKey: vi.fn(async () => { throw new Error("provider key API must stay dormant"); }),
     };
-    const app = createCustomerLayer(
-      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+    const otherRuntime = new Runtime(join(dir, "tenant-other"));
+    const runtimes = new Map([
+      ["github-42", runtime],
+      ["github-99", otherRuntime],
+    ]);
+    const layer = createCustomerLayer(
+      {
+        dataDir: runtime.dataDir,
+        runtimeForAccount: (account) => account.tenant_id ? runtimes.get(account.tenant_id) ?? null : null,
+      },
       {
         env,
         stripe,
         tenantStore: tenants,
         managedAiProvider: provider,
-        identity: {
-          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
-          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
-        },
+        now: () => now,
       },
-    ).app;
-    const cookie = await signInCookie(app);
-    await app.request("/create-checkout-session", {
-      method: "POST",
-      headers: { cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: "monthly" }),
-    });
+    );
+    try {
+      const firstAccount = layer.accounts.upsert("first", {
+        account_id: "github-42",
+        github_id: 42,
+        github_login: "octocat",
+        subscription_status: "active",
+        tenant_id: "github-42",
+        tenant_slug: "octocat-42",
+        managed_ai_key_hash: "historical-child-hash",
+        managed_ai_key_name: "zenod-tenant:octocat-42",
+      });
+      const secondAccount = layer.accounts.upsert("second", {
+        account_id: "github-99",
+        github_id: 99,
+        github_login: "other",
+        subscription_status: "active",
+        tenant_id: "github-99",
+        tenant_slug: "other-99",
+      });
+      runtime.settings.set("openrouter_api_key", "historical-child-secret");
+      const usageReport = {
+        operation: "ask",
+        provider: "openrouter" as const,
+        model: "mistral/test",
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      };
+      runtime.usageStore.record(
+        { ...usageReport, inputTokens: 1_000_000 },
+        Date.parse("2026-07-31T23:59:59.999Z"),
+      );
+      runtime.usageStore.record(
+        { ...usageReport, inputTokens: 500_000 },
+        Date.parse("2026-08-10T00:00:00.000Z"),
+      );
+      otherRuntime.usageStore.record(
+        { ...usageReport, inputTokens: 250_000 },
+        Date.parse("2026-08-11T00:00:00.000Z"),
+      );
 
-    const first = await app.request("/webhook", {
-      method: "POST",
-      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const duplicate = await app.request("/webhook", {
-      method: "POST",
-      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
-      body: "{}",
-    });
-    expect(await first.json()).toEqual({ received: true, result: "completed" });
-    expect(await duplicate.json()).toEqual({ received: true, result: "duplicate" });
-    expect(provider.createKey).toHaveBeenCalledTimes(1);
-    expect(provider.createKey).toHaveBeenCalledWith({
-      name: "zenod-tenant:octocat-42",
-      limit: 2,
-      limitReset: "monthly",
-      includeByokInLimit: true,
-    });
-    expect(runtime.settings.get("openrouter_api_key")).toBe("sk-or-managed-test");
+      await expect(layer.usageForAccount(firstAccount)).resolves.toEqual({
+        percentageUsed: 50,
+        state: "normal",
+        resetsAt: "2026-09-01T00:00:00.000Z",
+      });
+      await expect(layer.usageForAccount(secondAccount)).resolves.toEqual({
+        percentageUsed: 25,
+        state: "normal",
+        resetsAt: "2026-09-01T00:00:00.000Z",
+      });
 
-    const usage = await app.request("/api/customer-usage", { headers: { cookie } });
-    expect(await usage.json()).toEqual({
-      percentageUsed: 17,
-      state: "normal",
-      resetsAt: "2026-09-01T00:00:00.000Z",
-    });
-    const accountResponse = await app.request("/api/console/account", { headers: { cookie } });
-    const accountPayload = await accountResponse.json();
-    expect(accountPayload.usage).toEqual({
-      percentageUsed: 17,
-      state: "normal",
-      resetsAt: "2026-09-01T00:00:00.000Z",
-    });
-    expect(accountPayload).not.toHaveProperty("balance");
-    expect(accountPayload).not.toHaveProperty("ledger");
+      now = Date.parse("2026-09-01T00:00:00.000Z");
+      await expect(layer.usageForAccount(firstAccount)).resolves.toEqual({
+        percentageUsed: 0,
+        state: "normal",
+        resetsAt: "2026-10-01T00:00:00.000Z",
+      });
+      expect(provider.listKeys).not.toHaveBeenCalled();
+      expect(provider.createKey).not.toHaveBeenCalled();
+      expect(provider.updateKey).not.toHaveBeenCalled();
+      expect(runtime.settings.get("openrouter_api_key")).toBe("historical-child-secret");
+      expect(layer.accounts.get("first")).toMatchObject({
+        managed_ai_key_hash: "historical-child-hash",
+        managed_ai_key_name: "zenod-tenant:octocat-42",
+      });
+    } finally {
+      layer.close();
+      await otherRuntime.close();
+    }
   });
 
   it("tracks recurring billing state and suspends only terminal subscriptions", async () => {

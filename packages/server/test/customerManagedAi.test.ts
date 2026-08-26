@@ -10,7 +10,12 @@ import {
   loadManagedAiConfig,
   type ManagedAiProviderClient,
 } from "../src/customerManagedAi.js";
-import { projectCustomerUsage, type GatewayKeyUsage } from "../src/customerMetering.js";
+import {
+  loadHostedUsageConfig,
+  projectCustomerUsage,
+  projectCustomerUsageFromLedger,
+  type GatewayKeyUsage,
+} from "../src/customerMetering.js";
 import { Runtime } from "../src/runtime.js";
 
 const dirs: string[] = [];
@@ -382,6 +387,35 @@ describe("customer-safe usage projection", () => {
       Date.parse("2027-12-15T12:00:00.000Z"),
     )).toMatchObject({ resetsAt: "2028-01-01T00:00:00.000Z" });
     expect(projectCustomerUsage(null)).toEqual({ percentageUsed: null, state: "unavailable", resetsAt: null });
+  });
+});
+
+describe("Hosted operator usage contract", () => {
+  it("requires one runtime credential and projects only the internal monthly allowance", () => {
+    expect(() => loadHostedUsageConfig({ ZENOD_MANAGED_AI_ENABLED: "1" })).toThrow(
+      /requires OPENROUTER_API_KEY/,
+    );
+    expect(loadHostedUsageConfig({
+      ZENOD_MANAGED_AI_ENABLED: "1",
+      OPENROUTER_API_KEY: "operator-runtime-key",
+      ZENOD_MANAGED_AI_LIMIT_USD: "3",
+      ZENOD_MANAGED_AI_WARN_PERCENT: "75",
+    })).toEqual({
+      enabled: true,
+      operatorKey: "operator-runtime-key",
+      monthlyAllowanceUsd: 3,
+      warnPercent: 75,
+    });
+    expect(projectCustomerUsageFromLedger(
+      { costUsd: 2.25 },
+      3,
+      75,
+      Date.parse("2026-08-26T20:00:00.000Z"),
+    )).toEqual({
+      percentageUsed: 75,
+      state: "warn",
+      resetsAt: "2026-09-01T00:00:00.000Z",
+    });
   });
 });
 

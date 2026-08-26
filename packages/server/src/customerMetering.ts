@@ -28,6 +28,49 @@ export interface CustomerUsageProjection {
   resetsAt: string | null;
 }
 
+export interface HostedUsageConfig {
+  enabled: boolean;
+  operatorKey: string | null;
+  monthlyAllowanceUsd: number;
+  warnPercent: number;
+}
+
+function configuredPositiveNumber(raw: string | undefined, fallback: number, label: string): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive number`);
+  return value;
+}
+
+/**
+ * Hosted inference uses one operator-owned runtime credential. Customer limits
+ * are enforced from each tenant runtime's local UsageStore; no provider child
+ * key is needed to attribute or cap a tenant.
+ */
+export function loadHostedUsageConfig(env: NodeJS.ProcessEnv = process.env): HostedUsageConfig {
+  const enabled = env.ZENOD_MANAGED_AI_ENABLED === "1";
+  const operatorKey = env.OPENROUTER_API_KEY?.trim() || null;
+  if (enabled && !operatorKey) {
+    throw new Error("ZENOD_MANAGED_AI_ENABLED=1 requires OPENROUTER_API_KEY");
+  }
+  const warnPercent = configuredPositiveNumber(
+    env.ZENOD_MANAGED_AI_WARN_PERCENT,
+    80,
+    "ZENOD_MANAGED_AI_WARN_PERCENT",
+  );
+  if (warnPercent >= 100) throw new Error("ZENOD_MANAGED_AI_WARN_PERCENT must be below 100");
+  return {
+    enabled,
+    operatorKey,
+    monthlyAllowanceUsd: configuredPositiveNumber(
+      env.ZENOD_MANAGED_AI_LIMIT_USD,
+      2,
+      "ZENOD_MANAGED_AI_LIMIT_USD",
+    ),
+    warnPercent,
+  };
+}
+
 export function balanceState(input: { limit: number | null; limit_remaining: number | null }): BalanceState {
   if (input.limit_remaining !== null && input.limit_remaining <= 0) return "blocked";
   if (input.limit !== null && input.limit_remaining !== null && input.limit > 0 && input.limit_remaining / input.limit <= 0.15) {
@@ -125,6 +168,32 @@ export async function customerMetering(
 function nextUtcMonthlyReset(now: number): string {
   const current = new Date(now);
   return new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 1, 0, 0, 0, 0)).toISOString();
+}
+
+export function currentUtcMonthlyWindowStart(now: number): number {
+  const current = new Date(now);
+  return Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1, 0, 0, 0, 0);
+}
+
+export function projectCustomerUsageFromLedger(
+  summary: Pick<UsageSummary, "costUsd">,
+  monthlyAllowanceUsd: number,
+  warnPercent = 80,
+  now = Date.now(),
+): CustomerUsageProjection {
+  if (!Number.isFinite(monthlyAllowanceUsd) || monthlyAllowanceUsd <= 0) {
+    return { percentageUsed: null, state: "unavailable", resetsAt: nextUtcMonthlyReset(now) };
+  }
+  const rawPercentageUsed = summary.costUsd / monthlyAllowanceUsd * 100;
+  const percentageUsed = Math.min(
+    100,
+    Math.max(0, Math.round(rawPercentageUsed)),
+  );
+  return {
+    percentageUsed,
+    state: rawPercentageUsed >= 100 ? "paused" : rawPercentageUsed >= warnPercent ? "warn" : "normal",
+    resetsAt: nextUtcMonthlyReset(now),
+  };
 }
 
 export function projectCustomerUsage(

@@ -2015,10 +2015,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
         : null,
       folderId: settings.get("google_drive_folder_id"),
       transcriptionProvider: [
-        settings.get("groq_api_key") ? "groq for notes up to 5 min" : null,
-        settings.longTranscriptionProvider() === "openrouter" && settings.get("openrouter_api_key")
+        settings.apiKeyForProvider("groq") ? "groq for notes up to 5 min" : null,
+        settings.longTranscriptionProvider() === "openrouter" && settings.apiKeyForProvider("openrouter")
           ? `openrouter ${settings.openrouterTranscriptionModel()} for notes over 5 min and Groq fallback`
-          : settings.longTranscriptionProvider() === "openai" && settings.get("openai_api_key")
+          : settings.longTranscriptionProvider() === "openai" && settings.apiKeyForProvider("openai")
             ? "openai for notes over 5 min"
             : "local whisper.cpp for long notes",
       ]
@@ -2154,9 +2154,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     );
     const result = await transcribeAudio(data, file.name || "web-voice-note.webm", {
       model: settings.whisperModel(),
-      groqApiKey: settings.get("groq_api_key"),
-      openaiApiKey: settings.get("openai_api_key"),
-      openrouterApiKey: settings.get("openrouter_api_key"),
+      groqApiKey: settings.apiKeyForProvider("groq"),
+      openaiApiKey: settings.apiKeyForProvider("openai"),
+      openrouterApiKey: settings.apiKeyForProvider("openrouter"),
       openrouterModel: settings.openrouterTranscriptionModel(),
       longTranscriptionProvider: settings.longTranscriptionProvider(),
       useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
