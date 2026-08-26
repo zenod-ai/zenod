@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Zenod paid-beta and single-price contract integrated; refreshed read-only production packet next
+Phase: Zenod paid-beta and single-price contract integrated; immutable image blocked by GitHub Actions outage
 Last verified: 2026-08-26 CEST
 Integration target: `main`
 Fresh base commit: `ba5e9c10ff6466e357568fe9d495913af8047631` on `main`; the reviewed single €9/month contract is integrated and the repository's existing main-push workflow is building its immutable image
-Next action: after the automatic image publish completes, refresh ZAL-4's packet read-only with the exact new OCI/amd64 digest and current pricing/legal/readiness truth, then stop at the first unresolved production input; do not deploy or mutate configuration.
-Blockers: deployment still requires a named off-host backup destination and verified backups, exact credential/token sources and non-secret configuration values, a separately approved live €9 Stripe price, and an explicit immutable-image/Dokploy/rollback approval. OpenRouter reconciliation, Google OAuth, live channel sessions, real-card billing, signup opening, and external promotion remain later exact gates.
+Next action: wait for GitHub Actions recovery and the already-approved exact publish retry for `ba5e9c1` to reach terminal success; then resolve the real OCI/amd64 digest and refresh ZAL-4 read-only. Do not start another retry or infer a digest.
+Blockers: GitHub Actions reports a major outage; original publish run `32983888246` was canceled without a runner or steps and its one approved retry remains queued, so `sha-ba5e9c1` does not exist. Deployment also still requires a named off-host backup destination and verified backups, exact credential/token sources and non-secret configuration values, a separately approved live €9 Stripe price, and an explicit immutable-image/Dokploy/rollback approval. OpenRouter reconciliation, Google OAuth, live channel sessions, real-card billing, signup opening, and external promotion remain later exact gates.
 
 ## Bootstrap Map
 
@@ -172,7 +172,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | active / preflight refresh | Automatic immutable image for current `main`, then read-only ZAL-4 reconciliation | [ZAL-18 PR #1091](https://github.com/zenod-ai/zenod/pull/1091) merged; ZAL-4 packet on `main` | `ba5e9c1` | Child DoD covers readiness truth, recap regression, the approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | ZAL-18 passed two review loops and clean CI; exact merged-main shared/site/web/typecheck validation passed; no live mutation. | 2026-08-26 CEST | Record the automatically published digest and refresh #1061 read-only; stop before backup/config/deploy/provider/channel/billing/signup mutation. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | blocked / GitHub Actions outage | Exact immutable image for `ba5e9c1`, then read-only ZAL-4 reconciliation | [ZAL-18 PR #1091](https://github.com/zenod-ai/zenod/pull/1091) merged; failed/queued publish [run 32983888246](https://github.com/zenod-ai/zenod/actions/runs/32983888246) | `ba5e9c1` | Child DoD covers readiness truth, recap regression, the approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | ZAL-18 is green/integrated; GitHub hosted runner never acquired the publish job and Actions is in major outage; GHCR tag absent; live state unchanged. | 2026-08-26 CEST | After Actions recovery, let the existing approved retry finish, record its real digest, and resume #1061 read-only. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -251,6 +251,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-08-26 - Epic 0 worker - Candidate publication blocked by GitHub Actions outage
+
+Action: monitored the repository's standard immutable-image publish for reviewed runtime `ba5e9c1`. Run `32983888246` was canceled after 15 minutes because no hosted runner acquired it; it ran zero steps and pushed no image. Approved one exact retry of that existing non-deploying workflow, but GitHub's official Actions component is in `major_outage` and the retry remains queued. GHCR `sha-ba5e9c1` is absent, so ZAL-4 cannot truthfully refresh or name a deployable candidate.
+
+Evidence: [publish run 32983888246](https://github.com/zenod-ai/zenod/actions/runs/32983888246), empty runner/step metadata, GitHub Actions component status, and read-only GHCR tag lookup. Live Dokploy state and production configuration are unchanged.
+
+Next action: after GitHub Actions recovers, consume the already-approved retry. On success, record its real OCI/amd64 digest and resume ZAL-4 read-only. On another terminal failure, require a new explicit rerun decision. No production, backup, credential/config, provider, channel, billing, or signup action may proceed.
+
+Assignment identity: Epic 0 Foundation planner (`Jordi + current bound Codex task`); Zenod Alpha delivery manager; ZAL-4-production-readiness-operator
+
+Branch / latest commit: control `main` `046ff07`; runtime merge `ba5e9c1`; publish run `32983888246`
+
+Last verified: 2026-08-26 CEST
 
 ### 2026-08-26 - Epic 0 worker - Single €9 contract integrated; immutable candidate refresh next
 
