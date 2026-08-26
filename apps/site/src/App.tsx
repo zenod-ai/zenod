@@ -426,16 +426,17 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
           />
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_minmax(0,26rem)]">
             <div className="text-center lg:text-left">
-              <p className="label-caps mb-6 text-rust">Open source · AGPL-3.0 · Self-hosted</p>
+              <p className="label-caps mb-6 text-rust">Open-source self-hosted · Zenod Hosted</p>
               <h1 className="font-display text-5xl leading-[1.05] font-bold tracking-tight text-balance sm:text-6xl xl:text-7xl">
                 The librarian your agents report to.
               </h1>
               <p className="mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground max-lg:mx-auto">
-                Zenod is a self-hosted memory agent that runs your personal library. It files every
-                piece of evidence, distills it into living ideas, and serves your knowledge to every
-                AI agent you use — one brain across all of them. Plain markdown, in a git repo, in{" "}
-                <em className="text-foreground not-italic">your</em> GitHub account. You keep the
-                keys.
+                Zenod is the memory agent that runs your personal library. It files every piece of
+                evidence, distills it into living ideas, and serves your knowledge to every AI agent
+                you use — one brain across all of them. Self-host free with your AI provider and
+                Telegram, or choose Zenod Hosted for €9/month + VAT with managed AI usage and
+                WhatsApp included. Your memory stays plain markdown in{" "}
+                <em className="text-foreground not-italic">your</em> GitHub account.
               </p>
 
               <div className="mt-10 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
@@ -488,7 +489,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
               </Button>
             </div>
             <p className="label-caps mt-4 text-muted-foreground/70">
-              Self-host free forever · Hosted €9/month + VAT
+              Self-host free: your AI provider + Telegram · Hosted: €9/month + VAT, managed usage +
+              WhatsApp
             </p>
           </div>
         </section>
@@ -518,7 +520,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
               {
                 icon: KeyRoundIcon,
                 title: "You hold the keys",
-                body: "Your vault is a plain markdown git repo in your GitHub account, on your server, with your API keys. Open it in Obsidian any time. Export with zero loss — it's just files.",
+                body: "Your vault is a plain markdown git repo in your GitHub account. Self-hosted runs on your server with your AI provider key; Hosted manages the service for you. Open it in Obsidian any time. Export with zero loss — it's just files.",
               },
               {
                 icon: GitCommitIcon,
@@ -753,8 +755,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
             <div>
               <p className="font-display text-2xl font-bold tracking-tight">ZENOD</p>
               <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                A self-hosted AI memory agent that owns your personal library. Early access, with
-                hosted subscriptions opened only after the production-readiness gate passes.
+                Self-host Zenod free with your AI provider and Telegram, or choose Zenod Hosted for
+                €9/month + VAT with managed AI usage and WhatsApp included.
               </p>
             </div>
             <nav className="label-caps flex flex-wrap gap-x-8 gap-y-3 text-muted-foreground">
@@ -822,8 +824,9 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
               Your agents share one library. You decide where it runs.
             </h1>
             <p className="mt-6 max-w-2xl pb-14 leading-relaxed text-muted-foreground">
-              Every plan keeps your memory in a plain markdown repository in your GitHub account.
-              Hosted plans include the managed Zenod service.
+              Self-host free with your AI provider and Telegram, or choose Zenod Hosted for €9/month
+              + VAT with managed AI usage and WhatsApp included. Either way, your memory stays in a
+              plain markdown repository in your GitHub account.
             </p>
           </div>
           <PricingSection customer={customer} />
