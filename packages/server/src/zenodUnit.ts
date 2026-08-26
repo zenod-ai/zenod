@@ -777,13 +777,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       : null;
     const tenantActive = synchronousRecord?.tenant.id === tenantId &&
       (synchronousRecord.status ?? "active") === "active";
-    const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
-    const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
     return {
       mode: "hosted-managed",
-      credentials: entitled && tenantActive && clientId && clientSecret
-        ? { clientId, clientSecret }
-        : null,
+      credentials: null,
+      ...(entitled && tenantActive ? { tenantCredentialsAllowed: true } : {}),
     };
   };
   const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
