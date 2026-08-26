@@ -447,6 +447,7 @@ async function projectHostedCustomerResponse(
   path: string,
   response: Response,
   hostedDriveAllowed: boolean,
+  directToken: string | null,
 ): Promise<Response> {
   if (
     path === "/api/drive/oauth/start" &&
@@ -510,7 +511,12 @@ async function projectHostedCustomerResponse(
       headSha: body.headSha ?? null,
     };
   } else if (path === "/api/connections") {
-    projected = { mcpPath: "/mcp", clients: [], grants: [] };
+    projected = {
+      token: directToken ?? "",
+      mcpPath: directToken ? `/mcp/${directToken}` : "/mcp",
+      clients: [],
+      grants: [],
+    };
   } else {
     projected = { needsSetup: false, configured: true, hostedMode: "managed" };
   }
@@ -1204,9 +1210,12 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const hostedDriveAllowed = admissionAccount?.tenant_id
       ? runtimes.get(admissionAccount.tenant_id)?.settings.googleDriveTenantCredentialsAllowed() === true
       : false;
+    const canonicalDirectToken = session && hostedAccount
+      ? customer.tokenVault.get(hostedAccount.account_id)
+      : null;
     return hostedAccount &&
       (c.req.method === "GET" || (c.req.method === "PUT" && c.req.path === "/api/settings"))
-      ? projectHostedCustomerResponse(c.req.path, response, hostedDriveAllowed)
+      ? projectHostedCustomerResponse(c.req.path, response, hostedDriveAllowed, canonicalDirectToken)
       : response;
   });
   return {

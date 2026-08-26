@@ -13,6 +13,51 @@ afterEach(async () => {
 });
 
 describe("SqliteTenantStore", () => {
+  it("preserves implicit same-tenant reprovision tokens across restart without crossing tenants", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-token-compat-"));
+    tempDirs.push(dataDir);
+    const first = createSqliteTenantStore({ dataDir });
+    first.provisionTenant({ tenantId: "tenant-a", token: "tenant-a-original" });
+    first.provisionTenant({ tenantId: "tenant-b", token: "tenant-b-original" });
+
+    first.provisionTenant({ tenantId: "tenant-a", token: "tenant-a-reconciled" });
+    const original = first.resolveTokenHash(hashToken("tenant-a-original"));
+    expect(original).toMatchObject({ tenant: { id: "tenant-a" } });
+    expect(original?.profile ?? null).toBeNull();
+    const reconciled = first.resolveTokenHash(hashToken("tenant-a-reconciled"));
+    expect(reconciled).toMatchObject({ tenant: { id: "tenant-a" } });
+    expect(reconciled?.profile ?? null).toBeNull();
+    expect(first.resolveTokenHash(hashToken("tenant-b-original"))).toMatchObject({
+      tenant: { id: "tenant-b" },
+    });
+    expect(() =>
+      first.preserveTenantTokenHash("tenant-b", hashToken("tenant-a-original")),
+    ).toThrow(/another credential/);
+    first.close();
+
+    const restarted = createSqliteTenantStore({ dataDir });
+    expect(restarted.resolveTokenHash(hashToken("tenant-a-original"))?.tenant.id).toBe("tenant-a");
+    expect(restarted.resolveTokenHash(hashToken("tenant-a-reconciled"))?.tenant.id).toBe("tenant-a");
+    const restoredHash = hashToken("tenant-a-known-predeploy-token");
+    expect(restarted.preserveTenantTokenHash("tenant-a", restoredHash)).toMatchObject({
+      tenant: { id: "tenant-a" },
+      tokenHash: restoredHash,
+      profile: null,
+    });
+    restarted.close();
+
+    const deployed = createSqliteTenantStore({ dataDir });
+    expect(deployed.resolveTokenHash(restoredHash)?.tenant.id).toBe("tenant-a");
+    const rotated = deployed.rotateTenantToken("tenant-a");
+    expect(rotated).not.toBeNull();
+    expect(deployed.resolveTokenHash(hashToken("tenant-a-original"))).toBeNull();
+    expect(deployed.resolveTokenHash(hashToken("tenant-a-reconciled"))).toBeNull();
+    expect(deployed.resolveTokenHash(restoredHash)).toBeNull();
+    expect(deployed.resolveTokenHash(hashToken(rotated!.token))?.tenant.id).toBe("tenant-a");
+    expect(deployed.resolveTokenHash(hashToken("tenant-b-original"))?.tenant.id).toBe("tenant-b");
+    deployed.close();
+  });
+
   it("persists imported token hashes and tenant lifecycle state across restarts", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-tenants-"));
     tempDirs.push(dataDir);

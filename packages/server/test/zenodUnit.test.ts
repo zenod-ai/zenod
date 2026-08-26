@@ -620,7 +620,13 @@ describe("Zenod chassis unit", () => {
           .not.toMatch(/provider|llmReady|cloneError|api.?key|token/i);
         const connections = await unit.app.request("/api/connections", { headers });
         expect(connections.status).toBe(200);
-        expect(await connections.json()).toEqual({ mcpPath: "/mcp", clients: [], grants: [] });
+        const browserSession = "cookie" in headers;
+        expect(await connections.json()).toEqual({
+          token: browserSession ? "customer-token" : "",
+          mcpPath: browserSession ? "/mcp/customer-token" : "/mcp",
+          clients: [],
+          grants: [],
+        });
         const token = await unit.app.request("/api/token", { headers });
         expect(token.status).toBe(200);
         expect(await token.json()).toEqual({ token: "", mcpPath: "/mcp" });
