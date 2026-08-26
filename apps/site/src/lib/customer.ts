@@ -2,10 +2,10 @@ export const SIGN_IN_PATH = "/auth/signin"
 export const DASHBOARD_URL = "https://cloud.zenod.dev/app"
 export const CHECKOUT_PATH = "/create-checkout-session"
 
-export type PaidTier = "monthly" | "yearly"
+export type PaidTier = "monthly"
 
 export const PRICING_OPTIONS: ReadonlyArray<{
-  name: "Self-hosted" | "Monthly" | "Yearly"
+  name: "Self-hosted" | "Hosted"
   price: string
   cadence: string
   description: string
@@ -15,24 +15,26 @@ export const PRICING_OPTIONS: ReadonlyArray<{
     name: "Self-hosted",
     price: "Free",
     cadence: "forever",
-    description: "Run Zenod on your own infrastructure with the full open-source product.",
+    description: "Run Zenod on your own infrastructure with your AI provider and Telegram bot.",
     tier: null,
   },
   {
-    name: "Monthly",
-    price: "€5",
-    cadence: "per month",
-    description: "Hosted Zenod with your own GitHub vault and a monthly subscription.",
+    name: "Hosted",
+    price: "€9",
+    cadence: "per month + VAT",
+    description: "Zenod managed for you, with managed AI usage and WhatsApp included.",
     tier: "monthly",
   },
-  {
-    name: "Yearly",
-    price: "€50",
-    cadence: "per year",
-    description: "The same hosted Zenod with two months included in the annual price.",
-    tier: "yearly",
-  },
 ]
+
+export function consumePendingHostedTier(
+  storage: Pick<Storage, "getItem" | "removeItem">,
+  key: string,
+): PaidTier | null {
+  const pending = storage.getItem(key)
+  if (pending !== null) storage.removeItem(key)
+  return pending === "monthly" ? pending : null
+}
 
 export interface CustomerSession {
   login: string

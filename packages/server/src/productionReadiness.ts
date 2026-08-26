@@ -1,4 +1,4 @@
-export const ZENOD_LEGAL_VERSION = "2026-08-13";
+export const ZENOD_LEGAL_VERSION = "2026-08-26";
 
 export interface ReadinessCheck {
   id: string;
@@ -65,8 +65,10 @@ export function productionReadinessReport(
     },
     {
       id: "stripe_prices",
-      ok: Boolean(env.PRICE_MONTHLY?.startsWith("price_") && env.PRICE_YEARLY?.startsWith("price_")),
-      detail: env.PRICE_MONTHLY && env.PRICE_YEARLY ? "Monthly and yearly prices are configured" : "A live price is missing",
+      ok: Boolean(env.PRICE_MONTHLY?.startsWith("price_")),
+      detail: env.PRICE_MONTHLY?.startsWith("price_")
+        ? "The monthly Hosted price is configured"
+        : "The monthly Hosted price is missing",
     },
     {
       id: "stripe_tax",

@@ -260,6 +260,36 @@ describe("hosted customer layer", () => {
 
   });
 
+  it("rejects retired aliases and yearly for new Zenod checkout before calling Stripe", async () => {
+    const app = customerApp();
+    const cookie = await signInCookie(app);
+    const rejected = new Map([
+      ["starter", 'unknown tier "starter" (use monthly)'],
+      ["pro", 'unknown tier "pro" (use monthly)'],
+      ["yearly", 'tier "yearly" is not available for new checkout'],
+    ]);
+
+    for (const [tier, error] of rejected) {
+      const checkout = await app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      expect(checkout.status).toBe(400);
+      expect(await checkout.json()).toEqual({ error });
+      expect(createdParams).toBeNull();
+    }
+
+    const unknown = await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "enterprise" }),
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({ error: 'unknown tier "enterprise" (use monthly)' });
+    expect(createdParams).toBeNull();
+  });
+
   it("uses only the deployed PRICE_MONTHLY and PRICE_YEARLY env names", () => {
     const config = loadCustomerBillingConfig({
       PRICE_MONTHLY: "price_1TrjPC76yJ3p1J6XqXl1QwN8",
@@ -355,6 +385,65 @@ describe("hosted customer layer", () => {
     });
     expect(duplicate.status).toBe(409);
     expect(await duplicate.json()).toEqual({ error: "an active subscription already exists" });
+  });
+
+  it("keeps a historical yearly account readable, portal-manageable, and webhook-reconciled", async () => {
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+      },
+    );
+    try {
+      const cookie = await signInCookie(layer.app);
+      layer.accounts.upsert("cs_legacy_yearly", {
+        account_id: customerAccountId(42),
+        github_id: 42,
+        github_login: "octocat",
+        tier: "yearly",
+        stripe_customer_id: "cus_legacy_yearly",
+        stripe_subscription_id: "sub_legacy_yearly",
+        subscription_status: "active",
+      });
+
+      const account = await layer.app.request("/api/console/account", { headers: { cookie } });
+      expect(account.status).toBe(200);
+      expect(await account.json()).toMatchObject({ tier: "yearly", subscription_status: "active" });
+
+      const portal = await layer.app.request("/api/billing/portal", { method: "POST", headers: { cookie } });
+      expect(portal.status).toBe(200);
+      expect(await portal.json()).toEqual({ url: "https://billing.stripe.test/session" });
+
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        id: "sub_legacy_yearly",
+        customer: "cus_legacy_yearly",
+        status: "past_due",
+      } as Stripe.Subscription;
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.updated",
+        livemode: false,
+        data: { object: authoritativeSubscription },
+      } as Stripe.Event);
+      const webhook = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(await webhook.json()).toEqual({ received: true, result: "past_due" });
+      expect(layer.accounts.get("cs_legacy_yearly")).toMatchObject({
+        tier: "yearly",
+        subscription_status: "past_due",
+      });
+    } finally {
+      layer.close();
+    }
   });
 
   it("provisions one managed child key after tenant binding and projects customer-safe usage", async () => {
