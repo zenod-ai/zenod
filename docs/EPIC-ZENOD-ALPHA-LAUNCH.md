@@ -80,12 +80,12 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
-Phase: Minimum implementation and single €9 contract integrated; immutable image blocked by GitHub Actions outage
+Phase: Final public-offer polish and closed production-candidate preparation
 Last verified: 2026-08-26 CEST
 Integration target: `main`
-Fresh base commit: `ba5e9c10ff6466e357568fe9d495913af8047631` on `main`
-Next action: wait for GitHub Actions recovery and the already-approved retry of publish run `32983888246`; if it succeeds, resolve the real OCI/amd64 digest and resume [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061) read-only. Do not start another retry or infer a digest.
-Blockers: GitHub Actions reports `major_outage`. The original `ba5e9c1` publish was canceled after no hosted runner acquired it; zero steps ran, `sha-ba5e9c1` is absent, and the single approved retry remains queued. Exact off-host backup destination/procedure, backup quiesce, credential/token sources and reviewed non-secret config values, live €9 Stripe price selection, and immutable-image/Dokploy/rollback approval are also unresolved. OpenRouter reconciliation, Google OAuth, live channel tests, real-card billing, signup, and promotion remain later independent gates.
+Fresh base commit: `8d62a6f197fe7ed836eb93ff9c6c8569c6ccc95e` on `main`
+Next action: finish and integrate [ZAL-19 #1092](https://github.com/zenod-ai/zenod/issues/1092) while the delivery manager resolves exact production inputs read-only. Publish the ZAL-19 merge as the one final immutable image, refresh [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061), then perform verified backups, signup-closed deployment and live acceptance until the candidate is ready for Jordi's final launch test.
+Blockers: GitHub Actions reports `major_outage`; the earlier `ba5e9c1` retry remains queued, but it is no longer the intended deployment candidate because ZAL-19 is the final source correction. Exact off-host backup procedure, Google credential source, shared Channels token, live €9 Stripe price and reviewed non-secret Dokploy delta are being resolved. Public signup and promotion remain closed until the final test and explicit opening decision.
 
 ## Role Goals
 
@@ -179,6 +179,7 @@ The repository's global issue list is not the alpha board. It contains many hist
 | [#1082](https://github.com/zenod-ai/zenod/issues/1082) | Ticket worker | unassigned | ZAL-16 · Extend existing billing/readiness sources for owner system health | deferred / proposed | post-core-beta; #1077 and later sources | `codex/zal-16-billing-system-health` | `fa41246` | Existing billing/readiness sources compose into truthful guarded owner views. | Approved system-health destination preserved; not a launch dependency. | 2026-08-25 CEST | Revisit after core-beta proof. |
 | [#1083](https://github.com/zenod-ai/zenod/issues/1083) | Tester / integrator | ZAL-17-beta-acceptance-tester | ZAL-17 · Prove the minimum paid Hosted beta release candidate | done | #1073–#1076, then #1061 | merged [PR #1088](https://github.com/zenod-ai/zenod/pull/1088) / `main` | `f3c84c9` | Existing Hosted account/MCP/vault plus managed usage/direct WhatsApp and supported self-host regression pass on one named SHA. | Final source `f4a1746`, evidence `e2dc43a`, and receipt `b3a232c` passed CI/review; merged as `91b4e7d`; exact merged Drive journey/typecheck/schemas pass; issue closed complete. | 2026-08-26 CEST | None; hand off to ZAL-4 read-only preflight and named human gates. |
 | [#1090](https://github.com/zenod-ai/zenod/issues/1090) | Ticket worker | ZAL-18-single-price-contract-worker | ZAL-18 · Replace Zenod legacy €5/€50 offer with the approved single €9/month contract | done | approved product contract; reviewed ZAL-4 drift | merged [PR #1091](https://github.com/zenod-ai/zenod/pull/1091) / `main` | `7b72d38` | Existing Zenod site/account/checkout/Terms/readiness expose exactly one €9/month plus VAT plan; historical subscriptions and shared billing remain intact; no Stripe or production mutation. | Corrected `162c1ca` passed clean CI and no-blocker re-review; merged as `ba5e9c1`; merged-main 42 shared, site 7, web 72, typecheck, and diff checks pass. | 2026-08-26 CEST | None; ZAL-4 consumes the automatic immutable image read-only and refreshes its packet. |
+| [#1092](https://github.com/zenod-ai/zenod/issues/1092) | Ticket worker | ZAL-19-public-offer-worker | ZAL-19 · Align public homepage and metadata with the final Hosted offer | running | [#1090](https://github.com/zenod-ai/zenod/issues/1090) | `codex/zal-19-public-offer` | `8d62a6f` | Existing public site and metadata clearly present free self-hosted Zenod plus Hosted at €9/month + VAT with managed usage and WhatsApp; no redesign or new feature. | Dedicated worktree dispatched; live production remains unchanged and signup closed. | 2026-08-26 CEST | Complete focused tests and responsive QA, then review/integrate before building the final immutable image. |
 
 ## Branch And Integration
 
@@ -214,14 +215,14 @@ Stale assignment policy: verify issue, branch, PR, latest commit, evidence, bloc
 ## Planner Queue
 
 - Keep the UI contract as the approved destination while enforcing reuse-first issue boundaries; do not authorize a second portal, transport, account system, billing system, usage ledger, or admin application.
-- Preserve integrated #1073–#1076, #1083, and #1090. Refresh #1061 against the automatically published `ba5e9c1` image; do not reboot the product or reopen the approved offer.
+- Preserve integrated #1073–#1076, #1083, and #1090. Deliver #1092 as the last copy-only correction, then refresh #1061 against the #1092 merge image; do not reboot the product or reopen the approved offer.
 - Keep #1077–#1082 proposed as post-core-beta owner enhancements. Pull one forward only if real operating evidence shows that a small capped cohort cannot be supported with existing `/admin`, stores, scripts, endpoints, and runbooks.
 - Keep ZAL-4 fail-closed until a fresh digest is recorded and every named production approval is explicit.
 - Draft the separate voice-note-to-Codex child epic after the alpha offer is accepted; it is not part of this board.
 
 ## Worker Queue
 
-- Blocked: #1061 read-only packet refresh cannot name a candidate until GitHub Actions publishes exact `ba5e9c1`; the one approved retry is already queued.
+- Running: #1092 is the final copy-only source correction. #1061 resumes against its eventual merge image, not the earlier intermediate `ba5e9c1` retry.
 - Parent delivery manager remains sole spine steward and reviews terminal issue/branch evidence before integration.
 - ZAL-4 may update documentation/evidence only; it may not deploy, charge, alter config, create credentials, touch sessions, or open signup.
 
