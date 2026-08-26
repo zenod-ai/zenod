@@ -96,6 +96,10 @@ GOOGLE_OAUTH_CLIENT_SECRET
 ```
 
 Do not seed those values into tenant settings. Register only the approved public callback.
+For the Hosted public beta this connection is archive/export-only: Zenod creates
+one private tenant-specific folder automatically, GitHub remains the source
+integration, and customers do not select a Drive folder. Self-hosted BYO Drive
+source/inbox behavior is unchanged.
 
 Hosted managed AI requires:
 

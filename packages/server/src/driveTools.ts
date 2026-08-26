@@ -23,6 +23,10 @@ function describe(file: DriveFile): string {
 }
 
 export function buildDriveTools(settings: Settings, queue: IngestQueue): DriveSourceTools | undefined {
+  // Hosted Drive is deliberately archive/export-only for public beta. GitHub
+  // remains the source integration; the full Drive inbox/source workflow is a
+  // self-hosted BYO-credentials capability.
+  if (settings.googleDriveOAuthAuthority().mode === "hosted-managed") return undefined;
   const client = driveClientFromSettings(settings);
   if (!client) return undefined;
 

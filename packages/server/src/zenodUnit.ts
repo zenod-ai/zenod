@@ -175,7 +175,9 @@ function registerZenodTools(
   const chatTestAudit = runtime.state as unknown as ChatTestAuditStore;
   buildMcpServer(
     () => runtime.getEngine(),
-    () => buildDriveTools(settings, runtime.ingestQueue),
+    settings.googleDriveOAuthAuthority().mode === "hosted-managed"
+      ? undefined
+      : () => buildDriveTools(settings, runtime.ingestQueue),
     () => runtime.cleanSlate(),
     (input) => chatTestAudit.recordChatTestRun(input),
     {
@@ -418,9 +420,9 @@ function projectHostedDriveStatus(
     : !oauthAvailable
       ? "Google Drive connection is unavailable."
       : !configured
-        ? "Connect Google Drive to enable archived media links."
+        ? "Connect Google Drive to enable archive/export copies."
         : !folderId
-          ? "Choose a Zenod Drive folder to enable archived media links."
+          ? "Reconnect Google Drive so Zenod can prepare its managed archive folder."
           : "Google Drive archiving is not ready.";
   return {
     configured,

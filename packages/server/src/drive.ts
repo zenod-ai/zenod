@@ -12,16 +12,16 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 // Self-hosted OAuth and service-account setups retain their existing full-Drive
-// behavior. Hosted uses drive.file instead: it can only see files Zenod creates
-// or the customer explicitly opens with Zenod.
+// behavior. Hosted uses drive.file only for files Zenod creates in its managed
+// archive folder; Hosted beta does not offer Picker/source ingestion.
 const SCOPE = "https://www.googleapis.com/auth/drive";
 const HOSTED_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const USERINFO_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,parents";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-const MANAGED_ROOT_NAME = "Zenod";
 const MANAGED_ROOT_PROPERTY_KEY = "zenodManagedRoot";
-const MANAGED_ROOT_PROPERTY_VALUE = "v1";
+const MANAGED_ROOT_PROPERTY_VERSION = "v2";
+const MANAGED_FOLDER_FIELDS = `${FILE_FIELDS},appProperties,capabilities/canAddChildren`;
 
 export interface ServiceAccount {
   client_email: string;
@@ -245,27 +245,43 @@ export class DriveClient {
    * app-owned root by its private marker or create it in My Drive. With
    * drive.file, the query can only see files this OAuth client created/opened.
    */
-  async ensureManagedRootFolder(storedFolderId?: string | null): Promise<string> {
+  async ensureManagedRootFolder(tenantMarker: string, storedFolderId?: string | null): Promise<string> {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(tenantMarker)) {
+      throw new Error("Hosted Drive folder marker is invalid");
+    }
+    const markerValue = `${MANAGED_ROOT_PROPERTY_VERSION}:${tenantMarker}`;
+    const folderName = `Zenod archive ${tenantMarker.slice(0, 10)}`;
+    type ManagedFolder = DriveFile & {
+      appProperties?: Record<string, string>;
+      capabilities?: { canAddChildren?: boolean };
+    };
+    const isManagedWritableFolder = (folder: ManagedFolder | null): folder is ManagedFolder =>
+      folder?.mimeType === FOLDER_MIME &&
+      folder.name === folderName &&
+      folder.appProperties?.[MANAGED_ROOT_PROPERTY_KEY] === markerValue &&
+      folder.capabilities?.canAddChildren === true;
+
     if (storedFolderId) {
-      const stored = await this.getFile(storedFolderId).catch(() => null);
-      if (
-        stored?.mimeType === FOLDER_MIME &&
-        await this.canWrite(storedFolderId).catch(() => false)
-      ) {
+      const storedResponse = await this.request(`/files/${encodeURIComponent(storedFolderId)}`, {
+        fields: MANAGED_FOLDER_FIELDS,
+      }).catch(() => null);
+      const stored = storedResponse
+        ? await storedResponse.json().catch(() => null) as ManagedFolder | null
+        : null;
+      if (isManagedWritableFolder(stored)) {
         return storedFolderId;
       }
     }
 
-    const marker = `${MANAGED_ROOT_PROPERTY_KEY}='${MANAGED_ROOT_PROPERTY_VALUE}'`;
     const response = await this.request("/files", {
-      q: `trashed = false and mimeType = '${FOLDER_MIME}' and appProperties has { key='${MANAGED_ROOT_PROPERTY_KEY}' and value='${MANAGED_ROOT_PROPERTY_VALUE}' }`,
+      q: `trashed = false and mimeType = '${FOLDER_MIME}' and appProperties has { key='${MANAGED_ROOT_PROPERTY_KEY}' and value='${markerValue}' }`,
       orderBy: "createdTime asc",
       pageSize: "10",
       spaces: "drive",
-      fields: `files(${FILE_FIELDS},appProperties)`,
+      fields: `files(${MANAGED_FOLDER_FIELDS})`,
     });
-    const data = (await response.json()) as { files?: DriveFile[] };
-    const recovered = data.files?.find((file) => file.name === MANAGED_ROOT_NAME) ?? data.files?.[0];
+    const data = (await response.json()) as { files?: ManagedFolder[] };
+    const recovered = data.files?.find(isManagedWritableFolder);
     if (recovered?.id) return recovered.id;
 
     const created = await this.request(
@@ -274,15 +290,15 @@ export class DriveClient {
       {
         method: "POST",
         body: {
-          name: MANAGED_ROOT_NAME,
+          name: folderName,
           mimeType: FOLDER_MIME,
-          appProperties: { [MANAGED_ROOT_PROPERTY_KEY]: MANAGED_ROOT_PROPERTY_VALUE },
+          appProperties: { [MANAGED_ROOT_PROPERTY_KEY]: markerValue },
         },
       },
     );
     const folder = (await created.json()) as { id?: unknown };
     if (typeof folder.id !== "string" || !folder.id) {
-      throw new Error(`Drive API did not return the ${marker} folder ID`);
+      throw new Error("Drive API did not return the managed archive folder ID");
     }
     return folder.id;
   }

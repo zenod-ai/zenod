@@ -276,7 +276,7 @@ export function GoogleDriveConnect({
         </CardTitle>
         <CardDescription>
           {hosted
-            ? "Zenod creates one private app folder for voice notes, documents, and archived media."
+            ? "Optional archive/export copies in one private, app-managed folder. GitHub remains your memory source."
             : "Pick one Zenod Drive folder. Drop voice notes or documents there, or in its Inbox/ subfolder, and ask Zeno to transcribe them — Zeno creates archive subfolders inside that same folder."}
         </CardDescription>
       </CardHeader>
@@ -296,7 +296,7 @@ export function GoogleDriveConnect({
             </div>
             <FieldDescription>
               {hosted ? (
-                "Zenod uses this account only for the app folder it created."
+                "Zenod writes archive/export copies only to its app-managed folder."
               ) : (
                 <>
                   {selfHostedStatus?.authMode === "oauth"
@@ -352,8 +352,12 @@ export function GoogleDriveConnect({
             <div className="flex flex-col gap-3 text-sm text-muted-foreground">
               <p>
                 Connect your Google account through Zenod. Zenod creates or
-                recovers one app-owned folder automatically and only requests
-                access to files created or opened with Zenod.
+                recovers one private archive folder automatically and requests
+                access only to files it creates there.
+              </p>
+              <p>
+                Hosted beta does not use Google Drive as an inbox or memory
+                source. GitHub remains the source integration.
               </p>
               <p>
                 Disconnecting removes Zenod access and never deletes files
@@ -361,8 +365,8 @@ export function GoogleDriveConnect({
               </p>
             </div>
             <FieldDescription>
-              After consent, your Zenod folder is ready automatically. Zeno
-              creates Inbox/ and Archive/ subfolders inside it as needed.
+              After consent, the managed archive folder is ready automatically.
+              There is no folder to select.
             </FieldDescription>
           </>
         )}
@@ -594,7 +598,7 @@ export function GoogleDriveConnect({
                 <AlertDialogTitle>Disconnect Google Drive?</AlertDialogTitle>
                 <AlertDialogDescription>
                   {hosted
-                    ? "Zenod loses access to your Drive folder. Nothing changes in Google Drive."
+                    ? "Zenod loses access to its managed archive folder. Nothing changes in Google Drive and no files are deleted."
                     : "Zenod forgets the service-account key and Zeno loses access to your Drive files. Nothing changes in your Drive."}
                 </AlertDialogDescription>
               </AlertDialogHeader>

@@ -35,7 +35,7 @@ const hostedDriveStatus = {
   accountEmail: null,
   folderId: null,
   archiveConfigured: false,
-  archiveReason: "Connect Google Drive to enable archived media links.",
+  archiveReason: "Connect Google Drive to enable archive/export copies.",
 }
 
 afterEach(() => {
@@ -58,17 +58,18 @@ describe("GoogleDriveConnect edition projection", () => {
     ).not.toBeNull()
     expect(
       screen.getByText(
-        /creates or recovers one app-owned folder automatically/i
+        /creates or recovers one private archive folder automatically/i
       )
     ).not.toBeNull()
     expect(screen.queryByLabelText("Zenod Drive folder ID")).toBeNull()
     expect(document.body.textContent).toMatch(
-      /only requests access to files created or opened with Zenod/i
+      /does not use Google Drive as an inbox or memory source/i
     )
+    expect(document.body.textContent).toMatch(/There is no folder to select/i)
 
     const copy = document.body.textContent ?? ""
     expect(copy).not.toMatch(
-      /OAuth client ID|OAuth client secret|service account|private\/provider-model|whisper\.cpp|large-v3-turbo|API key|per-minute cost/i
+      /OAuth client ID|OAuth client secret|service account|private\/provider-model|whisper\.cpp|large-v3-turbo|API key|per-minute cost|list or transcribe/i
     )
     expect(mocks.api).not.toHaveBeenCalledWith("/api/transcription/status")
   })

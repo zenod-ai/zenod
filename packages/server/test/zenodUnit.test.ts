@@ -22,6 +22,7 @@ import {
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { driveAuthFromSettings } from "../src/drive.js";
+import { buildDriveTools } from "../src/driveTools.js";
 import { SETTING_KEYS } from "../src/settings.js";
 
 const tempDirs: string[] = [];
@@ -583,7 +584,7 @@ describe("Zenod chassis unit", () => {
           accountEmail: "customer@example.com",
           folderId: null,
           archiveConfigured: false,
-          archiveReason: "Choose a Zenod Drive folder to enable archived media links.",
+          archiveReason: "Reconnect Google Drive so Zenod can prepare its managed archive folder.",
         });
         expect(JSON.stringify(driveStatusBody)).not.toMatch(
           /oauthClientId|clientEmail|service.account|provider|transcription|internal|hostile|private.key|refresh.token|paid\/model|openrouter/i,
@@ -816,6 +817,8 @@ describe("Zenod chassis unit", () => {
     });
     const providerRequests: string[] = [];
     let managedFolderExists = false;
+    let managedFolderName = "";
+    let managedFolderMarker = "";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -850,25 +853,32 @@ describe("Zenod chassis unit", () => {
           if ((init?.method ?? "GET") === "POST") {
             managedFolderExists = true;
             const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-            expect(body).toMatchObject({
-              name: "Zenod",
-              mimeType: "application/vnd.google-apps.folder",
-              appProperties: { zenodManagedRoot: "v1" },
-            });
+            const appProperties = body.appProperties as Record<string, string>;
+            managedFolderMarker = appProperties.zenodManagedRoot;
+            managedFolderName = String(body.name);
+            expect(managedFolderMarker).toMatch(/^v2:[A-Za-z0-9_-]{20,64}$/);
+            expect(managedFolderName).toBe(`Zenod archive ${managedFolderMarker.slice(3, 13)}`);
+            expect(managedFolderName).not.toMatch(/github|customer|example\.com/i);
+            expect(body).toMatchObject({ mimeType: "application/vnd.google-apps.folder" });
             return Response.json({
               id: "hosted-managed-folder",
-              name: "Zenod",
+              name: managedFolderName,
               mimeType: "application/vnd.google-apps.folder",
+              appProperties: { zenodManagedRoot: managedFolderMarker },
+              capabilities: { canAddChildren: true },
             });
           }
           const query = new URL(url).searchParams.get("q") ?? "";
           expect(query).toContain("appProperties has");
+          if (managedFolderMarker) expect(query).toContain(managedFolderMarker);
           return Response.json({
             files: managedFolderExists
               ? [{
                   id: "hosted-managed-folder",
-                  name: "Zenod",
+                  name: managedFolderName,
                   mimeType: "application/vnd.google-apps.folder",
+                  appProperties: { zenodManagedRoot: managedFolderMarker },
+                  capabilities: { canAddChildren: true },
                 }]
               : [],
           });
@@ -912,6 +922,7 @@ describe("Zenod chassis unit", () => {
         },
       });
       expect(driveAuthFromSettings(runtime.settings)).toBeNull();
+      expect(buildDriveTools(runtime.settings, runtime.ingestQueue)).toBeUndefined();
 
       const authCases = [
         { name: "cookie", headers: { cookie } },
@@ -934,7 +945,7 @@ describe("Zenod chassis unit", () => {
           accountEmail: null,
           folderId: null,
           archiveConfigured: false,
-          archiveReason: "Connect Google Drive to enable archived media links.",
+          archiveReason: "Connect Google Drive to enable archive/export copies.",
         });
 
         const arbitraryFolder = await unit.app.request("/api/settings", {
@@ -989,6 +1000,8 @@ describe("Zenod chassis unit", () => {
           "hosted-managed-folder",
         );
         expect(runtime.settings.get("artifact_archive_provider")).toBe("drive");
+        const tenantMarker = runtime.settings.getRaw("google_drive_managed_folder_marker");
+        expect(tenantMarker).toMatch(/^[A-Za-z0-9_-]{20,64}$/);
         expect(driveAuthFromSettings(runtime.settings)).toEqual({
           kind: "oauth",
           clientId: "operator-google-client-id",
@@ -1034,6 +1047,7 @@ describe("Zenod chassis unit", () => {
         expect(runtime.settings.getRaw("google_oauth_email")).toBeNull();
         expect(runtime.settings.get("google_drive_folder_id")).toBeNull();
         expect(runtime.settings.get("artifact_archive_drive_folder_id")).toBeNull();
+        expect(runtime.settings.getRaw("google_drive_managed_folder_marker")).toBe(tenantMarker);
         expect(runtime.settings.getRaw("google_oauth_client_id")).toBe(
           "hostile-tenant-client-id",
         );
@@ -1076,6 +1090,181 @@ describe("Zenod chassis unit", () => {
       );
     } finally {
       unit.close();
+    }
+  });
+
+  it("ZAL-20 Hosted isolated Drive journey separates same-account tenants and rejects stale stored folders", async () => {
+    const dataDir = await tempDir();
+    const { unit, cookie } = await createHostedDriveCustomer(dataDir, {
+      clientId: "operator-google-client-id",
+      clientSecret: "operator-google-client-secret",
+    });
+    type ManagedFolder = {
+      id: string;
+      name: string;
+      mimeType: string;
+      appProperties: Record<string, string>;
+      capabilities: { canAddChildren: boolean };
+    };
+    const foldersByMarker = new Map<string, ManagedFolder>();
+    const providerRequests: Array<{ url: string; method: string }> = [];
+    let createdCount = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      providerRequests.push({ url, method });
+      if (url === "https://oauth2.googleapis.com/token") {
+        const body = new URLSearchParams(String(init?.body));
+        return Response.json({
+          access_token: "shared-google-account-access-token",
+          refresh_token: `refresh-${body.get("code")}`,
+        });
+      }
+      if (url === "https://www.googleapis.com/oauth2/v2/userinfo") {
+        return Response.json({ email: "same-google-account@example.com" });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/arbitrary-folder?")) {
+        return Response.json({
+          id: "arbitrary-folder",
+          name: "Zenod archive attacker",
+          mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodManagedRoot: "v2:attacker_marker_value_123" },
+          capabilities: { canAddChildren: true },
+        });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/stale-folder?")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/unwritable-folder?")) {
+        const folder = [...foldersByMarker.values()][0];
+        return Response.json({ ...folder, id: "unwritable-folder", capabilities: { canAddChildren: false } });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files/")) {
+        const id = decodeURIComponent(new URL(url).pathname.split("/").pop()!);
+        const folder = [...foldersByMarker.values()].find((candidate) => candidate.id === id);
+        return folder ? Response.json(folder) : new Response("not found", { status: 404 });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/files?")) {
+        if (method === "POST") {
+          const body = JSON.parse(String(init?.body)) as {
+            name: string;
+            mimeType: string;
+            appProperties: Record<string, string>;
+          };
+          const marker = body.appProperties.zenodManagedRoot;
+          const folder: ManagedFolder = {
+            id: `tenant-folder-${++createdCount}`,
+            name: body.name,
+            mimeType: body.mimeType,
+            appProperties: body.appProperties,
+            capabilities: { canAddChildren: true },
+          };
+          expect(marker).toMatch(/^v2:[A-Za-z0-9_-]{20,64}$/);
+          expect(folder.name).toBe(`Zenod archive ${marker.slice(3, 13)}`);
+          expect(folder.name).not.toMatch(/github|same-google|example\.com/i);
+          foldersByMarker.set(marker, folder);
+          return Response.json(folder);
+        }
+        const query = new URL(url).searchParams.get("q") ?? "";
+        const marker = query.match(/value='([^']+)'/)?.[1];
+        return Response.json({ files: marker ? [foldersByMarker.get(marker)].filter(Boolean) : [] });
+      }
+      throw new Error(`unexpected mocked Google request: ${url}`);
+    }));
+
+    try {
+      const runtime42 = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      const runtime99 = unit.runtimes.forTenantStorage(
+        "github-99",
+        unit.storage.forTenant({ id: "github-99" }),
+      );
+      runtime42.settings.set("google_drive_folder_id", "arbitrary-folder");
+      runtime42.settings.set("artifact_archive_drive_folder_id", "arbitrary-folder");
+
+      const connect = async (
+        headers: Record<string, string>,
+        code: string,
+        runtime: typeof runtime42,
+      ) => {
+        const start = await unit.app.request("https://cloud.zenod.test/api/drive/oauth/start", { headers });
+        expect(start.status).toBe(302);
+        const consent = new URL(start.headers.get("location")!);
+        expect(consent.searchParams.get("scope")?.split(" ").sort()).toEqual([
+          "https://www.googleapis.com/auth/drive.file",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ]);
+        const state = runtime.settings.getRaw("google_oauth_state")!;
+        const callback = await unit.app.request(
+          `https://cloud.zenod.test/api/drive/oauth/callback?code=${code}&state=${encodeURIComponent(state)}`,
+          { headers },
+        );
+        expect(callback.status).toBe(302);
+      };
+
+      await connect({ cookie }, "cookie-tenant-42", runtime42);
+      const marker42 = runtime42.settings.getRaw("google_drive_managed_folder_marker")!;
+      const folder42 = runtime42.settings.get("google_drive_folder_id")!;
+      expect(folder42).toBe("tenant-folder-1");
+      expect(folder42).not.toBe("arbitrary-folder");
+      expect(runtime42.settings.get("artifact_archive_drive_folder_id")).toBe(folder42);
+      expect(buildDriveTools(runtime42.settings, runtime42.ingestQueue)).toBeUndefined();
+
+      await unit.runtimes.close();
+      const restarted42 = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      expect(restarted42.settings.getRaw("google_drive_managed_folder_marker")).toBe(marker42);
+      restarted42.settings.set("google_drive_folder_id", "stale-folder");
+      restarted42.settings.set("artifact_archive_drive_folder_id", "stale-folder");
+      await connect({ authorization: "Bearer customer-token" }, "bearer-tenant-42", restarted42);
+      expect(restarted42.settings.get("google_drive_folder_id")).toBe(folder42);
+      expect(restarted42.settings.getRaw("google_drive_managed_folder_marker")).toBe(marker42);
+      expect(createdCount).toBe(1);
+
+      restarted42.settings.set("google_drive_folder_id", "unwritable-folder");
+      restarted42.settings.set("artifact_archive_drive_folder_id", "unwritable-folder");
+      await connect({ authorization: "Bearer customer-token" }, "unwritable-tenant-42", restarted42);
+      expect(restarted42.settings.get("google_drive_folder_id")).toBe(folder42);
+      expect(createdCount).toBe(1);
+
+      const restarted99 = unit.runtimes.forTenantStorage(
+        "github-99",
+        unit.storage.forTenant({ id: "github-99" }),
+      );
+      await connect({ authorization: "Bearer other-token" }, "bearer-tenant-99", restarted99);
+      const marker99 = restarted99.settings.getRaw("google_drive_managed_folder_marker")!;
+      const folder99 = restarted99.settings.get("google_drive_folder_id")!;
+      expect(restarted99.settings.getRaw("google_oauth_email")).toBe("same-google-account@example.com");
+      expect(restarted42.settings.getRaw("google_oauth_email")).toBe("same-google-account@example.com");
+      expect(marker99).not.toBe(marker42);
+      expect(folder99).toBe("tenant-folder-2");
+      expect(folder99).not.toBe(folder42);
+      expect(createdCount).toBe(2);
+
+      const requestsBeforeDisconnect = providerRequests.length;
+      const disconnect = await unit.app.request("/api/drive/disconnect", {
+        method: "POST",
+        headers: { authorization: "Bearer customer-token" },
+      });
+      expect(disconnect.status).toBe(200);
+      expect(providerRequests).toHaveLength(requestsBeforeDisconnect);
+      expect(restarted42.settings.get("google_drive_folder_id")).toBeNull();
+      expect(restarted42.settings.get("artifact_archive_drive_folder_id")).toBeNull();
+      expect(restarted42.settings.getRaw("google_drive_managed_folder_marker")).toBe(marker42);
+      expect(foldersByMarker).toHaveLength(2);
+
+      const safeStatus = await unit.app.request("/api/drive/status", {
+        headers: { authorization: "Bearer other-token" },
+      });
+      const safeStatusText = await safeStatus.text();
+      expect(safeStatusText).not.toContain(marker42);
+      expect(safeStatusText).not.toContain(marker99);
+    } finally {
+      await unit.close();
     }
   });
 
