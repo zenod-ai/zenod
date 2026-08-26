@@ -60,6 +60,20 @@ export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
 
+export interface GoogleDriveOAuthClientCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
+export type GoogleDriveOAuthAuthority =
+  | { mode: "self-hosted" }
+  | {
+      mode: "hosted-managed";
+      credentials: GoogleDriveOAuthClientCredentials | null;
+    };
+
+export type GoogleDriveOAuthAuthoritySource = () => GoogleDriveOAuthAuthority;
+
 export interface RingTenantConfig {
   enabled: boolean;
   tenantSlug: string | null;
@@ -172,6 +186,7 @@ export class Settings {
     private readonly store: SqliteStateStore,
     private readonly credentialVault?: CredentialVault,
     private readonly rawFallbacks: Readonly<Record<string, string>> = {},
+    private readonly googleDriveOAuthAuthoritySource?: GoogleDriveOAuthAuthoritySource,
   ) {
     this.migrateCredentialSecrets();
   }
@@ -600,12 +615,22 @@ export class Settings {
 
   /** Google Drive is connected: service account, or Google user OAuth. */
   driveConfigured(): boolean {
+    const authority = this.googleDriveOAuthAuthority();
+    if (authority.mode === "hosted-managed") {
+      return Boolean(
+        authority.credentials && this.getRaw("google_oauth_refresh_token"),
+      );
+    }
     return Boolean(
       this.get("google_service_account_json") ||
-        (this.getRaw("google_oauth_client_id") &&
-          this.getRaw("google_oauth_client_secret") &&
+        (this.get("google_oauth_client_id") &&
+          this.get("google_oauth_client_secret") &&
           this.getRaw("google_oauth_refresh_token")),
     );
+  }
+
+  googleDriveOAuthAuthority(): GoogleDriveOAuthAuthority {
+    return this.googleDriveOAuthAuthoritySource?.() ?? { mode: "self-hosted" };
   }
 
   /** Configured whisper transcription quality; defaults to large-v3-turbo. */

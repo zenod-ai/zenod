@@ -27,7 +27,10 @@ import { buildDriveTools } from "./driveTools.js";
 import { driveClientFromSettings } from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
-import type { SettingKey } from "./settings.js";
+import type {
+  GoogleDriveOAuthAuthority,
+  SettingKey,
+} from "./settings.js";
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
@@ -63,22 +66,6 @@ export const MEMORY_CHANNEL_MCP_TOOLS = Object.freeze([
   "store_memory",
 ] as const);
 
-/**
- * Operator-owned Google OAuth credentials are shared configuration, never
- * tenant state. Tenant runtimes keep env seeding disabled and receive these as
- * read-only fallbacks; each tenant stores only its own state/refresh token.
- */
-function sharedGoogleDriveOAuthSettingFallbacks(
-  env: NodeJS.ProcessEnv,
-): Readonly<Record<string, string>> {
-  const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
-  const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
-  return {
-    ...(clientId ? { google_oauth_client_id: clientId } : {}),
-    ...(clientSecret ? { google_oauth_client_secret: clientSecret } : {}),
-  };
-}
-
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
@@ -90,6 +77,9 @@ export class ZenodRuntimePool {
     private readonly appOptionsForTenant?: (tenantId: string, runtime: Runtime) => Pick<AppOptions, "chatInterceptor">,
     private readonly managedTelegramInbound?: (tenantId: string, input: TelegramManagedInbound) => Promise<void>,
     private readonly hostedCustomerTenant?: (tenantId: string) => boolean,
+    private readonly googleDriveOAuthAuthorityForTenant?: (
+      tenantId: string,
+    ) => GoogleDriveOAuthAuthority,
   ) {}
 
   forContext(context: UnitContext): Runtime {
@@ -116,10 +106,13 @@ export class ZenodRuntimePool {
       }),
       settingFallbacks: {
         ...sharedGithubSettingFallbacks(this.sharedGithubApp),
-        ...(this.hostedCustomerTenant?.(tenantId)
-          ? sharedGoogleDriveOAuthSettingFallbacks(this.env)
-          : {}),
       },
+      ...(this.googleDriveOAuthAuthorityForTenant
+        ? {
+            googleDriveOAuthAuthority: () =>
+              this.googleDriveOAuthAuthorityForTenant!(tenantId),
+          }
+        : {}),
       ...(this.managedTelegramInbound
         ? { managedTelegramInbound: (input) => this.managedTelegramInbound!(tenantId, input) }
         : {}),
@@ -642,6 +635,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
   let managedTelegramAdmission: ((tenantId: string, input: TelegramManagedInbound) => Promise<void>) | null = null;
   let isHostedCustomerTenant: (tenantId: string) => boolean = () => false;
+  let googleDriveOAuthAuthorityForTenant: (
+    tenantId: string,
+  ) => GoogleDriveOAuthAuthority = () => ({ mode: "self-hosted" });
   const runtimes = new ZenodRuntimePool(
     env,
     sharedGithubApp,
@@ -652,6 +648,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       await managedTelegramAdmission(tenantId, input);
     },
     (tenantId) => isHostedCustomerTenant(tenantId),
+    (tenantId) => googleDriveOAuthAuthorityForTenant(tenantId),
   );
   const unit = createUnit({
     name: unitName,
@@ -753,6 +750,36 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   );
   const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  googleDriveOAuthAuthorityForTenant = (tenantId) => {
+    const accounts = customer.accounts.list().filter(
+      (candidate) => candidate.tenant_id === tenantId,
+    );
+    if (accounts.length === 0) return { mode: "self-hosted" };
+    if (accounts.length !== 1) {
+      return { mode: "hosted-managed", credentials: null };
+    }
+    const account = accounts[0]!;
+    const entitled = account.subscription_status === "active" ||
+      account.subscription_status === "past_due";
+    const token = customer.tokenVault.get(account.account_id);
+    const tenantRecord = token
+      ? tenantStore.resolveTokenHash(hashToken(token))
+      : null;
+    const synchronousRecord = tenantRecord && typeof tenantRecord === "object" &&
+      !("then" in tenantRecord)
+      ? tenantRecord
+      : null;
+    const tenantActive = synchronousRecord?.tenant.id === tenantId &&
+      (synchronousRecord.status ?? "active") === "active";
+    const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
+    const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+    return {
+      mode: "hosted-managed",
+      credentials: entitled && tenantActive && clientId && clientSecret
+        ? { clientId, clientSecret }
+        : null,
+    };
+  };
   const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
     const account = customer.accounts.resolveForTenantId(input.tenantId);
     const token = account ? customer.tokenVault.get(account.account_id) : null;

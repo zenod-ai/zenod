@@ -21,6 +21,7 @@ import {
 } from "../src/zenodUnit.js";
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
+import { driveAuthFromSettings } from "../src/drive.js";
 import { SETTING_KEYS } from "../src/settings.js";
 
 const tempDirs: string[] = [];
@@ -119,7 +120,7 @@ async function createHostedDriveCustomer(
   unit.customerTokenVault.put("github-42", "customer-token");
   unit.customerTokenVault.put("github-99", "other-token");
   const cookie = await signInCustomer(unit);
-  return { unit, cookie };
+  return { unit, cookie, tenants };
 }
 
 const expectedHostedDriveStatusKeys = [...HOSTED_DRIVE_STATUS_PUBLIC_KEYS].sort();
@@ -806,7 +807,7 @@ describe("Zenod chassis unit", () => {
     }
   });
 
-  it("ZAL-17 Hosted managed Drive journey uses operator OAuth config without tenant credential seeding", async () => {
+  it("ZAL-17 Hosted managed Drive journey uses operator OAuth authority over preserved hostile tenant credentials", async () => {
     const dataDir = await tempDir();
     const { unit, cookie } = await createHostedDriveCustomer(dataDir, {
       clientId: "operator-google-client-id",
@@ -827,6 +828,8 @@ describe("Zenod chassis unit", () => {
           expect(body.get("redirect_uri")).toBe(
             "https://cloud.zenod.test/api/drive/oauth/callback",
           );
+          expect(body.toString()).not.toContain("hostile-tenant-client-id");
+          expect(body.toString()).not.toContain("hostile-tenant-client-secret");
           return Response.json({
             access_token: "mocked-google-access-token",
             refresh_token: "tenant-google-refresh-token",
@@ -847,16 +850,36 @@ describe("Zenod chassis unit", () => {
         "github-42",
         unit.storage.forTenant({ id: "github-42" }),
       );
-      expect(runtime.settings.get("google_oauth_client_id")).toBeNull();
-      expect(runtime.settings.get("google_oauth_client_secret")).toBeNull();
-      expect(runtime.state.getSetting("google_oauth_client_id")).toBeNull();
-      expect(runtime.state.getSetting("google_oauth_client_secret")).toBeNull();
+      runtime.settings.set("google_oauth_client_id", "hostile-tenant-client-id");
+      runtime.settings.set("google_oauth_client_secret", "hostile-tenant-client-secret");
+      runtime.settings.set(
+        "google_service_account_json",
+        '{"client_email":"hostile@example.invalid","private_key":"hostile-private-key"}',
+      );
+      runtime.settings.setRaw("google_oauth_email", "hostile@example.invalid");
       expect(runtime.settings.getRaw("google_oauth_client_id")).toBe(
-        "operator-google-client-id",
+        "hostile-tenant-client-id",
       );
       expect(runtime.settings.getRaw("google_oauth_client_secret")).toBe(
+        "hostile-tenant-client-secret",
+      );
+      expect(runtime.state.getSetting("google_oauth_client_id")).toBe(
+        "hostile-tenant-client-id",
+      );
+      expect(runtime.state.getSetting("google_oauth_client_secret")).not.toBe(
+        "hostile-tenant-client-secret",
+      );
+      expect(runtime.state.getSetting("google_oauth_client_secret")).not.toBe(
         "operator-google-client-secret",
       );
+      expect(runtime.settings.googleDriveOAuthAuthority()).toEqual({
+        mode: "hosted-managed",
+        credentials: {
+          clientId: "operator-google-client-id",
+          clientSecret: "operator-google-client-secret",
+        },
+      });
+      expect(driveAuthFromSettings(runtime.settings)).toBeNull();
 
       const authCases = [
         { name: "cookie", headers: { cookie } },
@@ -898,6 +921,8 @@ describe("Zenod chassis unit", () => {
         expect(consentUrl.searchParams.get("client_id")).toBe(
           "operator-google-client-id",
         );
+        expect(consentUrl.toString()).not.toContain("hostile-tenant-client-id");
+        expect(consentUrl.toString()).not.toContain("hostile-tenant-client-secret");
         expect(consentUrl.toString()).not.toContain("operator-google-client-secret");
         const state = runtime.settings.getRaw("google_oauth_state")!;
         expect(consentUrl.searchParams.get("state")).toBe(state);
@@ -913,8 +938,19 @@ describe("Zenod chassis unit", () => {
         expect(runtime.settings.getRaw("google_oauth_email")).toBe(
           "customer@example.com",
         );
-        expect(runtime.state.getSetting("google_oauth_client_id")).toBeNull();
-        expect(runtime.state.getSetting("google_oauth_client_secret")).toBeNull();
+        expect(driveAuthFromSettings(runtime.settings)).toEqual({
+          kind: "oauth",
+          clientId: "operator-google-client-id",
+          clientSecret: "operator-google-client-secret",
+          refreshToken: "tenant-google-refresh-token",
+          email: "customer@example.com",
+        });
+        expect(runtime.state.getSetting("google_oauth_client_id")).toBe(
+          "hostile-tenant-client-id",
+        );
+        expect(runtime.state.getSetting("google_oauth_client_secret")).not.toBe(
+          "operator-google-client-secret",
+        );
 
         const connected = await unit.app.request("/api/drive/status", {
           headers: authCase.headers,
@@ -943,7 +979,10 @@ describe("Zenod chassis unit", () => {
         expect(runtime.settings.getRaw("google_oauth_email")).toBeNull();
         expect(runtime.settings.get("google_drive_folder_id")).toBeNull();
         expect(runtime.settings.getRaw("google_oauth_client_id")).toBe(
-          "operator-google-client-id",
+          "hostile-tenant-client-id",
+        );
+        expect(runtime.settings.getRaw("google_oauth_client_secret")).toBe(
+          "hostile-tenant-client-secret",
         );
       }
 
@@ -951,12 +990,17 @@ describe("Zenod chassis unit", () => {
         "github-99",
         unit.storage.forTenant({ id: "github-99" }),
       );
-      expect(otherRuntime.settings.getRaw("google_oauth_client_id")).toBe(
-        "operator-google-client-id",
-      );
+      expect(otherRuntime.settings.getRaw("google_oauth_client_id")).toBeNull();
       expect(otherRuntime.state.getSetting("google_oauth_client_id")).toBeNull();
       expect(otherRuntime.settings.getRaw("google_oauth_refresh_token")).toBeNull();
       expect(otherRuntime.settings.getRaw("google_oauth_email")).toBeNull();
+      expect(otherRuntime.settings.googleDriveOAuthAuthority()).toEqual({
+        mode: "hosted-managed",
+        credentials: {
+          clientId: "operator-google-client-id",
+          clientSecret: "operator-google-client-secret",
+        },
+      });
       expect(providerRequests).toEqual([
         "https://oauth2.googleapis.com/token",
         "https://www.googleapis.com/oauth2/v2/userinfo",
@@ -981,6 +1025,23 @@ describe("Zenod chassis unit", () => {
     const dataDir = await tempDir();
     const { unit, cookie } = await createHostedDriveCustomer(dataDir);
     try {
+      const runtime = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      runtime.settings.set("google_oauth_client_id", "hostile-tenant-client-id");
+      runtime.settings.set("google_oauth_client_secret", "hostile-tenant-client-secret");
+      runtime.settings.set(
+        "google_service_account_json",
+        '{"client_email":"hostile@example.invalid","private_key":"hostile-private-key"}',
+      );
+      runtime.settings.setRaw("google_oauth_refresh_token", "hostile-refresh-token");
+      runtime.settings.setRaw("google_oauth_email", "hostile@example.invalid");
+      expect(runtime.settings.googleDriveOAuthAuthority()).toEqual({
+        mode: "hosted-managed",
+        credentials: null,
+      });
+      expect(driveAuthFromSettings(runtime.settings)).toBeNull();
       for (const headers of [
         { cookie },
         { authorization: "Bearer customer-token" },
@@ -1008,6 +1069,132 @@ describe("Zenod chassis unit", () => {
         expect(await (await unit.app.request("/api/drive/oauth/start", { headers })).text())
           .not.toMatch(/client|secret|provider|model|api.?key|token/i);
       }
+      expect(runtime.settings.getRaw("google_oauth_client_id")).toBe(
+        "hostile-tenant-client-id",
+      );
+      expect(runtime.settings.getRaw("google_oauth_client_secret")).toBe(
+        "hostile-tenant-client-secret",
+      );
+      expect(runtime.settings.getRaw("google_oauth_refresh_token")).toBe(
+        "hostile-refresh-token",
+      );
+    } finally {
+      unit.close();
+    }
+  });
+
+  it("ZAL-17 Hosted managed Drive journey fails closed on cached lifecycle changes", async () => {
+    const dataDir = await tempDir();
+    const { unit, tenants } = await createHostedDriveCustomer(dataDir, {
+      clientId: "operator-google-client-id",
+      clientSecret: "operator-google-client-secret",
+    });
+    const providerFetch = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", providerFetch);
+    try {
+      const runtime = unit.runtimes.forTenantStorage(
+        "github-42",
+        unit.storage.forTenant({ id: "github-42" }),
+      );
+      runtime.settings.set("google_oauth_client_id", "hostile-tenant-client-id");
+      runtime.settings.set("google_oauth_client_secret", "hostile-tenant-client-secret");
+      runtime.settings.setRaw("google_oauth_refresh_token", "tenant-refresh-token");
+
+      const expectManaged = () => {
+        expect(runtime.settings.googleDriveOAuthAuthority()).toEqual({
+          mode: "hosted-managed",
+          credentials: {
+            clientId: "operator-google-client-id",
+            clientSecret: "operator-google-client-secret",
+          },
+        });
+        expect(driveAuthFromSettings(runtime.settings)).toMatchObject({
+          kind: "oauth",
+          clientId: "operator-google-client-id",
+          clientSecret: "operator-google-client-secret",
+          refreshToken: "tenant-refresh-token",
+        });
+      };
+      const expectDenied = () => {
+        expect(runtime.settings.googleDriveOAuthAuthority()).toEqual({
+          mode: "hosted-managed",
+          credentials: null,
+        });
+        expect(driveAuthFromSettings(runtime.settings)).toBeNull();
+      };
+      const setSubscription = (
+        status: "checkout_pending" | "active" | "past_due" | "paused" | "canceled" | null,
+      ) => {
+        unit.customerAccounts.upsert("cs_customer", { subscription_status: status });
+      };
+      const start = () => unit.app.request("https://cloud.zenod.test/api/drive/oauth/start", {
+        headers: { authorization: "Bearer customer-token" },
+      });
+
+      expectManaged();
+      const activeStart = await start();
+      expect(activeStart.status).toBe(302);
+      expect(new URL(activeStart.headers.get("location")!).searchParams.get("client_id"))
+        .toBe("operator-google-client-id");
+      setSubscription("past_due");
+      expectManaged();
+      expect((await start()).status).toBe(302);
+      const entitledState = runtime.settings.getRaw("google_oauth_state")!;
+
+      setSubscription("canceled");
+      expectDenied();
+      expect((await start()).status).toBe(503);
+      const canceledCallback = await unit.app.request(
+        `https://cloud.zenod.test/api/drive/oauth/callback?code=must-not-exchange&state=${encodeURIComponent(entitledState)}`,
+        { headers: { authorization: "Bearer customer-token" } },
+      );
+      expect(canceledCallback.status).toBe(400);
+      expect(providerFetch).not.toHaveBeenCalled();
+
+      setSubscription("paused");
+      expectDenied();
+      expect((await start()).status).toBe(503);
+
+      setSubscription("active");
+      expectManaged();
+      tenants.setTenantStatus("github-42", "suspended");
+      expectDenied();
+      expect((await start()).status).not.toBe(302);
+
+      tenants.setTenantStatus("github-42", "deleted");
+      expectDenied();
+      expect((await start()).status).not.toBe(302);
+
+      tenants.setTenantStatus("github-42", "active");
+      expectManaged();
+      setSubscription(null);
+      expectDenied();
+      expect((await start()).status).toBe(503);
+
+      setSubscription("active");
+      expectManaged();
+      unit.customerAccounts.upsert("ambiguous-hosted-account", {
+        account_id: "github-42-duplicate",
+        github_id: 42,
+        github_login: "octocat",
+        tier: "monthly",
+        subscription_status: "active",
+        tenant_id: "github-42",
+        tenant_slug: "octocat-42-duplicate",
+        checkout_completed_at: new Date().toISOString(),
+      });
+      expectDenied();
+      expect((await start()).status).toBe(503);
+
+      expect(runtime.settings.getRaw("google_oauth_client_id")).toBe(
+        "hostile-tenant-client-id",
+      );
+      expect(runtime.settings.getRaw("google_oauth_client_secret")).toBe(
+        "hostile-tenant-client-secret",
+      );
+      expect(runtime.state.getSetting("google_oauth_client_secret")).not.toBe(
+        "operator-google-client-secret",
+      );
     } finally {
       unit.close();
     }

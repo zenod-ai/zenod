@@ -286,12 +286,25 @@ export class DriveClient {
 }
 
 export function driveAuthFromSettings(settings: Settings): DriveAuth | null {
-  const rawSettings = settings as Settings & { getRaw?: (key: string) => string | null };
-  const clientId = rawSettings.getRaw?.("google_oauth_client_id") ?? settings.get("google_oauth_client_id");
-  const clientSecret = rawSettings.getRaw?.("google_oauth_client_secret") ?? settings.get("google_oauth_client_secret");
-  const refreshToken = rawSettings.getRaw?.("google_oauth_refresh_token") ?? null;
-  if (clientId && clientSecret && refreshToken) {
-    return { kind: "oauth", clientId, clientSecret, refreshToken, email: rawSettings.getRaw?.("google_oauth_email") ?? null };
+  const authority = settings.googleDriveOAuthAuthority();
+  if (authority.mode === "hosted-managed") {
+    const refreshToken = settings.getRaw("google_oauth_refresh_token");
+    return authority.credentials && refreshToken
+      ? {
+          kind: "oauth",
+          ...authority.credentials,
+          refreshToken,
+          email: settings.getRaw("google_oauth_email"),
+        }
+      : null;
+  }
+  const clientId = settings.get("google_oauth_client_id");
+  const clientSecret = settings.get("google_oauth_client_secret");
+  if (clientId && clientSecret) {
+    const refreshToken = settings.getRaw("google_oauth_refresh_token");
+    if (refreshToken) {
+      return { kind: "oauth", clientId, clientSecret, refreshToken, email: settings.getRaw("google_oauth_email") };
+    }
   }
   const serviceAccountJson = settings.get("google_service_account_json");
   return serviceAccountJson ? { kind: "service_account", serviceAccountJson } : null;
