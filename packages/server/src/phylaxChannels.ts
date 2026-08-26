@@ -962,19 +962,26 @@ export class PhylaxChannelsOrgan {
     const mappedArguments: Record<string, unknown> = call.arguments;
     const compatibleArguments: Record<string, unknown> = { ...mappedArguments };
     const mappedArgumentCount = Object.keys(mappedArguments).length;
+    const requiresDurationLimitContract = mappedArguments.transcriptionDisposition === "skip_duration_limit";
     if (!validate(mappedArguments)) {
       // The transcript metadata is an additive optimization at the independent
       // Phylax -> Zenod boundary. During a Zenod-first/Phylax-first rolling
       // update, an older ingest_memory schema can still archive the raw audio
       // and transcribe it itself. Never let these optional new fields block
       // durable custody of the voice note.
-      for (const key of [
-        "providedTranscript",
-        "transcriptionProvider",
-        "audioDurationSeconds",
-        "transcriptionDisposition",
-      ]) {
-        delete compatibleArguments[key];
+      // A >2h note must never fall back to an older Zenod worker that would
+      // transcribe it. Keep the durable Phylax job pending until the downstream
+      // advertises the duration-limit contract. Shorter notes may safely let an
+      // older Zenod worker transcribe the already-custodied audio itself.
+      if (!requiresDurationLimitContract) {
+        for (const key of [
+          "providedTranscript",
+          "transcriptionProvider",
+          "audioDurationSeconds",
+          "transcriptionDisposition",
+        ]) {
+          delete compatibleArguments[key];
+        }
       }
       if (Object.keys(compatibleArguments).length !== mappedArgumentCount
         && validate(compatibleArguments)) {
@@ -1387,6 +1394,12 @@ export class PhylaxChannelsOrgan {
     if (call.tool === "ingest_memory" && input.senderTimestamp && call.arguments.senderTimestamp === undefined) {
       call.arguments.senderTimestamp = input.senderTimestamp;
     }
+    // Memory capture is safe to retry as soon as it has the stable provider
+    // message identity above. Keep this independent of schema discovery so a
+    // transient discovery/auth failure cannot turn a voice note into the
+    // ambiguous "do not retry" path. Durable chat remains discovery-gated.
+    const retryableCapture = (call.tool === "store_memory" || call.tool === "ingest_memory")
+      && Boolean(providerMessageId);
     const failureAudit = (
       downstreamMs: number,
       failureCode: PhylaxFailureAudit["failureCode"],
@@ -1433,6 +1446,7 @@ export class PhylaxChannelsOrgan {
               Math.max(0, Date.now() - downstreamStartedAt),
               "downstream_schema_drift",
             ),
+            retryableCapture ? "idempotent_capture" : null,
           );
         }
       }
@@ -1537,14 +1551,14 @@ export class PhylaxChannelsOrgan {
         throw downstreamCredentialRejectedError(
           failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
           call.tool === "chat_with_ring" ? "assistant" : "memory",
-          call.tool === "store_memory" && Boolean(providerMessageId),
+          retryableCapture,
         );
       }
       throw new PhylaxChannelError(
         "downstream_error",
         "Zenod could not process that message. Please try again.",
         failureAudit(Math.max(0, Date.now() - downstreamStartedAt), failureCode),
-        call.tool === "store_memory" && providerMessageId ? "idempotent_capture" : null,
+        retryableCapture ? "idempotent_capture" : null,
       );
     }
     const downstreamMs = Math.max(0, Date.now() - downstreamStartedAt);
@@ -1559,7 +1573,7 @@ export class PhylaxChannelsOrgan {
         throw downstreamCredentialRejectedError(
           failureAudit(downstreamMs, failureCode, audit),
           call.tool === "chat_with_ring" ? "assistant" : "memory",
-          call.tool === "store_memory" && Boolean(providerMessageId),
+          retryableCapture,
         );
       }
       throw new PhylaxChannelError(

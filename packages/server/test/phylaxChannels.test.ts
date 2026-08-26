@@ -823,8 +823,160 @@ describe("PhylaxChannelsOrgan", () => {
     expect(calls[0]!.arguments).not.toHaveProperty("audioDurationSeconds");
     expect(calls[0]!.arguments).not.toHaveProperty("transcriptionDisposition");
     expect(receipt.replyText).toContain("Saved ✓");
+
+    let overLimitError: unknown;
+    try {
+      await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "provider-old-ingest-over-limit",
+        senderTimestamp: "2026-08-27T00:01:00.000Z",
+        media: {
+          bytes: Buffer.from("immutable over-limit old-schema voice bytes"),
+          mimeType: "audio/ogg",
+          fileName: "provider-old-ingest-over-limit.ogg",
+        },
+        transcription: {
+          transcription_failed: {
+            code: "duration_limit",
+            message: "audio exceeds Zenod's 2-hour transcription limit",
+          },
+          duration_seconds: 2 * 60 * 60 + 1,
+        },
+      });
+    } catch (error) {
+      overLimitError = error;
+    }
+    expect(overLimitError).toBeInstanceOf(PhylaxChannelError);
+    expect((overLimitError as PhylaxChannelError).retryDisposition).toBe("idempotent_capture");
+    expect((overLimitError as PhylaxChannelError).audit?.failureCode).toBe("downstream_schema_drift");
+    expect(calls).toHaveLength(2); // short ingest plus its terminal poll; over-limit was never dispatched
     await organ.close();
   });
+
+  it.each(["discovery", "transport", "typed unauthorized"] as const)(
+    "keeps default voice ingest retryable through %s failure and completes once after repair",
+    async (failureMode) => {
+      const dataDir = await mkdtemp(join(tmpdir(), `phylax-ingest-repair-${failureMode.replaceAll(" ", "-")}-`));
+      dirs.push(dataDir);
+      let repaired = false;
+      const ingestKeys: string[] = [];
+      const organ = new PhylaxChannelsOrgan({
+        dataDir,
+        routes: {
+          resolve: () => ({
+            tenantId: "alpha",
+            downstreamUrl: "https://zenod.test/mcp/memory",
+            downstreamToken: "memory-scope-only",
+            turnBindings: defaultPhylaxTurnBindings(),
+          }),
+        },
+        artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+        discoverDownstream: async () => {
+          if (!repaired && failureMode === "discovery") {
+            throw new Error("temporary catalog outage");
+          }
+          return {
+            transport: "connected" as const,
+            tools: "ready" as const,
+            specs: [{
+              as: "memory",
+              mcp: "ingest_memory",
+              arg: "input",
+              description: "Durable raw media ingest",
+              inputSchema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["artifactUrl", "mediaType", "filename", "sourceHint", "contentHint", "idempotencyKey"],
+                properties: {
+                  artifactUrl: { type: "string" },
+                  mediaType: { type: "string" },
+                  filename: { type: "string" },
+                  sourceHint: { type: "string" },
+                  contentHint: { type: "string" },
+                  providedTranscript: { type: "string" },
+                  transcriptionProvider: { type: "string" },
+                  audioDurationSeconds: { type: ["number", "null"] },
+                  transcriptionDisposition: { enum: ["provided", "skip_duration_limit"] },
+                  senderTimestamp: { type: "string" },
+                  idempotencyKey: { type: "string" },
+                },
+              },
+            }],
+          };
+        },
+        async callDownstream(call) {
+          if (call.tool === "ingest_memory") {
+            ingestKeys.push(String(call.arguments.idempotencyKey));
+            if (!repaired && failureMode === "transport") {
+              throw new Error("temporary MCP transport failure");
+            }
+            if (!repaired && failureMode === "typed unauthorized") {
+              return {
+                isError: true,
+                content: [{ type: "text", text: "Unauthorized" }],
+              };
+            }
+            return {
+              content: [{ type: "text", text: "queued" }],
+              structuredContent: { ticket_id: `job-${failureMode}`, state: "accepted" },
+            };
+          }
+          expect(call.tool).toBe("get_task_result");
+          return {
+            content: [{ type: "text", text: "done" }],
+            structuredContent: {
+              ticket_id: `job-${failureMode}`,
+              state: "done",
+              result: {
+                recap: "Voice capture recovered exactly once.",
+                rawArtifact: { archiveUrl: `https://drive.google.com/file/d/${failureMode}/view` },
+                extraction: { transcriptionStatus: "transcribed" },
+                digest: { pagesTouched: ["Inbox/Voice.md"], githubUrls: [] },
+              },
+            },
+          };
+        },
+        capturePollIntervalMs: 1,
+        sleep: async () => {},
+      });
+      const input = {
+        channel: "whatsapp" as const,
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: `provider-${failureMode}`,
+        senderTimestamp: "2026-08-27T00:02:00.000Z",
+        media: {
+          bytes: Buffer.from(`immutable ${failureMode} voice bytes`),
+          mimeType: "audio/ogg",
+          fileName: `provider-${failureMode}.ogg`,
+        },
+        transcription: {
+          text_transcript: `Transcript recovered after ${failureMode}.`,
+          transcription_source: "test-stt",
+          duration_seconds: 60,
+        },
+      };
+
+      let firstError: unknown;
+      try {
+        await organ.receive(input);
+      } catch (error) {
+        firstError = error;
+      }
+      expect(firstError).toBeInstanceOf(PhylaxChannelError);
+      expect((firstError as PhylaxChannelError).retryDisposition).toBe("idempotent_capture");
+
+      repaired = true;
+      const receipt = await organ.receive(input);
+      expect(receipt.replyText).toContain("Saved ✓");
+      expect(receipt.replyText).toContain(`Google Drive audio: https://drive.google.com/file/d/${failureMode}/view`);
+      expect(new Set(ingestKeys)).toEqual(new Set([`alpha:whatsapp:provider-${failureMode}`]));
+      expect(ingestKeys).toHaveLength(failureMode === "discovery" ? 1 : 2);
+      await organ.close();
+    },
+  );
 
   it("keeps an accepted capture polling through a transient result outage and records only the later terminal success", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-transient-poll-"));
