@@ -922,7 +922,10 @@ export class PhylaxChannelsOrgan {
     return (this.options.discoverDownstream ?? discoverConfiguredPeer)(route);
   }
 
-  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<{ supportsIdempotencyKey: boolean }> {
+  private async validateBoundCall(call: PhylaxDownstreamCall): Promise<{
+    supportsIdempotencyKey: boolean;
+    supportsTranscriptionUsage: boolean;
+  }> {
     const discovery = await this.discoverDownstream(call.route);
     if (discovery.tools !== "ready") {
       throw new Error(`downstream schema discovery failed: ${discovery.error ?? "tools/list unavailable"}`);
@@ -949,7 +952,10 @@ export class PhylaxChannelsOrgan {
       throw new Error(`configured mapping no longer matches "${call.tool}" input schema${detail ? `: ${detail}` : ""}`);
     }
     const properties = objectValue((schema as Record<string, unknown>).properties);
-    return { supportsIdempotencyKey: Boolean(properties?.idempotencyKey) };
+    return {
+      supportsIdempotencyKey: Boolean(properties?.idempotencyKey),
+      supportsTranscriptionUsage: Boolean(properties?.transcriptionUsage),
+    };
   }
 
   private async pollCapture(
@@ -1339,11 +1345,6 @@ export class PhylaxChannelsOrgan {
     if ((call.tool === "store_memory" || call.tool === "ingest_memory") && providerMessageId) {
       call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
     }
-    if (call.tool === "store_memory" && handoff.transcription_usage) {
-      // Usage rides the already-authenticated, already-idempotent memory call.
-      // There is no second queue, credential, or tenant identifier in the payload.
-      call.arguments.transcriptionUsage = handoff.transcription_usage;
-    }
     if (call.tool === "ingest_memory" && text && call.arguments.contentHint === undefined) {
       call.arguments.contentHint = text;
     }
@@ -1387,6 +1388,12 @@ export class PhylaxChannelsOrgan {
           if (call.tool === "chat_with_zenod" && providerMessageId && validation.supportsIdempotencyKey) {
             call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
             durableChat = true;
+          }
+          if (call.tool === "store_memory" && handoff.transcription_usage && validation.supportsTranscriptionUsage) {
+            // Metering is optional and version-coherent. A Phylax-first rollout
+            // must still capture the memory when the older Zenod schema does
+            // not yet advertise this additive field.
+            call.arguments.transcriptionUsage = handoff.transcription_usage;
           }
         } catch (error) {
           throw new PhylaxChannelError(

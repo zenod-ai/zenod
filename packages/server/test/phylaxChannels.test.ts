@@ -124,6 +124,7 @@ describe("PhylaxChannelsOrgan", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-usage-handoff-"));
     dirs.push(dataDir);
     const calls: PhylaxDownstreamCall[] = [];
+    let supportsTranscriptionUsage = true;
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: {
@@ -153,7 +154,7 @@ describe("PhylaxChannelsOrgan", () => {
             properties: {
               content: { type: "string" },
               idempotencyKey: { type: "string" },
-              transcriptionUsage: { type: "object" },
+              ...(supportsTranscriptionUsage ? { transcriptionUsage: { type: "object" } } : {}),
             },
           },
         }],
@@ -209,6 +210,33 @@ describe("PhylaxChannelsOrgan", () => {
           },
         },
       });
+
+      supportsTranscriptionUsage = false;
+      calls.length = 0;
+      const mixedVersionReceipt = await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "voice-provider-old-zenod",
+        media: { artifactRef: "https://phylax.test/artifacts/tenant-alpha/voice-old.ogg", mimeType: "audio/ogg" },
+        transcription: {
+          text_transcript: "Capture survives a Phylax-first rollout.",
+          transcription_source: "openrouter mistralai/voxtral-mini-transcribe",
+          transcription_usage: {
+            provider: "openrouter",
+            model: "mistralai/voxtral-mini-transcribe",
+            audio_seconds: 30,
+            billable_units: 1,
+          },
+        },
+      });
+      expect(mixedVersionReceipt.replyText).toMatch(/Saved/i);
+      expect(calls.filter((call) => call.tool === "store_memory")).toHaveLength(1);
+      expect(calls[0]?.arguments).toMatchObject({
+        content: "Capture survives a Phylax-first rollout.",
+        idempotencyKey: "tenant-alpha:whatsapp:voice-provider-old-zenod",
+      });
+      expect(calls[0]?.arguments).not.toHaveProperty("transcriptionUsage");
     } finally {
       await organ.close();
     }
