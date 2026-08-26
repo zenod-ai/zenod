@@ -1,14 +1,14 @@
 {
   "schemaVersion": 2,
-  "sourceSha": "f314a55e8a304986867597e8a1da4ef94ff273cd",
-  "executedAt": "2026-08-26T17:01:09Z",
+  "sourceSha": "927467afa532c6df337d6d4c25479c79166eeb31",
+  "executedAt": "2026-08-26T17:17:52Z",
   "kind": "presentation-only built-portal browser QA",
   "boundary": "Loopback fixture with inert sample responses. This is not auth, OAuth, channel, provider, billing, staging, or production proof.",
   "procedure": [
     "npm run build -w web",
     "node scripts/zal17-portal-fixture.mjs",
     "Open http://127.0.0.1:4174/hosted and http://127.0.0.1:4174/self-hosted in Browser Control",
-    "At each edition, set viewport to 360x900, 736x900, then 1024x900; reload; inspect Vault & sources and Channels",
+    "At each edition, set viewport to 360x900, 736x900, then 1024x900; navigate; inspect Vault & sources and Channels",
     "Reset the viewport override and stop the loopback fixture"
   ],
   "hostedForbiddenCopyPattern": "OAuth client ID|OAuth client secret|service account|private/provider-model|openrouter|whisper.cpp|large-v3-turbo|API key|raw token|per-minute cost|Phylax|Ring",

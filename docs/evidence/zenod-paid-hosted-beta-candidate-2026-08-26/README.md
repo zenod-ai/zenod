@@ -12,7 +12,7 @@ Reconciled `main`: `a412dd0a369931f38b707a907264ed828908604b`
 
 Exact source candidate: `f4a1746eab3fef0e08ba933a30ed658e627e93d2`
 
-ZAL-20 Hosted Drive correction source: `f314a55e8a304986867597e8a1da4ef94ff273cd`
+ZAL-20 Hosted Drive correction source: `927467afa532c6df337d6d4c25479c79166eeb31`
 
 Evidence snapshot commit: `e2dc43ad04f6a72d59e1e56c4d382d8e24ade10e`
 
@@ -36,9 +36,10 @@ Existing architecture, product surfaces, APIs, settings storage and suites remai
 - The projection removes `oauthClientId`, `clientEmail`, service-account mode/material, provider/transcription data and every unlisted internal field, even when the tenant runtime contains hostile values.
 - The public Zenod service reads operator-owned `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` through an explicit Hosted Drive authority, not ordinary settings or raw fallbacks. Environment seeding remains disabled. For an entitled Hosted tenant, the operator pair has exclusive precedence; preserved legacy/hostile tenant OAuth client values and service-account JSON are ignored for status, start, callback and Drive authentication.
 - The authority is resolved on every operation. Only one unambiguous account in `active` or `past_due` state with an active tenant-token record receives it. Canceled, paused, null/checkout, suspended, deleted or ambiguous state fails closed immediately, including after a runtime has already been cached.
-- Each Hosted tenant continues to own only its OAuth state, refresh token, connected account email and selected folder. The tests prove a second Hosted tenant cannot read the first tenant's state or refresh token.
+- Each Hosted tenant continues to own only its OAuth state, refresh token, connected account email and app-managed folder identifier. The tests prove a second Hosted tenant cannot read the first tenant's state or refresh token.
 - A fresh Hosted tenant can start OAuth immediately when both operator variables exist. When either is absent, status truthfully returns `oauthAvailable: false`, the Connect button is disabled, and OAuth start returns a customer-safe `503 google_drive_oauth_unavailable` response.
 - ZAL-20 narrows Hosted Drive to an archive/export-only destination: the UI renders managed connect/status/disconnect with no folder control, inbox, source, list, ingest, or Picker promise. Zenod creates one tenant-specific private folder automatically. Self-hosted UI and raw API retain the existing BYO OAuth client ID/secret, service-account fallback, test/save, provider/transcription and folder behavior.
+- Hosted `ingest_memory` advertises no Drive-source promise and rejects `drive:`, `gdrive:`, `google-drive:` and `drive://file/` references before durable admission, provider access or source read, including pre-existing jobs resumed after restart. Self-hosted `ingest_memory` Drive references remain supported.
 
 Acceptance scaffolding added for this boundary:
 
@@ -93,6 +94,7 @@ The repository compose files are historical/operator inputs, not proof of this e
 | Operator authority precedence, config absent, lifecycle and no client DB seed | `zenodUnit.test.ts` hostile values, config-health, cached-runtime lifecycle and state assertions | local integration | PASS |
 | Self-host BYO raw status/start/callback/disconnect/error unchanged | `drive.test.ts` via the same journey command | local integration with mocked provider boundary | PASS |
 | Hosted repository/GitHub App, vault and MCP | `githubApp.test.ts`, `mcp.test.ts`, `zenodUnit.test.ts` | local integration/contract | PASS |
+| Hosted archive-only MCP admission and self-host Drive-ref compatibility | `mcp.test.ts`, `taskJobMediaIngestArchive.test.ts`, `npm run acceptance:zal20:drive` | local integration with mocked provider boundary | PASS |
 | Customer-safe managed usage; no provider/model/key/raw-token/dollar leak | managed-AI suites, `zenodUnit.test.ts`, web tests | local integration/contract | PASS |
 | Cap/raw admission, restart/replay and terminal receipts | `customerManagedAiAdmission.test.ts`, `customerManagedAiOutbox.test.ts`, `customerManagedAi.test.ts` | local integration/synthetic authority | PASS |
 | Hosted Telegram lifecycle/private admission/group denial | `telegram.test.ts`, `hostedChannels.test.ts`, `zenodUnit.test.ts` | local synthetic transport | PASS locally/synthetic |
@@ -122,17 +124,24 @@ Terminal receipt at the source candidate:
 ZAL17_DRIVE_JOURNEY_RECEIPT {"schemaVersion":1,"acceptance":"ZAL-17 managed Drive journeys","status":"pass","sourceSha":"f4a1746eab3fef0e08ba933a30ed658e627e93d2","command":"npm run acceptance:zal17:drive","testCommand":"npm exec -w @zenod/server -- vitest run test/zenodUnit.test.ts test/drive.test.ts -t \"ZAL-17 .* Drive journey\"","startedAt":"2026-08-26T01:28:53.917Z","completedAt":"2026-08-26T01:28:55.654Z","boundary":"local integration with mocked Google token and userinfo HTTP; no credentials, staging, or live mutation"}
 ```
 
+The corrected ZAL-20 boundary has its own exact-source receipt:
+
+```text
+ZAL20_DRIVE_JOURNEY_RECEIPT {"schemaVersion":1,"acceptance":"ZAL-20 least-privilege Hosted Drive journeys","status":"pass","sourceSha":"927467afa532c6df337d6d4c25479c79166eeb31","command":"npm run acceptance:zal20:drive","testCommand":"npm exec -w @zenod/server -- vitest run test/zenodUnit.test.ts test/drive.test.ts test/mcp.test.ts test/taskJobMediaIngestArchive.test.ts -t \"ZAL-20 .* Drive journey\"","startedAt":"2026-08-26T17:15:08.797Z","completedAt":"2026-08-26T17:15:10.591Z","boundary":"local integration with mocked Google OAuth, userinfo, and Drive HTTP; no credentials, grants, staging, or live mutation"}
+```
+
 | File/command | What it proves | Result |
 | --- | --- | --- |
 | `packages/server/test/zenodUnit.test.ts` | exact cookie+bearer safe projection, operator-only authority over hostile stored values, new tenant start/callback/status/folder/disconnect/error, no operator persistence, tenant isolation, missing config and cached lifecycle denial | PASS |
 | `packages/server/test/drive.test.ts` | self-host raw/BYO start/callback/status/disconnect/original config error | PASS |
+| `packages/server/test/mcp.test.ts` and `taskJobMediaIngestArchive.test.ts` | Hosted MCP description/admission, direct-queue/restart fail-closed, no provider/source read, and self-host Drive-ref compatibility | PASS |
 | `apps/web/src/components/google-drive-connect.test.tsx` | Hosted managed-only/missing-config UI and preserved self-host operator UI | PASS |
 | `scripts/zal17-drive-journey.mjs` | reproducible bounded journey and terminal JSON receipt | PASS |
 | `scripts/zal17-portal-fixture.mjs` | inert edition responses for built-portal presentation QA | fixture only; not operational proof |
 | `browser-qa.json` | exact responsive observations/procedure and downgraded visual boundary | PASS for presentation only |
-| exact 15-file server command listed below | Hosted/customer/managed-AI/Channels/Phylax/WhatsApp/Telegram/MCP/Drive/GitHub regression | PASS: 15 files, 298 tests |
-| `npm test -w web` | complete configured customer-web suite | PASS: 13 files, 70 tests |
-| `npm test` | all workspaces, 194 script assertions and schema check | PASS; core 31 files/527 pass/6 skip; scripts 194 pass |
+| exact 15-file server command listed below | Hosted/customer/managed-AI/Channels/Phylax/WhatsApp/Telegram/MCP/Drive/GitHub regression | PASS: 15 files, 303 tests |
+| `npm test -w web` | complete configured customer-web suite | PASS: 14 files, 72 tests |
+| `npm test` | all configured workspace and script suites plus schema check | PASS |
 | `npm run typecheck` | configured workspaces | PASS |
 | `npm run build` | core, chassis, server, customer web and public site | PASS; existing Vite chunk warning only |
 | `npm run schemas:check` | 27 self-contained tool schemas, no writes | PASS |
@@ -147,7 +156,7 @@ npm exec -w @zenod/server -- vitest run test/customerLayer.test.ts test/customer
 
 ### Browser procedure and claim boundary
 
-The prior responsive run served built `apps/web/dist` with `node scripts/zal17-portal-fixture.mjs` on loopback, opened `/hosted` and `/self-hosted`, set 360x900, 736x900 and 1024x900 viewports, reloaded, and inspected Vault & sources and Channels. There is an exact zero-line `apps/web` diff from that run's source SHA to this source candidate. At this candidate, the web bundle was rebuilt and Browser Control re-opened both editions at 1496px, rechecked the same two sections and observed `scrollWidth === innerWidth`. `browser-qa.json` separates the carried-forward responsive matrix from this candidate's recheck.
+The final responsive run served built `apps/web/dist` with `node scripts/zal17-portal-fixture.mjs` on loopback, opened `/hosted` and `/self-hosted`, set 360x900, 736x900 and 1024x900 viewports, navigated each edition, and inspected Vault & sources and Channels. Every measured page reported `scrollWidth === innerWidth`. The viewport override was reset and the fixture stopped after the run. `browser-qa.json` records the exact source SHA and observations.
 
 Observed on the ZAL-20 correction source: exact viewport widths matched scroll widths; Hosted showed managed OAuth with archive/export-only copy, no folder control, and no Drive inbox/source promise; self-host retained OAuth client/secret/service-account/folder controls and source copy; Hosted Channels showed WhatsApp without Ring/Phylax copy; self-host Channels showed no WhatsApp.
 
@@ -171,7 +180,7 @@ Rollback is non-destructive and requires no schema or data migration:
 4. Do not delete tenant refresh tokens, OAuth emails, folders or other credential-vault records during code rollback. A user-invoked Drive disconnect remains the only flow here that clears that tenant's Drive refresh/email/folder state.
 5. If managed AI authority is suspect, disable its staging flag so it fails closed; do not mint/delete keys as part of code rollback.
 6. Verify `/healthz`, expected `GIT_SHA`, customer-safe Drive config health, private Channels transport status and synthetic text/voice/media receipts.
-7. If only the corrected managed-Drive authority delta must be removed, revert source commit `f4a1746`; no schema/data migration or deletion is required. Do not delete preserved tenant OAuth values or refresh-token custody records.
+7. If only the corrected managed-Drive boundary must be removed, revert `927467a` and then `f314a55`; no schema/data migration or deletion is required. Do not delete preserved tenant OAuth values or refresh-token custody records.
 
 ## Explicit staging-only blockers and residual risks
 
