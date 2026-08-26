@@ -199,6 +199,15 @@ interface ArchivedMediaInput {
   sourceKind: "mcp" | "url" | "drive";
 }
 
+interface MediaExtraction {
+  body: string;
+  provider: string;
+  kind: "audio" | "image" | "pdf" | "text";
+  filename: string;
+  label: string;
+  transcriptionStatus?: "transcribed" | "skipped_duration_limit";
+}
+
 function parseDataUrl(bytesRef: string): { data: Buffer; mediaType: string } {
   const match = /^data:([^;,]+)?(?:;base64)?,(.*)$/s.exec(bytesRef);
   if (!match) throw new Error("bytesRef data URL is malformed");
@@ -326,10 +335,20 @@ async function processMediaIngest(
   if (!canTranscribe && !canExtractArtifact && !canReadText) {
     return mediaIngestUnavailableReceipt(input, archived.handle);
   }
+  if (input.transcriptionDisposition === "skip_duration_limit"
+    && !(typeof input.audioDurationSeconds === "number"
+      && Number.isFinite(input.audioDurationSeconds)
+      && input.audioDurationSeconds > 2 * 60 * 60)) {
+    throw new Error("skip_duration_limit requires a reported audio duration over 2 hours");
+  }
 
   const engine = await getEngine();
-  const extraction = canTranscribe
-    ? await transcribeMedia(settings, archived)
+  const extraction: MediaExtraction = canTranscribe
+    ? input.transcriptionDisposition === "skip_duration_limit"
+      ? skippedDurationLimitExtraction(input, archived)
+      : input.providedTranscript?.trim()
+        ? suppliedTranscriptExtraction(input, archived)
+        : await transcribeMedia(settings, archived)
     : canExtractArtifact
       ? await extractVisualMedia(engine, archived)
       : extractTextMedia(archived);
@@ -359,7 +378,9 @@ async function processMediaIngest(
     `Media type: ${archived.mediaType}`,
     `Source: ${input.sourceHint ?? archived.sourceKind}`,
     ...(input.senderTimestamp ? [`Source timestamp: ${input.senderTimestamp}`] : []),
-    `${extraction.kind === "audio" ? "Transcribed" : "Extracted"} by ${extraction.provider}.`,
+    ...(extraction.transcriptionStatus === "skipped_duration_limit"
+      ? ["Transcription: skipped because the audio exceeds Zenod's 2-hour transcription limit."]
+      : [`${extraction.kind === "audio" ? "Transcribed" : "Extracted"} by ${extraction.provider}.`]),
     `Extraction artifact: ${extractionHandle.uri}`,
     ...(input.contentHint ? [`User context: ${input.contentHint}`] : []),
     "",
@@ -376,7 +397,9 @@ async function processMediaIngest(
 
   return {
     status: "done",
-    message: "Media artifact archived, extracted, digested, filed, and committed.",
+    message: extraction.transcriptionStatus === "skipped_duration_limit"
+      ? "Audio archived without transcription because it exceeds the 2-hour limit; a Zenod entry pointing to the audio was filed."
+      : "Media artifact archived, extracted, digested, filed, and committed.",
     mediaType: input.mediaType ?? extraction.kind,
     source: receiptSource(input),
     rawArtifact: { handle: archived.handle.uri, archiveUrl: archived.handle.url ?? archived.handle.uri, sha256: archived.handle.sha256 },
@@ -386,6 +409,8 @@ async function processMediaIngest(
       transcriptHandle: extraction.kind === "audio" ? extractionHandle.uri : undefined,
       ocrHandle: extraction.kind === "image" ? extractionHandle.uri : undefined,
       provider: extraction.provider,
+      ...(extraction.transcriptionStatus ? { transcriptionStatus: extraction.transcriptionStatus } : {}),
+      ...(input.audioDurationSeconds !== undefined ? { durationSeconds: input.audioDurationSeconds } : {}),
     },
     digest: {
       evidenceRef: stored.evidenceRef,
@@ -410,7 +435,7 @@ function sourceFromHint(sourceHint: string | undefined): "mcp" | "whatsapp" | "t
 async function transcribeMedia(
   settings: Settings,
   archived: ArchivedMediaInput,
-): Promise<{ body: string; provider: string; kind: "audio"; filename: string; label: string }> {
+): Promise<MediaExtraction> {
   const result = await transcribeAudio(archived.data, archived.filename, {
     model: settings.whisperModel(),
     groqApiKey: settings.get("groq_api_key"),
@@ -427,6 +452,38 @@ async function transcribeMedia(
     kind: "audio",
     filename: `${stripKnownExtension(archived.filename)}.transcript.txt`,
     label: "Voice note",
+    transcriptionStatus: "transcribed",
+  };
+}
+
+function suppliedTranscriptExtraction(input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
+  const body = input.providedTranscript?.trim() ?? "";
+  if (!body) throw new Error("authenticated channel supplied an empty transcript");
+  return {
+    body,
+    provider: input.transcriptionProvider?.trim() || "authenticated channel transcription",
+    kind: "audio",
+    filename: `${stripKnownExtension(archived.filename)}.transcript.txt`,
+    label: "Voice note",
+    transcriptionStatus: "transcribed",
+  };
+}
+
+function skippedDurationLimitExtraction(input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
+  const duration = typeof input.audioDurationSeconds === "number" && Number.isFinite(input.audioDurationSeconds)
+    ? `${Math.round(input.audioDurationSeconds)} seconds`
+    : "more than 2 hours";
+  return {
+    body: [
+      "This voice note was archived without transcription because it exceeds Zenod's 2-hour transcription limit.",
+      `Reported audio duration: ${duration}.`,
+      "Use the raw audio archive link in this evidence entry for separate processing.",
+    ].join("\n"),
+    provider: "not transcribed (2-hour duration limit)",
+    kind: "audio",
+    filename: `${stripKnownExtension(archived.filename)}.archive-note.txt`,
+    label: "Voice note",
+    transcriptionStatus: "skipped_duration_limit",
   };
 }
 

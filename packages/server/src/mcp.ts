@@ -1155,7 +1155,21 @@ export function buildMcpServer(
         : INGEST_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ mediaType, artifactUrl, bytesRef, filename, sourceHint, contentHint, senderTimestamp, hints, idempotencyKey }) => {
+    async ({
+      mediaType,
+      artifactUrl,
+      bytesRef,
+      filename,
+      sourceHint,
+      contentHint,
+      providedTranscript,
+      transcriptionProvider,
+      audioDurationSeconds,
+      transcriptionDisposition,
+      senderTimestamp,
+      hints,
+      idempotencyKey,
+    }) => {
       if (!artifactUrl && !bytesRef) {
         return {
           content: [{ type: "text", text: "Invalid media ingest input: provide artifactUrl or bytesRef." }],
@@ -1173,6 +1187,10 @@ export function buildMcpServer(
         ...(filename ? { filename } : {}),
         ...(sourceHint ? { sourceHint } : {}),
         ...(contentHint ? { contentHint } : {}),
+        ...(providedTranscript !== undefined ? { providedTranscript } : {}),
+        ...(transcriptionProvider ? { transcriptionProvider } : {}),
+        ...(audioDurationSeconds !== undefined ? { audioDurationSeconds } : {}),
+        ...(transcriptionDisposition ? { transcriptionDisposition } : {}),
         ...(senderTimestamp ? { senderTimestamp } : {}),
         ...(hints ? { mediaHints: hints } : {}),
       };

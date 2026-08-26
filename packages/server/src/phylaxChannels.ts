@@ -75,6 +75,7 @@ export interface PhylaxTranscriptionReceipt {
   transcription_usage?: Record<string, unknown>;
   transcription_failed?: { code: string; message: string };
   transcription_source?: string;
+  duration_seconds?: number | null;
   transcription_timing?: {
     queue_wait_ms?: number | null;
     runtime_ms?: number | null;
@@ -125,6 +126,7 @@ export interface PhylaxDownstreamCall {
     artifact_ref?: string;
     artifact_mime_type?: string;
     artifact_file_name?: string;
+    duration_seconds?: number | null;
     transcription_usage?: Record<string, unknown>;
     transcription_failed?: { code: string; message: string };
     transcription_source?: string;
@@ -700,6 +702,10 @@ function valueFromBindingSource(
     channel: PhylaxPortedChannel;
     providerMessageId?: string;
     senderTimestamp?: string;
+    transcriptionText: string;
+    transcriptionProvider: string;
+    audioDurationSeconds: number | null;
+    transcriptionDisposition: "provided" | "skip_duration_limit";
   },
 ): unknown {
   switch (source.source) {
@@ -712,6 +718,10 @@ function valueFromBindingSource(
     case "channel": return input.channel;
     case "providerMessageId": return input.providerMessageId;
     case "senderTimestamp": return input.senderTimestamp;
+    case "transcriptionText": return input.transcriptionText;
+    case "transcriptionProvider": return input.transcriptionProvider;
+    case "audioDurationSeconds": return input.audioDurationSeconds;
+    case "transcriptionDisposition": return input.transcriptionDisposition;
     case "constant": return source.value;
     case "message": return input.message;
     case "surface": return input.surface;
@@ -779,6 +789,11 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, t
   }
   const digest = objectValue(payload.digest);
   const rawArtifact = objectValue(payload.rawArtifact);
+  const extraction = objectValue(payload.extraction);
+  const archiveUrl = typeof rawArtifact?.archiveUrl === "string" && rawArtifact.archiveUrl.trim()
+    ? rawArtifact.archiveUrl.trim()
+    : null;
+  const transcriptionStatus = extraction?.transcriptionStatus;
   const evidenceValue = payload.evidenceRef ?? digest?.evidenceRef;
   const evidenceRef = typeof evidenceValue === "string" && evidenceValue.trim()
     ? evidenceValue.trim()
@@ -801,9 +816,14 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, t
     text: sanitizePhylaxCustomerReply(appendPhylaxCaptureReceiptInvitation([
       "Saved ✓",
       `Recap: ${recap}`,
-      ...(typeof rawArtifact?.archiveUrl === "string" && rawArtifact.archiveUrl.trim()
-        ? ["Media: archived"]
-        : []),
+      ...(archiveUrl && (transcriptionStatus === "transcribed" || transcriptionStatus === "skipped_duration_limit")
+        ? [`${archiveUrl.includes("drive.google.com") ? "Google Drive audio" : "Audio archive"}: ${archiveUrl}`]
+        : rawArtifact ? ["Media: archived"] : []),
+      ...(transcriptionStatus === "skipped_duration_limit"
+        ? ["Transcription: skipped because the audio exceeds the 2-hour limit."]
+        : transcriptionStatus === "transcribed"
+          ? ["Transcription: completed."]
+          : []),
       ...(pages.length > 0 ? [`Filed: ${pages.join(", ")}`] : []),
       ...(filing === "uncertain"
         ? [`Filing: saved to ${pages[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
@@ -927,8 +947,8 @@ export class PhylaxChannelsOrgan {
     }
     const spec = discovery.specs.find((candidate) => candidate.mcp === call.tool);
     if (!spec) throw new Error(`configured tool "${call.tool}" is not advertised by the tenant downstream`);
-    const schema = typeof spec.inputSchema === "object" ? spec.inputSchema : { type: "object" };
-    const dialect = "$schema" in schema && typeof schema.$schema === "string"
+    const schema = objectValue(spec.inputSchema) ?? { type: "object" };
+    const dialect = typeof schema.$schema === "string"
       ? schema.$schema
       : "";
     const isDraft7 = /^https?:\/\/json-schema\.org\/draft-07\/schema#?$/.test(dialect);
@@ -939,14 +959,35 @@ export class PhylaxChannelsOrgan {
       ? { ...schema, $schema: "http://json-schema.org/draft-07/schema#" }
       : schema;
     const validate = validator.compile(validationSchema);
-    if (!validate(call.arguments)) {
-      const detail = validate.errors
-        ?.map((error: { instancePath: string; message?: string }) =>
-          `${error.instancePath || "/"} ${error.message ?? "is invalid"}`)
-        .join("; ");
-      throw new Error(`configured mapping no longer matches "${call.tool}" input schema${detail ? `: ${detail}` : ""}`);
+    const mappedArguments: Record<string, unknown> = call.arguments;
+    const compatibleArguments: Record<string, unknown> = { ...mappedArguments };
+    const mappedArgumentCount = Object.keys(mappedArguments).length;
+    if (!validate(mappedArguments)) {
+      // The transcript metadata is an additive optimization at the independent
+      // Phylax -> Zenod boundary. During a Zenod-first/Phylax-first rolling
+      // update, an older ingest_memory schema can still archive the raw audio
+      // and transcribe it itself. Never let these optional new fields block
+      // durable custody of the voice note.
+      for (const key of [
+        "providedTranscript",
+        "transcriptionProvider",
+        "audioDurationSeconds",
+        "transcriptionDisposition",
+      ]) {
+        delete compatibleArguments[key];
+      }
+      if (Object.keys(compatibleArguments).length !== mappedArgumentCount
+        && validate(compatibleArguments)) {
+        call.arguments = compatibleArguments;
+      } else {
+        const detail = validate.errors
+          ?.map((error: { instancePath: string; message?: string }) =>
+            `${error.instancePath || "/"} ${error.message ?? "is invalid"}`)
+          .join("; ");
+        throw new Error(`configured mapping no longer matches "${call.tool}" input schema${detail ? `: ${detail}` : ""}`);
+      }
     }
-    const properties = objectValue((schema as Record<string, unknown>).properties);
+    const properties = objectValue(schema.properties);
     return { supportsIdempotencyKey: Boolean(properties?.idempotencyKey) };
   }
 
@@ -1108,7 +1149,7 @@ export class PhylaxChannelsOrgan {
       artifactPath: artifact.path,
       artifactSha256: artifact.sha256,
       mimeType: input.media.mimeType ?? null,
-      fileName: input.media.fileName ?? null,
+      fileName: input.media.fileName?.trim() || `${input.messageId.trim()}.ogg`,
       text: input.text?.trim() ?? "",
     };
   }
@@ -1264,6 +1305,7 @@ export class PhylaxChannelsOrgan {
       ...(transcription.transcription_usage ? { transcription_usage: transcription.transcription_usage } : {}),
       ...(transcription.transcription_failed ? { transcription_failed: transcription.transcription_failed } : {}),
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),
+      ...(transcription.duration_seconds !== undefined ? { duration_seconds: transcription.duration_seconds } : {}),
       ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
       ...(replyEvidenceRef ? { reply_context: { evidenceRef: replyEvidenceRef } } : {}),
     };
@@ -1295,6 +1337,12 @@ export class PhylaxChannelsOrgan {
       channel: input.channel,
       ...(input.messageId ? { providerMessageId: input.messageId } : {}),
       senderTimestamp: input.senderTimestamp ?? new Date().toISOString(),
+      transcriptionText: handoff.text_transcript ?? "",
+      transcriptionProvider: handoff.transcription_source?.trim() || "Phylax channel transcription",
+      audioDurationSeconds: handoff.duration_seconds ?? null,
+      transcriptionDisposition: handoff.transcription_failed?.code === "duration_limit"
+        ? "skip_duration_limit" as const
+        : "provided" as const,
     };
     const selectedRoute = binding?.tool === "chat_with_ring"
       ? assistantRoute(route)

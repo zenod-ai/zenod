@@ -87,6 +87,123 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(stored[0]!.verbatim).toBe(true);
   });
 
+  it("archives raw audio and files a Phylax-supplied transcript without transcribing twice", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-supplied-transcript-"));
+    dirs.push(dir);
+    const archiveDir = join(dir, "archive");
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "This must never replace the supplied transcript.";
+    const settings = {
+      get: (key: string) => ({
+        artifact_archive_provider: "local",
+        artifact_archive_local_dir: archiveDir,
+      })[key] ?? null,
+    } as unknown as Settings;
+    const stored: StoreInput[] = [];
+    const engine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-08-27.md#^e-supplied",
+          pagesTouched: ["Inbox/Voice.md"],
+          commitSha: "f".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("raw WhatsApp audio").toString("base64")}`,
+      filename: "voice.ogg",
+      sourceHint: "WhatsApp voice note",
+      contentHint: "WhatsApp voice note",
+      providedTranscript: "The exact transcript produced once by Phylax.",
+      transcriptionProvider: "openrouter/mistral/voxtral-small-24b-2507",
+      audioDurationSeconds: 4_200,
+      transcriptionDisposition: "provided",
+    });
+    let done = store.get(job.id);
+    for (let i = 0; i < 50 && done?.status !== "done"; i += 1) {
+      await sleep(10);
+      done = store.get(job.id);
+    }
+
+    expect(done?.status).toBe("done");
+    const receipt = done!.result as MediaIngestReceipt;
+    expect(receipt.rawArtifact.handle).toMatch(/^file:\/\//);
+    expect(receipt.extraction).toMatchObject({
+      provider: "openrouter/mistral/voxtral-small-24b-2507",
+      transcriptionStatus: "transcribed",
+      durationSeconds: 4_200,
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).toContain("The exact transcript produced once by Phylax.");
+    expect(stored[0]!.content).not.toContain("This must never replace the supplied transcript.");
+    await queue.close();
+    store.close();
+  });
+
+  it("archives audio over two hours without transcription and files a memory pointer to the raw artifact", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-duration-limit-"));
+    dirs.push(dir);
+    const archiveDir = join(dir, "archive");
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "This transcription path must not run.";
+    const settings = {
+      get: (key: string) => ({
+        artifact_archive_provider: "local",
+        artifact_archive_local_dir: archiveDir,
+      })[key] ?? null,
+    } as unknown as Settings;
+    const stored: StoreInput[] = [];
+    const engine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-08-27.md#^e-over-two-hours",
+          pagesTouched: ["Inbox/Voice.md"],
+          commitSha: "e".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("very long raw audio").toString("base64")}`,
+      filename: "long-voice.ogg",
+      sourceHint: "WhatsApp voice note",
+      contentHint: "WhatsApp voice note",
+      providedTranscript: "",
+      transcriptionProvider: "Phylax channel transcription",
+      audioDurationSeconds: 7_201,
+      transcriptionDisposition: "skip_duration_limit",
+    });
+    let done = store.get(job.id);
+    for (let i = 0; i < 50 && done?.status !== "done"; i += 1) {
+      await sleep(10);
+      done = store.get(job.id);
+    }
+
+    expect(done?.status).toBe("done");
+    const receipt = done!.result as MediaIngestReceipt;
+    expect(receipt.message).toContain("without transcription");
+    expect(receipt.rawArtifact.handle).toMatch(/^file:\/\//);
+    expect(receipt.extraction).toMatchObject({
+      transcriptionStatus: "skipped_duration_limit",
+      durationSeconds: 7_201,
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).toContain("exceeds Zenod's 2-hour transcription limit");
+    expect(stored[0]!.content).toContain("Raw artifact:");
+    expect(stored[0]!.content).not.toContain("This transcription path must not run.");
+    await queue.close();
+    store.close();
+  });
+
   it("extracts an image ingest job, files it through the memory pipeline, and returns terminal receipts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-ingest-image-"));
     dirs.push(dir);

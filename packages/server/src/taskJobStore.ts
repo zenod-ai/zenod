@@ -65,6 +65,14 @@ export interface TaskJobInput {
   sourceHint?: string;
   /** media_ingest: user filing/digest context. */
   contentHint?: string;
+  /** media_ingest/audio: transcript already produced by the authenticated channel transport. */
+  providedTranscript?: string;
+  /** media_ingest/audio: provider label for the supplied transcript. */
+  transcriptionProvider?: string;
+  /** media_ingest/audio: best-effort duration probed by the channel transport. */
+  audioDurationSeconds?: number | null;
+  /** media_ingest/audio: use supplied text or intentionally skip transcription at the duration limit. */
+  transcriptionDisposition?: "provided" | "skip_duration_limit";
   /** media_ingest: original sender/source timestamp. */
   senderTimestamp?: string;
   /** media_ingest: optional filing hints. */
@@ -94,6 +102,8 @@ export interface MediaIngestReceipt {
     ocrHandle?: string | null;
     archiveUrl?: string | null;
     provider: string | null;
+    transcriptionStatus?: "transcribed" | "skipped_duration_limit";
+    durationSeconds?: number | null;
   };
   digest: {
     evidenceRef: string | null;

@@ -81,15 +81,18 @@ describe("PhylaxTenantSettingsStore", () => {
       voiceDefault: "capture",
       turnBindings: {
         voice_note: {
-          tool: "store_memory",
+          tool: "ingest_memory",
           argumentMappings: {
-            content: { source: "transcript" },
-            verbatim: { source: "constant", value: true },
-            hints: { source: "constant", value: ["WhatsApp voice note"] },
-            source: { source: "channel" },
-            contentType: { source: "constant", value: "voice_note" },
-            capturedAt: { source: "senderTimestamp" },
-            sourceId: { source: "providerMessageId" },
+            artifactUrl: { source: "artifactUrl" },
+            mediaType: { source: "constant", value: "audio" },
+            filename: { source: "filename" },
+            sourceHint: { source: "constant", value: "WhatsApp voice note" },
+            contentHint: { source: "constant", value: "WhatsApp voice note" },
+            providedTranscript: { source: "transcriptionText" },
+            transcriptionProvider: { source: "transcriptionProvider" },
+            audioDurationSeconds: { source: "audioDurationSeconds" },
+            transcriptionDisposition: { source: "transcriptionDisposition" },
+            senderTimestamp: { source: "senderTimestamp" },
           },
         },
         text: {
@@ -121,7 +124,7 @@ describe("PhylaxTenantSettingsStore", () => {
     const capture = store.get("alpha");
     const assistant = store.update("beta", { voiceDefault: "assistant" });
 
-    expect(resolvePhylaxTurnBinding(capture, "voice_note").tool).toBe("store_memory");
+    expect(resolvePhylaxTurnBinding(capture, "voice_note").tool).toBe("ingest_memory");
     expect(resolvePhylaxTurnBinding(assistant, "voice_note")).toEqual(assistant.turnBindings.text);
     expect(effectivePhylaxTurnBindings(assistant)).toEqual({
       ...assistant.turnBindings,
@@ -314,6 +317,43 @@ describe("PhylaxTenantSettingsStore", () => {
       argumentMappings: { message: { source: "transcript" } },
     });
     expect(await readFile(store.path, "utf8")).toContain('"tool":"chat_with_ring"');
+  });
+
+  it("migrates only the generated text-only voice binding to raw-audio ingest and preserves custom voice bindings", async () => {
+    const { store } = await setup();
+    const generatedLegacyVoice = {
+      tool: "store_memory",
+      argumentMappings: {
+        content: { source: "transcript" },
+        verbatim: { source: "constant", value: true },
+        hints: { source: "constant", value: ["WhatsApp voice note"] },
+        source: { source: "channel" },
+        contentType: { source: "constant", value: "voice_note" },
+        capturedAt: { source: "senderTimestamp" },
+        sourceId: { source: "providerMessageId" },
+      },
+    } as const;
+    const customVoice = {
+      tool: "store_memory",
+      argumentMappings: {
+        content: { source: "transcript" },
+        hints: { source: "constant", value: ["custom voice route"] },
+      },
+    } as const;
+    await writeFile(store.path, JSON.stringify({
+      generated: {
+        tenantId: "generated",
+        turnBindings: { ...defaultPhylaxTurnBindings(), voice_note: generatedLegacyVoice },
+      },
+      custom: {
+        tenantId: "custom",
+        turnBindings: { ...defaultPhylaxTurnBindings(), voice_note: customVoice },
+      },
+    }));
+
+    expect(store.get("generated").turnBindings.voice_note).toEqual(defaultPhylaxTurnBindings().voice_note);
+    expect(store.get("custom").turnBindings.voice_note).toEqual(customVoice);
+    expect(await readFile(store.path, "utf8")).toContain('"tool":"store_memory"');
   });
 
   it("verifies only the claimed normalized sender using its one-time inbound keyword", async () => {

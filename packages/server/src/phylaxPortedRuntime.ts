@@ -20,6 +20,8 @@ import {
 } from "./phylaxChannels.js";
 import { probeAudioDurationSeconds } from "./transcribe.js";
 
+const MAX_VOICE_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
+
 function normalizedWhatsAppSenderTimestamp(value: unknown): string | undefined {
   let numeric: number;
   if (typeof value === "object" && value !== null && "low" in value) {
@@ -194,29 +196,22 @@ export class PhylaxPortedRuntime {
         });
         if (verificationReply) return { replyText: verificationReply };
         const normalizedText = text.trim().toLowerCase();
-        if (!media && (normalizedText === "cancel transcription" || normalizedText === "confirm transcription")) {
+        if (!media && normalizedText === "confirm transcription") {
+          return {
+            replyText: "No confirmation is required. Zenod starts voice-note processing automatically.",
+          };
+        }
+        if (!media && normalizedText === "cancel transcription") {
           const tenantId = await this.organ.tenantIdFor("whatsapp", event.senderId, event.chatId);
           const sender = normalizeWhatsAppIdentifier(event.senderId);
           const conversationKey = `whatsapp:${sender}`;
-          if (normalizedText === "cancel transcription") {
-            const cancelled = this.whatsappStore.cancelLatestVoiceJob(tenantId, conversationKey);
-            if (!cancelled) {
-              return { replyText: "No pending voice transcription to cancel in this conversation." };
-            }
-            this.voiceAbortControllers.get(cancelled.providerMessageId)?.abort();
-            return {
-              replyText: "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
-            };
+          const cancelled = this.whatsappStore.cancelLatestVoiceJob(tenantId, conversationKey);
+          if (!cancelled) {
+            return { replyText: "No pending voice transcription to cancel in this conversation." };
           }
-          const confirmed = this.whatsappStore.confirmLatestVoiceJob(tenantId, conversationKey);
-          if (!confirmed) {
-            return { replyText: "No voice transcription is waiting for confirmation in this conversation." };
-          }
+          this.voiceAbortControllers.get(cancelled.providerMessageId)?.abort();
           return {
-            replyText:
-              "Confirmed the voice transcription. It is queued and may take a while. "
-              + 'Send “cancel transcription” to cancel it before Zenod starts filing it.',
-            afterReply: () => this.kickVoiceWorker(),
+            replyText: "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
           };
         }
         const senderTimestamp = normalizedWhatsAppSenderTimestamp(event.timestamp);
@@ -282,7 +277,6 @@ export class PhylaxPortedRuntime {
             media.bytes,
             media.fileName?.trim() || `${event.messageId}.ogg`,
           );
-          const needsConfirmation = durationSeconds === null || durationSeconds > 30 * 60;
           this.whatsappStore.createVoiceJob({
             providerMessageId: event.messageId,
             replyToMessageId: staged.replyToMessageId,
@@ -297,16 +291,14 @@ export class PhylaxPortedRuntime {
             fileName: staged.fileName,
             captionText: staged.text,
             durationSeconds,
-            state: needsConfirmation ? "awaiting_confirmation" : "queued",
+            state: "queued",
           });
           return {
             deferred: true,
-            replyText: durationSeconds === null
-              ? 'I could not determine this voice note’s length safely. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.'
-              : needsConfirmation
-              ? 'This voice note is longer than 30 minutes. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.'
-              : 'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
-            ...(!needsConfirmation ? { afterReply: () => this.kickVoiceWorker() } : {}),
+            replyText: durationSeconds !== null && durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS
+              ? "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it."
+              : 'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+            afterReply: () => this.kickVoiceWorker(),
             timing: { mediaDownloadMs: timing.mediaDownloadMs },
           };
         }
@@ -499,15 +491,29 @@ export class PhylaxPortedRuntime {
         if (job.state === "transcribed") {
           transcription = (job.transcription ?? {}) as PhylaxTranscriptionReceipt;
         } else {
-          const bytes = await readFile(job.artifactPath);
-          transcription = await this.organ.transcribeStagedVoice({
-            tenantId: job.tenantId,
-            bytes,
-            mimeType: job.mimeType,
-            fileName: job.fileName,
-          }, controller.signal);
+          if (job.durationSeconds !== null && job.durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS) {
+            transcription = {
+              duration_seconds: job.durationSeconds,
+              transcription_failed: {
+                code: "duration_limit",
+                message: "audio exceeds Zenod's 2-hour transcription limit",
+              },
+            };
+          } else {
+            const bytes = await readFile(job.artifactPath);
+            transcription = {
+              ...(await this.organ.transcribeStagedVoice({
+                tenantId: job.tenantId,
+                bytes,
+                mimeType: job.mimeType,
+                fileName: job.fileName,
+              }, controller.signal)),
+              duration_seconds: job.durationSeconds,
+            };
+          }
           if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") continue;
-          if (transcription.transcription_failed || !transcription.text_transcript?.trim()) {
+          const skippedForDuration = transcription.transcription_failed?.code === "duration_limit";
+          if (!skippedForDuration && (transcription.transcription_failed || !transcription.text_transcript?.trim())) {
             this.whatsappStore.queueVoiceFailureReply(
               job.providerMessageId,
               safeVoiceTranscriptionFailure(transcription.transcription_failed?.code),
@@ -520,7 +526,7 @@ export class PhylaxPortedRuntime {
             transcription as unknown as Record<string, unknown>,
           )) continue;
         }
-        if (!transcription.text_transcript?.trim()) {
+        if (!transcription.text_transcript?.trim() && transcription.transcription_failed?.code !== "duration_limit") {
           this.whatsappStore.queueVoiceFailureReply(
             job.providerMessageId,
             "⚠️ I could not process the persisted voice transcript because it was empty.",

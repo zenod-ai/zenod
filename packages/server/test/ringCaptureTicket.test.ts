@@ -478,6 +478,15 @@ describe("Ring capture context ticket", () => {
       ringTicketUrl: ringEndpoint.url,
       ringTicketToken: ringToken,
       telegramBinding: "755555555",
+      // This ticket exercises the preserved custom text-only capture path.
+      // The generated WhatsApp voice default is covered separately by the
+      // raw-audio ingest and Google Drive receipt integration tests.
+      turnBindings: {
+        voice_note: {
+          tool: "store_memory",
+          argumentMappings: { content: { source: "transcript" } },
+        },
+      },
     });
     // Keep the real Zenod queue authority and MCP surface, but prevent its
     // worker from consuming these controlled jobs before Phylax crosses from

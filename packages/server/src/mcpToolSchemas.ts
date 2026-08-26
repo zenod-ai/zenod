@@ -75,6 +75,25 @@ export const INGEST_MEMORY_SHAPE = {
   filename: z.string().min(1).optional().describe("Original filename, if known."),
   sourceHint: z.string().min(1).optional().describe("Where this came from, e.g. 'Claude upload', 'WhatsApp', 'Ring', or 'Drive'."),
   contentHint: z.string().min(1).optional().describe("User-provided context for filing/digesting, e.g. 'remember the renewal date shown here'."),
+  providedTranscript: z
+    .string()
+    .optional()
+    .describe("Optional transcript already produced by the authenticated channel transport. Empty when transcription was intentionally skipped."),
+  transcriptionProvider: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Provider label for an authenticated channel-supplied transcript."),
+  audioDurationSeconds: z
+    .number()
+    .nonnegative()
+    .nullable()
+    .optional()
+    .describe("Best-effort probed audio duration supplied by the channel transport."),
+  transcriptionDisposition: z
+    .enum(["provided", "skip_duration_limit"])
+    .optional()
+    .describe("Whether to use the supplied transcript or archive audio without transcription because it exceeds the product limit."),
   senderTimestamp: z.string().min(1).optional().describe("Original sender/source timestamp, preferably ISO-8601."),
   hints: z.array(z.string().min(1)).optional().describe("Optional filing hints for the eventual memory digest."),
   idempotencyKey: z
