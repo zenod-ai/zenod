@@ -176,6 +176,11 @@ export interface ProvisionTenantResult {
   record: TenantTokenRecord;
 }
 
+export interface EnsureTenantTokenResult {
+  record: TenantTokenRecord;
+  outcome: "created" | "replayed" | "conflict";
+}
+
 export interface TenantProvisioningStore extends TenantTokenStore {
   provisionTenant(
     input?: ProvisionTenantInput,
@@ -187,6 +192,16 @@ export interface TenantProvisioningStore extends TenantTokenStore {
     tenantId: string,
     profile: string,
   ): Promise<ProvisionTenantResult | null> | ProvisionTenantResult | null;
+  /**
+   * Reconcile a caller-custodied scoped token without ever rotating it.
+   * A different token for an existing tenant/profile reports conflict; callers
+   * must use the explicit rotation operation to invalidate that credential.
+   */
+  ensureTenantToken(
+    tenantId: string,
+    profile: string,
+    token: string,
+  ): Promise<EnsureTenantTokenResult | null> | EnsureTenantTokenResult | null;
   setTenantStatus(
     tenantId: string,
     status: TenantStatus,
@@ -206,6 +221,11 @@ export interface MemoryTenantStore extends TenantProvisioningStore {
     tenantId: string,
     profile: string,
   ): ProvisionTenantResult | null;
+  ensureTenantToken(
+    tenantId: string,
+    profile: string,
+    token: string,
+  ): EnsureTenantTokenResult | null;
   setTenantStatus(
     tenantId: string,
     status: TenantStatus,
@@ -468,6 +488,36 @@ export function createMemoryTenantStore(
       return { token, record: cloneTenantRecord(record) };
     },
 
+    ensureTenantToken(tenantId, profile, token) {
+      const id = tenantId.trim();
+      const normalizedProfile = normalizeCredentialProfile(profile);
+      const normalizedToken = normalizeReconciledCredentialToken(token);
+      const existing = id ? byTenant.get(id) : null;
+      if (!existing) return null;
+      const profileKey = `${id}\0${normalizedProfile}`;
+      const tokenHash = hashToken(normalizedToken);
+      const currentHash = profileHashes.get(profileKey);
+      if (currentHash) {
+        const current = byHash.get(currentHash)!;
+        return {
+          record: cloneTenantRecord(current),
+          outcome: currentHash === tokenHash ? "replayed" : "conflict",
+        };
+      }
+      if (byHash.has(tokenHash)) {
+        return { record: cloneTenantRecord(existing), outcome: "conflict" };
+      }
+      const record: TenantTokenRecord = {
+        ...existing,
+        tokenHash,
+        tenant: { ...existing.tenant },
+        profile: normalizedProfile,
+      };
+      byHash.set(tokenHash, record);
+      profileHashes.set(profileKey, tokenHash);
+      return { record: cloneTenantRecord(record), outcome: "created" };
+    },
+
     setTenantStatus(tenantId, status) {
       const id = tenantId.trim();
       const existing = id ? byTenant.get(id) : null;
@@ -550,6 +600,14 @@ function normalizeCredentialProfile(profile: string): string {
   if (!normalized) throw new Error("credential profile must be non-empty");
   if (normalized.length > 100)
     throw new Error("credential profile must be at most 100 characters");
+  return normalized;
+}
+
+function normalizeReconciledCredentialToken(token: string): string {
+  const normalized = token.trim();
+  if (normalized.length < 32 || normalized.length > 4_096) {
+    throw new Error("reconciled credential token must be between 32 and 4096 characters");
+  }
   return normalized;
 }
 
@@ -1626,6 +1684,41 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
         );
         if (!result) return c.json({ error: "tenant not found" }, 404);
         return c.json(toProvisionTenantResponse(result));
+      },
+    );
+
+    app.post(
+      "/api/tenants/:tenantId/tokens/ensure",
+      controlPlaneAuth,
+      async (c) => {
+        const body = await c.req.json().catch(() => ({}));
+        const record = body && typeof body === "object"
+          ? body as Record<string, unknown>
+          : {};
+        const profile = stringOrUndefined(record.profile);
+        const token = stringOrUndefined(record.token);
+        if (!profile || profile.length > 100)
+          return c.json({ error: "invalid credential profile" }, 400);
+        if (!token || token.length < 32 || token.length > 4_096)
+          return c.json({ error: "invalid reconciled credential token" }, 400);
+        const result = await provisioningStore.ensureTenantToken(
+          c.req.param("tenantId") ?? "",
+          profile,
+          token,
+        );
+        if (!result) return c.json({ error: "tenant not found" }, 404);
+        if (result.outcome === "conflict") {
+          return c.json({
+            error: "scoped credential already exists; use explicit rotation to replace it",
+            profile,
+          }, 409);
+        }
+        return c.json({
+          tenant: result.record.tenant,
+          status: result.record.status ?? "active",
+          profile,
+          replayed: result.outcome === "replayed",
+        });
       },
     );
 

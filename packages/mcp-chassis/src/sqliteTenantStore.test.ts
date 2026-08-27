@@ -199,4 +199,38 @@ describe("SqliteTenantStore", () => {
     });
     restarted.close();
   });
+
+  it("reconciles one caller-custodied profile token across lost responses and restart", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-stable-profile-token-"));
+    tempDirs.push(dataDir);
+    const stableToken = `zenod_${"ab".repeat(24)}`;
+    const conflictingToken = `zenod_${"cd".repeat(24)}`;
+    const first = createSqliteTenantStore({ dataDir });
+    first.provisionTenant({ tenantId: "tenant-a", token: "ordinary-tenant-token" });
+
+    expect(first.ensureTenantToken("tenant-a", "phylax-management-v1-zenod", stableToken))
+      .toMatchObject({ outcome: "created", record: { profile: "phylax-management-v1-zenod" } });
+    expect(first.ensureTenantToken("tenant-a", "phylax-management-v1-zenod", stableToken))
+      .toMatchObject({ outcome: "replayed", record: { tokenHash: hashToken(stableToken) } });
+    expect(first.ensureTenantToken("tenant-a", "phylax-management-v1-zenod", conflictingToken))
+      .toMatchObject({ outcome: "conflict", record: { tokenHash: hashToken(stableToken) } });
+    expect(first.resolveTokenHash(hashToken(stableToken))).toMatchObject({
+      tenant: { id: "tenant-a" },
+      profile: "phylax-management-v1-zenod",
+    });
+    expect(first.resolveTokenHash(hashToken(conflictingToken))).toBeNull();
+    first.close();
+
+    const restarted = createSqliteTenantStore({ dataDir });
+    expect(restarted.ensureTenantToken("tenant-a", "phylax-management-v1-zenod", stableToken))
+      .toMatchObject({ outcome: "replayed", record: { tokenHash: hashToken(stableToken) } });
+    const rotated = restarted.provisionTenantToken("tenant-a", "phylax-management-v1-zenod")!;
+    expect(rotated.token).not.toBe(stableToken);
+    expect(restarted.resolveTokenHash(hashToken(stableToken))).toBeNull();
+    expect(restarted.resolveTokenHash(hashToken(rotated.token))).toMatchObject({
+      tenant: { id: "tenant-a" },
+      profile: "phylax-management-v1-zenod",
+    });
+    restarted.close();
+  });
 });

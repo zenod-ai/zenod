@@ -1159,6 +1159,84 @@ describe("createUnit", () => {
     ).resolves.toHaveProperty("status", 401);
   });
 
+  it("reconciles caller-custodied profile tokens without implicit rotation or browser disclosure", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-profile-token-ensure-route-"));
+    tempDirs.push(dataDir);
+    const tenants = createMemoryTenantStore();
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
+      controlPlane: { store: tenants, token: "control-secret" },
+      toolProfiles: { "phylax-management-v1-zenod": ["read_memory"] },
+      conduct: { toolKinds: { read: ["read_memory"] } },
+      tools(server) {
+        server.registerTool("read_memory", {}, async () => ({
+          content: [{ type: "text", text: "memory read" }],
+        }));
+      },
+    });
+    const base = await listen(unit.app);
+    await provisionTenant(base, { tenantId: "tenant-a" });
+    const stableToken = `zenod_${"ab".repeat(24)}`;
+    const conflictingToken = `zenod_${"cd".repeat(24)}`;
+    const ensure = (token: string, headers = controlPlaneHeaders()) => fetch(
+      `${base}/api/tenants/tenant-a/tokens/ensure`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ profile: "phylax-management-v1-zenod", token }),
+      },
+    );
+
+    expect((await ensure(stableToken, {
+      "content-type": "application/json",
+      cookie: "zenod_customer=fake",
+    })).status).toBe(401);
+    const first = await ensure(stableToken);
+    expect(first.status).toBe(200);
+    await expect(first.json()).resolves.toEqual({
+      tenant: { id: "tenant-a" },
+      status: "active",
+      profile: "phylax-management-v1-zenod",
+      replayed: false,
+    });
+    const replay = await ensure(stableToken);
+    expect(replay.status).toBe(200);
+    await expect(replay.json()).resolves.toMatchObject({ replayed: true });
+    await expect(initialize(
+      base,
+      { headers: { authorization: `Bearer ${stableToken}` } },
+      `/mcp/${stableToken}`,
+    )).resolves.toHaveProperty("status", 200);
+
+    const conflict = await ensure(conflictingToken);
+    expect(conflict.status).toBe(409);
+    expect(JSON.stringify(await conflict.json())).not.toContain(stableToken);
+    await expect(initialize(
+      base,
+      { headers: { authorization: `Bearer ${stableToken}` } },
+      `/mcp/${stableToken}`,
+    )).resolves.toHaveProperty("status", 200);
+
+    const rotated = await fetch(`${base}/api/tenants/tenant-a/tokens`, {
+      method: "POST",
+      headers: controlPlaneHeaders(),
+      body: JSON.stringify({ profile: "phylax-management-v1-zenod" }),
+    }).then((response) => response.json());
+    expect(rotated.token).not.toBe(stableToken);
+    await expect(initialize(
+      base,
+      { headers: { authorization: `Bearer ${stableToken}` } },
+      `/mcp/${stableToken}`,
+    )).resolves.toHaveProperty("status", 401);
+    await expect(initialize(
+      base,
+      { headers: { authorization: `Bearer ${rotated.token}` } },
+      `/mcp/${rotated.token}`,
+    )).resolves.toHaveProperty("status", 200);
+  });
+
   it("rejects suspended and deleted tenants during MCP auth", async () => {
     const tenants = createMemoryTenantStore();
     const unit = createUnit({

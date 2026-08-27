@@ -29,6 +29,13 @@ export type {
   PhylaxPaidWorkState,
   PhylaxUsageCostBasis,
 } from "./phylaxAllowanceLedger.js";
+export {
+  PHYLAX_MANAGEMENT_PROFILES,
+  PHYLAX_MANAGEMENT_PROTOCOL,
+  PHYLAX_MANAGEMENT_TOOL_NAMES,
+  PHYLAX_MANAGEMENT_VERSION,
+  registerPhylaxManagementTools,
+} from "./phylaxManagementMcp.js";
 export { createRingUnit } from "./ringUnit.js";
 export { createRingCustomerLayer } from "./ringCustomerLayer.js";
 export { createHeraldUnit } from "./heraldUnit.js";

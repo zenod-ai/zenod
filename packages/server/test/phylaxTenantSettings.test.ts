@@ -456,6 +456,200 @@ describe("PhylaxTenantSettingsStore", () => {
     });
   });
 
+  it("matches only the exact current pending WhatsApp and Telegram management operation proofs", async () => {
+    const { store } = await setup();
+    store.registerPhone(
+      "whatsapp-tenant",
+      "+34 611 111 111",
+      "primary",
+      1_000,
+      "42-otter",
+      "whatsapp-operation-proof",
+    );
+    store.registerTelegram(
+      "telegram-tenant",
+      "@Exact_Owner",
+      1_000,
+      "55-raven",
+      "telegram-operation-proof",
+    );
+
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "whatsapp-tenant",
+      channel: "whatsapp",
+      identity: "+34 611 111 111",
+      operationProof: "whatsapp-operation-proof",
+      now: 2_000,
+    })).toBe(true);
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "telegram-tenant",
+      channel: "telegram",
+      identity: "@exact_owner",
+      operationProof: "telegram-operation-proof",
+      now: 2_000,
+    })).toBe(true);
+    expect(store.view("whatsapp-tenant")).not.toHaveProperty("verificationHash");
+    expect(store.view("whatsapp-tenant")).not.toHaveProperty("verificationOperationProofHash");
+    expect(store.view("telegram-tenant")).not.toHaveProperty("telegramVerificationHash");
+    expect(store.view("telegram-tenant")).not.toHaveProperty("telegramVerificationOperationProofHash");
+  });
+
+  it("rejects an old operation proof after same-code reconnect of the same identity", async () => {
+    const { store } = await setup();
+    store.registerPhone(
+      "whatsapp-tenant",
+      "+34 611 111 111",
+      "primary",
+      1_000,
+      "42-otter",
+      "whatsapp-operation-proof-a",
+    );
+    store.disconnectPhone("whatsapp-tenant", 2_000);
+    store.registerPhone(
+      "whatsapp-tenant",
+      "+34 611 111 111",
+      "primary",
+      3_000,
+      "42-otter",
+      "whatsapp-operation-proof-b",
+    );
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "whatsapp-tenant",
+      channel: "whatsapp",
+      identity: "+34 611 111 111",
+      operationProof: "whatsapp-operation-proof-a",
+      now: 3_001,
+    })).toBe(false);
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "whatsapp-tenant",
+      channel: "whatsapp",
+      identity: "+34 611 111 111",
+      operationProof: "whatsapp-operation-proof-b",
+      now: 3_001,
+    })).toBe(true);
+
+    store.registerTelegram(
+      "telegram-tenant",
+      "@same_owner",
+      1_000,
+      "55-raven",
+      "telegram-operation-proof-a",
+    );
+    store.disconnectTelegram("telegram-tenant");
+    store.registerTelegram(
+      "telegram-tenant",
+      "@same_owner",
+      3_000,
+      "55-raven",
+      "telegram-operation-proof-b",
+    );
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "telegram-tenant",
+      channel: "telegram",
+      identity: "@same_owner",
+      operationProof: "telegram-operation-proof-a",
+      now: 3_001,
+    })).toBe(false);
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "telegram-tenant",
+      channel: "telegram",
+      identity: "@same_owner",
+      operationProof: "telegram-operation-proof-b",
+      now: 3_001,
+    })).toBe(true);
+  });
+
+  it("rejects expired pending verification proofs at the exact expiry boundary", async () => {
+    const { store } = await setup();
+    store.registerPhone(
+      "whatsapp-tenant",
+      "+34 611 111 111",
+      "primary",
+      1_000,
+      "42-otter",
+      "whatsapp-operation-proof",
+    );
+    store.registerTelegram(
+      "telegram-tenant",
+      "@expiry_owner",
+      1_000,
+      "55-raven",
+      "telegram-operation-proof",
+    );
+    const expiresAt = 1_801_000;
+
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "whatsapp-tenant",
+      channel: "whatsapp",
+      identity: "+34 611 111 111",
+      operationProof: "whatsapp-operation-proof",
+      now: expiresAt - 1,
+    })).toBe(true);
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "whatsapp-tenant",
+      channel: "whatsapp",
+      identity: "+34 611 111 111",
+      operationProof: "whatsapp-operation-proof",
+      now: expiresAt,
+    })).toBe(false);
+    expect(store.matchesPendingManagementOperationProof({
+      tenantId: "telegram-tenant",
+      channel: "telegram",
+      identity: "@expiry_owner",
+      operationProof: "telegram-operation-proof",
+      now: expiresAt,
+    })).toBe(false);
+  });
+
+  it("keeps pending proof matching isolated by tenant, channel and identity", async () => {
+    const { store } = await setup();
+    store.registerPhone(
+      "alpha",
+      "+34 611 111 111",
+      "primary",
+      1_000,
+      "42-otter",
+      "whatsapp-operation-proof",
+    );
+    store.registerTelegram(
+      "beta",
+      "@beta_owner",
+      1_000,
+      "55-raven",
+      "telegram-operation-proof",
+    );
+
+    for (const input of [
+      {
+        tenantId: "beta",
+        channel: "whatsapp",
+        identity: "+34 611 111 111",
+        operationProof: "whatsapp-operation-proof",
+      },
+      {
+        tenantId: "alpha",
+        channel: "telegram",
+        identity: "@beta_owner",
+        operationProof: "telegram-operation-proof",
+      },
+      {
+        tenantId: "alpha",
+        channel: "whatsapp",
+        identity: "+34 622 222 222",
+        operationProof: "whatsapp-operation-proof",
+      },
+      {
+        tenantId: "beta",
+        channel: "telegram",
+        identity: "@other_owner",
+        operationProof: "telegram-operation-proof",
+      },
+    ] as const) {
+      expect(store.matchesPendingManagementOperationProof({ ...input, now: 2_000 }))
+        .toBe(false);
+    }
+  });
+
   it("isolates pending and immutable Telegram identities across tenants and survives restart", async () => {
     const { dataDir, storage, store } = await setup();
     store.registerTelegram("alpha", "@unique_owner", 1_000, "55-raven");
