@@ -19,7 +19,7 @@ import {
 } from "../src/phylaxChannels.js";
 import type { PeerToolResult } from "../src/peerClient.js";
 import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
-import { PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
+import { defaultPhylaxTurnBindings, PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 import {
   phylaxTranscriptionConfigurationError,
   phylaxTranscriptionOptions,
@@ -724,6 +724,259 @@ describe("PhylaxChannelsOrgan", () => {
     expect(receipt.replyText).toContain("Draft-07 catalog capture.");
     await organ.close();
   });
+
+  it("keeps raw voice custody working against an older ingest schema during a rolling update", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-old-ingest-schema-"));
+    dirs.push(dataDir);
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: {
+        resolve: () => ({
+          tenantId: "alpha",
+          downstreamUrl: "https://zenod.test/mcp/memory",
+          downstreamToken: "memory-scope-only",
+          turnBindings: defaultPhylaxTurnBindings(),
+        }),
+      },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      discoverDownstream: async () => ({
+        transport: "connected",
+        tools: "ready",
+        specs: [{
+          as: "memory",
+          mcp: "ingest_memory",
+          arg: "input",
+          description: "Older raw media ingest contract",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["artifactUrl", "mediaType", "filename", "sourceHint", "contentHint", "idempotencyKey"],
+            properties: {
+              artifactUrl: { type: "string" },
+              mediaType: { type: "string" },
+              filename: { type: "string" },
+              sourceHint: { type: "string" },
+              contentHint: { type: "string" },
+              senderTimestamp: { type: "string" },
+              idempotencyKey: { type: "string" },
+            },
+          },
+        }],
+      }),
+      async callDownstream(call) {
+        calls.push(call);
+        if (call.tool === "ingest_memory") {
+          return {
+            content: [{ type: "text", text: "queued" }],
+            structuredContent: { ticket_id: "old-ingest-job", state: "accepted" },
+          };
+        }
+        return {
+          content: [{ type: "text", text: "done" }],
+          structuredContent: {
+            ticket_id: "old-ingest-job",
+            state: "done",
+            result: {
+              recap: "Raw audio archived by the older Zenod worker.",
+              rawArtifact: { archiveUrl: "https://drive.google.com/file/d/old-worker/view" },
+              digest: { pagesTouched: ["Inbox/Voice.md"], githubUrls: [] },
+            },
+          },
+        };
+      },
+      capturePollIntervalMs: 1,
+      sleep: async () => {},
+    });
+
+    const receipt = await organ.receive({
+      channel: "whatsapp",
+      sender: "34611111111",
+      chatId: "chat-alpha",
+      messageId: "provider-old-ingest",
+      senderTimestamp: "2026-08-27T00:00:00.000Z",
+      media: {
+        bytes: Buffer.from("immutable old-schema voice bytes"),
+        mimeType: "audio/ogg",
+        fileName: "provider-old-ingest.ogg",
+      },
+      transcription: {
+        text_transcript: "Already transcribed by Phylax.",
+        transcription_source: "test-stt",
+        duration_seconds: 60,
+      },
+    });
+
+    expect(calls[0]).toMatchObject({
+      tool: "ingest_memory",
+      arguments: {
+        mediaType: "audio",
+        filename: "provider-old-ingest.ogg",
+        sourceHint: "WhatsApp voice note",
+        contentHint: "WhatsApp voice note",
+        senderTimestamp: "2026-08-27T00:00:00.000Z",
+        idempotencyKey: "alpha:whatsapp:provider-old-ingest",
+      },
+    });
+    expect(calls[0]!.arguments).not.toHaveProperty("providedTranscript");
+    expect(calls[0]!.arguments).not.toHaveProperty("transcriptionProvider");
+    expect(calls[0]!.arguments).not.toHaveProperty("audioDurationSeconds");
+    expect(calls[0]!.arguments).not.toHaveProperty("transcriptionDisposition");
+    expect(receipt.replyText).toContain("Saved ✓");
+
+    let overLimitError: unknown;
+    try {
+      await organ.receive({
+        channel: "whatsapp",
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: "provider-old-ingest-over-limit",
+        senderTimestamp: "2026-08-27T00:01:00.000Z",
+        media: {
+          bytes: Buffer.from("immutable over-limit old-schema voice bytes"),
+          mimeType: "audio/ogg",
+          fileName: "provider-old-ingest-over-limit.ogg",
+        },
+        transcription: {
+          transcription_failed: {
+            code: "duration_limit",
+            message: "audio exceeds Zenod's 2-hour transcription limit",
+          },
+          duration_seconds: 2 * 60 * 60 + 1,
+        },
+      });
+    } catch (error) {
+      overLimitError = error;
+    }
+    expect(overLimitError).toBeInstanceOf(PhylaxChannelError);
+    expect((overLimitError as PhylaxChannelError).retryDisposition).toBe("idempotent_capture");
+    expect((overLimitError as PhylaxChannelError).audit?.failureCode).toBe("downstream_schema_drift");
+    expect(calls).toHaveLength(2); // short ingest plus its terminal poll; over-limit was never dispatched
+    await organ.close();
+  });
+
+  it.each(["discovery", "transport", "typed unauthorized"] as const)(
+    "keeps default voice ingest retryable through %s failure and completes once after repair",
+    async (failureMode) => {
+      const dataDir = await mkdtemp(join(tmpdir(), `phylax-ingest-repair-${failureMode.replaceAll(" ", "-")}-`));
+      dirs.push(dataDir);
+      let repaired = false;
+      const ingestKeys: string[] = [];
+      const organ = new PhylaxChannelsOrgan({
+        dataDir,
+        routes: {
+          resolve: () => ({
+            tenantId: "alpha",
+            downstreamUrl: "https://zenod.test/mcp/memory",
+            downstreamToken: "memory-scope-only",
+            turnBindings: defaultPhylaxTurnBindings(),
+          }),
+        },
+        artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+        discoverDownstream: async () => {
+          if (!repaired && failureMode === "discovery") {
+            throw new Error("temporary catalog outage");
+          }
+          return {
+            transport: "connected" as const,
+            tools: "ready" as const,
+            specs: [{
+              as: "memory",
+              mcp: "ingest_memory",
+              arg: "input",
+              description: "Durable raw media ingest",
+              inputSchema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["artifactUrl", "mediaType", "filename", "sourceHint", "contentHint", "idempotencyKey"],
+                properties: {
+                  artifactUrl: { type: "string" },
+                  mediaType: { type: "string" },
+                  filename: { type: "string" },
+                  sourceHint: { type: "string" },
+                  contentHint: { type: "string" },
+                  providedTranscript: { type: "string" },
+                  transcriptionProvider: { type: "string" },
+                  audioDurationSeconds: { type: ["number", "null"] },
+                  transcriptionDisposition: { enum: ["provided", "skip_duration_limit"] },
+                  senderTimestamp: { type: "string" },
+                  idempotencyKey: { type: "string" },
+                },
+              },
+            }],
+          };
+        },
+        async callDownstream(call) {
+          if (call.tool === "ingest_memory") {
+            ingestKeys.push(String(call.arguments.idempotencyKey));
+            if (!repaired && failureMode === "transport") {
+              throw new Error("temporary MCP transport failure");
+            }
+            if (!repaired && failureMode === "typed unauthorized") {
+              return {
+                isError: true,
+                content: [{ type: "text", text: "Unauthorized" }],
+              };
+            }
+            return {
+              content: [{ type: "text", text: "queued" }],
+              structuredContent: { ticket_id: `job-${failureMode}`, state: "accepted" },
+            };
+          }
+          expect(call.tool).toBe("get_task_result");
+          return {
+            content: [{ type: "text", text: "done" }],
+            structuredContent: {
+              ticket_id: `job-${failureMode}`,
+              state: "done",
+              result: {
+                recap: "Voice capture recovered exactly once.",
+                rawArtifact: { archiveUrl: `https://drive.google.com/file/d/${failureMode}/view` },
+                extraction: { transcriptionStatus: "transcribed" },
+                digest: { pagesTouched: ["Inbox/Voice.md"], githubUrls: [] },
+              },
+            },
+          };
+        },
+        capturePollIntervalMs: 1,
+        sleep: async () => {},
+      });
+      const input = {
+        channel: "whatsapp" as const,
+        sender: "34611111111",
+        chatId: "chat-alpha",
+        messageId: `provider-${failureMode}`,
+        senderTimestamp: "2026-08-27T00:02:00.000Z",
+        media: {
+          bytes: Buffer.from(`immutable ${failureMode} voice bytes`),
+          mimeType: "audio/ogg",
+          fileName: `provider-${failureMode}.ogg`,
+        },
+        transcription: {
+          text_transcript: `Transcript recovered after ${failureMode}.`,
+          transcription_source: "test-stt",
+          duration_seconds: 60,
+        },
+      };
+
+      let firstError: unknown;
+      try {
+        await organ.receive(input);
+      } catch (error) {
+        firstError = error;
+      }
+      expect(firstError).toBeInstanceOf(PhylaxChannelError);
+      expect((firstError as PhylaxChannelError).retryDisposition).toBe("idempotent_capture");
+
+      repaired = true;
+      const receipt = await organ.receive(input);
+      expect(receipt.replyText).toContain("Saved ✓");
+      expect(receipt.replyText).toContain(`Google Drive audio: https://drive.google.com/file/d/${failureMode}/view`);
+      expect(new Set(ingestKeys)).toEqual(new Set([`alpha:whatsapp:provider-${failureMode}`]));
+      expect(ingestKeys).toHaveLength(failureMode === "discovery" ? 1 : 2);
+      await organ.close();
+    },
+  );
 
   it("keeps an accepted capture polling through a transient result outage and records only the later terminal success", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-binding-transient-poll-"));
@@ -2921,7 +3174,7 @@ describe("ported gateway integration", () => {
       expect(transcriptionCalls).toBe(1);
       expect(downstreamCalls).toBe(1);
       expect(sent.map((entry) => entry.text)).toEqual([
-        'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "strawberry banana",
       ]);
       const outbound = runtime.whatsappStore.recentTranscript({ sinceMs: 0 })
@@ -3056,7 +3309,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
       expect(aborted).toBe(false);
       expect(sent).toEqual([
-        'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "Long voice saved.",
       ]);
       expect(calls).toHaveLength(1);
@@ -3072,13 +3325,14 @@ describe("ported gateway integration", () => {
     }
   });
 
-  it("holds over-30-minute audio for scoped confirmation and supports exact scoped cancellation", async () => {
+  it("automatically handles voice notes through two hours, skips longer transcription, and keeps cancellation scoped", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-controls-"));
     dirs.push(dataDir);
     const sent: string[] = [];
     let transcriptionCalls = 0;
-    let downstreamCalls = 0;
+    const downstreamCalls: PhylaxDownstreamCall[] = [];
     let durationSeconds: number | null = null;
+    let blockTranscription = false;
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: {
@@ -3093,18 +3347,18 @@ describe("ported gateway integration", () => {
       transcriber: {
         async transcribe({ signal }) {
           transcriptionCalls += 1;
-          if (durationSeconds < 30 * 60) {
+          if (blockTranscription) {
             await new Promise<void>((resolve) => {
               signal.addEventListener("abort", () => resolve(), { once: true });
             });
             throw new Error("cancelled");
           }
-          return { text_transcript: "confirmed transcript", transcription_source: "whisper.cpp base" };
+          return { text_transcript: "automatic transcript", transcription_source: "whisper.cpp base" };
         },
       },
-      async callDownstream() {
-        downstreamCalls += 1;
-        return { content: [{ type: "text", text: "Confirmed voice handled." }] };
+      async callDownstream(call) {
+        downstreamCalls.push(call);
+        return { content: [{ type: "text", text: "Voice handled." }] };
       },
     });
     const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
@@ -3141,36 +3395,46 @@ describe("ported gateway integration", () => {
     });
     try {
       await runtime.whatsapp.handleEvent(event("alpha-unknown-duration", "34611111111", "", true));
-      expect(runtime.whatsappStore.voiceJob("alpha-unknown-duration")?.state).toBe("awaiting_confirmation");
-      expect(transcriptionCalls).toBe(0);
-      expect(sent).toContain(
-        'I could not determine this voice note’s length safely. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.',
-      );
-      await runtime.whatsapp.handleEvent(event("alpha-cancel-unknown", "34611111111", "cancel transcription"));
-      expect(runtime.whatsappStore.voiceJob("alpha-unknown-duration")?.state).toBe("cancelled");
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-unknown-duration")?.state).toBe("completed"));
+      expect(transcriptionCalls).toBe(1);
+      expect(downstreamCalls).toHaveLength(1);
 
       durationSeconds = 31 * 60;
       await runtime.whatsapp.handleEvent(event("alpha-long", "34611111111", "", true));
-      expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("awaiting_confirmation");
-      expect(transcriptionCalls).toBe(0);
-      await runtime.whatsapp.handleEvent(event("beta-confirm", "34622222222", "confirm transcription"));
-      expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("awaiting_confirmation");
-      expect(transcriptionCalls).toBe(0);
-      await runtime.whatsapp.handleEvent(event("alpha-confirm", "34611111111", "confirm transcription"));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-long")?.state).toBe("completed"));
-      expect(transcriptionCalls).toBe(1);
-      expect(downstreamCalls).toBe(1);
+      expect(transcriptionCalls).toBe(2);
+      expect(downstreamCalls).toHaveLength(2);
+
+      await runtime.whatsapp.handleEvent(event("beta-confirm", "34622222222", "confirm transcription"));
+      expect(sent).toContain("No confirmation is required. Zenod starts voice-note processing automatically.");
+
+      durationSeconds = 2 * 60 * 60;
+      await runtime.whatsapp.handleEvent(event("alpha-exactly-two-hours", "34611111111", "", true));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-exactly-two-hours")?.state).toBe("completed"));
+      expect(transcriptionCalls).toBe(3);
+      expect(downstreamCalls).toHaveLength(3);
+
+      durationSeconds = 2 * 60 * 60 + 1;
+      await runtime.whatsapp.handleEvent(event("alpha-over-two-hours", "34611111111", "", true));
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-over-two-hours")?.state).toBe("completed"));
+      expect(transcriptionCalls).toBe(3);
+      expect(downstreamCalls).toHaveLength(4);
+      expect(downstreamCalls[3]!.handoff).toMatchObject({
+        duration_seconds: 2 * 60 * 60 + 1,
+        transcription_failed: { code: "duration_limit" },
+      });
 
       durationSeconds = 60;
+      blockTranscription = true;
       await runtime.whatsapp.handleEvent(event("alpha-cancel", "34611111111", "", true));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-cancel")?.state).toBe("transcribing"));
       await runtime.whatsapp.handleEvent(event("alpha-cancel-command", "34611111111", "cancel transcription"));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-cancel")?.state).toBe("cancelled"));
-      expect(downstreamCalls).toBe(1);
+      expect(downstreamCalls).toHaveLength(4);
       expect(sent).toEqual(expect.arrayContaining([
-        'This voice note is longer than 30 minutes. Reply “confirm transcription” to start it, or “cancel transcription” to cancel it.',
-        "No voice transcription is waiting for confirmation in this conversation.",
-        "Confirmed voice handled.",
+        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.",
+        "Voice handled.",
         "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
       ]));
     } finally {
@@ -3358,7 +3622,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() =>
         expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
       expect(sent).toEqual([
-        'I received your voice note and queued it for transcription. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "⚠️ Your voice note was transcribed, but Zenod could not confirm the final result. I will not retry it automatically because that could perform the request twice.",
       ]);
       expect(sent.join("\n")).not.toMatch(/Ring|Phylax/i);
@@ -3389,8 +3653,8 @@ describe("ported gateway integration", () => {
               tool: "store_memory",
               argumentMappings: { content: { source: "transcript" } },
             },
-            text: { tool: "chat_with_ring", argumentMappings: {} },
-            media: { tool: "ingest_memory", argumentMappings: {} },
+            text: defaultPhylaxTurnBindings().text,
+            media: defaultPhylaxTurnBindings().media,
           },
         }),
       },
@@ -3525,14 +3789,7 @@ describe("ported gateway integration", () => {
           tenantId: "alpha",
           downstreamUrl: "https://zenod.test/mcp/memory",
           downstreamToken: "memory-scope-only",
-          turnBindings: {
-            voice_note: {
-              tool: "store_memory",
-              argumentMappings: { content: { source: "transcript" } },
-            },
-            text: { tool: "chat_with_ring", argumentMappings: {} },
-            media: { tool: "ingest_memory", argumentMappings: {} },
-          },
+          turnBindings: defaultPhylaxTurnBindings(),
         }),
       },
       artifactUrl: (tenantId, artifactId) =>
@@ -3550,31 +3807,51 @@ describe("ported gateway integration", () => {
         tools: "ready",
         specs: [{
           as: "memory",
-          mcp: "store_memory",
+          mcp: "ingest_memory",
           arg: "input",
-          description: "Store memory",
+          description: "Archive media and store memory",
           inputSchema: {
             type: "object",
             additionalProperties: false,
-            required: ["content", "idempotencyKey"],
+            required: ["artifactUrl", "mediaType", "sourceHint", "contentHint", "idempotencyKey"],
             properties: {
-              content: { type: "string" },
+              artifactUrl: { type: "string" },
+              mediaType: { type: "string" },
+              filename: { type: "string" },
+              sourceHint: { type: "string" },
+              contentHint: { type: "string" },
+              providedTranscript: { type: "string" },
+              transcriptionProvider: { type: "string" },
+              audioDurationSeconds: { type: ["number", "null"] },
+              transcriptionDisposition: { type: "string", enum: ["provided", "skip_duration_limit"] },
+              senderTimestamp: { type: "string" },
               idempotencyKey: { type: "string" },
             },
           },
         }],
       }),
       async callDownstream(call) {
-        if (call.tool === "store_memory") {
+        if (call.tool === "ingest_memory") {
           const key = String(call.arguments.idempotencyKey);
           storeKeys.push(key);
           storeAttempts.set(key, (storeAttempts.get(key) ?? 0) + 1);
+          expect(call.arguments).toMatchObject({
+            mediaType: "audio",
+            filename: `${key.slice("alpha:whatsapp:".length)}.ogg`,
+            sourceHint: "WhatsApp voice note",
+            contentHint: "WhatsApp voice note",
+            providedTranscript: `transcript for ${key.slice("alpha:whatsapp:".length)}`,
+            transcriptionProvider: "test-stt",
+            audioDurationSeconds: 60,
+            transcriptionDisposition: "provided",
+          });
+          expect(String(call.arguments.artifactUrl)).toMatch(/^https:\/\/phylax\.test\/artifacts\/alpha\//);
           return {
             content: [{ type: "text", text: "queued" }],
             structuredContent: {
               ticket_id: `job:${key}`,
               jobId: `job:${key}`,
-              kind: "store",
+              kind: "media_ingest",
               status: "queued",
               state: "accepted",
             },
@@ -3588,11 +3865,19 @@ describe("ported gateway integration", () => {
           structuredContent: {
             ticket_id: ticketId,
             jobId: ticketId,
-            kind: "store",
+            kind: "media_ingest",
             status: "done",
             state: "done",
             result: {
               recap: `Saved ${key}`,
+              message: `Saved ${key}`,
+              rawArtifact: {
+                archiveUrl: `https://drive.google.com/file/d/${key.slice("alpha:whatsapp:".length)}/view`,
+              },
+              extraction: {
+                transcriptionStatus: "transcribed",
+                durationSeconds: 60,
+              },
               evidenceRef: `Log/2026-08-26.md#^${createHash("sha256").update(key).digest("hex").slice(0, 8)}`,
               pagesTouched: ["Inbox/Voice Notes.md"],
               commitSha: createHash("sha256").update(`commit:${key}`).digest("hex"),
@@ -3645,6 +3930,8 @@ describe("ported gateway integration", () => {
       expect([...storeKeys].sort()).toEqual([...expectedKeys].sort());
       expect(storeAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 1])));
       expect(sent.filter((text) => text.includes("Saved ✓"))).toHaveLength(3);
+      expect(sent.filter((text) => text.includes("Google Drive audio:"))).toHaveLength(3);
+      expect(sent.filter((text) => text.includes("Transcription: completed."))).toHaveLength(3);
       expect(sent.filter((text) => text.includes("could not confirm the final result"))).toHaveLength(0);
       for (const messageId of messageIds) {
         expect(runtime.whatsappStore.voiceJob(messageId)?.state).not.toBe("ring_outcome_unknown");

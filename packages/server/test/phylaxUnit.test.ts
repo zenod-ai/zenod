@@ -424,27 +424,6 @@ describe("Phylax customer unit mount", () => {
           },
         },
         {
-          as: "memory",
-          mcp: "store_memory",
-          arg: "input",
-          description: "Store a voice memory",
-          inputSchema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["content", "verbatim", "hints", "idempotencyKey"],
-            properties: {
-              content: { type: "string", minLength: 1 },
-              verbatim: { const: true },
-              hints: { type: "array", items: { type: "string" } },
-              source: { enum: ["whatsapp", "telegram"] },
-              contentType: { const: "voice_note" },
-              capturedAt: { type: "string", minLength: 1 },
-              sourceId: { type: "string", minLength: 1 },
-              idempotencyKey: { type: "string", minLength: 1 },
-            },
-          },
-        },
-        {
           as: "media",
           mcp: "ingest_memory",
           arg: "input",
@@ -459,7 +438,13 @@ describe("Phylax customer unit mount", () => {
                 enum: ["audio", "screenshot", "image", "pdf", "document", "link"],
               },
               filename: { type: "string", minLength: 1 },
-              sourceHint: { const: "WhatsApp media" },
+              sourceHint: { enum: ["WhatsApp media", "WhatsApp voice note"] },
+              contentHint: { type: "string" },
+              providedTranscript: { type: "string" },
+              transcriptionProvider: { type: "string" },
+              audioDurationSeconds: { type: ["number", "null"] },
+              transcriptionDisposition: { enum: ["provided", "skip_duration_limit"] },
+              senderTimestamp: { type: "string" },
               idempotencyKey: { type: "string", minLength: 1 },
             },
           },
@@ -474,16 +459,11 @@ describe("Phylax customer unit mount", () => {
       if (tool === "chat_with_zenod") {
         return { content: [{ type: "text", text: "Assistant answer." }] };
       }
-      if (tool === "store_memory") {
-        return {
-          content: [{ type: "text", text: "queued" }],
-          structuredContent: { ticket_id: "voice-job", state: "accepted" },
-        };
-      }
       if (tool === "ingest_memory") {
+        const voice = args.mediaType === "audio";
         return {
           content: [{ type: "text", text: "queued" }],
-          structuredContent: { ticket_id: "media-job", state: "accepted" },
+          structuredContent: { ticket_id: voice ? "voice-job" : "media-job", state: "accepted" },
         };
       }
       if (tool === "get_task_result" && args.ticket_id === "voice-job") {
@@ -494,10 +474,14 @@ describe("Phylax customer unit mount", () => {
             state: "done",
             result: {
               recap: "Remember the launch sequence.",
-              evidenceRef: "Log/2026-07-29.md#^voice-production",
-              pagesTouched: ["Projects/Launch.md"],
-              commitSha: "abc1234",
-              githubUrls: ["https://github.test/commit/abc1234"],
+              rawArtifact: { archiveUrl: "https://drive.google.com/file/d/voice-production/view" },
+              extraction: { transcriptionStatus: "transcribed", durationSeconds: 60 },
+              digest: {
+                evidenceRef: "Log/2026-07-29.md#^voice-production",
+                pagesTouched: ["Projects/Launch.md"],
+                commitSha: "abc1234",
+                githubUrls: ["https://github.test/commit/abc1234"],
+              },
             },
           },
         };
@@ -552,20 +536,28 @@ describe("Phylax customer unit mount", () => {
         messageId: "capture-voice-1",
         senderTimestamp: "2026-08-01T14:00:00.000Z",
         transcription: { text_transcript: "Remember the launch sequence." },
+        media: {
+          bytes: Buffer.from("immutable-voice-audio"),
+          mimeType: "audio/ogg",
+          fileName: "capture-voice-1.ogg",
+        },
       });
       expect(peerMocks.callPeerTool.mock.calls[1]?.[0]).toMatchObject({
         url: "https://memory.test/mcp",
         token: "tenant-alpha-memory-scope",
       });
-      expect(peerMocks.callPeerTool.mock.calls[1]?.[1]).toBe("store_memory");
+      expect(peerMocks.callPeerTool.mock.calls[1]?.[1]).toBe("ingest_memory");
       expect(peerMocks.callPeerTool.mock.calls[1]?.[2]).toEqual({
-        content: "Remember the launch sequence.",
-        verbatim: true,
-        hints: ["WhatsApp voice note"],
-        source: "whatsapp",
-        contentType: "voice_note",
-        capturedAt: "2026-08-01T14:00:00.000Z",
-        sourceId: "capture-voice-1",
+        artifactUrl: expect.any(String),
+        mediaType: "audio",
+        filename: "capture-voice-1.ogg",
+        sourceHint: "WhatsApp voice note",
+        contentHint: "WhatsApp voice note",
+        providedTranscript: "Remember the launch sequence.",
+        transcriptionProvider: "Phylax channel transcription",
+        audioDurationSeconds: null,
+        transcriptionDisposition: "provided",
+        senderTimestamp: "2026-08-01T14:00:00.000Z",
         idempotencyKey: "tenant-alpha:whatsapp:capture-voice-1",
       });
       expect(peerMocks.callPeerTool.mock.calls[2]?.slice(1)).toEqual([
@@ -573,6 +565,8 @@ describe("Phylax customer unit mount", () => {
         { ticket_id: "voice-job" },
       ]);
       expect(voice.replyText).toContain("Saved ✓");
+      expect(voice.replyText).toContain("Google Drive audio: https://drive.google.com/file/d/voice-production/view");
+      expect(voice.replyText).toContain("Transcription: completed.");
       expect(voice.replyText).not.toContain("Log/2026-07-29.md#^voice-production");
       expect(voice.replyText).not.toContain("abc1234");
       expect(voice.replyText).toMatch(

@@ -36,6 +36,10 @@ export type PhylaxBindingArgumentSource =
   | { source: "channel" }
   | { source: "providerMessageId" }
   | { source: "senderTimestamp" }
+  | { source: "transcriptionText" }
+  | { source: "transcriptionProvider" }
+  | { source: "audioDurationSeconds" }
+  | { source: "transcriptionDisposition" }
   | { source: "constant"; value: PhylaxBindingConstant }
   | { source: "message" }
   | { source: "surface" }
@@ -153,6 +157,45 @@ function directZenodChatBinding(): PhylaxTurnBinding {
   };
 }
 
+function generatedLegacyVoiceStoreBinding(): PhylaxTurnBinding {
+  return {
+    tool: "store_memory",
+    argumentMappings: {
+      content: { source: "transcript" },
+      verbatim: { source: "constant", value: true },
+      hints: { source: "constant", value: ["WhatsApp voice note"] },
+      source: { source: "channel" },
+      contentType: { source: "constant", value: "voice_note" },
+      capturedAt: { source: "senderTimestamp" },
+      sourceId: { source: "providerMessageId" },
+    },
+  };
+}
+
+function directZenodVoiceIngestBinding(): PhylaxTurnBinding {
+  return {
+    tool: "ingest_memory",
+    argumentMappings: {
+      artifactUrl: { source: "artifactUrl" },
+      mediaType: { source: "constant", value: "audio" },
+      filename: { source: "filename" },
+      sourceHint: { source: "constant", value: "WhatsApp voice note" },
+      contentHint: { source: "constant", value: "WhatsApp voice note" },
+      providedTranscript: { source: "transcriptionText" },
+      transcriptionProvider: { source: "transcriptionProvider" },
+      audioDurationSeconds: { source: "audioDurationSeconds" },
+      transcriptionDisposition: { source: "transcriptionDisposition" },
+      senderTimestamp: { source: "senderTimestamp" },
+    },
+  };
+}
+
+function isGeneratedLegacyVoiceStoreBinding(binding: PhylaxTurnBinding): boolean {
+  const legacy = generatedLegacyVoiceStoreBinding();
+  return binding.tool === legacy.tool
+    && JSON.stringify(binding.argumentMappings) === JSON.stringify(legacy.argumentMappings);
+}
+
 /**
  * The first Hosted deployment persisted the old default Ring binding in every
  * tenant row. Migrate only that exact generated value at read time. A customer
@@ -171,18 +214,7 @@ function isGeneratedLegacyRingChatBinding(binding: PhylaxTurnBinding): boolean {
  */
 export function defaultPhylaxTurnBindings(): PhylaxTurnBindings {
   return {
-    voice_note: {
-      tool: "store_memory",
-      argumentMappings: {
-        content: { source: "transcript" },
-        verbatim: { source: "constant", value: true },
-        hints: { source: "constant", value: ["WhatsApp voice note"] },
-        source: { source: "channel" },
-        contentType: { source: "constant", value: "voice_note" },
-        capturedAt: { source: "senderTimestamp" },
-        sourceId: { source: "providerMessageId" },
-      },
-    },
+    voice_note: directZenodVoiceIngestBinding(),
     text: directZenodChatBinding(),
     media: {
       tool: "ingest_memory",
@@ -256,6 +288,10 @@ export const PHYLAX_BINDING_ARGUMENT_SOURCES = [
   "channel",
   "providerMessageId",
   "senderTimestamp",
+  "transcriptionText",
+  "transcriptionProvider",
+  "audioDurationSeconds",
+  "transcriptionDisposition",
   "constant",
   "message",
   "surface",
@@ -344,6 +380,9 @@ function normalizedStoredTurnBindings(value: unknown): PhylaxTurnBindings {
     try {
       const normalized = normalizedTurnBinding(stored[turnType]);
       if (turnType === "text" && isGeneratedLegacyRingChatBinding(normalized)) {
+        continue;
+      }
+      if (turnType === "voice_note" && isGeneratedLegacyVoiceStoreBinding(normalized)) {
         continue;
       }
       defaults[turnType] = normalized;
