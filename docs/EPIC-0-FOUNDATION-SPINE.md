@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `17818127d19a332ff8164d5c968f93a7c7b5bb80` on `main`; the ZAL-22 production receipt remains the deployed rollback/behavior baseline
+Last reconciled commit: `297656e75b4baa8a0674726348b9a0d0f18b6399` on `main`; the ZAL-22 production receipt remains the deployed rollback/behavior baseline
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,13 +84,13 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Frozen integrated-independent Zenod–Phylax final push; wave 1 integration and bounded review-fix loop
-Last verified: 2026-08-27 16:38 CEST
+Phase: Frozen integrated-independent Zenod–Phylax final push; wave 3 adapter and UI lanes active
+Last verified: 2026-08-27 18:14 CEST
 Integration target: `main`
-Fresh base commit: `17818127d19a332ff8164d5c968f93a7c7b5bb80` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
+Fresh base commit: `297656e75b4baa8a0674726348b9a0d0f18b6399` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
 Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
-Next action: finish #1104's bounded artifact correction while #1107 implements the tenant-safe management MCP from exact integrated `main`; independently review and integrate each exact head, then advance the recorded dependency waves toward Jordi's final test.
-Blockers: #1104 remains merge-blocked on two bounded artifact-separation findings; no architecture question is open. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
+Next action: execute #1108's Zenod lifecycle/BFF adapter and #1109's separate UI shells in parallel from exact `main`; independently review and integrate them in the child's recorded order.
+Blockers: no architecture question or current source-wave blocker is open. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
 
 ## Bootstrap Map
 
@@ -141,7 +141,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Concern | Existing authority / proposed home | Root rollup state | Next routing action |
 |---|---|---|---|
-| Integrated-independent Zenod/Phylax final push | `docs/EPIC-P-PHYLAX-SPRINT.md` | Active child spine; architecture frozen; #1103, #1105, #1106 and #1119 integrated; #1104 bounded artifact correction and #1107 tenant-safe management MCP active; signup-closed production candidate preserved as baseline. | Finish independent review/integration of #1104 and #1107, then dispatch #1108 and #1109 from their recorded dependencies. |
+| Integrated-independent Zenod/Phylax final push | `docs/EPIC-P-PHYLAX-SPRINT.md` | Active child spine; architecture frozen; #1103–#1107 and #1119 integrated; #1108 backend/BFF and #1109 UI/artifact lanes active from one exact base; signup-closed production candidate preserved as baseline. | Independently review and integrate #1108 first, then reconcile and integrate #1109 per the child spine. |
 | Zenod alpha launch history | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Prior offer, readiness and deployment evidence remains authoritative for its completed tickets and current #1061 gate, but it is no longer the dispatch board. | Read only unless the active Phylax spine routes a specific gate or evidence correction. |
 | Voice capture and grounded recall | `docs/EPIC-MECHANICAL-CAPTURE.md` | Capture/transcription/retrieval has strong July evidence; the new recent-recap failure is a fresh acceptance gap. | Reproduce the exact interaction and add it to the canonical journey suite before declaring alpha-ready. |
 | Voice note → Codex execution | Proposed child epic | Direction is clear; UX, authority, project disambiguation, delivery surface, and pricing are not settled. | Draft a child spine after the immediate readiness audit; do not silently fold it into the memory-only launch gate. |
@@ -177,7 +177,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-P-PHYLAX-SPRINT.md` | Epic worker | `/root` final-push delivery manager | Deliver frozen integrated-independent architecture | active / wave 2 | #1104 and #1107 active; #1108–#1112 dependency-ordered; then #1061 human gates | [#1103](https://github.com/zenod-ai/zenod/issues/1103)–[#1112](https://github.com/zenod-ai/zenod/issues/1112), [#1119](https://github.com/zenod-ai/zenod/issues/1119) | `1781812` | Separate product/Phylax artifacts and islands; stable auth; issuer-neutral Phylax ledger; tenant-safe management MCP; Zenod BFF; reusable UI/standalone; no-loss migration; three-island proof; exact release acceptance. | #1103, #1105, #1106 and #1119 are integrated; #1104 is in its bounded artifact review-fix loop and #1107 is active from exact main; production remains the signup-closed baseline. | 2026-08-27 16:45 CEST | Independently review and integrate #1104 and #1107, then dispatch #1108 and #1109 per the child spine dependencies. |
+| `docs/EPIC-P-PHYLAX-SPRINT.md` | Epic worker | `/root` final-push delivery manager | Deliver frozen integrated-independent architecture | active / wave 3 | #1103–#1107 and #1119 integrated; #1108/#1109 active; #1110–#1112 dependency-ordered; then #1061 human gates | [#1103](https://github.com/zenod-ai/zenod/issues/1103)–[#1112](https://github.com/zenod-ai/zenod/issues/1112), [#1119](https://github.com/zenod-ai/zenod/issues/1119) | `297656e` | Separate product/Phylax artifacts and islands; stable auth; issuer-neutral Phylax ledger; tenant-safe management MCP; Zenod BFF; reusable UI/standalone; no-loss migration; three-island proof; exact release acceptance. | #1103–#1107 and #1119 are integrated; #1108/#1109 run from exact main with disjoint ownership; production remains the signup-closed baseline. | 2026-08-27 18:14 CEST | Independently review and integrate #1108 first, then reconcile and integrate #1109 per the child spine. |
 | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Historical child / gate source | Zenod Alpha delivery manager | Preserve prior alpha evidence and #1061 gate | read-only / superseded for dispatch | active Phylax child, #1112 | prior ZAL PRs | `a6fbe8f` | Prior offer/readiness/deployment evidence remains available without competing issue selection. | Signup-closed candidate deployed; #1061 remains 11/13 and linked from the active child. | 2026-08-27 14:40 CEST | No dispatch; follow active child. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
@@ -229,7 +229,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Worker Queue
 
-- Final-push work is dispatchable only from `docs/EPIC-P-PHYLAX-SPRINT.md`; #1104's bounded artifact correction and #1107 are active, and later waves may start only from the child ledger after their recorded dependencies integrate.
+- Final-push work is dispatchable only from `docs/EPIC-P-PHYLAX-SPRINT.md`; #1108 and #1109 are active from exact `main`, and later waves may start only from the child ledger after their recorded dependencies integrate.
 - Add explicit Write Scope to the chosen child epic spine.
 - Ensure its Issue Ledger links to GitHub issues or marks drafts clearly.
 - Add Handoff Journal and Proposed Cross-Spine Updates sections if missing.
