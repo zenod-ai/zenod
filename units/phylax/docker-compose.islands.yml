@@ -1,0 +1,84 @@
+# Local/pre-production topology proof for the reusable Phylax artifact.
+# Every service owns exactly one service-number/session island and one volume.
+# Product-bound instances fix the downstream adapter by PHYLAX_INSTANCE_MODE;
+# standalone is opt-in through the `standalone` profile.
+
+x-phylax: &phylax
+  # The checked-in whisper fallback is the proven musl/amd64 binary used by the
+  # current service. Keep that runtime intact and make its target explicit.
+  platform: ${PHYLAX_PLATFORM:-linux/amd64}
+  build:
+    context: ../..
+    dockerfile: units/phylax/Dockerfile
+    args:
+      GIT_SHA: ${GIT_SHA:-local}
+  image: ${PHYLAX_IMAGE:-zenod-phylax:local}
+  restart: unless-stopped
+  environment: &phylax-env
+    NODE_ENV: production
+    PORT: "8080"
+    ZENOD_UNIT: phylax
+    AGENT: phylax
+    ZENOD_DATA_DIR: /data
+    ZENOD_WEB_DIST: /app/apps/web/dist
+    PHYLAX_SITE_DIST: /app/apps/phylax-site/dist
+    PHYLAX_PREWARM_LOCAL_MODEL: "0"
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - >-
+        node -e "fetch('http://127.0.0.1:8080/api/health',{signal:AbortSignal.timeout(3000)})
+        .then(r=>{if(!r.ok)throw new Error('unhealthy')})
+        .catch(()=>process.exit(1))"
+    interval: 5s
+    timeout: 4s
+    retries: 12
+
+services:
+  phylax-for-zenod:
+    <<: *phylax
+    environment:
+      <<: *phylax-env
+      PHYLAX_INSTANCE_MODE: zenod
+      PHYLAX_INSTANCE_ID: phylax-for-zenod
+      PHYLAX_SERVICE_NUMBER_ID: zenod-primary
+      PHYLAX_ADMIN_ORIGIN: ${PHYLAX_ZENOD_ADMIN_ORIGIN:-http://localhost:18081}
+      CUSTOMER_APP_URL: ${PHYLAX_ZENOD_PUBLIC_ORIGIN:-http://localhost:18081}
+      CHASSIS_VAULT_MASTER_KEY: ${PHYLAX_ZENOD_VAULT_MASTER_KEY:?required}
+      ACCOUNT_STATE_SECRET: ${PHYLAX_ZENOD_ACCOUNT_STATE_SECRET:?required}
+    ports: ["127.0.0.1:${PHYLAX_ZENOD_PORT:-18081}:8080"]
+    volumes: [phylax-for-zenod-data:/data]
+
+  phylax-for-pm:
+    <<: *phylax
+    environment:
+      <<: *phylax-env
+      PHYLAX_INSTANCE_MODE: pm
+      PHYLAX_INSTANCE_ID: phylax-for-pm
+      PHYLAX_SERVICE_NUMBER_ID: pm-primary
+      PHYLAX_ADMIN_ORIGIN: ${PHYLAX_PM_ADMIN_ORIGIN:-http://localhost:18082}
+      CUSTOMER_APP_URL: ${PHYLAX_PM_PUBLIC_ORIGIN:-http://localhost:18082}
+      CHASSIS_VAULT_MASTER_KEY: ${PHYLAX_PM_VAULT_MASTER_KEY:?required}
+      ACCOUNT_STATE_SECRET: ${PHYLAX_PM_ACCOUNT_STATE_SECRET:?required}
+    ports: ["127.0.0.1:${PHYLAX_PM_PORT:-18082}:8080"]
+    volumes: [phylax-for-pm-data:/data]
+
+  phylax-standalone:
+    <<: *phylax
+    profiles: [standalone]
+    environment:
+      <<: *phylax-env
+      PHYLAX_INSTANCE_MODE: standalone
+      PHYLAX_INSTANCE_ID: phylax-standalone
+      PHYLAX_SERVICE_NUMBER_ID: standalone-primary
+      PHYLAX_ADMIN_ORIGIN: ${PHYLAX_STANDALONE_ADMIN_ORIGIN:-http://localhost:18083}
+      CUSTOMER_APP_URL: ${PHYLAX_STANDALONE_PUBLIC_ORIGIN:-http://localhost:18083}
+      CHASSIS_VAULT_MASTER_KEY: ${PHYLAX_STANDALONE_VAULT_MASTER_KEY:?required}
+      ACCOUNT_STATE_SECRET: ${PHYLAX_STANDALONE_ACCOUNT_STATE_SECRET:?required}
+    ports: ["127.0.0.1:${PHYLAX_STANDALONE_PORT:-18083}:8080"]
+    volumes: [phylax-standalone-data:/data]
+
+volumes:
+  phylax-for-zenod-data:
+  phylax-for-pm-data:
+  phylax-standalone-data:

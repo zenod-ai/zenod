@@ -48,6 +48,11 @@ import {
   PhylaxTenantSettingsStore,
 } from "./phylaxTenantSettings.js";
 import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
+import {
+  assertCustomerDownstreamMutationAllowed,
+  resolvePhylaxInstanceConfig,
+  type PhylaxInstanceConfig,
+} from "./phylaxInstance.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
@@ -61,9 +66,15 @@ const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
 
+export interface CreatePhylaxUnitOptions extends CreateZenodUnitOptions {
+  instance?: PhylaxInstanceConfig;
+}
+
 /** Compose the shipped customer unit with the ported channels organ. */
-export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
-  const env = options.env ?? process.env;
+export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
+  const { instance: configuredInstance, ...zenodOptions } = options;
+  const env = zenodOptions.env ?? process.env;
+  const instance = configuredInstance ?? resolvePhylaxInstanceConfig(env);
   const configuredRestartAfter = Number(
     env.PHYLAX_TRANSPORT_RESTART_AFTER_MS ?? PHYLAX_TRANSPORT_RESTART_AFTER_MS,
   );
@@ -145,14 +156,16 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     },
   });
   const bootLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
-  void prepareModel(
-    bootLocalModel && isValidWhisperModel(bootLocalModel)
-      ? bootLocalModel
-      : PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL,
-  );
+  if (env.PHYLAX_PREWARM_LOCAL_MODEL !== "0") {
+    void prepareModel(
+      bootLocalModel && isValidWhisperModel(bootLocalModel)
+        ? bootLocalModel
+        : PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL,
+    );
+  }
 
   base = createZenodUnit({
-    ...options,
+    ...zenodOptions,
     storage,
     agent: PHYLAX_AGENT,
     unitName: "phylax",
@@ -205,6 +218,16 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
       name: PHYLAX_AGENT.name,
       version: VERSION,
       sha: resolvedGitSha(),
+      instance: {
+        id: instance.instanceId,
+        mode: instance.mode,
+        downstreamAdapter: instance.downstreamAdapter,
+        customerConfigurableDownstream: instance.customerConfigurableDownstream,
+        commercialOwner: instance.commercialOwner,
+        serviceNumberId: instance.serviceNumberId,
+        adminOrigin: instance.adminOrigin,
+        runtime: "phylax",
+      },
       worker,
       restart: {
         required: restartRequired,
@@ -308,6 +331,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     try {
       const body = parsePhylaxSettingsUpdate(await c.req.json<unknown>());
+      assertCustomerDownstreamMutationAllowed(instance, body as Record<string, unknown>);
       const normalized = normalizePhylaxTranscriptionUpdate(tenantSettings, tenantId, body);
       const settings = tenantSettings.update(tenantId, normalized);
       runtime.retryPendingVoiceCaptures(tenantId);
@@ -421,6 +445,7 @@ export function createPhylaxUnit(options: CreateZenodUnitOptions = {}) {
     app,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
+    phylaxInstance: instance,
     hostedChannelAudit,
     ringCaptureTickets: captureTickets,
     async close() {
