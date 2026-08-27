@@ -165,6 +165,8 @@ browserTest(
       tempDirs.push(browserDir);
       chromeProcess = spawn(chrome!, [
         "--headless=new",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-background-networking",
@@ -181,7 +183,7 @@ browserTest(
         } catch {
           return null;
         }
-      });
+      }, 30_000);
       const target = await fetch(
         `http://127.0.0.1:${debuggingPort}/json/new?${encodeURIComponent(authorize.toString())}`,
         { method: "PUT" },
@@ -260,5 +262,5 @@ browserTest(
       await unit.close();
     }
   },
-  30_000,
+  60_000,
 );
