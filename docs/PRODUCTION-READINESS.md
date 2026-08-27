@@ -9,37 +9,28 @@ The current approved Hosted shape is **two services from one immutable image**:
 
 Ring is not on the Zenod customer path and must not be changed by this runbook.
 
-The current exact read-only preflight, target IDs, image/rollback digests and redacted environment delta live in [`docs/evidence/zenod-production-readiness-preflight-2026-08-26/README.md`](./evidence/zenod-production-readiness-preflight-2026-08-26/README.md).
+The historical read-only preflight, target IDs, and original rollback digests live in [`docs/evidence/zenod-production-readiness-preflight-2026-08-26/README.md`](./evidence/zenod-production-readiness-preflight-2026-08-26/README.md). The current deployed receipt is [`docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md`](./evidence/zenod-zal22-production-rollout-2026-08-27/README.md).
 
-## Current commercial blocker
+## Current deployed state
 
-The approved beta product is one €9/month plus VAT Hosted plan. Candidate `91b4e7d` still contains the legacy €5/month and €50/year site, checkout tiers, Terms, price variables and monthly/yearly readiness requirement. Therefore:
+The approved beta product is one €9/month plus VAT Hosted plan. Exact merge `a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2` is deployed signup-closed to both services as OCI index `sha256:9308e5e2319567958380c1e329afab22532be54ec9fff8dddeabea2b3ed4227a`. The public offer and Terms are coherent, both restored encrypted volume backups pass, the existing direct MCP token still works, signed Channels and tenant Drive status pass, and both services are healthy 1/1.
 
-- do not deploy `91b4e7d`, even with signup and tester checkout closed, because it would continue publishing the wrong product and legal contract;
-- no billing drill may run against the legacy price contract; and
-- a future immutable digest may be considered only after a reviewed correction makes the site, account, Terms, checkout parser, one operator-supplied monthly Stripe price reference and readiness rule agree on the approved product.
+Public signup remains closed. Production readiness is 11/13 and fails only `stripe_profile` and `live_billing_journey`, but the product gate also retains two explicit acceptance requirements outside that endpoint:
 
-Do not work around this by silently reusing a legacy price ID or assigning one price to both tiers.
+- Jordi's overlapping voice-note/Drive-receipt test; and
+- the integrated/standalone Phylax allowance and customer-safe combined-usage truth locked on 2026-08-27.
 
-## Current and future human gates
+Do not reopen the legacy child-key design or change auth/credential/session ownership to satisfy those gates.
 
-The only current approval request is:
+## Remaining human gates
 
-> **APPROVE PR #1089 DOCS MERGE ONLY**
+The signup-closed deploy gate is complete. Remaining effects are independent:
 
-This authorizes merging documentation and evidence only. It authorizes zero production, backup, quiesce, environment, credential, token, deploy, provider, Google, channel, billing, signup, route, session, data or verification-timestamp mutation.
-
-Future approvals are independent and must be requested separately in this order:
-
-1. define the off-host backup destination, retention and restore procedure;
-2. authorize exact backup quiesce/verification for both volumes;
-3. approve credential/token generation or source plus redacted exact non-secret environment values;
-4. approve configuration and signup-closed deployment of a future pricing-corrected immutable digest;
-5. approve OpenRouter reconciliation and child-key effects;
-6. approve Google OAuth grant and disposable-account test;
-7. approve real WhatsApp/Telegram sends or session-affecting work;
-8. approve one €9 real-card billing drill and refund/cancel handling; and
-9. approve public signup.
+1. Jordi performs the existing-session overlapping voice test; no reconnect, credential, token, or session mutation is expected.
+2. Implement and accept the bounded Phylax-owned metering/allowance seam without refactoring transport, memory, Drive, or auth.
+3. Correct and verify the Stripe business/support profile in the Stripe Dashboard.
+4. Approve and run one €9 real-card billing drill with intended refund/cancel handling.
+5. Approve public signup.
 
 Approval of one gate never authorizes the next.
 
@@ -88,29 +79,24 @@ ZENOD_PUBLIC_SITE_HOST
 
 `ZENOD_PUBLIC_SITE_HOST` is currently present and non-empty. It is optional for boot: `isPublicSiteHost` defaults to `zenod.dev` when neither a route option nor this environment key is supplied. Retain the explicit key in a future exact delta so host routing does not rely on the fallback.
 
-Hosted Drive requires operator-owned keys on public Zenod only:
+Hosted Drive adds no operator environment keys. Its credentials are tenant-owned and stored through that tenant's existing Vault & sources UI and encrypted settings custody (setting names shown for authority clarity, not as environment configuration):
 
 ```text
-GOOGLE_OAUTH_CLIENT_ID
-GOOGLE_OAUTH_CLIENT_SECRET
+google_oauth_client_id
+google_oauth_client_secret
+google_oauth_refresh_token
 ```
 
-Do not seed those values into tenant settings. Register only the approved public callback.
-For the Hosted public beta this connection is archive/export-only: Zenod creates
-one private tenant-specific folder automatically, GitHub remains the source
-integration, and customers do not select a Drive folder. Self-hosted BYO Drive
-source/inbox behavior is unchanged.
+Operator `GOOGLE_OAUTH_*` environment values must not override a tenant's credentials. Each tenant connects its own Google account; the refresh token, account and app-managed folder remain tenant-scoped. The Hosted public beta connection is archive/export-only: Zenod creates one private tenant-specific folder automatically, GitHub remains the source integration, and customers do not select a Drive folder. Self-hosted BYO Drive source/inbox behavior is unchanged.
 
-Hosted managed AI requires:
+Do not add the superseded managed child-key environment block:
 
 ```text
-ZENOD_MANAGED_AI_ENABLED
 OPENROUTER_PROVISIONING_KEY
-ZENOD_MANAGED_AI_LIMIT_USD
-ZENOD_MANAGED_AI_WARN_PERCENT
+ZENOD_MANAGED_AI_ENABLED
 ```
 
-Enabling managed AI starts authoritative reconciliation and may create, cap, disable or resume OpenRouter child keys for existing entitled tenants. Installing the key and enabling the flag therefore requires explicit provider-mutation approval; it is not a passive configuration change.
+The locked next design keeps one customer allowance while Zenod and Phylax meter their own costs. Zenod/PM issues a tenant-scoped allowance to Phylax; Phylax records transport/STT use; the product presents combined percentage/state/reset truth. Standalone Phylax uses the same ledger with a different allowance issuer. This is an accounting/control seam, not a provider-key-per-tenant requirement.
 
 The customer Channels facade requires:
 
@@ -140,7 +126,7 @@ ZENOD_PUBLIC_PAID_SIGNUP
 ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS
 ```
 
-`PRICE_MONTHLY` is the sole price reference required for new Zenod checkout. Any existing `PRICE_YEARLY` value is legacy configuration: preserve it in pre-change snapshots and do not delete or reinterpret it, but Zenod readiness and new checkout do not depend on it. The monthly reference remains blocked until Jordi separately approves the exact live €9 Stripe price. No environment change is authorized by this runbook. A future closed-deploy delta must keep `ZENOD_PUBLIC_PAID_SIGNUP` closed and the tester allowlist empty.
+`PRICE_MONTHLY` is the sole price reference required for new Zenod checkout and now points to the approved €9 live price. Any existing `PRICE_YEARLY` value is legacy configuration: preserve it in snapshots and do not delete or reinterpret it, but Zenod readiness and new checkout do not depend on it. Keep `ZENOD_PUBLIC_PAID_SIGNUP=0` until the remaining gates pass.
 
 ### Private existing Phylax / Channels
 
@@ -173,15 +159,15 @@ Do not set any `*_VERIFIED_AT` value prospectively. Set it to the UTC completion
 - `ZENOD_STRIPE_PROFILE_VERIFIED_AT`: Stripe checkout/portal show the correct legal business, support email, website, Terms and Privacy links.
 - `ZENOD_LIVE_BILLING_VERIFIED_AT`: after the pricing correction, one separately approved real-card €9 purchase completed, provisioned exactly one tenant and managed-AI authority, returned a working MCP URL, opened the billing portal, and was refunded/cancelled as intended.
 
-## Future pricing-corrected deploy with signup and checkout closed
+## Current signup-closed deploy and future code rollout order
 
-Do not use this procedure with `91b4e7d`. After the pricing correction produces a new immutable digest and the earlier independent gates have completed:
+The 2026-08-27 release used this sequence. Reuse it for future compatible code changes:
 
 1. Obtain Jordi's exact approval of the future OCI digest, both Dokploy applications, the redacted exact key/non-secret-value delta and rollback references.
 2. Record both currently deployed immutable images, complete operator-only environment snapshots, domains, mounts, service names, volume identities and private network.
 3. Complete the two-volume backup and isolated restore drill below.
-4. Pin the private existing Phylax application to the approved future digest first, preserving its volume and session. Verify private `/api/health` reports `phylax`, the full future SHA, acceptable worker/transport health and no session reset.
-5. Pin public `zenod-mt` to the same digest second. Verify `/healthz`, `/api/health`, the landing page, Terms, Privacy and Data Handling by identity, not merely status.
+4. Pin public `zenod-mt` first and verify `/healthz`, `/api/health`, the landing page, Terms, Privacy, existing MCP, tenant Drive and the private Channels facade. Consumer-first deployment ensures the newer Zenod schema is ready before Phylax sends newer voice metadata.
+5. Pin private Phylax second, preserving its volume and session. Verify private `/api/health` reports `phylax`, the full future SHA, acceptable worker/transport health and no session reset.
 6. Confirm `/api/public/production-readiness` remains non-200 and reports signup closed. An unauthenticated MCP request must be rejected; an existing tenant token must initialize, list tools and call a read-only tool without crossing tenant boundaries.
 7. Run only the separately approved credential/channel/provider probes from the preflight matrix. Do not pair/reset WhatsApp, send test messages, create Google grants or enable OpenRouter reconciliation unless the approval names that effect.
 
@@ -207,15 +193,15 @@ Copy both archives/checksums to an approved independent encrypted destination. R
 
 ## Closed billing drill
 
-This stage is blocked until the candidate implements the approved €9 single-plan contract and Jordi separately approves Stripe/profile/real-card effects. The public pricing buttons remain disabled and the tester allowlist remains empty before that approval.
+The €9 single-plan contract is deployed. This stage remains blocked until the Stripe profile, final voice acceptance and Phylax usage truth are green and Jordi separately approves the real-card effect. Public signup remains closed before that approval.
 
 After approval, verify in order:
 
 1. Checkout displays the approved Zenod Hosted plan, €9/month plus applicable VAT, required billing address, Terms consent and automatic tax.
-2. One `checkout.session.completed` delivery returns HTTP 200 and creates exactly one tenant and one bounded managed-AI authority across event replay.
+2. One `checkout.session.completed` delivery returns HTTP 200 and creates exactly one tenant and one product allowance across event replay.
 3. The returned MCP URL initializes and can store/search a disposable memory in the tester vault.
 4. **Manage billing** opens the live portal with invoice history, payment-method update and cancellation at period end.
-5. Subscription/invoice lifecycle proves `past_due` grace, `canceled`/`paused` suspension, and later `active` restoration without duplicate provider keys.
+5. Subscription/invoice lifecycle proves `past_due` grace, `canceled`/`paused` suspension, and later `active` restoration without duplicate tenants or allowance grants.
 6. Refund/cancel as approved and retain only redacted IDs/timestamps as evidence.
 
 ## Open and rollback
@@ -230,4 +216,4 @@ To close sales, set signup closed and clear tester checkout. To roll back code:
 4. confirm both prior SHAs, public health, private transport health and existing read-only MCP; and
 5. restore data only for proven corruption, into a new volume, retaining the original.
 
-Never roll back by deleting/recreating a volume, resetting WhatsApp, deleting child keys, clearing queues or removing legacy functionality.
+Never roll back by deleting/recreating a volume, resetting WhatsApp, rotating tenant tokens, clearing queues or removing legacy functionality.
