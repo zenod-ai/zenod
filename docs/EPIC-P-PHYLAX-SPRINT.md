@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: `/root` final-push delivery manager
 Steward since: 2026-08-27 14:40 CEST
-Last reconciled commit: `297656e75b4baa8a0674726348b9a0d0f18b6399` on `main`
+Last reconciled commit: `ebb5f52706bd68689baa30a7875c342c67a991fa` on `main`
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -111,12 +111,12 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: Final architecture frozen; wave 3 Zenod adapter and UI shells active in parallel
-Last verified: 2026-08-27 18:14 CEST
+Phase: Final architecture frozen; wave 3 integrated and wave 4 no-loss decoupling active
+Last verified: 2026-08-27 19:46 CEST
 Integration target: main
-Fresh base commit: `297656e75b4baa8a0674726348b9a0d0f18b6399` on `main`; signup-closed production candidate remains deployed and is the rollback/behavior baseline, not target-architecture proof
+Fresh base commit: `ebb5f52706bd68689baa30a7875c342c67a991fa` on `main`; signup-closed production candidate remains deployed and is the rollback/behavior baseline, not target-architecture proof
 Control plane: [PR #1113](https://github.com/zenod-ai/zenod/pull/1113) merged as `3e902f4` after CI and independent review; durable visual contract at `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html`
-Next action: implement #1108's Zenod lifecycle/BFF/combined-usage adapter and #1109's separate product/native/operator UI shells in parallel from exact `main`; independently review each exact head, integrate #1108 first, then reconcile and integrate #1109.
+Next action: implement #1110's explicit no-loss compatibility migration from exact integrated `main`; independently review its mixed-version, rollback, custom-binding, concurrent-voice and Drive-receipt evidence before integration.
 Blockers: no architecture decision or source-wave blocker is open. Production deployment, real channel sends, real-card billing and public signup remain later named human gates. Exact plan allowance amounts, allocation chunk sizes and native Phylax pricing are configuration/commercial choices that cannot change the ledger or service architecture.
 
 ## Role Goals
@@ -209,18 +209,18 @@ Later dated rows supersede conflicting July product-shape assumptions while pres
 | [#1106](https://github.com/zenod-ai/zenod/issues/1106) | Ticket worker | ZPF-4-worker | Issuer-neutral Phylax allowance and usage ledger | done / wave 1 | none | [#1118](https://github.com/zenod-ai/zenod/pull/1118) / `codex/zpf-4-phylax-ledger` | `913efeb` | Append-only integer ledger gives exactly-once tenant grants/adjustments/usage, deterministic reset/suspension and custody-preserving cap behavior. | Final head `1fbef2f`; CI and independent review PASS; all lease/cap/period/order/restart invariants green; merged as `37d08bc` | 2026-08-27 16:38 CEST | Integrated library foundation; runtime wiring remains owned by later tickets. |
 | [#1119](https://github.com/zenod-ai/zenod/issues/1119) | Ticket worker | ZPF-1R-worker | Repair the real durable chat MCP declaration seam | done / wave 1 repair | #1103 | [#1120](https://github.com/zenod-ai/zenod/pull/1120) / `codex/zpf-1r-durable-chat-contract` | `2649553` | `chat_with_zenod` has one canonical accepted/poll contract while ordinary synchronous chat remains compatible; replay and tenant isolation remain exact. | Final head `344ba6e`; CI and clean exact-head manager review PASS; malformed tickets reject and 60 focused tests pass; merged as `1781812` | 2026-08-27 16:38 CEST | Integrated; baseline defect is closed without auth/routing/credential changes. |
 | [#1107](https://github.com/zenod-ai/zenod/issues/1107) | Ticket worker | ZPF-5-worker | Tenant-safe Phylax management MCP | done / wave 2 | #1105, #1106 | [#1122](https://github.com/zenod-ai/zenod/pull/1122) / `codex/zpf-5-management-mcp` | `e682ca0` | Versioned, scoped, idempotent tenant/channel/credit tools; separate owner surface; hostile and rolling-version matrix green. | Final head `2cd7623`; exact CI and independent review PASS; stable caller-custodied service credentials, fenced recovery and high-entropy operation proof; merged as `297656e` | 2026-08-27 18:14 CEST | Integrated; no production, credential, token, session or live-channel mutation occurred. |
-| [#1108](https://github.com/zenod-ai/zenod/issues/1108) | Ticket worker | ZPF-6-worker | Zenod provisioning, Channels BFF and combined usage | active / wave 3 | #1107 | `codex/zpf-6-zenod-adapter` | `297656e` | Zenod lifecycle provisions/funds Phylax through MCP; browser remains Zenod-only; combined cap/projection is truthful and existing tenant assets persist. | Dispatched in a dedicated worktree from exact post-#1107 `main`; server/BFF-only ownership frozen | 2026-08-27 18:14 CEST | Implement, validate and hand off a PR; no UI, Phylax-runtime or production mutation. |
-| [#1109](https://github.com/zenod-ai/zenod/issues/1109) | Ticket worker | ZPF-7-worker | Product UI facades, Phylax operator UI and standalone shell | active / wave 3 | #1104, #1107 | `codex/zpf-7-ui-shells` | `297656e` | Reusable settings/metering components serve Zenod/PM facades and native Phylax while every instance retains a separate operator UI and authority boundary. | Dispatched in a dedicated worktree from exact post-#1107 `main`; UI/artifact-only ownership frozen | 2026-08-27 18:14 CEST | Implement, validate and hand off a PR; no lifecycle, ledger, PM-repo or production mutation. |
-| [#1110](https://github.com/zenod-ai/zenod/issues/1110) | Ticket worker | ZPF-8-worker | Remove legacy coupling with no-loss compatibility migration | queued / wave 4 | #1103–#1109 | `codex/zpf-8-decouple-migrate` | fresh integrated wave-3 `main` | Phylax-local metering and fixed adapters replace piggyback/dynamic coupling only after exact migration, mixed-version, rollback and custom-binding preservation proof. | Current piggyback `transcriptionUsage` and legacy binding evidence | 2026-08-27 14:40 CEST | Dispatch after all prerequisite seams are reviewed and integrated. |
+| [#1108](https://github.com/zenod-ai/zenod/issues/1108) | Ticket worker | ZPF-6-worker | Zenod provisioning, Channels BFF and combined usage | done / wave 3 | #1107 | [#1125](https://github.com/zenod-ai/zenod/pull/1125) / `codex/zpf-6-zenod-adapter` | `297656e` | Zenod lifecycle provisions/funds Phylax through MCP; browser remains Zenod-only; combined cap/projection is truthful and existing tenant assets persist. | Final head `e17b30d`; CI and independent review PASS; 1,073 server tests; merged as `0000725` | 2026-08-27 19:46 CEST | Integrated; retain separate stores, stable credentials, authoritative periods and fail-closed combined cap. |
+| [#1109](https://github.com/zenod-ai/zenod/issues/1109) | Ticket worker | ZPF-7-worker | Product UI facades, Phylax operator UI and standalone shell | done / wave 3 | #1104, #1107 | [#1124](https://github.com/zenod-ai/zenod/pull/1124) / `codex/zpf-7-ui-shells` | `297656e` then reconciled `0000725` | Reusable settings/metering components serve Zenod/PM facades and native Phylax while every instance retains a separate operator UI and authority boundary. | Final head `2308933`; CI and independent review PASS; fixed-mode hostile asset/auth and responsive proofs green; merged as `ebb5f52` | 2026-08-27 19:46 CEST | Integrated; preserve separate product/native/operator shells and Phylax-specific artifact. |
+| [#1110](https://github.com/zenod-ai/zenod/issues/1110) | Ticket worker | ZPF-8-worker | Remove legacy coupling with no-loss compatibility migration | active / wave 4 | #1103–#1109 | `codex/zpf-8-decouple-migrate` | `ebb5f52` | Phylax-local metering and fixed adapters replace piggyback/dynamic coupling only after exact migration, mixed-version, rollback and custom-binding preservation proof. | Dispatched from exact integrated wave-3 `main` with no UI, transport, auth or production authority | 2026-08-27 19:46 CEST | Implement bounded compatibility migration, broad proof, PR and independent review; do not deploy. |
 | [#1111](https://github.com/zenod-ai/zenod/issues/1111) | Ticket worker | ZPF-9-worker | PM and standalone conformance without a core fork | queued / wave 5 | #1107, #1109, #1110 | `codex/zpf-9-three-island-conformance` | fresh integrated #1110 `main` | PM contract harness and native issuer prove three simultaneous isolated islands using the same Phylax core; downstream PM repo unchanged without authority. | Frozen three-island architecture | 2026-08-27 14:40 CEST | Dispatch after #1110 integrates. |
 | [#1112](https://github.com/zenod-ai/zenod/issues/1112) | Tester / release worker | ZPF-10-release | Final integrated-independent acceptance and closed rollout | queued / wave 6 | #1103–#1111 | `codex/zpf-10-release-acceptance` | exact integrated `main` | Exact candidate passes full automated/independent review, backups, separate-artifact closed deploy and uninterrupted real customer journey; test package delivered. | ZAL-22 production packet is the prior rollback/current baseline | 2026-08-27 14:40 CEST | Dispatch only after implementation waves integrate. |
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / human gate | `/root` + Jordi | Public production-readiness gate | blocked after closed candidate | #1112, Stripe profile, live €9 journey, explicit signup approval | existing ZAL-4 operator lane | exact #1112 candidate | Readiness 13/13, final human acceptance, explicit public signup approval and rollback named. | Current production candidate is signup-closed and 11/13 | 2026-08-27 14:40 CEST | Keep signup closed; execute only after #1112 and separate exact approvals. |
 
 ## Branch And Integration
 
-- Default integration branch: protected `main`; current coherent wave-3 base is `297656e75b4baa8a0674726348b9a0d0f18b6399` after integrating #1103–#1107 and #1119.
+- Default integration branch: protected `main`; current coherent wave-4 base is `ebb5f52706bd68689baa30a7875c342c67a991fa` after integrating #1103–#1109 and #1119.
 - One ticket worker, dedicated `codex/` branch and separate worktree per issue. Workers write detailed progress and handoffs to their issue; only `/root` edits this spine.
-- Waves 1–2 integrated #1103–#1107 and #1119. Wave 3 runs #1108 and #1109 in parallel from one exact base with disjoint server/BFF and UI/artifact ownership. Later waves obey the dependencies recorded above.
+- Waves 1–3 integrated #1103–#1109 and #1119. Wave 4 runs only #1110 from exact integrated main. Later waves obey the dependencies recorded above.
 - The manager independently reviews each PR, integrates small coherent changes, updates the base for subsequent workers and rejects architectural drift even when tests are green.
 - No implementation PR may deploy automatically as acceptance. ZPF-10 owns the exact backup/deploy/test sequence after all source waves integrate.
 - `review` means implementation complete, PR open, CI green and independent architecture review clean; `done` additionally requires integrated-main validation and spine reconciliation.
@@ -425,6 +425,24 @@ Branch / latest commit: `main` `297656e75b4baa8a0674726348b9a0d0f18b6399`; stewa
 Last verified: 2026-08-27 18:14 CEST
 
 Links: [#1108](https://github.com/zenod-ai/zenod/issues/1108), [#1109](https://github.com/zenod-ai/zenod/issues/1109), [PR #1117](https://github.com/zenod-ai/zenod/pull/1117), [PR #1122](https://github.com/zenod-ai/zenod/pull/1122)
+
+### 2026-08-27 - Epic worker - Wave 3 integrated; no-loss decoupling started
+
+Context: #1108/[PR #1125](https://github.com/zenod-ai/zenod/pull/1125) and #1109/[PR #1124](https://github.com/zenod-ai/zenod/pull/1124) passed their bounded fix loops, exact-head CI and independent review. #1108 merged first as `0000725`; #1109 reconciled onto that exact main, revalidated its fixed-mode/operator asset boundary, and merged as `ebb5f52`.
+
+Action: dispatched #1110 from exact integrated `main` `ebb5f52` to remove only the legacy transcription-accounting piggyback and dynamic fixed-product binding compatibility after generated/custom/mixed-version/rollback evidence passes.
+
+Next: independently review and integrate #1110. Dispatch #1111 only after the compatibility migration is exact-main green and preserves every existing credential, session, token, binding and tenant datum.
+
+Risks: no old compatibility read may be removed before both rolling orders and rollback pass. Fixed Zenod/PM adapters must never reinterpret custom standalone bindings. Phylax local usage booking must not block capture or duplicate charges. #1110 authorizes no UI rewrite, transport replacement, deployment or live mutation.
+
+Assignment identity: `/root` final-push delivery manager; ZPF-8 worker
+
+Branch / latest commit: `main` `ebb5f52706bd68689baa30a7875c342c67a991fa`; steward reconciliation branch `codex/zpf-control-wave4`
+
+Last verified: 2026-08-27 19:46 CEST
+
+Links: [#1110](https://github.com/zenod-ai/zenod/issues/1110), [PR #1124](https://github.com/zenod-ai/zenod/pull/1124), [PR #1125](https://github.com/zenod-ai/zenod/pull/1125)
 
 ## Open Questions
 
