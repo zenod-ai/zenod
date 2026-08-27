@@ -30,9 +30,11 @@ function resetLabel(value: string | null): string {
 export function HostedUsageCard({
   usage,
   compact = false,
+  productName,
 }: {
   usage: HostedCustomerUsage
   compact?: boolean
+  productName: string
 }) {
   const percentage =
     usage.percentageUsed === null
@@ -48,8 +50,8 @@ export function HostedUsageCard({
       <CardContent className="space-y-3">
         {percentage === null ? (
           <p className="text-sm text-muted-foreground">
-            Zenod cannot verify your included usage right now. New managed
-            processing waits safely until usage can be verified.
+            {productName} cannot verify your included usage right now. New
+            managed processing waits safely until usage can be verified.
           </p>
         ) : (
           <>

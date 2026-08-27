@@ -1460,8 +1460,8 @@ export function PhylaxTenantSettings() {
               {data.settings.telegramBinding
                 ? `Verified numeric chat ID ${data.settings.telegramBinding} is active.`
                 : telegramLegacyBinding
-                  ? "This legacy handle is preserved but is not routable. Reverify it from Zenod Hosted Channels in a private Telegram DM."
-                  : "Use Zenod Hosted Channels to create a verified numeric Telegram binding."}
+                  ? "This legacy handle is preserved but is not routable. Reverify it from the host product's Channels page in a private Telegram DM."
+                  : "Use the host product's Channels page to create a verified numeric Telegram binding."}
             </FieldDescription>
           </Field>
           <div className="flex gap-5 text-sm">

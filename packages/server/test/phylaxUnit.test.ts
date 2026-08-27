@@ -875,6 +875,7 @@ describe("Phylax customer unit mount", () => {
       expect((await unit.app.request("/admin")).status).toBe(404);
       expect((await unit.app.request("/admin", { headers: { cookie: await cookieFor("someone-else") } })).status).toBe(404);
       expect((await unit.app.request("/api/whatsapp/status", { headers: { cookie: await cookieFor("someone-else") } })).status).toBe(404);
+      expect((await unit.app.request("/api/phylax/admin/metering", { headers: { cookie: await cookieFor("someone-else") } })).status).toBe(404);
       const adminCookie = await cookieFor("alfablok");
       const page = await unit.app.request("/admin", { headers: { cookie: adminCookie } });
       expect(page.status).toBe(200);
@@ -886,6 +887,10 @@ describe("Phylax customer unit mount", () => {
       const status = await unit.app.request("/api/whatsapp/status", { headers: { cookie: adminCookie } });
       expect(status.status).toBe(200);
       expect(await status.json()).toMatchObject({ state: "disabled", linkedNumber: null });
+      const metering = await unit.app.request("/api/phylax/admin/metering", { headers: { cookie: adminCookie } });
+      expect(metering.status).toBe(200);
+      expect(metering.headers.get("cache-control")).toBe("private, no-store");
+      expect(await metering.json()).toEqual({ tenants: [] });
     } finally {
       unit.close();
     }

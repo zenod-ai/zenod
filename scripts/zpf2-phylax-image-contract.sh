@@ -81,6 +81,7 @@ assert_surface() {
   probe GET /checkout/complete 303
   probe POST /webhook 503
   probe GET /api/phylax/settings 401
+  probe GET /api/phylax/admin/metering 404
 
   probe POST /api/ask 404
   probe POST /api/chat 404
@@ -95,10 +96,29 @@ assert_surface() {
   probe GET /api/public/production-readiness 404
   probe GET /api/customer-usage 404
   probe GET /api/customer-managed-ai/jobs/example 404
+
+  local customer_html
+  customer_html="$(curl -fsS --max-time 5 "$base_url/app")"
+  if ! grep -Fq '<div id="root"></div>' <<<"$customer_html"; then
+    echo "dedicated Phylax customer HTML is missing" >&2
+    return 1
+  fi
+  if grep -Eiq 'Zenod account|Talk to Zenod|Vault &amp; sources' <<<"$customer_html"; then
+    echo "Zenod customer copy leaked into the Phylax artifact" >&2
+    return 1
+  fi
+  # Anonymous callers never receive the owner SPA. The backend boundary is
+  # authoritative; client-side routing is only a second line of separation.
+  probe GET /admin 404
 }
 
 wait_for_health
 assert_surface
+docker exec "$container" sh -c '
+  test -d /app/apps/phylax-web/dist
+  test ! -e /app/apps/web/dist
+  ! grep -R -E -i "Zenod account|Talk to Zenod|Vault & sources" /app/apps/phylax-web/dist
+'
 docker exec "$container" node -e '
   const fs = require("node:fs");
   const identity = JSON.parse(fs.readFileSync("/data/phylax-instance.json", "utf8"));

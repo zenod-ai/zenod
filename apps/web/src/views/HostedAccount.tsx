@@ -182,7 +182,7 @@ export function HostedAccount() {
                 {billingError ? <p className="mt-2 text-sm text-destructive">{billingError}</p> : null}
               </CardContent>
             </Card>
-            <HostedUsageCard usage={account.usage} />
+            <HostedUsageCard usage={account.usage} productName="Zenod" />
           </div>
 
           {endpoint && (

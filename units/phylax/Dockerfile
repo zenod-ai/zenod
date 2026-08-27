@@ -14,6 +14,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/mcp-chassis/package.json packages/mcp-chassis/
 COPY packages/server/package.json packages/server/
 COPY apps/web/package.json apps/web/
+COPY apps/phylax-web/package.json apps/phylax-web/
 COPY apps/phylax-site/package.json apps/phylax-site/
 # npm's workspace lock includes the other application manifests. They are
 # dependency metadata only; their sources and runtime assets are not copied.
@@ -29,10 +30,11 @@ COPY scripts ./scripts
 COPY docs/tool-output-schemas.v4.json ./docs/tool-output-schemas.v4.json
 COPY packages ./packages
 COPY apps/web ./apps/web
+COPY apps/phylax-web ./apps/phylax-web
 COPY apps/phylax-site ./apps/phylax-site
 RUN npm run build -w @zenod/mcp-chassis \
   && npm run build:phylax -w @zenod/server \
-  && npm run build -w web \
+  && npm run build -w phylax-web \
   && npm run build -w phylax-site
 RUN npm prune --omit=dev
 
@@ -49,7 +51,7 @@ ENV NODE_ENV=production \
     ZENOD_UNIT=phylax \
     AGENT=phylax \
     ZENOD_DATA_DIR=/data \
-    ZENOD_WEB_DIST=/app/apps/web/dist \
+    PHYLAX_WEB_DIST=/app/apps/phylax-web/dist \
     PHYLAX_SITE_DIST=/app/apps/phylax-site/dist \
     GIT_SHA=${GIT_SHA}
 
@@ -63,7 +65,7 @@ COPY --from=build /app/packages/mcp-chassis/dist ./packages/mcp-chassis/dist
 COPY --from=build /app/packages/server/package.json ./packages/server/package.json
 COPY --from=build /app/packages/server/dist-phylax/phylaxMain.js ./packages/server/dist/phylaxMain.js
 COPY --from=build /app/packages/server/node_modules ./packages/server/node_modules
-COPY --from=build /app/apps/web/dist ./apps/web/dist
+COPY --from=build /app/apps/phylax-web/dist ./apps/phylax-web/dist
 COPY --from=build /app/apps/phylax-site/dist ./apps/phylax-site/dist
 
 VOLUME /data

@@ -26,6 +26,10 @@ import {
 } from "@/components/hosted-usage-card"
 import type { DashboardOverviewData } from "@/views/DashboardOverview"
 import type { ZenodEdition, ZenodPortalSection } from "@/views/zenod-edition"
+import {
+  ChannelExperienceFrame,
+  ZENOD_CHANNEL_EXPERIENCE,
+} from "@/components/channel-experience"
 
 export function HostedUsagePanel({ compact = false }: { compact?: boolean }) {
   const [usage, setUsage] = React.useState<HostedCustomerUsage | null>(null)
@@ -50,6 +54,7 @@ export function HostedUsagePanel({ compact = false }: { compact?: boolean }) {
     return <Skeleton className={compact ? "h-32 w-full" : "h-48 w-full"} />
   return (
     <HostedUsageCard
+      productName="Zenod"
       usage={
         usage ?? { percentageUsed: null, state: "unavailable", resetsAt: null }
       }
@@ -82,13 +87,7 @@ export function HostedChannelsPanel() {
   }, [channels])
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">Channels</h2>
-        <p className="text-sm text-muted-foreground">
-          Talk to this Zenod memory from WhatsApp and Telegram.
-        </p>
-      </div>
+    <ChannelExperienceFrame experience={ZENOD_CHANNEL_EXPERIENCE}>
       {error && (
         <Alert variant="destructive">
           <TriangleAlertIcon />
@@ -109,7 +108,7 @@ export function HostedChannelsPanel() {
           />
         )}
       </div>
-    </div>
+    </ChannelExperienceFrame>
   )
 }
 

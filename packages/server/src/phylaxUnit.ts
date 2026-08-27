@@ -562,6 +562,17 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   app.use("/admin/*", adminOnly);
   app.use("/api/whatsapp/*", adminOnly);
   app.use("/api/telegram/*", adminOnly);
+  app.use("/api/phylax/admin/*", adminOnly);
+  app.get("/api/phylax/admin/metering", (c) => {
+    c.header("cache-control", "private, no-store");
+    return c.json({
+      tenants: customer.accounts.list().flatMap((account) =>
+        account.tenant_id
+          ? [allowanceLedger.operatorProjection(account.tenant_id)]
+          : [],
+      ),
+    });
+  });
   mountPhylaxAdminChannelRoutes(app, runtime);
   if (options.webDist) {
     app.get("/admin", serveStatic({
