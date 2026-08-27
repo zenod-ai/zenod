@@ -150,6 +150,49 @@ describe("NotificationBus coalescing (R2-T2)", () => {
   });
 });
 
+describe("NotificationBus exact-duplicate guard (daily digest double-send)", () => {
+  it("suppresses the EXACT same manual text sent again within a minute (the digest double-send bug)", async () => {
+    await withStore(async (store) => {
+      let sends = 0;
+      let clock = 1000;
+      const bus = new NotificationBus(async () => { sends += 1; return { sent: 1, recipients: ["c"] }; }, store, () => clock);
+      const digest = "📋 Daily digest: 3 open tickets, 1 blocked.";
+      const a = await bus.notify({ eventType: "manual", text: digest });
+      clock += 5000; // a retried/duplicate tool call moments later
+      const b = await bus.notify({ eventType: "manual", text: digest });
+      expect(sends).toBe(1);
+      expect(a.status).toBe("sent");
+      expect(b.status).toBe("suppressed");
+      const suppressed = store.recent().find((r) => r.status === "suppressed");
+      expect(suppressed?.suppressedBy).toBe(a.id);
+    });
+  });
+
+  it("still delivers the SAME digest text again once outside the exact-duplicate window", async () => {
+    await withStore(async (store) => {
+      let sends = 0;
+      let clock = 1000;
+      const bus = new NotificationBus(async () => { sends += 1; return { sent: 1, recipients: ["c"] }; }, store, () => clock);
+      await bus.notify({ eventType: "manual", text: "same text" });
+      clock += 61 * 1000; // outside the 60s exact-duplicate window
+      const b = await bus.notify({ eventType: "manual", text: "same text" });
+      expect(sends).toBe(2);
+      expect(b.status).toBe("sent");
+    });
+  });
+
+  it("does not suppress two DIFFERENT manual texts sent back to back", async () => {
+    await withStore(async (store) => {
+      let sends = 0;
+      const bus = new NotificationBus(async () => { sends += 1; return { sent: 1, recipients: ["c"] }; }, store, () => 1000);
+      await bus.notify({ eventType: "manual", text: "first" });
+      const b = await bus.notify({ eventType: "manual", text: "second" });
+      expect(sends).toBe(2);
+      expect(b.status).toBe("sent");
+    });
+  });
+});
+
 describe("NotificationBus review fixes (dedup evidence-key + ordering window)", () => {
   it("a re-run producing a NEW PR within the dedup window still sends (evidence-keyed)", async () => {
     await withStore(async (store) => {
