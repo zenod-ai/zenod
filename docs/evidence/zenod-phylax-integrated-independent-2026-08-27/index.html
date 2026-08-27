@@ -688,6 +688,24 @@
         <div class="callout green" style="margin-top:14px">
           <strong>The clean accounting rule:</strong> Zenod does not copy Phylax usage into the Zenod ledger as if Zenod incurred it. Each service keeps its authoritative append-only usage events. The host product computes the customer-level projection and P&amp;L from both ledgers, and can transfer more internal allowance to Phylax through an idempotent, audited grant.
         </div>
+        <div class="diagram" style="margin-top:14px">
+          <div class="diagram-title"><h3>One Phylax core, interchangeable allowance issuers</h3><p>Standalone is an extension of the same system—not a later rebuild.</p></div>
+          <div class="planes">
+            <div class="plane">
+              <div class="kicker">Allowance issuer A · integrated</div>
+              <h3>Zenod or PM billing adapter</h3>
+              <ul><li>Receives the host subscription event.</li><li>Maps the host customer to the existing Phylax channel tenant.</li><li>Calls the same idempotent <code>grant_allowance</code> operation.</li><li>Shows the combined plan projection in the host UI.</li></ul>
+            </div>
+            <div class="plane">
+              <div class="kicker">Allowance issuer B · standalone</div>
+              <h3>Phylax billing adapter</h3>
+              <ul><li>Receives the native Phylax subscription event.</li><li>Maps it to the existing Phylax channel tenant.</li><li>Calls the same idempotent <code>grant_allowance</code> operation.</li><li>Shows the same metering projection in the Phylax portal.</li></ul>
+            </div>
+          </div>
+          <div class="callout blue" style="margin-top:14px">
+            <strong>Shared core below both issuers:</strong> one tenant schema, one allowance-grant ledger, one usage-event ledger, one admission/enforcement path, one MCP control surface, one channel settings model, one delivery journal and one reusable UI component set. The tenant records only an explicit <code>commercial_owner = zenod | pm | phylax</code> and the external plan-period reference; it does not select a different runtime.
+          </div>
+        </div>
         <div class="callout orange" style="margin-top:14px">
           <strong>Capture remains safer than accounting:</strong> Phylax journals raw evidence before optional metering writes. Allowance is checked before starting a paid transcription/delivery operation, but a temporary ledger-reporting failure must never lose already received media. Provider truth, deterministic estimates and unavailable cost data remain explicitly distinguishable.
         </div>
@@ -725,6 +743,7 @@
               <li>Preserve the current two services, sessions, volumes and tenant credentials.</li>
               <li>Ship the direct Zenod adapter for text, voice and media.</li>
               <li>Expose tenant-safe WhatsApp/Telegram controls only inside Zenod Hosted.</li>
+              <li>Build Phylax metering once with an issuer-neutral grant ledger; connect the Zenod allowance issuer first.</li>
               <li>Make concurrent voice capture durable and Drive archive receipts truthful.</li>
               <li>Freeze authentication: deploys cannot rotate or invalidate MCP clients.</li>
               <li>Deploy one version-coherent image, then run overlapping-voice, Drive and MCP acceptance.</li>
