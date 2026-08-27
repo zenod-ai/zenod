@@ -59,6 +59,7 @@ import {
 } from "./phylaxTenantSettings.js";
 import {
   assertCustomerDownstreamMutationAllowed,
+  bindPhylaxInstanceIdentity,
   resolvePhylaxInstanceConfig,
   type PhylaxInstanceConfig,
 } from "./phylaxInstance.js";
@@ -111,6 +112,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   const env = options.env ?? process.env;
   const configuredInstance = options.instance;
   const instance = configuredInstance ?? resolvePhylaxInstanceConfig(env);
+  const dataDir = options.dataDir ?? options.storage?.dataDir ?? env.ZENOD_DATA_DIR ?? "./data";
+  bindPhylaxInstanceIdentity(dataDir, instance);
   const configuredRestartAfter = Number(
     env.PHYLAX_TRANSPORT_RESTART_AFTER_MS ?? PHYLAX_TRANSPORT_RESTART_AFTER_MS,
   );
@@ -118,7 +121,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     ? Math.max(1_000, Math.min(configuredRestartAfter, 900_000))
     : PHYLAX_TRANSPORT_RESTART_AFTER_MS;
   const storage = options.storage ?? new ChassisStorage({
-    dataDir: options.dataDir,
+    dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
   });
   const tenantStore = options.tenantStore ?? createSqliteTenantStore({

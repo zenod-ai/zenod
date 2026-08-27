@@ -16,6 +16,12 @@ export function createPhylaxCustomerLayer(
 ) {
   return createCustomerLayer(host, {
     ...options,
+    capabilities: {
+      ...options.capabilities,
+      productionReadiness: false,
+      repositoryConnection: false,
+      managedAiApplication: false,
+    },
     product: {
       product: "phylax",
       unit: "phylax",

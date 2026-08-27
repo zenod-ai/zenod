@@ -48,8 +48,22 @@ export interface CustomerLayerOptions {
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
   managedAiProvider?: ManagedAiProviderClient;
   product?: CustomerProductConfig;
+  /**
+   * Optional route capabilities for product-specific customer surfaces.
+   *
+   * The shared customer layer defaults to the existing Zenod surface. Products
+   * that reuse only its account/auth/checkout core must explicitly turn off
+   * application capabilities they do not own.
+   */
+  capabilities?: Partial<CustomerLayerCapabilities>;
   /** Test-only fault seam proving Telegram does not acknowledge before SQLite admission. */
   managedAiAdmissionBeforeJournal?: () => void;
+}
+
+export interface CustomerLayerCapabilities {
+  productionReadiness: boolean;
+  repositoryConnection: boolean;
+  managedAiApplication: boolean;
 }
 
 export interface CustomerLayerHost {
@@ -96,6 +110,11 @@ function signedReturnDestination(
 export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLayerOptions = {}) {
   const env = options.env ?? process.env;
   const product = options.product ?? { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" };
+  const capabilities: CustomerLayerCapabilities = {
+    productionReadiness: options.capabilities?.productionReadiness ?? true,
+    repositoryConnection: options.capabilities?.repositoryConnection ?? true,
+    managedAiApplication: options.capabilities?.managedAiApplication ?? true,
+  };
   const accounts = new CustomerAccountStore(host.dataDir, product.product);
   const billing = loadCustomerBillingConfig(env, product);
   assertPublicSignupIsReady(env);
@@ -225,10 +244,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   reconcileTimer?.unref?.();
   const app = new Hono<{ Bindings: HttpBindings }>();
 
-  app.get("/api/public/production-readiness", (c) => {
-    const report = productionReadinessReport(env);
-    return c.json(report, report.ready ? 200 : 503);
-  });
+  if (capabilities.productionReadiness) {
+    app.get("/api/public/production-readiness", (c) => {
+      const report = productionReadinessReport(env);
+      return c.json(report, report.ready ? 200 : 503);
+    });
+  }
 
   app.get("/auth/signin", (c) => {
     if (!identity || !customerStateSecret(env)) return c.text("Sign-in is not configured.", 503);
@@ -285,63 +306,65 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   });
   app.all("/api/auth/logout", (c) => c.json({ error: "not found" }, 404));
 
-  app.get("/api/github/app/start", (c) => {
-    const session = readCustomerSession(c, env);
-    if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
-    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
-    const sharedApp = host.sharedGithubApp;
-    if (!sharedApp) return c.json({ error: "GitHub repository connection is not configured" }, 503);
-    const state = signState(
-      { mode: "connect_repo", gid: session.github_id, login: session.login },
-      customerStateSecret(env),
-    );
-    return c.json({
-      url: `https://github.com/apps/${encodeURIComponent(sharedApp.slug)}/installations/new?state=${encodeURIComponent(state)}`,
+  if (capabilities.repositoryConnection) {
+    app.get("/api/github/app/start", (c) => {
+      const session = readCustomerSession(c, env);
+      if (!session) return c.json({ error: "unauthorized" }, 401);
+      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+      const sharedApp = host.sharedGithubApp;
+      if (!sharedApp) return c.json({ error: "GitHub repository connection is not configured" }, 503);
+      const state = signState(
+        { mode: "connect_repo", gid: session.github_id, login: session.login },
+        customerStateSecret(env),
+      );
+      return c.json({
+        url: `https://github.com/apps/${encodeURIComponent(sharedApp.slug)}/installations/new?state=${encodeURIComponent(state)}`,
+      });
     });
-  });
 
-  // The existing Zenod Memory GitHub App is configured to return here after the
-  // customer grants it access to their brain repository.
-  app.get("/github/setup", (c) => {
-    const session = readCustomerSession(c, env);
-    if (!session) return c.redirect("/auth/signin", 302);
-    const stateRaw = c.req.query("state") ?? "";
-    const state = stateRaw ? verifyState(stateRaw, customerStateSecret(env)) : null;
-    if (state?.mode !== "connect_repo" || state.gid !== session.github_id) {
-      return c.text("This repository connection link is invalid or expired.", 400);
-    }
-    const installationId = c.req.query("installation_id");
-    if (!installationId || !/^\d+$/.test(installationId)) return c.redirect("/app", 302);
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
-    const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
-    if (!account?.tenant_id || !runtime) return c.text("Tenant runtime is unavailable.", 409);
-    runtime.settings.setRaw("github_app_installation_id", installationId);
-    runtime.invalidate();
-    return c.redirect("/app?github=connected", 302);
-  });
-
-  app.put("/api/vault/repository", async (c) => {
-    const session = readCustomerSession(c, env);
-    if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
-    const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
-    if (!account?.tenant_id || !runtime) return c.json({ error: "tenant unavailable" }, 409);
-    const body = await c.req
-      .json<{ repo?: string; branch?: string }>()
-      .catch((): { repo?: string; branch?: string } => ({}));
-    const repo = body.repo?.trim() ?? "";
-    const branch = body.branch?.trim() || "main";
-    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return c.json({ error: "invalid repository" }, 400);
-    runtime.settings.set("vault_repo", repo);
-    runtime.settings.set("vault_branch", branch);
-    runtime.invalidate();
-    accounts.upsert(account.session_id, {
-      vault_repo: repo,
-      vault_repo_url: `https://github.com/${repo}`,
+    // The existing Zenod Memory GitHub App is configured to return here after the
+    // customer grants it access to their brain repository.
+    app.get("/github/setup", (c) => {
+      const session = readCustomerSession(c, env);
+      if (!session) return c.redirect("/auth/signin", 302);
+      const stateRaw = c.req.query("state") ?? "";
+      const state = stateRaw ? verifyState(stateRaw, customerStateSecret(env)) : null;
+      if (state?.mode !== "connect_repo" || state.gid !== session.github_id) {
+        return c.text("This repository connection link is invalid or expired.", 400);
+      }
+      const installationId = c.req.query("installation_id");
+      if (!installationId || !/^\d+$/.test(installationId)) return c.redirect("/app", 302);
+      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
+      if (!account?.tenant_id || !runtime) return c.text("Tenant runtime is unavailable.", 409);
+      runtime.settings.setRaw("github_app_installation_id", installationId);
+      runtime.invalidate();
+      return c.redirect("/app?github=connected", 302);
     });
-    return c.json({ repo, branch });
-  });
+
+    app.put("/api/vault/repository", async (c) => {
+      const session = readCustomerSession(c, env);
+      if (!session) return c.json({ error: "unauthorized" }, 401);
+      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
+      if (!account?.tenant_id || !runtime) return c.json({ error: "tenant unavailable" }, 409);
+      const body = await c.req
+        .json<{ repo?: string; branch?: string }>()
+        .catch((): { repo?: string; branch?: string } => ({}));
+      const repo = body.repo?.trim() ?? "";
+      const branch = body.branch?.trim() || "main";
+      if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return c.json({ error: "invalid repository" }, 400);
+      runtime.settings.set("vault_repo", repo);
+      runtime.settings.set("vault_branch", branch);
+      runtime.invalidate();
+      accounts.upsert(account.session_id, {
+        vault_repo: repo,
+        vault_repo_url: `https://github.com/${repo}`,
+      });
+      return c.json({ repo, branch });
+    });
+  }
 
   app.get("/api/console/account", async (c) => {
     const session = readCustomerSession(c, env);
@@ -379,24 +402,26 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     });
   });
 
-  app.get("/api/customer-usage", async (c) => {
-    const session = readCustomerSession(c, env);
-    if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
-    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
-    return c.json(await usageForAccount(account));
-  });
+  if (capabilities.managedAiApplication) {
+    app.get("/api/customer-usage", async (c) => {
+      const session = readCustomerSession(c, env);
+      if (!session) return c.json({ error: "unauthorized" }, 401);
+      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+      return c.json(await usageForAccount(account));
+    });
 
-  app.get("/api/customer-managed-ai/jobs/:id", async (c, next) => {
-    const session = readCustomerSession(c, env);
-    // Bearer-authenticated channel/MCP callers are resolved by the Zenod unit,
-    // which owns the tenant token store. Cookie customers stay on this seam.
-    if (!session) return next();
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
-    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
-    const job = managedAiAdmissions.getForTenant(c.req.param("id"), account.tenant_id);
-    return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
-  });
+    app.get("/api/customer-managed-ai/jobs/:id", async (c, next) => {
+      const session = readCustomerSession(c, env);
+      // Bearer-authenticated channel/MCP callers are resolved by the Zenod unit,
+      // which owns the tenant token store. Cookie customers stay on this seam.
+      if (!session) return next();
+      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+      const job = managedAiAdmissions.getForTenant(c.req.param("id"), account.tenant_id);
+      return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
+    });
+  }
 
   app.post("/api/token/regenerate", async (c) => {
     const session = readCustomerSession(c, env);

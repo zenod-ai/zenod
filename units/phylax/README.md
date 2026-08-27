@@ -26,6 +26,12 @@ persisted arbitrary tool bindings. PM mode likewise never executes persisted
 bindings and intentionally has no data-plane route until its separately frozen
 adapter contract lands in #1111.
 
+On the first dedicated boot, Phylax writes `/data/phylax-instance.json` with the
+configured `instanceId`, `mode`, and `serviceNumberId`. A legacy volume is bound
+in place without moving or deleting any existing state. Later boots must present
+the identical identity; any mismatch or unreadable marker fails before channel
+or session runtime startup.
+
 One running instance owns one WhatsApp service-number session. Instances made
 from the same image must have different values for all of the following:
 
@@ -57,6 +63,11 @@ require a state migration or a WhatsApp re-pair.
 `npm run build:phylax -w @zenod/server` creates the same dedicated runtime
 bundle outside Docker and fails if its reachable graph contains a forbidden
 Zenod runtime module or symbol.
+
+`npm run test:phylax-image-contract` builds and boots the dedicated image against
+an ephemeral volume, checks the exact allowed and denied customer routes, proves
+the identity marker and legacy session bytes survive restart, and proves a
+mismatched island cannot open the volume. It never uses a production volume.
 
 ## Local island proof
 

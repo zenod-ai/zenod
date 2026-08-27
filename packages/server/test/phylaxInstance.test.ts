@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
@@ -11,6 +11,8 @@ import { createPhylaxUnit, resolvePhylaxRuntimeRoute } from "../src/phylaxUnit.j
 import {
   assertCustomerDownstreamMutationAllowed,
   assertDedicatedPhylaxProcessEnv,
+  bindPhylaxInstanceIdentity,
+  PHYLAX_INSTANCE_IDENTITY_FILE,
   resolvePhylaxInstanceConfig,
 } from "../src/phylaxInstance.js";
 import { defaultPhylaxTurnBindings, PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
@@ -68,6 +70,76 @@ describe("dedicated Phylax deployment islands", () => {
       .not.toThrow();
   });
 
+  it("binds a legacy data directory in place and accepts only identical restarts", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-legacy-bind-"));
+    dirs.push(dataDir);
+    const sessionDir = join(dataDir, "whatsapp", "session");
+    await mkdir(sessionDir, { recursive: true });
+    const sessionPath = join(sessionDir, "creds.json");
+    const sessionBytes = "legacy-session-must-remain-byte-identical";
+    await writeFile(sessionPath, sessionBytes);
+    const instance = resolvePhylaxInstanceConfig({
+      PHYLAX_INSTANCE_MODE: "standalone",
+      PHYLAX_INSTANCE_ID: "legacy-phylax",
+      PHYLAX_SERVICE_NUMBER_ID: "legacy-number",
+    });
+
+    expect(bindPhylaxInstanceIdentity(dataDir, instance)).toEqual({
+      instanceId: "legacy-phylax",
+      mode: "standalone",
+      serviceNumberId: "legacy-number",
+    });
+    expect(JSON.parse(await readFile(join(dataDir, PHYLAX_INSTANCE_IDENTITY_FILE), "utf8"))).toEqual({
+      instanceId: "legacy-phylax",
+      mode: "standalone",
+      serviceNumberId: "legacy-number",
+    });
+    expect(await readFile(sessionPath, "utf8")).toBe(sessionBytes);
+
+    expect(bindPhylaxInstanceIdentity(dataDir, instance)).toEqual({
+      instanceId: "legacy-phylax",
+      mode: "standalone",
+      serviceNumberId: "legacy-number",
+    });
+    expect(await readFile(sessionPath, "utf8")).toBe(sessionBytes);
+
+    for (const mismatch of [
+      { PHYLAX_INSTANCE_MODE: "standalone", PHYLAX_INSTANCE_ID: "other-phylax", PHYLAX_SERVICE_NUMBER_ID: "legacy-number" },
+      { PHYLAX_INSTANCE_MODE: "zenod", PHYLAX_INSTANCE_ID: "legacy-phylax", PHYLAX_SERVICE_NUMBER_ID: "legacy-number" },
+      { PHYLAX_INSTANCE_MODE: "standalone", PHYLAX_INSTANCE_ID: "legacy-phylax", PHYLAX_SERVICE_NUMBER_ID: "other-number" },
+    ]) {
+      expect(() => bindPhylaxInstanceIdentity(dataDir, resolvePhylaxInstanceConfig(mismatch)))
+        .toThrow("Phylax data volume is bound to legacy-phylax/standalone/legacy-number");
+    }
+    expect(await readFile(sessionPath, "utf8")).toBe(sessionBytes);
+  });
+
+  it("rejects a mismatched volume before creating channel or customer runtime state", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-pre-runtime-mismatch-"));
+    dirs.push(dataDir);
+    await writeFile(join(dataDir, "legacy-sentinel"), "preserve-me");
+    bindPhylaxInstanceIdentity(dataDir, resolvePhylaxInstanceConfig({
+      PHYLAX_INSTANCE_MODE: "zenod",
+      PHYLAX_INSTANCE_ID: "phylax-for-zenod",
+      PHYLAX_SERVICE_NUMBER_ID: "zenod-primary",
+    }));
+    const before = (await readdir(dataDir)).sort();
+
+    expect(() => createPhylaxUnit({
+      dataDir,
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        PHYLAX_PREWARM_LOCAL_MODEL: "0",
+        PHYLAX_INSTANCE_MODE: "pm",
+        PHYLAX_INSTANCE_ID: "phylax-for-pm",
+        PHYLAX_SERVICE_NUMBER_ID: "pm-primary",
+      },
+    })).toThrow("refusing requested phylax-for-pm/pm/pm-primary");
+
+    expect((await readdir(dataDir)).sort()).toEqual(before);
+    expect(await readFile(join(dataDir, "legacy-sentinel"), "utf8")).toBe("preserve-me");
+  });
+
   it("enforces product adapters at runtime instead of trusting persisted bindings", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-fixed-adapter-"));
     dirs.push(dataDir);
@@ -121,7 +193,7 @@ describe("dedicated Phylax deployment islands", () => {
     });
   });
 
-  it("exposes only Phylax MCP tools and no Zenod application routes", async () => {
+  it("exposes the exact Phylax customer surface and no Zenod application routes", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-runtime-audit-"));
     dirs.push(dataDir);
     const unit = createPhylaxUnit({
@@ -165,12 +237,39 @@ describe("dedicated Phylax deployment islands", () => {
       }
       await client.close();
 
+      for (const [method, path, status] of [
+        ["GET", "/api/health", 200],
+        ["GET", "/api/auth/status", 200],
+        ["GET", "/api/me", 401],
+        ["GET", "/api/console/account", 401],
+        ["POST", "/create-checkout-session", 401],
+        ["POST", "/api/billing/portal", 401],
+        ["GET", "/checkout/complete", 303],
+        ["POST", "/webhook", 503],
+        ["GET", "/api/phylax/settings", 401],
+      ] as const) {
+        const response = await unit.app.request(path, {
+          method,
+          headers: { "content-type": "application/json" },
+          ...(method === "POST" ? { body: "{}" } : {}),
+        });
+        expect(response.status, `${method} ${path}`).toBe(status);
+      }
+
       for (const [method, path] of [
         ["POST", "/api/ask"],
         ["POST", "/api/chat"],
         ["GET", "/api/drive/status"],
         ["POST", "/api/store"],
         ["GET", "/api/vault"],
+        ["PUT", "/api/vault/repository"],
+        ["GET", "/api/github/app/start"],
+        ["GET", "/api/github/app/setup"],
+        ["GET", "/api/github/app/start/setup"],
+        ["GET", "/github/setup"],
+        ["GET", "/api/public/production-readiness"],
+        ["GET", "/api/customer-usage"],
+        ["GET", "/api/customer-managed-ai/jobs/example"],
       ] as const) {
         const response = await unit.app.request(path, {
           method,

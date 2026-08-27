@@ -1,3 +1,6 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 export const PHYLAX_INSTANCE_MODES = ["zenod", "pm", "standalone"] as const;
 
 export type PhylaxInstanceMode = (typeof PHYLAX_INSTANCE_MODES)[number];
@@ -19,6 +22,13 @@ export interface PhylaxInstanceConfig {
   /** Operator surface for this instance; never used as customer authentication. */
   adminOrigin: string | null;
 }
+
+export type PhylaxPersistedInstanceIdentity = Pick<
+  PhylaxInstanceConfig,
+  "instanceId" | "mode" | "serviceNumberId"
+>;
+
+export const PHYLAX_INSTANCE_IDENTITY_FILE = "phylax-instance.json";
 
 const MODE_CONFIG: Record<PhylaxInstanceMode, Pick<
   PhylaxInstanceConfig,
@@ -86,6 +96,75 @@ export function resolvePhylaxInstanceConfig(env: NodeJS.ProcessEnv): PhylaxInsta
     ),
     adminOrigin: normalizedOrigin(env.PHYLAX_ADMIN_ORIGIN),
   };
+}
+
+function persistedIdentity(instance: PhylaxInstanceConfig): PhylaxPersistedInstanceIdentity {
+  return {
+    instanceId: instance.instanceId,
+    mode: instance.mode,
+    serviceNumberId: instance.serviceNumberId,
+  };
+}
+
+function readPersistedIdentity(path: string): PhylaxPersistedInstanceIdentity {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`Phylax instance identity at ${path} is unreadable; refusing to start`, { cause: error });
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`Phylax instance identity at ${path} is invalid; refusing to start`);
+  }
+  const record = parsed as Record<string, unknown>;
+  if (
+    typeof record.instanceId !== "string"
+    || !PHYLAX_INSTANCE_MODES.includes(record.mode as PhylaxInstanceMode)
+    || typeof record.serviceNumberId !== "string"
+  ) {
+    throw new Error(`Phylax instance identity at ${path} is invalid; refusing to start`);
+  }
+  return {
+    instanceId: record.instanceId,
+    mode: record.mode as PhylaxInstanceMode,
+    serviceNumberId: record.serviceNumberId,
+  };
+}
+
+/**
+ * Bind a data volume to one deployment island before any channel/session runtime
+ * is constructed. A legacy volume with no marker is adopted in place; after the
+ * first boot every identity field is immutable and mismatches fail closed.
+ */
+export function bindPhylaxInstanceIdentity(
+  dataDir: string,
+  instance: PhylaxInstanceConfig,
+): PhylaxPersistedInstanceIdentity {
+  mkdirSync(dataDir, { recursive: true });
+  const path = join(dataDir, PHYLAX_INSTANCE_IDENTITY_FILE);
+  const expected = persistedIdentity(instance);
+  try {
+    writeFileSync(path, `${JSON.stringify(expected, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    return expected;
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+  }
+  const actual = readPersistedIdentity(path);
+  if (
+    actual.instanceId !== expected.instanceId
+    || actual.mode !== expected.mode
+    || actual.serviceNumberId !== expected.serviceNumberId
+  ) {
+    throw new Error(
+      `Phylax data volume is bound to ${actual.instanceId}/${actual.mode}/${actual.serviceNumberId}; `
+      + `refusing requested ${expected.instanceId}/${expected.mode}/${expected.serviceNumberId}`,
+    );
+  }
+  return actual;
 }
 
 /** The dedicated image must never be repurposed as a Zenod/PM process. */
