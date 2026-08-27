@@ -1,15 +1,15 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { serve } from "@hono/node-server";
+import { createMemoryTenantStore } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
-import { SqliteStateStore } from "zenod";
 
-import { Settings } from "../src/settings.js";
-import {
-  PhylaxChannelsOrgan,
-  type PhylaxDownstreamCall,
-} from "../src/phylaxChannels.js";
+import { PhylaxChannelsOrgan } from "../src/phylaxChannels.js";
 import { defaultPhylaxTurnBindings } from "../src/phylaxTenantSettings.js";
+import { callPeerTool, type PeerToolResult } from "../src/peerClient.js";
+import { createZenodUnit } from "../src/zenodUnit.js";
 
 interface EvidencePointer {
   file: string;
@@ -24,6 +24,8 @@ interface BaselineContract {
   fixtures: Array<{
     id: string;
     kind: string;
+    automatedStatus: "proved" | "failed" | "unproved";
+    productionStatus: string;
     input: { messageId: string; text?: string };
     expected: Record<string, unknown>;
     automatedEvidence: EvidencePointer;
@@ -32,6 +34,11 @@ interface BaselineContract {
     id: string;
     automatedStatus: "proved" | "failed" | "unproved";
     productionStatus: string;
+    evidence: EvidencePointer;
+  }>;
+  knownSourceBaselineFailures: Array<{
+    id: string;
+    code: string;
     evidence: EvidencePointer;
   }>;
   knownUnprovedProductionClaims: string[];
@@ -93,122 +100,155 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
     const evidence = [
       ...contract.fixtures.map((fixture) => fixture.automatedEvidence),
       ...contract.scenarios.map((scenario) => scenario.evidence),
+      ...contract.knownSourceBaselineFailures.map((failure) => failure.evidence),
     ];
     for (const pointer of evidence) {
       const source = await readFile(join(repositoryRoot, pointer.file), "utf8");
       expect(source, pointer.file).toContain(`it(\"${pointer.test}\"`);
     }
 
+    expect(contract.fixtures.filter((fixture) => fixture.automatedStatus === "failed").map((fixture) => fixture.id))
+      .toEqual(["intake_text", "intake_url"]);
+    expect(contract.fixtures.some((fixture) => fixture.automatedStatus === "unproved")).toBe(false);
     expect(contract.scenarios.every((scenario) => scenario.automatedStatus === "proved")).toBe(true);
+    expect(contract.knownSourceBaselineFailures).toMatchObject([{
+      id: "real_composed_text_url_boundary",
+      code: "undeclared_long_tool",
+    }]);
     expect(contract.knownUnprovedProductionClaims.length).toBeGreaterThan(0);
     expect(contract.scenarios.some((scenario) => scenario.productionStatus === "unproved")).toBe(true);
   });
 
-  it("runs the frozen text and URL fixtures through the current direct Zenod seam", async () => {
+  it("records the current text and URL failure across the real authenticated Zenod MCP ticket boundary", async () => {
     const contract = await loadContract();
     const fixtures = contract.fixtures.filter((fixture) => fixture.kind === "text" || fixture.kind === "url");
-    const dataDir = await mkdtemp(join(tmpdir(), "zpf1-direct-seam-"));
-    tempDirs.push(dataDir);
-    const calls: PhylaxDownstreamCall[] = [];
-    const organ = new PhylaxChannelsOrgan({
-      dataDir,
-      routes: {
-        resolve: () => ({
-          tenantId: "alpha",
-          downstreamUrl: "https://zenod.test/mcp/alpha",
-          downstreamToken: "fixture-memory-token",
-          turnBindings: defaultPhylaxTurnBindings(),
-        }),
+    const rootDir = await mkdtemp(join(tmpdir(), "zpf1-real-seam-"));
+    tempDirs.push(rootDir);
+    const alphaToken = "zpf1-alpha-memory-token";
+    const betaToken = "zpf1-beta-memory-token";
+    const unit = createZenodUnit({
+      dataDir: join(rootDir, "zenod"),
+      tenantStore: createMemoryTenantStore([
+        { token: alphaToken, tenant: { id: "alpha" } },
+        { token: betaToken, tenant: { id: "beta" } },
+      ]),
+      env: {
+        NODE_ENV: "test",
+        CHASSIS_VAULT_MASTER_KEY: "11".repeat(32),
       },
-      discoverDownstream: async () => ({
-        transport: "connected",
-        tools: "ready",
-        specs: [{
-          as: "chat",
-          mcp: "chat_with_zenod",
-          description: "Direct Zenod fixture",
-          inputSchema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["message", "surface", "conversationKey"],
-            properties: {
-              message: { type: "string" },
-              surface: { const: "whatsapp" },
-              conversationKey: { type: "string" },
-              idempotencyKey: { type: "string" },
-            },
+      appOptionsForTenant(_tenantId, runtime) {
+        runtime.getEngine = async () => ({
+          async chat(message: string) {
+            return { text: `Real Zenod reply: ${message}`, sources: [] };
           },
-        }],
+        }) as Awaited<ReturnType<typeof runtime.getEngine>>;
+        return {};
+      },
+    });
+
+    const server = await new Promise<ReturnType<typeof serve>>((resolveServer) => {
+      const started = serve(
+        { fetch: unit.app.fetch, hostname: "127.0.0.1", port: 0 },
+        () => resolveServer(started),
+      );
+    });
+    const address = server.address() as AddressInfo;
+    const zenodOrigin = `http://127.0.0.1:${address.port}`;
+    const alphaRoute = {
+      tenantId: "alpha",
+      downstreamUrl: `${zenodOrigin}/mcp/${alphaToken}`,
+      downstreamToken: alphaToken,
+      turnBindings: defaultPhylaxTurnBindings(),
+    };
+    const authMismatch = await fetch(alphaRoute.downstreamUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${betaToken}`,
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+        params: {},
       }),
+    });
+    expect(authMismatch.status).toBe(401);
+
+    const downstreamCalls: Array<{ tool: string; result: PeerToolResult }> = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir: join(rootDir, "phylax"),
+      routes: {
+        resolve: () => alphaRoute,
+      },
       capturePollIntervalMs: 1,
       sleep: async () => undefined,
       async callDownstream(call) {
-        calls.push(call);
-        if (call.tool === "chat_with_zenod") {
-          const idempotencyKey = String(call.arguments.idempotencyKey);
-          return {
-            content: [{ type: "text", text: "queued" }],
-            structuredContent: {
-              ticket_id: `job:${idempotencyKey}`,
-              state: "accepted",
-            },
-          };
-        }
-        const ticketId = String(call.arguments.ticket_id);
-        return {
-          content: [{ type: "text", text: "done" }],
-          structuredContent: {
-            ticket_id: ticketId,
-            state: "done",
-            result: { text: `Saved ${ticketId.slice("job:".length)}`, sources: [] },
-          },
-        };
+        const result = await callPeerTool({
+          name: `zpf1-${call.route.tenantId}`,
+          url: call.route.downstreamUrl,
+          token: call.route.downstreamToken,
+        }, call.tool, call.arguments);
+        downstreamCalls.push({ tool: call.tool, result });
+        return result;
       },
     });
 
     try {
       for (const fixture of fixtures) {
-        const receipt = await organ.receive({
+        const received = organ.receive({
           channel: "whatsapp",
           sender: "34611111111",
           chatId: "34611111111@s.whatsapp.net",
           messageId: fixture.input.messageId,
           text: fixture.input.text,
         });
-        expect(receipt.replyText).toContain(String(fixture.expected.idempotencyKey));
+        await expect(received).rejects.toMatchObject({
+          name: "PhylaxChannelError",
+          code: "downstream_error",
+          audit: { failureCode: "downstream_rejected" },
+          retryDisposition: "idempotent_capture",
+        });
       }
-      const chatCalls = calls.filter((call) => call.tool === "chat_with_zenod");
-      expect(chatCalls).toHaveLength(2);
-      expect(chatCalls.map((call) => ({
-        tool: call.tool,
-        idempotencyKey: call.arguments.idempotencyKey,
-        message: call.arguments.message,
-      }))).toEqual(fixtures.map((fixture) => ({
-        tool: fixture.expected.tool,
-        idempotencyKey: fixture.expected.idempotencyKey,
-        message: fixture.input.text,
-      })));
+      const chatResults = downstreamCalls
+        .filter((call) => call.tool === "chat_with_zenod")
+        .map((call) => call.result);
+      expect(chatResults).toHaveLength(2);
+      for (const result of chatResults) {
+        expect(result).toMatchObject({
+          isError: true,
+          structuredContent: {
+            error: {
+              code: "undeclared_long_tool",
+              message: expect.stringContaining(
+                'Tool "chat_with_zenod" returned an accepted ticket but is not declared in conduct.longTools.',
+              ),
+            },
+          },
+        });
+      }
+      const jobs = unit.runtimes.get("alpha")?.taskJobStore.recent(10) ?? [];
+      expect(jobs).toHaveLength(2);
+      expect(jobs.map((job) => ({
+        kind: job.kind,
+        idempotencyKey: job.idempotencyKey,
+        message: job.input.text,
+        status: job.status,
+      })).sort((left, right) => String(left.idempotencyKey).localeCompare(String(right.idempotencyKey))))
+        .toEqual(fixtures.map((fixture) => ({
+          kind: "chat",
+          idempotencyKey: fixture.expected.idempotencyKey,
+          message: fixture.input.text,
+          status: "done",
+        })).sort((left, right) => String(left.idempotencyKey).localeCompare(String(right.idempotencyKey))));
     } finally {
       await organ.close();
+      await new Promise<void>((resolveServer, reject) => {
+        server.close((error) => error ? reject(error) : resolveServer());
+      });
+      unit.close();
     }
-  });
-
-  it("keeps the direct MCP bearer byte-identical across ordinary restart and changed seed input", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "zpf1-mcp-bearer-"));
-    tempDirs.push(dataDir);
-    const statePath = join(dataDir, "settings.sqlite");
-
-    const firstStore = new SqliteStateStore(statePath);
-    const first = new Settings(firstStore);
-    first.seedFromEnv({ ZENOD_API_TOKEN: "existing-tenant-bearer" } as NodeJS.ProcessEnv);
-    expect(first.apiToken()).toBe("existing-tenant-bearer");
-    firstStore.close();
-
-    const restartedStore = new SqliteStateStore(statePath);
-    const restarted = new Settings(restartedStore);
-    restarted.seedFromEnv({ ZENOD_API_TOKEN: "replacement-seed-must-not-apply" } as NodeJS.ProcessEnv);
-    expect(restarted.apiToken()).toBe("existing-tenant-bearer");
-    restartedStore.close();
   });
 
   it("pins the independent Zenod and Phylax production volume identities without reading secrets", async () => {
