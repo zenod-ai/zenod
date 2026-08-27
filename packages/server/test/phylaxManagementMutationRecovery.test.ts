@@ -15,7 +15,10 @@ import {
   type HostedChannelMutationName,
 } from "../src/hostedChannels.js";
 import { phylaxArtifactCapabilitySecret } from "../src/phylaxArtifactCapability.js";
-import { PHYLAX_MANAGEMENT_PROFILES } from "../src/phylaxManagementMcp.js";
+import {
+  PHYLAX_MANAGEMENT_PROFILES,
+  phylaxManagementConnectOperationProof,
+} from "../src/phylaxManagementMcp.js";
 import type { PhylaxDeliveryReceipt, PhylaxTenantDelivery } from "../src/phylaxChannels.js";
 import { createPhylaxUnit } from "../src/phylaxUnit.js";
 
@@ -124,6 +127,28 @@ function stubDelivery(
 
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function collidingChallengeOperations(input: {
+  secret: string;
+  tenantId: string;
+  identity: string;
+  prefix: string;
+}): { operationIdA: string; operationIdB: string; code: string } {
+  const seen = new Map<string, string>();
+  for (let index = 0; index <= 720; index += 1) {
+    const operationId = `${input.prefix}-${index}`;
+    const code = hostedChannelChallengeCode(
+      input.secret,
+      input.tenantId,
+      operationId,
+      input.identity,
+    );
+    const prior = seen.get(code);
+    if (prior) return { operationIdA: prior, operationIdB: operationId, code };
+    seen.set(code, operationId);
+  }
+  throw new Error("expected a deterministic collision in the 720-code human challenge space");
 }
 
 describe("Phylax management mutation recovery", () => {
@@ -269,7 +294,7 @@ describe("Phylax management mutation recovery", () => {
   );
 
   it.each(["whatsapp", "telegram"] as const)(
-    "does not attribute a replacement %s challenge to an orphaned earlier operation",
+    "does not attribute a same-code replacement %s challenge to an orphaned earlier operation",
     async (channel) => {
       const dataDir = await mkdtemp(join(tmpdir(), `phylax-management-${channel}-challenge-attribution-`));
       dirs.push(dataDir);
@@ -290,8 +315,38 @@ describe("Phylax management mutation recovery", () => {
       });
       const expectedRevision = started.unit.phylaxTenantSettings.bindingRevision("alpha", channel);
       const identity = channel === "whatsapp" ? "34611111111" : "alpha_test";
-      const operationIdA = `connect-${channel}-orphan-a`;
-      const operationIdB = `connect-${channel}-replacement-b`;
+      const challengeSecret = phylaxArtifactCapabilitySecret({
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      } as NodeJS.ProcessEnv);
+      const { operationIdA, operationIdB, code } = collidingChallengeOperations({
+        secret: challengeSecret,
+        tenantId: "alpha",
+        identity,
+        prefix: `connect-${channel}-collision`,
+      });
+      const operationProofA = phylaxManagementConnectOperationProof({
+        secret: challengeSecret,
+        tenantId: "alpha",
+        owner: "zenod",
+        channel,
+        operationId: operationIdA,
+        identity,
+      });
+      const operationProofB = phylaxManagementConnectOperationProof({
+        secret: challengeSecret,
+        tenantId: "alpha",
+        owner: "zenod",
+        channel,
+        operationId: operationIdB,
+        identity,
+      });
+      expect(operationProofB).not.toBe(operationProofA);
+      expect(hostedChannelChallengeCode(
+        challengeSecret,
+        "alpha",
+        operationIdB,
+        identity,
+      )).toBe(code);
       const operation = (channel === "whatsapp"
         ? "whatsapp.challenge"
         : "telegram.connect") as HostedChannelMutationName;
@@ -301,22 +356,6 @@ describe("Phylax management mutation recovery", () => {
         channel,
         identity,
       };
-      const challengeSecret = phylaxArtifactCapabilitySecret({
-        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
-      } as NodeJS.ProcessEnv);
-      const codeA = hostedChannelChallengeCode(
-        challengeSecret,
-        "alpha",
-        operationIdA,
-        identity,
-      );
-      const codeB = hostedChannelChallengeCode(
-        challengeSecret,
-        "alpha",
-        operationIdB,
-        identity,
-      );
-      expect(codeB).not.toBe(codeA);
       expect(started.unit.hostedChannelAudit.claim({
         operationId: operationIdA,
         tenantId: "alpha",
@@ -337,7 +376,8 @@ describe("Phylax management mutation recovery", () => {
           identity,
           "primary",
           Date.now(),
-          codeA,
+          code,
+          operationProofA,
         );
         started.unit.phylaxTenantSettings.disconnectPhone("alpha", Date.now());
         started.unit.phylaxTenantSettings.registerPhone(
@@ -345,12 +385,25 @@ describe("Phylax management mutation recovery", () => {
           identity,
           "primary",
           Date.now(),
-          codeB,
+          code,
+          operationProofB,
         );
       } else {
-        started.unit.phylaxTenantSettings.registerTelegram("alpha", identity, Date.now(), codeA);
+        started.unit.phylaxTenantSettings.registerTelegram(
+          "alpha",
+          identity,
+          Date.now(),
+          code,
+          operationProofA,
+        );
         started.unit.phylaxTenantSettings.disconnectTelegram("alpha");
-        started.unit.phylaxTenantSettings.registerTelegram("alpha", identity, Date.now(), codeB);
+        started.unit.phylaxTenantSettings.registerTelegram(
+          "alpha",
+          identity,
+          Date.now(),
+          code,
+          operationProofB,
+        );
       }
       const replacementRevision = started.unit.phylaxTenantSettings.bindingRevision("alpha", channel);
       await started.unit.close();
@@ -382,30 +435,24 @@ describe("Phylax management mutation recovery", () => {
         expect(structured(replay)).toEqual(structured(unknown));
         expect(started.unit.phylaxTenantSettings.bindingRevision("alpha", channel))
           .toBe(replacementRevision);
-        expect(started.unit.phylaxTenantSettings.matchesPendingVerificationProof({
+        expect(started.unit.phylaxTenantSettings.matchesPendingManagementOperationProof({
           tenantId: "alpha",
           channel,
           identity,
-          derivedChallenge: codeA,
+          operationProof: operationProofA,
         })).toBe(false);
-        expect(started.unit.phylaxTenantSettings.matchesPendingVerificationProof({
+        expect(started.unit.phylaxTenantSettings.matchesPendingManagementOperationProof({
           tenantId: "alpha",
           channel,
           identity,
-          derivedChallenge: codeB,
+          operationProof: operationProofB,
         })).toBe(true);
         if (channel === "whatsapp") {
-          expect(started.unit.phylaxTenantSettings.verifyInboundReceipt(identity, codeA)).toBeNull();
-          expect(started.unit.phylaxTenantSettings.verifyInboundReceipt(identity, codeB)).not.toBeNull();
+          expect(started.unit.phylaxTenantSettings.verifyInboundReceipt(identity, code)).not.toBeNull();
         } else {
           expect(started.unit.phylaxTenantSettings.verifyTelegramInbound(
             "733333333",
-            codeA,
-            "@alpha_test",
-          )).toBeNull();
-          expect(started.unit.phylaxTenantSettings.verifyTelegramInbound(
-            "733333333",
-            codeB,
+            code,
             "@alpha_test",
           )).not.toBeNull();
         }

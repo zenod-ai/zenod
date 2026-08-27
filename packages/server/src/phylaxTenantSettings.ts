@@ -93,6 +93,8 @@ export interface PhylaxTenantSettings {
   verified: boolean;
   numberId: string;
   verificationHash: string | null;
+  /** Private management-operation attribution; never part of a customer view. */
+  verificationOperationProofHash: string | null;
   verificationExpiresAt: number | null;
   whatsappBindingRevision: string;
   downstreamUrl: string | null;
@@ -114,6 +116,8 @@ export interface PhylaxTenantSettings {
   telegramLegacyBinding: string | null;
   telegramPendingIdentity: string | null;
   telegramVerificationHash: string | null;
+  /** Private management-operation attribution; never part of a customer view. */
+  telegramVerificationOperationProofHash: string | null;
   telegramVerificationExpiresAt: number | null;
   telegramBindingRevision: string;
   notificationPrefs: { whatsapp: boolean; telegram: boolean };
@@ -123,7 +127,9 @@ export interface PhylaxTenantSettings {
 export interface PhylaxTenantSettingsView extends Omit<
   PhylaxTenantSettings,
   | "verificationHash"
+  | "verificationOperationProofHash"
   | "telegramVerificationHash"
+  | "telegramVerificationOperationProofHash"
   | "downstreamCredentialRevision"
 > {
   downstreamTokenConfigured: boolean;
@@ -430,6 +436,7 @@ function defaultSettings(
     verified: false,
     numberId: "primary",
     verificationHash: null,
+    verificationOperationProofHash: null,
     verificationExpiresAt: null,
     whatsappBindingRevision: "0",
     downstreamUrl: null,
@@ -448,6 +455,7 @@ function defaultSettings(
     telegramLegacyBinding: null,
     telegramPendingIdentity: null,
     telegramVerificationHash: null,
+    telegramVerificationOperationProofHash: null,
     telegramVerificationExpiresAt: null,
     telegramBindingRevision: "0",
     notificationPrefs: { whatsapp: true, telegram: false },
@@ -459,13 +467,17 @@ function verificationDigest(keyword: string): Buffer {
   return createHash("sha256").update(keyword.trim().toLowerCase(), "utf8").digest();
 }
 
-function verificationDigestMatches(
+function operationProofDigest(proof: string): Buffer {
+  return createHash("sha256").update(proof, "utf8").digest();
+}
+
+function operationProofDigestMatches(
   storedHash: string | null,
-  derivedChallenge: string,
+  operationProof: string,
 ): boolean {
   if (!storedHash) return false;
   const expected = Buffer.from(storedHash, "hex");
-  const provided = verificationDigest(derivedChallenge);
+  const provided = operationProofDigest(operationProof);
   return expected.length === provided.length && timingSafeEqual(expected, provided);
 }
 
@@ -544,7 +556,9 @@ export class PhylaxTenantSettingsStore {
     const current = this.get(tenantId);
     const {
       verificationHash: _verificationHash,
+      verificationOperationProofHash: _verificationOperationProofHash,
       telegramVerificationHash: _telegramVerificationHash,
+      telegramVerificationOperationProofHash: _telegramVerificationOperationProofHash,
       downstreamCredentialRevision: _downstreamCredentialRevision,
       ...settings
     } = current;
@@ -821,6 +835,7 @@ export class PhylaxTenantSettingsStore {
               }
             : {}),
           verificationHash: null,
+          verificationOperationProofHash: null,
           verificationExpiresAt: null,
           updatedAt: new Date(now).toISOString(),
         };
@@ -836,6 +851,7 @@ export class PhylaxTenantSettingsStore {
             : {}),
           telegramPendingIdentity: null,
           telegramVerificationHash: null,
+          telegramVerificationOperationProofHash: null,
           telegramVerificationExpiresAt: null,
           updatedAt: new Date(now).toISOString(),
         };
@@ -854,6 +870,7 @@ export class PhylaxTenantSettingsStore {
     numberId = "primary",
     now = Date.now(),
     keyword = friendlyVerificationKeyword(),
+    managementOperationProof?: string,
   ): { settings: PhylaxTenantSettingsView; keyword: string } {
     const normalized = normalizeWhatsAppIdentifier(phoneNumber);
     if (!normalized) throw new Error("invalid WhatsApp phone number");
@@ -867,6 +884,9 @@ export class PhylaxTenantSettingsStore {
       verified: false,
       numberId: numberId.trim() || "primary",
       verificationHash: verificationDigest(keyword).toString("hex"),
+      verificationOperationProofHash: managementOperationProof
+        ? operationProofDigest(managementOperationProof).toString("hex")
+        : null,
       verificationExpiresAt: now + VERIFY_TTL_MS,
       whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
@@ -899,6 +919,7 @@ export class PhylaxTenantSettingsStore {
       verified: false,
       numberId: "primary",
       verificationHash: null,
+      verificationOperationProofHash: null,
       verificationExpiresAt: null,
       whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
@@ -937,6 +958,7 @@ export class PhylaxTenantSettingsStore {
       telegramLegacyBinding: null,
       telegramPendingIdentity: null,
       telegramVerificationHash: null,
+      telegramVerificationOperationProofHash: null,
       telegramVerificationExpiresAt: null,
       telegramBindingRevision: randomBytes(16).toString("hex"),
       notificationPrefs: { ...current.notificationPrefs, telegram: false },
@@ -950,6 +972,7 @@ export class PhylaxTenantSettingsStore {
     identity: string,
     now = Date.now(),
     keyword = friendlyVerificationKeyword(),
+    managementOperationProof?: string,
   ): { settings: PhylaxTenantSettingsView; keyword: string } {
     const normalized = this.assertTelegramAvailable(tenantId, identity, now);
     if (!/^\d{2}-[a-z]{2,24}$/.test(keyword)) {
@@ -962,6 +985,9 @@ export class PhylaxTenantSettingsStore {
       telegramIdentityHint: null,
       telegramPendingIdentity: normalized,
       telegramVerificationHash: verificationDigest(keyword).toString("hex"),
+      telegramVerificationOperationProofHash: managementOperationProof
+        ? operationProofDigest(managementOperationProof).toString("hex")
+        : null,
       telegramVerificationExpiresAt: now + VERIFY_TTL_MS,
       telegramBindingRevision: randomBytes(16).toString("hex"),
       notificationPrefs: { ...current.notificationPrefs, telegram: false },
@@ -1023,6 +1049,7 @@ export class PhylaxTenantSettingsStore {
       telegramIdentityHint: observedUsername || pendingDisplay,
       telegramLegacyBinding: null,
       telegramPendingIdentity: null,
+      telegramVerificationOperationProofHash: null,
       telegramBindingRevision: randomBytes(16).toString("hex"),
       notificationPrefs: { ...entry.notificationPrefs, telegram: true },
       updatedAt: new Date(now).toISOString(),
@@ -1041,17 +1068,18 @@ export class PhylaxTenantSettingsStore {
   /**
    * Read-only crash-recovery proof for a channel-connect operation.
    *
-   * The caller must re-derive the operation's challenge from its private
-   * challenge authority. This method confirms that the exact tenant still has
-   * the exact identity pending, that its proof is unexpired, and that the
-   * re-derived challenge matches the stored digest in constant time. The
-   * stored digest never leaves this store.
+   * The caller must re-derive a high-entropy proof scoped to the management
+   * operation. This method confirms that the exact tenant still has the exact
+   * identity pending, that its proof is unexpired, and that the proof matches
+   * the stored digest in constant time. The short human verification code is
+   * deliberately not used for crash attribution because its small namespace
+   * permits legitimate collisions. The stored digest never leaves this store.
    */
-  matchesPendingVerificationProof(input: {
+  matchesPendingManagementOperationProof(input: {
     tenantId: string;
     channel: PhylaxPortedChannel;
     identity: string;
-    derivedChallenge: string;
+    operationProof: string;
     now?: number;
   }): boolean {
     const current = this.get(input.tenantId);
@@ -1064,9 +1092,9 @@ export class PhylaxTenantSettingsStore {
         current.phoneNumber === identity &&
         current.verificationExpiresAt !== null &&
         current.verificationExpiresAt > now &&
-        verificationDigestMatches(
-          current.verificationHash,
-          input.derivedChallenge,
+        operationProofDigestMatches(
+          current.verificationOperationProofHash,
+          input.operationProof,
         ),
       );
     }
@@ -1078,9 +1106,9 @@ export class PhylaxTenantSettingsStore {
       current.telegramPendingIdentity === identity &&
       current.telegramVerificationExpiresAt !== null &&
       current.telegramVerificationExpiresAt > now &&
-      verificationDigestMatches(
-        current.telegramVerificationHash,
-        input.derivedChallenge,
+      operationProofDigestMatches(
+        current.telegramVerificationOperationProofHash,
+        input.operationProof,
       ),
     );
   }
@@ -1108,6 +1136,7 @@ export class PhylaxTenantSettingsStore {
     const verified = {
       ...entry,
       verified: true,
+      verificationOperationProofHash: null,
       whatsappBindingRevision: randomBytes(16).toString("hex"),
       updatedAt: new Date(now).toISOString(),
     };

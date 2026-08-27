@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { UnitContext } from "@zenod/mcp-chassis";
 import { z } from "zod";
@@ -50,6 +51,26 @@ const OWNER_BY_PROFILE = Object.fromEntries(
 
 function managementAuthorityScope(owner: PhylaxCommercialOwner): string {
   return `management:${owner}`;
+}
+
+export function phylaxManagementConnectOperationProof(input: {
+  secret: string;
+  tenantId: string;
+  owner: PhylaxCommercialOwner;
+  channel: "whatsapp" | "telegram";
+  operationId: string;
+  identity: string;
+}): string {
+  return createHmac("sha256", input.secret)
+    .update(JSON.stringify([
+      "phylax-management-connect-attribution-v1",
+      input.tenantId,
+      input.owner,
+      input.channel,
+      input.operationId,
+      input.identity,
+    ]), "utf8")
+    .digest("base64url");
 }
 
 const operationId = z.string().trim().regex(/^[a-zA-Z0-9._:-]{8,160}$/);
@@ -367,6 +388,14 @@ function registerChannelMutationTools(
         input.operationId,
         identity,
       );
+      const operationProof = phylaxManagementConnectOperationProof({
+        secret: dependencies.challengeSecret,
+        tenantId,
+        owner,
+        channel: input.channel,
+        operationId: input.operationId,
+        identity,
+      });
       const response = await executeHostedChannelMutation(
         dependencies.audit,
         {
@@ -385,11 +414,11 @@ function registerChannelMutationTools(
               return { state: "not_applied" as const };
             }
             const at = Date.now();
-            const applied = dependencies.settings.matchesPendingVerificationProof({
+            const applied = dependencies.settings.matchesPendingManagementOperationProof({
               tenantId,
               channel: input.channel,
               identity,
-              derivedChallenge: code,
+              operationProof,
               now: at,
             });
             const sharedNumber = input.channel === "whatsapp"
@@ -437,7 +466,14 @@ function registerChannelMutationTools(
               dependencies.settings.assertPhoneAvailable(tenantId, identity);
               const sharedNumber = dependencies.runtime.whatsapp.status().linkedNumber;
               if (!sharedNumber) return mutationFailure(input.operationId, operation, "channels_unavailable", "WhatsApp transport is unavailable.");
-              const registration = dependencies.settings.registerPhone(tenantId, identity, "primary", at, code);
+              const registration = dependencies.settings.registerPhone(
+                tenantId,
+                identity,
+                "primary",
+                at,
+                code,
+                operationProof,
+              );
               return {
                 status: 200,
                 body: {
@@ -452,7 +488,13 @@ function registerChannelMutationTools(
               return mutationFailure(input.operationId, operation, "binding_conflict", "Disconnect the current Telegram identity first.");
             }
             dependencies.settings.assertTelegramAvailable(tenantId, identity);
-            const registration = dependencies.settings.registerTelegram(tenantId, identity, at, code);
+            const registration = dependencies.settings.registerTelegram(
+              tenantId,
+              identity,
+              at,
+              code,
+              operationProof,
+            );
             return {
               status: 200,
               body: {
