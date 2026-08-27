@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: `/root` final-push delivery manager
 Steward since: 2026-08-27 14:40 CEST
-Last reconciled commit: `915d3c45c2d771ac2724ea9248f80af4e40a9c12` on `main` before this control-plane update
+Last reconciled commit: `17818127d19a332ff8164d5c968f93a7c7b5bb80` on `main`
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
