@@ -85,12 +85,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 ## Current State
 
 Phase: Frozen integrated-independent Zenod–Phylax final push; wave 1 integration and bounded review-fix loop
-Last verified: 2026-08-27 16:25 CEST
+Last verified: 2026-08-27 16:38 CEST
 Integration target: `main`
-Fresh base commit: `264955371bbf85b44be5540448f0e1e8998889b8` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
+Fresh base commit: `17818127d19a332ff8164d5c968f93a7c7b5bb80` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
 Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
-Next action: integrate the exact reviewed #1119 repair, finish the bounded #1104 artifact and #1106 ledger review-fix loops, then dispatch #1107 from the resulting coherent `main` and continue through the recorded dependency waves to Jordi's final test.
-Blockers: #1104 and #1106 remain merge-blocked on bounded review findings; no architecture question is open. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
+Next action: finish #1104's bounded artifact correction while #1107 implements the tenant-safe management MCP from exact integrated `main`; independently review and integrate each exact head, then advance the recorded dependency waves toward Jordi's final test.
+Blockers: #1104 remains merge-blocked on two bounded artifact-separation findings; no architecture question is open. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
 
 ## Bootstrap Map
 
