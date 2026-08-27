@@ -29,6 +29,7 @@ function input(kind: ManagedAiRawKind, idempotencyKey = `message-${kind}`): Mana
 
 const normal = { percentageUsed: 20, state: "normal" as const, resetsAt: "2026-09-01T00:00:00.000Z" };
 const paused = { percentageUsed: 100, state: "paused" as const, resetsAt: "2026-09-01T00:00:00.000Z" };
+const settingUp = { percentageUsed: null, state: "setting_up" as const, resetsAt: null };
 
 describe("managed AI raw-evidence admission", () => {
   it("journals text, audio, and image before returning a typed cap pause", async () => {
@@ -50,6 +51,25 @@ describe("managed AI raw-evidence admission", () => {
         });
         expect(Buffer.from(queue.raw(outcome.job.id)!).toString()).toBe(`${kind}-raw-evidence`);
       }
+      expect(processor).not.toHaveBeenCalled();
+    } finally {
+      queue.close();
+    }
+  });
+
+  it("journals but does not run paid work while the combined product allowance is setting up", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-managed-admission-setting-up-"));
+    dirs.push(dir);
+    const queue = new CustomerManagedAiAdmissionQueue(join(dir, "admission.sqlite"));
+    const processor = vi.fn();
+    try {
+      const outcome = await queue.submit(input("audio", "awaiting-phylax"), settingUp, processor);
+      expect(outcome).toMatchObject({
+        state: "waiting_for_usage",
+        job: { status: "waiting_for_usage", attempts: 0 },
+      });
+      expect(processor).not.toHaveBeenCalled();
+      expect(await queue.resume(async () => settingUp, processor)).toBe(0);
       expect(processor).not.toHaveBeenCalled();
     } finally {
       queue.close();

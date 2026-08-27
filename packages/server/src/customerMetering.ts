@@ -20,7 +20,7 @@ export interface GatewayKeyUsage {
   reset_at: string | null;
 }
 
-export type CustomerUsageState = "normal" | "warn" | "paused" | "unavailable";
+export type CustomerUsageState = "normal" | "warn" | "paused" | "setting_up" | "unavailable";
 
 export interface CustomerUsageProjection {
   percentageUsed: number | null;

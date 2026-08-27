@@ -1378,6 +1378,17 @@ export interface HostedChannelCustomerTenant {
   processingPaused?: boolean;
 }
 
+export interface HostedChannelsBackend {
+  request(
+    tenant: HostedChannelCustomerTenant,
+    action?: {
+      operation: HostedChannelMutationName;
+      operationId: string;
+      body: Record<string, unknown>;
+    },
+  ): Promise<{ status: number; body: unknown }>;
+}
+
 function configuredPrivateOrigin(env: NodeJS.ProcessEnv): string | null {
   const configured = env.ZENOD_CHANNELS_URL?.trim();
   const allowed = (env.ZENOD_CHANNELS_ALLOWED_ORIGINS ?? "")
@@ -1428,7 +1439,7 @@ function nullableNumber(value: unknown): number | null | undefined {
       ? value
       : undefined;
 }
-function projectChannels(value: unknown): HostedChannelsView | null {
+export function projectHostedChannels(value: unknown): HostedChannelsView | null {
   const root = record(value);
   const whatsapp = record(root?.whatsapp);
   const telegram = record(root?.telegram);
@@ -1542,7 +1553,7 @@ function publicErrorMessage(
       return "Channels are temporarily unavailable. Try again shortly.";
   }
 }
-function projectError(
+export function projectHostedChannelError(
   value: unknown,
   expected?: HostedChannelMutationName,
   expectedId?: string,
@@ -1588,13 +1599,13 @@ function projectError(
     ...(mutation ? { mutation } : {}),
   };
 }
-function projectAction(
+export function projectHostedChannelAction(
   value: unknown,
   operation: HostedChannelMutationName,
   expectedId: string,
 ): unknown | null {
   const root = record(value);
-  const channels = projectChannels(root?.channels);
+  const channels = projectHostedChannels(root?.channels);
   const mutation = projectMutation(root?.mutation, operation, expectedId);
   if (!root || !channels || !mutation) return null;
   if (operation === "whatsapp.challenge") {
@@ -1659,7 +1670,7 @@ function applyProcessingPause(value: unknown, paused: boolean): unknown {
   if (!paused || !value || typeof value !== "object") return value;
   const root = value as Record<string, unknown>;
   const channels =
-    "channels" in root ? projectChannels(root.channels) : projectChannels(root);
+    "channels" in root ? projectHostedChannels(root.channels) : projectHostedChannels(root);
   if (
     !channels ||
     !["verified", "degraded", "paused"].includes(channels.whatsapp.state)
@@ -1672,6 +1683,42 @@ function applyProcessingPause(value: unknown, paused: boolean): unknown {
   return "channels" in root
     ? { ...root, channels: nextChannels }
     : nextChannels;
+}
+
+function projectBackendResponse(
+  response: { status: number; body: unknown },
+  tenant: HostedChannelCustomerTenant,
+  action?: { operation: HostedChannelMutationName; operationId: string },
+): { status: number; body: unknown } {
+  const projected = response.status >= 400
+    ? projectHostedChannelError(response.body, action?.operation, action?.operationId)
+    : action
+      ? projectHostedChannelAction(response.body, action.operation, action.operationId)
+      : projectHostedChannels(response.body);
+  if (projected) {
+    return {
+      status: response.status,
+      body: applyProcessingPause(projected, tenant.processingPaused === true),
+    };
+  }
+  return {
+    status: 503,
+    body: {
+      error: {
+        code: "channels_unavailable",
+        message: "Channels are temporarily unavailable. Try again shortly.",
+        retryDisposition: "retry_same_operation",
+      },
+      ...(action ? {
+        mutation: {
+          operationId: action.operationId,
+          operation: action.operation,
+          outcome: "failed",
+          at: Date.now(),
+        },
+      } : {}),
+    } satisfies HostedChannelErrorResponse,
+  };
 }
 
 async function proxyChannels(
@@ -1739,14 +1786,14 @@ async function proxyChannels(
         typeof input?.body.operationId === "string"
           ? input.body.operationId
           : undefined;
-      const error = projectError(raw, input?.operation, expectedId);
+      const error = projectHostedChannelError(raw, input?.operation, expectedId);
       return error ? { status: response.status, body: error } : unavailable;
     }
     const expectedId =
       typeof input?.body.operationId === "string" ? input.body.operationId : "";
     const projected = input?.operation
-      ? projectAction(raw, input.operation, expectedId)
-      : projectChannels(raw);
+      ? projectHostedChannelAction(raw, input.operation, expectedId)
+      : projectHostedChannels(raw);
     return projected
       ? {
           status: response.status,
@@ -1765,6 +1812,8 @@ export function mountHostedChannelsCustomerRoutes(
   app: Hono<{ Bindings: HttpBindings }>,
   input: {
     env: NodeJS.ProcessEnv;
+    /** New integrated shape: Zenod BFF invokes the tenant-scoped management MCP. */
+    transport?: HostedChannelsBackend;
     routeVisible?: (
       c: Context<{ Bindings: HttpBindings }>,
     ) => boolean | Promise<boolean>;
@@ -1782,7 +1831,9 @@ export function mountHostedChannelsCustomerRoutes(
     }
     const tenant = await input.resolveTenant(c);
     if (!tenant) return c.json({ error: "unauthorized" }, 401);
-    const response = await proxyChannels(input.env, tenant, "");
+    const response = input.transport
+      ? projectBackendResponse(await input.transport.request(tenant), tenant)
+      : await proxyChannels(input.env, tenant, "");
     return c.json(response.body, response.status as ContentfulStatusCode);
   });
   const actions = [
@@ -1817,12 +1868,18 @@ export function mountHostedChannelsCustomerRoutes(
       const body: Record<string, unknown> = { operationId };
       if (operation === "whatsapp.challenge") body.sender = raw.sender;
       if (operation === "telegram.connect") body.identity = raw.identity;
-      const response = await proxyChannels(
-        input.env,
-        tenant,
-        `/${channel}/${action}`,
-        { operation, body, includeCredentials },
-      );
+      const response = input.transport
+        ? projectBackendResponse(
+            await input.transport.request(tenant, { operation, operationId, body }),
+            tenant,
+            { operation, operationId },
+          )
+        : await proxyChannels(
+            input.env,
+            tenant,
+            `/${channel}/${action}`,
+            { operation, body, includeCredentials },
+          );
       return c.json(response.body, response.status as ContentfulStatusCode);
     });
   }
