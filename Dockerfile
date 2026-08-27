@@ -17,6 +17,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/mcp-chassis/package.json packages/mcp-chassis/
 COPY packages/server/package.json packages/server/
 COPY apps/web/package.json apps/web/
+COPY apps/phylax-web/package.json apps/phylax-web/
 COPY apps/site/package.json apps/site/
 COPY apps/calli-web/package.json apps/calli-web/
 COPY apps/calli-site/package.json apps/calli-site/

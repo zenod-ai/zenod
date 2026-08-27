@@ -835,6 +835,19 @@ export class PhylaxAllowanceLedger {
     };
   }
 
+  /** Read-only inventory of every tenant represented in the authoritative ledger. */
+  tenantIds(): string[] {
+    const rows = this.db.prepare(`
+      SELECT tenant_id FROM phylax_allowance_periods
+      UNION
+      SELECT tenant_id FROM phylax_allowance_entries
+      UNION
+      SELECT tenant_id FROM phylax_paid_work
+      ORDER BY tenant_id
+    `).all() as unknown as Array<{ tenant_id: string }>;
+    return rows.map((row) => row.tenant_id);
+  }
+
   operatorProjection(tenantIdInput: string, periodIdInput?: string): PhylaxOperatorLedgerProjection {
     const tenantId = required(tenantIdInput, "tenantId");
     const periodId = periodIdInput ? required(periodIdInput, "periodId") : null;

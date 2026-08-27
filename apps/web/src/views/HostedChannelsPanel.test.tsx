@@ -109,6 +109,8 @@ describe("Hosted Zenod channels", () => {
       /Phylax|Ring|provider|OpenRouter|downstream|operationId/i
     )
     expect(container.querySelector(".md\\:grid-cols-2")).not.toBeNull()
+    expect(container.querySelector("[data-channel='whatsapp']")).not.toBeNull()
+    expect(container.querySelector("[data-channel='telegram']")).not.toBeNull()
   })
 
   it("shows verified test and disconnect controls without exposing transport controls", async () => {

@@ -1,5 +1,5 @@
 {
-  "name": "web",
+  "name": "phylax-web",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run src/views/dashboard-navigation.test.ts src/views/Settings.product-loading.test.tsx src/views/Settings.drive-connect.test.tsx src/views/Settings.editions.test.tsx src/views/HostedAccount.test.tsx src/views/HostedChannelsPanel.test.tsx src/lib/api.test.ts src/components/google-drive-connect.test.tsx src/components/hosted-usage-card.test.tsx src/components/channel-experience.test.tsx src/components/peer-agents-model.test.ts src/components/peer-agents.test.tsx src/components/ring-control-surface-model.test.ts src/components/herald-loop-panels.test.tsx src/components/phylax-tenant-settings.test.tsx",
-    "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
@@ -23,9 +22,6 @@
     "radix-ui": "^1.5.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1",
-    "shadcn": "^4.11.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4",
@@ -44,10 +40,9 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17",
     "jsdom": "^29.1.1",
-    "prettier": "^3.8.3",
-    "prettier-plugin-tailwindcss": "^0.8.0",
     "typescript": "~6",
     "typescript-eslint": "^8",
-    "vite": "^8"
+    "vite": "^8",
+    "vitest": "^4.1.10"
   }
 }

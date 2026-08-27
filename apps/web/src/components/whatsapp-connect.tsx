@@ -56,6 +56,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import {
+  ChannelControlCard,
+  type ChannelState,
+} from "@/components/channel-experience"
+import {
   clearHostedChannelOperation,
   clearHostedWhatsAppRecovery,
   hostedChannelOperationKey,
@@ -598,25 +602,6 @@ export function WhatsAppConnect() {
   )
 }
 
-function hostedStatusLabel(
-  status: HostedChannelsResponse["whatsapp"]["state"] | null
-): string {
-  if (!status) return "Loading"
-  if (status === "awaiting_code") return "Awaiting code"
-  if (status === "verified") return "Connected"
-  if (status === "degraded") return "Needs attention"
-  if (status === "paused") return "Paused"
-  return "Not connected"
-}
-
-function hostedBadgeVariant(
-  status: HostedChannelsResponse["whatsapp"]["state"] | null
-): React.ComponentProps<typeof Badge>["variant"] {
-  if (status === "verified") return "secondary"
-  if (status === "degraded" || status === "paused") return "destructive"
-  return "outline"
-}
-
 /** Customer-safe adapter over the existing tenant sender verification store. */
 export function HostedWhatsAppConnect({
   initial,
@@ -762,193 +747,198 @@ export function HostedWhatsAppConnect({
   const awaiting = status?.state === "awaiting_code"
   const preservedBinding =
     connected || status?.state === "degraded" || status?.state === "paused"
+  const controlState: ChannelState = !status
+    ? "loading"
+    : status.state === "verified"
+      ? "connected"
+      : status.state
 
   return (
-    <Card>
-      <CardHeader>
-        <SmartphoneIcon className="size-5 text-muted-foreground" />
-        <CardTitle className="flex items-center gap-2">
-          WhatsApp
-          <Badge variant={hostedBadgeVariant(status?.state ?? null)}>
-            {connected && <CheckIcon />}
-            {hostedStatusLabel(status?.state ?? null)}
-          </Badge>
-        </CardTitle>
-        <CardDescription>
-          Included with Zenod Hosted for one verified sender.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {error && (
-          <Alert variant="destructive">
-            <TriangleAlertIcon />
-            <AlertTitle>WhatsApp needs attention</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {awaiting && challenge && (
-          <Alert>
-            <SendIcon />
-            <AlertTitle>Send this code from your WhatsApp</AlertTitle>
-            <AlertDescription className="flex flex-col gap-2">
-              <span>
-                Message <strong>{challenge.code}</strong> to{" "}
-                <strong>{challenge.sharedNumber}</strong>.
-              </span>
-              <span>
-                Keep this page open. Zenod will confirm the sender
-                automatically.
-              </span>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {awaiting && !challenge && (
-          <Alert>
-            <SendIcon />
-            <AlertTitle>Verification is still waiting</AlertTitle>
-            <AlertDescription>
-              For safety, Zenod does not store the one-time code. Show the same
-              code again, issue a new one, or cancel this setup.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {status?.state === "degraded" && (
-          <Alert variant="destructive">
-            <TriangleAlertIcon />
-            <AlertTitle>Your sender is still connected</AlertTitle>
-            <AlertDescription>
-              Delivery needs attention. Refresh or send a test; Zenod will not
-              replace the verified sender.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {status?.state === "paused" && (
-          <Alert>
-            <TriangleAlertIcon />
-            <AlertTitle>Your sender is connected but paused</AlertTitle>
-            <AlertDescription>
-              The verified sender is preserved. Send a test after service
-              resumes; no new verification is required.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {status?.senderHint && (
-          <FieldValue
-            label="Verified sender"
-            value={status.senderHint}
-            detail={
-              preservedBinding
-                ? `Last message ${timeAgo(status.lastInboundAt)}`
-                : "Verification is not complete yet"
-            }
-          />
-        )}
-
-        {!preservedBinding && !awaiting && (
-          <Field>
-            <FieldLabel htmlFor="hosted-whatsapp-sender">
-              Your WhatsApp sender number
-            </FieldLabel>
-            <Input
-              id="hosted-whatsapp-sender"
-              type="tel"
-              autoComplete="tel"
-              placeholder="+34 600 000 000"
-              value={sender}
-              onChange={(event) => setSender(event.target.value)}
-            />
-            <FieldDescription>
-              Zenod verifies only this sender. It never asks for a QR code or
-              reads your other chats.
-            </FieldDescription>
-          </Field>
-        )}
-      </CardContent>
-      <CardFooter className="flex flex-wrap gap-2">
-        {!preservedBinding && !awaiting && (
-          <Button
-            type="button"
-            onClick={() => void createChallenge()}
-            disabled={!sender.trim() || busy !== null}
-          >
-            {busy === "challenge" ? <Spinner /> : <SendIcon />}
-            Create one-time code
-          </Button>
-        )}
-        {awaiting && (
-          <>
+    <ChannelControlCard
+      control={{
+        id: "whatsapp",
+        label: "WhatsApp",
+        state: controlState,
+        identityHint: status?.senderHint ?? null,
+        description: "Included with Zenod Hosted for one verified sender.",
+      }}
+      icon={<SmartphoneIcon className="size-5 text-muted-foreground" />}
+      hideIdentity
+      actions={
+        <>
+          {!preservedBinding && !awaiting && (
             <Button
               type="button"
-              variant="outline"
-              onClick={() => void createChallenge(false)}
-              disabled={busy !== null}
+              onClick={() => void createChallenge()}
+              disabled={!sender.trim() || busy !== null}
             >
-              {busy === "challenge" ? <Spinner /> : <RefreshCwIcon />}
-              Show code again
+              {busy === "challenge" ? <Spinner /> : <SendIcon />}
+              Create one-time code
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void createChallenge(true)}
-              disabled={busy !== null}
-            >
-              Issue new code
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void disconnect()}
-              disabled={busy !== null}
-            >
-              Cancel setup
-            </Button>
-          </>
-        )}
-        {preservedBinding && (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void sendTest()}
-              disabled={busy !== null}
-            >
-              {busy === "test" ? <Spinner /> : <SendIcon />}
-              Send test
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button type="button" variant="ghost" disabled={busy !== null}>
-                  <UnplugIcon />
-                  Disconnect
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Disconnect WhatsApp?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    New WhatsApp messages will no longer reach this Zenod.
-                    Existing memories stay in your vault.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep connected</AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    onClick={() => void disconnect()}
+          )}
+          {awaiting && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void createChallenge(false)}
+                disabled={busy !== null}
+              >
+                {busy === "challenge" ? <Spinner /> : <RefreshCwIcon />}
+                Show code again
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void createChallenge(true)}
+                disabled={busy !== null}
+              >
+                Issue new code
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void disconnect()}
+                disabled={busy !== null}
+              >
+                Cancel setup
+              </Button>
+            </>
+          )}
+          {preservedBinding && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void sendTest()}
+                disabled={busy !== null}
+              >
+                {busy === "test" ? <Spinner /> : <SendIcon />}
+                Send test
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy !== null}
                   >
+                    <UnplugIcon />
                     Disconnect
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </>
-        )}
-      </CardFooter>
-    </Card>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Disconnect WhatsApp?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      New WhatsApp messages will no longer reach this Zenod.
+                      Existing memories stay in your vault.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep connected</AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      onClick={() => void disconnect()}
+                    >
+                      Disconnect
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </>
+      }
+    >
+      {error && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>WhatsApp needs attention</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {awaiting && challenge && (
+        <Alert>
+          <SendIcon />
+          <AlertTitle>Send this code from your WhatsApp</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <span>
+              Message <strong>{challenge.code}</strong> to{" "}
+              <strong>{challenge.sharedNumber}</strong>.
+            </span>
+            <span>
+              Keep this page open. Zenod will confirm the sender automatically.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {awaiting && !challenge && (
+        <Alert>
+          <SendIcon />
+          <AlertTitle>Verification is still waiting</AlertTitle>
+          <AlertDescription>
+            For safety, Zenod does not store the one-time code. Show the same
+            code again, issue a new one, or cancel this setup.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {status?.state === "degraded" && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Your sender is still connected</AlertTitle>
+          <AlertDescription>
+            Delivery needs attention. Refresh or send a test; Zenod will not
+            replace the verified sender.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {status?.state === "paused" && (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>Your sender is connected but paused</AlertTitle>
+          <AlertDescription>
+            The verified sender is preserved. Send a test after service resumes;
+            no new verification is required.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {status?.senderHint && (
+        <FieldValue
+          label="Verified sender"
+          value={status.senderHint}
+          detail={
+            preservedBinding
+              ? `Last message ${timeAgo(status.lastInboundAt)}`
+              : "Verification is not complete yet"
+          }
+        />
+      )}
+
+      {!preservedBinding && !awaiting && (
+        <Field>
+          <FieldLabel htmlFor="hosted-whatsapp-sender">
+            Your WhatsApp sender number
+          </FieldLabel>
+          <Input
+            id="hosted-whatsapp-sender"
+            type="tel"
+            autoComplete="tel"
+            placeholder="+34 600 000 000"
+            value={sender}
+            onChange={(event) => setSender(event.target.value)}
+          />
+          <FieldDescription>
+            Zenod verifies only this sender. It never asks for a QR code or
+            reads your other chats.
+          </FieldDescription>
+        </Field>
+      )}
+    </ChannelControlCard>
   )
 }

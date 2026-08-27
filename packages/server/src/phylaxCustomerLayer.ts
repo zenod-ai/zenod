@@ -3,6 +3,27 @@ import {
   type CustomerLayerHost,
   type CustomerLayerOptions,
 } from "./customerLayer.js";
+import type { CustomerUsageProjection } from "./customerMetering.js";
+import type { PhylaxCustomerMeteringProjection } from "./phylaxAllowanceLedger.js";
+
+export function projectPhylaxCustomerUsage(
+  allowance: PhylaxCustomerMeteringProjection,
+): CustomerUsageProjection {
+  const percentageUsed = allowance.periodId === null
+    ? null
+    : Math.min(100, Math.max(0, Math.round(allowance.usageBasisPoints / 100)));
+  return {
+    percentageUsed,
+    state: allowance.state === "paused" || allowance.state === "suspended"
+      ? "paused"
+      : allowance.state === "unavailable"
+        ? "unavailable"
+        : percentageUsed !== null && percentageUsed >= 80
+          ? "warn"
+          : "normal",
+    resetsAt: allowance.resetsAt === null ? null : new Date(allowance.resetsAt).toISOString(),
+  };
+}
 
 /**
  * Phylax customer front, duplicated from the shipped Zenod customer layer.

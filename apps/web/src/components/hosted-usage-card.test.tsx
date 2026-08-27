@@ -10,6 +10,7 @@ describe("HostedUsageCard", () => {
   it("shows only customer-safe included usage", () => {
     render(
       <HostedUsageCard
+        productName="Zenod"
         usage={{
           percentageUsed: 84,
           state: "warn",
@@ -29,6 +30,7 @@ describe("HostedUsageCard", () => {
   it("explains a fail-closed provider outage without inventing a balance", () => {
     render(
       <HostedUsageCard
+        productName="Zenod"
         usage={{ percentageUsed: null, state: "unavailable", resetsAt: null }}
       />
     )
@@ -42,6 +44,7 @@ describe("HostedUsageCard", () => {
   it("states that raw evidence survives a managed-processing pause", () => {
     render(
       <HostedUsageCard
+        productName="Zenod"
         usage={{
           percentageUsed: 100,
           state: "paused",
@@ -57,11 +60,14 @@ describe("HostedUsageCard", () => {
   it("does not promise a reset when managed access has no provider reset timestamp", () => {
     render(
       <HostedUsageCard
+        productName="Zenod"
         usage={{ percentageUsed: 100, state: "paused", resetsAt: null }}
       />
     )
 
-    expect(screen.getByText(/resumes when managed access is restored/i)).not.toBeNull()
+    expect(
+      screen.getByText(/resumes when managed access is restored/i)
+    ).not.toBeNull()
     expect(screen.queryByText(/resumes after the reset/i)).toBeNull()
   })
 })

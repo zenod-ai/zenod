@@ -82,7 +82,7 @@ describe("tenant-safe Phylax management MCP", () => {
     expect((await fetch(`${base}/mcp`, { headers: { cookie: "zenod_customer=fake" } })).status).toBe(401);
     expect((await fetch(`${base}/api/phylax/settings`, {
       headers: { authorization: `Bearer ${serviceToken}` },
-    })).status).toBe(401);
+    })).status).toBe(404);
     expect((await fetch(`${base}/api/whatsapp/status`, {
       headers: { authorization: `Bearer ${serviceToken}` },
     })).status).toBe(404);

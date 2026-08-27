@@ -13,7 +13,7 @@ assertDedicatedPhylaxProcessEnv(env);
 const instance = resolvePhylaxInstanceConfig(env);
 const port = Number(env.PORT ?? 8080);
 const dataDir = resolve(env.ZENOD_DATA_DIR ?? "./data");
-const webDist = env.ZENOD_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/web/dist");
+const webDist = env.PHYLAX_WEB_DIST ?? resolve(import.meta.dirname, "../../../apps/phylax-web/dist");
 const siteDist = env.PHYLAX_SITE_DIST ?? resolve(import.meta.dirname, "../../../apps/phylax-site/dist");
 mkdirSync(dataDir, { recursive: true });
 

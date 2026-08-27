@@ -214,9 +214,17 @@ describe("Phylax tenant transcription settings", () => {
     ).toBe("legacy_owner")
     expect(
       screen.getByText(
-        "This legacy handle is preserved but is not routable. Reverify it from Zenod Hosted Channels in a private Telegram DM."
+        "This legacy handle is preserved but is not routable. Reverify it from the host product's Channels page in a private Telegram DM."
       )
     ).not.toBeNull()
+  })
+
+  it("uses the shared production channel card for native WhatsApp registration", async () => {
+    mockApi()
+    const { container } = render(<PhylaxTenantSettings />)
+
+    expect(await screen.findByText("Verify your WhatsApp")).not.toBeNull()
+    expect(container.querySelector("[data-channel='whatsapp']")).not.toBeNull()
   })
 
   it("shows validated local models and the OpenRouter transcription catalog", async () => {
