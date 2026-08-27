@@ -222,7 +222,9 @@ function isAcceptedTicket(payload: ConductPayload): boolean {
 }
 
 function claimsAcceptedTicket(payload: ConductPayload): boolean {
-  return payload.status === "accepted" || payload.state === "accepted" || nonEmptyString(payload.ticket_id);
+  return payload.status === "accepted"
+    || payload.state === "accepted"
+    || Object.prototype.hasOwnProperty.call(payload, "ticket_id");
 }
 
 function conductPoll(value: unknown): PollToolContract | null {
