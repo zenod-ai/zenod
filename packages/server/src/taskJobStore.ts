@@ -72,7 +72,7 @@ export interface TaskJobInput {
   /** media_ingest/audio: best-effort duration probed by the channel transport. */
   audioDurationSeconds?: number | null;
   /** media_ingest/audio: use supplied text or intentionally skip transcription at the duration limit. */
-  transcriptionDisposition?: "provided" | "skip_duration_limit";
+  transcriptionDisposition?: "provided" | "skip_duration_limit" | "skip_unavailable";
   /** media_ingest: original sender/source timestamp. */
   senderTimestamp?: string;
   /** media_ingest: optional filing hints. */
@@ -102,7 +102,7 @@ export interface MediaIngestReceipt {
     ocrHandle?: string | null;
     archiveUrl?: string | null;
     provider: string | null;
-    transcriptionStatus?: "transcribed" | "skipped_duration_limit";
+    transcriptionStatus?: "transcribed" | "skipped_duration_limit" | "skipped_unavailable";
     durationSeconds?: number | null;
   };
   digest: {

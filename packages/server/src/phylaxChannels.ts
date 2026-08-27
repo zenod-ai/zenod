@@ -21,6 +21,11 @@ import {
   type ConversationTranscriptReader,
 } from "./conversationTranscript.js";
 import { GET_RECENT_CONVERSATION_TRANSCRIPT_SHAPE } from "./mcpToolSchemas.js";
+import {
+  PhylaxUsagePausedError,
+  type PhylaxTranscriptionUsageInput,
+  type PhylaxUsageClaim,
+} from "./phylaxUsageMeter.js";
 import type {
   PhylaxBindingArgumentSource,
   PhylaxTurnBindings,
@@ -66,13 +71,14 @@ export interface PhylaxChannelInbound {
     artifactRef?: string;
     mimeType?: string | null;
     fileName?: string | null;
+    /** Provider-reported audio duration used only for local cost admission. */
+    durationSeconds?: number | null;
   };
   transcription?: PhylaxTranscriptionReceipt;
 }
 
 export interface PhylaxTranscriptionReceipt {
   text_transcript?: string;
-  transcription_usage?: Record<string, unknown>;
   transcription_failed?: { code: string; message: string };
   transcription_source?: string;
   duration_seconds?: number | null;
@@ -127,7 +133,6 @@ export interface PhylaxDownstreamCall {
     artifact_mime_type?: string;
     artifact_file_name?: string;
     duration_seconds?: number | null;
-    transcription_usage?: Record<string, unknown>;
     transcription_failed?: { code: string; message: string };
     transcription_source?: string;
     transcription_timing?: { queue_wait_ms?: number | null; runtime_ms?: number | null };
@@ -142,6 +147,7 @@ export type PhylaxTerminalReceiptDelivery = (
   recipient: string,
   text: string,
   captureProviderMessageId: string,
+  tenantId: string,
 ) => Promise<{ sentMessageId: string }>;
 
 export type PhylaxTerminalReceiptRecovery = (
@@ -356,6 +362,7 @@ function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string)
 
 const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 4 * 60_000;
 const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
+const MAX_CHANNEL_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
 const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
 const CHAT_PENDING_REPLY = "I’m still working on that — I’ll reply here when it is finished.";
 
@@ -565,6 +572,15 @@ class PhylaxCaptureJournal {
     return Number(result.changes) === 1;
   }
 
+  releaseDeliveryClaim(job: PhylaxCaptureJob): void {
+    this.db.prepare(
+      `UPDATE phylax_capture_jobs
+       SET delivered_at = NULL, updated_at = ?
+       WHERE tenant_id = ? AND channel = ? AND provider_message_id = ?
+         AND delivery_completed_at IS NULL`,
+    ).run(Date.now(), job.tenantId, job.channel, job.providerMessageId);
+  }
+
   lastEvidenceRef(tenantId: string, conversationKey: string): string | null {
     const row = this.db.prepare(
       `SELECT evidence_ref FROM phylax_capture_conversations
@@ -705,7 +721,7 @@ function valueFromBindingSource(
     transcriptionText: string;
     transcriptionProvider: string;
     audioDurationSeconds: number | null;
-    transcriptionDisposition: "provided" | "skip_duration_limit";
+    transcriptionDisposition: "provided" | "skip_duration_limit" | "skip_unavailable";
   },
 ): unknown {
   switch (source.source) {
@@ -836,6 +852,7 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, t
 
 export class PhylaxChannelsOrgan {
   private readonly captureJournal: PhylaxCaptureJournal;
+  private readonly transcriptionJournal: DatabaseSync;
   private terminalReceiptDelivery: PhylaxTerminalReceiptDelivery | null = null;
   private terminalReceiptRecovery: PhylaxTerminalReceiptRecovery | null = null;
   private readonly backgroundPolls = new Map<string, Promise<void>>();
@@ -854,9 +871,56 @@ export class PhylaxChannelsOrgan {
       captureForegroundDeadlineMs?: number;
       capturePollIntervalMs?: number;
       sleep?: (milliseconds: number) => Promise<void>;
+      recordInboundUsage?: (input: {
+        tenantId: string;
+        providerMessageId: string;
+        channel: PhylaxPortedChannel;
+      }) => void;
+      beginTranscriptionUsage?: (
+        input: Omit<PhylaxTranscriptionUsageInput, "provider" | "model">,
+      ) => PhylaxUsageClaim;
+      completeTranscriptionUsage?: (claim: PhylaxUsageClaim, succeeded: boolean) => void;
+      maintainTranscriptionUsage?: (claim: PhylaxUsageClaim) => () => void;
     },
   ) {
     this.captureJournal = new PhylaxCaptureJournal(options.dataDir);
+    this.transcriptionJournal = new DatabaseSync(join(options.dataDir, "phylax-transcription-results.sqlite"));
+    this.transcriptionJournal.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 30000;
+      CREATE TABLE IF NOT EXISTS phylax_transcription_results (
+        tenant_id TEXT NOT NULL,
+        provider_message_id TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id, provider_message_id)
+      )
+    `);
+  }
+
+  private persistedTranscription(tenantId: string, providerMessageId: string): PhylaxTranscriptionReceipt | null {
+    const row = this.transcriptionJournal.prepare(
+      "SELECT result_json FROM phylax_transcription_results WHERE tenant_id=? AND provider_message_id=?",
+    ).get(tenantId, providerMessageId) as { result_json?: unknown } | undefined;
+    if (typeof row?.result_json !== "string") return null;
+    try {
+      return JSON.parse(row.result_json) as PhylaxTranscriptionReceipt;
+    } catch {
+      return null;
+    }
+  }
+
+  private persistTranscription(
+    tenantId: string,
+    providerMessageId: string,
+    result: PhylaxTranscriptionReceipt,
+  ): void {
+    this.transcriptionJournal.prepare(
+      `INSERT INTO phylax_transcription_results
+       (tenant_id, provider_message_id, result_json, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (tenant_id, provider_message_id) DO NOTHING`,
+    ).run(tenantId, providerMessageId, JSON.stringify(result), Date.now());
   }
 
   setTerminalReceiptDelivery(delivery: PhylaxTerminalReceiptDelivery): void {
@@ -896,9 +960,21 @@ export class PhylaxChannelsOrgan {
 
   async resumePendingCaptures(): Promise<void> {
     await this.reconcileTerminalReceiptDeliveries();
+    for (const job of this.captureJournal.unindexedTerminalReceipts()) {
+      if (job.deliveredAt === null && job.receiptText) this.startTerminalReceiptDelivery(job);
+    }
     for (const job of this.captureJournal.pending()) {
       this.startBackgroundPoll(job);
     }
+  }
+
+  private startTerminalReceiptDelivery(job: PhylaxCaptureJob): void {
+    const key = `${job.tenantId}\0${job.channel}\0${job.providerMessageId}`;
+    if (this.backgroundPolls.has(key)) return;
+    const delivery = this.deliverTerminalReceipt(job, job.receiptText ?? "")
+      .catch((error) => console.error(`[phylax] terminal receipt ${job.providerMessageId} failed:`, error))
+      .finally(() => this.backgroundPolls.delete(key));
+    this.backgroundPolls.set(key, delivery);
   }
 
   private async reconcileTerminalReceiptDeliveries(): Promise<void> {
@@ -930,6 +1006,7 @@ export class PhylaxChannelsOrgan {
     this.closing = true;
     await Promise.allSettled(this.backgroundPolls.values());
     this.captureJournal.close();
+    this.transcriptionJournal.close();
   }
 
   private callDownstream(call: PhylaxDownstreamCall): Promise<PeerToolResult> {
@@ -962,18 +1039,19 @@ export class PhylaxChannelsOrgan {
     const mappedArguments: Record<string, unknown> = call.arguments;
     const compatibleArguments: Record<string, unknown> = { ...mappedArguments };
     const mappedArgumentCount = Object.keys(mappedArguments).length;
-    const requiresDurationLimitContract = mappedArguments.transcriptionDisposition === "skip_duration_limit";
+    const carriesPhylaxAudioDisposition = mappedArguments.mediaType === "audio"
+      && (
+        mappedArguments.transcriptionDisposition === "provided"
+        || mappedArguments.transcriptionDisposition === "skip_duration_limit"
+        || mappedArguments.transcriptionDisposition === "skip_unavailable"
+      );
     if (!validate(mappedArguments)) {
-      // The transcript metadata is an additive optimization at the independent
-      // Phylax -> Zenod boundary. During a Zenod-first/Phylax-first rolling
-      // update, an older ingest_memory schema can still archive the raw audio
-      // and transcribe it itself. Never let these optional new fields block
-      // durable custody of the voice note.
-      // A >2h note must never fall back to an older Zenod worker that would
-      // transcribe it. Keep the durable Phylax job pending until the downstream
-      // advertises the duration-limit contract. Shorter notes may safely let an
-      // older Zenod worker transcribe the already-custodied audio itself.
-      if (!requiresDurationLimitContract) {
+      // Once Phylax has made any audio-transcription decision, an older Zenod
+      // schema must not silently discard it and run a second STT provider.
+      // Keep the durable channel job pending until the downstream advertises
+      // the explicit contract. Optional metadata may still be stripped only
+      // from calls that do not carry a Phylax audio disposition.
+      if (!carriesPhylaxAudioDisposition) {
         for (const key of [
           "providedTranscript",
           "transcriptionProvider",
@@ -1083,28 +1161,39 @@ export class PhylaxChannelsOrgan {
         }
         const completed = await this.pollCapture(job, route, { sender: job.sender }, null);
         if (!completed || !completed.receipt) return;
-        const current = this.captureJournal.get(job.tenantId, job.channel, job.providerMessageId);
-        if (!current || current.deliveryCompletedAt !== null || current.deliveredAt !== null || !this.terminalReceiptDelivery) return;
-        // W-P4 convention: claim the provider boundary durably before the send;
-        // a crash after this point is ambiguous and must not duplicate a reply.
-        if (!this.captureJournal.claimDelivery(job)) return;
-        const delivery = await this.terminalReceiptDelivery(
-          job.channel,
-          job.channel === "telegram" ? job.chatId : job.sender,
-          completed.receipt.text,
-          job.providerMessageId,
-        );
-        this.captureJournal.recordReceiptDelivery(
-          job.tenantId,
-          job.channel,
-          job.providerMessageId,
-          delivery.sentMessageId,
-        );
+        await this.deliverTerminalReceipt(job, completed.receipt.text);
       } catch (error) {
         console.error(`[phylax] capture poll ${job.jobId} failed:`, error);
       }
     })().finally(() => this.backgroundPolls.delete(key));
     this.backgroundPolls.set(key, polling);
+  }
+
+  private async deliverTerminalReceipt(job: PhylaxCaptureJob, text: string): Promise<void> {
+    const current = this.captureJournal.get(job.tenantId, job.channel, job.providerMessageId);
+    if (!current || current.deliveryCompletedAt !== null || current.deliveredAt !== null || !this.terminalReceiptDelivery) return;
+    // Claim before the provider boundary. A deterministic allowance pause is
+    // known to occur before any provider call and can therefore release the
+    // claim; every other error remains ambiguous and attempt-once.
+    if (!this.captureJournal.claimDelivery(job)) return;
+    try {
+      const delivery = await this.terminalReceiptDelivery(
+        job.channel,
+        job.channel === "telegram" ? job.chatId : job.sender,
+        text,
+        job.providerMessageId,
+        job.tenantId,
+      );
+      this.captureJournal.recordReceiptDelivery(
+        job.tenantId,
+        job.channel,
+        job.providerMessageId,
+        delivery.sentMessageId,
+      );
+    } catch (error) {
+      if (error instanceof PhylaxUsagePausedError) this.captureJournal.releaseDeliveryClaim(job);
+      throw error;
+    }
   }
 
   private async reportDownstreamCredentialStatus(
@@ -1237,54 +1326,123 @@ export class PhylaxChannelsOrgan {
       ? Math.max(0, Math.round(input.transcription.transcription_timing.runtime_ms))
       : null;
     if (!input.transcription && input.media?.bytes && isAudioMedia(input.media) && this.options.transcriber) {
-      const transcriptionStartedAt = Date.now();
-      const configuredDeadline = this.options.transcriptionDeadlineMs ?? 60_000;
-      const deadlineMs = Number.isFinite(configuredDeadline)
-        ? Math.max(100, Math.min(configuredDeadline, 300_000))
-        : 60_000;
-      const controller = new AbortController();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        transcription = await Promise.race([
-          this.options.transcriber.transcribe({
-            tenantId: route.tenantId,
-            bytes: Buffer.from(input.media.bytes),
-            mimeType: input.media.mimeType ?? null,
-            fileName: input.media.fileName ?? null,
-            signal: controller.signal,
-          }),
-          new Promise<PhylaxTranscriptionReceipt>((resolve) => {
-            timer = setTimeout(() => {
-              controller.abort();
-              resolve({
-                transcription_failed: {
-                  code: "timeout",
-                  message: `transcription exceeded the ${deadlineMs}ms deadline`,
-                },
-              });
-            }, deadlineMs);
-            timer.unref?.();
-          }),
-        ]);
-      } catch (error) {
+      const durationSeconds = typeof input.media.durationSeconds === "number" && Number.isFinite(input.media.durationSeconds)
+        ? Math.max(0, input.media.durationSeconds)
+        : null;
+      if (durationSeconds !== null && durationSeconds > MAX_CHANNEL_TRANSCRIPTION_SECONDS) {
         transcription = {
+          duration_seconds: durationSeconds,
           transcription_failed: {
-            code: controller.signal.aborted ? "timeout" : "unavailable",
-            message: error instanceof Error ? error.message : "transcription failed",
+            code: "duration_limit",
+            message: "audio exceeds Phylax's 2-hour transcription limit",
           },
         };
-      } finally {
-        if (timer) clearTimeout(timer);
+      } else {
+        const providerMessageId = input.messageId?.trim() || artifact?.sha256 || randomUUID();
+        const persistedTranscription = this.persistedTranscription(route.tenantId, providerMessageId);
+        const usageClaim = this.options.beginTranscriptionUsage?.({
+          tenantId: route.tenantId,
+          providerMessageId,
+          custodyRef: artifact?.sha256 ? `sha256:${artifact.sha256}` : `provider:${providerMessageId}`,
+          durationSeconds,
+          ...(persistedTranscription ? { persistedResult: true } : {}),
+        });
+        if (persistedTranscription) {
+          transcription = persistedTranscription;
+          if (usageClaim) {
+            this.options.completeTranscriptionUsage?.(
+              usageClaim,
+              Boolean(transcription.text_transcript?.trim()),
+            );
+          }
+        } else if (usageClaim?.state === "already_booked") {
+          // An older mixed-version worker may have booked usage before this
+          // content journal existed. Never pay the provider twice; preserve raw
+          // custody and surface the missing-result condition downstream.
+          transcription = {
+            duration_seconds: durationSeconds,
+            transcription_failed: {
+              code: "persisted_result_missing",
+              message: "transcription was already billed but its local result is unavailable",
+            },
+          };
+        } else if (usageClaim?.state === "paused") {
+          if (usageClaim.work?.state === "processing") {
+            // Another live/runtime lease already owns this exact provider
+            // event. Do not forward a competing raw fallback or advance the
+            // Telegram offset; the bounded lease sweep wakes durable retry.
+            throw new PhylaxUsagePausedError("voice transcription is already processing");
+          }
+          transcription = {
+            duration_seconds: durationSeconds,
+            transcription_failed: {
+              code: "allowance_unavailable",
+              message: "voice transcription is paused until channel allowance is available",
+            },
+          };
+          this.options.completeTranscriptionUsage?.(usageClaim, false);
+        } else {
+          const transcriptionStartedAt = Date.now();
+          const configuredDeadline = this.options.transcriptionDeadlineMs ?? 60_000;
+          const deadlineMs = Number.isFinite(configuredDeadline)
+            ? Math.max(100, Math.min(configuredDeadline, 300_000))
+            : 60_000;
+          const controller = new AbortController();
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const stopLeaseMaintenance = usageClaim
+            ? this.options.maintainTranscriptionUsage?.(usageClaim)
+            : undefined;
+          try {
+            transcription = await Promise.race([
+              this.options.transcriber.transcribe({
+                tenantId: route.tenantId,
+                bytes: Buffer.from(input.media.bytes),
+                mimeType: input.media.mimeType ?? null,
+                fileName: input.media.fileName ?? null,
+                signal: controller.signal,
+              }),
+              new Promise<PhylaxTranscriptionReceipt>((resolve) => {
+                timer = setTimeout(() => {
+                  controller.abort();
+                  resolve({
+                    transcription_failed: {
+                      code: "timeout",
+                      message: `transcription exceeded the ${deadlineMs}ms deadline`,
+                    },
+                  });
+                }, deadlineMs);
+                timer.unref?.();
+              }),
+            ]);
+          } catch (error) {
+            transcription = {
+              transcription_failed: {
+                code: controller.signal.aborted ? "timeout" : "unavailable",
+                message: error instanceof Error ? error.message : "transcription failed",
+              },
+            };
+          } finally {
+            if (timer) clearTimeout(timer);
+            stopLeaseMaintenance?.();
+          }
+          this.persistTranscription(route.tenantId, providerMessageId, transcription);
+          if (usageClaim) {
+            this.options.completeTranscriptionUsage?.(
+              usageClaim,
+              Boolean(transcription.text_transcript?.trim()),
+            );
+          }
+          const observedTranscriptionMs = Math.max(0, Date.now() - transcriptionStartedAt);
+          const reportedQueueWait = transcription.transcription_timing?.queue_wait_ms;
+          const reportedRuntime = transcription.transcription_timing?.runtime_ms;
+          transcriptionQueueWaitMs = typeof reportedQueueWait === "number" && Number.isFinite(reportedQueueWait)
+            ? Math.max(0, Math.round(reportedQueueWait))
+            : null;
+          transcriptionRuntimeMs = typeof reportedRuntime === "number" && Number.isFinite(reportedRuntime)
+            ? Math.max(0, Math.round(reportedRuntime))
+            : Math.max(0, observedTranscriptionMs - (transcriptionQueueWaitMs ?? 0));
+        }
       }
-      const observedTranscriptionMs = Math.max(0, Date.now() - transcriptionStartedAt);
-      const reportedQueueWait = transcription.transcription_timing?.queue_wait_ms;
-      const reportedRuntime = transcription.transcription_timing?.runtime_ms;
-      transcriptionQueueWaitMs = typeof reportedQueueWait === "number" && Number.isFinite(reportedQueueWait)
-        ? Math.max(0, Math.round(reportedQueueWait))
-        : null;
-      transcriptionRuntimeMs = typeof reportedRuntime === "number" && Number.isFinite(reportedRuntime)
-        ? Math.max(0, Math.round(reportedRuntime))
-        : Math.max(0, observedTranscriptionMs - (transcriptionQueueWaitMs ?? 0));
     }
     const text = transcription.text_transcript?.trim() || input.text?.trim() || "";
     if (!text && !artifactRef && !transcription.transcription_failed) {
@@ -1309,13 +1467,25 @@ export class PhylaxChannelsOrgan {
       ...(artifactRef ? { artifact_ref: artifactRef } : {}),
       ...(artifactRef && input.media?.mimeType ? { artifact_mime_type: input.media.mimeType } : {}),
       ...(artifactRef && input.media?.fileName ? { artifact_file_name: input.media.fileName } : {}),
-      ...(transcription.transcription_usage ? { transcription_usage: transcription.transcription_usage } : {}),
       ...(transcription.transcription_failed ? { transcription_failed: transcription.transcription_failed } : {}),
       ...(transcription.transcription_source ? { transcription_source: transcription.transcription_source } : {}),
       ...(transcription.duration_seconds !== undefined ? { duration_seconds: transcription.duration_seconds } : {}),
       ...(transcription.transcription_timing ? { transcription_timing: transcription.transcription_timing } : {}),
       ...(replyEvidenceRef ? { reply_context: { evidenceRef: replyEvidenceRef } } : {}),
     };
+    if (input.messageId?.trim()) {
+      try {
+        this.options.recordInboundUsage?.({
+          tenantId: route.tenantId,
+          providerMessageId: input.messageId.trim(),
+          channel: input.channel,
+        });
+      } catch {
+        // The durable provider event and capture journal already own the
+        // message. A local metering outage must not turn it into a duplicate
+        // downstream delivery; reconciliation can use that same event ID.
+      }
+    }
     const auditHandoff: PhylaxDownstreamCall["handoff"] = handoff.artifact_ref
       ? {
           ...handoff,
@@ -1349,11 +1519,15 @@ export class PhylaxChannelsOrgan {
       audioDurationSeconds: handoff.duration_seconds ?? null,
       transcriptionDisposition: handoff.transcription_failed?.code === "duration_limit"
         ? "skip_duration_limit" as const
+        : handoff.transcription_failed
+          ? "skip_unavailable" as const
         : "provided" as const,
     };
-    const selectedRoute = binding?.tool === "chat_with_ring"
-      ? assistantRoute(route)
-      : route;
+    // ZPF-8 freezes one configured downstream per tenant. Legacy bindings may
+    // still name historical tools such as `chat_with_ring`, but the tool is
+    // discovered and called only on the tenant's single downstream adapter.
+    // Preserved assistant credentials are rollback data, never a second route.
+    const selectedRoute = route;
     const call: PhylaxDownstreamCall = binding
       ? {
           route: selectedRoute,
@@ -1686,21 +1860,6 @@ function downstreamCredentialRejectedError(
     audit,
     retryableCapture ? "idempotent_capture" : null,
   );
-}
-
-function assistantRoute(route: PhylaxTenantRoute): PhylaxTenantRoute {
-  if (!route.assistantUrl?.trim() || !route.assistantToken?.trim()) {
-    throw new PhylaxChannelError(
-      "downstream_error",
-      "The connected assistant needs attention. Open its settings and reconnect it.",
-    );
-  }
-  return {
-    tenantId: route.tenantId,
-    downstreamUrl: route.assistantUrl,
-    downstreamToken: route.assistantToken,
-    turnBindings: route.turnBindings,
-  };
 }
 
 function configuredPeer(route: PhylaxTenantRoute) {

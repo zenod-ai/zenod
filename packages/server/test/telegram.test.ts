@@ -6,6 +6,8 @@ import type { BrainEngine } from "zenod";
 import { Runtime } from "../src/runtime.js";
 import { TelegramGateway, chunkText, type TelegramManagedInbound } from "../src/telegramGateway.js";
 import { CustomerManagedAiAdmissionQueue } from "../src/customerManagedAiAdmission.js";
+import { PhylaxAllowanceLedger } from "../src/phylaxAllowanceLedger.js";
+import { PhylaxUsageMeter } from "../src/phylaxUsageMeter.js";
 import {
   normalizeAllowedUsers,
   normalizeTelegramId,
@@ -173,28 +175,28 @@ describe("chunkText", () => {
 });
 
 describe("TelegramGateway", () => {
-  it("sanitizes hostile failures at the whole ported gateway boundary", async () => {
+  it("retains failed ported updates for provider redelivery without leaking hostile detail", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-ported-safe-errors-"));
     const runtime = new Runtime(dir);
     const hostile = "https://internal.example/secret?token=bearer-123 Ring Phylax MCP tool stack";
-    const { fetchImpl, calls } = fakeBotApi(tgMessage());
+    const { fetchImpl, calls, acknowledged } = fakeAcknowledgedBotApi(tgMessage());
     runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: ["555"], enabled: true });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const gateway = new TelegramGateway({
       settings: runtime.settings,
       getEngine: async () => fakeEngine([]),
       fetchImpl,
+      pollErrorDelayMs: 1,
       portedInboundHandler: async () => {
         throw new Error(hostile);
       },
     });
     try {
       await gateway.start();
-      await waitFor(() => calls.some((call) => call.method === "sendRichMessage"));
-      const rich = calls.find((call) => call.method === "sendRichMessage")?.body.rich_message as { markdown?: string };
-      const customerText = String(rich.markdown);
-      expect(customerText).toBe("⚠️ Zenod could not process that message. Please try again.");
-      expect(customerText).not.toMatch(/internal\.example|bearer-123|Ring|Phylax|MCP|tool|stack/i);
+      await waitFor(() => consoleError.mock.calls.length >= 2);
+      expect(acknowledged()).toBe(false);
+      expect(calls.some((call) => call.method === "sendRichMessage" || call.method === "sendMessage")).toBe(false);
+      expect(calls.filter((call) => call.method === "getUpdates").length).toBeGreaterThanOrEqual(2);
     } finally {
       consoleError.mockRestore();
       await gateway.close();
@@ -310,6 +312,221 @@ describe("TelegramGateway", () => {
       expect(inbound).toEqual([
         { sender: "555", username: "@tester", chatId: "555" },
       ]);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("admits and settles a ported reply against its exact Telegram provider receipt", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-ported-metering-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl } = fakeBotApi(tgMessage());
+    runtime.settings.setTelegramSettings({
+      botToken: "TEST:TOKEN",
+      allowedUsers: [],
+      acceptAll: true,
+      enabled: true,
+      rich: true,
+    });
+    const admitted: string[] = [];
+    const settled: Array<{ intent: string; receipt: string | null }> = [];
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      portedInboundHandler: async () => ({ replyText: "verified", tenantId: "alpha" }),
+      beginPortedDeliveryUsage(input) {
+        admitted.push(input.providerMessageId);
+        return {
+          state: "processing",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "channel.outbound.telegram",
+          amountUnits: 1,
+          provider: "telegram",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      completePortedDeliveryUsage(claim, providerReceiptId) {
+        settled.push({ intent: claim.providerEventId, receipt: providerReceiptId });
+      },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => settled.length === 1);
+      expect(admitted).toEqual([expect.stringMatching(/:reply:rich$/)]);
+      expect(settled).toEqual([{ intent: admitted[0], receipt: "1" }]);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("abandons a rejected rich admission before metering its plain fallback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-rich-fallback-metering-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(tgMessage(), { richOk: false });
+    runtime.settings.setTelegramSettings({
+      botToken: "TEST:TOKEN",
+      allowedUsers: [],
+      acceptAll: true,
+      enabled: true,
+      rich: true,
+    });
+    const admitted: string[] = [];
+    const settled: Array<{ intent: string; receipt: string | null }> = [];
+    const abandoned: string[] = [];
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      portedInboundHandler: async () => ({ replyText: "plain fallback", tenantId: "alpha" }),
+      beginPortedDeliveryUsage(input) {
+        admitted.push(input.providerMessageId);
+        return {
+          state: "processing",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "channel.outbound.telegram",
+          amountUnits: 1,
+          provider: "telegram",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      completePortedDeliveryUsage(claim, providerReceiptId) {
+        settled.push({ intent: claim.providerEventId, receipt: providerReceiptId });
+      },
+      abandonPortedDeliveryUsage(claim) {
+        abandoned.push(claim.providerEventId);
+      },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => settled.length === 1);
+      expect(calls.some((call) => call.method === "sendRichMessage")).toBe(true);
+      expect(calls.some((call) => call.method === "sendMessage")).toBe(true);
+      expect(admitted).toEqual([
+        expect.stringMatching(/:reply:rich$/),
+        expect.stringMatching(/:reply:plain:0$/),
+      ]);
+      expect(abandoned).toEqual([admitted[0]]);
+      expect(settled).toEqual([{ intent: admitted[1], receipt: "1" }]);
+    } finally {
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses a stable terminal intent after allowance is granted without leaking the paused reservation", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-terminal-allowance-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(null);
+    runtime.settings.setTelegramSettings({ botToken: "TEST:TOKEN", allowedUsers: [], enabled: false, rich: false });
+    const now = Date.now();
+    const ledger = new PhylaxAllowanceLedger(join(dir, "phylax-allowance.sqlite"));
+    ledger.grantAllowance({
+      tenantId: "alpha",
+      periodId: "current",
+      startsAt: now - 1_000,
+      endsAt: now + 60_000,
+      amountUnits: 1,
+      source: "zenod",
+      idempotencyKey: "grant:terminal-small",
+      tariffVersion: "test-v1",
+      auditReason: "initial insufficient allowance",
+    });
+    const meter = new PhylaxUsageMeter(dir, ledger, {
+      PHYLAX_TARIFF_VERSION: "test-v1",
+      PHYLAX_OUTBOUND_MESSAGE_UNITS: "2",
+    });
+    const admitted: string[] = [];
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      beginPortedDeliveryUsage(input) {
+        admitted.push(input.providerMessageId);
+        return meter.beginDelivery(input);
+      },
+      completePortedDeliveryUsage(claim, providerReceiptId) {
+        meter.completeDelivery(claim, providerReceiptId);
+      },
+    });
+    try {
+      await expect(gateway.sendText("555", "terminal receipt", "alpha", "capture-1"))
+        .rejects.toThrow("allowance is available");
+      expect(calls.some((call) => call.method === "sendMessage")).toBe(false);
+      expect(ledger.customerProjection("alpha")).toMatchObject({ usedUnits: 0, reservedUnits: 0 });
+
+      ledger.adjustAllowance({
+        tenantId: "alpha",
+        periodId: "current",
+        amountUnits: 1,
+        source: "zenod",
+        idempotencyKey: "adjust:terminal",
+        tariffVersion: "test-v1",
+        auditReason: "fund exact terminal delivery",
+      });
+      expect(ledger.resumePaused("alpha")).toBe(1);
+      await expect(gateway.sendText("555", "terminal receipt", "alpha", "capture-1"))
+        .resolves.toEqual({ sentMessageId: "1" });
+      expect(admitted).toEqual(["capture-1:terminal", "capture-1:terminal"]);
+      expect(calls.filter((call) => call.method === "sendMessage")).toHaveLength(1);
+      expect(ledger.customerProjection("alpha")).toMatchObject({ usedUnits: 2, reservedUnits: 0 });
+      expect(meter.recoverDeliveryReceipt({
+        tenantId: "alpha",
+        providerMessageId: "capture-1:terminal",
+        channel: "telegram",
+      })).toBe("1");
+    } finally {
+      meter.close();
+      ledger.close();
+      await gateway.close();
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not resend a deterministic ported reply that is already provider-booked", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-telegram-ported-replay-"));
+    const runtime = new Runtime(dir);
+    const { fetchImpl, calls } = fakeBotApi(tgMessage());
+    runtime.settings.setTelegramSettings({
+      botToken: "TEST:TOKEN",
+      allowedUsers: [],
+      acceptAll: true,
+      enabled: true,
+      rich: true,
+    });
+    const gateway = new TelegramGateway({
+      settings: runtime.settings,
+      getEngine: async () => fakeEngine([]),
+      fetchImpl,
+      portedInboundHandler: async () => ({ replyText: "already sent", tenantId: "alpha" }),
+      beginPortedDeliveryUsage(input) {
+        return {
+          state: "already_booked",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          providerReceiptId: "telegram-provider-receipt-1",
+          operation: "channel.outbound.telegram",
+          amountUnits: 1,
+          provider: "telegram",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+    });
+    try {
+      await gateway.start();
+      await waitFor(() => calls.filter((call) => call.method === "getUpdates").length >= 2);
+      expect(calls.some((call) => call.method === "sendRichMessage" || call.method === "sendMessage")).toBe(false);
     } finally {
       await gateway.close();
       runtime.close();

@@ -19,6 +19,11 @@ import {
   type PhylaxTranscriptionReceipt,
 } from "./phylaxChannels.js";
 import { probeAudioDurationSeconds } from "./transcribe.js";
+import type {
+  PhylaxDeliveryUsageInput,
+  PhylaxTranscriptionUsageInput,
+  PhylaxUsageClaim,
+} from "./phylaxUsageMeter.js";
 
 const MAX_VOICE_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
 
@@ -102,6 +107,14 @@ export class PhylaxPortedRuntime {
     terminal: boolean;
   }) => void;
   private readonly wakeCaptureTickets?: () => void;
+  private readonly beginVoiceTranscriptionUsage?: (
+    input: Omit<PhylaxTranscriptionUsageInput, "provider" | "model">,
+  ) => PhylaxUsageClaim;
+  private readonly completeVoiceTranscriptionUsage?: (
+    claim: PhylaxUsageClaim,
+    succeeded: boolean,
+  ) => void;
+  private readonly maintainVoiceTranscriptionUsage?: (claim: PhylaxUsageClaim) => () => void;
 
   constructor(
     readonly dataDir: string,
@@ -126,6 +139,22 @@ export class PhylaxPortedRuntime {
         terminal: boolean;
       }) => void;
       wakeCaptureTickets?: () => void;
+      beginVoiceTranscriptionUsage?: (
+        input: Omit<PhylaxTranscriptionUsageInput, "provider" | "model">,
+      ) => PhylaxUsageClaim;
+      completeVoiceTranscriptionUsage?: (
+        claim: PhylaxUsageClaim,
+        succeeded: boolean,
+      ) => void;
+      maintainVoiceTranscriptionUsage?: (claim: PhylaxUsageClaim) => () => void;
+      beginDeliveryUsage?: (input: PhylaxDeliveryUsageInput) => PhylaxUsageClaim;
+      completeDeliveryUsage?: (claim: PhylaxUsageClaim, providerReceiptId: string | null) => void;
+      abandonDeliveryUsage?: (claim: PhylaxUsageClaim) => void;
+      recoverDeliveryReceipt?: (input: {
+        tenantId: string;
+        providerMessageId: string;
+        channel: "whatsapp" | "telegram";
+      }) => string | null;
     } = {},
   ) {
     const configuredWindow = Number(env.PHYLAX_MEDIA_COALESCE_WINDOW_MS ?? 300_000);
@@ -148,6 +177,9 @@ export class PhylaxPortedRuntime {
       probeAudioDurationSeconds(bytes, fileName));
     this.onCaptureJobObserved = adapters.observeCaptureJob;
     this.wakeCaptureTickets = adapters.wakeCaptureTickets;
+    this.beginVoiceTranscriptionUsage = adapters.beginVoiceTranscriptionUsage;
+    this.completeVoiceTranscriptionUsage = adapters.completeVoiceTranscriptionUsage;
+    this.maintainVoiceTranscriptionUsage = adapters.maintainVoiceTranscriptionUsage;
     this.state = new SqliteStateStore(join(dataDir, "phylax-channels.sqlite"));
     this.settings = new Settings(this.state);
     this.settings.seedFromEnv(env);
@@ -188,6 +220,8 @@ export class PhylaxPortedRuntime {
           ),
         };
       },
+      beginPortedDeliveryUsage: adapters.beginDeliveryUsage,
+      completePortedDeliveryUsage: adapters.completeDeliveryUsage,
       portedInboundHandler: async ({ event, text, media, transcription, timing, progress }) => {
         const verificationReply = await adapters.verifyInbound?.({
           channel: "whatsapp",
@@ -209,7 +243,19 @@ export class PhylaxPortedRuntime {
           if (!cancelled) {
             return { replyText: "No pending voice transcription to cancel in this conversation." };
           }
-          this.voiceAbortControllers.get(cancelled.providerMessageId)?.abort();
+          const activeController = this.voiceAbortControllers.get(cancelled.providerMessageId);
+          // Replay the exact admission even while a controller exists. A
+          // paused row is terminalized immediately; an active provider lease
+          // rejects cancellation and remains owned by the worker, which
+          // settles it after the abort.
+          const cancelledUsage = this.beginVoiceTranscriptionUsage?.({
+            tenantId: cancelled.tenantId,
+            providerMessageId: cancelled.providerMessageId,
+            custodyRef: `sha256:${cancelled.artifactSha256}`,
+            durationSeconds: cancelled.durationSeconds,
+          });
+          if (cancelledUsage) this.completeVoiceTranscriptionUsage?.(cancelledUsage, false);
+          activeController?.abort();
           return {
             replyText: "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
           };
@@ -398,6 +444,9 @@ export class PhylaxPortedRuntime {
       settings: this.settings,
       getEngine: unavailableEngine,
       dataDir: join(dataDir, "telegram"),
+      beginPortedDeliveryUsage: adapters.beginDeliveryUsage,
+      completePortedDeliveryUsage: adapters.completeDeliveryUsage,
+      abandonPortedDeliveryUsage: adapters.abandonDeliveryUsage,
       portedInboundHandler: async ({ sender, username, chatId, messageId, text, media, transcription }) => {
         const verificationReply = await adapters.verifyInbound?.({
           channel: "telegram",
@@ -427,6 +476,7 @@ export class PhylaxPortedRuntime {
           this.observeCaptureJob("telegram", messageId, forwarded);
           return {
             replyText: forwarded.replyText,
+            tenantId: forwarded.tenantId,
             ...(forwarded.afterReply ? { afterReply: forwarded.afterReply } : {}),
           };
         } catch (error) {
@@ -435,10 +485,10 @@ export class PhylaxPortedRuntime {
       },
       ...(adapters.telegramFetch ? { fetchImpl: adapters.telegramFetch } : {}),
     });
-    this.organ.setTerminalReceiptDelivery(async (channel, recipient, text, captureProviderMessageId) => {
+    this.organ.setTerminalReceiptDelivery(async (channel, recipient, text, captureProviderMessageId, tenantId) => {
       const delivery = channel === "whatsapp"
-        ? await this.whatsapp.sendText(recipient, text, captureProviderMessageId)
-        : await this.telegram.sendText(recipient, text);
+        ? await this.whatsapp.sendText(recipient, text, captureProviderMessageId, tenantId)
+        : await this.telegram.sendText(recipient, text, tenantId, captureProviderMessageId);
       this.wakeCaptureTickets?.();
       return delivery;
     });
@@ -449,12 +499,18 @@ export class PhylaxPortedRuntime {
       recipient,
       text,
     ) => {
-      if (channel !== "whatsapp") return null;
-      return this.whatsapp.recoverPortedReceipt(
+      if (channel === "whatsapp") {
+        return this.whatsapp.recoverPortedReceipt(
+          tenantId,
+          captureProviderMessageId,
+          { recipient, text },
+        );
+      }
+      return adapters.recoverDeliveryReceipt?.({
         tenantId,
-        captureProviderMessageId,
-        { recipient, text },
-      );
+        providerMessageId: `${captureProviderMessageId}:terminal`,
+        channel: "telegram",
+      }) ?? null;
     });
     queueMicrotask(() => this.kickVoiceWorker());
   }
@@ -486,10 +542,27 @@ export class PhylaxPortedRuntime {
       this.lastVoiceTenantId = job.tenantId;
       const controller = new AbortController();
       this.voiceAbortControllers.set(job.providerMessageId, controller);
+      let usageClaim: PhylaxUsageClaim | undefined;
+      let usageSettled = false;
       try {
         let transcription: PhylaxTranscriptionReceipt;
         if (job.state === "transcribed") {
           transcription = (job.transcription ?? {}) as PhylaxTranscriptionReceipt;
+          if (transcription.transcription_failed?.code !== "duration_limit") {
+            usageClaim = this.beginVoiceTranscriptionUsage?.({
+              tenantId: job.tenantId,
+              providerMessageId: job.providerMessageId,
+              custodyRef: `sha256:${job.artifactSha256}`,
+              durationSeconds: job.durationSeconds,
+              persistedResult: true,
+            });
+            if (usageClaim?.state === "paused") return;
+            this.completeVoiceTranscriptionUsage?.(
+              usageClaim!,
+              Boolean(transcription.text_transcript?.trim()),
+            );
+            usageSettled = Boolean(usageClaim);
+          }
         } else {
           if (job.durationSeconds !== null && job.durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS) {
             transcription = {
@@ -500,20 +573,50 @@ export class PhylaxPortedRuntime {
               },
             };
           } else {
+            usageClaim = this.beginVoiceTranscriptionUsage?.({
+              tenantId: job.tenantId,
+              providerMessageId: job.providerMessageId,
+              custodyRef: `sha256:${job.artifactSha256}`,
+              durationSeconds: job.durationSeconds,
+            });
+            if (usageClaim?.state === "paused") {
+              this.whatsappStore.requeueInterruptedVoiceJob(job.providerMessageId);
+              return;
+            }
             const bytes = await readFile(job.artifactPath);
-            transcription = {
-              ...(await this.organ.transcribeStagedVoice({
-                tenantId: job.tenantId,
-                bytes,
-                mimeType: job.mimeType,
-                fileName: job.fileName,
-              }, controller.signal)),
-              duration_seconds: job.durationSeconds,
-            };
+            const stopLeaseMaintenance = usageClaim
+              ? this.maintainVoiceTranscriptionUsage?.(usageClaim)
+              : undefined;
+            try {
+              transcription = {
+                ...(await this.organ.transcribeStagedVoice({
+                  tenantId: job.tenantId,
+                  bytes,
+                  mimeType: job.mimeType,
+                  fileName: job.fileName,
+                }, controller.signal)),
+                duration_seconds: job.durationSeconds,
+              };
+            } finally {
+              stopLeaseMaintenance?.();
+            }
           }
-          if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") continue;
+          if (this.whatsappStore.voiceJob(job.providerMessageId)?.state === "cancelled") {
+            if (usageClaim) {
+              this.completeVoiceTranscriptionUsage?.(
+                usageClaim,
+                Boolean(transcription.text_transcript?.trim()),
+              );
+              usageSettled = true;
+            }
+            continue;
+          }
           const skippedForDuration = transcription.transcription_failed?.code === "duration_limit";
           if (!skippedForDuration && (transcription.transcription_failed || !transcription.text_transcript?.trim())) {
+            if (usageClaim) {
+              this.completeVoiceTranscriptionUsage?.(usageClaim, false);
+              usageSettled = true;
+            }
             this.whatsappStore.queueVoiceFailureReply(
               job.providerMessageId,
               safeVoiceTranscriptionFailure(transcription.transcription_failed?.code),
@@ -524,7 +627,17 @@ export class PhylaxPortedRuntime {
           if (!this.whatsappStore.persistVoiceTranscript(
             job.providerMessageId,
             transcription as unknown as Record<string, unknown>,
-          )) continue;
+          )) {
+            if (usageClaim) {
+              this.completeVoiceTranscriptionUsage?.(usageClaim, true);
+              usageSettled = true;
+            }
+            continue;
+          }
+          if (usageClaim) {
+            this.completeVoiceTranscriptionUsage?.(usageClaim, true);
+            usageSettled = true;
+          }
         }
         if (!transcription.text_transcript?.trim() && transcription.transcription_failed?.code !== "duration_limit") {
           this.whatsappStore.queueVoiceFailureReply(
@@ -577,12 +690,24 @@ export class PhylaxPortedRuntime {
         await this.whatsapp.drainMediaRecovery();
         result.afterReply?.();
       } catch (error) {
+        if (usageClaim && !usageSettled) {
+          try {
+            this.completeVoiceTranscriptionUsage?.(usageClaim, false);
+          } catch {
+            // Preserve the original channel failure; the ledger lease remains
+            // durable and can be reconciled from the persisted job on restart.
+          }
+        }
         const current = this.whatsappStore.voiceJob(job.providerMessageId);
         if (current?.state === "cancelled") continue;
         if (this.voiceWorkerClosed && current?.state === "transcribing") {
           this.whatsappStore.requeueInterruptedVoiceJob(job.providerMessageId);
           continue;
         }
+        // The transcript is already durable. A temporary local-ledger
+        // settlement failure must not relabel it failed or call STT again.
+        // Leave it transcribed so the next wake/restart settles and forwards.
+        if (current?.state === "transcribed") return;
         if (current?.state === "forwarding") {
           if (
             error instanceof PhylaxChannelError
@@ -612,6 +737,11 @@ export class PhylaxPortedRuntime {
     const resumed = this.whatsappStore.resumeIdempotentVoiceCaptures(tenantId);
     if (resumed > 0) this.kickVoiceWorker();
     return resumed;
+  }
+
+  wakeAllowanceWork(): void {
+    this.kickVoiceWorker();
+    void this.organ.resumePendingCaptures();
   }
 
   private observeCaptureJob(
@@ -669,12 +799,12 @@ export class PhylaxPortedRuntime {
     this.eventLoopHeartbeatTimer.unref();
   }
 
-  delivery(): PhylaxTenantDelivery {
+  delivery(tenantId?: string): PhylaxTenantDelivery {
     return {
       send: async (channel, recipient, text) => {
         const sent = channel === "whatsapp"
-          ? await this.whatsapp.sendText(recipient, text)
-          : await this.telegram.sendText(recipient, text);
+          ? await this.whatsapp.sendText(recipient, text, undefined, tenantId)
+          : await this.telegram.sendText(recipient, text, tenantId);
         return {
           channel,
           recipient,

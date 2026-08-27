@@ -21,6 +21,7 @@ import {
   type PhylaxTenantSettingsStore,
 } from "./phylaxTenantSettings.js";
 import type { HostedChannelMutationAuditStore } from "./hostedChannels.js";
+import type { PhylaxUsageMeter } from "./phylaxUsageMeter.js";
 
 export const PHYLAX_MANAGEMENT_PROTOCOL = "phylax.management";
 export const PHYLAX_MANAGEMENT_VERSION = "1.0";
@@ -82,6 +83,7 @@ interface ManagementDependencies {
   runtime: PhylaxPortedRuntime;
   audit: HostedChannelMutationAuditStore;
   ledger: PhylaxAllowanceLedger;
+  usageMeter: PhylaxUsageMeter;
   challengeSecret: string;
 }
 
@@ -555,7 +557,7 @@ function registerChannelMutationTools(
             : settings.telegramBinding;
           if (!recipient) return mutationFailure(input.operationId, operation, "not_connected", "Channel is not connected.");
           try {
-            const receipt = await dependencies.runtime.delivery().send(
+            const receipt = await dependencies.runtime.delivery(tenantId).send(
               input.channel,
               recipient,
               "Phylax channel test: this identity is connected.",
@@ -711,7 +713,10 @@ function registerLedgerMutationTool(
           operation,
           requestBody: { ...args },
           target: args.periodId,
-          bindingRevision: () => dependencies.ledger.revision(tenantId),
+          // The caller's expected revision is part of this operation identity.
+          // Later usage/reconciliation entries must not turn an exact retry of
+          // an already-terminal mutation into an operation-key conflict.
+          bindingRevision: () => args.expectedRevision,
           recoverOrphaned: () => {
             const existing = dependencies.ledger
               .operatorProjection(tenantId, args.periodId)
@@ -774,6 +779,8 @@ function registerLedgerMutationTool(
                   tariffVersion: args.tariffVersion,
                   auditReason: args.auditReason,
                 });
+            dependencies.usageMeter.reconcilePending(tenantId);
+            dependencies.ledger.resumePaused(tenantId);
             return {
               status: 200,
               body: {
@@ -794,6 +801,9 @@ function registerLedgerMutationTool(
           }
         },
       );
+      if (response.status < 400) {
+        dependencies.runtime.wakeAllowanceWork();
+      }
       return mutationToolResult(response);
     },
   );
@@ -834,7 +844,7 @@ function registerControlTool(
           operation,
           requestBody: { ...args },
           target: tenantId,
-          bindingRevision: () => dependencies.ledger.revision(tenantId),
+          bindingRevision: () => args.expectedRevision,
           recoverOrphaned: () => {
             const existing = dependencies.ledger
               .operatorProjection(tenantId)
@@ -880,6 +890,10 @@ function registerControlTool(
               idempotencyKey: args.operationId,
               auditReason: args.auditReason,
             });
+            if (kind === "resume") {
+              dependencies.usageMeter.reconcilePending(tenantId);
+              dependencies.ledger.resumePaused(tenantId);
+            }
             return {
               status: 200,
               body: {
@@ -899,6 +913,9 @@ function registerControlTool(
           }
         },
       );
+      if (response.status < 400 && kind === "resume") {
+        dependencies.runtime.wakeAllowanceWork();
+      }
       return mutationToolResult(response);
     },
   );

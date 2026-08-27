@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { BrainEngine } from "zenod";
 import type { Settings } from "./settings.js";
@@ -14,6 +15,7 @@ import {
 } from "./voiceArchivePrimitives.js";
 import { normalizeTelegramEntry, normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 import { linkifyGithubRefs } from "./githubLinks.js";
+import { PhylaxUsagePausedError, type PhylaxUsageClaim } from "./phylaxUsageMeter.js";
 
 export type TelegramConnectionState = "disabled" | "disconnected" | "connected" | "error";
 
@@ -69,11 +71,19 @@ export interface TelegramPortedInbound {
   chatId: string;
   messageId: string;
   text: string;
-  media?: { bytes: Buffer; mimeType: string | null; fileName: string | null };
+  media?: {
+    bytes: Buffer;
+    mimeType: string | null;
+    fileName: string | null;
+    durationSeconds?: number | null;
+  };
   transcription?: { provider?: string; failed?: { code: string; message: string } };
 }
 
-export type TelegramPortedInboundHandler = (input: TelegramPortedInbound) => Promise<{ replyText: string }>;
+export type TelegramPortedInboundHandler = (input: TelegramPortedInbound) => Promise<{
+  replyText: string;
+  tenantId?: string;
+}>;
 export interface TelegramManagedInbound {
   kind: "text" | "audio" | "image";
   sender: string;
@@ -140,6 +150,14 @@ export class TelegramGateway {
       dataDir?: string;
       fetchImpl?: typeof fetch;
       portedInboundHandler?: TelegramPortedInboundHandler;
+      beginPortedDeliveryUsage?: (input: {
+        tenantId: string;
+        providerMessageId: string;
+        custodyRef: string;
+        channel: "telegram";
+      }) => PhylaxUsageClaim;
+      completePortedDeliveryUsage?: (claim: PhylaxUsageClaim, providerReceiptId: string | null) => void;
+      abandonPortedDeliveryUsage?: (claim: PhylaxUsageClaim) => void;
       managedInboundHandler?: TelegramManagedInboundHandler;
       managedInboundEnabled?: () => boolean;
       pollErrorDelayMs?: number;
@@ -248,7 +266,10 @@ export class TelegramGateway {
     // startup policy. Hosted managed mode must begin at Telegram's durable
     // provider acknowledgement instead: sending a positive offset is what
     // acknowledges older updates, and we only advance after SQLite admission.
-    if (!(this.options.managedInboundHandler && (this.options.managedInboundEnabled?.() ?? true))) {
+    if (!(
+      (this.options.managedInboundHandler && (this.options.managedInboundEnabled?.() ?? true))
+      || this.options.portedInboundHandler
+    )) {
       await this.primeOffset();
     }
     this.running = true;
@@ -594,7 +615,14 @@ export class TelegramGateway {
       try {
         const downloaded = await this.downloadFile(voice.file_id);
         const filename = `${voice.file_unique_id ?? voice.file_id}.${downloaded.ext}`;
-        media = { bytes: downloaded.data, mimeType: voice.mime_type ?? "audio/ogg", fileName: filename };
+        media = {
+          bytes: downloaded.data,
+          mimeType: voice.mime_type ?? "audio/ogg",
+          fileName: filename,
+          durationSeconds: typeof voice.duration === "number" && Number.isFinite(voice.duration)
+            ? Math.max(0, voice.duration)
+            : null,
+        };
         // The ported Phylax organ transcribes after tenant resolution. This
         // preserves the existing downloader while keeping provider keys scoped.
       } catch (error) {
@@ -613,11 +641,21 @@ export class TelegramGateway {
         ...(transcription ? { transcription } : {}),
       });
       if (!forwarded.replyText.trim()) throw new Error("tenant downstream returned no reply");
-      await this.sendReply(chatId, forwarded.replyText);
+      if (forwarded.tenantId) {
+        await this.sendReply(chatId, forwarded.replyText, {
+          tenantId: forwarded.tenantId,
+          providerMessageId: `${message.message_id}:reply`,
+        });
+      } else {
+        await this.sendReply(chatId, forwarded.replyText);
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      await this.sendReply(chatId, "⚠️ Zenod could not process that message. Please try again.").catch(() => {});
       console.error(`[telegram] ported inbound failed for chat ${chatId}: ${detail}`);
+      // Ported mode is provider-redelivered and downstream-idempotent. Do not
+      // acknowledge the update or substitute an unmetered response when its
+      // deterministic reply failed; retaining the offset is the durable retry.
+      throw error;
     }
   }
 
@@ -690,13 +728,59 @@ export class TelegramGateway {
   }
 
   /** Ported Bot API send primitive used by Phylax's tenant-scoped MCP face. */
-  async sendText(recipient: string, text: string): Promise<{ sentMessageId: string }> {
+  async sendText(
+    recipient: string,
+    text: string,
+    tenantId?: string,
+    auditMessageId?: string,
+  ): Promise<{ sentMessageId: string }> {
     const normalized = normalizeTelegramEntry(recipient);
     const chatId = /^-?\d+$/.test(normalized) ? Number(normalized) : Number.NaN;
     if (!Number.isSafeInteger(chatId) || !text.trim()) throw new Error("Telegram recipient and text are required");
-    const result = await this.callApi<{ message_id?: number }>("sendMessage", { chat_id: chatId, text });
-    if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
-    return { sentMessageId: String(result.message_id) };
+    const providerMessageId = auditMessageId?.trim()
+      ? `${auditMessageId.trim()}:terminal`
+      : `telegram-intent-${randomUUID()}`;
+    const usageClaim = tenantId?.trim()
+      ? this.options.beginPortedDeliveryUsage?.({
+          tenantId: tenantId.trim(),
+          providerMessageId,
+          custodyRef: `outbound-intent:${providerMessageId}`,
+          channel: "telegram",
+        })
+      : undefined;
+    if (usageClaim?.state === "paused") {
+      throw new PhylaxUsagePausedError("Telegram delivery is paused until channel allowance is available");
+    }
+    if (usageClaim?.state === "already_booked") {
+      const sentMessageId = usageClaim.providerReceiptId ?? usageClaim.work?.providerReceiptId;
+      if (!sentMessageId) throw new Error("Telegram delivery is booked without an exact provider receipt");
+      return { sentMessageId };
+    }
+    if (usageClaim?.state === "abandoned") {
+      throw new Error("Telegram delivery intent was previously abandoned");
+    }
+    try {
+      const result = await this.callApi<{ message_id?: number }>("sendMessage", { chat_id: chatId, text });
+      if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
+      const sentMessageId = String(result.message_id);
+      if (usageClaim) {
+        try {
+          this.options.completePortedDeliveryUsage?.(usageClaim, sentMessageId);
+        } catch (error) {
+          console.error("[telegram] local delivery accounting settlement failed:", error);
+        }
+      }
+      return { sentMessageId };
+    } catch (error) {
+      if (usageClaim) {
+        try {
+          this.options.completePortedDeliveryUsage?.(usageClaim, null);
+        } catch (settlementError) {
+          console.error("[telegram] local failed-delivery accounting settlement failed:", settlementError);
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -754,21 +838,93 @@ export class TelegramGateway {
       });
   }
 
-  private async sendReply(chatId: number, markdown: string): Promise<void> {
+  private async sendReply(
+    chatId: number,
+    markdown: string,
+    metering?: { tenantId: string; providerMessageId: string },
+  ): Promise<void> {
     if (!markdown) return;
     if (this.settings().rich) {
-      try {
-        // Inline owner/repo#N → [owner/repo#N](issue url) in the rich markdown.
-        await this.callApi("sendRichMessage", { chat_id: chatId, rich_message: { markdown: linkifyGithubRefs(markdown, { markdown: true }) } });
+      const claim = metering
+        ? this.options.beginPortedDeliveryUsage?.({
+            tenantId: metering.tenantId,
+            providerMessageId: `${metering.providerMessageId}:rich`,
+            custodyRef: `telegram-reply:${metering.providerMessageId}:rich`,
+            channel: "telegram",
+          })
+        : undefined;
+      if (claim?.state === "paused") throw new PhylaxUsagePausedError("Telegram delivery is paused until channel allowance is available");
+      if (claim?.state === "already_booked") {
+        if (!(claim.providerReceiptId ?? claim.work?.providerReceiptId)) {
+          throw new Error("Telegram rich delivery is booked without an exact provider receipt");
+        }
         return;
-      } catch (err) {
-        console.warn(
-          `[telegram] sendRichMessage rejected, falling back to plain: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      }
+      if (claim?.state !== "abandoned") {
+        try {
+          // Inline owner/repo#N → [owner/repo#N](issue url) in the rich markdown.
+          const result = await this.callApi<{ message_id?: number }>("sendRichMessage", { chat_id: chatId, rich_message: { markdown: linkifyGithubRefs(markdown, { markdown: true }) } });
+          if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
+          if (claim) {
+            try {
+              this.options.completePortedDeliveryUsage?.(claim, String(result.message_id));
+            } catch (error) {
+              console.error("[telegram] local rich-delivery accounting settlement failed:", error);
+            }
+          }
+          return;
+        } catch (err) {
+          // Rich and plain are distinct deterministic provider intents. The rich
+          // representation is deliberately abandoned before the plain chunks
+          // begin, so it cannot retain allowance or make a replay skip later
+          // chunks after only chunk 0 was sent.
+          if (claim) this.options.abandonPortedDeliveryUsage?.(claim);
+          console.warn(
+            `[telegram] sendRichMessage rejected, falling back to plain: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     }
-    for (const chunk of chunkText(linkifyGithubRefs(markdown, { markdown: false }), PLAIN_MESSAGE_LIMIT)) {
-      await this.callApi("sendMessage", { chat_id: chatId, text: chunk });
+    const chunks = chunkText(linkifyGithubRefs(markdown, { markdown: false }), PLAIN_MESSAGE_LIMIT);
+    for (const [index, chunk] of chunks.entries()) {
+      const claim = metering
+        ? this.options.beginPortedDeliveryUsage?.({
+            tenantId: metering.tenantId,
+            providerMessageId: `${metering.providerMessageId}:plain:${index}`,
+            custodyRef: `telegram-reply:${metering.providerMessageId}:plain:${index}`,
+            channel: "telegram",
+          })
+        : undefined;
+      if (claim?.state === "paused") throw new PhylaxUsagePausedError("Telegram delivery is paused until channel allowance is available");
+      if (claim?.state === "already_booked") {
+        if (!(claim.providerReceiptId ?? claim.work?.providerReceiptId)) {
+          throw new Error("Telegram plain delivery is booked without an exact provider receipt");
+        }
+        continue;
+      }
+      if (claim?.state === "abandoned") {
+        throw new Error("Telegram plain delivery intent was previously abandoned");
+      }
+      try {
+        const result = await this.callApi<{ message_id?: number }>("sendMessage", { chat_id: chatId, text: chunk });
+        if (!result?.message_id) throw new Error("Telegram provider returned no delivery receipt");
+        if (claim) {
+          try {
+            this.options.completePortedDeliveryUsage?.(claim, String(result.message_id));
+          } catch (error) {
+            console.error("[telegram] local plain-delivery accounting settlement failed:", error);
+          }
+        }
+      } catch (error) {
+        if (claim) {
+          try {
+            this.options.completePortedDeliveryUsage?.(claim, null);
+          } catch (settlementError) {
+            console.error("[telegram] local failed-plain accounting settlement failed:", settlementError);
+          }
+        }
+        throw error;
+      }
     }
   }
 

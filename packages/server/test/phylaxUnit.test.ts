@@ -443,7 +443,7 @@ describe("Phylax customer unit mount", () => {
               providedTranscript: { type: "string" },
               transcriptionProvider: { type: "string" },
               audioDurationSeconds: { type: ["number", "null"] },
-              transcriptionDisposition: { enum: ["provided", "skip_duration_limit"] },
+              transcriptionDisposition: { enum: ["provided", "skip_duration_limit", "skip_unavailable"] },
               senderTimestamp: { type: "string" },
               idempotencyKey: { type: "string", minLength: 1 },
             },

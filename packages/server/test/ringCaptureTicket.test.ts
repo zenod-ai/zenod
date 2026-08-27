@@ -385,7 +385,7 @@ describe("Ring capture context ticket", () => {
     }
   }, 15_000);
 
-  it("wakes production Ring delivery after background terminal receipts on both provider branches", async () => {
+  it("delivers terminal receipts without piggybacking a second Ring downstream", async () => {
     const phylaxDir = await mkdtemp(join(tmpdir(), "ring-capture-production-phylax-"));
     const ringDir = await mkdtemp(join(tmpdir(), "ring-capture-production-ring-"));
     const memoryDir = await mkdtemp(join(tmpdir(), "ring-capture-production-memory-"));
@@ -575,20 +575,14 @@ describe("Ring capture context ticket", () => {
           result: stored(capture.evidenceRef, capture.page),
         });
 
-        // This starts the actual organ background poll. Its successful provider
-        // delivery must pass through PhylaxPortedRuntime's production callback,
-        // wake journal recovery, and reach Ring without restart or direct
-        // producer observation/drain calls.
+        // The terminal provider receipt remains durable, but ZPF-8 no longer
+        // piggybacks a second application call onto Zenod memory capture.
         receipt.afterReply?.();
-        await vi.waitFor(async () => {
-          expect(await ringRuntime.state.recentCaptureTickets?.(cid)).toMatchObject([{
-            identity: { surface: capture.channel },
-            summary: `Filed memory in ${capture.page}.`,
-            evidenceRef: capture.evidenceRef,
-            terminal: true,
-          }]);
+        await vi.waitFor(() => {
+          expect(capture.channel === "whatsapp" ? whatsappSend : telegramSend)
+            .toHaveBeenCalled();
         }, { timeout: 5_000 });
-        expect(await ringRuntime.state.recentCaptureTickets?.(cid)).toHaveLength(1);
+        expect(await ringRuntime.state.recentCaptureTickets?.(cid)).toEqual([]);
       }
 
       expect(whatsappSend).toHaveBeenCalledTimes(1);
@@ -596,11 +590,14 @@ describe("Ring capture context ticket", () => {
         "34611111111",
         expect.stringContaining("Areas/Production WhatsApp.md"),
         "wa-production-capture",
+        "tenant-alpha",
       );
       expect(telegramSend).toHaveBeenCalledTimes(1);
       expect(telegramSend).toHaveBeenCalledWith(
         "7711",
         expect.stringContaining("Areas/Production Telegram.md"),
+        "tenant-alpha",
+        "tg-production-capture",
       );
       expect(JSON.stringify(whatsappSend.mock.calls)).not.toContain("Log/2026-07-29.md#^production-wa");
       expect(JSON.stringify(telegramSend.mock.calls)).not.toContain("Log/2026-07-29.md#^production-tg");

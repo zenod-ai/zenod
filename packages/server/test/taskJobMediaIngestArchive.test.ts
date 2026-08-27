@@ -204,6 +204,61 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     store.close();
   });
 
+  it("archives a Phylax-unavailable voice without invoking Zenod transcription", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-phylax-unavailable-"));
+    dirs.push(dir);
+    const archiveDir = join(dir, "archive");
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "This second transcription must never run.";
+    const settings = {
+      get: (key: string) => ({
+        artifact_archive_provider: "local",
+        artifact_archive_local_dir: archiveDir,
+      })[key] ?? null,
+    } as unknown as Settings;
+    const stored: StoreInput[] = [];
+    const engine = {
+      async store(input: StoreInput) {
+        stored.push(input);
+        return {
+          evidenceRef: "Log/2026-08-27.md#^e-phylax-unavailable",
+          pagesTouched: ["Inbox/Voice.md"],
+          commitSha: "d".repeat(40),
+          githubUrls: [],
+        };
+      },
+    } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const job = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("raw unavailable audio").toString("base64")}`,
+      filename: "voice.ogg",
+      sourceHint: "Telegram voice note",
+      providedTranscript: "",
+      transcriptionProvider: "Phylax channel transcription",
+      audioDurationSeconds: 42,
+      transcriptionDisposition: "skip_unavailable",
+    });
+    let done = store.get(job.id);
+    for (let i = 0; i < 50 && done?.status !== "done"; i += 1) {
+      await sleep(10);
+      done = store.get(job.id);
+    }
+
+    expect(done?.status).toBe("done");
+    const receipt = done!.result as MediaIngestReceipt;
+    expect(receipt.extraction).toMatchObject({
+      transcriptionStatus: "skipped_unavailable",
+      durationSeconds: 42,
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.content).toContain("authenticated channel reported transcription unavailable");
+    expect(stored[0]!.content).not.toContain("This second transcription must never run.");
+    await queue.close();
+    store.close();
+  });
+
   it("extracts an image ingest job, files it through the memory pipeline, and returns terminal receipts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-ingest-image-"));
     dirs.push(dir);
