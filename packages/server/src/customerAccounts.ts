@@ -17,6 +17,7 @@ export interface CustomerAccount {
   stripe_subscription_id: string | null;
   subscription_status: "checkout_pending" | "active" | "past_due" | "paused" | "canceled" | null;
   cancel_at_period_end: boolean;
+  current_period_start: string | null;
   current_period_end: string | null;
   github_id: number;
   github_login: string;
@@ -87,6 +88,7 @@ export class CustomerAccountStore {
       stripe_subscription_id: null,
       subscription_status: null,
       cancel_at_period_end: false,
+      current_period_start: null,
       current_period_end: null,
       github_id: existing?.github_id ?? required.github_id,
       github_login: existing?.github_login ?? required.github_login,

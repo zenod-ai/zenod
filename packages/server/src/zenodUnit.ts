@@ -48,6 +48,10 @@ import {
   hostedChannelsConfigured,
   mountHostedChannelsCustomerRoutes,
 } from "./hostedChannels.js";
+import {
+  loadZenodPhylaxConfig,
+  ZenodPhylaxAdapter,
+} from "./zenodPhylax.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
@@ -663,6 +667,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       dataDir: storage.dataDir,
       busyTimeoutMs: 30_000,
     });
+  const zenodPhylax = agent.name === "zenod"
+    ? new ZenodPhylaxAdapter(storage.dataDir, loadZenodPhylaxConfig(env))
+    : null;
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
   let managedTelegramAdmission: ((tenantId: string, input: TelegramManagedInbound) => Promise<void>) | null = null;
   let isHostedCustomerTenant: (tenantId: string) => boolean = () => false;
@@ -777,8 +784,65 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       env,
       tenantStore,
       product: options.customerProduct ?? options.customer?.product,
+      async onEntitlementChanged(account, input) {
+        await options.customer?.onEntitlementChanged?.(account, input);
+        await zenodPhylax?.setEntitlement(account, input.entitled);
+      },
+      async projectUsage(account, local) {
+        const productLocal = options.customer?.projectUsage
+          ? await options.customer.projectUsage(account, local)
+          : local;
+        return zenodPhylax
+          ? zenodPhylax.usageForAccount(account, productLocal)
+          : productLocal;
+      },
     },
   );
+  zenodPhylax?.setDownstreamTokenResolver((accountId) =>
+    customer.tokenVault.get(accountId));
+  let phylaxRefreshTimer: NodeJS.Timeout | null = null;
+  let phylaxRefreshStopped = false;
+  let phylaxRefreshRun: Promise<void> | null = null;
+  const configuredPhylaxRefreshDelay = Number(env.ZENOD_PHYLAX_LEGACY_REFRESH_RETRY_MS);
+  const initialPhylaxRefreshDelayMs = Number.isSafeInteger(configuredPhylaxRefreshDelay) &&
+    configuredPhylaxRefreshDelay > 0
+    ? configuredPhylaxRefreshDelay
+    : 30_000;
+  let phylaxRefreshDelayMs = initialPhylaxRefreshDelayMs;
+  if (zenodPhylax?.config.enabled) {
+    const schedulePhylaxRefresh = (delayMs: number) => {
+      if (phylaxRefreshStopped || phylaxRefreshTimer) return;
+      phylaxRefreshTimer = setTimeout(() => {
+        phylaxRefreshTimer = null;
+        void runPhylaxRefresh();
+      }, delayMs);
+      phylaxRefreshTimer.unref?.();
+    };
+    const runPhylaxRefresh = (): Promise<void> => {
+      if (phylaxRefreshRun) return phylaxRefreshRun;
+      const run = (async () => {
+        const refreshed = await customer.refreshAuthoritativeSubscriptions();
+        await zenodPhylax.bootstrapAccounts(customer.accounts.list());
+        if (refreshed.failedAccountIds.length > 0) {
+          schedulePhylaxRefresh(phylaxRefreshDelayMs);
+          phylaxRefreshDelayMs = Math.min(phylaxRefreshDelayMs * 2, 5 * 60_000);
+        } else {
+          phylaxRefreshDelayMs = initialPhylaxRefreshDelayMs;
+        }
+      })().catch((error) => {
+        console.error("[zenod-phylax] authoritative refresh/bootstrap failed:", error);
+        schedulePhylaxRefresh(phylaxRefreshDelayMs);
+        phylaxRefreshDelayMs = Math.min(phylaxRefreshDelayMs * 2, 5 * 60_000);
+      }).finally(() => {
+        if (phylaxRefreshRun === run) phylaxRefreshRun = null;
+      });
+      phylaxRefreshRun = run;
+      return run;
+    };
+    queueMicrotask(() => {
+      void runPhylaxRefresh();
+    });
+  }
   const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
   googleDriveOAuthAuthorityForTenant = (tenantId) => {
@@ -1008,9 +1072,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   app.get("/api/health", (c) =>
     c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
   );
-  if (agent.name === "zenod" && hostedChannelsConfigured(env)) {
+  if (
+    agent.name === "zenod" &&
+    (zenodPhylax?.config.enabled || hostedChannelsConfigured(env))
+  ) {
     mountHostedChannelsCustomerRoutes(app, {
       env,
+      ...(zenodPhylax?.config.enabled
+        ? { transport: { request: (tenant, action) => zenodPhylax.channels(tenant, action) } }
+        : {}),
       routeVisible(c) {
         const session = readCustomerSession(c, env);
         return Boolean(
@@ -1036,13 +1106,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           (account.subscription_status !== "active" &&
             account.subscription_status !== "past_due")
         ) return null;
-        return {
-          tenantId: account.tenant_id,
-          downstreamToken,
-          processingPaused:
-            (account as { managed_ai_status?: string }).managed_ai_status ===
-            "paused",
-        };
+        return zenodPhylax?.config.enabled
+          ? zenodPhylax.customerTenant(account, downstreamToken)
+          : {
+              tenantId: account.tenant_id,
+              downstreamToken,
+              processingPaused:
+                (account as { managed_ai_status?: string }).managed_ai_status ===
+                "paused",
+            };
       },
     });
   } else if (agent.name === "zenod") {
@@ -1250,9 +1322,19 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     customerAccounts: customer.accounts,
     customerTokenVault: customer.tokenVault,
     customerManagedAiAdmissions: customer.managedAiAdmissions,
+    zenodPhylax,
     resumeManagedAiAdmissions,
     async close() {
       const failures: unknown[] = [];
+      phylaxRefreshStopped = true;
+      if (phylaxRefreshTimer) clearTimeout(phylaxRefreshTimer);
+      if (phylaxRefreshRun) {
+        try {
+          await phylaxRefreshRun;
+        } catch (error) {
+          failures.push(error);
+        }
+      }
       for (
         const result of await Promise.allSettled([
           Promise.resolve().then(() => options.customerAdmin?.close?.()),
@@ -1260,6 +1342,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
             if (admissionResumeTimer) clearInterval(admissionResumeTimer);
           }),
           Promise.resolve().then(() => customer.close()),
+          Promise.resolve().then(() => zenodPhylax?.close()),
           Promise.resolve().then(() => managedAiOutbox.close()),
           runtimes.close(),
         ])

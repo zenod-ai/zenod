@@ -57,6 +57,7 @@ describe("hosted customer layer", () => {
       customer: "cus_test_customer",
       status: "active",
       cancel_at_period_end: false,
+      current_period_start: 1_797_321_600,
       current_period_end: 1_800_000_000,
       metadata: { account_id: customerAccountId(42) },
     } as Stripe.Subscription;
@@ -356,6 +357,95 @@ describe("hosted customer layer", () => {
     tenants.close();
   });
 
+  it("runs the generic sidecar lifecycle after local entitlement and composes one customer usage projection", async () => {
+    const lifecycle: Array<{ status: string | null; entitled: boolean; localStatus: string | null }> = [];
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+        async onEntitlementChanged(account, input) {
+          const token = account.tenant_id
+            ? tenants.snapshot().find((item) => item.tenant.id === account.tenant_id)
+            : null;
+          lifecycle.push({
+            status: account.subscription_status,
+            entitled: input.entitled,
+            localStatus: token?.status ?? null,
+          });
+        },
+        projectUsage: async () => ({
+          percentageUsed: null,
+          state: "setting_up",
+          resetsAt: "2026-09-27T00:00:00.000Z",
+        }),
+      },
+    );
+    try {
+      const cookie = await signInCookie(layer.app);
+      await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      const checkout = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(checkout.status).toBe(200);
+      expect(lifecycle.at(-1)).toEqual({ status: "active", entitled: true, localStatus: "active" });
+
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        status: "canceled",
+      } as Stripe.Subscription;
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.updated",
+        livemode: false,
+        data: { object: authoritativeSubscription },
+      } as Stripe.Event);
+      const canceled = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(canceled.status).toBe(200);
+      expect(lifecycle.at(-1)).toEqual({ status: "canceled", entitled: false, localStatus: "suspended" });
+
+      authoritativeSubscription = {
+        ...authoritativeSubscription,
+        status: "past_due",
+      } as Stripe.Subscription;
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "invoice.payment_failed",
+        livemode: false,
+        data: { object: { subscription: authoritativeSubscription.id } },
+      } as Stripe.Event);
+      const grace = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(grace.status).toBe(200);
+      expect(lifecycle.at(-1)).toEqual({ status: "past_due", entitled: true, localStatus: "active" });
+
+      const usage = await layer.app.request("/api/customer-usage", { headers: { cookie } });
+      expect(await usage.json()).toEqual({
+        percentageUsed: null,
+        state: "setting_up",
+        resetsAt: "2026-09-27T00:00:00.000Z",
+      });
+    } finally {
+      layer.close();
+    }
+  });
+
   it("opens the Stripe customer portal for the signed-in billing owner", async () => {
     const app = locallyBoundCustomerApp();
     const cookie = await signInCookie(app);
@@ -556,6 +646,7 @@ describe("hosted customer layer", () => {
       customer: "cus_test_customer",
       status,
       cancel_at_period_end: cancelAtPeriodEnd,
+      current_period_start: 1_797_321_600,
       current_period_end: 1_800_000_000,
     }) as Stripe.Subscription;
 
@@ -724,6 +815,104 @@ describe("hosted customer layer", () => {
       tenant: { id: "pilot-tenant", name: "Pilot Tenant", plan: "pilot" },
     });
     reopened.close();
+  });
+
+  it("refreshes legacy billing periods authoritatively with per-account isolation and no provisioning side effects", async () => {
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        onEntitlementChanged: vi.fn(),
+      },
+    );
+    const monthly = layer.accounts.upsert("legacy-monthly", {
+      account_id: "legacy-monthly",
+      github_id: 101,
+      github_login: "monthly",
+      tenant_id: "legacy-monthly",
+      stripe_subscription_id: "sub-monthly",
+      subscription_status: "active",
+    });
+    const yearly = layer.accounts.upsert("legacy-yearly", {
+      account_id: "legacy-yearly",
+      github_id: 102,
+      github_login: "yearly",
+      tenant_id: "legacy-yearly",
+      stripe_subscription_id: "sub-yearly",
+      subscription_status: "active",
+    });
+    layer.accounts.upsert("legacy-failed", {
+      account_id: "legacy-failed",
+      github_id: 103,
+      github_login: "failed",
+      tenant_id: "legacy-failed",
+      stripe_subscription_id: "sub-failed",
+      subscription_status: "active",
+    });
+    vi.mocked(stripe.subscriptions!.retrieve).mockImplementation(async (id) => {
+      if (id === "sub-failed") throw new Error("Stripe unavailable for one account");
+      const yearlyPeriod = id === "sub-yearly";
+      return {
+        ...authoritativeSubscription,
+        id,
+        metadata: { account_id: id === "sub-monthly" ? monthly.account_id : yearly.account_id },
+        current_period_start: yearlyPeriod ? 1_798_761_600 : 1_797_321_600,
+        current_period_end: yearlyPeriod ? 1_830_297_600 : 1_800_000_000,
+      } as Stripe.Subscription;
+    });
+    const beforeTenants = tenants.snapshot();
+
+    const first = await layer.refreshAuthoritativeSubscriptions();
+    const second = await layer.refreshAuthoritativeSubscriptions();
+
+    expect(first).toEqual({
+      refreshedAccountIds: ["legacy-monthly", "legacy-yearly"],
+      failedAccountIds: ["legacy-failed"],
+    });
+    expect(second).toEqual(first);
+    expect(layer.accounts.get("legacy-monthly")).toMatchObject({
+      current_period_start: new Date(1_797_321_600 * 1000).toISOString(),
+      current_period_end: new Date(1_800_000_000 * 1000).toISOString(),
+    });
+    expect(layer.accounts.get("legacy-yearly")).toMatchObject({
+      current_period_start: new Date(1_798_761_600 * 1000).toISOString(),
+      current_period_end: new Date(1_830_297_600 * 1000).toISOString(),
+    });
+    expect(layer.accounts.get("legacy-failed")?.current_period_start).toBeNull();
+    expect(tenants.snapshot()).toEqual(beforeTenants);
+    expect(layer.tokenVault.get("legacy-monthly")).toBeNull();
+    layer.close();
+  });
+
+  it("leaves a legacy row unchanged when no authoritative Stripe provider exists", async () => {
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env: {
+          ...env,
+          STRIPE_SECRET_KEY: "",
+          STRIPE_WEBHOOK_SECRET: "",
+        },
+        tenantStore: tenants,
+      },
+    );
+    layer.accounts.upsert("legacy-no-provider", {
+      account_id: "legacy-no-provider",
+      github_id: 104,
+      github_login: "no-provider",
+      tenant_id: "legacy-no-provider",
+      stripe_subscription_id: "sub-no-provider",
+      subscription_status: "active",
+    });
+    expect(await layer.refreshAuthoritativeSubscriptions()).toEqual({
+      refreshedAccountIds: [],
+      failedAccountIds: ["legacy-no-provider"],
+    });
+    expect(layer.accounts.get("legacy-no-provider")?.current_period_start).toBeNull();
+    expect(layer.tokenVault.get("legacy-no-provider")).toBeNull();
+    layer.close();
   });
 
   it("keeps the established MCP token valid when account binding is reconciled after a secret change", async () => {

@@ -48,6 +48,76 @@ function connectedTransportStatus<
 }
 
 describe("Hosted Zenod channel adapter", () => {
+  it("projects the integrated backend transport at the Zenod browser boundary", async () => {
+    const app = new Hono();
+    const transport = {
+      request: vi.fn(async (_tenant, action) => ({
+        status: 200,
+        body: action
+          ? {
+              channels: {
+                whatsapp: {
+                  state: "awaiting_code",
+                  senderHint: "••••1111",
+                  sharedNumber: "+34 699 000 111",
+                  verificationExpiresAt: 1_800_000_000_000,
+                  lastInboundAt: null,
+                  lastReceiptAt: null,
+                  revision: "wa:1",
+                },
+                telegram: {
+                  state: "off",
+                  identityHint: null,
+                  verificationExpiresAt: null,
+                  revision: "tg:0",
+                },
+              },
+              challenge: {
+                code: "42-otter",
+                sharedNumber: "+34 699 000 111",
+                expiresAt: 1_800_000_000_000,
+              },
+              mutation: {
+                operationId: action.operationId,
+                operation: action.operation,
+                outcome: "succeeded",
+                at: 1_790_000_000_000,
+              },
+              evidence: [{ secret: "must-not-reach-browser" }],
+              binding: { downstreamToken: "must-not-reach-browser" },
+            }
+          : {},
+      })),
+    };
+    mountHostedChannelsCustomerRoutes(app, {
+      env: {},
+      transport,
+      resolveTenant: () => ({
+        tenantId: "tenant-alpha",
+        downstreamToken: "memory-secret",
+      }),
+    });
+    const response = await app.request("/api/channels/whatsapp/challenge", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operationId: "integrated-challenge-0001",
+        sender: "+34 611 111 111",
+      }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(Object.keys(body).sort()).toEqual(["challenge", "channels", "mutation"]);
+    expect(JSON.stringify(body)).not.toMatch(/must-not-reach-browser|downstreamToken|evidence|binding/);
+    expect(transport.request).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-alpha" }),
+      expect.objectContaining({
+        operation: "whatsapp.challenge",
+        operationId: "integrated-challenge-0001",
+      }),
+    );
+  });
+
   it("reports an unavailable transport as a typed failure without partially binding the tenant", async () => {
     const dataDir = await mkdtemp(
       join(tmpdir(), "hosted-channels-unavailable-"),

@@ -72,6 +72,7 @@ describe("customer account persistence", () => {
       metadata: { account_id: "github-42" },
       status: "past_due",
       cancel_at_period_end: false,
+      current_period_start: 1_768_003_200,
       current_period_end: 1_800_000_000,
     } as Stripe.Subscription);
 
@@ -80,6 +81,8 @@ describe("customer account persistence", () => {
       stripe_subscription_id: "sub_live",
       stripe_customer_id: "cus_live",
       subscription_status: "past_due",
+      current_period_start: new Date(1_768_003_200 * 1000).toISOString(),
+      current_period_end: new Date(1_800_000_000 * 1000).toISOString(),
     });
   });
 });

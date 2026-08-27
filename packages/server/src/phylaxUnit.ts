@@ -7,6 +7,7 @@ import {
   createSqliteTenantStore,
   createUnit,
   hashToken,
+  type ControlPlaneOptions,
   type TenantProvisioningStore,
   type UnitContext,
 } from "@zenod/mcp-chassis";
@@ -106,6 +107,8 @@ export interface CreatePhylaxUnitOptions {
   webDist?: string;
   siteDist?: string;
   tenantStore?: TenantProvisioningStore;
+  /** Internal owner authority for tenant/profile credential reconciliation. */
+  controlPlane?: Omit<ControlPlaneOptions, "store">;
   customer?: CustomerLayerOptions;
   env?: NodeJS.ProcessEnv;
   /** Test/product extension seam; receives only the Phylax MCP context. */
@@ -235,6 +238,11 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         PHYLAX_MANAGEMENT_TOOL_NAMES,
     },
     tenantAuth: { store: tenantStore },
+    controlPlane: {
+      ...options.controlPlane,
+      store: tenantStore,
+      env,
+    },
     oauth: {
       server: true,
       store: createSqliteOAuthStore({ dataDir: storage.dataDir }),

@@ -20,6 +20,7 @@ import {
   ZENOD_READ_TOOLS,
   ZenodRuntimePool,
 } from "../src/zenodUnit.js";
+import { CustomerAccountStore } from "../src/customerAccounts.js";
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { driveAuthFromSettings } from "../src/drive.js";
@@ -125,6 +126,52 @@ async function createHostedDriveCustomer(
 const expectedHostedDriveStatusKeys = [...HOSTED_DRIVE_STATUS_PUBLIC_KEYS].sort();
 
 describe("Zenod chassis unit", () => {
+  it("retries failed legacy billing-period refresh independently and clears the retry lane on close", async () => {
+    const dataDir = await tempDir();
+    const accounts = new CustomerAccountStore(dataDir);
+    accounts.upsert("legacy-active", {
+      account_id: "legacy-active",
+      github_id: 777,
+      github_login: "legacy",
+      tenant_id: "legacy-active",
+      stripe_subscription_id: "sub-legacy-active",
+      subscription_status: "active",
+      current_period_start: null,
+      current_period_end: "2099-09-27T00:00:00.000Z",
+    });
+    const unit = createZenodUnit({
+      dataDir,
+      env: {
+        NODE_ENV: "test",
+        CHASSIS_VAULT_MASTER_KEY,
+        ZENOD_PHYLAX_MANAGEMENT_URL: "https://phylax.internal",
+        ZENOD_PHYLAX_ALLOWED_ORIGINS: "https://phylax.internal",
+        ZENOD_PHYLAX_CONTROL_TOKEN: "control-secret",
+        ZENOD_MASTER_ALLOWANCE_UNITS: "3000000",
+        ZENOD_PHYLAX_ALLOWANCE_UNITS: "1000000",
+        ZENOD_ALLOWANCE_UNITS_PER_USD: "1000000",
+        ZENOD_PHYLAX_TARIFF_VERSION: "tariff-v1",
+        ZENOD_PHYLAX_LEGACY_REFRESH_RETRY_MS: "20",
+      },
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(unit.zenodPhylax?.viewForAccount("legacy-active")?.state).toBe("setting_up");
+      });
+      const firstUpdatedAt = unit.zenodPhylax!.viewForAccount("legacy-active")!.updatedAt;
+      await vi.waitFor(() => {
+        expect(unit.zenodPhylax!.viewForAccount("legacy-active")!.updatedAt)
+          .toBeGreaterThan(firstUpdatedAt);
+      });
+      expect(unit.zenodPhylax?.viewForAccount("legacy-active")).toMatchObject({
+        periodId: null,
+        lastErrorCode: "billing_period_unavailable",
+      });
+    } finally {
+      await unit.close();
+    }
+  });
+
   it("declares every Zenod read tool for chassis conduct enforcement", () => {
     expect([...ZENOD_READ_TOOLS].sort()).toEqual([
       "ask_brain",

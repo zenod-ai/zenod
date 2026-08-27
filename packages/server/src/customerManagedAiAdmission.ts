@@ -199,7 +199,7 @@ export class CustomerManagedAiAdmissionQueue {
       const paused = this.setWaiting(existing.id, "paused_at_cap", usage.resetsAt);
       return { state: "paused_at_cap", job: paused };
     }
-    if (usage.state === "unavailable") {
+    if (usage.state === "setting_up" || usage.state === "unavailable") {
       const waiting = this.setWaiting(existing.id, "waiting_for_usage", usage.resetsAt);
       return { state: "waiting_for_usage", job: waiting };
     }
@@ -245,7 +245,7 @@ export class CustomerManagedAiAdmissionQueue {
         this.setWaiting(pending.id, "paused_at_cap", usage.resetsAt);
         continue;
       }
-      if (usage.state === "unavailable") {
+      if (usage.state === "setting_up" || usage.state === "unavailable") {
         this.setWaiting(pending.id, "waiting_for_usage", usage.resetsAt);
         continue;
       }

@@ -17,7 +17,7 @@ import {
   type CustomerProductConfig,
 } from "./customerBilling.js";
 import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
-import { projectCustomerUsage } from "./customerMetering.js";
+import { projectCustomerUsage, type CustomerUsageProjection } from "./customerMetering.js";
 import {
   createOpenRouterManagedAiClient,
   CustomerManagedAiAuditStore,
@@ -46,6 +46,16 @@ export interface CustomerLayerOptions {
   stripe?: CustomerStripeClient;
   tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
+  /** Product-owned sidecar lifecycle; it must durably record desired state before returning. */
+  onEntitlementChanged?: (
+    account: CustomerAccount,
+    input: { entitled: boolean },
+  ) => Promise<void> | void;
+  /** Product-owned composition of the local usage projection with an independent service. */
+  projectUsage?: (
+    account: CustomerAccount,
+    local: CustomerUsageProjection,
+  ) => Promise<CustomerUsageProjection> | CustomerUsageProjection;
   managedAiProvider?: ManagedAiProviderClient;
   product?: CustomerProductConfig;
   /**
@@ -176,7 +186,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
     const managedOutcome = await managedAi.setSubscriptionAccess(account, entitled);
     if (managedOutcome.state === "orphaned") throw new Error("managed AI child key requires operator recovery");
-    return accounts.get(account.session_id) ?? account;
+    const reconciled = accounts.get(account.session_id) ?? account;
+    await options.onEntitlementChanged?.(reconciled, { entitled });
+    return accounts.get(account.session_id) ?? reconciled;
   };
   const refreshAuthoritativeSubscription = async (
     account: CustomerAccount | null,
@@ -196,7 +208,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   ): Promise<CustomerAccount | null> => reconcileEntitlement(
     await refreshAuthoritativeSubscription(account, subscriptionId),
   );
-  const usageForAccount = async (account: CustomerAccount) => {
+  const localUsageForAccount = async (account: CustomerAccount) => {
     if (!managedAiProvider || !account.tenant_slug) {
       return projectCustomerUsage(null, managedAiConfig.warnPercent);
     }
@@ -212,6 +224,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     } catch {
       return projectCustomerUsage(null, managedAiConfig.warnPercent);
     }
+  };
+  const usageForAccount = async (account: CustomerAccount) => {
+    const local = await localUsageForAccount(account);
+    return options.projectUsage ? options.projectUsage(account, local) : local;
   };
   const reconcileManagedAiAccounts = async (): Promise<void> => {
     const failures: unknown[] = [];
@@ -229,6 +245,32 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       }
     }
     if (failures.length > 0) throw new AggregateError(failures, "managed AI periodic reconciliation failed");
+  };
+  const refreshAuthoritativeSubscriptions = async (): Promise<{
+    refreshedAccountIds: string[];
+    failedAccountIds: string[];
+  }> => {
+    const refreshedAccountIds: string[] = [];
+    const failedAccountIds: string[] = [];
+    for (const account of accounts.list()) {
+      if (
+        !account.tenant_id ||
+        !account.stripe_subscription_id ||
+        account.subscription_status === null ||
+        account.subscription_status === "checkout_pending"
+      ) continue;
+      if (!stripe?.subscriptions) {
+        failedAccountIds.push(account.account_id);
+        continue;
+      }
+      try {
+        await refreshAuthoritativeSubscription(account);
+        refreshedAccountIds.push(account.account_id);
+      } catch {
+        failedAccountIds.push(account.account_id);
+      }
+    }
+    return { refreshedAccountIds, failedAccountIds };
   };
   const reconcileIntervalRaw = Number(env.ZENOD_MANAGED_AI_RECONCILE_INTERVAL_MS);
   const reconcileIntervalMs = Number.isFinite(reconcileIntervalRaw) && reconcileIntervalRaw > 0
@@ -578,6 +620,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     managedAiAdmissions,
     reconcileEntitlement,
     reconcileManagedAiAccounts,
+    refreshAuthoritativeSubscriptions,
     close() {
       if (reconcileTimer) clearInterval(reconcileTimer);
       managedAiAdmissions.close();
