@@ -232,6 +232,14 @@ describe("tenant-safe Phylax management MCP", () => {
     try {
       await ensure(alpha, "alpha");
       await ensure(beta, "beta");
+      unit.phylaxUsageMeter.recordInboundMessage({
+        tenantId: "alpha",
+        providerMessageId: "mixed-version-before-grant",
+        channel: "whatsapp",
+      });
+      expect(unit.phylaxUsageMeter.pending("alpha")).toBe(1);
+      let allowanceWakes = 0;
+      unit.phylaxRuntime.wakeAllowanceWork = () => { allowanceWakes += 1; };
       const now = Date.now();
       const grantArgs = {
         operationId: "grant-alpha-0001",
@@ -245,7 +253,9 @@ describe("tenant-safe Phylax management MCP", () => {
       };
       const grant = await alpha.callTool({ name: "phylax_management_v1_credit_grant", arguments: grantArgs });
       expect(grant.isError).not.toBe(true);
-      expect(structured(grant)).toMatchObject({ replayed: false, revision: "1", allowance: { remainingUnits: 500 } });
+      expect(structured(grant)).toMatchObject({ replayed: false, revision: "2", allowance: { remainingUnits: 499 } });
+      expect(unit.phylaxUsageMeter.pending("alpha")).toBe(0);
+      expect(allowanceWakes).toBe(1);
       const lostResponseReplay = await alpha.callTool({ name: "phylax_management_v1_credit_grant", arguments: grantArgs });
       expect(structured(lostResponseReplay)).toEqual(structured(grant));
 
@@ -274,20 +284,20 @@ describe("tenant-safe Phylax management MCP", () => {
         name: "phylax_management_v1_suspend",
         arguments: {
           operationId: "suspend-alpha-1",
-          expectedRevision: "1",
+          expectedRevision: "2",
           auditReason: "subscription paused",
         },
       });
-      expect(structured(suspended)).toMatchObject({ revision: "2", allowance: { state: "suspended" } });
+      expect(structured(suspended)).toMatchObject({ revision: "3", allowance: { state: "suspended" } });
       const resumed = await alpha.callTool({
         name: "phylax_management_v1_resume",
         arguments: {
           operationId: "resume-alpha-001",
-          expectedRevision: "2",
+          expectedRevision: "3",
           auditReason: "subscription restored",
         },
       });
-      expect(structured(resumed)).toMatchObject({ revision: "3", allowance: { state: "active", remainingUnits: 500 } });
+      expect(structured(resumed)).toMatchObject({ revision: "4", allowance: { state: "active", remainingUnits: 499 } });
 
       const betaProjection = await beta.callTool({ name: "phylax_management_v1_credit_query", arguments: {} });
       expect(structured(betaProjection)).toMatchObject({

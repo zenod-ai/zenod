@@ -17,16 +17,14 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
-import {
-  captureMemoryAuthorityId,
-  isCaptureMemoryTool,
-} from "./captureMemoryAuthority.js";
 import { readCustomerSession } from "./customerSession.js";
 import {
   HostedChannelMutationAuditStore,
   mountPhylaxHostedChannelRoutes,
 } from "./hostedChannels.js";
 import { PhylaxAllowanceLedger } from "./phylaxAllowanceLedger.js";
+import { PhylaxUsageMeter } from "./phylaxUsageMeter.js";
+import { PhylaxCompatibilityMigration } from "./phylaxCompatibilityMigration.js";
 import {
   PHYLAX_MANAGEMENT_PROFILES,
   PHYLAX_MANAGEMENT_TOOL_NAMES,
@@ -146,8 +144,14 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   const allowanceLedger = new PhylaxAllowanceLedger(
     join(storage.dataDir, "phylax-allowance.sqlite"),
   );
+  const usageMeter = new PhylaxUsageMeter(storage.dataDir, allowanceLedger, env);
+  const compatibilityMigration = new PhylaxCompatibilityMigration(
+    storage.dataDir,
+    tenantSettings,
+    instance,
+  );
+  compatibilityMigration.migrateExisting();
   const artifactCapabilitySecret = phylaxArtifactCapabilitySecret(env);
-  const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
   const captureTickets = new RingCaptureTicketProducer(
     join(storage.dataDir, "ring-capture-ticket-outbox.sqlite"),
     async (ticket) => {
@@ -179,10 +183,11 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   const organ = createTenantOrgan(
     storage.dataDir,
     tenantSettings,
-    captureTickets,
     env,
     artifactCapabilitySecret,
     instance,
+    usageMeter,
+    compatibilityMigration,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ channel, sender, username, text }) {
@@ -204,13 +209,34 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
           : ZENOD_TELEGRAM_VERIFICATION_REPLY
         : null;
     },
-    observeCaptureJob(ticket) {
-      captureTickets.observeJob(ticket, ticket.terminal);
+    beginVoiceTranscriptionUsage(input) {
+      const transcription = tenantSettings.transcriptionConfig(input.tenantId);
+      return usageMeter.beginTranscription({
+        ...input,
+        provider: transcription.provider,
+        model: transcription.model,
+      });
     },
-    wakeCaptureTickets() {
-      captureTickets.recoverFromCaptureJournal(captureJournalPath);
+    completeVoiceTranscriptionUsage(claim, succeeded) {
+      usageMeter.completeTranscription(claim, succeeded);
+    },
+    maintainVoiceTranscriptionUsage(claim) {
+      return usageMeter.maintainTranscriptionLease(claim);
+    },
+    beginDeliveryUsage(input) {
+      return usageMeter.beginDelivery(input);
+    },
+    completeDeliveryUsage(claim, providerReceiptId) {
+      usageMeter.completeDelivery(claim, providerReceiptId);
+    },
+    abandonDeliveryUsage(claim) {
+      usageMeter.abandonDelivery(claim);
+    },
+    recoverDeliveryReceipt(input) {
+      return usageMeter.recoverDeliveryReceipt(input);
     },
   });
+  usageMeter.setWorkReadyCallback(() => runtime.wakeAllowanceWork());
   const bootLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
   if (env.PHYLAX_PREWARM_LOCAL_MODEL !== "0") {
     void prepareModel(
@@ -271,6 +297,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         runtime,
         audit: hostedChannelAudit,
         ledger: allowanceLedger,
+        usageMeter,
         challengeSecret: artifactCapabilitySecret,
       });
       registerTenantChannelTools(server, context, runtime, tenantSettings);
@@ -290,10 +317,6 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       },
     )
     : null;
-  captureTickets.recoverFromCaptureJournal(
-    captureJournalPath,
-  );
-  captureTickets.resume();
   void runtime.start().catch((error) => console.error("phylax channels failed to start:", error));
 
   const app = new Hono<{ Bindings: HttpBindings }>();
@@ -583,6 +606,10 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       ),
     });
   });
+  app.get("/api/phylax/admin/compatibility", (c) => {
+    c.header("cache-control", "private, no-store");
+    return c.json({ migrations: compatibilityMigration.migrateExisting() });
+  });
   mountPhylaxAdminChannelRoutes(app, runtime);
   if (options.webDist) {
     if (!customer) {
@@ -629,6 +656,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     phylaxInstance: instance,
     hostedChannelAudit,
     phylaxAllowanceLedger: allowanceLedger,
+    phylaxUsageMeter: usageMeter,
+    phylaxCompatibilityMigration: compatibilityMigration,
     ringCaptureTickets: captureTickets,
     async close() {
       const failures: unknown[] = [];
@@ -641,6 +670,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       }
       for (const close of [
         () => hostedChannelAudit.close(),
+        () => compatibilityMigration.close(),
+        () => usageMeter.close(),
         () => allowanceLedger.close(),
       ]) {
         try {
@@ -852,10 +883,11 @@ export function normalizePhylaxTranscriptionUpdate(
 function createTenantOrgan(
   dataDir: string,
   tenantSettings: PhylaxTenantSettingsStore,
-  captureTickets: RingCaptureTicketProducer,
   env: NodeJS.ProcessEnv,
   artifactCapabilitySecret: string,
   instance: PhylaxInstanceConfig,
+  usageMeter: PhylaxUsageMeter,
+  compatibilityMigration: PhylaxCompatibilityMigration,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   const configuredVoiceJobDeadline = Number(
@@ -867,14 +899,35 @@ function createTenantOrgan(
     transcriptionDeadlineMs: configuredDeadline,
     voiceJobDeadlineMs: configuredVoiceJobDeadline,
     routes: {
-      resolve: (channel, sender) => resolvePhylaxRuntimeRoute(
-        instance,
-        tenantSettings,
-        channel,
-        sender,
-      ),
+      resolve: (channel, sender) => {
+        const route = resolvePhylaxRuntimeRoute(
+          instance,
+          tenantSettings,
+          channel,
+          sender,
+        );
+        if (route) compatibilityMigration.migrateTenant(route.tenantId);
+        return route;
+      },
       reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>
         tenantSettings.reportDownstreamCredentialStatus(tenantId, credentialRevision, status),
+    },
+    recordInboundUsage(input) {
+      usageMeter.recordInboundMessage(input);
+    },
+    beginTranscriptionUsage(input) {
+      const transcription = tenantSettings.transcriptionConfig(input.tenantId);
+      return usageMeter.beginTranscription({
+        ...input,
+        provider: transcription.provider,
+        model: transcription.model,
+      });
+    },
+    completeTranscriptionUsage(claim, succeeded) {
+      usageMeter.completeTranscription(claim, succeeded);
+    },
+    maintainTranscriptionUsage(claim) {
+      return usageMeter.maintainTranscriptionLease(claim);
     },
     async callDownstream(call) {
       const result = await callPeerTool(
@@ -887,24 +940,6 @@ function createTenantOrgan(
         call.tool,
         call.arguments,
       );
-      if (isCaptureMemoryTool(call.tool) && !result.isError) {
-        const structured = result.structuredContent;
-        if (structured && typeof structured === "object" && !Array.isArray(structured)) {
-          const candidate = structured as Record<string, unknown>;
-          const jobId = candidate.ticket_id ?? candidate.jobId;
-          if (typeof jobId === "string" && jobId.trim()) {
-            captureTickets.bindMemoryJob({
-              tenantId: call.route.tenantId,
-              jobId: jobId.trim(),
-              memoryAuthorityId: captureMemoryAuthorityId({
-                url: call.route.downstreamUrl,
-                token: call.route.downstreamToken,
-              }),
-              captureTool: call.tool,
-            });
-          }
-        }
-      }
       return result;
     },
     transcriber: {
@@ -1084,7 +1119,7 @@ function registerTenantChannelTools(
 ): void {
   const tenantId = context.tenant?.id;
   if (!tenantId) throw new Error("Phylax channel tools require a tenant");
-  const delivery = runtime.delivery();
+  const delivery = runtime.delivery(tenantId);
   const send = async (channel: PhylaxPortedChannel, recipient: string, text: string) => {
     if (!settings.ownsRecipient(tenantId, channel, recipient)) {
       throw new PhylaxChannelError("delivery_error", "That recipient is not connected to this Zenod account.");

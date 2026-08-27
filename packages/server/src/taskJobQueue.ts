@@ -205,7 +205,7 @@ interface MediaExtraction {
   kind: "audio" | "image" | "pdf" | "text";
   filename: string;
   label: string;
-  transcriptionStatus?: "transcribed" | "skipped_duration_limit";
+  transcriptionStatus?: "transcribed" | "skipped_duration_limit" | "skipped_unavailable";
 }
 
 function parseDataUrl(bytesRef: string): { data: Buffer; mediaType: string } {
@@ -346,6 +346,8 @@ async function processMediaIngest(
   const extraction: MediaExtraction = canTranscribe
     ? input.transcriptionDisposition === "skip_duration_limit"
       ? skippedDurationLimitExtraction(input, archived)
+      : input.transcriptionDisposition === "skip_unavailable"
+        ? skippedUnavailableExtraction(input, archived)
       : input.providedTranscript?.trim()
         ? suppliedTranscriptExtraction(input, archived)
         : await transcribeMedia(settings, archived)
@@ -380,6 +382,8 @@ async function processMediaIngest(
     ...(input.senderTimestamp ? [`Source timestamp: ${input.senderTimestamp}`] : []),
     ...(extraction.transcriptionStatus === "skipped_duration_limit"
       ? ["Transcription: skipped because the audio exceeds Zenod's 2-hour transcription limit."]
+      : extraction.transcriptionStatus === "skipped_unavailable"
+        ? ["Transcription: skipped because the authenticated channel reported it unavailable."]
       : [`${extraction.kind === "audio" ? "Transcribed" : "Extracted"} by ${extraction.provider}.`]),
     `Extraction artifact: ${extractionHandle.uri}`,
     ...(input.contentHint ? [`User context: ${input.contentHint}`] : []),
@@ -399,6 +403,8 @@ async function processMediaIngest(
     status: "done",
     message: extraction.transcriptionStatus === "skipped_duration_limit"
       ? "Audio archived without transcription because it exceeds the 2-hour limit; a Zenod entry pointing to the audio was filed."
+      : extraction.transcriptionStatus === "skipped_unavailable"
+        ? "Audio archived without another transcription attempt; a Zenod entry pointing to the audio was filed."
       : "Media artifact archived, extracted, digested, filed, and committed.",
     mediaType: input.mediaType ?? extraction.kind,
     source: receiptSource(input),
@@ -484,6 +490,20 @@ function skippedDurationLimitExtraction(input: TaskJobInput, archived: ArchivedM
     filename: `${stripKnownExtension(archived.filename)}.archive-note.txt`,
     label: "Voice note",
     transcriptionStatus: "skipped_duration_limit",
+  };
+}
+
+function skippedUnavailableExtraction(_input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
+  return {
+    body: [
+      "This voice note was archived without another transcription attempt because the authenticated channel reported transcription unavailable.",
+      "Use the raw audio archive link in this evidence entry for separate processing.",
+    ].join("\n"),
+    provider: "not transcribed (channel unavailable)",
+    kind: "audio",
+    filename: `${stripKnownExtension(archived.filename)}.archive-note.txt`,
+    label: "Voice note",
+    transcriptionStatus: "skipped_unavailable",
   };
 }
 

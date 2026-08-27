@@ -91,9 +91,9 @@ export const INGEST_MEMORY_SHAPE = {
     .optional()
     .describe("Best-effort probed audio duration supplied by the channel transport."),
   transcriptionDisposition: z
-    .enum(["provided", "skip_duration_limit"])
+    .enum(["provided", "skip_duration_limit", "skip_unavailable"])
     .optional()
-    .describe("Whether to use the supplied transcript or archive audio without transcription because it exceeds the product limit."),
+    .describe("Whether to use the supplied transcript or archive audio without another transcription attempt."),
   senderTimestamp: z.string().min(1).optional().describe("Original sender/source timestamp, preferably ISO-8601."),
   hints: z.array(z.string().min(1)).optional().describe("Optional filing hints for the eventual memory digest."),
   idempotencyKey: z

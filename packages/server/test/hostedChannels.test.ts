@@ -1384,7 +1384,10 @@ describe("Hosted Zenod channel adapter", () => {
           text: "private task",
         }),
       );
-      expect(sendReply).toHaveBeenLastCalledWith(733333333, "stored privately");
+      expect(sendReply).toHaveBeenLastCalledWith(733333333, "stored privately", {
+        tenantId: "tenant-dm-username",
+        providerMessageId: "6:reply",
+      });
       expect(sendChatAction).toHaveBeenCalledWith(733333333, "typing");
     } finally {
       await unit.close();

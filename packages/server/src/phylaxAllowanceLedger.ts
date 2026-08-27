@@ -113,6 +113,8 @@ export interface PhylaxPaidWork {
   leaseToken: string | null;
   leaseUntil: number | null;
   usageEntrySequence: number | null;
+  /** Exact irreversible provider receipt for completed paid work. */
+  providerReceiptId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -169,6 +171,8 @@ interface PaidWorkRow {
   completed_lease_owner: string | null;
   completed_lease_token: string | null;
   usage_entry_sequence: number | null;
+  provider_receipt_id: string | null;
+  cancellation_requested_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -256,6 +260,7 @@ function paidWork(row: PaidWorkRow): PhylaxPaidWork {
     leaseToken: row.lease_token,
     leaseUntil: row.lease_until,
     usageEntrySequence: row.usage_entry_sequence,
+    providerReceiptId: row.provider_receipt_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -333,6 +338,8 @@ export class PhylaxAllowanceLedger {
         completed_lease_owner TEXT,
         completed_lease_token TEXT,
         usage_entry_sequence INTEGER,
+        provider_receipt_id TEXT,
+        cancellation_requested_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         UNIQUE (tenant_id, idempotency_key),
@@ -345,9 +352,23 @@ export class PhylaxAllowanceLedger {
       (this.db.prepare("PRAGMA table_info(phylax_paid_work)").all() as unknown as Array<{ name: string }>)
         .map((column) => column.name),
     );
-    for (const column of ["lease_token", "completed_lease_owner", "completed_lease_token"]) {
+    for (const column of ["lease_token", "completed_lease_owner", "completed_lease_token", "provider_receipt_id"]) {
       if (!paidWorkColumns.has(column)) this.db.exec(`ALTER TABLE phylax_paid_work ADD COLUMN ${column} TEXT`);
     }
+    if (!paidWorkColumns.has("cancellation_requested_at")) {
+      this.db.exec("ALTER TABLE phylax_paid_work ADD COLUMN cancellation_requested_at INTEGER");
+    }
+    // Older completed rows already point at their immutable usage entry. Backfill
+    // only the provider receipt projection; no credential, session or tenant
+    // payload is touched.
+    this.db.exec(`
+      UPDATE phylax_paid_work
+      SET provider_receipt_id = (
+        SELECT provider_event_id FROM phylax_allowance_entries
+        WHERE sequence = phylax_paid_work.usage_entry_sequence
+      )
+      WHERE state='done' AND provider_receipt_id IS NULL AND usage_entry_sequence IS NOT NULL
+    `);
   }
 
   private transaction<T>(run: () => T): T {
@@ -612,7 +633,10 @@ export class PhylaxAllowanceLedger {
     if (!period) throw new Error("allowance period does not exist");
     const acceptedOutsidePeriod = acceptedAt < period.starts_at || acceptedAt >= period.ends_at;
     const eventOutsidePeriod = normalized.occurredAt < period.starts_at || normalized.occurredAt >= period.ends_at;
-    if (acceptedOutsidePeriod || eventOutsidePeriod) {
+    // Work admitted inside a period owns its reservation even if completion
+    // crosses the wall-clock period boundary. Unreserved late usage remains
+    // rejected, and the event itself must still belong to the admitted period.
+    if (eventOutsidePeriod || (acceptedOutsidePeriod && ownedReservationUnits === 0)) {
       return { ok: false, error: new Error("usage requires an active allowance period") };
     }
     const spendableUnits = this.availableInPeriod(normalized.tenantId, normalized.periodId)
@@ -976,6 +1000,17 @@ export class PhylaxAllowanceLedger {
     ).get(tenantId, providerEventId, operation) as unknown as PaidWorkRow | undefined ?? null;
   }
 
+  /** Read only the exact irreversible receipt for a completed provider intent. */
+  paidWorkReceipt(tenantIdInput: string, providerEventIdInput: string, operationInput: string): string | null {
+    const tenantId = required(tenantIdInput, "tenantId");
+    const providerEventId = required(providerEventIdInput, "providerEventId");
+    const operation = required(operationInput, "operation");
+    const work = this.workByProviderEvent(tenantId, providerEventId, operation);
+    return work?.state === "done" && work.provider_receipt_id?.trim()
+      ? work.provider_receipt_id.trim()
+      : null;
+  }
+
   private evaluateWork(id: string, now: number): PaidWorkRow {
     const current = this.work(id);
     if (!current) throw new Error("paid work does not exist");
@@ -1019,26 +1054,54 @@ export class PhylaxAllowanceLedger {
     });
   }
 
+  /** Reclaim only expired leases; live owners are never fenced by identity. */
+  reconcileExpiredPaidWork(at: number = this.now()): number {
+    const now = timestamp(at, "at");
+    return this.transaction(() => this.reconcileExpiredPaidWorkInTransaction(now));
+  }
+
+  private reconcileExpiredPaidWorkInTransaction(now: number, tenantId?: string): number {
+    const rows = this.db.prepare(
+      `SELECT id, cancellation_requested_at FROM phylax_paid_work
+       WHERE state='processing' AND lease_until <= ? ${tenantId ? "AND tenant_id=?" : ""}
+       ORDER BY created_at, id`,
+    ).all(...(tenantId ? [now, tenantId] : [now])) as unknown as Array<{
+      id: string;
+      cancellation_requested_at: number | null;
+    }>;
+    let changed = 0;
+    for (const row of rows) {
+      if (row.cancellation_requested_at !== null) {
+        const result = this.db.prepare(
+          `UPDATE phylax_paid_work
+           SET state='cancelled', pause_reason=NULL, reserved_units=0,
+               lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
+           WHERE id=? AND state='processing' AND lease_until <= ?`,
+        ).run(now, row.id, now);
+        changed += Number(result.changes);
+        continue;
+      }
+      const released = this.db.prepare(
+        `UPDATE phylax_paid_work
+         SET state='captured', pause_reason=NULL, reserved_units=0,
+             lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
+         WHERE id=? AND state='processing' AND lease_until <= ?`,
+      ).run(now, row.id, now);
+      if (Number(released.changes) === 1) {
+        this.evaluateWork(row.id, now);
+        changed += 1;
+      }
+    }
+    return changed;
+  }
+
   claimNextPaidWork(tenantIdInput: string, workerIdInput: string, leaseMs: number, at: number = this.now()): PhylaxPaidWork | null {
     const tenantId = required(tenantIdInput, "tenantId");
     const workerId = required(workerIdInput, "workerId");
     const now = timestamp(at, "at");
     const lease = units(leaseMs, "leaseMs", { positive: true });
     return this.transaction(() => {
-      const expired = this.db.prepare(
-        `SELECT id FROM phylax_paid_work
-         WHERE tenant_id=? AND state='processing' AND lease_until <= ?
-         ORDER BY created_at, id`,
-      ).all(tenantId, now) as unknown as Array<{ id: string }>;
-      for (const item of expired) {
-        const released = this.db.prepare(
-          `UPDATE phylax_paid_work
-           SET state='captured', pause_reason=NULL, reserved_units=0,
-               lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
-           WHERE id=? AND state='processing' AND lease_until <= ?`,
-        ).run(now, item.id, now);
-        if (Number(released.changes) === 1) this.evaluateWork(item.id, now);
-      }
+      this.reconcileExpiredPaidWorkInTransaction(now, tenantId);
       this.reconcileExpiredPeriodsInTransaction(now);
       const candidate = this.db.prepare(
         `SELECT * FROM phylax_paid_work
@@ -1056,6 +1119,148 @@ export class PhylaxAllowanceLedger {
     });
   }
 
+  /**
+   * Claim one already-admitted operation by its durable identity.
+   *
+   * Channel workers know the exact provider message they are about to process;
+   * taking an arbitrary tenant job would let concurrent voice notes exchange
+   * reservations. This targeted claim keeps the existing FIFO worker API while
+   * giving the channel seam an exact, restart-safe lease.
+   */
+  claimPaidWork(
+    workIdInput: string,
+    tenantIdInput: string,
+    workerIdInput: string,
+    leaseMs: number,
+    at: number = this.now(),
+  ): PhylaxPaidWork | null {
+    const workId = required(workIdInput, "workId");
+    const tenantId = required(tenantIdInput, "tenantId");
+    const workerId = required(workerIdInput, "workerId");
+    const now = timestamp(at, "at");
+    const lease = units(leaseMs, "leaseMs", { positive: true });
+    return this.transaction(() => {
+      const current = this.work(workId);
+      if (!current || current.tenant_id !== tenantId) return null;
+      if (current.state === "processing" && current.lease_until !== null && current.lease_until <= now) {
+        this.reconcileExpiredPaidWorkInTransaction(now, tenantId);
+      }
+      this.reconcileExpiredPeriodsInTransaction(now);
+      const ready = this.work(workId);
+      if (!ready || ready.tenant_id !== tenantId || ready.state !== "ready") return null;
+      const leaseToken = randomUUID();
+      const result = this.db.prepare(
+        `UPDATE phylax_paid_work
+         SET state='processing', lease_owner=?, lease_token=?, lease_until=?, updated_at=?
+         WHERE id=? AND tenant_id=? AND state='ready'`,
+      ).run(workerId, leaseToken, now + lease, now, workId, tenantId);
+      return Number(result.changes) === 1 ? paidWork(this.work(workId)!) : null;
+    });
+  }
+
+  renewPaidWorkLease(input: {
+    workId: string;
+    tenantId: string;
+    leaseOwner: string;
+    leaseToken: string;
+    leaseMs: number;
+  }): PhylaxPaidWork {
+    const workId = required(input.workId, "workId");
+    const tenantId = required(input.tenantId, "tenantId");
+    const leaseOwner = required(input.leaseOwner, "leaseOwner");
+    const leaseToken = required(input.leaseToken, "leaseToken");
+    const leaseMs = units(input.leaseMs, "leaseMs", { positive: true });
+    return this.transaction(() => {
+      const now = this.now();
+      const result = this.db.prepare(
+        `UPDATE phylax_paid_work SET lease_until=?, updated_at=?
+         WHERE id=? AND tenant_id=? AND state='processing'
+           AND lease_owner=? AND lease_token=? AND lease_until > ?`,
+      ).run(now + leaseMs, now, workId, tenantId, leaseOwner, leaseToken, now);
+      if (Number(result.changes) !== 1) {
+        throw new PhylaxLedgerConflictError("paid work lease cannot be renewed by this claim");
+      }
+      return paidWork(this.work(workId)!);
+    });
+  }
+
+  /** Release a provider attempt that failed before producing any receipt. */
+  releasePaidWorkForRetry(input: {
+    workId: string;
+    tenantId: string;
+    leaseOwner: string;
+    leaseToken: string;
+  }): PhylaxPaidWork {
+    const workId = required(input.workId, "workId");
+    const tenantId = required(input.tenantId, "tenantId");
+    const leaseOwner = required(input.leaseOwner, "leaseOwner");
+    const leaseToken = required(input.leaseToken, "leaseToken");
+    return this.transaction(() => {
+      const current = this.work(workId);
+      if (!current || current.tenant_id !== tenantId) throw new Error("paid work does not exist for tenant");
+      if (current.state !== "processing") return paidWork(current);
+      if (current.lease_owner !== leaseOwner || current.lease_token !== leaseToken) {
+        throw new PhylaxLedgerConflictError("paid work release lease does not match the active claim");
+      }
+      const now = this.now();
+      if (current.cancellation_requested_at !== null) {
+        this.db.prepare(
+          `UPDATE phylax_paid_work
+           SET state='cancelled', pause_reason=NULL, reserved_units=0,
+               lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
+           WHERE id=? AND tenant_id=? AND state='processing'
+             AND lease_owner=? AND lease_token=?`,
+        ).run(now, workId, tenantId, leaseOwner, leaseToken);
+        return paidWork(this.work(workId)!);
+      }
+      this.db.prepare(
+        `UPDATE phylax_paid_work
+         SET state='captured', pause_reason=NULL, reserved_units=0,
+             lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
+         WHERE id=? AND tenant_id=? AND state='processing'
+           AND lease_owner=? AND lease_token=?`,
+      ).run(now, workId, tenantId, leaseOwner, leaseToken);
+      return paidWork(this.evaluateWork(workId, now));
+    });
+  }
+
+  /** Terminalize admitted work that will deliberately not call a provider. */
+  cancelPaidWork(input: {
+    workId: string;
+    tenantId: string;
+    leaseOwner?: string;
+    leaseToken?: string;
+  }): PhylaxPaidWork {
+    const workId = required(input.workId, "workId");
+    const tenantId = required(input.tenantId, "tenantId");
+    return this.transaction(() => {
+      const current = this.work(workId);
+      if (!current || current.tenant_id !== tenantId) throw new Error("paid work does not exist for tenant");
+      if (current.state === "done" || current.state === "cancelled") return paidWork(current);
+      if (current.state === "processing") {
+        if (!input.leaseOwner && !input.leaseToken) {
+          this.db.prepare(
+            `UPDATE phylax_paid_work SET cancellation_requested_at=?, updated_at=?
+             WHERE id=? AND tenant_id=? AND state='processing'`,
+          ).run(this.now(), this.now(), workId, tenantId);
+          return paidWork(this.work(workId)!);
+        }
+        if (
+          current.lease_owner !== input.leaseOwner?.trim()
+          || current.lease_token !== input.leaseToken?.trim()
+        ) throw new PhylaxLedgerConflictError("actively leased paid work cannot be cancelled without its exact claim");
+      }
+      this.db.prepare(
+        `UPDATE phylax_paid_work
+         SET state='cancelled', pause_reason=NULL, reserved_units=0,
+             lease_owner=NULL, lease_token=NULL, lease_until=NULL,
+             cancellation_requested_at=NULL, updated_at=?
+         WHERE id=? AND tenant_id=? AND state IN ('captured', 'ready', 'paused', 'processing')`,
+      ).run(this.now(), workId, tenantId);
+      return paidWork(this.work(workId)!);
+    });
+  }
+
   completePaidWork(input: {
     workId: string;
     tenantId: string;
@@ -1063,6 +1268,8 @@ export class PhylaxAllowanceLedger {
     leaseToken: string;
     amountUnits: number;
     providerEventId: string;
+    /** Exact provider receipt identity when it differs from the admission intent. */
+    usageProviderEventId?: string;
     provider: string;
     model?: string | null;
     costBasis: PhylaxUsageCostBasis;
@@ -1089,7 +1296,7 @@ export class PhylaxAllowanceLedger {
         tenantId,
         periodId: current.period_id,
         amountUnits: units(input.amountUnits, "amountUnits", { nonNegative: true }),
-        providerEventId: current.provider_event_id,
+        providerEventId: input.usageProviderEventId?.trim() || current.provider_event_id,
         operation: current.operation,
         provider: required(input.provider, "provider"),
         model: input.model?.trim() || null,
@@ -1097,10 +1304,15 @@ export class PhylaxAllowanceLedger {
         idempotencyKey: required(input.idempotencyKey, "idempotencyKey"),
         tariffVersion: required(input.tariffVersion, "tariffVersion"),
         auditReason: required(input.auditReason, "auditReason", 2_000),
-        occurredAt: timestamp(input.occurredAt ?? completedAt, "occurredAt"),
+        // Attribute paid work to its durable admission/custody time. Provider
+        // completion may legitimately cross an allowance-period boundary.
+        occurredAt: timestamp(input.occurredAt ?? current.created_at, "occurredAt"),
       };
       const hash = payloadHash({ ...normalized, amountUnits: -normalized.amountUnits, idempotencyKey: undefined, occurredAt: undefined });
       if (current.state === "done") {
+        if (current.provider_receipt_id !== null && current.provider_receipt_id !== normalized.providerEventId) {
+          throw new PhylaxLedgerConflictError("paid work already completed with a different provider receipt");
+        }
         if (current.completed_lease_owner !== leaseOwner || current.completed_lease_token !== leaseToken) {
           throw new PhylaxLedgerConflictError("paid work completion lease does not match the completed claim");
         }
@@ -1134,13 +1346,15 @@ export class PhylaxAllowanceLedger {
         `UPDATE phylax_paid_work
          SET state='done', pause_reason=NULL, reserved_units=0,
              lease_owner=NULL, lease_token=NULL, lease_until=NULL,
+             cancellation_requested_at=NULL,
              completed_lease_owner=?, completed_lease_token=?,
-             usage_entry_sequence=?, updated_at=?
+             usage_entry_sequence=?, provider_receipt_id=?, updated_at=?
          WHERE id=? AND state='processing' AND lease_owner=? AND lease_token=? AND lease_until > ?`,
       ).run(
         leaseOwner,
         leaseToken,
         usage.entry.sequence,
+        normalized.providerEventId,
         completedAt,
         current.id,
         leaseOwner,
@@ -1150,6 +1364,111 @@ export class PhylaxAllowanceLedger {
       const completed = this.work(current.id)!;
       if (completed.state !== "done" || completed.usage_entry_sequence !== usage.entry.sequence) {
         throw new Error("paid work lease changed before completion");
+      }
+      return { result: { work: paidWork(completed), usage } };
+    });
+    if ("error" in attempt) throw attempt.error;
+    return attempt.result;
+  }
+
+  /**
+   * Settle an irreversible provider result that was durably journaled after
+   * the provider call but before the ordinary lease completion committed.
+   *
+   * The original paid-work identity and exact provider receipt must both
+   * match. Because the external cost already happened, this recovery path
+   * records truthful usage even if the original lease or period wall clock has
+   * since elapsed; it can never authorize another provider call.
+   */
+  completePaidWorkFromDurableReceipt(input: {
+    workId: string;
+    tenantId: string;
+    admissionProviderEventId: string;
+    providerReceiptId: string;
+    amountUnits: number;
+    provider: string;
+    model?: string | null;
+    costBasis: PhylaxUsageCostBasis;
+    tariffVersion: string;
+    auditReason: string;
+  }): { work: PhylaxPaidWork; usage: PhylaxLedgerMutation } {
+    const workId = required(input.workId, "workId");
+    const tenantId = required(input.tenantId, "tenantId");
+    const admissionProviderEventId = required(input.admissionProviderEventId, "admissionProviderEventId");
+    const providerReceiptId = required(input.providerReceiptId, "providerReceiptId");
+    const acceptedAt = timestamp(this.now(), "acceptedAt");
+    const attempt = this.transaction<
+      | { result: { work: PhylaxPaidWork; usage: PhylaxLedgerMutation } }
+      | { error: Error }
+    >(() => {
+      const current = this.work(workId);
+      if (!current || current.tenant_id !== tenantId) throw new Error("paid work does not exist for tenant");
+      if (current.provider_event_id !== admissionProviderEventId) {
+        throw new PhylaxLedgerConflictError("paid work provider event does not match durable receipt intent");
+      }
+      if (current.provider_receipt_id !== null && current.provider_receipt_id !== providerReceiptId) {
+        throw new PhylaxLedgerConflictError("paid work already carries a different provider receipt");
+      }
+      const normalized = {
+        tenantId,
+        periodId: current.period_id,
+        amountUnits: units(input.amountUnits, "amountUnits", { nonNegative: true }),
+        providerEventId: providerReceiptId,
+        operation: current.operation,
+        provider: required(input.provider, "provider"),
+        model: input.model?.trim() || null,
+        costBasis: input.costBasis,
+        idempotencyKey: `usage:${providerReceiptId}:${current.operation}`,
+        tariffVersion: required(input.tariffVersion, "tariffVersion"),
+        auditReason: required(input.auditReason, "auditReason", 2_000),
+        occurredAt: current.created_at,
+      };
+      const hash = payloadHash({
+        ...normalized,
+        amountUnits: -normalized.amountUnits,
+        idempotencyKey: undefined,
+        occurredAt: undefined,
+      });
+      const usageAttempt = this.attemptUsageInTransaction(
+        normalized,
+        hash,
+        acceptedAt,
+        // The provider cost is irreversible. Preserve truthful accounting even
+        // if reconciliation released the original reservation after a crash.
+        Math.max(current.reserved_units, normalized.amountUnits),
+      );
+      if (!usageAttempt.ok) return { error: usageAttempt.error };
+      const usage = usageAttempt.usage;
+      if (current.state === "done") {
+        if (current.usage_entry_sequence !== usage.entry.sequence) {
+          throw new PhylaxLedgerConflictError("paid work already completed with a different usage entry");
+        }
+        return { result: { work: paidWork(current), usage } };
+      }
+      this.db.prepare(
+        `UPDATE phylax_paid_work
+         SET state='done', pause_reason=NULL, reserved_units=0,
+             lease_owner=NULL, lease_token=NULL, lease_until=NULL,
+             cancellation_requested_at=NULL,
+             completed_lease_owner=COALESCE(completed_lease_owner, 'durable-receipt'),
+             completed_lease_token=COALESCE(completed_lease_token, ?),
+             usage_entry_sequence=?, provider_receipt_id=?, updated_at=?
+         WHERE id=? AND tenant_id=? AND state!='done'`,
+      ).run(
+        `receipt:${providerReceiptId}`,
+        usage.entry.sequence,
+        providerReceiptId,
+        acceptedAt,
+        current.id,
+        tenantId,
+      );
+      const completed = this.work(current.id)!;
+      if (
+        completed.state !== "done"
+        || completed.usage_entry_sequence !== usage.entry.sequence
+        || completed.provider_receipt_id !== providerReceiptId
+      ) {
+        throw new Error("paid work durable-receipt completion did not commit");
       }
       return { result: { work: paidWork(completed), usage } };
     });

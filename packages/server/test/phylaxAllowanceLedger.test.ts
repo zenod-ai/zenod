@@ -776,16 +776,10 @@ describe("PhylaxAllowanceLedger", () => {
     expect(betaCompleted.usage.replayed).toBe(false);
 
     now = SEPTEMBER_START;
-    expect(() => store.completePaidWork(alphaCompletion)).toThrow("active allowance period");
-    expect(store.pendingWork("alpha")).toEqual([
-      expect.objectContaining({
-        id: alphaWork.id,
-        state: "processing",
-        reservedUnits: 100,
-        leaseToken: alphaClaim.leaseToken,
-      }),
-    ]);
-    expect(store.operatorProjection("alpha", "2026-08")).toMatchObject({ usedUnits: 0, expiredUnits: 0 });
+    const alphaCompleted = store.completePaidWork(alphaCompletion);
+    expect(alphaCompleted.usage.replayed).toBe(false);
+    expect(store.pendingWork("alpha")).toEqual([]);
+    expect(store.operatorProjection("alpha", "2026-08")).toMatchObject({ usedUnits: 100, expiredUnits: 0 });
     expect(store.completePaidWork(betaCompletion).usage).toMatchObject({
       replayed: true,
       entry: { sequence: betaCompleted.usage.entry.sequence },
@@ -793,15 +787,13 @@ describe("PhylaxAllowanceLedger", () => {
     store.close();
 
     const restarted = new PhylaxAllowanceLedger(path, () => now);
-    expect(() => restarted.completePaidWork(alphaCompletion)).toThrow("active allowance period");
-    now += 1_001;
-    expect(restarted.claimNextPaidWork("alpha", "worker-recovery", 1_000, now)).toBeNull();
-    expect(restarted.pendingWork("alpha")).toEqual([
-      expect.objectContaining({ state: "paused", pauseReason: "period_inactive", reservedUnits: 0 }),
-    ]);
+    expect(restarted.completePaidWork(alphaCompletion).usage).toMatchObject({
+      replayed: true,
+      entry: { sequence: alphaCompleted.usage.entry.sequence },
+    });
     expect(restarted.operatorProjection("alpha", "2026-08")).toMatchObject({
-      usedUnits: 0,
-      expiredUnits: 100,
+      usedUnits: 100,
+      expiredUnits: 0,
     });
     restarted.close();
   });

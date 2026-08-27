@@ -53,6 +53,20 @@ export interface PhylaxTurnBinding {
 
 export type PhylaxTurnBindings = Record<PhylaxTurnType, PhylaxTurnBinding>;
 
+export type PhylaxLegacyBindingDisposition =
+  | "default"
+  | "generated_legacy"
+  | "generated_current"
+  | "custom"
+  | "invalid_preserved";
+
+export interface PhylaxLegacyBindingInspection {
+  tenantId: string;
+  disposition: PhylaxLegacyBindingDisposition;
+  /** Non-secret digest used to prove an exact row was classified only once. */
+  bindingDigest: string;
+}
+
 const CLOUD_TRANSCRIPTION_PROVIDERS = ["groq", "openai", "openrouter"] as const;
 const VERIFICATION_ANIMALS = [
   "badger",
@@ -550,6 +564,71 @@ export class PhylaxTenantSettingsStore {
       downstreamCredentialStatus: stored.downstreamCredentialStatus ?? "unknown",
       downstreamCredentialCheckedAt: stored.downstreamCredentialCheckedAt ?? null,
     };
+  }
+
+  tenantIds(): string[] {
+    return Object.keys(this.load()).sort();
+  }
+
+  /**
+   * Classify the persisted routing row without rewriting it.
+   *
+   * Fixed product instances ignore these bindings at runtime. Keeping the
+   * original bytes untouched makes a mixed-version rollback exact, while the
+   * compatibility journal can prove generated defaults were adopted once and
+   * custom rows were explicitly preserved rather than guessed.
+   */
+  inspectLegacyBindings(tenantId: string): PhylaxLegacyBindingInspection {
+    const stored = this.load()[tenantId];
+    const raw = stored?.turnBindings;
+    const bindingDigest = createHash("sha256")
+      .update(JSON.stringify(raw ?? null), "utf8")
+      .digest("hex");
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return { tenantId, disposition: "default", bindingDigest };
+    }
+    try {
+      const candidate = raw as Partial<Record<PhylaxTurnType, unknown>>;
+      const knownTurnTypes = new Set<string>(PHYLAX_TURN_TYPES);
+      if (Object.keys(candidate).some((turnType) => !knownTurnTypes.has(turnType))) {
+        return { tenantId, disposition: "custom", bindingDigest };
+      }
+      const normalized = Object.fromEntries(
+        PHYLAX_TURN_TYPES.flatMap((turnType) =>
+          candidate[turnType] === undefined
+            ? []
+            : [[turnType, normalizedTurnBinding(candidate[turnType])]]),
+      ) as Partial<Record<PhylaxTurnType, PhylaxTurnBinding>>;
+      const values = Object.values(normalized);
+      if (values.length === 0) return { tenantId, disposition: "default", bindingDigest };
+      if (
+        (normalized.text && isGeneratedLegacyRingChatBinding(normalized.text))
+        || (normalized.voice_note && isGeneratedLegacyVoiceStoreBinding(normalized.voice_note))
+      ) {
+        const nonGenerated = Object.entries(normalized).some(([turnType, binding]) => {
+          if (turnType === "text" && isGeneratedLegacyRingChatBinding(binding)) return false;
+          if (turnType === "voice_note" && isGeneratedLegacyVoiceStoreBinding(binding)) return false;
+          return JSON.stringify(binding) !== JSON.stringify(
+            defaultPhylaxTurnBindings()[turnType as PhylaxTurnType],
+          );
+        });
+        return {
+          tenantId,
+          disposition: nonGenerated ? "custom" : "generated_legacy",
+          bindingDigest,
+        };
+      }
+      const defaults = defaultPhylaxTurnBindings();
+      const currentOnly = Object.entries(normalized).every(([turnType, binding]) =>
+        JSON.stringify(binding) === JSON.stringify(defaults[turnType as PhylaxTurnType]));
+      return {
+        tenantId,
+        disposition: currentOnly ? "generated_current" : "custom",
+        bindingDigest,
+      };
+    } catch {
+      return { tenantId, disposition: "invalid_preserved", bindingDigest };
+    }
   }
 
   view(tenantId: string): PhylaxTenantSettingsView {

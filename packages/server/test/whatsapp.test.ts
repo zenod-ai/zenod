@@ -858,12 +858,30 @@ describe("WhatsAppGateway", () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-terminal-receipt-"));
     const runtime = new Runtime(dir);
     const socket = new FakeSocket();
+    const admitted: string[] = [];
+    const settled: Array<{ intent: string; receipt: string | null }> = [];
     const gateway = new WhatsAppGateway({
       dataDir: join(dir, "whatsapp"),
       settings: runtime.settings,
       store: runtime.whatsappStore,
       getEngine: async () => fakeEngine([]),
       socketFactory: async () => socket,
+      beginPortedDeliveryUsage(input) {
+        admitted.push(input.providerMessageId);
+        return {
+          state: "processing",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "channel.outbound.whatsapp",
+          amountUnits: 1,
+          provider: "whatsapp",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      completePortedDeliveryUsage(claim, providerReceiptId) {
+        settled.push({ intent: claim.providerEventId, receipt: providerReceiptId });
+      },
     });
 
     try {
@@ -882,14 +900,54 @@ describe("WhatsAppGateway", () => {
         "34611111111",
         "Saved ✓",
         "capture-provider-1",
+        "alpha",
       );
 
       expect(sent).toEqual({ sentMessageId: "sent_1" });
+      expect(admitted).toHaveLength(1);
+      expect(settled).toEqual([{ intent: admitted[0], receipt: "sent_1" }]);
       expect(runtime.whatsappStore.channelAudit("capture-provider-1")).toMatchObject({
         tenantId: "alpha",
         outboundProviderId: "sent_1",
         outboundStatus: "sent",
       });
+    } finally {
+      runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not resend a durable outbound intent that is already provider-booked", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-metered-replay-"));
+    const runtime = new Runtime(dir);
+    const socket = new FakeSocket();
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "whatsapp"),
+      settings: runtime.settings,
+      store: runtime.whatsappStore,
+      getEngine: async () => fakeEngine([]),
+      socketFactory: async () => socket,
+      beginPortedDeliveryUsage(input) {
+        return {
+          state: "already_booked",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          providerReceiptId: "wa-provider-receipt-1",
+          operation: "channel.outbound.whatsapp",
+          amountUnits: 1,
+          provider: "whatsapp",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+    });
+    try {
+      runtime.settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+      await gateway.pair();
+      socket.emitter.emit("connection.update", { connection: "open" });
+      await expect(gateway.sendText("34611111111", "Saved ✓", "capture-replay", "alpha"))
+        .resolves.toEqual({ sentMessageId: "wa-provider-receipt-1" });
+      expect(socket.sent).toEqual([]);
     } finally {
       runtime.close();
       await rm(dir, { recursive: true, force: true });

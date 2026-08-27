@@ -43,6 +43,7 @@ import {
   type WhatsAppStoreDiagnostics,
   type WhatsAppTranscriptFollowUp,
 } from "./whatsappStore.js";
+import { PhylaxUsagePausedError, type PhylaxUsageClaim } from "./phylaxUsageMeter.js";
 import { linkifyGithubRefs } from "./githubLinks.js";
 
 // Soak finding #1 / C-26 — how the Console must treat a shared image. Its described
@@ -682,6 +683,13 @@ export class WhatsAppGateway {
       portedReplyIntentScope?: (
         inboundProviderMessageId: string,
       ) => { tenantId: string; receiptEligible: boolean } | null;
+      beginPortedDeliveryUsage?: (input: {
+        tenantId: string;
+        providerMessageId: string;
+        custodyRef: string;
+        channel: "whatsapp";
+      }) => PhylaxUsageClaim;
+      completePortedDeliveryUsage?: (claim: PhylaxUsageClaim, providerReceiptId: string | null) => void;
       socketFactory?: SocketFactory;
       portedInboundHandler?: WhatsAppPortedInboundHandler;
       lifecycle?: {
@@ -1268,6 +1276,7 @@ export class WhatsAppGateway {
     recipient: string,
     text: string,
     auditMessageId?: string,
+    tenantId?: string,
   ): Promise<{ sentMessageId: string }> {
     const socket = this.socket;
     if (!socket) throw new Error("WhatsApp is not connected");
@@ -1278,7 +1287,7 @@ export class WhatsAppGateway {
     const scope = this.options.portedReplyIntentScope?.(sourceMessageId) ?? null;
     const intent = this.options.store.prepareOutboundIntent({
       sourceMessageId,
-      tenantId: scope?.tenantId ?? null,
+      tenantId: scope?.tenantId ?? tenantId?.trim() ?? null,
       providerMessageId: generateMessageIDV2(socket.user?.id ?? undefined),
       chatId: jid,
       contactId: jid,
@@ -1354,19 +1363,53 @@ export class WhatsAppGateway {
     const existing = this.outboundIntentSends.get(intent.intentId);
     if (existing) return existing;
     const pending = (async () => {
-      const sent = await socket.sendMessage(
-        intent.chatId,
-        { text: intent.bodyText },
-        { messageId: intent.providerMessageId },
-      );
-      const sentMessageId = sent?.key?.id?.trim() ?? "";
-      if (!sentMessageId) {
-        throw new Error("WhatsApp provider returned no delivery receipt");
+      const usageClaim = intent.tenantId
+        ? this.options.beginPortedDeliveryUsage?.({
+            tenantId: intent.tenantId,
+            providerMessageId: intent.providerMessageId,
+            custodyRef: `outbound-intent:${intent.intentId}`,
+            channel: "whatsapp",
+          })
+        : undefined;
+      if (usageClaim?.state === "paused") {
+        throw new PhylaxUsagePausedError("WhatsApp delivery is paused until channel allowance is available");
       }
-      return {
-        sentMessageId,
-        ...(sent !== undefined ? { raw: sent } : {}),
-      };
+      if (usageClaim?.state === "already_booked") {
+        const sentMessageId = usageClaim.providerReceiptId ?? usageClaim.work?.providerReceiptId;
+        if (!sentMessageId) throw new Error("WhatsApp delivery is booked without an exact provider receipt");
+        return { sentMessageId };
+      }
+      try {
+        const sent = await socket.sendMessage(
+          intent.chatId,
+          { text: intent.bodyText },
+          { messageId: intent.providerMessageId },
+        );
+        const sentMessageId = sent?.key?.id?.trim() ?? "";
+        if (!sentMessageId) {
+          throw new Error("WhatsApp provider returned no delivery receipt");
+        }
+        if (usageClaim) {
+          try {
+            this.options.completePortedDeliveryUsage?.(usageClaim, sentMessageId);
+          } catch (error) {
+            console.error("[whatsapp] local delivery accounting settlement failed:", error);
+          }
+        }
+        return {
+          sentMessageId,
+          ...(sent !== undefined ? { raw: sent } : {}),
+        };
+      } catch (error) {
+        if (usageClaim) {
+          try {
+            this.options.completePortedDeliveryUsage?.(usageClaim, null);
+          } catch (settlementError) {
+            console.error("[whatsapp] local failed-delivery accounting settlement failed:", settlementError);
+          }
+        }
+        throw error;
+      }
     })().finally(() => this.outboundIntentSends.delete(intent.intentId));
     this.outboundIntentSends.set(intent.intentId, pending);
     return pending;

@@ -25,6 +25,7 @@ import {
   phylaxTranscriptionOptions,
 } from "../src/phylaxUnit.js";
 import { WhatsAppStore, type WhatsAppInboundEvent } from "../src/whatsappStore.js";
+import { PhylaxUsagePausedError } from "../src/phylaxUsageMeter.js";
 
 const dirs: string[] = [];
 
@@ -140,6 +141,8 @@ describe("PhylaxChannelsOrgan", () => {
       },
     };
     const delivered: string[] = [];
+    let deliveryAttempts = 0;
+    let deliveryAllowed = false;
     const routes = {
       resolve: () => ({
         tenantId: "alpha",
@@ -228,6 +231,8 @@ describe("PhylaxChannelsOrgan", () => {
         callDownstream,
       });
       organ.setTerminalReceiptDelivery(async (_channel, _recipient, text) => {
+        deliveryAttempts += 1;
+        if (!deliveryAllowed) throw new PhylaxUsagePausedError("allowance is not provisioned yet");
         delivered.push(text);
         return { sentMessageId: "wa-chat-terminal-1" };
       });
@@ -235,7 +240,17 @@ describe("PhylaxChannelsOrgan", () => {
       for (let attempt = 0; attempt < 10 && pollCalls < 2; attempt += 1) await Promise.resolve();
       expect(pollCalls).toBe(2);
       await vi.advanceTimersByTimeAsync(0);
+      await vi.waitFor(() => expect(deliveryAttempts).toBe(1));
+      expect(delivered).toEqual([]);
+
+      // The deterministic pre-provider allowance pause releases the local
+      // outbox claim. A later grant/wake resumes the same terminal receipt;
+      // the downstream mutation remains exactly-once.
+      deliveryAllowed = true;
+      await organ.resumePendingCaptures();
+      await vi.advanceTimersByTimeAsync(0);
       await vi.waitFor(() => expect(delivered).toEqual(["Created the approved launch record."]));
+      expect(deliveryAttempts).toBe(2);
 
       const replay = await organ.receive({
         channel: "whatsapp",
@@ -725,10 +740,11 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
-  it("keeps raw voice custody working against an older ingest schema during a rolling update", async () => {
+  it("keeps Phylax-first voice custody pending until Zenod advertises the STT disposition contract", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-voice-old-ingest-schema-"));
     dirs.push(dataDir);
     const calls: PhylaxDownstreamCall[] = [];
+    let upgraded = false;
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: {
@@ -760,6 +776,12 @@ describe("PhylaxChannelsOrgan", () => {
               contentHint: { type: "string" },
               senderTimestamp: { type: "string" },
               idempotencyKey: { type: "string" },
+              ...(upgraded ? {
+                providedTranscript: { type: "string" },
+                transcriptionProvider: { type: "string" },
+                audioDurationSeconds: { type: ["number", "null"] },
+                transcriptionDisposition: { enum: ["provided", "skip_duration_limit", "skip_unavailable"] },
+              } : {}),
             },
           },
         }],
@@ -789,7 +811,7 @@ describe("PhylaxChannelsOrgan", () => {
       sleep: async () => {},
     });
 
-    const receipt = await organ.receive({
+    const voiceInput = {
       channel: "whatsapp",
       sender: "34611111111",
       chatId: "chat-alpha",
@@ -805,8 +827,20 @@ describe("PhylaxChannelsOrgan", () => {
         transcription_source: "test-stt",
         duration_seconds: 60,
       },
-    });
+    } as const;
+    let oldSchemaError: unknown;
+    try {
+      await organ.receive(voiceInput);
+    } catch (error) {
+      oldSchemaError = error;
+    }
+    expect(oldSchemaError).toBeInstanceOf(PhylaxChannelError);
+    expect((oldSchemaError as PhylaxChannelError).retryDisposition).toBe("idempotent_capture");
+    expect((oldSchemaError as PhylaxChannelError).audit?.failureCode).toBe("downstream_schema_drift");
+    expect(calls).toHaveLength(0);
 
+    upgraded = true;
+    const receipt = await organ.receive(voiceInput);
     expect(calls[0]).toMatchObject({
       tool: "ingest_memory",
       arguments: {
@@ -814,16 +848,17 @@ describe("PhylaxChannelsOrgan", () => {
         filename: "provider-old-ingest.ogg",
         sourceHint: "WhatsApp voice note",
         contentHint: "WhatsApp voice note",
+        providedTranscript: "Already transcribed by Phylax.",
+        transcriptionProvider: "test-stt",
+        audioDurationSeconds: 60,
+        transcriptionDisposition: "provided",
         senderTimestamp: "2026-08-27T00:00:00.000Z",
         idempotencyKey: "alpha:whatsapp:provider-old-ingest",
       },
     });
-    expect(calls[0]!.arguments).not.toHaveProperty("providedTranscript");
-    expect(calls[0]!.arguments).not.toHaveProperty("transcriptionProvider");
-    expect(calls[0]!.arguments).not.toHaveProperty("audioDurationSeconds");
-    expect(calls[0]!.arguments).not.toHaveProperty("transcriptionDisposition");
     expect(receipt.replyText).toContain("Saved ✓");
 
+    upgraded = false;
     let overLimitError: unknown;
     try {
       await organ.receive({
@@ -898,7 +933,7 @@ describe("PhylaxChannelsOrgan", () => {
                   providedTranscript: { type: "string" },
                   transcriptionProvider: { type: "string" },
                   audioDurationSeconds: { type: ["number", "null"] },
-                  transcriptionDisposition: { enum: ["provided", "skip_duration_limit"] },
+                  transcriptionDisposition: { enum: ["provided", "skip_duration_limit", "skip_unavailable"] },
                   senderTimestamp: { type: "string" },
                   idempotencyKey: { type: "string" },
                 },
@@ -2148,7 +2183,7 @@ describe("PhylaxChannelsOrgan", () => {
       transcriber: {
         async transcribe() {
           if (fail) throw new Error("provider offline");
-          return { text_transcript: "voice text", transcription_usage: { seconds: 2 }, transcription_source: "phylax@test" };
+          return { text_transcript: "voice text", transcription_source: "phylax@test" };
         },
       },
       artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/alpha-token/artifacts/${tenantId}/${artifactId}`,
@@ -2163,7 +2198,8 @@ describe("PhylaxChannelsOrgan", () => {
       chatId: "chat",
       media: { bytes: Buffer.from("ogg"), fileName: "voice.ogg", mimeType: "audio/ogg" },
     });
-    expect(passed.handoff).toMatchObject({ sender: "34611111111", text_transcript: "voice text", transcription_usage: { seconds: 2 }, transcription_source: "phylax@test" });
+    expect(passed.handoff).toMatchObject({ sender: "34611111111", text_transcript: "voice text", transcription_source: "phylax@test" });
+    expect(passed.handoff).not.toHaveProperty("transcription_usage");
     expect(passed.handoff.artifact_ref).toBe("sha256:90308fe99871113bf5490ec73a8813b667adc60fe01530102a6c7bfb73c66481");
     expect(passed.artifactSha256).toBe("90308fe99871113bf5490ec73a8813b667adc60fe01530102a6c7bfb73c66481");
     expect(passed.evidence[0]).toMatchObject({
@@ -2227,6 +2263,170 @@ describe("PhylaxChannelsOrgan", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].arguments.message).toContain('"code":"timeout"');
     expect(existsSync(join(phylaxWhatsAppPaths(dataDir).artifacts, "alpha"))).toBe(true);
+  });
+
+  it("meters Telegram audio locally around its existing transcription seam", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-telegram-stt-metering-"));
+    dirs.push(dataDir);
+    const begun: Array<{ tenantId: string; providerMessageId: string; durationSeconds: number | null; persistedResult: boolean }> = [];
+    const completed: Array<{ providerMessageId: string; succeeded: boolean }> = [];
+    let transcriptionCalls = 0;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://zenod.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      beginTranscriptionUsage(input) {
+        begun.push({
+          tenantId: input.tenantId,
+          providerMessageId: input.providerMessageId,
+          durationSeconds: input.durationSeconds,
+          persistedResult: input.persistedResult === true,
+        });
+        return {
+          state: "processing",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "transcription.audio",
+          amountUnits: 1,
+          provider: "telegram",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      completeTranscriptionUsage(claim, succeeded) {
+        completed.push({ providerMessageId: claim.providerEventId, succeeded });
+      },
+      transcriber: { async transcribe() { transcriptionCalls += 1; return { text_transcript: "telegram voice" }; } },
+      async callDownstream() { return { content: [{ type: "text", text: "saved" }] }; },
+    });
+    const result = await organ.receive({
+      channel: "telegram",
+      sender: "555",
+      chatId: "555",
+      messageId: "telegram-voice-1",
+      media: {
+        bytes: Buffer.from("telegram-audio"),
+        fileName: "voice.ogg",
+        mimeType: "audio/ogg",
+        durationSeconds: 42,
+      },
+    });
+    const replay = await organ.receive({
+      channel: "telegram",
+      sender: "555",
+      chatId: "555",
+      messageId: "telegram-voice-1",
+      media: {
+        bytes: Buffer.from("telegram-audio"),
+        fileName: "voice.ogg",
+        mimeType: "audio/ogg",
+        durationSeconds: 42,
+      },
+    });
+    expect(result.handoff).toMatchObject({ text_transcript: "telegram voice" });
+    expect(replay.handoff).toMatchObject({ text_transcript: "telegram voice" });
+    expect(transcriptionCalls).toBe(1);
+    expect(begun).toEqual([
+      { tenantId: "alpha", providerMessageId: "telegram-voice-1", durationSeconds: 42, persistedResult: false },
+      { tenantId: "alpha", providerMessageId: "telegram-voice-1", durationSeconds: 42, persistedResult: true },
+    ]);
+    expect(completed).toEqual([
+      { providerMessageId: "telegram-voice-1", succeeded: true },
+      { providerMessageId: "telegram-voice-1", succeeded: true },
+    ]);
+  });
+
+  it("archives Telegram audio over two hours and forwards its pointer without calling STT", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-telegram-duration-limit-"));
+    dirs.push(dataDir);
+    let transcriptionCalls = 0;
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://zenod.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      beginTranscriptionUsage() { throw new Error("duration-limited media must not reserve paid STT"); },
+      transcriber: { async transcribe() { transcriptionCalls += 1; return { text_transcript: "must not happen" }; } },
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "stored raw audio" }] };
+      },
+    });
+    const result = await organ.receive({
+      channel: "telegram",
+      sender: "555",
+      chatId: "555",
+      messageId: "telegram-over-two-hours",
+      media: {
+        bytes: Buffer.from("long-telegram-audio"),
+        fileName: "long.ogg",
+        mimeType: "audio/ogg",
+        durationSeconds: 2 * 60 * 60 + 1,
+      },
+    });
+    expect(transcriptionCalls).toBe(0);
+    expect(result.handoff).toMatchObject({
+      duration_seconds: 2 * 60 * 60 + 1,
+      transcription_failed: { code: "duration_limit" },
+      artifact_ref: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.handoff).toMatchObject({
+      artifact_ref: expect.stringMatching(/^https:\/\/phylax\.test\/artifacts\/alpha\//),
+      transcription_failed: { code: "duration_limit" },
+    });
+  });
+
+  it("preserves and forwards Telegram raw custody without STT when allowance is unavailable", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-telegram-allowance-pause-"));
+    dirs.push(dataDir);
+    let transcriptionCalls = 0;
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://zenod.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+      beginTranscriptionUsage(input) {
+        return {
+          state: "paused",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "transcription.audio",
+          amountUnits: 30,
+          provider: "telegram",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      transcriber: { async transcribe() { transcriptionCalls += 1; return { text_transcript: "must not happen" }; } },
+      async callDownstream(call) {
+        calls.push(call);
+        return { content: [{ type: "text", text: "stored raw audio" }] };
+      },
+    });
+    const result = await organ.receive({
+      channel: "telegram",
+      sender: "555",
+      chatId: "555",
+      messageId: "telegram-paused-voice",
+      media: {
+        bytes: Buffer.from("paused-telegram-audio"),
+        fileName: "paused.ogg",
+        mimeType: "audio/ogg",
+        durationSeconds: 30,
+      },
+    });
+    expect(transcriptionCalls).toBe(0);
+    expect(result.handoff).toMatchObject({
+      duration_seconds: 30,
+      transcription_failed: { code: "allowance_unavailable" },
+      artifact_ref: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.handoff).toMatchObject({
+      artifact_ref: expect.stringMatching(/^https:\/\/phylax\.test\/artifacts\/alpha\//),
+      transcription_failed: { code: "allowance_unavailable" },
+    });
   });
 
   it("uses a safe local model policy and requires tenant keys for cloud audio", () => {
@@ -2578,7 +2778,6 @@ describe("ported gateway integration", () => {
       transcriber: { async transcribe() { return {
         text_transcript: "strawberry banana",
         transcription_source: "whisper.cpp@large-v3-turbo",
-        transcription_usage: { seconds: 1.25 },
         transcription_timing: { queue_wait_ms: 23, runtime_ms: 45 },
       }; } },
       artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/artifacts/${tenantId}/${artifactId}`,
@@ -3020,7 +3219,7 @@ describe("ported gateway integration", () => {
     }
   });
 
-  it("routes text and receipt replies through the tenant assistant authority without widening memory capture", async () => {
+  it("keeps legacy assistant bindings on the tenant's one configured downstream", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-assistant-route-"));
     dirs.push(dataDir);
     const calls: PhylaxDownstreamCall[] = [];
@@ -3092,19 +3291,18 @@ describe("ported gateway integration", () => {
 
     expect(result.replyText).toBe("Council answer");
     expect(discoveries).toEqual([{
-      url: "https://ring.test/mcp/assistant",
-      token: "assistant-scope-only",
+      url: "https://zenod.test/mcp/memory",
+      token: "memory-scope-only",
     }]);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       route: {
         tenantId: "alpha",
-        downstreamUrl: "https://ring.test/mcp/assistant",
-        downstreamToken: "assistant-scope-only",
+        downstreamUrl: "https://zenod.test/mcp/memory",
+        downstreamToken: "memory-scope-only",
       },
       tool: "chat_with_ring",
     });
-    expect(JSON.stringify(calls)).not.toContain("memory-scope-only");
     await organ.close();
   });
 
@@ -3114,6 +3312,8 @@ describe("ported gateway integration", () => {
     const sent: Array<{ jid: string; text: string }> = [];
     let transcriptionCalls = 0;
     let downstreamCalls = 0;
+    const usageBegins: Array<Record<string, unknown>> = [];
+    const usageSettlements: boolean[] = [];
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
@@ -3139,6 +3339,22 @@ describe("ported gateway integration", () => {
       PHYLAX_VOICE_PROGRESS_DELAY_MS: "100",
     }, {
       probeVoiceDuration: async () => 60,
+      beginVoiceTranscriptionUsage(input) {
+        usageBegins.push(input);
+        return {
+          state: "compatibility_pending",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "transcription.audio",
+          amountUnits: 60,
+          provider: "local",
+          model: "base",
+          costBasis: "estimated",
+        };
+      },
+      completeVoiceTranscriptionUsage(_claim, succeeded) {
+        usageSettlements.push(succeeded);
+      },
       whatsappSocketFactory: async () => ({
         ev: { on() {} },
         user: { id: "34999999999@s.whatsapp.net" },
@@ -3173,6 +3389,13 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("voice-owner")?.state).toBe("completed"));
       expect(transcriptionCalls).toBe(1);
       expect(downstreamCalls).toBe(1);
+      expect(usageBegins).toEqual([expect.objectContaining({
+        tenantId: "alpha",
+        providerMessageId: "voice-owner",
+        custodyRef: expect.stringMatching(/^sha256:/),
+        durationSeconds: 60,
+      })]);
+      expect(usageSettlements).toEqual([true]);
       expect(sent.map((entry) => entry.text)).toEqual([
         'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "strawberry banana",
@@ -3361,8 +3584,24 @@ describe("ported gateway integration", () => {
         return { content: [{ type: "text", text: "Voice handled." }] };
       },
     });
+    const settledUsage: Array<{ providerMessageId: string; succeeded: boolean }> = [];
     const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
       probeVoiceDuration: async () => durationSeconds,
+      beginVoiceTranscriptionUsage(input) {
+        return {
+          state: "processing",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "transcription.audio",
+          amountUnits: 1,
+          provider: "test",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      completeVoiceTranscriptionUsage(claim, succeeded) {
+        settledUsage.push({ providerMessageId: claim.providerEventId, succeeded });
+      },
       whatsappSocketFactory: async () => ({
         ev: { on() {} },
         async sendMessage(_jid, content) {
@@ -3430,6 +3669,10 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-cancel")?.state).toBe("transcribing"));
       await runtime.whatsapp.handleEvent(event("alpha-cancel-command", "34611111111", "cancel transcription"));
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("alpha-cancel")?.state).toBe("cancelled"));
+      await vi.waitFor(() => expect(settledUsage).toContainEqual({
+        providerMessageId: "alpha-cancel",
+        succeeded: false,
+      }));
       expect(downstreamCalls).toHaveLength(4);
       expect(sent).toEqual(expect.arrayContaining([
         'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
@@ -3823,7 +4066,7 @@ describe("ported gateway integration", () => {
               providedTranscript: { type: "string" },
               transcriptionProvider: { type: "string" },
               audioDurationSeconds: { type: ["number", "null"] },
-              transcriptionDisposition: { type: "string", enum: ["provided", "skip_duration_limit"] },
+              transcriptionDisposition: { type: "string", enum: ["provided", "skip_duration_limit", "skip_unavailable"] },
               senderTimestamp: { type: "string" },
               idempotencyKey: { type: "string" },
             },
