@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'">
+  <title>Zenod × Phylax — integrated experience, independent services</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #11151a;
+      --panel-2: #171c22;
+      --panel-3: #1d232b;
+      --text: #f5f7fa;
+      --muted: #9ba7b4;
+      --faint: #687482;
+      --line: #2a323c;
+      --line-strong: #3b4653;
+      --blue: #72b7ff;
+      --blue-bg: #102b43;
+      --green: #62d592;
+      --green-bg: #123425;
+      --orange: #ffb15a;
+      --orange-bg: #3a2711;
+      --purple: #c49aff;
+      --purple-bg: #2c1d45;
+      --red: #ff7f7a;
+      --red-bg: #3b1d1d;
+      --teal: #67d8d0;
+      --teal-bg: #123635;
+      --shadow: 0 16px 60px rgb(0 0 0 / 28%);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 15% -5%, rgb(71 129 196 / 17%), transparent 32rem),
+        radial-gradient(circle at 95% 15%, rgb(133 84 199 / 12%), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font: 15px/1.55 var(--sans);
+    }
+    button, input, select { font: inherit; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: var(--mono); color: #dbe9f8; }
+    h1, h2, h3, h4, p { margin-top: 0; }
+    h1 { margin-bottom: 16px; font-size: clamp(36px, 5vw, 66px); line-height: 1.02; letter-spacing: -0.045em; }
+    h2 { margin-bottom: 10px; font-size: clamp(25px, 3vw, 36px); line-height: 1.12; letter-spacing: -0.025em; }
+    h3 { margin-bottom: 8px; font-size: 18px; line-height: 1.25; }
+    h4 { margin-bottom: 6px; font-size: 14px; }
+
+    .shell { width: min(1240px, calc(100% - 32px)); margin: 0 auto; }
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      border-bottom: 1px solid rgb(255 255 255 / 7%);
+      background: rgb(11 13 16 / 84%);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner { min-height: 58px; display: flex; align-items: center; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 720; white-space: nowrap; }
+    .brand-mark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; background: linear-gradient(145deg, var(--blue), var(--purple)); color: #071018; }
+    .nav { display: flex; gap: 5px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+    .nav a { padding: 7px 10px; border-radius: 9px; color: var(--muted); white-space: nowrap; font-size: 13px; }
+    .nav a:hover { background: var(--panel-2); color: var(--text); text-decoration: none; }
+
+    .hero { padding: 82px 0 54px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font: 700 12px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; }
+    .eyebrow::before { content: ""; width: 26px; height: 2px; border-radius: 2px; background: currentColor; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(310px, .6fr); gap: 46px; align-items: end; }
+    .hero-copy { max-width: 800px; color: #c0cad4; font-size: 19px; }
+    .decision-card { padding: 22px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: linear-gradient(145deg, rgb(114 183 255 / 10%), rgb(196 154 255 / 7%)), var(--panel); box-shadow: var(--shadow); }
+    .decision-card .label { color: var(--green); font-size: 12px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+    .decision-card strong { display: block; margin: 8px 0 12px; font-size: 21px; line-height: 1.25; }
+    .decision-card p { margin-bottom: 0; color: var(--muted); }
+
+    .status-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 34px; }
+    .status-item { min-height: 86px; padding: 14px 15px; border: 1px solid var(--line); border-radius: 14px; background: rgb(17 21 26 / 80%); }
+    .status-item span { display: block; color: var(--muted); font-size: 12px; }
+    .status-item strong { display: block; margin-top: 4px; font-size: 15px; }
+
+    section { padding: 58px 0; scroll-margin-top: 70px; }
+    .section-head { display: grid; grid-template-columns: .7fr 1.3fr; gap: 40px; margin-bottom: 28px; }
+    .section-head p { max-width: 780px; margin-bottom: 0; color: var(--muted); font-size: 17px; }
+    .kicker { margin-bottom: 7px; color: var(--blue); font: 700 12px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; }
+
+    .callout { padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    .callout strong { color: var(--text); }
+    .callout p:last-child { margin-bottom: 0; }
+    .callout.blue { border-color: rgb(114 183 255 / 40%); background: linear-gradient(145deg, var(--blue-bg), var(--panel)); }
+    .callout.green { border-color: rgb(98 213 146 / 36%); background: linear-gradient(145deg, var(--green-bg), var(--panel)); }
+    .callout.orange { border-color: rgb(255 177 90 / 38%); background: linear-gradient(145deg, var(--orange-bg), var(--panel)); }
+
+    .diagram { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: rgb(17 21 26 / 90%); box-shadow: var(--shadow); overflow: hidden; }
+    .diagram-title { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+    .diagram-title p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    .flow { display: grid; grid-template-columns: minmax(130px, .75fr) 42px minmax(185px, 1fr) 42px minmax(250px, 1.35fr); align-items: stretch; gap: 8px; }
+    .flow-node { position: relative; min-height: 134px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel-2); }
+    .flow-node.product { border-color: rgb(114 183 255 / 45%); background: linear-gradient(150deg, var(--blue-bg), var(--panel-2)); }
+    .flow-node.transport { border-color: rgb(103 216 208 / 45%); background: linear-gradient(150deg, var(--teal-bg), var(--panel-2)); }
+    .flow-node.app { border-color: rgb(196 154 255 / 43%); background: linear-gradient(150deg, var(--purple-bg), var(--panel-2)); }
+    .flow-node .node-label { color: var(--faint); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .flow-node h3 { margin-top: 8px; }
+    .flow-node p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+    .arrow { display: grid; place-items: center; color: var(--faint); font-size: 27px; }
+    .adapter-stack { display: grid; gap: 9px; }
+    .adapter { display: grid; grid-template-columns: 98px 1fr; gap: 12px; align-items: start; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgb(0 0 0 / 16%); }
+    .adapter b { color: var(--purple); font-size: 12px; }
+    .adapter span { color: var(--muted); font-size: 12px; }
+
+    .control-flow { display: grid; grid-template-columns: minmax(145px, .8fr) 34px minmax(210px, 1.1fr) 34px minmax(230px, 1.2fr) 34px minmax(180px, .9fr); align-items: stretch; gap: 7px; }
+    .control-node { min-height: 170px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel-2); }
+    .control-node.browser { border-color: rgb(114 183 255 / 45%); background: linear-gradient(150deg, var(--blue-bg), var(--panel-2)); }
+    .control-node.host { border-color: rgb(196 154 255 / 43%); background: linear-gradient(150deg, var(--purple-bg), var(--panel-2)); }
+    .control-node.mcp { border-color: rgb(103 216 208 / 45%); background: linear-gradient(150deg, var(--teal-bg), var(--panel-2)); }
+    .control-node.store { border-color: rgb(98 213 146 / 40%); background: linear-gradient(150deg, var(--green-bg), var(--panel-2)); }
+    .control-node .node-label { color: var(--faint); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .control-node h3 { margin-top: 8px; }
+    .control-node p { margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+    .tool-list { display: grid; gap: 5px; margin-top: 10px; }
+    .tool-list code { display: block; padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; background: rgb(0 0 0 / 18%); font-size: 10px; overflow-wrap: anywhere; }
+
+    .planes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .plane { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+    .plane ul, .plain-list { margin: 10px 0 0; padding-left: 19px; color: var(--muted); }
+    .plane li + li, .plain-list li + li { margin-top: 5px; }
+
+    .product-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .product-card { display: flex; flex-direction: column; min-height: 308px; padding: 19px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    .product-card.recommended { border-color: rgb(98 213 146 / 42%); box-shadow: inset 0 0 0 1px rgb(98 213 146 / 10%); }
+    .pill { display: inline-flex; align-items: center; width: fit-content; padding: 4px 8px; border-radius: 999px; background: var(--panel-3); color: var(--muted); font-size: 11px; font-weight: 700; }
+    .pill.green { color: var(--green); background: var(--green-bg); }
+    .pill.blue { color: var(--blue); background: var(--blue-bg); }
+    .pill.purple { color: var(--purple); background: var(--purple-bg); }
+    .product-card h3 { margin: 14px 0 5px; }
+    .product-card > p { color: var(--muted); font-size: 13px; }
+    .product-card ul { margin: auto 0 0; padding: 13px 0 0; border-top: 1px solid var(--line); list-style: none; color: #c7d0d9; font-size: 12px; }
+    .product-card li { display: flex; gap: 8px; }
+    .product-card li + li { margin-top: 7px; }
+    .product-card li::before { content: "✓"; color: var(--green); }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { width: 100%; min-width: 940px; border-collapse: collapse; background: var(--panel); }
+    th, td { padding: 13px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; }
+    td { font-size: 13px; }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { color: var(--text); font-weight: 700; }
+    .yes { color: var(--green); }
+    .no { color: var(--faint); }
+    .later { color: var(--orange); }
+
+    .tabs { display: flex; gap: 7px; margin-bottom: 14px; overflow-x: auto; scrollbar-width: none; }
+    .tab { padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); color: var(--muted); cursor: pointer; white-space: nowrap; }
+    .tab[aria-selected="true"] { border-color: rgb(114 183 255 / 55%); background: var(--blue-bg); color: var(--text); }
+    .screen { display: none; grid-template-columns: 218px minmax(0, 1fr); min-height: 585px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; box-shadow: var(--shadow); }
+    .screen.active { display: grid; }
+    .sidebar { padding: 18px 13px; border-right: 1px solid var(--line); background: #0f1317; }
+    .sidebar-brand { margin: 0 8px 18px; font-weight: 780; }
+    .sidebar-brand span { color: var(--muted); font-weight: 500; }
+    .side-link { display: block; width: 100%; margin: 3px 0; padding: 9px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); text-align: left; cursor: default; }
+    .side-link.active { background: var(--panel-3); color: var(--text); }
+    .screen-main { padding: 26px; min-width: 0; }
+    .screen-head { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .screen-head p { margin-bottom: 0; color: var(--muted); }
+    .screen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .ui-card { padding: 17px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+    .ui-card.full { grid-column: 1 / -1; }
+    .ui-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+    .ui-card p { color: var(--muted); font-size: 13px; }
+    .status { padding: 3px 7px; border-radius: 999px; color: var(--green); background: var(--green-bg); font-size: 10px; font-weight: 760; text-transform: uppercase; }
+    .status.off { color: var(--muted); background: var(--panel-3); }
+    .status.warn { color: var(--orange); background: var(--orange-bg); }
+    .row { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    .row b { color: var(--text); text-align: right; }
+    .field { display: grid; gap: 5px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    .field-box { min-height: 38px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 9px; background: #0c1014; color: #cbd5df; font-family: var(--mono); font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    .btn { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--panel-3); color: var(--text); font-size: 12px; }
+    .btn.primary { border-color: var(--blue); background: var(--blue); color: #09121b; font-weight: 760; }
+    .note { margin-top: 12px; padding: 10px 11px; border-radius: 10px; background: rgb(114 183 255 / 8%); color: #b9c8d7; font-size: 12px; }
+
+    .ownership { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .owner-card { padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    .owner-card h3 { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 5px rgb(114 183 255 / 10%); }
+    .owner-card:nth-child(2) .dot { background: var(--teal); box-shadow: 0 0 0 5px rgb(103 216 208 / 10%); }
+    .owner-card:nth-child(3) .dot { background: var(--purple); box-shadow: 0 0 0 5px rgb(196 154 255 / 10%); }
+
+    .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+    .milestone { position: relative; padding: 18px 15px 18px 20px; border-top: 2px solid var(--line-strong); }
+    .milestone::before { content: ""; position: absolute; width: 11px; height: 11px; top: -7px; left: 20px; border-radius: 50%; background: var(--line-strong); }
+    .milestone.now { border-color: var(--green); }
+    .milestone.now::before { background: var(--green); }
+    .milestone.next { border-color: var(--blue); }
+    .milestone.next::before { background: var(--blue); }
+    .milestone .when { color: var(--faint); font-size: 11px; font-weight: 750; text-transform: uppercase; }
+    .milestone h3 { margin-top: 7px; }
+    .milestone p { margin-bottom: 0; color: var(--muted); font-size: 12px; }
+
+    .invariants { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .invariant { display: flex; gap: 11px; align-items: flex-start; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+    .invariant .num { flex: 0 0 auto; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; background: var(--blue-bg); color: var(--blue); font: 760 12px/1 var(--mono); }
+    .invariant p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+
+    .verdict { display: grid; grid-template-columns: 1.2fr .8fr; gap: 14px; }
+    .do, .dont { padding: 21px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    .do { border-color: rgb(98 213 146 / 35%); }
+    .dont { border-color: rgb(255 127 122 / 28%); }
+    .do h3 { color: var(--green); }
+    .dont h3 { color: var(--red); }
+    .checklist { margin: 14px 0 0; padding: 0; list-style: none; }
+    .checklist li { position: relative; padding: 8px 0 8px 25px; border-top: 1px solid var(--line); color: #cad3dc; }
+    .checklist li::before { position: absolute; left: 0; color: var(--green); content: "✓"; }
+    .dont .checklist li::before { color: var(--red); content: "×"; }
+
+    footer { padding: 40px 0 70px; color: var(--faint); font-size: 12px; }
+    .footer-grid { display: flex; justify-content: space-between; gap: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+
+    @media (max-width: 980px) {
+      .hero-grid, .section-head, .verdict { grid-template-columns: 1fr; }
+      .status-strip, .product-grid { grid-template-columns: 1fr 1fr; }
+      .flow, .control-flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); min-height: 26px; }
+      .ownership { grid-template-columns: 1fr; }
+      .timeline { grid-template-columns: 1fr 1fr; row-gap: 20px; }
+    }
+    @media (max-width: 720px) {
+      .shell { width: min(100% - 20px, 1240px); }
+      .topbar-inner { align-items: flex-start; flex-direction: column; padding: 10px 0; }
+      .nav { width: 100%; margin-left: 0; }
+      .hero { padding-top: 50px; }
+      .status-strip, .product-grid, .planes, .screen-grid, .invariants { grid-template-columns: 1fr; }
+      .screen { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+      .sidebar .side-link:not(.active) { display: none; }
+      .screen-main { padding: 17px; }
+      .timeline { grid-template-columns: 1fr; }
+      .footer-grid { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand"><span class="brand-mark">Z</span> Zenod × Phylax</div>
+      <nav class="nav" aria-label="Document sections">
+        <a href="#decision">Decision</a>
+        <a href="#flow">Connection flow</a>
+        <a href="#products">Products</a>
+        <a href="#ui">UI contract</a>
+        <a href="#ownership">Ownership</a>
+        <a href="#metering">Metering</a>
+        <a href="#beta">Beta scope</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="decision">
+      <div class="shell">
+        <div class="eyebrow">Product &amp; delivery vision · 27 August 2026</div>
+        <div class="hero-grid">
+          <div>
+            <h1>Integrated for the customer.<br>Independent in production.</h1>
+            <p class="hero-copy">Zenod, Phylax, and the PM can feel like coherent products without combining their runtimes. The integration is a product shell, entitlement, and tenant-scoped adapter—not a rewrite of working channel, memory, or proposal systems.</p>
+          </div>
+          <aside class="decision-card">
+            <span class="label">Recommended binding decision</span>
+            <strong>One Phylax channel platform. Multiple product-owned experiences.</strong>
+            <p>Zenod and PM include Phylax invisibly. Phylax-only customers use its standalone portal. Each product owns its own data and business logic.</p>
+          </aside>
+        </div>
+        <div class="status-strip" aria-label="Decision summary">
+          <div class="status-item"><span>Zenod Hosted</span><strong>One UI · Phylax included</strong></div>
+          <div class="status-item"><span>Phylax standalone</span><strong>Own portal · generic agent destination</strong></div>
+          <div class="status-item"><span>PM + WhatsApp</span><strong>PM UI · Phylax transport · Zenod memory link</strong></div>
+          <div class="status-item"><span>Public beta now</span><strong>Land the contract; ship only Zenod slice</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">01 · Connection flow</div><h2>The stable seam</h2></div>
+          <p>Phylax owns the channels. The selected product adapter owns what the message means. This gives Zenod, PM, and standalone Phylax the same proven transport without placing memory, proposal, or billing logic inside the channel service.</p>
+        </div>
+
+        <div class="diagram">
+          <div class="diagram-title"><h3>Inbound and outbound data plane</h3><p>One message ID remains the idempotency spine end to end.</p></div>
+          <div class="flow">
+            <div class="flow-node product">
+              <span class="node-label">Customer channel</span>
+              <h3>WhatsApp / Telegram</h3>
+              <p>Text, voice, image, reply context and provider message identity.</p>
+            </div>
+            <div class="arrow" aria-hidden="true">↔</div>
+            <div class="flow-node transport">
+              <span class="node-label">Independent transport</span>
+              <h3>Phylax</h3>
+              <p>Session, sender verification, raw staging, ≤2h STT, dedupe, journal, retries and final channel delivery.</p>
+            </div>
+            <div class="arrow" aria-hidden="true">↔</div>
+            <div class="flow-node app">
+              <span class="node-label">Named product adapter</span>
+              <div class="adapter-stack">
+                <div class="adapter"><b>Zenod</b><span>Store/search/chat; raw audio archive in that tenant's Drive; memory receipt.</span></div>
+                <div class="adapter"><b>PM</b><span>Proposal conversation, revision correlation and governed actions; native Zenod retrieval when linked.</span></div>
+                <div class="adapter"><b>Generic</b><span>Phylax-only customer's MCP or webhook destination; no Zenod assumptions.</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="planes">
+            <div class="plane">
+              <div class="kicker">Control plane · integrated</div>
+              <h3>The product UI manages its Phylax tenant</h3>
+              <ul>
+                <li>Zenod or PM account and billing remain authoritative.</li>
+                <li>The signed-in product backend invokes tenant-scoped Phylax MCP control tools.</li>
+                <li>Customers never see Phylax service tokens, sessions or internal URLs.</li>
+                <li>Phylax-only uses its own account, billing and portal.</li>
+              </ul>
+            </div>
+            <div class="plane">
+              <div class="kicker">Data plane · independent</div>
+              <h3>Phylax never becomes the application</h3>
+              <ul>
+                <li>No Zenod vault access inside Phylax.</li>
+                <li>No PM proposal state inside Phylax.</li>
+                <li>No WhatsApp session inside Zenod or PM.</li>
+                <li>Failures remain isolated and deploys can roll back separately.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="diagram" style="margin-top:14px">
+          <div class="diagram-title"><h3>Settings and activation control flow</h3><p>The browser has one session and never authenticates directly to Phylax.</p></div>
+          <div class="control-flow">
+            <div class="control-node browser">
+              <span class="node-label">Customer browser</span>
+              <h3>Zenod or PM UI</h3>
+              <p>Signed-in product session.</p>
+              <div class="tool-list"><code>GET /api/channels</code><code>POST /api/channels/whatsapp/challenge</code><code>POST /api/channels/test</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node host">
+              <span class="node-label">Product trust boundary</span>
+              <h3>Zenod / PM backend</h3>
+              <p>Authenticates the customer, resolves its tenant and checks product entitlement.</p>
+              <p><strong>It—not the browser—holds the private Phylax service authority.</strong></p>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node mcp">
+              <span class="node-label">Independent service seam</span>
+              <h3>Phylax MCP</h3>
+              <p>Validates the host product and scopes every operation to the mapped channel tenant.</p>
+              <div class="tool-list"><code>channel_status</code><code>start_verification</code><code>test_delivery</code><code>disconnect_channel</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node store">
+              <span class="node-label">Phylax-owned state</span>
+              <h3>Channel settings</h3>
+              <p>Verified sender, Telegram identity, adapter binding, media policy and delivery state.</p>
+              <p>No Zenod vault, PM proposal or host-product billing data.</p>
+            </div>
+          </div>
+          <div class="planes" style="margin-top:14px">
+            <div class="plane">
+              <div class="kicker">Customer-safe tools</div>
+              <h3>Typed actions, not generic admin</h3>
+              <ul><li>Read the current tenant's channel status.</li><li>Create or cancel an identity challenge.</li><li>Test delivery and disconnect the tenant binding.</li><li>Update only explicitly allowed tenant media/receipt preferences.</li></ul>
+            </div>
+            <div class="plane">
+              <div class="kicker">Owner-only tools</div>
+              <h3>Never reachable through product UI</h3>
+              <ul><li>Pair or reset the shared WhatsApp transport.</li><li>Replace shared bot credentials.</li><li>Inspect other tenants or global delivery journals.</li><li>Change shared routing, capacity or infrastructure.</li></ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout green" style="margin-top:14px">
+          <strong>Simple definition:</strong> “Included Phylax” means the host product provisions one internal channel tenant and renders the shared channel controls inside its own UI. It does not mean duplicating a Phylax subscription, merging databases, moving credentials, or sharing application code paths.
+        </div>
+        <div class="callout blue" style="margin-top:14px">
+          <strong>The simplest Phylax:</strong> <code>WhatsApp ↔ Phylax ↔ one downstream service</code>. Inbound, Phylax is an MCP client calling that service. Outbound, Phylax is an MCP server exposing <code>send_message</code> and delivery status. With a one-to-one binding it is effectively that service's WhatsApp extension, while still retaining its own process, session, journal and failure boundary. Multi-tenant hosting is many isolated one-to-one bindings on one Phylax runtime—not a new intelligent router.
+        </div>
+        <div class="planes" style="margin-top:14px">
+          <div class="plane">
+            <div class="kicker">Integrated authentication</div>
+            <h3>Provisioned, tenant-scoped MCP binding</h3>
+            <ul>
+              <li>The customer signs into Zenod or PM once.</li>
+              <li>The host backend provisions a durable Phylax↔service binding.</li>
+              <li>No internal URL or token is pasted into the product UI.</li>
+              <li>Deploys never rotate or invalidate the binding credential.</li>
+            </ul>
+          </div>
+          <div class="plane">
+            <div class="kicker">Native Phylax authentication</div>
+            <h3>MCP OAuth, with bearer fallback</h3>
+            <ul>
+              <li>The customer enters the downstream MCP URL.</li>
+              <li>Phylax completes MCP OAuth when the server supports it.</li>
+              <li>A manually supplied bearer token remains the simple fallback.</li>
+              <li>The resulting credential is encrypted and belongs to that tenant.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:14px">
+          <strong>One media contract:</strong> every adapter receives the same bounded envelope—provider message ID, sender, reply context, media type, raw artifact reference, duration, transcript when ≤2 hours, explicit <code>archive_only</code> when over 2 hours, and a stable idempotency key. The downstream returns one canonical terminal result; Phylax turns it into one channel receipt.
+        </div>
+        <div class="callout green" style="margin-top:14px">
+          <strong>MCP is also the UI seam:</strong> <code>Product UI → authenticated product backend → Phylax MCP</code>. The thin host facade authorizes the signed-in tenant and calls the same typed tools used everywhere else: <code>channel_status</code>, <code>start_verification</code>, <code>test_delivery</code>, <code>disconnect_channel</code> and <code>send_message</code>. The browser never holds the private Phylax credential. The Phylax standalone UI uses the same service operations, so there is one control contract rather than parallel native APIs.
+        </div>
+
+        <div class="diagram" style="margin-top:14px">
+          <div class="diagram-title"><h3>What happens when a customer subscribes</h3><p>One customer account; one internal channel binding.</p></div>
+          <div class="timeline">
+            <div class="milestone now"><span class="when">1 · Host product</span><h3>Create tenant</h3><p>Zenod or PM creates its normal customer/account and remains the billing authority.</p></div>
+            <div class="milestone next"><span class="when">2 · Host backend</span><h3>Provision channel binding</h3><p>Call Phylax MCP with a stable external tenant reference and the named adapter kind.</p></div>
+            <div class="milestone next"><span class="when">3 · Customer UI</span><h3>Verify identity</h3><p>The customer opens Channels and proves their WhatsApp or Telegram identity.</p></div>
+            <div class="milestone next"><span class="when">4 · Ongoing</span><h3>Proxy control</h3><p>The signed-in UI calls its own backend; that backend invokes Phylax for status and actions.</p></div>
+          </div>
+          <div class="note"><strong>Terminology:</strong> the host provisions a Phylax <em>channel tenant/binding</em>, not a duplicate customer user. The customer never receives a second login or second subscription.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="products">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">02 · Product experiences</div><h2>Four editions, one coherent rule</h2></div>
+          <p>The shell and entitlement belong to the product the customer bought. Phylax is visible only when Phylax itself is the product.</p>
+        </div>
+
+        <div class="product-grid">
+          <article class="product-card recommended">
+            <span class="pill green">Public beta</span>
+            <h3>Zenod Hosted</h3>
+            <p>The customer buys memory. WhatsApp and Telegram are included access channels.</p>
+            <ul>
+              <li>One Zenod account and subscription</li>
+              <li>Zenod Channels UI</li>
+              <li>Hidden internal Phylax tenant</li>
+              <li>Zenod owns vault, Drive and receipts</li>
+            </ul>
+          </article>
+          <article class="product-card">
+            <span class="pill">Supported edition</span>
+            <h3>Zenod Self-hosted</h3>
+            <p>The operator runs Zenod and supplies its own infrastructure and credentials.</p>
+            <ul>
+              <li>Zenod UI and MCP</li>
+              <li>Telegram supported</li>
+              <li>No managed WhatsApp card in beta</li>
+              <li>BYO AI and Drive credentials</li>
+            </ul>
+          </article>
+          <article class="product-card">
+            <span class="pill blue">Standalone later</span>
+            <h3>Phylax-only</h3>
+            <p>The customer buys “your agent on WhatsApp and Telegram,” without buying Zenod memory.</p>
+            <ul>
+              <li>Phylax account and subscription</li>
+              <li>Connections and delivery portal</li>
+              <li>Generic MCP/webhook destination</li>
+              <li>No Zenod vault or Drive screens</li>
+            </ul>
+          </article>
+          <article class="product-card">
+            <span class="pill purple">Next product lane</span>
+            <h3>PM + WhatsApp</h3>
+            <p>The customer buys the PM. WhatsApp is included through Phylax, just as it is for Zenod.</p>
+            <ul>
+              <li>PM account, proposal UI and billing</li>
+              <li>Embedded Channels settings</li>
+              <li>Phylax routes to the PM adapter</li>
+              <li>Zenod memory linked server-side</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="table-wrap" style="margin-top:16px">
+          <table>
+            <thead><tr><th>Capability</th><th>Zenod Hosted</th><th>Zenod Self-hosted</th><th>Phylax-only</th><th>PM + WhatsApp</th></tr></thead>
+            <tbody>
+              <tr><td>Customer sees</td><td>Zenod only</td><td>Zenod only</td><td>Phylax</td><td>PM only</td></tr>
+              <tr><td>WhatsApp transport</td><td class="yes">Included Phylax</td><td class="no">Absent in beta</td><td class="yes">Core product</td><td class="yes">Included Phylax</td></tr>
+              <tr><td>Destination</td><td>Direct Zenod adapter</td><td>Local Zenod</td><td>Customer MCP/webhook</td><td>PM adapter</td></tr>
+              <tr><td>Zenod memory</td><td class="yes">Core product</td><td class="yes">Core product</td><td class="no">Not implied</td><td>Tenant-scoped linked capability</td></tr>
+              <tr><td>Proposal state</td><td class="no">None</td><td class="no">None</td><td class="no">None</td><td class="yes">Owned by PM</td></tr>
+              <tr><td>Billing authority</td><td>Zenod</td><td class="no">None</td><td>Phylax</td><td>PM</td></tr>
+              <tr><td>Customer channel credential</td><td>None exposed</td><td>Telegram token</td><td>Destination credential only</td><td>None exposed</td></tr>
+              <tr><td>Implementation timing</td><td class="yes">Now</td><td class="yes">Now</td><td class="later">After beta</td><td class="later">After foundation stabilizes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="ui">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">03 · UI settings contract</div><h2>Same channel component, product-owned navigation</h2></div>
+          <p>These are screen-level destinations, not permission to build a second router or design system. The channel cards can share a component library; each host product decides which screens and actions exist.</p>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Product UI examples">
+          <button class="tab" role="tab" aria-selected="true" data-screen="zenod">Zenod Hosted</button>
+          <button class="tab" role="tab" aria-selected="false" data-screen="phylax">Phylax-only</button>
+          <button class="tab" role="tab" aria-selected="false" data-screen="pm">PM + WhatsApp</button>
+          <button class="tab" role="tab" aria-selected="false" data-screen="self">Zenod Self-hosted</button>
+        </div>
+
+        <div class="screen active" data-panel="zenod" role="tabpanel">
+          <aside class="sidebar">
+            <div class="sidebar-brand">Zenod <span>Hosted</span></div>
+            <button class="side-link">Overview</button><button class="side-link">Connect / MCP</button><button class="side-link active">Channels</button><button class="side-link">Vault &amp; sources</button><button class="side-link">Usage</button><button class="side-link">Account</button>
+          </aside>
+          <div class="screen-main">
+            <div class="screen-head"><div><div class="kicker">Channels</div><h2>Talk to Zenod anywhere</h2><p>Every channel reaches this tenant memory directly.</p></div></div>
+            <div class="screen-grid">
+              <article class="ui-card"><div class="ui-card-head"><h3>WhatsApp</h3><span class="status">Connected</span></div><p>Included with Hosted · one verified sender.</p><div class="row"><span>Sender</span><b>+34 6•• ••• •••</b></div><div class="row"><span>Last receipt</span><b>Saved · 2 min ago</b></div><div class="actions"><button class="btn primary">Send test</button><button class="btn">Disconnect</button></div><div class="note">No Phylax name, URL, token, QR session or transport setting appears here.</div></article>
+              <article class="ui-card"><div class="ui-card-head"><h3>Telegram</h3><span class="status">Connected</span></div><p>Private DM identity linked to this Zenod tenant.</p><div class="row"><span>User</span><b>@jordi · 63050995</b></div><div class="row"><span>Last delivery</span><b>11 min ago</b></div><div class="actions"><button class="btn primary">Send test</button><button class="btn">Disconnect</button></div></article>
+              <article class="ui-card full"><div class="ui-card-head"><h3>Voice storage contract</h3><span class="status">Stable</span></div><div class="row"><span>Up to 2 hours</span><b>Transcribe + archive raw audio + Zenod memory receipt</b></div><div class="row"><span>Over 2 hours</span><b>No transcription · archive raw audio + pointer memory receipt</b></div><div class="note">The Drive archive confirmation is part of the final Zenod receipt, not a hidden transport event.</div></article>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen" data-panel="phylax" role="tabpanel">
+          <aside class="sidebar">
+            <div class="sidebar-brand">Phylax <span>Standalone</span></div>
+            <button class="side-link">Overview</button><button class="side-link active">Connections</button><button class="side-link">Agent destination</button><button class="side-link">Media &amp; transcription</button><button class="side-link">Delivery &amp; errors</button><button class="side-link">Usage</button><button class="side-link">Account</button>
+          </aside>
+          <div class="screen-main">
+            <div class="screen-head"><div><div class="kicker">Connections</div><h2>Your agents on WhatsApp and Telegram</h2><p>Phylax transports messages to the agent destination you configure.</p></div></div>
+            <div class="screen-grid">
+              <article class="ui-card"><div class="ui-card-head"><h3>WhatsApp sender</h3><span class="status warn">Verify</span></div><label class="field">Your sender number<div class="field-box">+34 6•• ••• •••</div></label><div class="actions"><button class="btn primary">Create verification code</button></div><div class="note">The user sends the code to the shared Phylax number. Tenant customers never pair the shared transport QR.</div></article>
+              <article class="ui-card"><div class="ui-card-head"><h3>Telegram identity</h3><span class="status off">Off</span></div><p>Verify ownership through a private DM before routing.</p><div class="actions"><button class="btn primary">Connect Telegram</button></div></article>
+              <article class="ui-card full"><div class="ui-card-head"><h3>Agent destination</h3><span class="status">Healthy</span></div><label class="field">Destination type<div class="field-box">MCP · Streamable HTTP</div></label><label class="field">Endpoint<div class="field-box">https://agent.example.com/mcp</div></label><label class="field">Bearer credential<div class="field-box">••••••••••••••••••••</div></label><div class="actions"><button class="btn primary">Test round trip</button><button class="btn">Save</button></div><div class="note">This can be Ring, PM, another agent, or a generic MCP service. Phylax has zero routing intelligence beyond the configured adapter contract.</div></article>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen" data-panel="pm" role="tabpanel">
+          <aside class="sidebar">
+            <div class="sidebar-brand">PM <span>Workspace</span></div>
+            <button class="side-link">This week</button><button class="side-link">Proposals</button><button class="side-link">Projects</button><button class="side-link">Memory</button><button class="side-link active">Channels</button><button class="side-link">Settings</button>
+          </aside>
+          <div class="screen-main">
+            <div class="screen-head"><div><div class="kicker">Channels</div><h2>Talk to your PM on WhatsApp</h2><p>WhatsApp is an included PM access channel powered by the shared channel platform.</p></div></div>
+            <div class="screen-grid">
+              <article class="ui-card"><div class="ui-card-head"><h3>WhatsApp</h3><span class="status">Connected</span></div><div class="row"><span>Approved destination</span><b>+34 6•• ••• •••</b></div><div class="row"><span>PM workspace</span><b>AlfaBlok</b></div><div class="actions"><button class="btn primary">Send test proposal</button><button class="btn">Disconnect</button></div></article>
+              <article class="ui-card"><div class="ui-card-head"><h3>Zenod memory</h3><span class="status">Linked</span></div><p>The PM can retrieve cited memories through the same tenant's Zenod MCP authority.</p><div class="row"><span>Access</span><b>Read/search/cite</b></div><div class="row"><span>Vault</span><b>Never copied into PM</b></div><div class="actions"><button class="btn">Test cited retrieval</button></div></article>
+              <article class="ui-card full"><div class="ui-card-head"><h3>Proposal reply policy</h3><span class="status">Governed</span></div><div class="row"><span>WhatsApp comment</span><b>Correlates to proposal and reopens revision</b></div><div class="row"><span>Accept / reject</span><b>Explicit authenticated UI action only</b></div><div class="note">The PM owns proposal state and URLs. Phylax only delivers and returns provider receipts. Zenod only provides cited memory.</div></article>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen" data-panel="self" role="tabpanel">
+          <aside class="sidebar">
+            <div class="sidebar-brand">Zenod <span>Self-hosted</span></div>
+            <button class="side-link">Setup</button><button class="side-link">Overview</button><button class="side-link">Connect / MCP</button><button class="side-link active">Channels</button><button class="side-link">Vault &amp; sources</button><button class="side-link">Provider</button><button class="side-link">Usage</button>
+          </aside>
+          <div class="screen-main">
+            <div class="screen-head"><div><div class="kicker">Self-hosted channels</div><h2>Telegram</h2><p>The supported self-hosted phone channel uses a bot token you own.</p></div></div>
+            <div class="screen-grid">
+              <article class="ui-card full"><div class="ui-card-head"><h3>Telegram bot</h3><span class="status">Connected</span></div><label class="field">Bot token<div class="field-box">123456:••••••••••••••</div></label><div class="row"><span>Bot</span><b>@my_zenod_bot</b></div><div class="row"><span>Allowed user</span><b>63050995</b></div><div class="actions"><button class="btn primary">Save</button><button class="btn">Send test</button><button class="btn">Disconnect</button></div><div class="note">There is no disabled WhatsApp card and no Phylax explanation in this edition. A separately licensed self-hosted Phylax adapter can be considered later.</div></article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="ownership">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">04 · Responsibility map</div><h2>Who owns what—permanently</h2></div>
+          <p>Most prior instability came from changing ownership while changing presentation. This contract freezes ownership so UI work cannot silently move credentials, sessions, transcription, storage, or business logic.</p>
+        </div>
+
+        <div class="ownership">
+          <article class="owner-card"><h3><span class="dot"></span>Phylax owns</h3><ul class="plain-list"><li>WhatsApp/Baileys and Telegram transport</li><li>Shared session and sender verification</li><li>Provider message journal and dedupe</li><li>Raw media staging and ≤2h transcription</li><li>Retry, delivery and provider receipt</li></ul></article>
+          <article class="owner-card"><h3><span class="dot"></span>Zenod owns</h3><ul class="plain-list"><li>Tenant identity, memory and MCP surface</li><li>GitHub vault and search/citations</li><li>That tenant's Google Drive connection</li><li>Raw audio archive and archive receipt</li><li>Memory classification, commit and pointer entries</li></ul></article>
+          <article class="owner-card"><h3><span class="dot"></span>PM owns</h3><ul class="plain-list"><li>Project and proposal state</li><li>Proposal URLs and revisions</li><li>Reply-to-proposal correlation</li><li>Acceptance/rejection authority</li><li>PM-specific conversation policy</li></ul></article>
+        </div>
+
+        <div class="diagram" style="margin-top:14px">
+          <div class="diagram-title"><h3>Zenod voice-note lifecycle</h3><p>Storage receipt is an application receipt, not a transport guess.</p></div>
+          <div class="timeline">
+            <div class="milestone now"><span class="when">1 · Phylax</span><h3>Capture first</h3><p>Journal provider ID and raw bytes before optional processing.</p></div>
+            <div class="milestone next"><span class="when">2 · Phylax</span><h3>Transcribe ≤2h</h3><p>Never ask for a 30-minute confirmation. Over 2h is marked “archive only.”</p></div>
+            <div class="milestone next"><span class="when">3 · Zenod</span><h3>Archive + commit</h3><p>Upload actual audio to that tenant's Drive and create the memory or pointer entry.</p></div>
+            <div class="milestone next"><span class="when">4 · Phylax</span><h3>Deliver truth</h3><p>One final receipt includes memory path and Drive archive outcome.</p></div>
+          </div>
+        </div>
+
+        <div class="invariants" style="margin-top:14px">
+          <div class="invariant"><span class="num">01</span><p><strong>Deploying code never rotates customer tokens.</strong> Rotation and revocation are explicit, named, confirmed operations.</p></div>
+          <div class="invariant"><span class="num">02</span><p><strong>Credentials stay with their tenant and owning service.</strong> No global Google credential can replace a tenant's Drive authority.</p></div>
+          <div class="invariant"><span class="num">03</span><p><strong>Optional accounting cannot block capture.</strong> Raw evidence is journaled before usage reporting or classification.</p></div>
+          <div class="invariant"><span class="num">04</span><p><strong>Rolling deploys are additive and schema-safe.</strong> New optional metadata is omitted when the older peer cannot validate it.</p></div>
+          <div class="invariant"><span class="num">05</span><p><strong>One provider message, one durable job, one terminal receipt.</strong> Concurrent voice notes have distinct stable keys.</p></div>
+          <div class="invariant"><span class="num">06</span><p><strong>Phylax adapters are named and bounded.</strong> No generic router silently changes Zenod or PM behavior.</p></div>
+          <div class="invariant"><span class="num">07</span><p><strong>Bundling does not duplicate customers.</strong> Host product billing is authoritative; Phylax gets only an internal tenant binding.</p></div>
+          <div class="invariant"><span class="num">08</span><p><strong>Public UI never exposes internal service credentials.</strong> Integrated control calls use a private tenant-scoped backend boundary.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="metering">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">05 · Commercial metering</div><h2>One plan. Separate cost ledgers.</h2></div>
+          <p>Phylax creates real costs and must account for them where they occur. The host product owns the customer relationship and allocates part of the bundled allowance to the customer's Phylax channel tenant.</p>
+        </div>
+
+        <div class="diagram">
+          <div class="diagram-title"><h3>Subscription → allowance → cost → combined P&amp;L</h3><p>No double counting and no second customer subscription.</p></div>
+          <div class="control-flow">
+            <div class="control-node browser">
+              <span class="node-label">Commercial event</span>
+              <h3>Zenod / PM subscription</h3>
+              <p>Checkout, renewal or an explicit operator adjustment creates one idempotent plan-period event.</p>
+              <div class="tool-list"><code>account_id</code><code>plan_period_id</code><code>commercial_allowance</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node host">
+              <span class="node-label">Billing authority</span>
+              <h3>Host product ledger</h3>
+              <p>Owns the plan and decides the internal service allocation. It never pretends Phylax usage happened inside Zenod.</p>
+              <div class="tool-list"><code>allocate_channels_allowance</code><code>adjust_channels_allowance</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node mcp">
+              <span class="node-label">Host-only MCP control</span>
+              <h3>Phylax allowance tools</h3>
+              <p>Record an append-only grant for the mapped channel tenant and expose its current metering state.</p>
+              <div class="tool-list"><code>grant_allowance</code><code>metering_status</code><code>suspend_paid_processing</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node store">
+              <span class="node-label">Cost authority</span>
+              <h3>Phylax usage ledger</h3>
+              <p>Records transcription duration, provider/model, messages, media and delivery cost against stable event keys.</p>
+              <p>Returns usage and remaining internal allowance.</p>
+            </div>
+          </div>
+
+          <div class="planes" style="margin-top:14px">
+            <div class="plane">
+              <div class="kicker">Customer presentation</div>
+              <h3>One combined plan view</h3>
+              <ul><li>Zenod/PM shows one usage percentage, state and reset date.</li><li>No internal Zenod-versus-Phylax allocation or provider dollars.</li><li>Phylax-only shows its own channel-plan usage.</li><li>A top-up or renewal is reflected without a second checkout.</li></ul>
+            </div>
+            <div class="plane">
+              <div class="kicker">Operator presentation</div>
+              <h3>Real service-level P&amp;L</h3>
+              <ul><li>Zenod inference/storage cost from the Zenod ledger.</li><li>Phylax transcription/delivery cost from the Phylax ledger.</li><li>Combined revenue, cost, margin and tenant total.</li><li>Daily breakdown by service, provider, model and operation.</li></ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead><tr><th>Event</th><th>Zenod Hosted buyer</th><th>PM buyer</th><th>Phylax-only buyer</th><th>Reliability rule</th></tr></thead>
+            <tbody>
+              <tr><td>Initial purchase</td><td>Zenod creates the Phylax binding and allowance grant</td><td>PM creates the Phylax binding and allowance grant</td><td>Phylax billing grants its own allowance</td><td>One external event ID; safe to replay</td></tr>
+              <tr><td>Renewal</td><td>Zenod opens a new plan period and grants the channel allocation</td><td>PM opens a new plan period and grants the channel allocation</td><td>Phylax opens its own new period</td><td>Never mutate the prior period</td></tr>
+              <tr><td>Channel usage</td><td colspan="3">Phylax meters where STT/delivery happens and reports the tenant result to the host product</td><td>Provider message ID + operation is unique</td></tr>
+              <tr><td>Operator credit</td><td>Zenod issues an audited adjustment</td><td>PM issues an audited adjustment</td><td>Phylax owner issues an audited adjustment</td><td>Append-only grant; actor and reason required</td></tr>
+              <tr><td>Customer display</td><td>Combined included-usage percentage</td><td>Combined PM-plan percentage</td><td>Phylax channel-plan percentage</td><td>Never expose internal costs or allocations</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout green" style="margin-top:14px">
+          <strong>The clean accounting rule:</strong> Zenod does not copy Phylax usage into the Zenod ledger as if Zenod incurred it. Each service keeps its authoritative append-only usage events. The host product computes the customer-level projection and P&amp;L from both ledgers, and can transfer more internal allowance to Phylax through an idempotent, audited grant.
+        </div>
+        <div class="diagram" style="margin-top:14px">
+          <div class="diagram-title"><h3>One Phylax core, interchangeable allowance issuers</h3><p>Standalone is an extension of the same system—not a later rebuild.</p></div>
+          <div class="planes">
+            <div class="plane">
+              <div class="kicker">Allowance issuer A · integrated</div>
+              <h3>Zenod or PM billing adapter</h3>
+              <ul><li>Receives the host subscription event.</li><li>Maps the host customer to the existing Phylax channel tenant.</li><li>Calls the same idempotent <code>grant_allowance</code> operation.</li><li>Shows the combined plan projection in the host UI.</li></ul>
+            </div>
+            <div class="plane">
+              <div class="kicker">Allowance issuer B · standalone</div>
+              <h3>Phylax billing adapter</h3>
+              <ul><li>Receives the native Phylax subscription event.</li><li>Maps it to the existing Phylax channel tenant.</li><li>Calls the same idempotent <code>grant_allowance</code> operation.</li><li>Shows the same metering projection in the Phylax portal.</li></ul>
+            </div>
+          </div>
+          <div class="callout blue" style="margin-top:14px">
+            <strong>Shared core below both issuers:</strong> one tenant schema, one allowance-grant ledger, one usage-event ledger, one admission/enforcement path, one MCP control surface, one channel settings model, one delivery journal and one reusable UI component set. The tenant records only an explicit <code>commercial_owner = zenod | pm | phylax</code> and the external plan-period reference; it does not select a different runtime.
+          </div>
+        </div>
+        <div class="callout orange" style="margin-top:14px">
+          <strong>Capture remains safer than accounting:</strong> Phylax journals raw evidence before optional metering writes. Allowance is checked before starting a paid transcription/delivery operation, but a temporary ledger-reporting failure must never lose already received media. Provider truth, deterministic estimates and unavailable cost data remain explicitly distinguishable.
+        </div>
+      </div>
+    </section>
+
+    <section id="scale">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">06 · Scaling vision</div><h2>Scale the seam, not the coupling</h2></div>
+          <p>Every new product gets a small adapter and UI composition. It does not fork the transport, copy the vault, or invent a new authentication system.</p>
+        </div>
+        <div class="diagram">
+          <div class="planes">
+            <div class="plane"><h3>Tenant routing record</h3><ul><li><code>channel_tenant_id</code></li><li><code>host_product = zenod | pm | standalone</code></li><li><code>adapter_kind</code> + opaque destination reference</li><li>verified identities and media policy</li><li>no customer plaintext internal tokens</li></ul></div>
+            <div class="plane"><h3>Durable processing</h3><ul><li>Partition work by tenant and provider message ID</li><li>Lease journal entries for horizontal workers</li><li>Persist terminal result before delivery</li><li>Replay delivery without replaying application mutation</li><li>Keep channel and application volumes independently backed up</li></ul></div>
+            <div class="plane"><h3>Product expansion</h3><ul><li>Zenod adapter: fixed, direct memory contract</li><li>PM adapter: proposals + optional Zenod retrieval</li><li>Standalone adapter: customer-configured MCP/webhook</li><li>Future Meta Cloud API behind the same Phylax seam</li></ul></div>
+            <div class="plane"><h3>Release discipline</h3><ul><li>Versioned adapter contracts</li><li>Consumer-first compatibility for new required behavior</li><li>No credential migration as a side effect of startup</li><li>Exact two-service candidate and rollback proof</li><li>Live smoke per product adapter</li></ul></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="beta">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">07 · What lands now</div><h2>Clarify broadly. Implement narrowly.</h2></div>
+          <p>Yes, this contract should land before the final public-beta rollout resumes. No, the current refactor should not expand into building the PM adapter or a redesigned standalone Phylax business.</p>
+        </div>
+
+        <div class="verdict">
+          <div class="do">
+            <h3>Public-beta implementation slice</h3>
+            <ul class="checklist">
+              <li>Preserve the current two services, sessions, volumes and tenant credentials.</li>
+              <li>Ship the direct Zenod adapter for text, voice and media.</li>
+              <li>Expose tenant-safe WhatsApp/Telegram controls only inside Zenod Hosted.</li>
+              <li>Build Phylax metering once with an issuer-neutral grant ledger; connect the Zenod allowance issuer first.</li>
+              <li>Make concurrent voice capture durable and Drive archive receipts truthful.</li>
+              <li>Freeze authentication: deploys cannot rotate or invalidate MCP clients.</li>
+              <li>Deploy one version-coherent image, then run overlapping-voice, Drive and MCP acceptance.</li>
+            </ul>
+          </div>
+          <div class="dont">
+            <h3>Explicitly not in this refactor</h3>
+            <ul class="checklist">
+              <li>No merging Zenod and Phylax runtimes.</li>
+              <li>No moving STT or WhatsApp sessions into Zenod.</li>
+              <li>No PM proposal logic inside Phylax.</li>
+              <li>No new universal routing framework.</li>
+              <li>No Phylax-only commercial rebuild before Zenod beta.</li>
+              <li>No acceptance of the pending sprint proposal from this artifact.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout blue" style="margin-top:14px">
+          <strong>Recommended sequencing:</strong> stabilize and release the Zenod Hosted adapter first. Then land the Phylax standalone UI against the same channel API. Then build PM-over-WhatsApp as a PM adapter, using Phylax for transport and Zenod MCP for cited memory. This keeps the pending PH1–PH4 direction aligned without making it part of the current beta critical path.
+        </div>
+
+        <div class="callout orange" style="margin-top:14px">
+          <strong>Open commercial choices—deferred, not architectural blockers:</strong> whether standalone Phylax has its own price; whether PM bundles Zenod memory or links an existing Zenod entitlement; and whether self-hosted Zenod later supports a separately operated Phylax add-on. The service boundaries above remain valid under any of those choices.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-grid">
+      <span>Durable product/UI contract proposal · Zenod repository · 2026-08-27</span>
+      <span>Read-only synthesis: pending PM proposal was reviewed but not accepted, rejected or modified.</span>
+    </div>
+  </footer>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const panels = Array.from(document.querySelectorAll('[data-panel]'));
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((item) => item.setAttribute('aria-selected', String(item === tab)));
+        panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === tab.dataset.screen));
+      });
+    });
+  </script>
+</body>
+</html>
