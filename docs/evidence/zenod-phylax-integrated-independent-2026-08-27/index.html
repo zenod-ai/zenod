@@ -258,6 +258,7 @@
         <a href="#products">Products</a>
         <a href="#ui">UI contract</a>
         <a href="#ownership">Ownership</a>
+        <a href="#metering">Metering</a>
         <a href="#beta">Beta scope</a>
       </nav>
     </div>
@@ -618,10 +619,85 @@
       </div>
     </section>
 
+    <section id="metering">
+      <div class="shell">
+        <div class="section-head">
+          <div><div class="kicker">05 · Commercial metering</div><h2>One plan. Separate cost ledgers.</h2></div>
+          <p>Phylax creates real costs and must account for them where they occur. The host product owns the customer relationship and allocates part of the bundled allowance to the customer's Phylax channel tenant.</p>
+        </div>
+
+        <div class="diagram">
+          <div class="diagram-title"><h3>Subscription → allowance → cost → combined P&amp;L</h3><p>No double counting and no second customer subscription.</p></div>
+          <div class="control-flow">
+            <div class="control-node browser">
+              <span class="node-label">Commercial event</span>
+              <h3>Zenod / PM subscription</h3>
+              <p>Checkout, renewal or an explicit operator adjustment creates one idempotent plan-period event.</p>
+              <div class="tool-list"><code>account_id</code><code>plan_period_id</code><code>commercial_allowance</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node host">
+              <span class="node-label">Billing authority</span>
+              <h3>Host product ledger</h3>
+              <p>Owns the plan and decides the internal service allocation. It never pretends Phylax usage happened inside Zenod.</p>
+              <div class="tool-list"><code>allocate_channels_allowance</code><code>adjust_channels_allowance</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node mcp">
+              <span class="node-label">Host-only MCP control</span>
+              <h3>Phylax allowance tools</h3>
+              <p>Record an append-only grant for the mapped channel tenant and expose its current metering state.</p>
+              <div class="tool-list"><code>grant_allowance</code><code>metering_status</code><code>suspend_paid_processing</code></div>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="control-node store">
+              <span class="node-label">Cost authority</span>
+              <h3>Phylax usage ledger</h3>
+              <p>Records transcription duration, provider/model, messages, media and delivery cost against stable event keys.</p>
+              <p>Returns usage and remaining internal allowance.</p>
+            </div>
+          </div>
+
+          <div class="planes" style="margin-top:14px">
+            <div class="plane">
+              <div class="kicker">Customer presentation</div>
+              <h3>One combined plan view</h3>
+              <ul><li>Zenod/PM shows one usage percentage, state and reset date.</li><li>No internal Zenod-versus-Phylax allocation or provider dollars.</li><li>Phylax-only shows its own channel-plan usage.</li><li>A top-up or renewal is reflected without a second checkout.</li></ul>
+            </div>
+            <div class="plane">
+              <div class="kicker">Operator presentation</div>
+              <h3>Real service-level P&amp;L</h3>
+              <ul><li>Zenod inference/storage cost from the Zenod ledger.</li><li>Phylax transcription/delivery cost from the Phylax ledger.</li><li>Combined revenue, cost, margin and tenant total.</li><li>Daily breakdown by service, provider, model and operation.</li></ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead><tr><th>Event</th><th>Zenod Hosted buyer</th><th>PM buyer</th><th>Phylax-only buyer</th><th>Reliability rule</th></tr></thead>
+            <tbody>
+              <tr><td>Initial purchase</td><td>Zenod creates the Phylax binding and allowance grant</td><td>PM creates the Phylax binding and allowance grant</td><td>Phylax billing grants its own allowance</td><td>One external event ID; safe to replay</td></tr>
+              <tr><td>Renewal</td><td>Zenod opens a new plan period and grants the channel allocation</td><td>PM opens a new plan period and grants the channel allocation</td><td>Phylax opens its own new period</td><td>Never mutate the prior period</td></tr>
+              <tr><td>Channel usage</td><td colspan="3">Phylax meters where STT/delivery happens and reports the tenant result to the host product</td><td>Provider message ID + operation is unique</td></tr>
+              <tr><td>Operator credit</td><td>Zenod issues an audited adjustment</td><td>PM issues an audited adjustment</td><td>Phylax owner issues an audited adjustment</td><td>Append-only grant; actor and reason required</td></tr>
+              <tr><td>Customer display</td><td>Combined included-usage percentage</td><td>Combined PM-plan percentage</td><td>Phylax channel-plan percentage</td><td>Never expose internal costs or allocations</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout green" style="margin-top:14px">
+          <strong>The clean accounting rule:</strong> Zenod does not copy Phylax usage into the Zenod ledger as if Zenod incurred it. Each service keeps its authoritative append-only usage events. The host product computes the customer-level projection and P&amp;L from both ledgers, and can transfer more internal allowance to Phylax through an idempotent, audited grant.
+        </div>
+        <div class="callout orange" style="margin-top:14px">
+          <strong>Capture remains safer than accounting:</strong> Phylax journals raw evidence before optional metering writes. Allowance is checked before starting a paid transcription/delivery operation, but a temporary ledger-reporting failure must never lose already received media. Provider truth, deterministic estimates and unavailable cost data remain explicitly distinguishable.
+        </div>
+      </div>
+    </section>
+
     <section id="scale">
       <div class="shell">
         <div class="section-head">
-          <div><div class="kicker">05 · Scaling vision</div><h2>Scale the seam, not the coupling</h2></div>
+          <div><div class="kicker">06 · Scaling vision</div><h2>Scale the seam, not the coupling</h2></div>
           <p>Every new product gets a small adapter and UI composition. It does not fork the transport, copy the vault, or invent a new authentication system.</p>
         </div>
         <div class="diagram">
@@ -638,7 +714,7 @@
     <section id="beta">
       <div class="shell">
         <div class="section-head">
-          <div><div class="kicker">06 · What lands now</div><h2>Clarify broadly. Implement narrowly.</h2></div>
+          <div><div class="kicker">07 · What lands now</div><h2>Clarify broadly. Implement narrowly.</h2></div>
           <p>Yes, this contract should land before the final public-beta rollout resumes. No, the current refactor should not expand into building the PM adapter or a redesigned standalone Phylax business.</p>
         </div>
 
