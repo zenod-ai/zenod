@@ -1,0 +1,147 @@
+{
+  "contractVersion": 1,
+  "frozenAt": "2026-08-27",
+  "sourceBaseline": "3e902f49372f211f589d73722f6be9bbf33a79d5",
+  "deployedBaseline": {
+    "source": "a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2",
+    "ociIndex": "sha256:9308e5e2319567958380c1e329afab22532be54ec9fff8dddeabea2b3ed4227a",
+    "status": "signup_closed_candidate"
+  },
+  "architectureInvariants": {
+    "serviceOwnership": "Zenod owns memory, tenant Google Drive custody and the application receipt; Phylax owns channel transport, raw staging, transcription and provider delivery.",
+    "runtimeBoundary": "Zenod and Phylax remain independently deployed services with independent stores, credentials, sessions and volumes.",
+    "browserBoundary": "The browser talks only to its product backend; tenant-scoped backend calls cross the Phylax MCP boundary.",
+    "identityContinuity": "Ordinary startup, reconciliation and image rollout do not rotate, revoke, replace or reinterpret MCP credentials, OAuth clients, tenant Google credentials, channel sessions, tenant bindings or volumes.",
+    "captureRule": "One provider message creates one durable job and at most one terminal customer receipt; raw evidence is journaled before optional paid processing.",
+    "voiceRule": "Voice notes up to and including two hours transcribe automatically; longer notes archive raw audio without transcription and create a pointer entry.",
+    "architectureAuthority": "A ticket may characterize these behaviors but may not redesign service ownership, auth, routing, metering or customer experience."
+  },
+  "fixtures": [
+    {
+      "id": "intake_text",
+      "kind": "text",
+      "input": { "messageId": "fixture-text-1", "text": "Remember the launch checklist." },
+      "expected": { "tool": "chat_with_zenod", "idempotencyKey": "alpha:whatsapp:fixture-text-1" },
+      "automatedEvidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "runs the frozen text and URL fixtures through the current direct Zenod seam" }
+    },
+    {
+      "id": "intake_url",
+      "kind": "url",
+      "input": { "messageId": "fixture-url-1", "text": "Remember https://example.test/research?id=42" },
+      "expected": { "tool": "chat_with_zenod", "idempotencyKey": "alpha:whatsapp:fixture-url-1" },
+      "automatedEvidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "runs the frozen text and URL fixtures through the current direct Zenod seam" }
+    },
+    {
+      "id": "intake_image",
+      "kind": "image",
+      "input": { "messageId": "wa-image-captioned", "mimeType": "image/png", "caption": "please inspect this" },
+      "expected": { "oneAuthenticatedArtifact": true, "transcriptionCalls": 0, "oneProviderReply": true },
+      "automatedEvidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "forwards captioned and uncaptioned images once with authenticated artifacts and metadata" }
+    },
+    {
+      "id": "intake_voice",
+      "kind": "voice",
+      "input": { "messageId": "voice-overlap-1", "mimeType": "audio/ogg", "durationSeconds": 60 },
+      "expected": { "transcriptionDisposition": "provided", "oneIngest": true, "oneTerminalReceipt": true },
+      "automatedEvidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "files three overlapping WhatsApp voice notes once each with distinct stable provider keys and one final receipt" }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "voice_overlap_three",
+      "automatedStatus": "proved",
+      "productionStatus": "unproved",
+      "evidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "files three overlapping WhatsApp voice notes once each with distinct stable provider keys and one final receipt" },
+      "productionNote": "The ZAL-22 rollout packet requests this exact live lap; it is not normalized as passed."
+    },
+    {
+      "id": "exact_redelivery_dedupe",
+      "automatedStatus": "proved",
+      "productionStatus": "unproved",
+      "evidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "files three overlapping WhatsApp voice notes once each with distinct stable provider keys and one final receipt" }
+    },
+    {
+      "id": "voice_lte_two_hours",
+      "automatedStatus": "proved",
+      "productionStatus": "partially_observed",
+      "evidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "automatically handles voice notes through two hours, skips longer transcription, and keeps cancellation scoped" }
+    },
+    {
+      "id": "voice_gt_two_hours_archive_only",
+      "automatedStatus": "proved",
+      "productionStatus": "unproved",
+      "evidence": { "file": "packages/server/test/taskJobMediaIngestArchive.test.ts", "test": "archives audio over two hours without transcription and files a memory pointer to the raw artifact" }
+    },
+    {
+      "id": "drive_aware_terminal_receipt",
+      "automatedStatus": "proved",
+      "productionStatus": "unproved",
+      "evidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "dispatches a captioned image as an idempotent ingest and renders its Drive link only from the terminal receipt" }
+    },
+    {
+      "id": "restart_capture_recovery",
+      "automatedStatus": "proved",
+      "productionStatus": "observed_no_error",
+      "evidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "reconciles a restart after an audited provider send without sending or forwarding again" }
+    },
+    {
+      "id": "cap_pause_capture_first",
+      "automatedStatus": "proved",
+      "productionStatus": "unproved",
+      "evidence": { "file": "packages/server/test/customerManagedAiAdmission.test.ts", "test": "journals text, audio, and image before returning a typed cap pause" }
+    },
+    {
+      "id": "one_terminal_response",
+      "automatedStatus": "proved",
+      "productionStatus": "unproved",
+      "evidence": { "file": "packages/server/test/customerManagedAiAdmission.test.ts", "test": "allows only one cross-process claimant and persists one terminal receipt" }
+    },
+    {
+      "id": "direct_mcp_bearer_continuity",
+      "automatedStatus": "proved",
+      "productionStatus": "observed",
+      "evidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "keeps the direct MCP bearer byte-identical across ordinary restart and changed seed input" }
+    },
+    {
+      "id": "oauth_client_token_continuity",
+      "automatedStatus": "proved",
+      "productionStatus": "observed",
+      "evidence": { "file": "packages/mcp-chassis/src/oauthSqliteStore.test.ts", "test": "issues, rotates, and expires access tokens while keeping refresh tokens durable" }
+    },
+    {
+      "id": "tenant_google_continuity",
+      "automatedStatus": "proved",
+      "productionStatus": "observed",
+      "evidence": { "file": "packages/server/test/zenodUnit.test.ts", "test": "ZAL-20 Hosted managed Drive journey uses drive.file, creates or recovers one folder, and survives restart" }
+    },
+    {
+      "id": "whatsapp_session_continuity",
+      "automatedStatus": "proved",
+      "productionStatus": "observed",
+      "evidence": { "file": "packages/server/test/whatsappCredentials.test.ts", "test": "seeds a protected backup before opening an existing valid session" }
+    },
+    {
+      "id": "telegram_binding_continuity",
+      "automatedStatus": "proved",
+      "productionStatus": "not_connected",
+      "evidence": { "file": "packages/server/test/phylaxTenantSettings.test.ts", "test": "isolates pending and immutable Telegram identities across tenants and survives restart" }
+    },
+    {
+      "id": "tenant_binding_continuity",
+      "automatedStatus": "proved",
+      "productionStatus": "observed",
+      "evidence": { "file": "packages/server/test/hostedChannels.test.ts", "test": "replays terminal inbound verification after concurrency and restart without Zenod dispatch" }
+    },
+    {
+      "id": "independent_volume_identity",
+      "automatedStatus": "proved",
+      "productionStatus": "observed",
+      "evidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "pins the independent Zenod and Phylax production volume identities without reading secrets" }
+    }
+  ],
+  "knownUnprovedProductionClaims": [
+    "Three overlapping live voice notes each produce exactly one Saved receipt with a Google Drive audio link.",
+    "A live voice note over two hours archives to Drive, skips transcription and creates a pointer entry.",
+    "The complete local two-service container composition has been re-walked from this exact source baseline."
+  ]
+}
