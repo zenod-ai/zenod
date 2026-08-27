@@ -1228,7 +1228,9 @@ function projectChannels(value: unknown): HostedChannelsView | null {
     return null;
   if (
     (senderHint !== null && !/^••••\d{1,8}$/.test(senderHint)) ||
-    (sharedNumber !== null && !/^\+?[\d ()-]{8,32}$/.test(sharedNumber)) ||
+    (sharedNumber !== null &&
+      !/^\+?[\d ()-]{8,32}$/.test(sharedNumber) &&
+      !/^••••\d{1,8}$/.test(sharedNumber)) ||
     (identityHint !== null && !/^@[-a-zA-Z0-9_]{1,64}$/.test(identityHint)) ||
     !whatsappRevision ||
     !/^[a-zA-Z0-9._:-]{1,160}$/.test(whatsappRevision) ||

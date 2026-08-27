@@ -489,7 +489,7 @@ describe("Hosted Zenod channel adapter", () => {
           whatsapp: {
             state: "off",
             senderHint: null,
-            sharedNumber: "+34 699 000 111",
+            sharedNumber: "••••0219",
             verificationExpiresAt: null,
             lastInboundAt: null,
             lastReceiptAt: null,
@@ -576,8 +576,12 @@ describe("Hosted Zenod channel adapter", () => {
     });
     expect(fetchImpl.mock.calls[0]?.[1]?.redirect).toBe("error");
 
-    await app.request("/api/channels", {
+    const beta = await app.request("/api/channels", {
       headers: { "x-test-tenant": "beta" },
+    });
+    expect(beta.status).toBe(200);
+    expect(await beta.json()).toMatchObject({
+      whatsapp: { sharedNumber: "••••0219" },
     });
     expect(String(fetchImpl.mock.calls[1]?.[0])).toContain(
       "/internal/zenod/channels/tenant-beta",
