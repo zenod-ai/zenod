@@ -1,4 +1,4 @@
-export const VERSION = "0.0.1";
+export { VERSION } from "./version.js";
 
 export type {
   Answer,

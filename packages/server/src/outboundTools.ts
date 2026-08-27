@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { VERSION } from "zenod";
+import { VERSION } from "zenod/version";
 import type { PeerTools } from "zenod";
 import {
   parseOutboundReceipt,

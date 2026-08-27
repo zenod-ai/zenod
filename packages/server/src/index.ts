@@ -3,6 +3,16 @@ export { createCallisthenesCustomerLayer } from "./callisthenesCustomerLayer.js"
 export { createPhylaxCustomerLayer } from "./phylaxCustomerLayer.js";
 export { createPhylaxUnit } from "./phylaxUnit.js";
 export {
+  assertCustomerDownstreamMutationAllowed,
+  assertDedicatedPhylaxProcessEnv,
+  resolvePhylaxInstanceConfig,
+} from "./phylaxInstance.js";
+export type {
+  PhylaxDownstreamAdapter,
+  PhylaxInstanceConfig,
+  PhylaxInstanceMode,
+} from "./phylaxInstance.js";
+export {
   PhylaxAllowanceLedger,
   PhylaxLedgerConflictError,
 } from "./phylaxAllowanceLedger.js";

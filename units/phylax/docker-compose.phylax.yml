@@ -1,7 +1,6 @@
-# Phylax is one full customer unit: landing, GitHub customer session, Stripe
-# TEST billing, tenant rows, dashboard, MCP face, and the ported channels organ.
-# Its only persistent state is the new unit-owned /data volume. Never seed this
-# volume from the protected legacy/fused Phylax compose.
+# Native/standalone Phylax. The same dedicated artifact is also used by the
+# fixed Zenod and PM islands; only the immutable instance mode and deployment-
+# owned storage/origin differ. Existing `phylax-data` mounts in place.
 
 networks:
   dokploy-network:
@@ -12,16 +11,26 @@ volumes:
 
 services:
   phylax:
+    # The checked-in whisper fallback is the proven musl/amd64 binary used by
+    # the current service. Keep that runtime intact and make its target explicit.
+    platform: ${PHYLAX_PLATFORM:-linux/amd64}
     build:
       context: ../..
-      dockerfile: Dockerfile
+      dockerfile: units/phylax/Dockerfile
       args:
         GIT_SHA: ${GIT_SHA:?required}
+    # Keep the existing default tag so a rolling source-build does not select a
+    # new image reference merely because the artifact now has its own Dockerfile.
     image: ${PHYLAX_IMAGE:-zenod-phylax-customer}
     environment:
       NODE_ENV: production
       PORT: "8080"
       ZENOD_UNIT: phylax
+      AGENT: phylax
+      PHYLAX_INSTANCE_MODE: ${PHYLAX_INSTANCE_MODE:-standalone}
+      PHYLAX_INSTANCE_ID: ${PHYLAX_INSTANCE_ID:-phylax-standalone}
+      PHYLAX_SERVICE_NUMBER_ID: ${PHYLAX_SERVICE_NUMBER_ID:-standalone-primary}
+      PHYLAX_ADMIN_ORIGIN: ${PHYLAX_ADMIN_ORIGIN:-https://phylax.zenod.dev}
       ZENOD_DATA_DIR: /data
       ZENOD_WEB_DIST: /app/apps/web/dist
       PHYLAX_SITE_DIST: /app/apps/phylax-site/dist

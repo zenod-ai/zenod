@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { SqliteStateStore } from "zenod";
+import { SqliteStateStore } from "zenod/state/sqlite";
 import {
   normalizeOptionalConfigString,
   normalizeAllowedSenders,

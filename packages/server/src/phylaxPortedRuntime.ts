@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Env, Hono } from "hono";
-import { SqliteStateStore } from "zenod";
+import { SqliteStateStore } from "zenod/state/sqlite";
 import { Settings } from "./settings.js";
 import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";

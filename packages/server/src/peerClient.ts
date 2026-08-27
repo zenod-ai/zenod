@@ -2,7 +2,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "node:crypto";
-import { VERSION, type StoreResult, type TrustedConnectionProfile } from "zenod";
+import type { StoreResult, TrustedConnectionProfile } from "zenod";
+import { VERSION } from "zenod/version";
 import { validateWalletUrl } from "./walletUrl.js";
 import {
   PEER_SKILL_LIMITS,
