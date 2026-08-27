@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `e22dd0e64f7d4794f4668fbb2585cbf576ddc989` on `main`; the ZAL-22 production receipt remains the deployed rollback/behavior baseline
+Last reconciled commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; the ZAL-22 production receipt remains the deployed rollback/behavior baseline
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,13 +84,13 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Integrated-independent source architecture complete; wave 6 final acceptance preflight active
-Last verified: 2026-08-27 22:37 CEST
+Phase: Integrated-independent source architecture and phase-1 release packet complete; commercial config approval pending before backup/deploy gates
+Last verified: 2026-08-27 23:12 CEST
 Integration target: `main`
-Fresh base commit: `e22dd0e64f7d4794f4668fbb2585cbf576ddc989` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
+Fresh base commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
 Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
-Next action: execute #1112 exact-candidate validation and read-only deployment/continuity/rollback preflight; stop before backup quiesce or closed deployment for Jordi's precise human gate.
-Blockers: no architecture question or current source-wave blocker is open. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
+Next action: Jordi approves or replaces the recommended allowance/tariff values in the exact #1112 release packet; then request Gate A fresh backups only. Closed deploy, real sends, billing and signup remain separate later gates.
+Blockers: no architecture or source blocker is open. Exact production allowance/tariff values are the single current human input. Production backup/deploy, real channel sends, live billing and public signup remain named later gates. Public signup stays closed.
 
 ## Bootstrap Map
 
@@ -141,7 +141,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Concern | Existing authority / proposed home | Root rollup state | Next routing action |
 |---|---|---|---|
-| Integrated-independent Zenod/Phylax final push | `docs/EPIC-P-PHYLAX-SPRINT.md` | Active child spine; source architecture integrated through #1111; #1112 final acceptance preflight active from exact main; signup-closed production candidate preserved as baseline. | Finish exact preflight and request the named backup/closed-deploy gate; keep real sends, billing and signup separately gated. |
+| Integrated-independent Zenod/Phylax final push | `docs/EPIC-P-PHYLAX-SPRINT.md` | Active child spine; source architecture and phase-1 release packet complete; separate immutable Zenod/Phylax images published from exact main; production untouched. | Approve or replace the recommended allowance/tariff values, then request Gate A backups only; keep deploy, real sends, billing and signup separately gated. |
 | Zenod alpha launch history | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Prior offer, readiness and deployment evidence remains authoritative for its completed tickets and current #1061 gate, but it is no longer the dispatch board. | Read only unless the active Phylax spine routes a specific gate or evidence correction. |
 | Voice capture and grounded recall | `docs/EPIC-MECHANICAL-CAPTURE.md` | Capture/transcription/retrieval has strong July evidence; the new recent-recap failure is a fresh acceptance gap. | Reproduce the exact interaction and add it to the canonical journey suite before declaring alpha-ready. |
 | Voice note → Codex execution | Proposed child epic | Direction is clear; UX, authority, project disambiguation, delivery surface, and pricing are not settled. | Draft a child spine after the immediate readiness audit; do not silently fold it into the memory-only launch gate. |
@@ -177,7 +177,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-P-PHYLAX-SPRINT.md` | Epic worker | `/root` final-push delivery manager | Deliver frozen integrated-independent architecture | active / wave 6 preflight | #1103–#1111 and #1119 integrated; #1112 active; then #1061 human gates | [#1103](https://github.com/zenod-ai/zenod/issues/1103)–[#1112](https://github.com/zenod-ai/zenod/issues/1112), [#1119](https://github.com/zenod-ai/zenod/issues/1119) | `e22dd0e` | Separate product/Phylax artifacts and islands; stable auth; issuer-neutral Phylax ledger; tenant-safe management MCP; Zenod BFF; reusable UI/standalone; no-loss migration; three-island proof; exact release acceptance. | Source architecture is integrated; #1112 phase 1 validates exact artifacts and continuity/rollback read-only; production remains the signup-closed baseline. | 2026-08-27 22:37 CEST | Finish preflight and request exact backup/closed-deploy approval; do not combine real sends, billing or signup gates. |
+| `docs/EPIC-P-PHYLAX-SPRINT.md` | Epic worker | `/root` final-push delivery manager | Deliver frozen integrated-independent architecture | active / wave 6 config gate | #1103–#1111 and #1119 integrated; #1112 phase 1 complete; then gated backup/deploy/journey and #1061 | [#1103](https://github.com/zenod-ai/zenod/issues/1103)–[#1112](https://github.com/zenod-ai/zenod/issues/1112), [#1119](https://github.com/zenod-ai/zenod/issues/1119) | `73e309a` | Separate product/Phylax artifacts and islands; stable auth; issuer-neutral Phylax ledger; tenant-safe management MCP; Zenod BFF; reusable UI/standalone; no-loss migration; three-island proof; exact release acceptance. | #1112 phase 1 PASS: full validation/security, immutable paired images, live read-only continuity, backup/rollout/rollback packet; production untouched. | 2026-08-27 23:12 CEST | Obtain exact allowance/tariff approval; then request Gate A backups only. Do not combine deploy, real sends, billing or signup gates. |
 | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Historical child / gate source | Zenod Alpha delivery manager | Preserve prior alpha evidence and #1061 gate | read-only / superseded for dispatch | active Phylax child, #1112 | prior ZAL PRs | `a6fbe8f` | Prior offer/readiness/deployment evidence remains available without competing issue selection. | Signup-closed candidate deployed; #1061 remains 11/13 and linked from the active child. | 2026-08-27 14:40 CEST | No dispatch; follow active child. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
@@ -229,7 +229,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Worker Queue
 
-- Final-push work is dispatchable only from `docs/EPIC-P-PHYLAX-SPRINT.md`; #1112 phase 1 is active from exact `main`, while backup/deploy, real sends, billing and signup retain their separate human gates.
+- Final-push work is dispatchable only from `docs/EPIC-P-PHYLAX-SPRINT.md`; #1112 phase 1 is complete on exact `main` `73e309a`. The current human input is the allowance/tariff configuration; backup, deploy, real sends, billing and signup retain separate gates.
 - Add explicit Write Scope to the chosen child epic spine.
 - Ensure its Issue Ledger links to GitHub issues or marks drafts clearly.
 - Add Handoff Journal and Proposed Cross-Spine Updates sections if missing.
@@ -257,6 +257,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-08-27 - Epic 0 worker - ZPF-10 phase-1 release packet complete; exact config decision next
+
+Action: reconciled exact `main` `73e309a`, successful CI/publish, separate immutable Zenod and Phylax OCI indexes, full local/CI/image/security evidence, and fresh read-only production continuity/rollback inspection. Added the durable [ZPF-10 release gate packet](./evidence/zpf-10-release-gate-2026-08-27/README.md). Production remains untouched and signup closed.
+
+Evidence: [CI 33116222429](https://github.com/zenod-ai/zenod/actions/runs/33116222429), [publish 33116222471](https://github.com/zenod-ai/zenod/actions/runs/33116222471), [issue #1112](https://github.com/zenod-ai/zenod/issues/1112), and the release packet. Candidate images are Zenod OCI index `a25a84c1...` and dedicated Phylax OCI index `929b4b5c...`; normal rollback remains live universal index `9308e5e...` with both volumes preserved.
+
+Next action: Jordi approves or replaces the recommended production values `3000000 / 1000000 / 1000000 / tariff-v1` and explicit private `phylax-runtime-v1` 1/1/1 pins. That approval authorizes configuration finalization only. The next requested operational gate is fresh backups only; closed deployment, real channel sends, billing and signup stay separate.
+
+Assignment identity: `/root` final-push delivery manager and sole root/child spine steward
+
+Branch / latest commit: `main` `73e309adda4d04c5ea58f2ec4dc114143731ed1c`; control branch `codex/zpf-control-phase1-gate`
+
+Last verified: 2026-08-27 23:12 CEST
 
 ### 2026-08-27 - Epic 0 worker - Zenod signup-closed production candidate ready for founder voice acceptance
 

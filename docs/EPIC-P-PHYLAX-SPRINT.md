@@ -9,7 +9,7 @@ GitHub issues: same repository
 Integration branch: main
 Active spine steward: `/root` final-push delivery manager
 Steward since: 2026-08-27 14:40 CEST
-Last reconciled commit: `e22dd0e64f7d4794f4668fbb2585cbf576ddc989` on `main`
+Last reconciled commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -111,13 +111,14 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: Source architecture complete; wave 6 final acceptance and closed-rollout preflight active
-Last verified: 2026-08-27 22:37 CEST
+Phase: Source architecture and wave-6 phase-1 release packet complete; allowance/tariff approval pending before gated backups and closed rollout
+Last verified: 2026-08-27 23:12 CEST
 Integration target: main
-Fresh base commit: `e22dd0e64f7d4794f4668fbb2585cbf576ddc989` on `main`; signup-closed production candidate remains deployed and is the rollback/behavior baseline, not target-architecture proof
+Fresh base commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; signup-closed production candidate remains deployed and is the rollback/behavior baseline, not target-architecture proof
 Control plane: [PR #1113](https://github.com/zenod-ai/zenod/pull/1113) merged as `3e902f4` after CI and independent review; durable visual contract at `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html`
-Next action: execute #1112 phase 1 from exact integrated `main`: exact-candidate automated/security review, immutable-artifact and read-only production continuity/rollback preflight, then present the exact backup/closed-deploy human gate before any mutation.
-Blockers: no architecture decision or source-wave blocker is open. Production deployment, real channel sends, real-card billing and public signup remain later named human gates. Exact plan allowance amounts, allocation chunk sizes and native Phylax pricing are configuration/commercial choices that cannot change the ledger or service architecture.
+Release packet: `docs/evidence/zpf-10-release-gate-2026-08-27/README.md`
+Next action: Jordi approves or replaces the recommended production allowance/tariff values; then request the exact Gate A fresh-backups-only approval. Deployment, real journey, billing and signup remain separate gates.
+Blockers: no architecture decision, source-wave, artifact, security or continuity blocker is open. The exact allowance/tariff values are the single current input. Production backup/deploy, real channel sends, real-card billing and public signup remain later named human gates.
 
 ## Role Goals
 
@@ -213,14 +214,14 @@ Later dated rows supersede conflicting July product-shape assumptions while pres
 | [#1109](https://github.com/zenod-ai/zenod/issues/1109) | Ticket worker | ZPF-7-worker | Product UI facades, Phylax operator UI and standalone shell | done / wave 3 | #1104, #1107 | [#1124](https://github.com/zenod-ai/zenod/pull/1124) / `codex/zpf-7-ui-shells` | `297656e` then reconciled `0000725` | Reusable settings/metering components serve Zenod/PM facades and native Phylax while every instance retains a separate operator UI and authority boundary. | Final head `2308933`; CI and independent review PASS; fixed-mode hostile asset/auth and responsive proofs green; merged as `ebb5f52` | 2026-08-27 19:46 CEST | Integrated; preserve separate product/native/operator shells and Phylax-specific artifact. |
 | [#1110](https://github.com/zenod-ai/zenod/issues/1110) | Ticket worker | ZPF-8-worker | Remove legacy coupling with no-loss compatibility migration | done / wave 4 | #1103–#1109 | [#1127](https://github.com/zenod-ai/zenod/pull/1127) / `codex/zpf-8-decouple-migrate` | `ebb5f52` | Phylax-local metering and fixed adapters replace piggyback/dynamic coupling only after exact migration, mixed-version, rollback and custom-binding preservation proof. | Final head `6643a20`; CI and independent review PASS; 1,108 server tests and separate-image contract green; merged as `a90d699` | 2026-08-27 21:57 CEST | Integrated; retain capture-safe rolling compatibility and rollback data without restoring legacy coupling. |
 | [#1111](https://github.com/zenod-ai/zenod/issues/1111) | Ticket worker | ZPF-9-worker | PM and standalone conformance without a core fork | done / wave 5 | #1107, #1109, #1110 | [#1129](https://github.com/zenod-ai/zenod/pull/1129) / `codex/zpf-9-three-island-conformance` | `a90d699` | PM contract harness and native issuer prove three simultaneous isolated islands using the same Phylax core; downstream PM repo unchanged without authority. | Final head `4e25b1e`; CI and independent review PASS; 1,109 server tests and 58-input bundle green; merged as `e22dd0e` | 2026-08-27 22:37 CEST | Integrated; retain test-only PM semantics and one canonical envelope with compatibility mappings. |
-| [#1112](https://github.com/zenod-ai/zenod/issues/1112) | Tester / release worker | ZPF-10-release | Final integrated-independent acceptance and closed rollout | active / wave 6 preflight | #1103–#1111 | `codex/zpf-10-release-acceptance` | `e22dd0e` | Exact candidate passes full automated/independent review, backups, separate-artifact closed deploy and uninterrupted real customer journey; test package delivered. | Phase 1 dispatched: local/CI/security plus immutable artifact and read-only target/env/volume/session/rollback evidence only | 2026-08-27 22:37 CEST | Complete exact preflight; stop at the named production backup/deploy gate with precise actions and rollback. |
+| [#1112](https://github.com/zenod-ai/zenod/issues/1112) | Tester / release worker | `/root` ZPF-10 release manager | Final integrated-independent acceptance and closed rollout | active / phase 1 complete; config gate | #1103–#1111 | `main` + release packet | `73e309a` | Exact candidate passes full automated/independent review, backups, separate-artifact closed deploy and uninterrupted real customer journey; test package delivered. | Phase 1 PASS: 1,109 server tests, paired immutable artifacts, independent security review, live read-only continuity/rollback, exact backup/deploy packet; production untouched. | 2026-08-27 23:12 CEST | Obtain allowance/tariff approval; then request Gate A backups only. Closed deploy and real journey remain separate approvals. |
 | [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / human gate | `/root` + Jordi | Public production-readiness gate | blocked after closed candidate | #1112, Stripe profile, live €9 journey, explicit signup approval | existing ZAL-4 operator lane | exact #1112 candidate | Readiness 13/13, final human acceptance, explicit public signup approval and rollback named. | Current production candidate is signup-closed and 11/13 | 2026-08-27 14:40 CEST | Keep signup closed; execute only after #1112 and separate exact approvals. |
 
 ## Branch And Integration
 
 - Default integration branch: protected `main`; current coherent release base is `e22dd0e64f7d4794f4668fbb2585cbf576ddc989` after integrating #1103–#1111 and #1119.
 - One ticket worker, dedicated `codex/` branch and separate worktree per issue. Workers write detailed progress and handoffs to their issue; only `/root` edits this spine.
-- Source waves 1–5 integrated #1103–#1111 and #1119. Wave 6 runs #1112 release acceptance from exact integrated main; production actions remain human-gated.
+- Source waves 1–5 integrated #1103–#1111 and #1119. Wave 6 phase 1 is complete on exact main `73e309a`; production actions remain human-gated.
 - The manager independently reviews each PR, integrates small coherent changes, updates the base for subsequent workers and rejects architectural drift even when tests are green.
 - No implementation PR may deploy automatically as acceptance. ZPF-10 owns the exact backup/deploy/test sequence after all source waves integrate.
 - `review` means implementation complete, PR open, CI green and independent architecture review clean; `done` additionally requires integrated-main validation and spine reconciliation.
@@ -234,7 +235,9 @@ Later dated rows supersede conflicting July product-shape assumptions while pres
 | Test phone number for the manager's laps | Jordi | P-S5 start | Provide a spare/test WhatsApp number the manager may pair and message (or approve using a temp number) | P-S1..P-S4 |
 | Real number pairing | Jordi | His own pass | Jordi scans the QR on /admin | Manager's laps on the test number |
 | Live paying tenants / other live units | Jordi | Should not occur | BLOCKED ON JORDI | All else |
-| Production backup/deploy | Jordi | ZPF-10 has an exact reviewed merge SHA, immutable images, targets, env-preservation proof and rollback | Approve the exact backup and closed deployment actions | Local/review/CI/read-only preflight |
+| Production allowance/tariff configuration | Jordi | ZPF-10 phase 1 is evidence-complete but target environment fingerprints require exact values | Approve the recommended `3000000 / 1000000 / 1000000 / tariff-v1` values and explicit private `phylax-runtime-v1` 1/1/1 pins, or provide replacements | Local/review/CI/read-only work; no backup or production mutation |
+| Fresh production backups | Jordi | Allowance/tariff values are fixed and the exact Gate A packet is ready | Approve the exact fresh-backups-only wording in the release packet | Local/review/CI/read-only preflight; no deploy/config/channel/billing/signup |
+| Closed production deployment | Jordi | Gate A passes and exact target fingerprints/deploy JSON are reviewed | Approve the exact private-first then public deployment and rollback actions | Backup evidence and read-only validation; no real sends/billing/signup |
 | Real channel acceptance | Jordi | Closed candidate is healthy and named test messages/tenant are ready | Approve the exact real WhatsApp/Telegram sends; Jordi performs final experiential pass | Automated and synthetic acceptance |
 | Billing and public signup | Jordi | #1061 reaches exact Stripe/profile/legal/live-journey gate | Separate real-card approval, then separate `public signup on` approval | Signup-closed testing and remediation |
 
@@ -261,6 +264,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 - Wave 4: #1110 compatibility migration and coupling removal.
 - Wave 5: #1111 three-island PM/standalone conformance.
 - Wave 6: #1112 exact release acceptance, then #1061 public gates.
+- Current wave-6 action: approve or replace the release packet's allowance/tariff values; next request Gate A backups only.
 
 ## Tester Queue
 
@@ -479,6 +483,24 @@ Branch / latest commit: `main` `e22dd0e64f7d4794f4668fbb2585cbf576ddc989`; relea
 Last verified: 2026-08-27 22:39 CEST
 
 Links: [#1112](https://github.com/zenod-ai/zenod/issues/1112), [PR #1129](https://github.com/zenod-ai/zenod/pull/1129)
+
+### 2026-08-27 - Epic worker - ZPF-10 phase 1 complete; exact allowance/tariff gate active
+
+Context: the missing dedicated publish lane was repaired without runtime or architecture changes. Exact current `main` `73e309a` passed normal CI and automatically published a paired Zenod image and Phylax-only image. Independent architecture/security review and the full release evidence are green.
+
+Action: froze the exact candidate, live signup-closed baseline, preserved environment/volume/session state, additive fixed-island/BFF configuration, backup-only procedure, private-first/public-second rollout and reverse-order image rollback in `docs/evidence/zpf-10-release-gate-2026-08-27/README.md`. No production, credential, token, session, tenant-data, billing or signup mutation occurred.
+
+Next: Jordi approves or replaces the recommended `3000000 / 1000000 / 1000000 / tariff-v1` allowance values and explicit private `phylax-runtime-v1` 1/1/1 tariff pins. After exact target fingerprints are calculated, request Gate A fresh backups only. Closed deploy and real journey remain later separate gates.
+
+Risks: phase-1 evidence is not deployed or live-journey proof. Do not combine configuration approval with backup, deploy, sends, billing or signup authority. Public signup remains closed.
+
+Assignment identity: `/root` final-push delivery manager and spine steward
+
+Branch / latest commit: `main` `73e309adda4d04c5ea58f2ec4dc114143731ed1c`; control branch `codex/zpf-control-phase1-gate`
+
+Last verified: 2026-08-27 23:12 CEST
+
+Links: [#1112](https://github.com/zenod-ai/zenod/issues/1112), [CI 33116222429](https://github.com/zenod-ai/zenod/actions/runs/33116222429), [publish 33116222471](https://github.com/zenod-ai/zenod/actions/runs/33116222471)
 
 ## Open Questions
 
