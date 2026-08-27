@@ -46,6 +46,16 @@ function grant(
 }
 
 describe("PhylaxAllowanceLedger", () => {
+  it("enumerates every ledger-backed tenant without relying on customer accounts", async () => {
+    const { store } = await ledger("tenant-inventory");
+    grant(store, "management-provisioned");
+    grant(store, "native-checkout");
+
+    expect(store.tenantIds()).toEqual(["management-provisioned", "native-checkout"]);
+
+    store.close();
+  });
+
   it("keeps issuer grants tenant-isolated, append-only and collision-safe", async () => {
     const { store } = await ledger("grants");
     const alpha = grant(store, "alpha", 10_000);

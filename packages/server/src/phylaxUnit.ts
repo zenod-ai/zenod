@@ -72,6 +72,7 @@ import {
 } from "./phylaxInstance.js";
 import {
   createPhylaxCustomerLayer,
+  projectPhylaxCustomerUsage,
 } from "./phylaxCustomerLayer.js";
 import type { CustomerLayerOptions } from "./customerLayer.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
@@ -276,10 +277,19 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       options.registerAdditionalTools?.(server, context);
     },
   });
-  const customer = createPhylaxCustomerLayer(
-    { dataDir: storage.dataDir },
-    { ...options.customer, env, tenantStore },
-  );
+  const customer = instance.mode === "standalone"
+    ? createPhylaxCustomerLayer(
+      { dataDir: storage.dataDir },
+      {
+        ...options.customer,
+        env,
+        tenantStore,
+        projectUsage: (account) => account.tenant_id
+          ? projectPhylaxCustomerUsage(allowanceLedger.customerProjection(account.tenant_id))
+          : { percentageUsed: null, state: "unavailable", resetsAt: null },
+      },
+    )
+    : null;
   captureTickets.recoverFromCaptureJournal(
     captureJournalPath,
   );
@@ -365,6 +375,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     runtime,
     audit: hostedChannelAudit,
   });
+  if (customer) {
   app.get("/api/phylax/settings", (c) => {
     const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
@@ -513,6 +524,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       return c.json({ error: error instanceof Error ? error.message : "invalid phone number" }, 400);
     }
   });
+  }
   app.get("/artifacts/:tenantId/:file", async (c) => {
     const tenantId = c.req.param("tenantId");
     const file = c.req.param("file");
@@ -566,10 +578,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   app.get("/api/phylax/admin/metering", (c) => {
     c.header("cache-control", "private, no-store");
     return c.json({
-      tenants: customer.accounts.list().flatMap((account) =>
-        account.tenant_id
-          ? [allowanceLedger.operatorProjection(account.tenant_id)]
-          : [],
+      tenants: allowanceLedger.tenantIds().map((tenantId) =>
+        allowanceLedger.operatorProjection(tenantId)
       ),
     });
   });
@@ -582,24 +592,28 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     }));
   }
 
-  app.route("/", customer.app);
-  // Product APIs are always resolved before SPA fallbacks. This makes the
-  // absence of Zenod memory/Drive/application routes an observable 404.
-  app.all("/api/*", (c) => forwardPhylaxUnitRequest(c, base, customer, tenantStore, env));
-  mountStaticSurfaces(app, {
-    webDist: options.webDist,
-    siteDist: options.siteDist,
-    publicSiteHost: "phylax.zenod.dev",
-  });
-  app.all("*", (c) => forwardPhylaxUnitRequest(c, base, customer, tenantStore, env));
+  if (customer) {
+    app.route("/", customer.app);
+    // Product APIs are always resolved before SPA fallbacks. This makes the
+    // absence of Zenod memory/Drive/application routes an observable 404.
+    app.all("/api/*", (c) => forwardPhylaxUnitRequest(c, base, customer, tenantStore, env));
+    mountStaticSurfaces(app, {
+      webDist: options.webDist,
+      siteDist: options.siteDist,
+      publicSiteHost: "phylax.zenod.dev",
+    });
+    app.all("*", (c) => forwardPhylaxUnitRequest(c, base, customer, tenantStore, env));
+  } else {
+    app.route("/", base.app);
+  }
 
   return {
     ...base,
     app,
     storage,
     tenantStore,
-    customerAccounts: customer.accounts,
-    customerTokenVault: customer.tokenVault,
+    customerAccounts: customer?.accounts ?? null,
+    customerTokenVault: customer?.tokenVault ?? null,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
     phylaxInstance: instance,
@@ -611,7 +625,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       for (const result of await Promise.allSettled([
         runtime.close(),
         captureTickets.close(),
-        Promise.resolve().then(() => customer.close()),
+        Promise.resolve().then(() => customer?.close()),
       ])) {
         if (result.status === "rejected") failures.push(result.reason);
       }

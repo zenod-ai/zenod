@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner"
 
 import { api, errorMessage } from "@/lib/api"
+import { ChannelControlCard } from "@/components/channel-experience"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -867,14 +868,22 @@ export function PhylaxTenantSettings() {
     )
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Verify your WhatsApp</CardTitle>
-          <CardDescription>
-            Possession is proved only by an inbound message from this number.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <ChannelControlCard
+        control={{
+          id: "whatsapp",
+          label: "Verify your WhatsApp",
+          state: data.settings.verified
+            ? "connected"
+            : keyword
+              ? "awaiting_code"
+              : "off",
+          identityHint: data.settings.phoneNumber,
+          description:
+            "Possession is proved only by an inbound message from this number.",
+        }}
+        hideIdentity
+      >
+        <div className="space-y-4">
           <Field>
             <FieldLabel htmlFor="phylax-phone">Your phone number</FieldLabel>
             <div className="flex gap-2">
@@ -904,8 +913,8 @@ export function PhylaxTenantSettings() {
               </div>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </ChannelControlCard>
       <Card>
         <CardHeader>
           <CardTitle>Tenant memory MCP connection</CardTitle>

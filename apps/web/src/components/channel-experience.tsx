@@ -15,6 +15,7 @@ import {
 
 export type ChannelProduct = "zenod" | "pm" | "phylax"
 export type ChannelState =
+  | "loading"
   | "off"
   | "awaiting_code"
   | "connected"
@@ -48,6 +49,7 @@ export {
 } from "@/components/channel-experience-config"
 
 function stateLabel(state: ChannelState): string {
+  if (state === "loading") return "Loading"
   if (state === "awaiting_code") return "Awaiting code"
   if (state === "connected") return "Connected"
   if (state === "degraded") return "Needs attention"
@@ -92,12 +94,24 @@ export function ChannelExperienceFrame({
  * native Phylax shell. It receives only customer-safe projections; authority,
  * service credentials and transport diagnostics never enter this component.
  */
-export function ChannelControlCard({ control }: { control: ChannelControl }) {
+export function ChannelControlCard({
+  control,
+  icon,
+  children,
+  actions,
+  hideIdentity = false,
+}: {
+  control: ChannelControl
+  icon?: React.ReactNode
+  children?: React.ReactNode
+  actions?: React.ReactNode
+  hideIdentity?: boolean
+}) {
   const connected = control.state === "connected"
   return (
     <Card className="min-w-0 rounded-none" data-channel={control.id}>
       <CardHeader>
-        <MessageCircleIcon className="size-5 text-muted-foreground" />
+        {icon ?? <MessageCircleIcon className="size-5 text-muted-foreground" />}
         <CardTitle className="flex flex-wrap items-center gap-2">
           {control.label}
           <Badge
@@ -115,28 +129,41 @@ export function ChannelControlCard({ control }: { control: ChannelControl }) {
         </CardTitle>
         <CardDescription>{control.description}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <p className="text-sm break-words text-muted-foreground">
-          {control.identityHint ?? "No identity linked yet."}
-        </p>
-      </CardContent>
-      <CardFooter className="flex flex-wrap gap-2">
-        {control.state === "off" && control.onConnect ? (
-          <Button type="button" onClick={control.onConnect}>
-            Connect
-          </Button>
-        ) : null}
-        {control.state !== "off" && control.onTest ? (
-          <Button type="button" variant="outline" onClick={control.onTest}>
-            Send test
-          </Button>
-        ) : null}
-        {control.state !== "off" && control.onDisconnect ? (
-          <Button type="button" variant="ghost" onClick={control.onDisconnect}>
-            Disconnect
-          </Button>
-        ) : null}
-      </CardFooter>
+      {!hideIdentity || children ? (
+        <CardContent className="flex flex-col gap-4">
+          {!hideIdentity ? (
+            <p className="text-sm break-words text-muted-foreground">
+              {control.identityHint ?? "No identity linked yet."}
+            </p>
+          ) : null}
+          {children}
+        </CardContent>
+      ) : null}
+      {actions !== undefined ? (
+        <CardFooter className="flex flex-wrap gap-2">{actions}</CardFooter>
+      ) : control.onConnect || control.onTest || control.onDisconnect ? (
+        <CardFooter className="flex flex-wrap gap-2">
+          {control.state === "off" && control.onConnect ? (
+            <Button type="button" onClick={control.onConnect}>
+              Connect
+            </Button>
+          ) : null}
+          {control.state !== "off" && control.onTest ? (
+            <Button type="button" variant="outline" onClick={control.onTest}>
+              Send test
+            </Button>
+          ) : null}
+          {control.state !== "off" && control.onDisconnect ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={control.onDisconnect}
+            >
+              Disconnect
+            </Button>
+          ) : null}
+        </CardFooter>
+      ) : null}
     </Card>
   )
 }

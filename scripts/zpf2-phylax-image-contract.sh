@@ -8,10 +8,12 @@ suffix="${USER:-codex}-$$"
 container="zpf2-phylax-contract-${suffix}"
 mismatch_container="zpf2-phylax-mismatch-${suffix}"
 volume="zpf2-phylax-data-${suffix}"
+fixed_containers=("zpf2-phylax-zenod-${suffix}" "zpf2-phylax-pm-${suffix}")
+fixed_volumes=("zpf2-phylax-zenod-data-${suffix}" "zpf2-phylax-pm-data-${suffix}")
 
 cleanup() {
-  docker rm -f "$container" "$mismatch_container" >/dev/null 2>&1 || true
-  docker volume rm "$volume" >/dev/null 2>&1 || true
+  docker rm -f "$container" "$mismatch_container" "${fixed_containers[@]}" >/dev/null 2>&1 || true
+  docker volume rm "$volume" "${fixed_volumes[@]}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -159,4 +161,52 @@ docker logs "$mismatch_container" 2>&1 | grep -F "Phylax data volume is bound to
 docker run --rm --platform "$platform" --entrypoint sh -v "$volume:/data" "$image" -c \
   'test "$(cat /data/whatsapp/session/contract-sentinel)" = "legacy-session-sentinel"'
 
-echo "Phylax image contract passed: exact customer surface, immutable identity, restart, mismatch, and legacy data preservation."
+for index in 0 1; do
+  mode="${fixed_containers[$index]#zpf2-phylax-}"
+  mode="${mode%-${suffix}}"
+  fixed_container="${fixed_containers[$index]}"
+  fixed_volume="${fixed_volumes[$index]}"
+  docker volume create "$fixed_volume" >/dev/null
+  docker run -d --platform "$platform" --name "$fixed_container" -P -v "$fixed_volume:/data" \
+    -e CHASSIS_VAULT_MASTER_KEY="$(printf '55%.0s' {1..32})" \
+    -e ACCOUNT_STATE_SECRET="zpf2-fixed-${mode}-account-state-secret" \
+    -e PUBLIC_SIGNUP_ENABLED=0 \
+    -e PHYLAX_API_TOKEN="phylax_fixed_${mode}_bearer_token" \
+    -e PHYLAX_PREWARM_LOCAL_MODEL=0 \
+    -e PHYLAX_INSTANCE_MODE="$mode" \
+    -e PHYLAX_INSTANCE_ID="contract-${mode}" \
+    -e PHYLAX_SERVICE_NUMBER_ID="contract-${mode}-number" \
+    "$image" >/dev/null
+  fixed_port="$(docker port "$fixed_container" 8080/tcp | head -n 1 | awk -F: '{print $NF}')"
+  fixed_base_url="http://127.0.0.1:${fixed_port}"
+  for _attempt in {1..120}; do
+    if [[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 "$fixed_base_url/api/health" 2>/dev/null || true)" == "200" ]]; then
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 "$fixed_base_url/api/health" 2>/dev/null || true)" != "200" ]]; then
+    docker logs "$fixed_container" >&2 || true
+    exit 1
+  fi
+  for route in / /app /auth/signin /api/me /api/console/account /buy /checkout/complete /api/channels /api/phylax/settings; do
+    status="$(curl -sS -o /tmp/zpf2-fixed-body-$$ -w '%{http_code}' --max-time 5 "$fixed_base_url$route")"
+    if [[ "$status" != "404" ]]; then
+      echo "fixed $mode unexpectedly served $route with status $status" >&2
+      exit 1
+    fi
+    if grep -Eiq 'Sign in with GitHub|Choose your Phylax plan|One destination only|downstream agent binding|<div id="root"></div>' /tmp/zpf2-fixed-body-$$; then
+      echo "fixed $mode leaked the standalone customer shell on $route" >&2
+      exit 1
+    fi
+  done
+  status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -X POST -H 'content-type: application/json' --data '{}' "$fixed_base_url/create-checkout-session")"
+  [[ "$status" == "404" ]] || { echo "fixed $mode mounted checkout: $status" >&2; exit 1; }
+  status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -X PUT -H 'content-type: application/json' --data '{"downstreamUrl":"https://hostile.invalid/mcp"}' "$fixed_base_url/api/phylax/settings")"
+  [[ "$status" == "404" ]] || { echo "fixed $mode mounted arbitrary downstream settings: $status" >&2; exit 1; }
+  status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$fixed_base_url/admin")"
+  [[ "$status" == "404" ]] || { echo "fixed $mode exposed owner UI anonymously: $status" >&2; exit 1; }
+  rm -f /tmp/zpf2-fixed-body-$$
+done
+
+echo "Phylax image contract passed: standalone customer surface, fixed-mode isolation, immutable identity, restart, mismatch, and legacy data preservation."

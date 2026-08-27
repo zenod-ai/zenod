@@ -805,6 +805,155 @@ describe("Phylax customer unit mount", () => {
     }
   });
 
+  it.each(["zenod", "pm"] as const)(
+    "keeps the %s fixed instance free of standalone customer routes and static shells",
+    async (mode) => {
+      const dataDir = await mkdtemp(join(tmpdir(), `phylax-fixed-${mode}-`));
+      dirs.push(dataDir);
+      const siteDist = join(dataDir, "site");
+      const webDist = join(dataDir, "web");
+      await mkdir(siteDist);
+      await mkdir(webDist);
+      await writeFile(join(siteDist, "index.html"), "HOSTILE STANDALONE CHECKOUT SHELL");
+      await writeFile(join(webDist, "index.html"), "PHYLAX OPERATOR SHELL");
+      const env = {
+        ACCOUNT_STATE_SECRET: `fixed-${mode}-session-secret`,
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        PHYLAX_INSTANCE_MODE: mode,
+        PHYLAX_PREWARM_LOCAL_MODEL: "0",
+        ZENOD_CHANNELS_PRIVATE_TOKEN: `fixed-${mode}-bff-token`,
+      };
+      const unit = createPhylaxUnit({
+        dataDir: join(dataDir, "data"),
+        siteDist,
+        webDist,
+        tenantStore: createMemoryTenantStore(),
+        env,
+      });
+      const sessions = new Hono();
+      sessions.get("/", (c) => {
+        issueCustomerSession(c, { id: 1, login: "alfablok" }, env);
+        return c.text("ok");
+      });
+      const ownerCookie = (await sessions.request("/")).headers.get("set-cookie")!.split(";", 1)[0]!;
+      try {
+        expect(unit.customerAccounts).toBeNull();
+        expect((await unit.app.request("/api/health")).status).toBe(200);
+        expect(await (await unit.app.request("/api/health")).json()).toMatchObject({
+          instance: { mode, customerConfigurableDownstream: false },
+        });
+        const chassisAuth = await unit.app.request("/api/auth/status");
+        expect(chassisAuth.status).toBe(200);
+        expect(await chassisAuth.json()).toMatchObject({
+          configured: true,
+          hostedMode: null,
+          authenticated: false,
+        });
+        const internalPath = "/internal/zenod/channels/tenant-alpha";
+        expect((await unit.app.request(internalPath)).status).toBe(404);
+        expect(await (await unit.app.request(internalPath, {
+          headers: { authorization: `Bearer fixed-${mode}-bff-token` },
+        })).json()).toMatchObject({
+          whatsapp: { state: "off" },
+          telegram: { state: "off" },
+        });
+
+        for (const [method, path] of [
+          ["GET", "/"],
+          ["GET", "/app"],
+          ["GET", "/auth/signin"],
+          ["GET", "/api/me"],
+          ["GET", "/api/console/account"],
+          ["GET", "/buy"],
+          ["POST", "/create-checkout-session"],
+          ["GET", "/checkout/complete"],
+          ["POST", "/webhook"],
+          ["GET", "/api/channels"],
+          ["GET", "/api/phylax/settings"],
+          ["PUT", "/api/phylax/settings"],
+          ["POST", "/api/phylax/downstream/tools"],
+          ["POST", "/api/phylax/phone-registration"],
+        ] as const) {
+          const response = await unit.app.request(path, {
+            method,
+            headers: { "content-type": "application/json", host: "phylax.zenod.dev" },
+            ...(method === "POST" || method === "PUT" ? { body: "{}" } : {}),
+          });
+          expect(response.status, `${mode} ${method} ${path}`).toBe(404);
+          expect(await response.text()).not.toContain("HOSTILE STANDALONE CHECKOUT SHELL");
+        }
+
+        expect((await unit.app.request("/admin")).status).toBe(404);
+        const owner = await unit.app.request("/admin", { headers: { cookie: ownerCookie } });
+        expect(owner.status).toBe(200);
+        expect(await owner.text()).toContain("PHYLAX OPERATOR SHELL");
+      } finally {
+        await unit.close();
+      }
+    },
+  );
+
+  it("projects native customer usage from the Phylax allowance ledger only", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-customer-usage-"));
+    dirs.push(dataDir);
+    const env = {
+      ACCOUNT_STATE_SECRET: "phylax-usage-session-secret",
+      CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+    };
+    const unit = createPhylaxUnit({ dataDir, tenantStore: createMemoryTenantStore(), env });
+    unit.customerAccounts!.upsert("alpha", {
+      account_id: "github-71",
+      github_id: 71,
+      github_login: "alpha",
+      subscription_status: "active",
+      tenant_id: "tenant-alpha",
+    });
+    const now = Date.now();
+    unit.phylaxAllowanceLedger.grantAllowance({
+      tenantId: "tenant-alpha",
+      periodId: "current",
+      startsAt: now - 60_000,
+      endsAt: now + 3_600_000,
+      amountUnits: 10_000,
+      source: "phylax",
+      idempotencyKey: "native-plan:tenant-alpha:current",
+      tariffVersion: "test-v1",
+      auditReason: "native customer usage projection test",
+    });
+    unit.phylaxAllowanceLedger.recordUsage({
+      tenantId: "tenant-alpha",
+      periodId: "current",
+      amountUnits: 8_100,
+      providerEventId: "usage-projection-event",
+      operation: "transcription.audio",
+      provider: "hostile-provider-must-not-leak",
+      model: "hostile-model-must-not-leak",
+      costBasis: "actual",
+      idempotencyKey: "usage-projection-event",
+      tariffVersion: "test-v1",
+      auditReason: "native customer usage projection test",
+    });
+    const sessions = new Hono();
+    sessions.get("/", (c) => {
+      issueCustomerSession(c, { id: 71, login: "alpha" }, env);
+      return c.text("ok");
+    });
+    const cookie = (await sessions.request("/")).headers.get("set-cookie")!.split(";", 1)[0]!;
+    try {
+      const response = await unit.app.request("/api/console/account", { headers: { cookie } });
+      expect(response.status).toBe(200);
+      const body = await response.json() as { usage: unknown };
+      expect(body.usage).toEqual({
+        percentageUsed: 81,
+        state: "warn",
+        resetsAt: new Date(now + 3_600_000).toISOString(),
+      });
+      expect(JSON.stringify(body.usage)).not.toMatch(/provider|model|units|allocation|hostile/i);
+    } finally {
+      await unit.close();
+    }
+  });
+
   it("serves artifacts only with an exact signed capability and never accepts a tenant token URL", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-artifact-"));
     dirs.push(dataDir);
@@ -887,10 +1036,24 @@ describe("Phylax customer unit mount", () => {
       const status = await unit.app.request("/api/whatsapp/status", { headers: { cookie: adminCookie } });
       expect(status.status).toBe(200);
       expect(await status.json()).toMatchObject({ state: "disabled", linkedNumber: null });
+      const now = Date.now();
+      unit.phylaxAllowanceLedger.grantAllowance({
+        tenantId: "management-provisioned",
+        periodId: "current",
+        startsAt: now - 60_000,
+        endsAt: now + 3_600_000,
+        amountUnits: 500,
+        source: "zenod",
+        idempotencyKey: "management-provisioned:current",
+        tariffVersion: "test-v1",
+        auditReason: "management-provisioned tenant without native customer account",
+      });
       const metering = await unit.app.request("/api/phylax/admin/metering", { headers: { cookie: adminCookie } });
       expect(metering.status).toBe(200);
       expect(metering.headers.get("cache-control")).toBe("private, no-store");
-      expect(await metering.json()).toEqual({ tenants: [] });
+      expect(await metering.json()).toMatchObject({
+        tenants: [{ tenantId: "management-provisioned", grantedUnits: 500 }],
+      });
     } finally {
       unit.close();
     }

@@ -219,6 +219,14 @@ describe("Phylax tenant transcription settings", () => {
     ).not.toBeNull()
   })
 
+  it("uses the shared production channel card for native WhatsApp registration", async () => {
+    mockApi()
+    const { container } = render(<PhylaxTenantSettings />)
+
+    expect(await screen.findByText("Verify your WhatsApp")).not.toBeNull()
+    expect(container.querySelector("[data-channel='whatsapp']")).not.toBeNull()
+  })
+
   it("shows validated local models and the OpenRouter transcription catalog", async () => {
     mockApi()
     render(<PhylaxTenantSettings />)
