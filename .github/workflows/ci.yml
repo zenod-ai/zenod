@@ -17,4 +17,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: docker build --target build -t zenod-build-check .
+      - run: npm run build:phylax -w @zenod/server
+      - run: npm run test:phylax-image-contract
       - run: npm test
