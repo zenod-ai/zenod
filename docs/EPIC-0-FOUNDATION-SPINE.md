@@ -84,12 +84,13 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Signup-closed Zenod production candidate awaiting final founder voice acceptance
-Last verified: 2026-08-27 CEST
+Phase: Frozen integrated-independent Zenod–Phylax final push entering parallel execution
+Last verified: 2026-08-27 14:40 CEST
 Integration target: `main`
-Fresh base commit: `a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2` on `main`, deployed to public Zenod and private Phylax as OCI index `sha256:9308e5e2319567958380c1e329afab22532be54ec9fff8dddeabea2b3ed4227a`
-Next action: Jordi sends three overlapping voice notes through the existing verified WhatsApp session and confirms one Drive-aware Saved receipt per note with no duplicate, unknown-outcome reply, reauthentication, or re-pair. The delivery manager records that result, then closes the bounded Phylax allowance/customer-usage truth before the live-card and public-signup gates.
-Blockers: source/CI/publish, restored encrypted two-volume backups, signup-closed two-service deploy, existing direct MCP, signed Channels, tenant Google Drive, €9 public offer, and fresh logs are green. Public signup remains closed on the founder voice test, Phylax-owned metering/allowance presentation, Stripe business-profile verification, one approved live €9 billing journey, and final explicit signup approval.
+Fresh base commit: `915d3c45c2d771ac2724ea9248f80af4e40a9c12` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
+Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
+Next action: merge the final-push control plane, then dispatch #1103, #1104 and #1105 in parallel from the exact merged base; start #1106 when a slot opens and continue through the dependency waves to Jordi's final test.
+Blockers: none for local implementation after the control-plane merge. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
 
 ## Bootstrap Map
 
@@ -105,7 +106,8 @@ Read in this order:
 | 6 | `docs/EPIC-0-STORY.md` | Existing Epic 0 story spine; read-only from this track. | When routing story/launch consequences |
 | 7 | [`Log/2026-08-15.md#^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21) | Product-direction voice note: alpha launch, promotion, and the memory + execution lane. | Alpha-launch or voice-execution planning |
 | 8 | [`Log/2026-08-15.md#^e-063285`](https://github.com/AlfaBlok/obsidian-brain/blob/a58d731c33000a780f4bd94bbe02b0432e2282db/Log/2026-08-15.md#L27) | Readiness voice note: incorrect recent recap, launch milestone, backlog, and reporting loop. | Readiness audit and regression planning |
-| 9 | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child delivery surface, dispatchable issue ledger, gates, and “continue” contract. | Any Zenod alpha work |
+| 9 | `docs/EPIC-P-PHYLAX-SPRINT.md` | Active final-push delivery surface, frozen architecture, dependency-ordered issue board and human gates. | Any current Zenod/Phylax final-push work |
+| 10 | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Historical alpha-launch decisions, deployed-candidate evidence and public-readiness context. | When a current issue links back to prior launch evidence |
 
 ## Architecture And Context
 
@@ -139,7 +141,8 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Concern | Existing authority / proposed home | Root rollup state | Next routing action |
 |---|---|---|---|
-| Zenod alpha launch | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Active child spine; ZAL-3E is integrated and defines one exact managed/BYOK usage contract, but no commercial option or implementation is approved by that merge. | Jordi approves or revises the economics contract; child delivery manager then dispatches the smallest implementation batch. |
+| Integrated-independent Zenod/Phylax final push | `docs/EPIC-P-PHYLAX-SPRINT.md` | Active child spine; architecture frozen, issues #1103–#1112 created, signup-closed production candidate preserved as baseline. | Merge control plane; dispatch #1103/#1104/#1105 in parallel and #1106 when capacity opens. |
+| Zenod alpha launch history | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Prior offer, readiness and deployment evidence remains authoritative for its completed tickets and current #1061 gate, but it is no longer the dispatch board. | Read only unless the active Phylax spine routes a specific gate or evidence correction. |
 | Voice capture and grounded recall | `docs/EPIC-MECHANICAL-CAPTURE.md` | Capture/transcription/retrieval has strong July evidence; the new recent-recap failure is a fresh acceptance gap. | Reproduce the exact interaction and add it to the canonical journey suite before declaring alpha-ready. |
 | Voice note → Codex execution | Proposed child epic | Direction is clear; UX, authority, project disambiguation, delivery surface, and pricing are not settled. | Draft a child spine after the immediate readiness audit; do not silently fold it into the memory-only launch gate. |
 | Public story and promotion | `docs/EPIC-0-STORY.md` | Reddit/X promotion is desired now, but current packaging and funnel truth are not reconciled. | Produce a small launch-message backlog after the product/SKU decision; external posting remains approval-gated. |
@@ -174,7 +177,8 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | running / ready for founder voice test | final experiential voice acceptance, Phylax allowance truth, Stripe profile/live billing and signup gate | [ZAL-22 #1099](https://github.com/zenod-ai/zenod/issues/1099); merged [PR #1101](https://github.com/zenod-ai/zenod/pull/1101) | `a6fbe8f` | Child DoD covers readiness truth, recap regression, approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | Exact OCI `9308e5e...` deployed 1/1 to both services; two restored encrypted backups, old MCP, signed Channels, tenant Drive, €9 site and clean logs pass. Signup remains closed. | 2026-08-27 CEST | Jordi runs three overlapping voice notes; then finish Phylax customer-usage truth and the separate Stripe/public gates. |
+| `docs/EPIC-P-PHYLAX-SPRINT.md` | Epic worker | `/root` final-push delivery manager | Deliver frozen integrated-independent architecture | active / control plane | control-plane merge, #1103–#1112, then #1061 human gates | [#1103](https://github.com/zenod-ai/zenod/issues/1103)–[#1112](https://github.com/zenod-ai/zenod/issues/1112) | `915d3c4` | Separate product/Phylax artifacts and islands; stable auth; issuer-neutral Phylax ledger; tenant-safe management MCP; Zenod BFF; reusable UI/standalone; no-loss migration; three-island proof; exact release acceptance. | Backlog and binding decisions created 2026-08-27; current production remains signup-closed baseline. | 2026-08-27 14:40 CEST | Merge control plane and dispatch wave 1. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Historical child / gate source | Zenod Alpha delivery manager | Preserve prior alpha evidence and #1061 gate | read-only / superseded for dispatch | active Phylax child, #1112 | prior ZAL PRs | `a6fbe8f` | Prior offer/readiness/deployment evidence remains available without competing issue selection. | Signup-closed candidate deployed; #1061 remains 11/13 and linked from the active child. | 2026-08-27 14:40 CEST | No dispatch; follow active child. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -212,7 +216,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Planner Queue
 
-- Treat `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` as the sole active alpha delivery board; do not select work from the global open-issue list.
+- Treat `docs/EPIC-P-PHYLAX-SPRINT.md` as the sole active final-push delivery board; do not select work from the global open-issue list or the historical alpha spine.
 - On “continue,” execute the active child spine's single next action and remain the delivery manager/spine steward.
 - Preserve the approved one-plan €9 Zenod contract. Route [#1090](https://github.com/zenod-ai/zenod/issues/1090) as the smallest correction before refreshing the production candidate; do not reopen product economics or deploy the legacy-priced image.
 - Create the separate voice-note-to-Codex child EpicSpine only after the alpha offer is accepted.
@@ -225,7 +229,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Worker Queue
 
-- Alpha implementation/diagnostic work is dispatchable only from `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`; ZAL-18 is the active bounded pricing-contract worker from current `main`.
+- Final-push work is dispatchable only from `docs/EPIC-P-PHYLAX-SPRINT.md`; wave 1 is #1103/#1104/#1105 with #1106 queued behind worker capacity.
 - Add explicit Write Scope to the chosen child epic spine.
 - Ensure its Issue Ledger links to GitHub issues or marks drafts clearly.
 - Add Handoff Journal and Proposed Cross-Spine Updates sections if missing.
