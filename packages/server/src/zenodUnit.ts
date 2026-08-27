@@ -274,6 +274,7 @@ export const ZENOD_READ_TOOLS = [
 ] as const;
 
 export const ZENOD_LONG_TOOLS = {
+  chat_with_zenod: { pollTool: "get_task_result", allowSynchronousResult: true },
   store_memory: { pollTool: "get_task_result" },
   ingest_memory: { pollTool: "get_task_result" },
   task_brain: { pollTool: "get_task_result" },

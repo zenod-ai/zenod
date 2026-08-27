@@ -377,6 +377,11 @@ createUnit({
 });
 ```
 
+A hybrid tool that returns a normal evidenced result for ordinary inputs and an
+accepted ticket only when durable execution is requested may declare
+`allowSynchronousResult: true`. Accepted-shaped responses still receive the full
+ticket and poll-contract validation.
+
 Dispatch declarations additionally require unchanged `origin_ticket_id`
 propagation and an exact depth increment, with depth limited to `0..1`.
 
