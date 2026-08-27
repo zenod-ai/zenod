@@ -488,6 +488,11 @@ describe("createUnit", () => {
         toolKinds: { read: ["get_job_result"] },
         longTools: {
           run_job: { pollTool: "get_job_result" },
+          hybrid_job: { pollTool: "get_job_result", allowSynchronousResult: true },
+          hybrid_missing_status_ticket: { pollTool: "get_job_result", allowSynchronousResult: true },
+          hybrid_missing_state_ticket: { pollTool: "get_job_result", allowSynchronousResult: true },
+          hybrid_blank_ticket: { pollTool: "get_job_result", allowSynchronousResult: true },
+          hybrid_non_string_ticket: { pollTool: "get_job_result", allowSynchronousResult: true },
           missing_poll_contract: { pollTool: "get_job_result" },
           wrong_poll_contract: { pollTool: "get_job_result" },
           dispatch_job: { pollTool: "get_job_result", dispatch: true },
@@ -503,6 +508,63 @@ describe("createUnit", () => {
               ticket_id: "job-good",
               status: "accepted",
               poll,
+            },
+          }),
+        );
+        server.registerTool(
+          "hybrid_job",
+          {
+            inputSchema: { durable: z.boolean().optional() },
+            annotations: { readOnlyHint: false },
+          },
+          async ({ durable }) => durable
+            ? {
+                content: [{ type: "text", text: "accepted" }],
+                structuredContent: { ticket_id: "hybrid-1", status: "accepted", poll },
+              }
+            : {
+                content: [{ type: "text", text: "completed synchronously" }],
+                structuredContent: {
+                  result: "completed synchronously",
+                  evidence: [{ kind: "hybrid_completed", id: "hybrid-sync" }],
+                },
+              },
+        );
+        server.registerTool(
+          "hybrid_missing_status_ticket",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: { status: "accepted", poll },
+          }),
+        );
+        server.registerTool(
+          "hybrid_missing_state_ticket",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: { state: "accepted", poll },
+          }),
+        );
+        server.registerTool(
+          "hybrid_blank_ticket",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: {
+              ticket_id: "",
+              evidence: [{ kind: "hybrid_completed", id: "must-not-pass-sync" }],
+            },
+          }),
+        );
+        server.registerTool(
+          "hybrid_non_string_ticket",
+          { inputSchema: {}, annotations: { readOnlyHint: false } },
+          async () => ({
+            content: [{ type: "text", text: "accepted" }],
+            structuredContent: {
+              ticket_id: 7,
+              evidence: [{ kind: "hybrid_completed", id: "must-not-pass-sync" }],
             },
           }),
         );
@@ -614,6 +676,23 @@ describe("createUnit", () => {
     await expect(callToolResult(base, "run_job")).resolves.toMatchObject({
       structuredContent: { ticket_id: "job-good", status: "accepted" },
     });
+    await expect(callToolResult(base, "hybrid_job", { durable: true })).resolves.toMatchObject({
+      structuredContent: { ticket_id: "hybrid-1", status: "accepted" },
+    });
+    await expect(callToolResult(base, "hybrid_job")).resolves.toMatchObject({
+      structuredContent: { result: "completed synchronously" },
+    });
+    for (const toolName of [
+      "hybrid_missing_status_ticket",
+      "hybrid_missing_state_ticket",
+      "hybrid_blank_ticket",
+      "hybrid_non_string_ticket",
+    ]) {
+      await expect(callToolResult(base, toolName)).resolves.toMatchObject({
+        isError: true,
+        structuredContent: { error: { code: "missing_accepted_ticket" } },
+      });
+    }
     await expect(callToolResult(base, "missing_poll_contract")).resolves.toMatchObject({
       isError: true,
       structuredContent: { error: { code: "missing_poll_tool" } },

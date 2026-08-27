@@ -1,7 +1,8 @@
 {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "frozenAt": "2026-08-27",
   "sourceBaseline": "3e902f49372f211f589d73722f6be9bbf33a79d5",
+  "repairBase": "264955371bbf85b44be5540448f0e1e8998889b8",
   "deployedBaseline": {
     "source": "a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2",
     "ociIndex": "sha256:9308e5e2319567958380c1e329afab22532be54ec9fff8dddeabea2b3ed4227a",
@@ -20,22 +21,22 @@
     {
       "id": "intake_text",
       "kind": "text",
-      "automatedStatus": "failed",
+      "automatedStatus": "proved",
       "productionStatus": "observed",
       "input": { "messageId": "fixture-text-1", "text": "Remember the launch checklist." },
-      "expected": { "tool": "chat_with_zenod", "idempotencyKey": "alpha:whatsapp:fixture-text-1" },
-      "sourceBaselineFailure": { "code": "undeclared_long_tool", "message": "Tool chat_with_zenod returned an accepted ticket but is not declared in conduct.longTools." },
-      "automatedEvidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "records the current text and URL failure across the real authenticated Zenod MCP ticket boundary" }
+      "expected": { "tool": "chat_with_zenod", "idempotencyKey": "alpha:whatsapp:fixture-text-1", "oneTerminalResult": true, "redeliveryCreatesAdditionalJob": false },
+      "resolvedSourceBaselineFailure": { "code": "undeclared_long_tool", "message": "Tool chat_with_zenod returned an accepted ticket but is not declared in conduct.longTools." },
+      "automatedEvidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "completes text and URL once across the real authenticated Zenod MCP ticket boundary" }
     },
     {
       "id": "intake_url",
       "kind": "url",
-      "automatedStatus": "failed",
+      "automatedStatus": "proved",
       "productionStatus": "observed",
       "input": { "messageId": "fixture-url-1", "text": "Remember https://example.test/research?id=42" },
-      "expected": { "tool": "chat_with_zenod", "idempotencyKey": "alpha:whatsapp:fixture-url-1" },
-      "sourceBaselineFailure": { "code": "undeclared_long_tool", "message": "Tool chat_with_zenod returned an accepted ticket but is not declared in conduct.longTools." },
-      "automatedEvidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "records the current text and URL failure across the real authenticated Zenod MCP ticket boundary" }
+      "expected": { "tool": "chat_with_zenod", "idempotencyKey": "alpha:whatsapp:fixture-url-1", "oneTerminalResult": true, "redeliveryCreatesAdditionalJob": false },
+      "resolvedSourceBaselineFailure": { "code": "undeclared_long_tool", "message": "Tool chat_with_zenod returned an accepted ticket but is not declared in conduct.longTools." },
+      "automatedEvidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "completes text and URL once across the real authenticated Zenod MCP ticket boundary" }
     },
     {
       "id": "intake_image",
@@ -149,12 +150,13 @@
       "evidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "pins the independent Zenod and Phylax production volume identities without reading secrets" }
     }
   ],
-  "knownSourceBaselineFailures": [
+  "knownSourceBaselineFailures": [],
+  "resolvedSourceBaselineFailures": [
     {
       "id": "real_composed_text_url_boundary",
       "code": "undeclared_long_tool",
-      "detail": "The real Zenod MCP unit authenticates the tenant, advertises chat_with_zenod, enqueues and completes the durable task, but chassis rejects the accepted response because chat_with_zenod is absent from conduct.longTools; Phylax therefore cannot poll the ticket to its terminal reply.",
-      "evidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "records the current text and URL failure across the real authenticated Zenod MCP ticket boundary" }
+      "detail": "At source baseline 3e902f4 the real Zenod MCP unit accepted durable chat but chassis rejected it as undeclared_long_tool. ZPF-1R declares chat_with_zenod through the same canonical long-tool contract as store/ingest, so Phylax now receives, polls and deduplicates the terminal result.",
+      "evidence": { "file": "packages/server/test/phylaxBaselineContract.test.ts", "test": "completes text and URL once across the real authenticated Zenod MCP ticket boundary" }
     }
   ],
   "knownUnprovedProductionClaims": [

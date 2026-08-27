@@ -19,6 +19,7 @@ interface EvidencePointer {
 interface BaselineContract {
   contractVersion: number;
   sourceBaseline: string;
+  repairBase: string;
   deployedBaseline: { source: string; ociIndex: string; status: string };
   architectureInvariants: Record<string, string>;
   fixtures: Array<{
@@ -37,6 +38,11 @@ interface BaselineContract {
     evidence: EvidencePointer;
   }>;
   knownSourceBaselineFailures: Array<{
+    id: string;
+    code: string;
+    evidence: EvidencePointer;
+  }>;
+  resolvedSourceBaselineFailures: Array<{
     id: string;
     code: string;
     evidence: EvidencePointer;
@@ -81,8 +87,9 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
       "independent_volume_identity",
     ];
 
-    expect(contract.contractVersion).toBe(1);
+    expect(contract.contractVersion).toBe(2);
     expect(contract.sourceBaseline).toMatch(/^[a-f0-9]{40}$/);
+    expect(contract.repairBase).toMatch(/^[a-f0-9]{40}$/);
     expect(contract.deployedBaseline.source).toMatch(/^[a-f0-9]{40}$/);
     expect(contract.deployedBaseline.ociIndex).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(contract.fixtures.map((fixture) => fixture.id).sort()).toEqual([...requiredFixtureIds].sort());
@@ -100,18 +107,18 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
     const evidence = [
       ...contract.fixtures.map((fixture) => fixture.automatedEvidence),
       ...contract.scenarios.map((scenario) => scenario.evidence),
-      ...contract.knownSourceBaselineFailures.map((failure) => failure.evidence),
+      ...contract.resolvedSourceBaselineFailures.map((failure) => failure.evidence),
     ];
     for (const pointer of evidence) {
       const source = await readFile(join(repositoryRoot, pointer.file), "utf8");
       expect(source, pointer.file).toContain(`it(\"${pointer.test}\"`);
     }
 
-    expect(contract.fixtures.filter((fixture) => fixture.automatedStatus === "failed").map((fixture) => fixture.id))
-      .toEqual(["intake_text", "intake_url"]);
+    expect(contract.fixtures.every((fixture) => fixture.automatedStatus === "proved")).toBe(true);
     expect(contract.fixtures.some((fixture) => fixture.automatedStatus === "unproved")).toBe(false);
     expect(contract.scenarios.every((scenario) => scenario.automatedStatus === "proved")).toBe(true);
-    expect(contract.knownSourceBaselineFailures).toMatchObject([{
+    expect(contract.knownSourceBaselineFailures).toEqual([]);
+    expect(contract.resolvedSourceBaselineFailures).toMatchObject([{
       id: "real_composed_text_url_boundary",
       code: "undeclared_long_tool",
     }]);
@@ -119,7 +126,7 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
     expect(contract.scenarios.some((scenario) => scenario.productionStatus === "unproved")).toBe(true);
   });
 
-  it("records the current text and URL failure across the real authenticated Zenod MCP ticket boundary", async () => {
+  it("completes text and URL once across the real authenticated Zenod MCP ticket boundary", async () => {
     const contract = await loadContract();
     const fixtures = contract.fixtures.filter((fixture) => fixture.kind === "text" || fixture.kind === "url");
     const rootDir = await mkdtemp(join(tmpdir(), "zpf1-real-seam-"));
@@ -196,38 +203,45 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
     });
 
     try {
+      const receipts: Array<{
+        fixtureId: string;
+        jobId: string;
+        replyText: string;
+      }> = [];
       for (const fixture of fixtures) {
-        const received = organ.receive({
+        const inbound = {
           channel: "whatsapp",
           sender: "34611111111",
           chatId: "34611111111@s.whatsapp.net",
           messageId: fixture.input.messageId,
           text: fixture.input.text,
+        } as const;
+        const first = await organ.receive(inbound);
+        const replay = await organ.receive(inbound);
+        const firstJobId = String(first.downstream.structuredContent?.ticket_id ?? "");
+        const replayJobId = String(replay.downstream.structuredContent?.ticket_id ?? "");
+        expect(firstJobId).toMatch(/^[0-9a-f-]{36}$/);
+        expect(replayJobId).toBe(firstJobId);
+        expect(first.downstream.structuredContent).toMatchObject({
+          ticket_id: firstJobId,
+          state: "done",
+          result: { text: `Real Zenod reply: ${fixture.input.text}` },
         });
-        await expect(received).rejects.toMatchObject({
-          name: "PhylaxChannelError",
-          code: "downstream_error",
-          audit: { failureCode: "downstream_rejected" },
-          retryDisposition: "idempotent_capture",
-        });
+        expect(first.replyText).toBe(`Real Zenod reply: ${fixture.input.text}`);
+        expect(replay.replyText).toBe(first.replyText);
+        receipts.push({ fixtureId: fixture.id, jobId: firstJobId, replyText: first.replyText });
       }
       const chatResults = downstreamCalls
         .filter((call) => call.tool === "chat_with_zenod")
         .map((call) => call.result);
       expect(chatResults).toHaveLength(2);
-      for (const result of chatResults) {
-        expect(result).toMatchObject({
-          isError: true,
-          structuredContent: {
-            error: {
-              code: "undeclared_long_tool",
-              message: expect.stringContaining(
-                'Tool "chat_with_zenod" returned an accepted ticket but is not declared in conduct.longTools.',
-              ),
-            },
-          },
-        });
-      }
+      expect(new Set(receipts.map((receipt) => receipt.jobId)).size).toBe(2);
+      expect(chatResults.map((result) => result.structuredContent)).toEqual(
+        expect.arrayContaining(receipts.map((receipt) => expect.objectContaining({
+          ticket_id: receipt.jobId,
+          state: "accepted",
+        }))),
+      );
       const jobs = unit.runtimes.get("alpha")?.taskJobStore.recent(10) ?? [];
       expect(jobs).toHaveLength(2);
       expect(jobs.map((job) => ({
@@ -242,6 +256,35 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
           message: fixture.input.text,
           status: "done",
         })).sort((left, right) => String(left.idempotencyKey).localeCompare(String(right.idempotencyKey))));
+
+      const crossTenantPoll = await fetch(alphaRoute.downstreamUrl, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${betaToken}`,
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "get_task_result", arguments: { ticket_id: receipts[0]!.jobId } },
+        }),
+      });
+      expect(crossTenantPoll.status).toBe(401);
+
+      const ordinaryChat = await callPeerTool({
+        name: "zpf1-ordinary-alpha",
+        url: alphaRoute.downstreamUrl,
+        token: alphaRoute.downstreamToken,
+      }, "chat_with_zenod", {
+        message: "ordinary synchronous MCP chat",
+        surface: "mcp",
+      });
+      expect(ordinaryChat).toMatchObject({
+        isError: false,
+        structuredContent: { status: "ok", text: "Real Zenod reply: ordinary synchronous MCP chat" },
+      });
     } finally {
       await organ.close();
       await new Promise<void>((resolveServer, reject) => {
