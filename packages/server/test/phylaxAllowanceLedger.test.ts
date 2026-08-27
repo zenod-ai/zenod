@@ -173,6 +173,91 @@ describe("PhylaxAllowanceLedger", () => {
     store.close();
   });
 
+  it("rejects direct usage before its allowance period starts", async () => {
+    let now = AUGUST_START - 1;
+    const { store } = await ledger("usage-pre-start", () => now);
+    grant(store, "alpha", 100);
+    const usage = {
+      tenantId: "alpha",
+      periodId: "2026-08",
+      amountUnits: 10,
+      providerEventId: "pre-start-provider",
+      operation: "whatsapp.delivery",
+      provider: "whatsapp",
+      costBasis: "actual" as const,
+      idempotencyKey: "pre-start-usage",
+      tariffVersion: "delivery-v1",
+      auditReason: "period boundary regression",
+    };
+
+    expect(() => store.recordUsage(usage)).toThrow("active allowance period");
+    expect(store.operatorProjection("alpha", "2026-08")).toMatchObject({
+      grantedUnits: 100,
+      usedUnits: 0,
+      expiredUnits: 0,
+    });
+    expect(store.customerProjection("alpha", now)).toMatchObject({ state: "unavailable", periodId: null });
+    now = AUGUST_START;
+    expect(() => store.recordUsage({ ...usage, occurredAt: AUGUST_START - 1 })).toThrow("active allowance period");
+    expect(store.recordUsage(usage).replayed).toBe(false);
+    store.close();
+  });
+
+  it("makes exact-boundary and post-close direct usage independent of projection order and restart", async () => {
+    let beforeProjectionNow = AUGUST_START + 1;
+    const { store: beforeProjection, path } = await ledger(
+      "usage-boundary-before-projection",
+      () => beforeProjectionNow,
+    );
+    grant(beforeProjection, "alpha", 100);
+    const usage = {
+      tenantId: "alpha",
+      periodId: "2026-08",
+      amountUnits: 10,
+      providerEventId: "closed-period-provider",
+      operation: "whatsapp.delivery",
+      provider: "whatsapp",
+      costBasis: "actual" as const,
+      idempotencyKey: "closed-period-usage",
+      tariffVersion: "delivery-v1",
+      auditReason: "closed period ordering regression",
+    };
+    beforeProjectionNow = SEPTEMBER_START;
+
+    expect(() => beforeProjection.recordUsage(usage)).toThrow("active allowance period");
+    expect(beforeProjection.operatorProjection("alpha", "2026-08")).toMatchObject({
+      grantedUnits: 100,
+      usedUnits: 0,
+      expiredUnits: 100,
+    });
+    const beforeEntries = beforeProjection.operatorProjection("alpha", "2026-08").entries
+      .map((item) => ({ kind: item.kind, amountUnits: item.amountUnits }));
+    beforeProjection.close();
+
+    beforeProjectionNow += 1;
+    const restarted = new PhylaxAllowanceLedger(path, () => beforeProjectionNow);
+    expect(() => restarted.recordUsage(usage)).toThrow("active allowance period");
+    expect(restarted.reconcileExpiredPeriods(beforeProjectionNow)).toBe(0);
+    expect(restarted.operatorProjection("alpha", "2026-08").expiredUnits).toBe(100);
+    restarted.close();
+
+    let afterProjectionNow = AUGUST_START + 1;
+    const { store: afterProjection } = await ledger(
+      "usage-boundary-after-projection",
+      () => afterProjectionNow,
+    );
+    grant(afterProjection, "alpha", 100);
+    afterProjectionNow = SEPTEMBER_START;
+    expect(afterProjection.customerProjection("alpha", afterProjectionNow)).toMatchObject({
+      state: "unavailable",
+      periodId: null,
+    });
+    expect(() => afterProjection.recordUsage(usage)).toThrow("active allowance period");
+    expect(afterProjection.operatorProjection("alpha", "2026-08").entries
+      .map((item) => ({ kind: item.kind, amountUnits: item.amountUnits }))).toEqual(beforeEntries);
+    afterProjection.close();
+  });
+
   it("never lets an adjustment delete usage or reclaim reserved allowance", async () => {
     const { store } = await ledger("adjustments");
     grant(store, "alpha", 10_000);
@@ -571,6 +656,99 @@ describe("PhylaxAllowanceLedger", () => {
     expect(() => store.completePaidWork(staleCompletion)).toThrow(PhylaxLedgerConflictError);
     expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(90);
     store.close();
+  });
+
+  it("applies the same exact period boundary to completion while preserving an earlier exact replay", async () => {
+    let now = AUGUST_START + 1;
+    const { store, path } = await ledger("completion-boundary", () => now);
+    grant(store, "alpha", 100);
+    const alphaWork = store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "completion-boundary-alpha",
+      providerEventId: "completion-boundary-alpha-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/completion-boundary",
+      estimatedUnits: 100,
+    }).work;
+    const alphaClaim = store.claimNextPaidWork(
+      "alpha",
+      "worker-alpha",
+      SEPTEMBER_START - now + 1_000,
+      now,
+    )!;
+    const alphaCompletion = {
+      workId: alphaWork.id,
+      tenantId: "alpha",
+      leaseOwner: alphaClaim.leaseOwner!,
+      leaseToken: alphaClaim.leaseToken!,
+      amountUnits: 100,
+      providerEventId: "completion-boundary-alpha-provider",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual" as const,
+      idempotencyKey: "completion-boundary-alpha-usage",
+      tariffVersion: "stt-v1",
+      auditReason: "completion period boundary regression",
+    };
+
+    grant(store, "beta", 100);
+    const betaWork = store.admitPaidWork({
+      tenantId: "beta",
+      periodId: "2026-08",
+      idempotencyKey: "completion-boundary-beta",
+      providerEventId: "completion-boundary-beta-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://beta/completion-boundary",
+      estimatedUnits: 100,
+    }).work;
+    const betaClaim = store.claimNextPaidWork("beta", "worker-beta", 10_000, now)!;
+    const betaCompletion = {
+      workId: betaWork.id,
+      tenantId: "beta",
+      leaseOwner: betaClaim.leaseOwner!,
+      leaseToken: betaClaim.leaseToken!,
+      amountUnits: 100,
+      providerEventId: "completion-boundary-beta-provider",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual" as const,
+      idempotencyKey: "completion-boundary-beta-usage",
+      tariffVersion: "stt-v1",
+      auditReason: "completion replay boundary regression",
+    };
+    const betaCompleted = store.completePaidWork(betaCompletion);
+    expect(betaCompleted.usage.replayed).toBe(false);
+
+    now = SEPTEMBER_START;
+    expect(() => store.completePaidWork(alphaCompletion)).toThrow("active allowance period");
+    expect(store.pendingWork("alpha")).toEqual([
+      expect.objectContaining({
+        id: alphaWork.id,
+        state: "processing",
+        reservedUnits: 100,
+        leaseToken: alphaClaim.leaseToken,
+      }),
+    ]);
+    expect(store.operatorProjection("alpha", "2026-08")).toMatchObject({ usedUnits: 0, expiredUnits: 0 });
+    expect(store.completePaidWork(betaCompletion).usage).toMatchObject({
+      replayed: true,
+      entry: { sequence: betaCompleted.usage.entry.sequence },
+    });
+    store.close();
+
+    const restarted = new PhylaxAllowanceLedger(path, () => now);
+    expect(() => restarted.completePaidWork(alphaCompletion)).toThrow("active allowance period");
+    now += 1_001;
+    expect(restarted.claimNextPaidWork("alpha", "worker-recovery", 1_000, now)).toBeNull();
+    expect(restarted.pendingWork("alpha")).toEqual([
+      expect.objectContaining({ state: "paused", pauseReason: "period_inactive", reservedUnits: 0 }),
+    ]);
+    expect(restarted.operatorProjection("alpha", "2026-08")).toMatchObject({
+      usedUnits: 0,
+      expiredUnits: 100,
+    });
+    restarted.close();
   });
 
   it("rejects actual settlement above its reservation when no unreserved allowance remains", async () => {

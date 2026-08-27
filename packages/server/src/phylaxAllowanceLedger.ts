@@ -173,6 +173,10 @@ interface PaidWorkRow {
   updated_at: number;
 }
 
+type UsageMutationAttempt =
+  | { ok: true; usage: PhylaxLedgerMutation }
+  | { ok: false; error: Error };
+
 export class PhylaxLedgerConflictError extends Error {
   readonly code = "phylax_ledger_idempotency_conflict";
 
@@ -543,6 +547,7 @@ export class PhylaxAllowanceLedger {
     auditReason: string;
     occurredAt?: number;
   }): PhylaxLedgerMutation {
+    const acceptedAt = timestamp(this.now(), "acceptedAt");
     const normalized = {
       tenantId: required(input.tenantId, "tenantId"),
       periodId: required(input.periodId, "periodId"),
@@ -555,16 +560,18 @@ export class PhylaxAllowanceLedger {
       idempotencyKey: required(input.idempotencyKey, "idempotencyKey"),
       tariffVersion: required(input.tariffVersion, "tariffVersion"),
       auditReason: required(input.auditReason, "auditReason", 2_000),
-      occurredAt: timestamp(input.occurredAt ?? this.now(), "occurredAt"),
+      occurredAt: timestamp(input.occurredAt ?? acceptedAt, "occurredAt"),
     };
     if (!["actual", "estimated", "service_included", "unavailable"].includes(normalized.costBasis)) {
       throw new Error("costBasis is invalid");
     }
     const hash = payloadHash({ ...normalized, amountUnits: -normalized.amountUnits, idempotencyKey: undefined, occurredAt: undefined });
-    return this.transaction(() => this.recordUsageInTransaction(normalized, hash));
+    const attempt = this.transaction(() => this.attemptUsageInTransaction(normalized, hash, acceptedAt));
+    if (!attempt.ok) throw attempt.error;
+    return attempt.usage;
   }
 
-  private recordUsageInTransaction(
+  private attemptUsageInTransaction(
     normalized: {
       tenantId: string;
       periodId: string;
@@ -580,32 +587,43 @@ export class PhylaxAllowanceLedger {
       occurredAt: number;
     },
     hash: string,
+    acceptedAt: number,
     ownedReservationUnits = 0,
-  ): PhylaxLedgerMutation {
+  ): UsageMutationAttempt {
+    this.reconcileExpiredPeriodsInTransaction(acceptedAt);
     const byIdempotency = this.entryByIdempotency(normalized.tenantId, normalized.idempotencyKey);
-    if (byIdempotency) return this.replayOrConflict(byIdempotency, hash);
+    if (byIdempotency) return { ok: true, usage: this.replayOrConflict(byIdempotency, hash) };
     const byProvider = this.usageByProviderEvent(
       normalized.tenantId,
       normalized.providerEventId,
       normalized.operation,
     );
-    if (byProvider) return this.replayOrConflict(byProvider, hash);
-    if (!this.period(normalized.tenantId, normalized.periodId)) throw new Error("allowance period does not exist");
+    if (byProvider) return { ok: true, usage: this.replayOrConflict(byProvider, hash) };
+    const period = this.period(normalized.tenantId, normalized.periodId);
+    if (!period) throw new Error("allowance period does not exist");
+    const acceptedOutsidePeriod = acceptedAt < period.starts_at || acceptedAt >= period.ends_at;
+    const eventOutsidePeriod = normalized.occurredAt < period.starts_at || normalized.occurredAt >= period.ends_at;
+    if (acceptedOutsidePeriod || eventOutsidePeriod) {
+      return { ok: false, error: new Error("usage requires an active allowance period") };
+    }
     const spendableUnits = this.availableInPeriod(normalized.tenantId, normalized.periodId)
       + units(ownedReservationUnits, "ownedReservationUnits", { nonNegative: true });
     if (normalized.amountUnits > spendableUnits) {
-      throw new Error("usage exceeds currently unreserved allowance");
+      return { ok: false, error: new Error("usage exceeds currently unreserved allowance") };
     }
     return {
-      entry: entry(this.insertEntry({
-        ...normalized,
-        kind: "usage",
-        amountUnits: -normalized.amountUnits,
-        source: normalized.provider,
-        hash,
-        createdAt: this.now(),
-      })),
-      replayed: false,
+      ok: true,
+      usage: {
+        entry: entry(this.insertEntry({
+          ...normalized,
+          kind: "usage",
+          amountUnits: -normalized.amountUnits,
+          source: normalized.provider,
+          hash,
+          createdAt: acceptedAt,
+        })),
+        replayed: false,
+      },
     };
   }
 
@@ -1036,7 +1054,10 @@ export class PhylaxAllowanceLedger {
   }): { work: PhylaxPaidWork; usage: PhylaxLedgerMutation } {
     const workId = required(input.workId, "workId");
     const tenantId = required(input.tenantId, "tenantId");
-    return this.transaction(() => {
+    const attempt = this.transaction<
+      | { result: { work: PhylaxPaidWork; usage: PhylaxLedgerMutation } }
+      | { error: Error }
+    >(() => {
       const current = this.work(workId);
       if (!current || current.tenant_id !== tenantId) throw new Error("paid work does not exist for tenant");
       if (current.provider_event_id !== required(input.providerEventId, "providerEventId")) {
@@ -1057,18 +1078,20 @@ export class PhylaxAllowanceLedger {
         idempotencyKey: required(input.idempotencyKey, "idempotencyKey"),
         tariffVersion: required(input.tariffVersion, "tariffVersion"),
         auditReason: required(input.auditReason, "auditReason", 2_000),
-        occurredAt: timestamp(input.occurredAt ?? this.now(), "occurredAt"),
+        occurredAt: timestamp(input.occurredAt ?? completedAt, "occurredAt"),
       };
       const hash = payloadHash({ ...normalized, amountUnits: -normalized.amountUnits, idempotencyKey: undefined, occurredAt: undefined });
       if (current.state === "done") {
         if (current.completed_lease_owner !== leaseOwner || current.completed_lease_token !== leaseToken) {
           throw new PhylaxLedgerConflictError("paid work completion lease does not match the completed claim");
         }
-        const usage = this.recordUsageInTransaction(normalized, hash);
+        const usageAttempt = this.attemptUsageInTransaction(normalized, hash, completedAt);
+        if (!usageAttempt.ok) return { error: usageAttempt.error };
+        const usage = usageAttempt.usage;
         if (current.usage_entry_sequence !== usage.entry.sequence) {
           throw new PhylaxLedgerConflictError("paid work already completed with a different usage entry");
         }
-        return { work: paidWork(current), usage };
+        return { result: { work: paidWork(current), usage } };
       }
       if (current.state !== "processing") throw new Error("paid work is not actively leased for completion");
       if (current.lease_owner !== leaseOwner || current.lease_token !== leaseToken) {
@@ -1077,7 +1100,14 @@ export class PhylaxAllowanceLedger {
       if (current.lease_until === null || current.lease_until <= completedAt) {
         throw new Error("paid work lease expired before completion");
       }
-      const usage = this.recordUsageInTransaction(normalized, hash, current.reserved_units);
+      const usageAttempt = this.attemptUsageInTransaction(
+        normalized,
+        hash,
+        completedAt,
+        current.reserved_units,
+      );
+      if (!usageAttempt.ok) return { error: usageAttempt.error };
+      const usage = usageAttempt.usage;
       if (current.usage_entry_sequence !== null && current.usage_entry_sequence !== usage.entry.sequence) {
         throw new PhylaxLedgerConflictError("paid work already completed with a different usage entry");
       }
@@ -1102,8 +1132,10 @@ export class PhylaxAllowanceLedger {
       if (completed.state !== "done" || completed.usage_entry_sequence !== usage.entry.sequence) {
         throw new Error("paid work lease changed before completion");
       }
-      return { work: paidWork(completed), usage };
+      return { result: { work: paidWork(completed), usage } };
     });
+    if ("error" in attempt) throw attempt.error;
+    return attempt.result;
   }
 
   pendingWork(tenantIdInput: string): PhylaxPaidWork[] {
