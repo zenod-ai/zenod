@@ -54,6 +54,7 @@ import {
   PhylaxChannelsOrgan,
   phylaxWhatsAppPaths,
   registerPhylaxChannelTools,
+  type PhylaxFixedProductAdapter,
   type PhylaxPortedChannel,
 } from "./phylaxChannels.js";
 import { mountPhylaxAdminChannelRoutes, PhylaxPortedRuntime } from "./phylaxPortedRuntime.js";
@@ -112,6 +113,12 @@ export interface CreatePhylaxUnitOptions {
   env?: NodeJS.ProcessEnv;
   /** Test/product extension seam; receives only the Phylax MCP context. */
   registerAdditionalTools?: (server: McpServer, context: UnitContext) => void;
+  /**
+   * Server-owned fixed-product data-plane adapter. PM intentionally has no
+   * default: its island accepts no inbound route until an explicit adapter is
+   * injected by the PM composition root.
+   */
+  fixedProductAdapter?: PhylaxFixedProductAdapter;
   instance?: PhylaxInstanceConfig;
 }
 
@@ -120,6 +127,12 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   const env = options.env ?? process.env;
   const configuredInstance = options.instance;
   const instance = configuredInstance ?? resolvePhylaxInstanceConfig(env);
+  if (options.fixedProductAdapter && options.fixedProductAdapter.mode !== instance.mode) {
+    throw new Error(
+      `Phylax fixed adapter ${options.fixedProductAdapter.adapterId} targets ${options.fixedProductAdapter.mode}; `
+      + `refusing ${instance.mode} instance`,
+    );
+  }
   const dataDir = options.dataDir ?? options.storage?.dataDir ?? env.ZENOD_DATA_DIR ?? "./data";
   bindPhylaxInstanceIdentity(dataDir, instance);
   const configuredRestartAfter = Number(
@@ -188,6 +201,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     instance,
     usageMeter,
     compatibilityMigration,
+    options.fixedProductAdapter,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ channel, sender, username, text }) {
@@ -888,6 +902,7 @@ function createTenantOrgan(
   instance: PhylaxInstanceConfig,
   usageMeter: PhylaxUsageMeter,
   compatibilityMigration: PhylaxCompatibilityMigration,
+  fixedProductAdapter?: PhylaxFixedProductAdapter,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   const configuredVoiceJobDeadline = Number(
@@ -905,6 +920,7 @@ function createTenantOrgan(
           tenantSettings,
           channel,
           sender,
+          fixedProductAdapter,
         );
         if (route) compatibilityMigration.migrateTenant(route.tenantId);
         return route;
@@ -929,6 +945,7 @@ function createTenantOrgan(
     maintainTranscriptionUsage(claim) {
       return usageMeter.maintainTranscriptionLease(claim);
     },
+    ...(fixedProductAdapter ? { fixedProductAdapter } : {}),
     async callDownstream(call) {
       const result = await callPeerTool(
         {
@@ -996,20 +1013,24 @@ function createTenantOrgan(
  *
  * Persisted destinations/credentials remain tenant-specific for rolling
  * compatibility. Product-bound modes never inherit persisted tool bindings:
- * Zenod uses its frozen adapter and PM fails closed until #1111 defines one.
+ * Zenod uses its frozen adapter. PM remains fail-closed unless its composition
+ * root injects the explicit server-owned fixed-product adapter.
  */
 export function resolvePhylaxRuntimeRoute(
   instance: PhylaxInstanceConfig,
   tenantSettings: PhylaxTenantSettingsStore,
   channel: "whatsapp" | "telegram",
   sender: string,
+  fixedProductAdapter?: PhylaxFixedProductAdapter,
 ) {
   const route = tenantSettings.resolve(channel, sender);
   if (!route) return null;
-  if (instance.mode === "pm") return null;
+  if (instance.mode === "pm" && fixedProductAdapter?.mode !== "pm") return null;
   return {
     ...route,
-    turnBindings: instance.mode === "zenod"
+    turnBindings: fixedProductAdapter
+      ? undefined
+      : instance.mode === "zenod"
       ? defaultPhylaxTurnBindings()
       : effectivePhylaxTurnBindings(tenantSettings.get(route.tenantId)),
   };
