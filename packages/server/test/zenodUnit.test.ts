@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
@@ -2586,6 +2587,152 @@ describe("Zenod chassis unit", () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       unit.close();
+    }
+  });
+
+  it("keeps direct MCP and OAuth grants valid across restart with a loopback-safe production CSP", async () => {
+    const dataDir = await tempDir();
+    const directToken = "zenod_direct_token_survives_restart";
+    const env = {
+      NODE_ENV: "production",
+      ZENOD_API_TOKEN: directToken,
+      ZENOD_TENANT_ID: "stable-auth-tenant",
+      CHASSIS_VAULT_MASTER_KEY,
+    };
+    const verifier = "zpf3-loopback-verifier-with-enough-entropy";
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const redirectUri = "http://127.0.0.1:49152/callback";
+    const listen = (unit: ReturnType<typeof createZenodUnit>) =>
+      new Promise<ReturnType<typeof serve>>((resolve) => {
+        const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
+      });
+    const initialize = (origin: string, token: string) =>
+      fetch(`${origin}/mcp`, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "zpf3-auth",
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-03-26",
+            capabilities: {},
+            clientInfo: { name: "zpf3", version: "1" },
+          },
+        }),
+      });
+
+    const first = createZenodUnit({ dataDir, env });
+    const firstServer = await listen(first);
+    const firstAddress = firstServer.address() as AddressInfo;
+    const origin = `http://127.0.0.1:${firstAddress.port}`;
+    let oauthAccessToken: string;
+    try {
+      const ordinary = await fetch(`${origin}/app`);
+      expect(ordinary.headers.get("content-security-policy")).toContain(
+        "upgrade-insecure-requests",
+      );
+      expect(ordinary.headers.get("content-security-policy")).toContain(
+        "form-action 'self' https://checkout.stripe.com",
+      );
+      expect(ordinary.headers.get("content-security-policy")).not.toContain(
+        "http://127.0.0.1:*",
+      );
+
+      const registration = await fetch(`${origin}/oauth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Codex loopback",
+          redirect_uris: [redirectUri],
+        }),
+      });
+      expect(registration.status).toBe(201);
+      const { client_id: clientId } = await registration.json() as { client_id: string };
+      const authorize = new URL(`${origin}/oauth/authorize`);
+      authorize.search = new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        state: "zpf3-state",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        resource: `${origin}/mcp`,
+        scope: "mcp",
+      }).toString();
+
+      const consent = await fetch(authorize);
+      expect(consent.status).toBe(200);
+      expect(consent.headers.get("cache-control")).toBe("no-store");
+      expect(consent.headers.get("content-security-policy")).not.toContain(
+        "upgrade-insecure-requests",
+      );
+      expect(consent.headers.get("content-security-policy")).toContain(
+        "form-action 'self' https: http://127.0.0.1:* http://[::1]:*",
+      );
+      expect(await consent.text()).toContain('action="/oauth/authorize/decision"');
+
+      const decision = await fetch(`${origin}/oauth/authorize/decision`, {
+        method: "POST",
+        redirect: "manual",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          state: "zpf3-state",
+          code_challenge: challenge,
+          code_challenge_method: "S256",
+          resource: `${origin}/mcp`,
+          scope: "mcp",
+          token: directToken,
+          decision: "approve",
+        }),
+      });
+      expect(decision.status).toBe(302);
+      expect(decision.headers.get("cache-control")).toBe("no-store");
+      expect(decision.headers.get("content-security-policy")).not.toContain(
+        "upgrade-insecure-requests",
+      );
+      const callback = new URL(decision.headers.get("location")!);
+      expect(callback.origin + callback.pathname).toBe(redirectUri);
+      expect(callback.searchParams.get("state")).toBe("zpf3-state");
+      const code = callback.searchParams.get("code");
+      expect(code).toBeTruthy();
+
+      const tokenResponse = await fetch(`${origin}/oauth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code: code!,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+        }),
+      });
+      expect(tokenResponse.status).toBe(200);
+      oauthAccessToken = ((await tokenResponse.json()) as { access_token: string }).access_token;
+
+      expect((await initialize(origin, directToken)).status).toBe(200);
+      expect((await initialize(origin, oauthAccessToken)).status).toBe(200);
+    } finally {
+      await new Promise<void>((resolve) => firstServer.close(() => resolve()));
+      await first.close();
+    }
+
+    const restarted = createZenodUnit({ dataDir, env });
+    const restartedServer = await listen(restarted);
+    const restartedAddress = restartedServer.address() as AddressInfo;
+    const restartedOrigin = `http://127.0.0.1:${restartedAddress.port}`;
+    try {
+      expect((await initialize(restartedOrigin, directToken)).status).toBe(200);
+      expect((await initialize(restartedOrigin, oauthAccessToken!)).status).toBe(200);
+    } finally {
+      await new Promise<void>((resolve) => restartedServer.close(() => resolve()));
+      await restarted.close();
     }
   });
 

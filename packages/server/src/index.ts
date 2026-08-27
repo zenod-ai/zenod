@@ -12,6 +12,23 @@ export type {
   PhylaxInstanceConfig,
   PhylaxInstanceMode,
 } from "./phylaxInstance.js";
+export {
+  PhylaxAllowanceLedger,
+  PhylaxLedgerConflictError,
+} from "./phylaxAllowanceLedger.js";
+export type {
+  PhylaxAllowanceEntry,
+  PhylaxAllowanceEntryKind,
+  PhylaxAllowancePeriod,
+  PhylaxCustomerMeteringProjection,
+  PhylaxLedgerMutation,
+  PhylaxOperatorLedgerProjection,
+  PhylaxOperatorUsageBucket,
+  PhylaxPaidWork,
+  PhylaxPaidWorkAdmission,
+  PhylaxPaidWorkState,
+  PhylaxUsageCostBasis,
+} from "./phylaxAllowanceLedger.js";
 export { createRingUnit } from "./ringUnit.js";
 export { createRingCustomerLayer } from "./ringCustomerLayer.js";
 export { createHeraldUnit } from "./heraldUnit.js";
