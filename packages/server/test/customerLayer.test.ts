@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteTenantStore, hashToken } from "@zenod/mcp-chassis";
-import { customerAccountId } from "../src/customerAccounts.js";
+import { customerAccountId, type CustomerAccount } from "../src/customerAccounts.js";
 import { loadCustomerBillingConfig, type CustomerStripeClient } from "../src/customerBilling.js";
 import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerMetering } from "../src/customerMetering.js";
@@ -883,6 +883,121 @@ describe("hosted customer layer", () => {
     expect(layer.accounts.get("legacy-failed")?.current_period_start).toBeNull();
     expect(tenants.snapshot()).toEqual(beforeTenants);
     expect(layer.tokenVault.get("legacy-monthly")).toBeNull();
+    layer.close();
+  });
+
+  it("uses an existing tenant OpenRouter key as the authoritative capped monthly usage source", async () => {
+    runtime.settings.set("provider", "openrouter");
+    runtime.settings.set("openrouter_api_key", "tenant-key-kept-in-vault");
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({
+        data: {
+          label: "existing-tenant-key",
+          limit: 2,
+          limit_remaining: 1.4,
+          limit_reset: "monthly",
+          usage: 0.6,
+          usage_monthly: 0.6,
+          byok_usage_monthly: 0,
+          include_byok_in_limit: true,
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    const projectedAccounts: CustomerAccount[] = [];
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        projectUsage(account, local) {
+          projectedAccounts.push(account);
+          return local;
+        },
+      },
+    );
+    const account = layer.accounts.upsert("legacy-current-key", {
+      account_id: "legacy-current-key",
+      github_id: 105,
+      github_login: "current-key",
+      tenant_id: "legacy-current-key",
+      subscription_status: "active",
+    });
+    const expectedStart = new Date(Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      1,
+    )).toISOString();
+    const expectedEnd = new Date(Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth() + 1,
+      1,
+    )).toISOString();
+
+    expect(await layer.refreshAuthoritativeSubscriptions()).toEqual({
+      refreshedAccountIds: ["legacy-current-key"],
+      failedAccountIds: [],
+    });
+    expect(await layer.usageForAccount(account)).toEqual({
+      percentageUsed: 30,
+      state: "normal",
+      resetsAt: expectedEnd,
+    });
+    expect(layer.accounts.get("legacy-current-key")).toMatchObject({
+      managed_ai_limit_usd: 2,
+      managed_ai_status: "active",
+      current_period_start: expectedStart,
+      current_period_end: expectedEnd,
+    });
+    expect(projectedAccounts.at(-1)).toMatchObject({
+      managed_ai_limit_usd: 2,
+      current_period_start: expectedStart,
+      current_period_end: expectedEnd,
+    });
+    expect(request).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", {
+      headers: { Authorization: "Bearer tenant-key-kept-in-vault" },
+    });
+    expect(layer.tokenVault.get("legacy-current-key")).toBeNull();
+    layer.close();
+  });
+
+  it("fails closed when an existing tenant key does not match the hosted monthly cap", async () => {
+    runtime.settings.set("provider", "openrouter");
+    runtime.settings.set("openrouter_api_key", "tenant-key-kept-in-vault");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({
+        data: {
+          label: "wrong-policy-key",
+          limit: 5,
+          limit_remaining: 5,
+          limit_reset: "monthly",
+          usage_monthly: 0,
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } }));
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      { env, stripe, tenantStore: tenants },
+    );
+    const account = layer.accounts.upsert("legacy-wrong-key-policy", {
+      account_id: "legacy-wrong-key-policy",
+      github_id: 106,
+      github_login: "wrong-key-policy",
+      tenant_id: "legacy-wrong-key-policy",
+      subscription_status: "active",
+    });
+
+    expect(await layer.refreshAuthoritativeSubscriptions()).toEqual({
+      refreshedAccountIds: [],
+      failedAccountIds: ["legacy-wrong-key-policy"],
+    });
+    expect(await layer.usageForAccount(account)).toMatchObject({
+      percentageUsed: null,
+      state: "unavailable",
+    });
+    expect(layer.accounts.get("legacy-wrong-key-policy")).toMatchObject({
+      managed_ai_limit_usd: null,
+      current_period_start: null,
+      current_period_end: null,
+    });
     layer.close();
   });
 
