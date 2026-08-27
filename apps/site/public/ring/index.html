@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Ring — one door to your suite</title>
+    <meta name="description" content="The Ring is the one door: your WhatsApp, your web chat, one number. Phylax is the gateway inside it." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%8D%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --ink: #14110f;
+        --paper: #f6f3ee;
+        --muted: #6b625a;
+        --accent: #9a6b3f;
+        --line: #ddd6cc;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .wrap {
+        flex: 1;
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: clamp(3rem, 10vw, 7rem) 1.5rem 3rem;
+        width: 100%;
+      }
+      .eyebrow {
+        font-size: 0.75rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 1.5rem;
+        font-weight: 600;
+      }
+      h1 {
+        font-family: Georgia, "Times New Roman", "Bodoni Moda", serif;
+        font-weight: 500;
+        font-size: clamp(2.6rem, 9vw, 4.6rem);
+        line-height: 1.02;
+        letter-spacing: -0.01em;
+        margin-bottom: 1.4rem;
+      }
+      .lede {
+        font-size: clamp(1.1rem, 3.2vw, 1.4rem);
+        color: var(--muted);
+        max-width: 34rem;
+        margin-bottom: 2.6rem;
+      }
+      .job {
+        border-left: 2px solid var(--accent);
+        padding: 0.2rem 0 0.2rem 1.2rem;
+        font-size: 1.05rem;
+        margin-bottom: 2.8rem;
+      }
+      .job strong { color: var(--ink); }
+      .rule {
+        display: grid;
+        gap: 1.1rem;
+        border-top: 1px solid var(--line);
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+      }
+      .rule div { }
+      .rule dt {
+        font-family: Georgia, serif;
+        font-size: 1.15rem;
+        margin-bottom: 0.2rem;
+      }
+      .rule dd { color: var(--muted); font-size: 0.98rem; }
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2.8rem;
+      }
+      .btn {
+        display: inline-block;
+        background: var(--ink);
+        color: var(--paper);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.02rem;
+        padding: 0.85rem 1.5rem;
+        border-radius: 0.6rem;
+        transition: opacity 0.15s ease;
+      }
+      .btn:hover { opacity: 0.88; }
+      .price { color: var(--muted); font-size: 0.95rem; }
+      .price strong { color: var(--ink); font-weight: 600; }
+      .steps {
+        display: grid;
+        gap: 1.1rem;
+        counter-reset: step;
+        border-top: 1px solid var(--line);
+        padding-top: 2rem;
+        margin-bottom: 2rem;
+      }
+      .steps li {
+        list-style: none;
+        padding-left: 2.4rem;
+        position: relative;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+      .steps li strong { color: var(--ink); font-weight: 600; }
+      .steps li::before {
+        counter-increment: step;
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: -0.1rem;
+        width: 1.6rem;
+        height: 1.6rem;
+        border: 1px solid var(--accent);
+        border-radius: 50%;
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.82rem;
+        padding: 1.6rem 1.5rem;
+        text-align: center;
+      }
+      footer a { color: var(--accent); text-decoration: none; }
+      footer a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <p class="eyebrow">The Ring · your WhatsApp agent</p>
+      <h1>One number. Your agent answers.</h1>
+      <p class="lede">Text one WhatsApp number and your own agent replies — with a brain that sees every tool you connect and routes each message where it belongs.</p>
+      <div class="cta-row">
+        <!-- LIVE €5/mo Stripe Payment Link (price_1Tptlw80yG7aohEWL9X4zqMI). Checkout → cloud.zenod.dev webhook → provisioning → success_url must land the buyer on their new tenant's /setup wizard (opens on the WhatsApp pairing step). Set that success_url on the Payment Link in Stripe. -->
+        <a class="btn" href="https://buy.stripe.com/3cIdR3bSLgyL7yi89HbAs01">Get your agent — €5/month →</a>
+        <span class="price"><strong>€5 / month</strong> · your own dedicated instance · cancel anytime</span>
+      </div>
+      <p class="job">The Ring is the one door: an LLM gateway that owns your conversation, serializes your turns, and decides — from the tools you've connected and the skill attached to each — which one handles a message. Name a guy (“ask Herald…”) and it passes straight through. <strong>Phylax</strong> is the channel gateway inside it, carrying WhatsApp and Telegram.</p>
+      <ol class="steps">
+        <li><strong>Pay €5.</strong> We provision your own dedicated instance — no shared servers, your git repo as its memory.</li>
+        <li><strong>Land on setup.</strong> Set a password, connect your vault and model.</li>
+        <li><strong>Pair WhatsApp.</strong> Scan one QR to link your own number, allowlist yourself — then just text your agent.</li>
+      </ol>
+      <dl class="rule">
+        <div>
+          <dt>One number</dt>
+          <dd>You talk to one place. The Ring's brain decides who inside handles it.</dd>
+        </div>
+        <div>
+          <dt>Named pass-through</dt>
+          <dd>Address a guy by name and the Ring calls that tool directly — minimal thinking, the answer comes back attributed.</dd>
+        </div>
+        <div>
+          <dt>Your instance, your data</dt>
+          <dd>A dedicated container per customer; memory lives in a git repo you own, every write a real commit.</dd>
+        </div>
+      </dl>
+    </main>
+    <footer>
+      Part of the Atomic Suite ·
+      <a href="https://github.com/zenod-ai/zenod">zenod-ai/zenod</a>
+    </footer>
+  </body>
+</html>
