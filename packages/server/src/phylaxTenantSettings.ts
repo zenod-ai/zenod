@@ -15,6 +15,7 @@ const RING_TICKET_URL_KEY = "phylax_ring_ticket_url";
 const TRANSCRIPTION_TOKEN_KEY = "phylax_transcription_token";
 const VERIFY_TTL_MS = 30 * 60_000;
 export type PhylaxTranscriptionProvider = "local" | "groq" | "openai" | "openrouter";
+export type PhylaxCommercialOwner = "zenod" | "pm" | "phylax";
 export const PHYLAX_TURN_TYPES = ["voice_note", "text", "media"] as const;
 export type PhylaxTurnType = (typeof PHYLAX_TURN_TYPES)[number];
 export type PhylaxVoiceDefault = "capture" | "assistant";
@@ -84,6 +85,10 @@ const VERIFICATION_ANIMALS = [
 
 export interface PhylaxTenantSettings {
   tenantId: string;
+  /** Non-secret management namespace. Authority comes from the scoped service credential. */
+  commercialOwner: PhylaxCommercialOwner | null;
+  externalTenantId: string | null;
+  managementBindingRevision: string;
   phoneNumber: string | null;
   verified: boolean;
   numberId: string;
@@ -418,6 +423,9 @@ function defaultSettings(
 ): PhylaxTenantSettings {
   return {
     tenantId,
+    commercialOwner: null,
+    externalTenantId: null,
+    managementBindingRevision: "0",
     phoneNumber: null,
     verified: false,
     numberId: "primary",
@@ -560,6 +568,59 @@ export class PhylaxTenantSettingsStore {
     const url = this.encryptedDownstreamUrl(current);
     const token = this.secret(tenantId, DOWNSTREAM_TOKEN_KEY);
     return url && token ? { url, token } : null;
+  }
+
+  /**
+   * Bind the authenticated Phylax tenant to exactly one commercial owner and
+   * host-side tenant identity. Reconciliation is stable: the same binding and
+   * downstream authority is a no-op, while owner/tenant changes are denied.
+   */
+  ensureManagementBinding(input: {
+    tenantId: string;
+    commercialOwner: PhylaxCommercialOwner;
+    externalTenantId: string;
+    downstreamUrl: string;
+    downstreamToken: string;
+    expectedRevision: string;
+  }): { settings: PhylaxTenantSettingsView; replayed: boolean } {
+    const current = this.get(input.tenantId);
+    const externalTenantId = input.externalTenantId.trim();
+    if (!/^[a-zA-Z0-9._:-]{1,160}$/.test(externalTenantId)) {
+      throw new Error("externalTenantId is invalid");
+    }
+    if (current.managementBindingRevision !== input.expectedRevision) {
+      throw new Error("management binding revision is stale");
+    }
+    if (current.commercialOwner && current.commercialOwner !== input.commercialOwner) {
+      throw new Error("commercial owner is already bound");
+    }
+    if (current.externalTenantId && current.externalTenantId !== externalTenantId) {
+      throw new Error("external tenant is already bound");
+    }
+    const normalizedUrl = normalizedDownstreamUrl(input.downstreamUrl);
+    const credentials = this.downstreamCredentials(input.tenantId);
+    if (
+      current.commercialOwner === input.commercialOwner &&
+      current.externalTenantId === externalTenantId &&
+      credentials?.url === normalizedUrl &&
+      credentials.token === input.downstreamToken.trim()
+    ) {
+      return { settings: this.view(input.tenantId), replayed: true };
+    }
+    const nextRevision = randomBytes(16).toString("hex");
+    this.update(input.tenantId, {
+      downstreamUrl: normalizedUrl,
+      downstreamToken: input.downstreamToken,
+    });
+    const after = this.get(input.tenantId);
+    this.put({
+      ...after,
+      commercialOwner: input.commercialOwner,
+      externalTenantId,
+      managementBindingRevision: nextRevision,
+      updatedAt: new Date().toISOString(),
+    });
+    return { settings: this.view(input.tenantId), replayed: false };
   }
 
   /** Server-only Ring assistant authority; never used by memory capture dispatch. */

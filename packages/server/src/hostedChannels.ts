@@ -57,7 +57,12 @@ export type HostedChannelMutationName =
   | "telegram.connect"
   | "telegram.verify"
   | "telegram.test"
-  | "telegram.disconnect";
+  | "telegram.disconnect"
+  | "management.ensure_binding"
+  | "management.credit_grant"
+  | "management.credit_adjust"
+  | "management.suspend"
+  | "management.resume";
 export interface HostedChannelMutationOutcome {
   operationId: string;
   operation: HostedChannelMutationName;
@@ -408,13 +413,13 @@ function privateToken(c: Context, expected: string | undefined): boolean {
       ?.trim() ?? "";
   return Boolean(provided) && tokenMatches(expected.trim(), provided);
 }
-function normalizeHostedPhone(value: unknown): string | null {
+export function normalizeHostedPhone(value: unknown): string | null {
   if (typeof value !== "string" || !/^\s*\+?[\d ()-]+\s*$/.test(value))
     return null;
   const normalized = normalizeWhatsAppIdentifier(value);
   return /^\d{8,15}$/.test(normalized) ? normalized : null;
 }
-function normalizeHostedTelegram(value: unknown): string | null {
+export function normalizeHostedTelegram(value: unknown): string | null {
   if (typeof value !== "string" || value.trim().length > 64) return null;
   const normalized = normalizeTelegramEntry(value);
   const numeric = /^-?\d{1,20}$/.test(normalized);
@@ -437,7 +442,7 @@ const CHALLENGE_ANIMALS = [
   "whale",
   "wolf",
 ] as const;
-function challengeCode(
+export function hostedChannelChallengeCode(
   secret: string,
   tenantId: string,
   operationId: string,
@@ -449,7 +454,7 @@ function challengeCode(
   return `${10 + ((digest[0] ?? 0) % 90)}-${CHALLENGE_ANIMALS[(digest[1] ?? 0) % CHALLENGE_ANIMALS.length] ?? "otter"}`;
 }
 
-function channelView(
+export function hostedChannelView(
   tenantId: string,
   settingsStore: PhylaxTenantSettingsStore,
   runtime: PhylaxPortedRuntime,
@@ -549,7 +554,7 @@ async function waitForTerminal(
   return null;
 }
 
-async function executeOnce(
+export async function executeHostedChannelMutation(
   store: HostedChannelMutationAuditStore,
   input: {
     operationId: string;
@@ -695,7 +700,7 @@ export function mountPhylaxHostedChannelRoutes(
         },
         400,
       );
-    return c.json(channelView(tenantId, input.settings, input.runtime));
+    return c.json(hostedChannelView(tenantId, input.settings, input.runtime));
   });
 
   app.post(
@@ -728,13 +733,13 @@ export function mountPhylaxHostedChannelRoutes(
           400,
         );
       }
-      const code = challengeCode(
+      const code = hostedChannelChallengeCode(
         input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
         tenantId,
         operationId,
         sender,
       );
-      const result = await executeOnce(
+      const result = await executeHostedChannelMutation(
         input.audit,
         {
           operationId,
@@ -788,7 +793,7 @@ export function mountPhylaxHostedChannelRoutes(
             return {
               status: 200,
               body: {
-                channels: channelView(
+                channels: hostedChannelView(
                   tenantId,
                   input.settings,
                   input.runtime,
@@ -850,7 +855,7 @@ export function mountPhylaxHostedChannelRoutes(
           ),
           400,
         );
-      const result = await executeOnce(
+      const result = await executeHostedChannelMutation(
         input.audit,
         {
           operationId,
@@ -904,7 +909,7 @@ export function mountPhylaxHostedChannelRoutes(
             return {
               status: 200,
               body: {
-                channels: channelView(
+                channels: hostedChannelView(
                   tenantId,
                   input.settings,
                   input.runtime,
@@ -958,7 +963,7 @@ export function mountPhylaxHostedChannelRoutes(
           ),
           400,
         );
-      const result = await executeOnce(
+      const result = await executeHostedChannelMutation(
         input.audit,
         {
           operationId,
@@ -987,7 +992,7 @@ export function mountPhylaxHostedChannelRoutes(
           return {
             status: 200,
             body: {
-              channels: channelView(
+              channels: hostedChannelView(
                 tenantId,
                 input.settings,
                 input.runtime,
@@ -1037,13 +1042,13 @@ export function mountPhylaxHostedChannelRoutes(
         400,
       );
     }
-    const code = challengeCode(
+    const code = hostedChannelChallengeCode(
       input.env.ZENOD_CHANNELS_PRIVATE_TOKEN ?? "",
       tenantId,
       operationId,
       identity,
     );
-    const result = await executeOnce(
+    const result = await executeHostedChannelMutation(
       input.audit,
       {
         operationId,
@@ -1094,7 +1099,7 @@ export function mountPhylaxHostedChannelRoutes(
           return {
             status: 200,
             body: {
-              channels: channelView(
+              channels: hostedChannelView(
                 tenantId,
                 input.settings,
                 input.runtime,

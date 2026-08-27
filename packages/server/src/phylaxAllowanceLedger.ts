@@ -362,6 +362,15 @@ export class PhylaxAllowanceLedger {
     }
   }
 
+  /** Non-secret optimistic revision for tenant-scoped management mutations. */
+  revision(tenantIdInput: string): string {
+    const tenantId = required(tenantIdInput, "tenantId");
+    const row = this.db.prepare(
+      "SELECT COALESCE(MAX(sequence), 0) AS sequence FROM phylax_allowance_entries WHERE tenant_id=?",
+    ).get(tenantId) as { sequence: number | bigint };
+    return String(row.sequence);
+  }
+
   private period(tenantId: string, periodId: string): PeriodRow | null {
     return this.db.prepare(
       "SELECT * FROM phylax_allowance_periods WHERE tenant_id=? AND period_id=?",

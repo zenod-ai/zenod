@@ -25,6 +25,12 @@ import {
   HostedChannelMutationAuditStore,
   mountPhylaxHostedChannelRoutes,
 } from "./hostedChannels.js";
+import { PhylaxAllowanceLedger } from "./phylaxAllowanceLedger.js";
+import {
+  PHYLAX_MANAGEMENT_PROFILES,
+  PHYLAX_MANAGEMENT_TOOL_NAMES,
+  registerPhylaxManagementTools,
+} from "./phylaxManagementMcp.js";
 import {
   createPhylaxArtifactCapabilityUrl,
   phylaxArtifactCapabilitySecret,
@@ -133,6 +139,9 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     ringTicketUrl: env.PHYLAX_RING_TICKET_URL?.trim() || PHYLAX_DEFAULT_RING_TICKET_URL,
   });
   const hostedChannelAudit = new HostedChannelMutationAuditStore(storage.dataDir);
+  const allowanceLedger = new PhylaxAllowanceLedger(
+    join(storage.dataDir, "phylax-allowance.sqlite"),
+  );
   const artifactCapabilitySecret = phylaxArtifactCapabilitySecret(env);
   const captureJournalPath = join(storage.dataDir, "phylax-capture-jobs.sqlite");
   const captureTickets = new RingCaptureTicketProducer(
@@ -211,7 +220,19 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     name: "phylax",
     version: VERSION,
     conduct: {
-      toolKinds: { read: ["channel_status", "get_recent_conversation_transcript"] },
+      toolKinds: {
+        read: [
+          "channel_status",
+          "get_recent_conversation_transcript",
+          "phylax_management_v1_capabilities",
+          "phylax_management_v1_channel_status",
+          "phylax_management_v1_credit_query",
+        ],
+      },
+    },
+    toolProfiles: {
+      [PHYLAX_MANAGEMENT_PROFILES[instance.commercialOwner]]:
+        PHYLAX_MANAGEMENT_TOOL_NAMES,
     },
     tenantAuth: { store: tenantStore },
     oauth: {
@@ -236,6 +257,13 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       panels: ["mcp", "transcription", "connections"],
     },
     tools(server, context) {
+      registerPhylaxManagementTools(server, context, {
+        settings: tenantSettings,
+        runtime,
+        audit: hostedChannelAudit,
+        ledger: allowanceLedger,
+        challengeSecret: artifactCapabilitySecret,
+      });
       registerTenantChannelTools(server, context, runtime, tenantSettings);
       options.registerAdditionalTools?.(server, context);
     },
@@ -557,6 +585,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     phylaxTenantSettings: tenantSettings,
     phylaxInstance: instance,
     hostedChannelAudit,
+    phylaxAllowanceLedger: allowanceLedger,
     ringCaptureTickets: captureTickets,
     async close() {
       const failures: unknown[] = [];
@@ -567,7 +596,16 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       ])) {
         if (result.status === "rejected") failures.push(result.reason);
       }
-      hostedChannelAudit.close();
+      for (const close of [
+        () => hostedChannelAudit.close(),
+        () => allowanceLedger.close(),
+      ]) {
+        try {
+          close();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
       if ("close" in tenantStore && typeof tenantStore.close === "function") {
         try {
           tenantStore.close();
