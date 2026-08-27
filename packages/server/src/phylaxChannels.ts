@@ -126,6 +126,11 @@ export interface PhylaxDownstreamCall {
   route: PhylaxTenantRoute;
   tool: string;
   arguments: Record<string, unknown>;
+  /**
+   * Canonical core-to-adapter input. It is present for every inbound product
+   * turn and absent only on the mechanical `get_task_result` follow-up poll.
+   */
+  transportEnvelope?: PhylaxTransportEnvelopeV1;
   handoff: {
     sender: string;
     text_transcript?: string;
@@ -138,6 +143,72 @@ export interface PhylaxDownstreamCall {
     transcription_timing?: { queue_wait_ms?: number | null; runtime_ms?: number | null };
     reply_context?: { evidenceRef: string };
   };
+}
+
+export const PHYLAX_TRANSPORT_PROTOCOL = "phylax.transport";
+export const PHYLAX_TRANSPORT_VERSION = "1.0";
+
+/**
+ * Product-neutral channel turn handed to a fixed product adapter.
+ *
+ * Phylax owns every field in this envelope. The injected adapter may choose a
+ * downstream tool and argument shape, but it cannot replace the tenant route,
+ * credentials, transport journal, or delivery runtime.
+ */
+export interface PhylaxTransportEnvelopeV1 {
+  protocol: typeof PHYLAX_TRANSPORT_PROTOCOL;
+  version: typeof PHYLAX_TRANSPORT_VERSION;
+  tenantId: string;
+  channel: PhylaxPortedChannel;
+  providerMessageId: string;
+  providerMessageIdSource: "provider" | "compatibility_fallback";
+  idempotencyKey: string;
+  sender: string;
+  chatId: string;
+  conversationKey: string;
+  senderTimestamp: string;
+  replyToProviderMessageId: string | null;
+  content: {
+    text: string | null;
+    mediaType: "audio" | "screenshot" | "image" | "pdf" | "document" | "link" | null;
+    artifact: {
+      ref: string;
+      mimeType: string | null;
+      fileName: string | null;
+    } | null;
+    transcription: {
+      text: string | null;
+      provider: string | null;
+      durationSeconds: number | null;
+      durationSecondsReported: boolean;
+      timing: {
+        queueWaitMs?: number | null;
+        runtimeMs?: number | null;
+      } | null;
+      disposition: "provided" | "archive_only" | "unavailable" | "not_applicable";
+      failure: { code: string; message: string } | null;
+    };
+    replyContext: { evidenceRef: string } | null;
+  };
+}
+
+export interface PhylaxFixedProductAdapter {
+  /** The deployment mode that is allowed to inject this adapter. */
+  mode: "zenod" | "pm";
+  /** Stable non-secret implementation identity for audit and tests. */
+  adapterId: string;
+  createCall(envelope: Readonly<PhylaxTransportEnvelopeV1>): {
+    tool: string;
+    arguments: Record<string, unknown>;
+  };
+}
+
+export interface PhylaxTransportTerminalReceiptV1 {
+  protocol: typeof PHYLAX_TRANSPORT_PROTOCOL;
+  version: typeof PHYLAX_TRANSPORT_VERSION;
+  kind: string;
+  status: "completed";
+  receipt_id: string;
 }
 
 export type PhylaxDownstreamCaller = (call: PhylaxDownstreamCall) => Promise<PeerToolResult>;
@@ -243,7 +314,7 @@ function downstreamAudit(result: PeerToolResult): {
 
 function safeTypedReceipt(receipt: Record<string, unknown>): Record<string, unknown> {
   const safe: Record<string, unknown> = {};
-  for (const key of ["id", "kind", "status", "code", "mailbox_id", "receipt_id"] as const) {
+  for (const key of ["protocol", "version", "id", "kind", "status", "code", "mailbox_id", "receipt_id"] as const) {
     const value = receipt[key];
     if (typeof value === "number" || typeof value === "boolean") safe[key] = value;
     if (
@@ -259,6 +330,33 @@ function safeTypedReceipt(receipt: Record<string, unknown>): Record<string, unkn
       .map((item) => safeTypedReceipt(item));
   }
   return safe;
+}
+
+function terminalTransportReceipt(result: PeerToolResult): PhylaxTransportTerminalReceiptV1 | null {
+  const structured = objectValue(result.structuredContent);
+  const typedResult = objectValue(structured?.result);
+  const receipt = objectValue(structured?.receipt) ?? objectValue(typedResult?.receipt) ?? typedResult;
+  if (!receipt) return null;
+  const kind = typeof receipt.kind === "string" ? receipt.kind.trim() : "";
+  const receiptId = typeof receipt.receipt_id === "string" ? receipt.receipt_id.trim() : "";
+  if (
+    receipt.protocol !== PHYLAX_TRANSPORT_PROTOCOL
+    || receipt.version !== PHYLAX_TRANSPORT_VERSION
+    || receipt.status !== "completed"
+    || !kind
+    || !receiptId
+    || /:\/\//.test(kind)
+    || /:\/\//.test(receiptId)
+    || /\b(?:bearer|authorization|api[_-]?key|token)\b/i.test(kind)
+    || /\b(?:bearer|authorization|api[_-]?key|token)\b/i.test(receiptId)
+  ) return null;
+  return {
+    protocol: PHYLAX_TRANSPORT_PROTOCOL,
+    version: PHYLAX_TRANSPORT_VERSION,
+    kind,
+    status: "completed",
+    receipt_id: receiptId,
+  };
 }
 
 function safeDownstreamDestination(route: PhylaxTenantRoute): string {
@@ -680,6 +778,25 @@ function captureTurnType(input: PhylaxChannelInbound): PhylaxTurnType {
 
 type PhylaxIngestMediaType = "audio" | "screenshot" | "image" | "pdf" | "document" | "link";
 
+type PhylaxCompatibilityBindingInput = {
+  transcript: string;
+  sender: string;
+  chatId: string;
+  message: string;
+  surface: "whatsapp" | "mcp";
+  conversationKey: string;
+  artifactUrl?: string;
+  mediaType?: PhylaxIngestMediaType;
+  filename?: string;
+  channel: PhylaxPortedChannel;
+  providerMessageId?: string;
+  senderTimestamp?: string;
+  transcriptionText: string;
+  transcriptionProvider: string;
+  audioDurationSeconds: number | null;
+  transcriptionDisposition: "provided" | "skip_duration_limit" | "skip_unavailable";
+};
+
 function ingestMediaTypeFromHandoff(
   handoff: PhylaxDownstreamCall["handoff"],
 ): PhylaxIngestMediaType | undefined {
@@ -703,26 +820,89 @@ function ingestMediaTypeFromHandoff(
   return "document";
 }
 
+/** Preserve the existing Zenod/standalone peer arguments as a projection of the shared envelope. */
+function compatibilityBindingInput(
+  envelope: Readonly<PhylaxTransportEnvelopeV1>,
+): PhylaxCompatibilityBindingInput {
+  const handoff: PhylaxDownstreamCall["handoff"] = {
+    sender: envelope.sender,
+    ...(envelope.content.transcription.text
+      ? { text_transcript: envelope.content.transcription.text }
+      : {}),
+    ...(envelope.content.artifact
+      ? {
+          artifact_ref: envelope.content.artifact.ref,
+          ...(envelope.content.artifact.mimeType
+            ? { artifact_mime_type: envelope.content.artifact.mimeType }
+            : {}),
+          ...(envelope.content.artifact.fileName
+            ? { artifact_file_name: envelope.content.artifact.fileName }
+            : {}),
+        }
+      : {}),
+    ...(envelope.content.transcription.failure
+      ? { transcription_failed: envelope.content.transcription.failure }
+      : {}),
+    ...(envelope.content.transcription.provider
+      ? { transcription_source: envelope.content.transcription.provider }
+      : {}),
+    ...(envelope.content.transcription.durationSeconds !== null
+      && envelope.content.transcription.durationSecondsReported
+      ? { duration_seconds: envelope.content.transcription.durationSeconds }
+      : envelope.content.transcription.durationSecondsReported
+        ? { duration_seconds: null }
+      : {}),
+    ...(envelope.content.transcription.timing
+      ? {
+          transcription_timing: {
+            ...(envelope.content.transcription.timing.queueWaitMs !== undefined
+              ? { queue_wait_ms: envelope.content.transcription.timing.queueWaitMs }
+              : {}),
+            ...(envelope.content.transcription.timing.runtimeMs !== undefined
+              ? { runtime_ms: envelope.content.transcription.timing.runtimeMs }
+              : {}),
+          },
+        }
+      : {}),
+    ...(envelope.content.replyContext
+      ? { reply_context: envelope.content.replyContext }
+      : {}),
+  };
+  const message = handoffEnvelope(
+    handoff,
+    envelope.content.text || "A channel artifact was received.",
+  );
+  const replyEvidenceRef = envelope.content.replyContext?.evidenceRef ?? null;
+  return {
+    transcript: replyEvidenceRef ? message : (envelope.content.text ?? ""),
+    sender: envelope.sender,
+    chatId: envelope.chatId,
+    message,
+    surface: envelope.channel === "whatsapp" ? "whatsapp" : "mcp",
+    conversationKey: envelope.conversationKey,
+    ...(envelope.content.artifact ? { artifactUrl: envelope.content.artifact.ref } : {}),
+    ...(envelope.content.artifact?.fileName ? { filename: envelope.content.artifact.fileName } : {}),
+    ...(envelope.content.mediaType ? { mediaType: envelope.content.mediaType } : {}),
+    channel: envelope.channel,
+    ...(envelope.providerMessageIdSource === "provider"
+      ? { providerMessageId: envelope.providerMessageId }
+      : {}),
+    senderTimestamp: envelope.senderTimestamp,
+    transcriptionText: envelope.content.transcription.text ?? "",
+    transcriptionProvider: envelope.content.transcription.provider?.trim()
+      || "Phylax channel transcription",
+    audioDurationSeconds: envelope.content.transcription.durationSeconds,
+    transcriptionDisposition: envelope.content.transcription.disposition === "archive_only"
+      ? "skip_duration_limit"
+      : envelope.content.transcription.disposition === "unavailable"
+        ? "skip_unavailable"
+        : "provided",
+  };
+}
+
 function valueFromBindingSource(
   source: PhylaxBindingArgumentSource,
-  input: {
-    transcript: string;
-    sender: string;
-    chatId: string;
-    message: string;
-    surface: "whatsapp" | "mcp";
-    conversationKey: string;
-    artifactUrl?: string;
-    mediaType?: PhylaxIngestMediaType;
-    filename?: string;
-    channel: PhylaxPortedChannel;
-    providerMessageId?: string;
-    senderTimestamp?: string;
-    transcriptionText: string;
-    transcriptionProvider: string;
-    audioDurationSeconds: number | null;
-    transcriptionDisposition: "provided" | "skip_duration_limit" | "skip_unavailable";
-  },
+  input: PhylaxCompatibilityBindingInput,
 ): unknown {
   switch (source.source) {
     case "transcript": return input.transcript;
@@ -881,6 +1061,8 @@ export class PhylaxChannelsOrgan {
       ) => PhylaxUsageClaim;
       completeTranscriptionUsage?: (claim: PhylaxUsageClaim, succeeded: boolean) => void;
       maintainTranscriptionUsage?: (claim: PhylaxUsageClaim) => () => void;
+      /** Server-only fixed-product injection; absent PM adapters fail closed. */
+      fixedProductAdapter?: PhylaxFixedProductAdapter;
     },
   ) {
     this.captureJournal = new PhylaxCaptureJournal(options.dataDir);
@@ -1492,43 +1674,107 @@ export class PhylaxChannelsOrgan {
           artifact_ref: artifact?.sha256 ? `sha256:${artifact.sha256}` : "transport-artifact",
         }
       : handoff;
-    const message = handoffEnvelope(handoff, text || "A channel artifact was received.");
-    const surface: "whatsapp" | "mcp" = input.channel === "whatsapp" ? "whatsapp" : "mcp";
+    const providerMessageId = input.messageId?.trim();
+    const envelopeProviderMessageId = providerMessageId ?? `compat_${createHash("sha256")
+      .update(JSON.stringify([
+        route.tenantId,
+        input.channel,
+        sender,
+        input.chatId,
+        input.replyToMessageId?.trim() || null,
+        text || null,
+        handoff.artifact_ref ?? null,
+      ]))
+      .digest("hex")}`;
+    const senderTimestamp = input.senderTimestamp ?? new Date().toISOString();
+    const ingestMediaType = ingestMediaTypeFromHandoff(handoff);
+    const transportEnvelope: PhylaxTransportEnvelopeV1 = {
+      protocol: PHYLAX_TRANSPORT_PROTOCOL,
+      version: PHYLAX_TRANSPORT_VERSION,
+      tenantId: route.tenantId,
+      channel: input.channel,
+      providerMessageId: envelopeProviderMessageId,
+      providerMessageIdSource: providerMessageId ? "provider" : "compatibility_fallback",
+      idempotencyKey: `${route.tenantId}:${input.channel}:${envelopeProviderMessageId}`,
+      sender,
+      chatId: input.chatId,
+      conversationKey,
+      senderTimestamp,
+      replyToProviderMessageId: input.replyToMessageId?.trim() || null,
+      content: {
+        text: text || null,
+        mediaType: ingestMediaType ?? null,
+        artifact: handoff.artifact_ref
+          ? {
+              ref: handoff.artifact_ref,
+              mimeType: handoff.artifact_mime_type ?? null,
+              fileName: handoff.artifact_file_name ?? null,
+            }
+          : null,
+        transcription: {
+          text: handoff.text_transcript ?? null,
+          provider: handoff.transcription_source ?? null,
+          durationSeconds: handoff.duration_seconds ?? null,
+          durationSecondsReported: handoff.duration_seconds !== undefined,
+          timing: handoff.transcription_timing
+            ? {
+                ...(handoff.transcription_timing.queue_wait_ms !== undefined
+                  ? { queueWaitMs: handoff.transcription_timing.queue_wait_ms }
+                  : {}),
+                ...(handoff.transcription_timing.runtime_ms !== undefined
+                  ? { runtimeMs: handoff.transcription_timing.runtime_ms }
+                  : {}),
+              }
+            : null,
+          disposition: handoff.transcription_failed?.code === "duration_limit"
+            ? "archive_only"
+            : handoff.transcription_failed
+              ? "unavailable"
+              : turnType === "voice_note"
+                ? "provided"
+                : "not_applicable",
+          failure: handoff.transcription_failed ?? null,
+        },
+        replyContext: handoff.reply_context ?? null,
+      },
+    };
+    const bindingInput = compatibilityBindingInput(transportEnvelope);
+    const message = bindingInput.message;
+    const surface = bindingInput.surface;
     const binding = replyEvidenceRef
       ? route.turnBindings?.text
       : route.turnBindings?.[turnType];
-    const ingestMediaType = ingestMediaTypeFromHandoff(handoff);
-    const bindingInput = {
-      // A tenant may map its Ring text field from either `message` or
-      // `transcript`. Both must carry the structural evidence ref for a known
-      // receipt reply; the raw transcript remains available in `handoff`.
-      transcript: replyEvidenceRef ? message : text,
-      sender,
-      chatId: input.chatId,
-      message,
-      surface,
-      conversationKey,
-      ...(handoff.artifact_ref ? { artifactUrl: handoff.artifact_ref } : {}),
-      ...(handoff.artifact_file_name ? { filename: handoff.artifact_file_name } : {}),
-      ...(ingestMediaType ? { mediaType: ingestMediaType } : {}),
-      channel: input.channel,
-      ...(input.messageId ? { providerMessageId: input.messageId } : {}),
-      senderTimestamp: input.senderTimestamp ?? new Date().toISOString(),
-      transcriptionText: handoff.text_transcript ?? "",
-      transcriptionProvider: handoff.transcription_source?.trim() || "Phylax channel transcription",
-      audioDurationSeconds: handoff.duration_seconds ?? null,
-      transcriptionDisposition: handoff.transcription_failed?.code === "duration_limit"
-        ? "skip_duration_limit" as const
-        : handoff.transcription_failed
-          ? "skip_unavailable" as const
-        : "provided" as const,
-    };
+    const fixedAdapter = this.options.fixedProductAdapter;
+    let fixedAdapterCall: ReturnType<PhylaxFixedProductAdapter["createCall"]> | null = null;
+    if (fixedAdapter) {
+      if (!providerMessageId) {
+        throw new PhylaxChannelError(
+          "invalid_input",
+          "Zenod could not establish a safe delivery identity for that message. Please try again.",
+        );
+      }
+      fixedAdapterCall = fixedAdapter.createCall(transportEnvelope);
+      if (!fixedAdapterCall.tool.trim()) {
+        throw new PhylaxChannelError(
+          "invalid_input",
+          "Zenod could not process that message because the channel configuration needs attention.",
+        );
+      }
+    }
     // ZPF-8 freezes one configured downstream per tenant. Legacy bindings may
     // still name historical tools such as `chat_with_ring`, but the tool is
     // discovered and called only on the tenant's single downstream adapter.
     // Preserved assistant credentials are rollback data, never a second route.
     const selectedRoute = route;
-    const call: PhylaxDownstreamCall = binding
+    const call: PhylaxDownstreamCall = fixedAdapterCall
+      ? {
+          route: selectedRoute,
+          tool: fixedAdapterCall.tool.trim(),
+          arguments: fixedAdapterCall.arguments,
+          transportEnvelope,
+          handoff,
+        }
+      : binding
       ? {
           route: selectedRoute,
           tool: binding.tool,
@@ -1544,15 +1790,16 @@ export class PhylaxChannelsOrgan {
               return [[field, value]];
             }),
           ),
+          transportEnvelope,
           handoff,
         }
       : {
           route: selectedRoute,
           tool: "chat_with_zenod",
           arguments: { message, surface, conversationKey },
+          transportEnvelope,
           handoff,
         };
-    const providerMessageId = input.messageId?.trim();
     if ((call.tool === "store_memory" || call.tool === "ingest_memory") && !providerMessageId) {
       throw new PhylaxChannelError(
         "invalid_input",
@@ -1605,7 +1852,7 @@ export class PhylaxChannelsOrgan {
     let durableChat = false;
     let durableCall = false;
     try {
-      if (binding) {
+      if (binding || fixedAdapterCall) {
         try {
           const validation = await this.validateBoundCall(call);
           if (call.tool === "chat_with_zenod" && providerMessageId && validation.supportsIdempotencyKey) {
@@ -1755,6 +2002,14 @@ export class PhylaxChannelsOrgan {
         "Zenod could not process that message. Please try again.",
         failureAudit(downstreamMs, failureCode, audit),
         durableCall && providerMessageId ? "idempotent_capture" : null,
+      );
+    }
+    if (fixedAdapterCall && !terminalTransportReceipt(downstream)) {
+      throw new PhylaxChannelError(
+        "downstream_error",
+        "Zenod could not process that message. Please try again.",
+        failureAudit(downstreamMs, "downstream_schema_drift", audit),
+        providerMessageId ? "idempotent_capture" : null,
       );
     }
     const replyText = sanitizePhylaxCustomerReply(textFromResult(downstream));
