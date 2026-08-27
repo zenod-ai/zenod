@@ -109,6 +109,8 @@ export interface PhylaxPaidWork {
   state: PhylaxPaidWorkState;
   pauseReason: "insufficient_allowance" | "suspended" | "period_inactive" | null;
   leaseOwner: string | null;
+  /** Opaque claim generation. Completion must present this exact token. */
+  leaseToken: string | null;
   leaseUntil: number | null;
   usageEntrySequence: number | null;
   createdAt: number;
@@ -162,7 +164,10 @@ interface PaidWorkRow {
   state: PhylaxPaidWorkState;
   pause_reason: PhylaxPaidWork["pauseReason"];
   lease_owner: string | null;
+  lease_token: string | null;
   lease_until: number | null;
+  completed_lease_owner: string | null;
+  completed_lease_token: string | null;
   usage_entry_sequence: number | null;
   created_at: number;
   updated_at: number;
@@ -244,6 +249,7 @@ function paidWork(row: PaidWorkRow): PhylaxPaidWork {
     state: row.state,
     pauseReason: row.pause_reason,
     leaseOwner: row.lease_owner,
+    leaseToken: row.lease_token,
     leaseUntil: row.lease_until,
     usageEntrySequence: row.usage_entry_sequence,
     createdAt: row.created_at,
@@ -318,7 +324,10 @@ export class PhylaxAllowanceLedger {
         state TEXT NOT NULL,
         pause_reason TEXT,
         lease_owner TEXT,
+        lease_token TEXT,
         lease_until INTEGER,
+        completed_lease_owner TEXT,
+        completed_lease_token TEXT,
         usage_entry_sequence INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -328,6 +337,13 @@ export class PhylaxAllowanceLedger {
       CREATE INDEX IF NOT EXISTS phylax_paid_work_queue
         ON phylax_paid_work (tenant_id, state, created_at);
     `);
+    const paidWorkColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(phylax_paid_work)").all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name),
+    );
+    for (const column of ["lease_token", "completed_lease_owner", "completed_lease_token"]) {
+      if (!paidWorkColumns.has(column)) this.db.exec(`ALTER TABLE phylax_paid_work ADD COLUMN ${column} TEXT`);
+    }
   }
 
   private transaction<T>(run: () => T): T {
@@ -644,7 +660,7 @@ export class PhylaxAllowanceLedger {
         this.db.prepare(
           `UPDATE phylax_paid_work
            SET state='paused', pause_reason='suspended', reserved_units=0,
-               lease_owner=NULL, lease_until=NULL, updated_at=?
+               lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
            WHERE tenant_id=? AND state IN ('captured', 'ready')`,
         ).run(this.now(), normalized.tenantId);
       }
@@ -694,12 +710,10 @@ export class PhylaxAllowanceLedger {
     ).all(now) as unknown as PeriodRow[];
     let inserted = 0;
     for (const period of periods) {
-      const idempotencyKey = `system:expiry:${period.period_id}`;
-      if (this.entryByIdempotency(period.tenant_id, idempotencyKey)) continue;
       this.db.prepare(
         `UPDATE phylax_paid_work
          SET state='paused', pause_reason='period_inactive', reserved_units=0,
-             lease_owner=NULL, lease_until=NULL, updated_at=?
+             lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
          WHERE tenant_id=? AND period_id=? AND state IN ('captured', 'ready')`,
       ).run(now, period.tenant_id, period.period_id);
       const processing = this.db.prepare(
@@ -708,6 +722,13 @@ export class PhylaxAllowanceLedger {
          WHERE tenant_id=? AND period_id=? AND state='processing'`,
       ).get(period.tenant_id, period.period_id) as unknown as { units: number };
       const reclaimable = Math.max(0, this.periodBalance(period.tenant_id, period.period_id) - Number(processing.units));
+      if (reclaimable === 0) continue;
+      const anchor = this.db.prepare(
+        `SELECT COALESCE(MAX(sequence), 0) AS sequence
+         FROM phylax_allowance_entries WHERE tenant_id=? AND period_id=?`,
+      ).get(period.tenant_id, period.period_id) as unknown as { sequence: number };
+      const idempotencyKey = `system:expiry:${period.period_id}:through:${Number(anchor.sequence)}`;
+      if (this.entryByIdempotency(period.tenant_id, idempotencyKey)) continue;
       const hash = payloadHash({
         tenantId: period.tenant_id,
         periodId: period.period_id,
@@ -818,8 +839,8 @@ export class PhylaxAllowanceLedger {
       periodId,
       grantedUnits: rows.filter((row) => row.kind === "grant").reduce((sum, row) => sum + row.amount_units, 0),
       adjustedUnits: rows.filter((row) => row.kind === "adjustment").reduce((sum, row) => sum + row.amount_units, 0),
-      expiredUnits: -rows.filter((row) => row.kind === "expiry").reduce((sum, row) => sum + row.amount_units, 0),
-      usedUnits: -rows.filter((row) => row.kind === "usage").reduce((sum, row) => sum + row.amount_units, 0),
+      expiredUnits: Math.max(0, -rows.filter((row) => row.kind === "expiry").reduce((sum, row) => sum + row.amount_units, 0)),
+      usedUnits: Math.max(0, -rows.filter((row) => row.kind === "usage").reduce((sum, row) => sum + row.amount_units, 0)),
       byUsage: usageRows.map((row) => ({
         operation: row.operation,
         provider: row.provider,
@@ -932,7 +953,7 @@ export class PhylaxAllowanceLedger {
     this.db.prepare(
       `UPDATE phylax_paid_work
        SET state=?, pause_reason=?, reserved_units=?, lease_owner=NULL,
-           lease_until=NULL, updated_at=? WHERE id=?`,
+           lease_token=NULL, lease_until=NULL, updated_at=? WHERE id=?`,
     ).run(state, pauseReason, state === "ready" ? current.estimated_units : 0, now, id);
     return this.work(id)!;
   }
@@ -961,22 +982,33 @@ export class PhylaxAllowanceLedger {
     const now = timestamp(at, "at");
     const lease = units(leaseMs, "leaseMs", { positive: true });
     return this.transaction(() => {
-      this.db.prepare(
-        `UPDATE phylax_paid_work
-         SET state='ready', lease_owner=NULL, lease_until=NULL, updated_at=?
-         WHERE tenant_id=? AND state='processing' AND lease_until <= ?`,
-      ).run(now, tenantId, now);
+      const expired = this.db.prepare(
+        `SELECT id FROM phylax_paid_work
+         WHERE tenant_id=? AND state='processing' AND lease_until <= ?
+         ORDER BY created_at, id`,
+      ).all(tenantId, now) as unknown as Array<{ id: string }>;
+      for (const item of expired) {
+        const released = this.db.prepare(
+          `UPDATE phylax_paid_work
+           SET state='captured', pause_reason=NULL, reserved_units=0,
+               lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=?
+           WHERE id=? AND state='processing' AND lease_until <= ?`,
+        ).run(now, item.id, now);
+        if (Number(released.changes) === 1) this.evaluateWork(item.id, now);
+      }
+      this.reconcileExpiredPeriodsInTransaction(now);
       const candidate = this.db.prepare(
         `SELECT * FROM phylax_paid_work
          WHERE tenant_id=? AND state='ready'
          ORDER BY created_at, id LIMIT 1`,
       ).get(tenantId) as unknown as PaidWorkRow | undefined;
       if (!candidate) return null;
+      const leaseToken = randomUUID();
       const result = this.db.prepare(
         `UPDATE phylax_paid_work
-         SET state='processing', lease_owner=?, lease_until=?, updated_at=?
+         SET state='processing', lease_owner=?, lease_token=?, lease_until=?, updated_at=?
          WHERE id=? AND state='ready'`,
-      ).run(workerId, now + lease, now, candidate.id);
+      ).run(workerId, leaseToken, now + lease, now, candidate.id);
       return Number(result.changes) === 1 ? paidWork(this.work(candidate.id)!) : null;
     });
   }
@@ -984,6 +1016,8 @@ export class PhylaxAllowanceLedger {
   completePaidWork(input: {
     workId: string;
     tenantId: string;
+    leaseOwner: string;
+    leaseToken: string;
     amountUnits: number;
     providerEventId: string;
     provider: string;
@@ -1002,6 +1036,9 @@ export class PhylaxAllowanceLedger {
       if (current.provider_event_id !== required(input.providerEventId, "providerEventId")) {
         throw new PhylaxLedgerConflictError("paid work provider event does not match usage event");
       }
+      const leaseOwner = required(input.leaseOwner, "leaseOwner");
+      const leaseToken = required(input.leaseToken, "leaseToken");
+      const completedAt = timestamp(this.now(), "completedAt");
       const normalized = {
         tenantId,
         periodId: current.period_id,
@@ -1017,6 +1054,23 @@ export class PhylaxAllowanceLedger {
         occurredAt: timestamp(input.occurredAt ?? this.now(), "occurredAt"),
       };
       const hash = payloadHash({ ...normalized, amountUnits: -normalized.amountUnits, idempotencyKey: undefined, occurredAt: undefined });
+      if (current.state === "done") {
+        if (current.completed_lease_owner !== leaseOwner || current.completed_lease_token !== leaseToken) {
+          throw new PhylaxLedgerConflictError("paid work completion lease does not match the completed claim");
+        }
+        const usage = this.recordUsageInTransaction(normalized, hash);
+        if (current.usage_entry_sequence !== usage.entry.sequence) {
+          throw new PhylaxLedgerConflictError("paid work already completed with a different usage entry");
+        }
+        return { work: paidWork(current), usage };
+      }
+      if (current.state !== "processing") throw new Error("paid work is not actively leased for completion");
+      if (current.lease_owner !== leaseOwner || current.lease_token !== leaseToken) {
+        throw new PhylaxLedgerConflictError("paid work completion lease does not match the active claim");
+      }
+      if (current.lease_until === null || current.lease_until <= completedAt) {
+        throw new Error("paid work lease expired before completion");
+      }
       const usage = this.recordUsageInTransaction(normalized, hash);
       if (current.usage_entry_sequence !== null && current.usage_entry_sequence !== usage.entry.sequence) {
         throw new PhylaxLedgerConflictError("paid work already completed with a different usage entry");
@@ -1024,10 +1078,25 @@ export class PhylaxAllowanceLedger {
       this.db.prepare(
         `UPDATE phylax_paid_work
          SET state='done', pause_reason=NULL, reserved_units=0,
-             lease_owner=NULL, lease_until=NULL, usage_entry_sequence=?, updated_at=?
-         WHERE id=?`,
-      ).run(usage.entry.sequence, this.now(), current.id);
-      return { work: paidWork(this.work(current.id)!), usage };
+             lease_owner=NULL, lease_token=NULL, lease_until=NULL,
+             completed_lease_owner=?, completed_lease_token=?,
+             usage_entry_sequence=?, updated_at=?
+         WHERE id=? AND state='processing' AND lease_owner=? AND lease_token=? AND lease_until > ?`,
+      ).run(
+        leaseOwner,
+        leaseToken,
+        usage.entry.sequence,
+        completedAt,
+        current.id,
+        leaseOwner,
+        leaseToken,
+        completedAt,
+      );
+      const completed = this.work(current.id)!;
+      if (completed.state !== "done" || completed.usage_entry_sequence !== usage.entry.sequence) {
+        throw new Error("paid work lease changed before completion");
+      }
+      return { work: paidWork(completed), usage };
     });
   }
 

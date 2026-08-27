@@ -275,9 +275,26 @@ describe("PhylaxAllowanceLedger", () => {
     now += 1_001;
     const reclaimed = restarted.claimNextPaidWork("alpha", "worker-b", 1_000, now)!;
     expect(reclaimed).toMatchObject({ id: claimed.id, state: "processing", leaseOwner: "worker-b" });
+    expect(reclaimed.leaseToken).not.toBe(claimed.leaseToken);
+    expect(() => restarted.completePaidWork({
+      workId: claimed.id,
+      tenantId: "alpha",
+      leaseOwner: claimed.leaseOwner!,
+      leaseToken: claimed.leaseToken!,
+      amountUnits: 110,
+      providerEventId: "wamid.voice-1",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "estimated",
+      idempotencyKey: "usage:voice-1",
+      tariffVersion: "stt-2026-08",
+      auditReason: "completed transcription",
+    })).toThrow(PhylaxLedgerConflictError);
     const completed = restarted.completePaidWork({
       workId: reclaimed.id,
       tenantId: "alpha",
+      leaseOwner: reclaimed.leaseOwner!,
+      leaseToken: reclaimed.leaseToken!,
       amountUnits: 110,
       providerEventId: "wamid.voice-1",
       provider: "openrouter",
@@ -289,9 +306,14 @@ describe("PhylaxAllowanceLedger", () => {
     });
     expect(completed.work).toMatchObject({ state: "done", reservedUnits: 0 });
     expect(completed.usage.replayed).toBe(false);
-    expect(restarted.completePaidWork({
+    restarted.close();
+
+    const afterCompletionRestart = new PhylaxAllowanceLedger(path, () => now);
+    expect(afterCompletionRestart.completePaidWork({
       workId: reclaimed.id,
       tenantId: "alpha",
+      leaseOwner: reclaimed.leaseOwner!,
+      leaseToken: reclaimed.leaseToken!,
       amountUnits: 110,
       providerEventId: "wamid.voice-1",
       provider: "openrouter",
@@ -301,13 +323,219 @@ describe("PhylaxAllowanceLedger", () => {
       tariffVersion: "stt-2026-08",
       auditReason: "completed transcription",
     }).usage).toMatchObject({ replayed: true, entry: { sequence: completed.usage.entry.sequence } });
-    expect(restarted.customerProjection("alpha")).toMatchObject({
+    expect(afterCompletionRestart.customerProjection("alpha")).toMatchObject({
       usedUnits: 110,
       reservedUnits: 0,
       remainingUnits: 90,
     });
-    expect(restarted.pendingWork("alpha")).toEqual([]);
+    expect(afterCompletionRestart.pendingWork("alpha")).toEqual([]);
+    afterCompletionRestart.close();
+  });
+
+  it("re-evaluates an expired restart lease against suspension before another claim", async () => {
+    let now = AUGUST_START + 1;
+    const { store: first, path } = await ledger("restart-suspend", () => now);
+    grant(first, "alpha", 500);
+    first.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "suspended-work",
+      providerEventId: "suspended-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/suspended",
+      estimatedUnits: 200,
+    });
+    const claimed = first.claimNextPaidWork("alpha", "worker-a", 1_000, now)!;
+    first.close();
+
+    const restarted = new PhylaxAllowanceLedger(path, () => now);
+    restarted.suspendTenant({
+      tenantId: "alpha",
+      source: "zenod",
+      idempotencyKey: "suspend-during-restart",
+      auditReason: "subscription suspended during worker restart",
+    });
+    now += 1_001;
+    expect(restarted.claimNextPaidWork("alpha", "worker-b", 1_000, now)).toBeNull();
+    expect(restarted.pendingWork("alpha")).toEqual([
+      expect.objectContaining({
+        id: claimed.id,
+        state: "paused",
+        pauseReason: "suspended",
+        reservedUnits: 0,
+        leaseOwner: null,
+        leaseToken: null,
+        custodyRef: "artifact://alpha/suspended",
+      }),
+    ]);
+    expect(restarted.operatorProjection("alpha", "2026-08").usedUnits).toBe(0);
     restarted.close();
+  });
+
+  it("re-evaluates an expired lease against period expiry and expires its released reservation", async () => {
+    let now = AUGUST_START + 1;
+    const { store } = await ledger("lease-period-expiry", () => now);
+    grant(store, "alpha", 500);
+    store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "period-work",
+      providerEventId: "period-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/period",
+      estimatedUnits: 200,
+    });
+    const claimed = store.claimNextPaidWork(
+      "alpha",
+      "worker-a",
+      SEPTEMBER_START - now + 1_000,
+      now,
+    )!;
+    now = SEPTEMBER_START;
+    expect(store.reconcileExpiredPeriods(now)).toBe(1);
+    expect(store.operatorProjection("alpha", "2026-08").expiredUnits).toBe(300);
+    now += 1_001;
+
+    expect(store.claimNextPaidWork("alpha", "worker-b", 1_000, now)).toBeNull();
+    expect(store.pendingWork("alpha")).toEqual([
+      expect.objectContaining({
+        id: claimed.id,
+        state: "paused",
+        pauseReason: "period_inactive",
+        reservedUnits: 0,
+        leaseOwner: null,
+        leaseToken: null,
+      }),
+    ]);
+    expect(store.operatorProjection("alpha", "2026-08")).toMatchObject({
+      grantedUnits: 500,
+      usedUnits: 0,
+      expiredUnits: 500,
+    });
+    store.close();
+  });
+
+  it("re-evaluates an expired lease against the remaining allowance cap", async () => {
+    let now = AUGUST_START + 1;
+    const { store } = await ledger("lease-cap", () => now);
+    grant(store, "alpha", 200);
+    store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "cap-work",
+      providerEventId: "cap-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/cap",
+      estimatedUnits: 120,
+    });
+    const claimed = store.claimNextPaidWork("alpha", "worker-a", 1_000, now)!;
+    store.recordUsage({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      amountUnits: 100,
+      providerEventId: "delivery-before-recovery",
+      operation: "whatsapp.delivery",
+      provider: "whatsapp",
+      costBasis: "actual",
+      idempotencyKey: "usage-before-recovery",
+      tariffVersion: "delivery-v1",
+      auditReason: "other paid work consumed the remaining cap",
+    });
+    now += 1_001;
+
+    expect(store.claimNextPaidWork("alpha", "worker-b", 1_000, now)).toBeNull();
+    expect(store.pendingWork("alpha")).toEqual([
+      expect.objectContaining({
+        id: claimed.id,
+        state: "paused",
+        pauseReason: "insufficient_allowance",
+        reservedUnits: 0,
+        leaseOwner: null,
+        leaseToken: null,
+        custodyRef: "artifact://alpha/cap",
+      }),
+    ]);
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(100);
+    store.close();
+  });
+
+  it("rejects paused and stale claim completions while allowing only the current token and its exact replay", async () => {
+    let now = AUGUST_START + 1;
+    const { store } = await ledger("completion-fence", () => now);
+    grant(store, "alpha", 100);
+    const paused = store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "paused-completion",
+      providerEventId: "paused-completion-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/paused-completion",
+      estimatedUnits: 120,
+    }).work;
+    const completion = {
+      workId: paused.id,
+      tenantId: "alpha",
+      leaseOwner: "worker-a",
+      leaseToken: "not-a-valid-claim",
+      amountUnits: 90,
+      providerEventId: "paused-completion-provider",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual" as const,
+      idempotencyKey: "paused-completion-usage",
+      tariffVersion: "stt-v1",
+      auditReason: "completion fencing regression",
+    };
+    expect(() => store.completePaidWork(completion)).toThrow("not actively leased");
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(0);
+
+    store.adjustAllowance({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      amountUnits: 100,
+      source: "zenod",
+      idempotencyKey: "completion-top-up",
+      tariffVersion: "phylax-2026-08",
+      auditReason: "make the captured work claimable",
+    });
+    expect(store.resumePaused("alpha", now)).toBe(1);
+    const firstClaim = store.claimNextPaidWork("alpha", "shared-worker", 1_000, now)!;
+    now += 1_001;
+    const staleCompletion = {
+      ...completion,
+      leaseOwner: firstClaim.leaseOwner!,
+      leaseToken: firstClaim.leaseToken!,
+    };
+    expect(() => store.completePaidWork(staleCompletion)).toThrow("lease expired");
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(0);
+    const reassigned = store.claimNextPaidWork("alpha", "shared-worker", 1_000, now)!;
+    expect(reassigned.leaseToken).not.toBe(firstClaim.leaseToken);
+
+    expect(() => store.completePaidWork(staleCompletion)).toThrow(PhylaxLedgerConflictError);
+    expect(() => store.completePaidWork({
+      ...completion,
+      leaseOwner: "different-worker",
+      leaseToken: reassigned.leaseToken!,
+    })).toThrow(PhylaxLedgerConflictError);
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(0);
+
+    const currentCompletion = {
+      ...completion,
+      leaseOwner: reassigned.leaseOwner!,
+      leaseToken: reassigned.leaseToken!,
+    };
+    const completed = store.completePaidWork(currentCompletion);
+    expect(completed).toMatchObject({
+      work: { state: "done", leaseOwner: null, leaseToken: null },
+      usage: { replayed: false },
+    });
+    expect(store.completePaidWork(currentCompletion).usage).toMatchObject({
+      replayed: true,
+      entry: { sequence: completed.usage.entry.sequence },
+    });
+    expect(() => store.completePaidWork(staleCompletion)).toThrow(PhylaxLedgerConflictError);
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(90);
+    store.close();
   });
 
   it("makes suspension tenant-scoped and append-only without discarding pending custody", async () => {
