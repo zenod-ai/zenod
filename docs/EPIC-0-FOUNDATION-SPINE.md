@@ -2,13 +2,13 @@
 
 Status: active
 Created: 2026-07-09
-Updated: 2026-08-26
+Updated: 2026-08-27
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `ba5e9c1` plus current Foundation and Zenod Alpha spine working tree
+Last reconciled commit: `a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2` plus the ZAL-22 production receipt
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -84,12 +84,12 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Final public-offer polish and closed production-candidate preparation
-Last verified: 2026-08-26 CEST
+Phase: Signup-closed Zenod production candidate awaiting final founder voice acceptance
+Last verified: 2026-08-27 CEST
 Integration target: `main`
-Fresh base commit: `fb184d0713db00dd72d9e5191b345eadcb0e8448` on `main`; [ZAL-19 #1092](https://github.com/zenod-ai/zenod/issues/1092) is integrated, [ZAL-20 #1094](https://github.com/zenod-ai/zenod/issues/1094) removes restricted full-Drive OAuth, and [ZAL-21 #1095](https://github.com/zenod-ai/zenod/issues/1095) hardens the two-volume backup verifier
-Next action: independently review and integrate ZAL-20 and ZAL-21, then publish their combined main as the one final immutable image. Refresh ZAL-4 for that digest, take verified encrypted two-volume backups, deploy with signup closed, and run the live release-candidate acceptance before handing Jordi the final test.
-Blockers: GitHub Actions reports a major outage; no digest may be inferred, so a locally proved/pushed image path may be required after the two final source tickets integrate. The live €9 Stripe price and dedicated Channels secret now exist; encrypted off-host backup storage is configured. A Zenod-owned Google OAuth client, Stripe profile correction, exact Dokploy delta, backups, closed deployment, and live acceptance remain. Public signup stays closed until Jordi's final experiential test and separate opening decision.
+Fresh base commit: `a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2` on `main`, deployed to public Zenod and private Phylax as OCI index `sha256:9308e5e2319567958380c1e329afab22532be54ec9fff8dddeabea2b3ed4227a`
+Next action: Jordi sends three overlapping voice notes through the existing verified WhatsApp session and confirms one Drive-aware Saved receipt per note with no duplicate, unknown-outcome reply, reauthentication, or re-pair. The delivery manager records that result, then closes the bounded Phylax allowance/customer-usage truth before the live-card and public-signup gates.
+Blockers: source/CI/publish, restored encrypted two-volume backups, signup-closed two-service deploy, existing direct MCP, signed Channels, tenant Google Drive, €9 public offer, and fresh logs are green. Public signup remains closed on the founder voice test, Phylax-owned metering/allowance presentation, Stripe business-profile verification, one approved live €9 billing journey, and final explicit signup approval.
 
 ## Bootstrap Map
 
@@ -167,12 +167,14 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | 2026-08-20 | Treat priced usage economics as a prerequisite to the Zenod Alpha offer decision. | A monthly or annual price is incomplete until included workload, limit behavior, cost exposure, BYOK treatment, and break-even margins are explicit. | [ZAL-3E #1069](https://github.com/zenod-ai/zenod/issues/1069) and the active child spine |
 | 2026-08-25 | Approve one Zenod Hosted plan at €9/month plus VAT with managed usage and WhatsApp included. | The simplest sellable product is Zenod itself across MCP, Telegram, and Hosted WhatsApp; provider economics and the hidden Phylax service remain operator concerns. | Binding child-spine product decision and `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/ui-contract.html` |
 | 2026-08-26 | Do not deploy the locally proved candidate until its legacy €5/month and €50/year contract is corrected. | Read-only preflight showed code/product/legal/readiness drift despite the functional candidate passing local acceptance. A code-only correction is safer than deploying twice or misrepresenting the approved offer. | [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061), [PR #1089](https://github.com/zenod-ai/zenod/pull/1089), and [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) |
+| 2026-08-27 | Lock Zenod/PM plus Phylax as integrated UX over independent services. | Product backends own customer identity, subscription and memory; Phylax independently owns WhatsApp/Telegram transport, raw staging, STT, delivery and its own cost ledger. A narrow tenant-scoped control/data seam lets one browser experience manage both without moving credentials or sessions. Standalone Phylax reuses the same core with a different allowance issuer. | `docs/EPIC-P-PHYLAX-SPRINT.md` and `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` |
+| 2026-08-27 | Treat tenant credentials and direct MCP tokens as durable data, never deployment state. | Code/image/config rollout must not rotate, migrate, reinterpret or replace customer tokens, Google credentials or channel sessions. The ZAL-22 rollout preserved them and proved the pre-existing direct MCP URL and Google/WhatsApp connections after both restarts. | [PR #1098](https://github.com/zenod-ai/zenod/pull/1098) and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md` |
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | running / final candidate preparation | ZAL-20 and ZAL-21, final immutable image, exact production inputs, backups, closed deploy and acceptance | [ZAL-20 #1094](https://github.com/zenod-ai/zenod/issues/1094); [ZAL-21 #1095](https://github.com/zenod-ai/zenod/issues/1095) | `fb184d0` | Child DoD covers readiness truth, recap regression, the approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | ZAL-19 is reviewed/integrated; least-privilege Hosted Drive and image-safe backup verifier tickets are running; €9 price, Channels secret and encrypted backup remote are prepared. | 2026-08-26 CEST | Integrate the two remaining source tickets, publish their combined image, refresh #1061, then execute the closed-candidate sequence through final Jordi test. |
+| `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Epic worker | Zenod Alpha delivery manager | Deliver trustworthy Zenod alpha | running / ready for founder voice test | final experiential voice acceptance, Phylax allowance truth, Stripe profile/live billing and signup gate | [ZAL-22 #1099](https://github.com/zenod-ai/zenod/issues/1099); merged [PR #1101](https://github.com/zenod-ai/zenod/pull/1101) | `a6fbe8f` | Child DoD covers readiness truth, recap regression, approved one-plan offer, fail-closed production gate, stranger acceptance, promotion draft, and resumable state. | Exact OCI `9308e5e...` deployed 1/1 to both services; two restored encrypted backups, old MCP, signed Channels, tenant Drive, €9 site and clean logs pass. Signup remains closed. | 2026-08-27 CEST | Jordi runs three overlapping voice notes; then finish Phylax customer-usage truth and the separate Stripe/public gates. |
 | draft | Planner | Epic 0 Foundation planner | Create Foundation Epic GitHub issues | ready | - | - | `8658d72` | Issues exist for rollout work and link back to this spine. | This spine created 2026-07-09. | 2026-07-09 19:55 CEST | Create GitHub issues and update this row. |
 | draft | Epic worker | unassigned | Apply EpicSpine to one real child epic | ready | Foundation issues created | - | `8658d72` | One child epic has explicit authority, stewardship, issue ledger, and handoff journal aligned to the skill. | Candidate child spines listed above. | 2026-07-09 19:55 CEST | Choose child epic and dispatch worker. |
 | draft | Tester | unassigned | Validate bootstrap from a cold start | ready | Child epic applied | - | `8658d72` | Fresh agent can read the target spine and report authority, current state, active issues, blockers, and next action without chat history. | Skill validator passes. | 2026-07-09 19:55 CEST | Run cold-start test after child epic update. |
@@ -251,6 +253,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-08-27 - Epic 0 worker - Zenod signup-closed production candidate ready for founder voice acceptance
+
+Action: reconciled the integrated-but-independent Phylax decision, merged and published the final ZAL-22 correction, verified fresh restored/encrypted backups for both production volumes, and deployed exact OCI index `9308e5e...` to public Zenod first and private Phylax second. Existing direct MCP, signed Channels, tenant Drive, €9 site/Terms, exact health SHA and fresh logs pass. No customer token, Google credential, channel session or volume changed.
+
+Evidence: merged [PR #1101](https://github.com/zenod-ai/zenod/pull/1101), CI `33033764333`, publish `33033978660`, and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md`.
+
+Next action: Jordi runs three overlapping voice notes against the existing WhatsApp/Drive/MCP tenant. Then the alpha child closes the bounded Phylax allowance/customer-usage truth and the separate Stripe profile/live-card/public-signup gates. Public signup remains `0`.
+
+Assignment identity: Epic 0 Foundation planner and Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
+
+Branch / latest commit: production `main` `a6fbe8f`; receipt branch `codex/zal22-production-receipt`
+
+Last verified: 2026-08-27 CEST
 
 ### 2026-08-26 - Epic 0 worker - Candidate publication blocked by GitHub Actions outage
 

@@ -24,9 +24,11 @@ PUBLIC_SERVICE="zenod-mt-fxpzoo"
 PRIVATE_SERVICE="app-index-back-end-panel-6zm3qg"
 PUBLIC_VOLUME="zenod-mt-data"
 PRIVATE_VOLUME="phylax-data"
-IMAGE_INDEX="sha256:9ab0e06e259f7afc17035dc37e15c0d7828fdfb919336761a871bc4e430bd505"
+PREVIOUS_IMAGE_INDEX="sha256:9ab0e06e259f7afc17035dc37e15c0d7828fdfb919336761a871bc4e430bd505"
+IMAGE_INDEX="sha256:9308e5e2319567958380c1e329afab22532be54ec9fff8dddeabea2b3ed4227a"
 IMAGE="ghcr.io/zenod-ai/zenod@${IMAGE_INDEX}"
-SOURCE_SHA="8cdf049188b713449f5ed71bb9ee9ca2ab1dfee1"
+PREVIOUS_IMAGE="ghcr.io/zenod-ai/zenod@${PREVIOUS_IMAGE_INDEX}"
+SOURCE_SHA="a6fbe8f1b385608bf00a5e1a5e5c385305eba7a2"
 PRICE_MONTHLY="price_1U8jip80yG7aohEW6tZnFgZq"
 CHANNELS_ORIGIN="http://${PRIVATE_SERVICE}:8080"
 CHANNELS_MEMORY_URL="http://${PUBLIC_SERVICE}:8080/mcp"
@@ -146,9 +148,12 @@ main() {
   assert_app "$public" "$PUBLIC_APP" "$PUBLIC_NAME" "$PUBLIC_VOLUME"
   assert_app "$private" "$PRIVATE_APP" "$PRIVATE_NAME" "$PRIVATE_VOLUME"
 
-  [[ "$(jq -r '.dockerImage' <<<"$public")" == "$IMAGE" ]] || die "public image is not the reviewed candidate index"
+  case "$(jq -r '.dockerImage' <<<"$public")" in
+    "$IMAGE"|"$PREVIOUS_IMAGE") ;;
+    *) die "public image is neither the reviewed predecessor nor candidate index" ;;
+  esac
   case "$(jq -r '.dockerImage' <<<"$private")" in
-    "$IMAGE"|ghcr.io/zenod-ai/zenod@sha256:72216fc70124accf1d96e9c047688cd3593aeeb96adeb35908173e16c70cb19e) ;;
+    "$IMAGE"|"$PREVIOUS_IMAGE") ;;
     *) die "private image drift" ;;
   esac
   [[ "$(env_value "$public" ZENOD_PUBLIC_PAID_SIGNUP)" == "0" ]] || die "public signup must remain closed"
