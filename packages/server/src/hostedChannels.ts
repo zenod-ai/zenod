@@ -98,9 +98,13 @@ export interface HostedChannelErrorResponse {
       | "not_connected"
       | "operation_conflict"
       | "operation_in_progress"
+      | "operation_outcome_unknown"
       | "channels_unavailable";
     message: string;
-    retryDisposition?: "retry_same_operation" | "retry_new_operation";
+    retryDisposition?:
+      | "retry_same_operation"
+      | "retry_new_operation"
+      | "do_not_retry";
   };
   mutation?: HostedChannelMutationOutcome;
 }
@@ -115,7 +119,9 @@ export interface HostedChannelMutationAudit {
 
 interface OperationRow {
   operation_id: string;
+  request_operation_id: string | null;
   tenant_id: string;
+  authority_scope: string | null;
   operation: HostedChannelMutationName;
   request_hash: string | null;
   target_hash: string | null;
@@ -126,19 +132,29 @@ interface OperationRow {
   error_code: string | null;
   http_status: number | null;
   result_json: string | null;
+  claim_executor_id: string | null;
+  claim_expires_at: number | null;
   created_at: number;
 }
 type ClaimedOperation =
   | { kind: "claimed" }
   | { kind: "pending" }
+  | { kind: "orphaned" }
   | { kind: "conflict" }
   | { kind: "replay"; status: number; body: unknown };
 
 /** Durable operation claim, terminal replay, and secret-free mutation audit. */
 export class HostedChannelMutationAuditStore {
   private readonly db: DatabaseSync;
+  private readonly executorId: string;
+  private readonly claimLeaseMs: number;
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    options: { executorId?: string; claimLeaseMs?: number } = {},
+  ) {
+    this.executorId = options.executorId ?? randomUUID();
+    this.claimLeaseMs = Math.max(0, options.claimLeaseMs ?? 5_000);
     mkdirSync(dataDir, { recursive: true });
     this.db = new DatabaseSync(
       join(dataDir, "hosted-channel-mutations.sqlite"),
@@ -148,7 +164,9 @@ export class HostedChannelMutationAuditStore {
       PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS hosted_channel_mutations (
         operation_id TEXT PRIMARY KEY,
+        request_operation_id TEXT,
         tenant_id TEXT NOT NULL,
+        authority_scope TEXT,
         operation TEXT NOT NULL,
         request_hash TEXT,
         target_hash TEXT,
@@ -159,6 +177,8 @@ export class HostedChannelMutationAuditStore {
         error_code TEXT,
         http_status INTEGER,
         result_json TEXT,
+        claim_executor_id TEXT,
+        claim_expires_at INTEGER,
         created_at INTEGER NOT NULL,
         completed_at INTEGER
       );
@@ -174,12 +194,16 @@ export class HostedChannelMutationAuditStore {
     );
     for (const [name, type] of [
       ["request_hash", "TEXT"],
+      ["request_operation_id", "TEXT"],
+      ["authority_scope", "TEXT"],
       ["target_hash", "TEXT"],
       ["claim_binding_revision", "TEXT"],
       ["terminal_binding_revision", "TEXT"],
       ["state", "TEXT"],
       ["http_status", "INTEGER"],
       ["result_json", "TEXT"],
+      ["claim_executor_id", "TEXT"],
+      ["claim_expires_at", "INTEGER"],
       ["completed_at", "INTEGER"],
     ] as const) {
       if (!columns.has(name))
@@ -190,11 +214,56 @@ export class HostedChannelMutationAuditStore {
     this.db.exec(
       "UPDATE hosted_channel_mutations SET state='terminal', completed_at=created_at WHERE state IS NULL",
     );
+    this.db.exec(`
+      UPDATE hosted_channel_mutations
+      SET request_operation_id=operation_id
+      WHERE request_operation_id IS NULL;
+      CREATE INDEX IF NOT EXISTS hosted_channel_mutations_scope_key
+        ON hosted_channel_mutations(tenant_id, authority_scope, request_operation_id);
+    `);
+  }
+
+  private storageOperationId(
+    tenantId: string,
+    authorityScope: string,
+    operationId: string,
+  ): string {
+    return `v2:${createHash("sha256")
+      .update(`${tenantId}\n${authorityScope}\n${operationId}`)
+      .digest("hex")}`;
+  }
+
+  private findRow(input: {
+    operationId: string;
+    tenantId: string;
+    authorityScope: string;
+  }): OperationRow | undefined {
+    const scoped = this.db
+      .prepare("SELECT * FROM hosted_channel_mutations WHERE operation_id=?")
+      .get(
+        this.storageOperationId(
+          input.tenantId,
+          input.authorityScope,
+          input.operationId,
+        ),
+      ) as OperationRow | undefined;
+    if (scoped) return scoped;
+    // Compatibility for rows written before operation ids were tenant-scoped.
+    // Only the original tenant/public route may adopt a legacy row.
+    if (input.authorityScope !== "tenant") return undefined;
+    return this.db
+      .prepare(
+        `SELECT * FROM hosted_channel_mutations
+         WHERE operation_id=? AND tenant_id=?
+           AND (authority_scope IS NULL OR authority_scope='tenant')`,
+      )
+      .get(input.operationId, input.tenantId) as OperationRow | undefined;
   }
 
   claim(input: {
     operationId: string;
     tenantId: string;
+    authorityScope: string;
     operation: HostedChannelMutationName;
     requestHash: string;
     targetHash: string;
@@ -203,19 +272,20 @@ export class HostedChannelMutationAuditStore {
   }): ClaimedOperation {
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const row = this.db
-        .prepare("SELECT * FROM hosted_channel_mutations WHERE operation_id=?")
-        .get(input.operationId) as OperationRow | undefined;
+      const row = this.findRow(input);
       if (row) {
-        this.db.exec("COMMIT");
         if (
           row.tenant_id !== input.tenantId ||
+          (row.authority_scope !== null &&
+            row.authority_scope !== input.authorityScope) ||
           row.operation !== input.operation ||
           row.request_hash !== input.requestHash
         ) {
+          this.db.exec("COMMIT");
           return { kind: "conflict" };
         }
         if (row.state === "terminal") {
+          this.db.exec("COMMIT");
           if (
             row.http_status &&
             row.result_json &&
@@ -230,26 +300,56 @@ export class HostedChannelMutationAuditStore {
           return { kind: "conflict" };
         }
         if (row.target_hash !== input.targetHash) {
+          this.db.exec("COMMIT");
           return { kind: "conflict" };
         }
-        return row.claim_binding_revision === input.bindingRevision
-          ? { kind: "pending" }
-          : { kind: "conflict" };
+        // A successful effect can change the binding revision before its
+        // terminal response is persisted. Request/target hashes still bind
+        // the claim; revision drift is resolved by restart reconciliation.
+        const orphaned =
+          row.claim_executor_id !== this.executorId &&
+          (row.claim_expires_at ?? 0) <= input.at;
+        if (orphaned) {
+          this.db
+            .prepare(
+              `UPDATE hosted_channel_mutations
+               SET claim_executor_id=?, claim_expires_at=?
+               WHERE operation_id=? AND state='claimed'`,
+            )
+            .run(
+              this.executorId,
+              input.at + this.claimLeaseMs,
+              row.operation_id,
+            );
+        }
+        this.db.exec("COMMIT");
+        return orphaned ? { kind: "orphaned" } : { kind: "pending" };
       }
+      const storageOperationId = this.storageOperationId(
+        input.tenantId,
+        input.authorityScope,
+        input.operationId,
+      );
       this.db
         .prepare(
           `INSERT INTO hosted_channel_mutations
-          (operation_id, tenant_id, operation, request_hash, target_hash,
-           claim_binding_revision, state, outcome, error_code, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'claimed', 'failed', NULL, ?)`,
+          (operation_id, request_operation_id, tenant_id, authority_scope,
+           operation, request_hash, target_hash, claim_binding_revision,
+           state, outcome, error_code, claim_executor_id, claim_expires_at,
+           created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'claimed', 'failed', NULL, ?, ?, ?)`,
         )
         .run(
+          storageOperationId,
           input.operationId,
           input.tenantId,
+          input.authorityScope,
           input.operation,
           input.requestHash,
           input.targetHash,
           input.bindingRevision,
+          this.executorId,
+          input.at + this.claimLeaseMs,
           input.at,
         );
       this.db.exec("COMMIT");
@@ -262,19 +362,23 @@ export class HostedChannelMutationAuditStore {
 
   terminal(input: {
     operationId: string;
+    tenantId: string;
+    authorityScope: string;
     outcome: HostedChannelMutationOutcome["outcome"];
     errorCode: string | null;
     status: number;
     body: unknown;
     bindingRevision: string;
     at: number;
-  }): void {
-    this.db
+  }): boolean {
+    const row = this.findRow(input);
+    if (!row) return false;
+    const updated = this.db
       .prepare(
         `UPDATE hosted_channel_mutations
        SET state='terminal', outcome=?, error_code=?, http_status=?, result_json=?,
            terminal_binding_revision=?, completed_at=?
-       WHERE operation_id=? AND state='claimed'`,
+       WHERE operation_id=? AND state='claimed' AND claim_executor_id=?`,
       )
       .run(
         input.outcome,
@@ -283,18 +387,50 @@ export class HostedChannelMutationAuditStore {
         JSON.stringify(input.body),
         input.bindingRevision,
         input.at,
-        input.operationId,
+        row.operation_id,
+        this.executorId,
       );
+    return Number(updated.changes) === 1;
   }
 
-  replay(operationId: string): { status: number; body: unknown } | null {
-    const row = this.db
+  /** Renew only a claim still fenced to this store instance. */
+  private renewClaim(input: {
+    operationId: string;
+    tenantId: string;
+    authorityScope: string;
+  }): void {
+    if (this.claimLeaseMs === 0) return;
+    const row = this.findRow(input);
+    if (!row) return;
+    this.db
       .prepare(
-        "SELECT http_status, result_json, state FROM hosted_channel_mutations WHERE operation_id=?",
+        `UPDATE hosted_channel_mutations SET claim_expires_at=?
+         WHERE operation_id=? AND state='claimed' AND claim_executor_id=?`,
       )
-      .get(operationId) as
-      | Pick<OperationRow, "http_status" | "result_json" | "state">
-      | undefined;
+      .run(Date.now() + this.claimLeaseMs, row.operation_id, this.executorId);
+  }
+
+  /** Keep a slow live effect fenced so a second process cannot seize it. */
+  keepClaimAlive(input: {
+    operationId: string;
+    tenantId: string;
+    authorityScope: string;
+  }): () => void {
+    if (this.claimLeaseMs === 0) return () => {};
+    const timer = setInterval(
+      () => this.renewClaim(input),
+      Math.max(10, Math.floor(this.claimLeaseMs / 3)),
+    );
+    timer.unref();
+    return () => clearInterval(timer);
+  }
+
+  replay(input: {
+    operationId: string;
+    tenantId: string;
+    authorityScope: string;
+  }): { status: number; body: unknown } | null {
+    const row = this.findRow(input);
     if (row?.state !== "terminal" || !row.http_status || !row.result_json)
       return null;
     return {
@@ -307,12 +443,14 @@ export class HostedChannelMutationAuditStore {
     this.db
       .prepare(
         `INSERT INTO hosted_channel_mutations
-        (operation_id, tenant_id, operation, request_hash, state, outcome, error_code,
-         http_status, result_json, created_at, completed_at)
-       VALUES (?, ?, ?, '', 'terminal', ?, ?, 200, '{}', ?, ?)
+        (operation_id, request_operation_id, tenant_id, authority_scope,
+         operation, request_hash, state, outcome, error_code, http_status,
+         result_json, created_at, completed_at)
+       VALUES (?, ?, ?, 'tenant', ?, '', 'terminal', ?, ?, 200, '{}', ?, ?)
        ON CONFLICT(operation_id) DO NOTHING`,
       )
       .run(
+        this.storageOperationId(input.tenantId, "tenant", input.operationId),
         input.operationId,
         input.tenantId,
         input.operation,
@@ -347,7 +485,8 @@ export class HostedChannelMutationAuditStore {
   recent(tenantId: string, limit = 20): HostedChannelMutationAudit[] {
     const rows = this.db
       .prepare(
-        `SELECT operation_id, tenant_id, operation, outcome, error_code, created_at
+        `SELECT COALESCE(request_operation_id, operation_id) AS operation_id,
+                tenant_id, operation, outcome, error_code, created_at
        FROM hosted_channel_mutations WHERE tenant_id=? AND state='terminal'
        ORDER BY created_at DESC LIMIT ?`,
       )
@@ -534,7 +673,9 @@ function failure(
       code,
       message,
       retryDisposition:
-        code === "operation_in_progress"
+        code === "operation_outcome_unknown"
+          ? "do_not_retry"
+          : code === "operation_in_progress"
           ? "retry_same_operation"
           : "retry_new_operation",
     },
@@ -544,10 +685,14 @@ function failure(
 
 async function waitForTerminal(
   store: HostedChannelMutationAuditStore,
-  operationId: string,
+  input: {
+    operationId: string;
+    tenantId: string;
+    authorityScope: string;
+  },
 ) {
   for (let attempt = 0; attempt < 160; attempt += 1) {
-    const replay = store.replay(operationId);
+    const replay = store.replay(input);
     if (replay) return replay;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -559,21 +704,39 @@ export async function executeHostedChannelMutation(
   input: {
     operationId: string;
     tenantId: string;
+    /** A backend owner/profile scope. Public tenant routes use the default. */
+    authorityScope?: string;
     operation: HostedChannelMutationName;
     requestBody: Record<string, unknown>;
     target: string | null;
     bindingRevision: () => string;
     deriveChallenge?: () => string;
+    /**
+     * Restart-only reconciliation. Return an exact terminal response when the
+     * side effect is observable, `not_applied` only when it is safe to execute
+     * once, or `unknown` when repeating could duplicate an external effect.
+     */
+    recoverOrphaned?: () =>
+      | Promise<
+          | { state: "applied"; result: { status: number; body: unknown } }
+          | { state: "not_applied" }
+          | { state: "unknown" }
+        >
+      | { state: "applied"; result: { status: number; body: unknown } }
+      | { state: "not_applied" }
+      | { state: "unknown" };
   },
   effect: () =>
     | Promise<{ status: number; body: unknown }>
     | { status: number; body: unknown },
 ): Promise<{ status: number; body: unknown }> {
   const at = Date.now();
+  const authorityScope = input.authorityScope ?? "tenant";
   const claimRevision = input.bindingRevision();
   const claim = store.claim({
     operationId: input.operationId,
     tenantId: input.tenantId,
+    authorityScope,
     operation: input.operation,
     requestHash: requestHash(input.operation, input.requestBody),
     targetHash: targetDigest(input.target),
@@ -600,7 +763,9 @@ export async function executeHostedChannelMutation(
       },
     };
   };
-  if (claim.kind === "replay") return rehydrate(claim);
+  if (claim.kind === "replay") {
+    return rehydrate({ status: claim.status, body: claim.body });
+  }
   if (claim.kind === "conflict") {
     return {
       status: 409,
@@ -615,7 +780,11 @@ export async function executeHostedChannelMutation(
     };
   }
   if (claim.kind === "pending") {
-    const replay = await waitForTerminal(store, input.operationId);
+    const replay = await waitForTerminal(store, {
+      operationId: input.operationId,
+      tenantId: input.tenantId,
+      authorityScope,
+    });
     return replay
       ? rehydrate(replay)
       : {
@@ -630,45 +799,107 @@ export async function executeHostedChannelMutation(
           ),
         };
   }
-  let result: { status: number; body: unknown };
-  try {
-    result = await effect();
-  } catch {
-    result = {
-      status: 503,
-      body: failure(
-        input.operationId,
-        input.operation,
-        "channels_unavailable",
-        "This channel action is temporarily unavailable. Try again shortly.",
-        "failed",
-      ),
-    };
-  }
-  const response = result.body as {
-    mutation?: HostedChannelMutationOutcome;
-    error?: { code?: string };
-  };
-  const storedBody =
-    input.deriveChallenge && result.body && typeof result.body === "object"
-      ? {
-          ...(result.body as Record<string, unknown>),
-          challenge: {
-            ...((result.body as { challenge?: object }).challenge ?? {}),
-            code: "__derived__",
-          },
-        }
-      : result.body;
-  store.terminal({
+  const stopLease = store.keepClaimAlive({
     operationId: input.operationId,
-    outcome: response.mutation?.outcome ?? "failed",
-    errorCode: response.error?.code ?? null,
-    status: result.status,
-    body: storedBody,
-    bindingRevision: input.bindingRevision(),
-    at: response.mutation?.at ?? Date.now(),
+    tenantId: input.tenantId,
+    authorityScope,
   });
-  return result;
+  try {
+    let recoveredResult: { status: number; body: unknown } | null = null;
+    if (claim.kind === "orphaned") {
+      let recovery:
+        | { state: "applied"; result: { status: number; body: unknown } }
+        | { state: "not_applied" }
+        | { state: "unknown" };
+      try {
+        recovery = input.recoverOrphaned
+          ? await input.recoverOrphaned()
+          : { state: "unknown" };
+      } catch {
+        recovery = { state: "unknown" };
+      }
+      if (recovery.state === "applied") {
+        recoveredResult = recovery.result;
+      } else if (recovery.state === "unknown") {
+        recoveredResult = {
+          status: 409,
+          body: failure(
+            input.operationId,
+            input.operation,
+            "operation_outcome_unknown",
+            "The previous attempt may have completed. It will not be retried because that could perform the action twice.",
+            "failed",
+            at,
+          ),
+        };
+      }
+    }
+    let result: { status: number; body: unknown };
+    if (recoveredResult) {
+      result = recoveredResult;
+    } else {
+      try {
+        result = await effect();
+      } catch {
+        result = {
+          status: 503,
+          body: failure(
+            input.operationId,
+            input.operation,
+            "channels_unavailable",
+            "This channel action is temporarily unavailable. Try again shortly.",
+            "failed",
+          ),
+        };
+      }
+    }
+    const response = result.body as {
+      mutation?: HostedChannelMutationOutcome;
+      error?: { code?: string };
+    };
+    const storedBody =
+      input.deriveChallenge && result.body && typeof result.body === "object"
+        ? {
+            ...(result.body as Record<string, unknown>),
+            challenge: {
+              ...((result.body as { challenge?: object }).challenge ?? {}),
+              code: "__derived__",
+            },
+          }
+        : result.body;
+    const terminalized = store.terminal({
+      operationId: input.operationId,
+      tenantId: input.tenantId,
+      authorityScope,
+      outcome: response.mutation?.outcome ?? "failed",
+      errorCode: response.error?.code ?? null,
+      status: result.status,
+      body: storedBody,
+      bindingRevision: input.bindingRevision(),
+      at: response.mutation?.at ?? Date.now(),
+    });
+    if (!terminalized) {
+      const fencedReplay = await waitForTerminal(store, {
+        operationId: input.operationId,
+        tenantId: input.tenantId,
+        authorityScope,
+      });
+      if (fencedReplay) return rehydrate(fencedReplay);
+      return {
+        status: 409,
+        body: failure(
+          input.operationId,
+          input.operation,
+          "operation_outcome_unknown",
+          "The action result could not be durably confirmed and will not be retried automatically.",
+          "failed",
+        ),
+      };
+    }
+    return result;
+  } finally {
+    stopLease();
+  }
 }
 
 export function mountPhylaxHostedChannelRoutes(
@@ -1302,6 +1533,8 @@ function publicErrorMessage(
       return "This request key was already used for a different action.";
     case "operation_in_progress":
       return "This channel action is still in progress. Retry with the same request key.";
+    case "operation_outcome_unknown":
+      return "The previous action may have completed and will not be retried automatically.";
     case "channels_unavailable":
       return "Channels are temporarily unavailable. Try again shortly.";
   }
@@ -1321,6 +1554,7 @@ function projectError(
     "not_connected",
     "operation_conflict",
     "operation_in_progress",
+    "operation_outcome_unknown",
     "channels_unavailable",
   ];
   if (
@@ -1333,9 +1567,12 @@ function projectError(
   const code = error.code as HostedChannelErrorResponse["error"]["code"];
   const retryDisposition =
     error.retryDisposition === "retry_same_operation" ||
-    error.retryDisposition === "retry_new_operation"
+    error.retryDisposition === "retry_new_operation" ||
+    error.retryDisposition === "do_not_retry"
       ? error.retryDisposition
-      : code === "operation_in_progress"
+      : code === "operation_outcome_unknown"
+        ? "do_not_retry"
+        : code === "operation_in_progress"
         ? "retry_same_operation"
         : "retry_new_operation";
   const mutation =

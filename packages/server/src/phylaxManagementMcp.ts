@@ -48,6 +48,10 @@ const OWNER_BY_PROFILE = Object.fromEntries(
   Object.entries(PHYLAX_MANAGEMENT_PROFILES).map(([owner, profile]) => [profile, owner]),
 ) as Record<string, PhylaxCommercialOwner>;
 
+function managementAuthorityScope(owner: PhylaxCommercialOwner): string {
+  return `management:${owner}`;
+}
+
 const operationId = z.string().trim().regex(/^[a-zA-Z0-9._:-]{8,160}$/);
 const revision = z.string().trim().regex(/^[a-zA-Z0-9._:-]{1,160}$/);
 const tenantReference = z.string().trim().regex(/^[a-zA-Z0-9._:-]{1,160}$/);
@@ -253,10 +257,43 @@ function registerEnsureTool(
         {
           operationId: input.operationId,
           tenantId,
+          authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { ...input },
           target: `${owner}:${input.externalTenantId}`,
           bindingRevision: () => dependencies.settings.get(tenantId).managementBindingRevision,
+          recoverOrphaned: () => {
+            const current = dependencies.settings.get(tenantId);
+            if (current.managementBindingRevision === input.expectedRevision) {
+              return { state: "not_applied" as const };
+            }
+            const credentials = dependencies.settings.downstreamCredentials(tenantId);
+            if (
+              current.commercialOwner !== owner ||
+              current.externalTenantId !== input.externalTenantId ||
+              credentials?.url !== new URL(input.downstreamUrl.trim()).toString() ||
+              credentials.token !== input.downstreamToken.trim()
+            ) {
+              return { state: "unknown" as const };
+            }
+            const at = Date.now();
+            return {
+              state: "applied" as const,
+              result: {
+                status: 200,
+                body: {
+                  binding: safeBinding(dependencies.settings, tenantId),
+                  replayed: true,
+                  mutation: {
+                    operationId: input.operationId,
+                    operation,
+                    outcome: "succeeded",
+                    at,
+                  } satisfies HostedChannelMutationOutcome,
+                },
+              },
+            };
+          },
         },
         () => {
           try {
@@ -335,11 +372,51 @@ function registerChannelMutationTools(
         {
           operationId: input.operationId,
           tenantId,
+          authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { channel: input.channel, identity, expectedRevision: input.expectedRevision },
           target: identity,
           bindingRevision: () => dependencies.settings.bindingRevision(tenantId, input.channel),
           deriveChallenge: () => code,
+          recoverOrphaned: () => {
+            const current = dependencies.settings.get(tenantId);
+            const currentRevision = dependencies.settings.bindingRevision(tenantId, input.channel);
+            if (currentRevision === input.expectedRevision) {
+              return { state: "not_applied" as const };
+            }
+            const applied = input.channel === "whatsapp"
+              ? current.phoneNumber === identity && !current.verified && Boolean(current.verificationExpiresAt)
+              : current.telegramPendingIdentity === identity && Boolean(current.telegramVerificationExpiresAt);
+            const sharedNumber = input.channel === "whatsapp"
+              ? dependencies.runtime.whatsapp.status().linkedNumber
+              : null;
+            if (!applied || (input.channel === "whatsapp" && !sharedNumber)) {
+              return { state: "unknown" as const };
+            }
+            const at = Date.now();
+            return {
+              state: "applied" as const,
+              result: {
+                status: 200,
+                body: {
+                  channels: hostedChannelView(tenantId, dependencies.settings, dependencies.runtime, at),
+                  challenge: {
+                    code,
+                    ...(sharedNumber ? { sharedNumber } : {}),
+                    expiresAt: input.channel === "whatsapp"
+                      ? current.verificationExpiresAt!
+                      : current.telegramVerificationExpiresAt!,
+                  },
+                  mutation: {
+                    operationId: input.operationId,
+                    operation,
+                    outcome: "succeeded",
+                    at,
+                  } satisfies HostedChannelMutationOutcome,
+                },
+              },
+            };
+          },
         },
         () => {
           const currentRevision = dependencies.settings.bindingRevision(tenantId, input.channel);
@@ -413,6 +490,7 @@ function registerChannelMutationTools(
         {
           operationId: input.operationId,
           tenantId,
+          authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { channel: input.channel, expectedRevision: input.expectedRevision },
           target: input.channel === "whatsapp"
@@ -431,12 +509,16 @@ function registerChannelMutationTools(
             : settings.telegramBinding;
           if (!recipient) return mutationFailure(input.operationId, operation, "not_connected", "Channel is not connected.");
           try {
-            await dependencies.runtime.delivery().send(input.channel, recipient, "Phylax channel test: this identity is connected.");
+            const receipt = await dependencies.runtime.delivery().send(
+              input.channel,
+              recipient,
+              "Phylax channel test: this identity is connected.",
+            );
             return {
               status: 200,
               body: {
                 channels: hostedChannelView(tenantId, dependencies.settings, dependencies.runtime, at),
-                receipt: { deliveredAt: at },
+                receipt,
                 mutation: { operationId: input.operationId, operation, outcome: "succeeded", at },
               },
             };
@@ -468,12 +550,40 @@ function registerChannelMutationTools(
         {
           operationId: input.operationId,
           tenantId,
+          authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { channel: input.channel, expectedRevision: input.expectedRevision },
           target: input.channel === "whatsapp"
             ? dependencies.settings.get(tenantId).phoneNumber
             : dependencies.settings.get(tenantId).telegramBinding,
           bindingRevision: () => dependencies.settings.bindingRevision(tenantId, input.channel),
+          recoverOrphaned: () => {
+            const current = dependencies.settings.get(tenantId);
+            const currentRevision = dependencies.settings.bindingRevision(tenantId, input.channel);
+            if (currentRevision === input.expectedRevision) {
+              return { state: "not_applied" as const };
+            }
+            const disconnected = input.channel === "whatsapp"
+              ? current.phoneNumber === null && !current.verified
+              : current.telegramBinding === null && current.telegramPendingIdentity === null;
+            if (!disconnected) return { state: "unknown" as const };
+            const at = Date.now();
+            return {
+              state: "applied" as const,
+              result: {
+                status: 200,
+                body: {
+                  channels: hostedChannelView(tenantId, dependencies.settings, dependencies.runtime, at),
+                  mutation: {
+                    operationId: input.operationId,
+                    operation,
+                    outcome: "succeeded",
+                    at,
+                  } satisfies HostedChannelMutationOutcome,
+                },
+              },
+            };
+          },
         },
         () => {
           if (dependencies.settings.bindingRevision(tenantId, input.channel) !== input.expectedRevision) {
@@ -550,10 +660,45 @@ function registerLedgerMutationTool(
         {
           operationId: args.operationId,
           tenantId,
+          authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { ...args },
           target: args.periodId,
           bindingRevision: () => dependencies.ledger.revision(tenantId),
+          recoverOrphaned: () => {
+            const existing = dependencies.ledger
+              .operatorProjection(tenantId, args.periodId)
+              .entries.find((entry) => entry.idempotencyKey === args.operationId);
+            if (!existing) {
+              return dependencies.ledger.revision(tenantId) === args.expectedRevision
+                ? { state: "not_applied" as const }
+                : { state: "unknown" as const };
+            }
+            if (
+              existing.kind !== (input.operation === "management.credit_grant" ? "grant" : "adjustment") ||
+              existing.amountUnits !== args.amountUnits ||
+              existing.source !== `commercial-owner:${owner}`
+            ) {
+              return { state: "unknown" as const };
+            }
+            return {
+              state: "applied" as const,
+              result: {
+                status: 200,
+                body: {
+                  revision: dependencies.ledger.revision(tenantId),
+                  replayed: true,
+                  allowance: dependencies.ledger.customerProjection(tenantId),
+                  mutation: {
+                    operationId: args.operationId,
+                    operation,
+                    outcome: "succeeded",
+                    at: existing.occurredAt,
+                  } satisfies HostedChannelMutationOutcome,
+                },
+              },
+            };
+          },
         },
         () => {
           if (dependencies.ledger.revision(tenantId) !== args.expectedRevision) {
@@ -638,10 +783,44 @@ function registerControlTool(
         {
           operationId: args.operationId,
           tenantId,
+          authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { ...args },
           target: tenantId,
           bindingRevision: () => dependencies.ledger.revision(tenantId),
+          recoverOrphaned: () => {
+            const existing = dependencies.ledger
+              .operatorProjection(tenantId)
+              .entries.find((entry) => entry.idempotencyKey === args.operationId);
+            if (!existing) {
+              return dependencies.ledger.revision(tenantId) === args.expectedRevision
+                ? { state: "not_applied" as const }
+                : { state: "unknown" as const };
+            }
+            if (
+              existing.kind !== kind ||
+              existing.source !== `commercial-owner:${owner}`
+            ) {
+              return { state: "unknown" as const };
+            }
+            return {
+              state: "applied" as const,
+              result: {
+                status: 200,
+                body: {
+                  revision: dependencies.ledger.revision(tenantId),
+                  replayed: true,
+                  allowance: dependencies.ledger.customerProjection(tenantId),
+                  mutation: {
+                    operationId: args.operationId,
+                    operation,
+                    outcome: "succeeded",
+                    at: existing.occurredAt,
+                  } satisfies HostedChannelMutationOutcome,
+                },
+              },
+            };
+          },
         },
         () => {
           if (dependencies.ledger.revision(tenantId) !== args.expectedRevision) {

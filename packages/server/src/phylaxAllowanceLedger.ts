@@ -789,53 +789,50 @@ export class PhylaxAllowanceLedger {
   customerProjection(tenantIdInput: string, at: number = this.now()): PhylaxCustomerMeteringProjection {
     const tenantId = required(tenantIdInput, "tenantId");
     const now = timestamp(at, "at");
-    return this.transaction(() => {
-      this.reconcileExpiredPeriodsInTransaction(now);
-      const period = this.db.prepare(
-        `SELECT * FROM phylax_allowance_periods
-         WHERE tenant_id=? AND starts_at <= ? AND ends_at > ?
-         ORDER BY ends_at, period_id LIMIT 1`,
-      ).get(tenantId, now, now) as unknown as PeriodRow | undefined;
-      if (!period) {
-        return {
-          tenantId,
-          periodId: null,
-          state: this.isSuspended(tenantId) ? "suspended" : "unavailable",
-          allocatedUnits: 0,
-          usedUnits: 0,
-          reservedUnits: 0,
-          remainingUnits: 0,
-          usageBasisPoints: 0,
-          resetsAt: null,
-        };
-      }
-      const totals = this.db.prepare(
-        `SELECT
-           COALESCE(SUM(CASE WHEN kind IN ('grant', 'adjustment', 'expiry') THEN amount_units ELSE 0 END), 0) AS allocated,
-           COALESCE(-SUM(CASE WHEN kind='usage' THEN amount_units ELSE 0 END), 0) AS used
-         FROM phylax_allowance_entries WHERE tenant_id=? AND period_id=?`,
-      ).get(tenantId, period.period_id) as unknown as { allocated: number; used: number };
-      const allocatedUnits = Number(totals.allocated);
-      const usedUnits = Number(totals.used);
-      const reservedUnits = this.reservedInPeriod(tenantId, period.period_id);
-      const remainingUnits = Math.max(0, allocatedUnits - usedUnits - reservedUnits);
-      const usageBasisPoints = allocatedUnits <= 0
-        ? (usedUnits > 0 ? 10_000 : 0)
-        : Math.min(10_000, Math.max(0, Math.round(usedUnits / allocatedUnits * 10_000)));
+    const period = this.db.prepare(
+      `SELECT * FROM phylax_allowance_periods
+       WHERE tenant_id=? AND starts_at <= ? AND ends_at > ?
+       ORDER BY ends_at, period_id LIMIT 1`,
+    ).get(tenantId, now, now) as unknown as PeriodRow | undefined;
+    if (!period) {
       return {
         tenantId,
-        periodId: period.period_id,
-        state: this.isSuspended(tenantId)
-          ? "suspended"
-          : remainingUnits <= 0 ? "paused" : "active",
-        allocatedUnits,
-        usedUnits,
-        reservedUnits,
-        remainingUnits,
-        usageBasisPoints,
-        resetsAt: period.ends_at,
+        periodId: null,
+        state: this.isSuspended(tenantId) ? "suspended" : "unavailable",
+        allocatedUnits: 0,
+        usedUnits: 0,
+        reservedUnits: 0,
+        remainingUnits: 0,
+        usageBasisPoints: 0,
+        resetsAt: null,
       };
-    });
+    }
+    const totals = this.db.prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN kind IN ('grant', 'adjustment', 'expiry') THEN amount_units ELSE 0 END), 0) AS allocated,
+         COALESCE(-SUM(CASE WHEN kind='usage' THEN amount_units ELSE 0 END), 0) AS used
+       FROM phylax_allowance_entries WHERE tenant_id=? AND period_id=?`,
+    ).get(tenantId, period.period_id) as unknown as { allocated: number; used: number };
+    const allocatedUnits = Number(totals.allocated);
+    const usedUnits = Number(totals.used);
+    const reservedUnits = this.reservedInPeriod(tenantId, period.period_id);
+    const remainingUnits = Math.max(0, allocatedUnits - usedUnits - reservedUnits);
+    const usageBasisPoints = allocatedUnits <= 0
+      ? (usedUnits > 0 ? 10_000 : 0)
+      : Math.min(10_000, Math.max(0, Math.round(usedUnits / allocatedUnits * 10_000)));
+    return {
+      tenantId,
+      periodId: period.period_id,
+      state: this.isSuspended(tenantId)
+        ? "suspended"
+        : remainingUnits <= 0 ? "paused" : "active",
+      allocatedUnits,
+      usedUnits,
+      reservedUnits,
+      remainingUnits,
+      usageBasisPoints,
+      resetsAt: period.ends_at,
+    };
   }
 
   operatorProjection(tenantIdInput: string, periodIdInput?: string): PhylaxOperatorLedgerProjection {

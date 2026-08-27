@@ -173,6 +173,51 @@ describe("PhylaxAllowanceLedger", () => {
     store.close();
   });
 
+  it("keeps customer credit reads non-mutating across an expired period and revision", async () => {
+    let now = AUGUST_START + 1;
+    const { store } = await ledger("read-only-expired-projection", () => now);
+    store.grantAllowance({
+      tenantId: "alpha",
+      periodId: "short-period",
+      startsAt: AUGUST_START,
+      endsAt: AUGUST_START + 2,
+      amountUnits: 100,
+      source: "zenod",
+      idempotencyKey: "grant:alpha:short-period",
+      tariffVersion: "phylax-2026-08",
+      auditReason: "short read-only projection regression period",
+    });
+    store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "short-period",
+      idempotencyKey: "short-period-work",
+      providerEventId: "short-period-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/short-period",
+      estimatedUnits: 40,
+    });
+    now = AUGUST_START + 2;
+    const revisionBeforeRead = store.revision("alpha");
+    const workBeforeRead = store.pendingWork("alpha");
+
+    expect(store.customerProjection("alpha", now)).toMatchObject({
+      tenantId: "alpha",
+      periodId: null,
+      state: "unavailable",
+    });
+    expect(store.revision("alpha")).toBe(revisionBeforeRead);
+    expect(store.operatorProjection("alpha", "short-period").expiredUnits).toBe(0);
+    expect(store.pendingWork("alpha")).toEqual(workBeforeRead);
+
+    expect(store.reconcileExpiredPeriods(now)).toBe(1);
+    expect(store.revision("alpha")).not.toBe(revisionBeforeRead);
+    expect(store.operatorProjection("alpha", "short-period").expiredUnits).toBe(100);
+    expect(store.pendingWork("alpha")).toEqual([
+      expect.objectContaining({ state: "paused", pauseReason: "period_inactive", reservedUnits: 0 }),
+    ]);
+    store.close();
+  });
+
   it("rejects direct usage before its allowance period starts", async () => {
     let now = AUGUST_START - 1;
     const { store } = await ledger("usage-pre-start", () => now);

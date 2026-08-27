@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -11,6 +12,7 @@ import {
   PHYLAX_MANAGEMENT_PROFILES,
   PHYLAX_MANAGEMENT_TOOL_NAMES,
 } from "../src/phylaxManagementMcp.js";
+import type { PhylaxInstanceMode } from "../src/phylaxInstance.js";
 import { createPhylaxUnit } from "../src/phylaxUnit.js";
 
 const dirs: string[] = [];
@@ -22,11 +24,21 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function startUnit(dataDir: string, tenants: SqliteTenantStore) {
+async function startUnit(
+  dataDir: string,
+  tenants: SqliteTenantStore,
+  mode: PhylaxInstanceMode = "standalone",
+) {
   const unit = createPhylaxUnit({
     dataDir,
     tenantStore: tenants,
-    env: { CHASSIS_VAULT_MASTER_KEY: MASTER_KEY },
+    env: {
+      CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      PHYLAX_PREWARM_LOCAL_MODEL: "0",
+      PHYLAX_INSTANCE_MODE: mode,
+      PHYLAX_INSTANCE_ID: `management-${mode}`,
+      PHYLAX_SERVICE_NUMBER_ID: `${mode}-management-test`,
+    },
   });
   const server = await new Promise<ServerType>((resolve) => {
     const active = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(active));
@@ -46,26 +58,37 @@ function structured(call: Awaited<ReturnType<Client["callTool"]>>) {
   return call.structuredContent as Record<string, any>;
 }
 
+function ensureServiceToken(
+  tenants: SqliteTenantStore,
+  tenantId: string,
+  profile: string,
+): string {
+  const token = `zenod_${createHash("sha256").update(`${tenantId}\0${profile}`).digest("hex").slice(0, 48)}`;
+  const ensured = tenants.ensureTenantToken(tenantId, profile, token);
+  expect(ensured?.outcome).toMatch(/created|replayed/);
+  return token;
+}
+
 describe("tenant-safe Phylax management MCP", () => {
   it("keeps browser, ordinary bearer, service profile and owner/admin authorities separate", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-management-authority-"));
     dirs.push(dataDir);
     const tenants = new SqliteTenantStore({ dataDir });
     const primary = tenants.provisionTenant({ tenant: { id: "alpha" } });
-    const service = tenants.provisionTenantToken("alpha", PHYLAX_MANAGEMENT_PROFILES.zenod)!;
-    const { unit, base } = await startUnit(dataDir, tenants);
+    const serviceToken = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.zenod);
+    const { unit, base } = await startUnit(dataDir, tenants, "zenod");
 
     expect((await fetch(`${base}/mcp`)).status).toBe(401);
     expect((await fetch(`${base}/mcp`, { headers: { cookie: "zenod_customer=fake" } })).status).toBe(401);
     expect((await fetch(`${base}/api/phylax/settings`, {
-      headers: { authorization: `Bearer ${service.token}` },
+      headers: { authorization: `Bearer ${serviceToken}` },
     })).status).toBe(401);
     expect((await fetch(`${base}/api/whatsapp/status`, {
-      headers: { authorization: `Bearer ${service.token}` },
+      headers: { authorization: `Bearer ${serviceToken}` },
     })).status).toBe(404);
 
     const ordinary = await clientFor(base, primary.token);
-    const managed = await clientFor(base, service.token);
+    const managed = await clientFor(base, serviceToken);
     try {
       const ordinaryNames = (await ordinary.listTools()).tools.map((tool) => tool.name);
       expect(ordinaryNames).not.toEqual(expect.arrayContaining([...PHYLAX_MANAGEMENT_TOOL_NAMES]));
@@ -113,10 +136,10 @@ describe("tenant-safe Phylax management MCP", () => {
     dirs.push(dataDir);
     let tenants = new SqliteTenantStore({ dataDir });
     tenants.provisionTenant({ tenant: { id: "alpha" } });
-    const zenod = tenants.provisionTenantToken("alpha", PHYLAX_MANAGEMENT_PROFILES.zenod)!;
-    const pm = tenants.provisionTenantToken("alpha", PHYLAX_MANAGEMENT_PROFILES.pm)!;
-    let started = await startUnit(dataDir, tenants);
-    let zenodClient = await clientFor(started.base, zenod.token);
+    const zenodToken = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.zenod);
+    const pmToken = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.pm);
+    let started = await startUnit(dataDir, tenants, "zenod");
+    let zenodClient = await clientFor(started.base, zenodToken);
     try {
       const ensured = await zenodClient.callTool({
         name: "phylax_management_v1_ensure_binding",
@@ -147,23 +170,20 @@ describe("tenant-safe Phylax management MCP", () => {
       expect(replay.isError).not.toBe(true);
       expect(structured(replay)).toEqual(structured(ensured));
 
-      const pmClient = await clientFor(started.base, pm.token);
+      const pmClient = await clientFor(started.base, pmToken);
       try {
-        const collision = await pmClient.callTool({
-          name: "phylax_management_v1_ensure_binding",
-          arguments: {
-            operationId: "ensure-alpha-pm-1",
-            expectedRevision: structured(ensured).binding.revision,
-            externalTenantId: "pm-customer-42",
-            downstreamUrl: "https://pm.example/mcp/alpha",
-            downstreamToken: "pm-secret",
-          },
-        });
-        expect(collision.isError).toBe(true);
-        expect(structured(collision)).toMatchObject({ error: { code: "binding_conflict" } });
+        expect((await pmClient.listTools()).tools).toEqual([]);
       } finally {
         await pmClient.close();
       }
+      expect(() => started.unit.phylaxTenantSettings.ensureManagementBinding({
+        tenantId: "alpha",
+        commercialOwner: "pm",
+        externalTenantId: "pm-customer-42",
+        downstreamUrl: "https://pm.example/mcp/alpha",
+        downstreamToken: "pm-secret",
+        expectedRevision: structured(ensured).binding.revision,
+      })).toThrow("commercial owner");
     } finally {
       await zenodClient.close();
       await started.unit.close();
@@ -171,8 +191,8 @@ describe("tenant-safe Phylax management MCP", () => {
     }
 
     tenants = new SqliteTenantStore({ dataDir });
-    started = await startUnit(dataDir, tenants);
-    zenodClient = await clientFor(started.base, zenod.token);
+    started = await startUnit(dataDir, tenants, "zenod");
+    zenodClient = await clientFor(started.base, zenodToken);
     try {
       const status = await zenodClient.callTool({
         name: "phylax_management_v1_channel_status",
@@ -194,9 +214,9 @@ describe("tenant-safe Phylax management MCP", () => {
     const tenants = new SqliteTenantStore({ dataDir });
     tenants.provisionTenant({ tenant: { id: "alpha" } });
     tenants.provisionTenant({ tenant: { id: "beta" } });
-    const alphaToken = tenants.provisionTenantToken("alpha", PHYLAX_MANAGEMENT_PROFILES.zenod)!.token;
-    const betaToken = tenants.provisionTenantToken("beta", PHYLAX_MANAGEMENT_PROFILES.zenod)!.token;
-    const { unit, base } = await startUnit(dataDir, tenants);
+    const alphaToken = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.zenod);
+    const betaToken = ensureServiceToken(tenants, "beta", PHYLAX_MANAGEMENT_PROFILES.zenod);
+    const { unit, base } = await startUnit(dataDir, tenants, "zenod");
     const alpha = await clientFor(base, alphaToken);
     const beta = await clientFor(base, betaToken);
     const ensure = async (client: Client, id: string) => client.callTool({
@@ -287,7 +307,7 @@ describe("tenant-safe Phylax management MCP", () => {
     dirs.push(dataDir);
     const tenants = new SqliteTenantStore({ dataDir });
     tenants.provisionTenant({ tenant: { id: "alpha" } });
-    const token = tenants.provisionTenantToken("alpha", PHYLAX_MANAGEMENT_PROFILES.phylax)!.token;
+    const token = ensureServiceToken(tenants, "alpha", PHYLAX_MANAGEMENT_PROFILES.phylax);
     const { unit, base } = await startUnit(dataDir, tenants);
     const client = await clientFor(base, token);
     try {

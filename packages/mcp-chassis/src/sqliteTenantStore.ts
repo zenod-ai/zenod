@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   ProvisionTenantInput,
   ProvisionTenantResult,
+  EnsureTenantTokenResult,
   TenantContext,
   TenantProvisioningStore,
   TenantStatus,
@@ -188,6 +189,58 @@ export class SqliteTenantStore implements TenantProvisioningStore {
         profile: normalizedProfile,
       },
     };
+  }
+
+  ensureTenantToken(
+    tenantId: string,
+    profile: string,
+    token: string,
+  ): EnsureTenantTokenResult | null {
+    const existing = this.findTenant(tenantId);
+    if (!existing) return null;
+    const normalizedProfile = normalizeCredentialProfile(profile);
+    const normalizedToken = normalizeReconciledCredentialToken(token);
+    const tokenHash = hashToken(normalizedToken);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.db.prepare(
+        "SELECT token_hash FROM tenant_token_aliases WHERE tenant_id=? AND profile=?",
+      ).get(existing.tenant.id, normalizedProfile) as { token_hash: string } | undefined;
+      if (current) {
+        this.db.exec("COMMIT");
+        return {
+          record: {
+            ...existing,
+            tokenHash: current.token_hash,
+            tenant: { ...existing.tenant },
+            profile: normalizedProfile,
+          },
+          outcome: current.token_hash === tokenHash ? "replayed" : "conflict",
+        };
+      }
+      const bound = this.resolveTokenHash(tokenHash);
+      if (bound) {
+        this.db.exec("COMMIT");
+        return { record: existing, outcome: "conflict" };
+      }
+      this.db.prepare(
+        `INSERT INTO tenant_token_aliases (token_hash, tenant_id, profile, created_at)
+         VALUES (?, ?, ?, ?)`,
+      ).run(tokenHash, existing.tenant.id, normalizedProfile, Date.now());
+      this.db.exec("COMMIT");
+      return {
+        record: {
+          ...existing,
+          tokenHash,
+          tenant: { ...existing.tenant },
+          profile: normalizedProfile,
+        },
+        outcome: "created",
+      };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   setTenantStatus(
@@ -374,6 +427,14 @@ function normalizeCredentialProfile(profile: string): string {
   if (!normalized) throw new Error("credential profile must be non-empty");
   if (normalized.length > 100)
     throw new Error("credential profile must be at most 100 characters");
+  return normalized;
+}
+
+function normalizeReconciledCredentialToken(token: string): string {
+  const normalized = token.trim();
+  if (normalized.length < 32 || normalized.length > 4_096) {
+    throw new Error("reconciled credential token must be between 32 and 4096 characters");
+  }
   return normalized;
 }
 
