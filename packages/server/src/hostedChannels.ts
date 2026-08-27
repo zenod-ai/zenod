@@ -857,12 +857,15 @@ export async function executeHostedChannelMutation(
       mutation?: HostedChannelMutationOutcome;
       error?: { code?: string };
     };
+    const challenge = result.body && typeof result.body === "object"
+      ? (result.body as { challenge?: unknown }).challenge
+      : null;
     const storedBody =
-      input.deriveChallenge && result.body && typeof result.body === "object"
+      input.deriveChallenge && challenge && typeof challenge === "object"
         ? {
             ...(result.body as Record<string, unknown>),
             challenge: {
-              ...((result.body as { challenge?: object }).challenge ?? {}),
+              ...(challenge as Record<string, unknown>),
               code: "__derived__",
             },
           }

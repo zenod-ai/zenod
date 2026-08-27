@@ -459,6 +459,16 @@ function verificationDigest(keyword: string): Buffer {
   return createHash("sha256").update(keyword.trim().toLowerCase(), "utf8").digest();
 }
 
+function verificationDigestMatches(
+  storedHash: string | null,
+  derivedChallenge: string,
+): boolean {
+  if (!storedHash) return false;
+  const expected = Buffer.from(storedHash, "hex");
+  const provided = verificationDigest(derivedChallenge);
+  return expected.length === provided.length && timingSafeEqual(expected, provided);
+}
+
 function normalizedTelegramNumericIdentity(value: string | null | undefined): string | null {
   const normalized = String(value ?? "").trim();
   const numeric = /^-?\d{1,20}$/.test(normalized)
@@ -1026,6 +1036,53 @@ export class PhylaxTenantSettingsStore {
     return channel === "whatsapp"
       ? settings.whatsappBindingRevision
       : settings.telegramBindingRevision;
+  }
+
+  /**
+   * Read-only crash-recovery proof for a channel-connect operation.
+   *
+   * The caller must re-derive the operation's challenge from its private
+   * challenge authority. This method confirms that the exact tenant still has
+   * the exact identity pending, that its proof is unexpired, and that the
+   * re-derived challenge matches the stored digest in constant time. The
+   * stored digest never leaves this store.
+   */
+  matchesPendingVerificationProof(input: {
+    tenantId: string;
+    channel: PhylaxPortedChannel;
+    identity: string;
+    derivedChallenge: string;
+    now?: number;
+  }): boolean {
+    const current = this.get(input.tenantId);
+    const now = input.now ?? Date.now();
+    if (input.channel === "whatsapp") {
+      const identity = normalizeWhatsAppIdentifier(input.identity);
+      return Boolean(
+        identity &&
+        !current.verified &&
+        current.phoneNumber === identity &&
+        current.verificationExpiresAt !== null &&
+        current.verificationExpiresAt > now &&
+        verificationDigestMatches(
+          current.verificationHash,
+          input.derivedChallenge,
+        ),
+      );
+    }
+
+    const identity = normalizeTelegramEntry(input.identity);
+    return Boolean(
+      identity &&
+      current.telegramBinding === null &&
+      current.telegramPendingIdentity === identity &&
+      current.telegramVerificationExpiresAt !== null &&
+      current.telegramVerificationExpiresAt > now &&
+      verificationDigestMatches(
+        current.telegramVerificationHash,
+        input.derivedChallenge,
+      ),
+    );
   }
 
   verifyInboundReceipt(

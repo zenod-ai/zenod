@@ -384,16 +384,20 @@ function registerChannelMutationTools(
             if (currentRevision === input.expectedRevision) {
               return { state: "not_applied" as const };
             }
-            const applied = input.channel === "whatsapp"
-              ? current.phoneNumber === identity && !current.verified && Boolean(current.verificationExpiresAt)
-              : current.telegramPendingIdentity === identity && Boolean(current.telegramVerificationExpiresAt);
+            const at = Date.now();
+            const applied = dependencies.settings.matchesPendingVerificationProof({
+              tenantId,
+              channel: input.channel,
+              identity,
+              derivedChallenge: code,
+              now: at,
+            });
             const sharedNumber = input.channel === "whatsapp"
               ? dependencies.runtime.whatsapp.status().linkedNumber
               : null;
             if (!applied || (input.channel === "whatsapp" && !sharedNumber)) {
               return { state: "unknown" as const };
             }
-            const at = Date.now();
             return {
               state: "applied" as const,
               result: {
@@ -553,9 +557,10 @@ function registerChannelMutationTools(
           authorityScope: managementAuthorityScope(owner),
           operation,
           requestBody: { channel: input.channel, expectedRevision: input.expectedRevision },
-          target: input.channel === "whatsapp"
-            ? dependencies.settings.get(tenantId).phoneNumber
-            : dependencies.settings.get(tenantId).telegramBinding,
+          // The effect clears the live binding. Keep the audit target derived
+          // entirely from the request so crash-after-effect recovery hashes
+          // the same target before and after disconnect.
+          target: `disconnect:${input.channel}:${input.expectedRevision}`,
           bindingRevision: () => dependencies.settings.bindingRevision(tenantId, input.channel),
           recoverOrphaned: () => {
             const current = dependencies.settings.get(tenantId);

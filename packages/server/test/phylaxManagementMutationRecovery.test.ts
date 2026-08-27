@@ -10,9 +10,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SqliteTenantStore } from "@zenod/mcp-chassis";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  hostedChannelChallengeCode,
   HostedChannelMutationAuditStore,
   type HostedChannelMutationName,
 } from "../src/hostedChannels.js";
+import { phylaxArtifactCapabilitySecret } from "../src/phylaxArtifactCapability.js";
 import { PHYLAX_MANAGEMENT_PROFILES } from "../src/phylaxManagementMcp.js";
 import type { PhylaxDeliveryReceipt, PhylaxTenantDelivery } from "../src/phylaxChannels.js";
 import { createPhylaxUnit } from "../src/phylaxUnit.js";
@@ -82,6 +84,32 @@ function configureConnectedTenant(
     "12-alpha",
   )).not.toBeNull();
   return unit.phylaxTenantSettings.bindingRevision(tenantId, "whatsapp");
+}
+
+function configureConnectedTelegram(
+  unit: ReturnType<typeof createPhylaxUnit>,
+  tenantId = "alpha",
+) {
+  unit.phylaxTenantSettings.ensureManagementBinding({
+    tenantId,
+    commercialOwner: "zenod",
+    externalTenantId: "zenod-alpha",
+    downstreamUrl: "https://cloud.zenod.dev/mcp/alpha",
+    downstreamToken: "downstream-secret",
+    expectedRevision: "0",
+  });
+  unit.phylaxTenantSettings.registerTelegram(
+    tenantId,
+    "@alpha_test",
+    Date.now(),
+    "12-alpha",
+  );
+  expect(unit.phylaxTenantSettings.verifyTelegramInbound(
+    "733333333",
+    "12-alpha",
+    "@alpha_test",
+  )).not.toBeNull();
+  return unit.phylaxTenantSettings.bindingRevision(tenantId, "telegram");
 }
 
 function stubDelivery(
@@ -165,6 +193,228 @@ describe("Phylax management mutation recovery", () => {
       await started.unit.close();
     }
   });
+
+  it.each(["whatsapp", "telegram"] as const)(
+    "reconciles an applied %s disconnect after restart with a request-stable target",
+    async (channel) => {
+      const dataDir = await mkdtemp(join(tmpdir(), `phylax-management-${channel}-disconnect-crash-`));
+      dirs.push(dataDir);
+      let tenants = new SqliteTenantStore({ dataDir });
+      tenants.provisionTenant({ tenant: { id: "alpha" } });
+      const token = tenants.provisionTenantToken(
+        "alpha",
+        PHYLAX_MANAGEMENT_PROFILES.zenod,
+      )!.token;
+      let started = await startUnit(dataDir, tenants);
+      const expectedRevision = channel === "whatsapp"
+        ? configureConnectedTenant(started.unit)
+        : configureConnectedTelegram(started.unit);
+      const args = {
+        operationId: `disconnect-${channel}-crash-01`,
+        expectedRevision,
+        channel,
+      };
+      const operation = `${channel}.disconnect` as HostedChannelMutationName;
+      expect(started.unit.hostedChannelAudit.claim({
+        operationId: args.operationId,
+        tenantId: "alpha",
+        authorityScope: "management:zenod",
+        operation,
+        requestHash: digest(JSON.stringify({
+          operation,
+          body: { channel, expectedRevision },
+        })),
+        targetHash: digest(`disconnect:${channel}:${expectedRevision}`),
+        bindingRevision: expectedRevision,
+        at: Date.now(),
+      })).toEqual({ kind: "claimed" });
+      if (channel === "whatsapp") {
+        started.unit.phylaxTenantSettings.disconnectPhone("alpha", Date.now());
+      } else {
+        started.unit.phylaxTenantSettings.disconnectTelegram("alpha");
+      }
+      const appliedRevision = started.unit.phylaxTenantSettings.bindingRevision("alpha", channel);
+      expect(appliedRevision).not.toBe(expectedRevision);
+      await started.unit.close();
+      await new Promise<void>((resolve) => servers.shift()!.close(() => resolve()));
+      const db = new DatabaseSync(join(dataDir, "hosted-channel-mutations.sqlite"));
+      db.exec("UPDATE hosted_channel_mutations SET claim_expires_at=0 WHERE state='claimed'");
+      db.close();
+
+      tenants = new SqliteTenantStore({ dataDir });
+      started = await startUnit(dataDir, tenants);
+      const client = await clientFor(started.base, token);
+      try {
+        const recovered = await client.callTool({
+          name: "phylax_management_v1_channel_disconnect",
+          arguments: args,
+        });
+        expect(recovered.isError).not.toBe(true);
+        expect(structured(recovered)).toMatchObject({
+          channels: { [channel]: { state: "off", revision: appliedRevision } },
+          mutation: { operationId: args.operationId, outcome: "succeeded" },
+        });
+        const replay = await client.callTool({
+          name: "phylax_management_v1_channel_disconnect",
+          arguments: args,
+        });
+        expect(structured(replay)).toEqual(structured(recovered));
+        expect(started.unit.phylaxTenantSettings.bindingRevision("alpha", channel))
+          .toBe(appliedRevision);
+      } finally {
+        await client.close();
+        await started.unit.close();
+      }
+    },
+  );
+
+  it.each(["whatsapp", "telegram"] as const)(
+    "does not attribute a replacement %s challenge to an orphaned earlier operation",
+    async (channel) => {
+      const dataDir = await mkdtemp(join(tmpdir(), `phylax-management-${channel}-challenge-attribution-`));
+      dirs.push(dataDir);
+      let tenants = new SqliteTenantStore({ dataDir });
+      tenants.provisionTenant({ tenant: { id: "alpha" } });
+      const token = tenants.provisionTenantToken(
+        "alpha",
+        PHYLAX_MANAGEMENT_PROFILES.zenod,
+      )!.token;
+      let started = await startUnit(dataDir, tenants);
+      started.unit.phylaxTenantSettings.ensureManagementBinding({
+        tenantId: "alpha",
+        commercialOwner: "zenod",
+        externalTenantId: "zenod-alpha",
+        downstreamUrl: "https://cloud.zenod.dev/mcp/alpha",
+        downstreamToken: "downstream-secret",
+        expectedRevision: "0",
+      });
+      const expectedRevision = started.unit.phylaxTenantSettings.bindingRevision("alpha", channel);
+      const identity = channel === "whatsapp" ? "34611111111" : "alpha_test";
+      const operationIdA = `connect-${channel}-orphan-a`;
+      const operationIdB = `connect-${channel}-replacement-b`;
+      const operation = (channel === "whatsapp"
+        ? "whatsapp.challenge"
+        : "telegram.connect") as HostedChannelMutationName;
+      const argsA = {
+        operationId: operationIdA,
+        expectedRevision,
+        channel,
+        identity,
+      };
+      const challengeSecret = phylaxArtifactCapabilitySecret({
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      } as NodeJS.ProcessEnv);
+      const codeA = hostedChannelChallengeCode(
+        challengeSecret,
+        "alpha",
+        operationIdA,
+        identity,
+      );
+      const codeB = hostedChannelChallengeCode(
+        challengeSecret,
+        "alpha",
+        operationIdB,
+        identity,
+      );
+      expect(codeB).not.toBe(codeA);
+      expect(started.unit.hostedChannelAudit.claim({
+        operationId: operationIdA,
+        tenantId: "alpha",
+        authorityScope: "management:zenod",
+        operation,
+        requestHash: digest(JSON.stringify({
+          operation,
+          body: { channel, identity, expectedRevision },
+        })),
+        targetHash: digest(identity),
+        bindingRevision: expectedRevision,
+        at: Date.now(),
+      })).toEqual({ kind: "claimed" });
+
+      if (channel === "whatsapp") {
+        started.unit.phylaxTenantSettings.registerPhone(
+          "alpha",
+          identity,
+          "primary",
+          Date.now(),
+          codeA,
+        );
+        started.unit.phylaxTenantSettings.disconnectPhone("alpha", Date.now());
+        started.unit.phylaxTenantSettings.registerPhone(
+          "alpha",
+          identity,
+          "primary",
+          Date.now(),
+          codeB,
+        );
+      } else {
+        started.unit.phylaxTenantSettings.registerTelegram("alpha", identity, Date.now(), codeA);
+        started.unit.phylaxTenantSettings.disconnectTelegram("alpha");
+        started.unit.phylaxTenantSettings.registerTelegram("alpha", identity, Date.now(), codeB);
+      }
+      const replacementRevision = started.unit.phylaxTenantSettings.bindingRevision("alpha", channel);
+      await started.unit.close();
+      await new Promise<void>((resolve) => servers.shift()!.close(() => resolve()));
+      const db = new DatabaseSync(join(dataDir, "hosted-channel-mutations.sqlite"));
+      db.exec("UPDATE hosted_channel_mutations SET claim_expires_at=0 WHERE state='claimed'");
+      db.close();
+
+      tenants = new SqliteTenantStore({ dataDir });
+      started = await startUnit(dataDir, tenants);
+      const client = await clientFor(started.base, token);
+      try {
+        const unknown = await client.callTool({
+          name: "phylax_management_v1_channel_connect",
+          arguments: argsA,
+        });
+        expect(unknown.isError).toBe(true);
+        expect(structured(unknown)).toMatchObject({
+          error: {
+            code: "operation_outcome_unknown",
+            retryDisposition: "do_not_retry",
+          },
+          mutation: { operationId: operationIdA, outcome: "failed" },
+        });
+        const replay = await client.callTool({
+          name: "phylax_management_v1_channel_connect",
+          arguments: argsA,
+        });
+        expect(structured(replay)).toEqual(structured(unknown));
+        expect(started.unit.phylaxTenantSettings.bindingRevision("alpha", channel))
+          .toBe(replacementRevision);
+        expect(started.unit.phylaxTenantSettings.matchesPendingVerificationProof({
+          tenantId: "alpha",
+          channel,
+          identity,
+          derivedChallenge: codeA,
+        })).toBe(false);
+        expect(started.unit.phylaxTenantSettings.matchesPendingVerificationProof({
+          tenantId: "alpha",
+          channel,
+          identity,
+          derivedChallenge: codeB,
+        })).toBe(true);
+        if (channel === "whatsapp") {
+          expect(started.unit.phylaxTenantSettings.verifyInboundReceipt(identity, codeA)).toBeNull();
+          expect(started.unit.phylaxTenantSettings.verifyInboundReceipt(identity, codeB)).not.toBeNull();
+        } else {
+          expect(started.unit.phylaxTenantSettings.verifyTelegramInbound(
+            "733333333",
+            codeA,
+            "@alpha_test",
+          )).toBeNull();
+          expect(started.unit.phylaxTenantSettings.verifyTelegramInbound(
+            "733333333",
+            codeB,
+            "@alpha_test",
+          )).not.toBeNull();
+        }
+      } finally {
+        await client.close();
+        await started.unit.close();
+      }
+    },
+  );
 
   it("returns and terminal-replays the exact customer-safe provider receipt", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-management-receipt-"));
