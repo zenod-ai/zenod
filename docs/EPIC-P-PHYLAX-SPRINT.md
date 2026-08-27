@@ -1,15 +1,15 @@
-# EPIC P · Phylax Sprint — duplicate Zenod, the middle is the channels organ
+# EPIC P · Phylax Sprint — one channel core, integrated or standalone
 
-Status: active — gate satisfied 2026-07-11 (Jordi approved Ring SHIP and said "go phylax"); dispatched
+Status: active — transport proof preserved; integrated/standalone product architecture locked 2026-08-27; PM sprint-plan reconciliation pending
 Created: 2026-07-11
-Updated: 2026-07-11
+Updated: 2026-08-27
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Phylax delivery manager (bind on dispatch)
 Steward since: 2026-07-11T05:04:09+02:00
-Last reconciled commit: `96fbd3d70bae57419ce9cd8dec98c9bef8360853`
+Last reconciled commit: `1bd8c26` on `codex/integrated-product-vision` before this spine update
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -48,7 +48,8 @@ Stewardship transfer rule: record outgoing steward, incoming steward, absolute t
 | Artifact | Authoritative For |
 |---|---|
 | This EpicSpine | Product shape, journey, PORT/DUPLICATE markings, pre-made decisions |
-| The live zenod unit + EPIC-Z | The customer layer being duplicated |
+| `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` | Binding 2026-08-27 integrated/standalone service boundary, connection/control diagrams, product UI contract, metering/allowance model and beta sequencing |
+| The live Zenod unit + EPIC-Z | Historical/reusable customer-shell components; not authority to copy Zenod ownership, billing, credentials or metering into the Phylax core |
 | Existing WhatsApp/Baileys + Telegram + transcription code in `packages/server` (whatsapp store, `phylaxGateway.ts`, telegram routes, transcription paths) | The channels organ being PORTED |
 | GitHub issue | One ticket's execution detail |
 | Validation evidence | The journey screenshots + phone screenshots |
@@ -56,6 +57,14 @@ Stewardship transfer rule: record outgoing steward, incoming steward, absolute t
 ## Mission
 
 Stand up Phylax — "your agents, on WhatsApp and Telegram" — at `phylax.zenod.dev`, as a FULL customer unit (Jordi 2026-07-11, revising the old per-resource framing): DUPLICATE the Zenod customer layer (landing, GitHub sign-in, Stripe, tenants, dashboard), and the product middle is the PORTED channels organ that already works in this codebase: the Baileys WhatsApp server, the Telegram bot integration, and the transcription capability (D18). Dual-faced per D14: MCP SERVER (`send_message`/`notify`/`channel_status` — any tokened agent posts notifications) and MCP CLIENT (inbound messages matched sender→tenant IN PHYLAX, then forwarded as a standard MCP call to that tenant's configured downstream — their Ring). The Baileys number is ADMIN-plane: Jordi pairs it once via QR on a hardcoded-admin page; tenants never QR — they register their phone number and verify by sending a keyword TO the number. Done = the journey walked clean by the manager (with a real phone), then Jordi.
+
+### 2026-08-27 binding product-shape clarification
+
+The July mission remains the historical implementation/proof record, but its "duplicate Zenod" and Ring-only framing no longer defines the future product shape. The locked simplest seam is `WhatsApp / Telegram ↔ Phylax ↔ one downstream service`. Phylax is a duplex MCP channel bridge: inbound it acts as an MCP client calling the tenant's one named downstream adapter; outbound it acts as an MCP server exposing channel send/status operations. It owns transport sessions, sender verification, media staging, transcription, idempotency, delivery, receipts, channel settings and its own usage ledger. It does not own Zenod memory, PM proposal state, or host-product billing.
+
+Phylax must remain one reusable core. Zenod Hosted and PM present Phylax controls inside their own product UI and provision an internal channel tenant/binding automatically; the browser talks only to its signed-in product backend, which invokes narrow tenant-scoped Phylax MCP control tools. Phylax standalone adds its own customer shell and billing adapter around the same tenant model, MCP surface, metering, allowance enforcement, settings components and delivery runtime. Standalone is an extension of the beta core, never a rebuild or fork.
+
+Commercially, each service meters the costs it incurs. Phylax maintains the authoritative append-only transcription/channel usage ledger and allowance grants. Integrated Zenod/PM subscriptions issue an idempotent internal allowance grant to the mapped Phylax tenant; native Phylax billing issues the same grant for standalone customers. Only the allowance issuer and product-owned presentation differ. The host product may show one combined customer usage percentage and combined operator P&L without copying Phylax events into the Zenod or PM ledger as if those services incurred them.
 
 ## Definition Of Done
 
@@ -76,20 +85,38 @@ SHIP — the journey, walked on the LIVE deployment with a REAL browser and a RE
 
 HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day one; admin UI for N numbers later), phone re-verification on change, Google sign-in, cross-unit admin/usage view (separate epic), retirement of the old fused WhatsApp path (3.7 wave).
 
+### Locked contract acceptance for the reconciled sprint plan
+
+- [ ] One Phylax runtime/core supports integrated Zenod, integrated PM, and native Phylax through explicit product/allowance adapters rather than code forks.
+- [ ] Each Phylax tenant has exactly one named downstream service/adapter; Phylax contains no application routing intelligence.
+- [ ] Integrated browsers authenticate only to Zenod or PM. Their backend authorizes the customer, resolves the mapped channel tenant, and calls a narrow Phylax MCP control surface; no private Phylax token reaches the browser.
+- [ ] Tenant-safe MCP control tools cannot pair/reset shared transports, replace shared credentials, inspect other tenants, or access global journals/capacity.
+- [ ] Text, voice, image and reply context use one versioned media envelope with provider message ID, stable idempotency key, raw artifact reference, duration, transcript when eligible and explicit disposition when not transcribed.
+- [ ] Phylax meters its own transcription/channel costs through one append-only usage ledger. Integrated and standalone products call the same idempotent allowance-grant operation through different allowance issuers.
+- [ ] Customer presentation is product-owned: Zenod/PM show one combined plan projection; standalone Phylax shows the same Phylax metering projection in its own portal; operator P&L preserves service-level truth.
+- [ ] Zenod public-beta implementation proves the shared core first without hard-coding Zenod as the only commercial owner; standalone Phylax and PM later extend the same interfaces.
+- [ ] Deploys, startup reconciliation and UI changes cannot rotate customer MCP tokens, move tenant credentials, reset channel sessions, or change service ownership as an implicit side effect.
+
 ## Non-Goals
 
 - Routing intelligence of any kind (D14: zero — match sender, forward, done; brains live in the Ring).
 - Building a new pairing/QR screen (the existing one PORTS), new chat UIs, or touching the Ring beyond calling its MCP face.
 - Multiple numbers in the UI (schema yes, UI later).
+- Merging the Phylax runtime, session, journal, settings or metering stores into Zenod or PM.
+- Building separate integrated-versus-standalone Phylax metering, tenant, settings or delivery cores.
+- Letting product browsers call Phylax directly or hold internal service credentials.
+- Exposing broad owner/admin mutations through the tenant-safe MCP control surface.
+- Moving Zenod vault/Drive ownership or PM proposal/decision ownership into Phylax.
+- Expanding the current Zenod beta stabilization into the PM adapter or standalone commercial launch before its reconciled sprint tickets are accepted.
 
 ## Current State
 
-Phase: P-S5 journey loop — WhatsApp text, voice transcription, and MCP delivery receipt pass live; Telegram and two-tenant isolation remain
-Last verified: 2026-07-12T17:56:00+02:00 (exact-SHA runtime receipt reconciled; SHIP 1–12 completion audit recorded)
+Phase: Integrated/standalone product architecture locked; awaiting PM reconciliation into the overall sprint plan before new Phylax implementation is dispatched
+Last verified: 2026-08-27 CEST (Jordi conversation decision plus durable product/UI contract; no implementation or production claim)
 Integration target: main
-Fresh base commit: `31e69bbbc20e2e4a2b053a2d30adf44f18b34245` — PINNED at dispatch; no rebases until the journey passes (D19c)
-Next action: bind a real Telegram bot/identity and exercise one Telegram delivery; then verify isolation with a second tenant and a second sender number.
-Blockers: no Telegram bot token is configured on the Phylax service; the two available WhatsApp numbers are already the paired transport number and the sole verified tenant sender, so SHIP 11 still needs a second sender identity. See `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` for the requirement-by-requirement proof state.
+Planning branch / artifact commit: `codex/integrated-product-vision` at `1bd8c26`; durable contract at `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html`
+Next action: PM reconciles the locked product shape and contract acceptance into the pending overall sprint plan, explicitly mapping its Phylax/WhatsApp lane to the shared-core seams. Do not create a second metering/settings/runtime shape. After plan review, the Phylax steward normalizes executable tickets; the Zenod beta slice remains first and PM/standalone extend the same core later.
+Blockers: no architectural decision is open. Exact MCP tool names, plan/allowance amounts, standalone pricing, whether PM bundles or links Zenod memory, and a future self-hosted Phylax add-on remain sprint/commercial details that may vary without changing the locked core. Historical P-S5 Telegram and real second-tenant laps remain unclosed evidence and must not be represented as passed.
 
 ## Role Goals
 
@@ -105,12 +132,25 @@ Read in this order:
 | Priority | Link | Why It Matters | When To Read |
 |---|---|---|---|
 | 1 | This spine, top to bottom | Everything is here. | Always |
-| 2 | `docs/EPIC-Z-NIGHT-SPRINT.md` + `docs/EPIC-C-CALLISTHENES-SPRINT.md` + `docs/EPIC-R-RING-SPRINT.md` | Template + prior duplicates; copy their answers. | Always |
-| 3 | Live zenod unit customer-layer code | Being DUPLICATED. | P-S1 worker |
-| 4 | WhatsApp/Baileys code (`packages/server` whatsapp store + pairing screen), `phylaxGateway.ts`, telegram routes, transcription settings + pipeline, `/data/whatsapp` runtime shape | Being PORTED. | P-S2/P-S3 workers |
-| 5 | `docs/EPIC-3.0-CHASSIS-REPLATFORM.md` D14/D18/D19–D21 | The laws. | Manager |
+| 2 | `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` | Current locked product/UI/control/metering contract; supersedes "duplicate Zenod everywhere" as the future shape. | Always for new planning |
+| 3 | `docs/EPIC-Z-NIGHT-SPRINT.md` + `docs/EPIC-C-CALLISTHENES-SPRINT.md` + `docs/EPIC-R-RING-SPRINT.md` | Historical template and prior product evidence; reuse components, not obsolete ownership assumptions. | When reconciling legacy work |
+| 4 | Live Zenod and Phylax customer/channel code | Existing assets to extend; code remains authoritative for implemented behavior. | Ticket planning / workers |
+| 5 | WhatsApp/Baileys code (`packages/server` whatsapp store + pairing screen), `phylaxGateway.ts`, telegram routes, transcription settings + pipeline, `/data/whatsapp` runtime shape | Proven transport organ to preserve and expose through the shared MCP seam. | Channel workers |
+| 6 | `docs/EPIC-3.0-CHASSIS-REPLATFORM.md` D14/D18/D19–D21 | Durable routing/media doctrine. | Manager |
 
 ## Architecture And Context
+
+### Locked target architecture (2026-08-27)
+
+The simplest reusable Phylax is a duplex MCP bridge bound to one downstream service per tenant: `WhatsApp / Telegram ↔ Phylax ↔ downstream adapter`. Inbound messages are normalized into one versioned text/media envelope and forwarded through the tenant's adapter; outbound application calls use Phylax MCP send/status tools and return provider delivery receipts. Multi-tenant hosting is many isolated one-to-one bindings on one Phylax core, not an intelligent router.
+
+Integrated products use a backend-for-frontend control path: `Zenod or PM browser → authenticated Zenod or PM backend → tenant-scoped Phylax MCP → Phylax settings`. Subscription/account provisioning creates an internal channel tenant/binding rather than a duplicate customer login or subscription. The browser never authenticates directly to Phylax and never holds its service credential. Native Phylax uses its own product shell to invoke the same underlying settings/metering operations.
+
+One Phylax metering core records append-only allowance grants and usage events. A host-product allowance issuer handles integrated Zenod/PM subscription events; the native Phylax billing issuer handles standalone subscription events. Both call the same grant operation and feed the same admission/enforcement and customer-safe projection. `commercial_owner = zenod | pm | phylax` selects the issuer/presentation, never a different runtime, ledger or settings model.
+
+Ownership is fixed: Phylax owns transport/session/verification/raw staging/transcription/dedupe/delivery; Zenod owns memory/vault/tenant Drive archive and memory receipts; PM owns proposal/revision/correlation/decision state. New product adapters may compose these services but may not move ownership implicitly.
+
+### Historical July deployment shape
 
 One Dokploy application `phylax`, one hostname `phylax.zenod.dev`, one container: the duplicated customer front + the ported channels organ + its own `/data` (tenants, per-tenant settings, Baileys session state per number). Sender→tenant mapping lives HERE (Jordi 2026-07-11): tenant rows carry `{ phone_number, verified, number_id, downstream_url, downstream_token(vault), transcription_settings, telegram_binding }`. Inbound: sender lookup → tenant → forward to downstream with tenant's token (D18 payload for media). Unmatched senders: configurable hold/reject, default reject with a polite one-time reply.
 
@@ -126,6 +166,8 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 
 ## Decisions
 
+Later dated rows supersede conflicting July product-shape assumptions while preserving the July implementation and live-proof history.
+
 | Date | Decision | Rule |
 |---|---|---|
 | 2026-07-11 | Unit shape (Jordi, supersedes old 3.6 framing) | Phylax is a FULL customer unit: landing, Stripe, tenants, settings — exactly like Zenod — plus the Baileys/Telegram organ. |
@@ -140,6 +182,12 @@ Wave 1: P-S1 ∥ P-S2. Wave 2: P-S3, P-S4. Then P-S5. Heartbeats, budgets, workt
 | 2026-07-11 | Baileys session | FRESH QR pairing on the new unit (test number for the manager, real number by Jordi). The old fused container's session is not migrated; the old path keeps running untouched until its 3.7 wave. |
 | 2026-07-11 | Conduct kit | Register async ticket shapes with receipt middleware before walking (the silent_ack lesson). |
 | 2026-07-11 | Anything unanswered | Simplest option, journal it, keep moving. |
+| 2026-08-27 | Simplest seam (Jordi, binding) | Phylax is a duplex MCP channel bridge: one channel tenant maps to one named downstream service/adapter. Inbound Phylax is the MCP client; outbound Phylax is the MCP server. Multi-tenant scale repeats this isolated one-to-one shape; no routing intelligence. |
+| 2026-08-27 | Integrated control plane (Jordi, binding) | Zenod/PM browser talks only to its product backend. That backend authenticates and resolves the host tenant, then invokes narrow tenant-scoped Phylax MCP tools. Broad owner/admin tools and private Phylax credentials are never reachable from the customer UI. |
+| 2026-08-27 | Product provisioning (Jordi, binding) | Buying Zenod or PM creates one host-product customer plus an internal Phylax channel tenant/binding, not a second customer login/subscription. Native Phylax owns its own account only when Phylax itself is the purchased product. |
+| 2026-08-27 | Shared core and standalone extension (Jordi, binding) | Integrated Zenod, integrated PM and Phylax standalone reuse one tenant/settings/MCP/metering/enforcement/delivery core and reusable UI components. Standalone changes the product shell, billing authority and allowance issuer; it is never rebuilt or forked later. |
+| 2026-08-27 | Metering and P&L (Jordi, binding) | Phylax authoritatively meters its transcription/channel costs. Zenod/PM or native Phylax billing issues idempotent append-only allowance grants to the same ledger. Host UI may show one combined percentage; operator views preserve service-level costs and combined customer P&L. |
+| 2026-08-27 | Product ownership and sequence (Jordi, binding) | Phylax owns channels/STT, Zenod owns memory/vault/Drive archive, PM owns proposals/decisions. Land the contract and shared-core seams now; prove Zenod beta first; PM and standalone extend them later without widening the current stabilization refactor. |
 
 ## Issue Ledger
 
@@ -176,15 +224,20 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Planner Queue
 
-- None. The spine is the planner.
+- PM reconciles the 2026-08-27 locked contract and durable artifact into the pending overall sprint plan without accepting/rejecting it implicitly from this spine update.
+- Normalize the future execution board around one shared Phylax core: MCP data/control contracts; tenant mapping/provisioning; issuer-neutral allowance and usage ledgers; Zenod allowance issuer/BFF first; then PM adapter and native Phylax shell/issuer.
+- Preserve historical P-S5 evidence and name its remaining Telegram and real second-tenant laps wherever live transport completeness is claimed.
+- Do not create a parallel standalone metering/settings/runtime backlog or a browser-to-Phylax credential flow.
 
 ## Worker Queue
 
-- Wave 1 integrated. Wave 2 active: P-S3 and P-S4. Then P-S5.
+- No new worker dispatch from this conversation update. Await the PM-reconciled sprint plan and explicit executable tickets.
+- Historical P-S1–P-S4 are integrated; P-S5 remains incomplete for Telegram and a real second-tenant/sender isolation lap.
 
 ## Tester Queue
 
-- P-S5: real phone in hand; text pipe before voice pipe; isolation with two verified numbers.
+- Future shared-core acceptance must prove the same tenant/settings/metering behavior through integrated Zenod and native Phylax funding/presentation paths without a second implementation.
+- Historical P-S5 still requires a real Telegram identity and two verified sender identities before its original uninterrupted package can be called complete.
 
 ## Validation Evidence
 
@@ -242,9 +295,23 @@ Validation: the manager inspected every SHIP criterion against live HTTP behavio
 
 Next: obtain the named Telegram and second-sender inputs, run those two live laps, then restart the full journey at step 1 for the uninterrupted clean-pass package.
 
+### 2026-08-27 - Planner/steward - Integrated and standalone Phylax direction locked for PM reconciliation
+
+Context: Jordi paused the release sequence to reconcile Phylax's long-term product shape before more refactoring. The conversation established the simplest seam as a duplex MCP bridge bound to one downstream service per tenant. Zenod Hosted and PM should include Phylax transparently through their own authenticated backend and UI, while Phylax-only customers use a native product shell over the same core. The browser never talks directly to the private Phylax service or holds its credential. Tenant-safe settings/activation operations may use narrow MCP control tools; shared transport pairing/reset and global administration remain owner-only.
+
+Metering was added as a first-class service boundary rather than deferred standalone work. Phylax owns an issuer-neutral allowance-grant ledger, its channel/STT usage ledger and enforcement. Zenod, PM and native Phylax billing are interchangeable allowance issuers that fund the same channel tenant/core. This preserves one combined product usage presentation where appropriate while retaining truthful service-level operator P&L. The standalone product is therefore an extension—product shell, native billing issuer and generic downstream setup—not a later rebuild.
+
+The durable visual contract is `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` at planning commit `1bd8c26`. It includes the data plane, browser/backend/MCP settings flow, automatic subscription provisioning, integrated-versus-standalone UI contracts, voice/media ownership, metering/P&L, scaling invariants and beta scope. The local PM proposal and PG0 remained pending and read-only; no proposal decision, issue creation, downstream-repository change, implementation, deployment, credential, session or production mutation occurred.
+
+Next: Jordi will give this conversation/durable contract to the PM. The PM reconciles its overall sprint proposal around the locked shared-core seams, keeps the current Zenod stabilization slice narrow, and returns a revised execution plan. The Phylax steward then normalizes tickets only after that plan is reviewed.
+
+Risks: the historical July spine and tickets contain duplicate-Zenod, Ring-only and three-plan assumptions. They remain useful implementation/evidence history but must not be copied forward as current product authority. Exact tool names, prices and internal allowance allocations are proposal details; changing them must not fork the core architecture.
+
 ## Open Questions
 
-- None permitted. Decisions table or simplest option + journal.
+- No architecture question remains open for PM reconciliation.
+- Deferred commercial choices that do not change the core: native Phylax price; PM bundled-versus-linked Zenod memory entitlement; future self-hosted Phylax add-on; exact internal allowance allocations.
+- Exact MCP tool names are to be reconciled against existing code before ticket creation; the durable artifact names desired typed capabilities, not proof that every named tool exists.
 
 ## Proposed Cross-Spine Updates
 
@@ -252,6 +319,7 @@ Next: obtain the named Telegram and second-sender inputs, run those two live lap
 |---|---|---|---|---|---|
 | 2026-07-11 | `docs/EPIC-3.6-PHYLAX-MULTITENANT.md` | Mark superseded by this spine (doctrine D14/D18 carried forward; per-resource framing revised to full customer unit by Jordi 2026-07-11). | this spine | manager on bind | proposed |
 | 2026-07-11 | `docs/EPIC-3.7-DECOMMISSION-2X.md` | After SHIP approval, the old fused WhatsApp path becomes retireable (new wave). | this spine | 3.7 manager | proposed |
+| 2026-08-27 | Pending overall PM sprint proposal | Reconcile the WhatsApp-native PM lane to the locked one-core Phylax model: PM product backend invokes tenant-scoped Phylax MCP, PM owns proposals, Zenod supplies cited memory, and Phylax supplies transport plus its own metering. Sequence after Zenod beta stabilization; do not create a second runtime/metering/settings shape. | `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` and this handoff | PM | pending read-only reconciliation |
 
 ## Appendix
 
