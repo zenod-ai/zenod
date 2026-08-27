@@ -4,7 +4,7 @@
 
 For every repository-level task, read `docs/EPIC-0-FOUNDATION-SPINE.md` first. Its **Current State** and child-spine map are authoritative for project direction, the active delivery surface, human gates, and the next action.
 
-The active delivery surface as of 2026-08-16 is `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`. Read that child spine before selecting, planning, dispatching, or executing Zenod alpha work.
+The active delivery surface as of 2026-08-27 is `docs/EPIC-P-PHYLAX-SPRINT.md`. It owns the frozen integrated-independent Zenod/PM/Phylax architecture and final-push issue board. Read it before selecting, planning, dispatching, or executing this delivery push. `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` remains read-only historical launch evidence unless the active spine explicitly routes a gate back to it.
 
 Do not infer priority from the repository-wide GitHub issue list. It contains historical, superseded, blocked, and test-only records. Only issues linked from the active child spine's **Issue Ledger** are selectable for that epic.
 
@@ -24,7 +24,9 @@ Do not infer priority from the repository-wide GitHub issue list. It contains hi
 
 ## Current ready batch
 
-- [ZAL-1 #1058](https://github.com/zenod-ai/zenod/issues/1058): alpha-launch truth/readiness audit.
-- [ZAL-2 #1059](https://github.com/zenod-ai/zenod/issues/1059): reproduce and repair the incorrect recent-conversation recap.
+- [ZPF-1 #1103](https://github.com/zenod-ai/zenod/issues/1103): freeze working journeys and architecture invariants.
+- [ZPF-2 #1104](https://github.com/zenod-ai/zenod/issues/1104): create the independent Phylax artifact and isolated instance modes.
+- [ZPF-3 #1105](https://github.com/zenod-ai/zenod/issues/1105): make tenant auth, credentials and sessions deployment-stable.
+- [ZPF-4 #1106](https://github.com/zenod-ai/zenod/issues/1106): implement the issuer-neutral Phylax allowance/usage ledger when a worker slot opens.
 
-These two issues may run in parallel only after the control-plane spine commit is available as their common base. Later ZAL issues remain dependency- or approval-gated in `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`.
+The first three may run in parallel only after the control-plane spine commit is available as their common base. All later work is dependency-gated by `docs/EPIC-P-PHYLAX-SPRINT.md`; do not select from the global issue list.

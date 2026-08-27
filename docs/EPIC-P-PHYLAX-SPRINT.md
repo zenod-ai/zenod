@@ -1,15 +1,15 @@
 # EPIC P · Phylax Sprint — one channel core, integrated or standalone
 
-Status: active — transport proof preserved; integrated/standalone product architecture locked 2026-08-27; PM sprint-plan reconciliation pending
+Status: active — final integrated-independent delivery push
 Created: 2026-07-11
 Updated: 2026-08-27
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
-Active spine steward: Phylax delivery manager (bind on dispatch)
-Steward since: 2026-07-11T05:04:09+02:00
-Last reconciled commit: `1bd8c26` on `codex/integrated-product-vision` before this spine update
+Active spine steward: `/root` final-push delivery manager
+Steward since: 2026-08-27 14:40 CEST
+Last reconciled commit: `915d3c45c2d771ac2724ea9248f80af4e40a9c12` on `main` before this control-plane update
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -19,13 +19,13 @@ Tester: the delivery manager itself (journey walker)
 | Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
 |---|---|---|---|---|
 | Planner | Jordi + Epic 3.0 planner | This spine | Wrote it; every decision pre-answered below. | This document. |
-| Epic worker | Phylax delivery manager | This spine | MANAGER: mint tickets, dispatch parallel worktree workers, integrate, walk the journey, iterate until SHIP. | The test package. |
+| Epic worker | `/root` final-push delivery manager | This spine | Steward the frozen architecture, issue board, parallel dispatch, integration, release validation and final Jordi test handoff. No architecture changes without Jordi. | Reviewed integrated `main`, exact release evidence, blockers and one final test package. |
 | Ticket worker | assigned per ticket | One ticket, own worktree | FIRST ACTION: `git worktree add ../wt-<ticket> -b <branch> main`. Never checkout in the shared clone. PORT/DUPLICATE means move code, adapt only imports/config — a scratch-written duplicate line is a failing review. | PR + one-line result. |
 
 ## Write Scope
 
 Bound spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
-Active steward: Phylax delivery manager
+Active steward: `/root` final-push delivery manager
 
 Writable by default:
 
@@ -111,12 +111,13 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: Integrated/standalone product architecture locked; awaiting PM reconciliation into the overall sprint plan before new Phylax implementation is dispatched
-Last verified: 2026-08-27 CEST (Jordi conversation decision plus durable product/UI contract; no implementation or production claim)
+Phase: Final architecture frozen; executable backlog created; control-plane integration before wave-1 dispatch
+Last verified: 2026-08-27 14:40 CEST
 Integration target: main
-Planning branch / artifact commit: `codex/integrated-product-vision` at `1bd8c26`; durable contract at `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html`
-Next action: PM reconciles the locked product shape and contract acceptance into the pending overall sprint plan, explicitly mapping its Phylax/WhatsApp lane to the shared-core seams. Do not create a second metering/settings/runtime shape. After plan review, the Phylax steward normalizes executable tickets; the Zenod beta slice remains first and PM/standalone extend the same core later.
-Blockers: no architectural decision is open. Exact MCP tool names, plan/allowance amounts, standalone pricing, whether PM bundles or links Zenod memory, and a future self-hosted Phylax add-on remain sprint/commercial details that may vary without changing the locked core. Historical P-S5 Telegram and real second-tenant laps remain unclosed evidence and must not be represented as passed.
+Fresh base commit: `915d3c45c2d771ac2724ea9248f80af4e40a9c12` on `main`; signup-closed production candidate remains deployed and is the rollback/behavior baseline, not target-architecture proof
+Planning branch / artifact commit: `codex/zenod-phylax-final-push-control-plane` from `915d3c4`; durable visual contract at `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html`
+Next action: review, validate and merge the control-plane update; immediately dispatch #1103, #1104 and #1105 in isolated worktrees from the merged commit, then start #1106 when a slot opens.
+Blockers: no architecture or backlog decision is open. Implementation work is gated only on the control-plane merge. Production deployment, real channel sends, real-card billing and public signup remain later named human gates. Exact plan allowance amounts, allocation chunk sizes and native Phylax pricing are configuration/commercial choices that cannot change the ledger or service architecture.
 
 ## Role Goals
 
@@ -188,6 +189,10 @@ Later dated rows supersede conflicting July product-shape assumptions while pres
 | 2026-08-27 | Shared core and standalone extension (Jordi, binding) | Integrated Zenod, integrated PM and Phylax standalone reuse one tenant/settings/MCP/metering/enforcement/delivery core and reusable UI components. Standalone changes the product shell, billing authority and allowance issuer; it is never rebuilt or forked later. |
 | 2026-08-27 | Metering and P&L (Jordi, binding) | Phylax authoritatively meters its transcription/channel costs. Zenod/PM or native Phylax billing issues idempotent append-only allowance grants to the same ledger. Host UI may show one combined percentage; operator views preserve service-level costs and combined customer P&L. |
 | 2026-08-27 | Product ownership and sequence (Jordi, binding) | Phylax owns channels/STT, Zenod owns memory/vault/Drive archive, PM owns proposals/decisions. Land the contract and shared-core seams now; prove Zenod beta first; PM and standalone extend them later without widening the current stabilization refactor. |
+| 2026-08-27 | Deployment islands (Jordi, binding) | One Phylax codebase produces one Phylax artifact reused by isolated instances. One service WhatsApp number belongs to one Phylax instance. `phylax-for-zenod` and `phylax-for-pm` use fixed product adapters; standalone Phylax permits one explicitly configured compatible downstream per tenant. Instances never share volumes, sessions, credentials, ledgers or admin state. Zenod and PM remain separate artifacts. |
+| 2026-08-27 | Credit semantics (Jordi, binding) | Credit is internal integer-denominated allowance, never a provider key, OAuth credential, MCP token or provider balance. The selling product owns the master customer allowance and grants bounded, idempotent allocations to its mapped Phylax tenant through service-authenticated MCP. Phylax spends only its allocation, records its own actual/estimated costs and never deletes historical usage. Native Phylax billing uses the same grant operation. |
+| 2026-08-27 | Architecture change authority (Jordi, binding) | Service ownership, instance topology, MCP boundaries, auth model, metering ownership and customer experience are frozen by this spine. Ticket workers implement bounded seams only. Any proposed change returns to Jordi; no worker may reinterpret the architecture, move credentials, create another router/ledger/runtime, or refactor a working subsystem opportunistically. |
+| 2026-08-27 | Final-push mandate | `/root` is the active epic worker and spine steward. It must keep dispatching, reviewing and integrating the dependency-ordered issue board until the exact candidate is ready for Jordi's final test or a named human gate blocks progress. |
 
 ## Issue Ledger
 
@@ -198,21 +203,39 @@ Later dated rows supersede conflicting July product-shape assumptions while pres
 | [#872](https://github.com/zenod-ai/zenod/issues/872) | Ticket worker | P-S3-worker | P-S3 tenant settings + keyword verification + transcription | done | P-S1, P-S2 done | [#881](https://github.com/zenod-ai/zenod/pull/881) / `codex/p-s3-tenant-settings` | `c0a2f6b` | SHIP 6–7, 9 | 645 full + 24 post-merge focused tests; CI; manager review; merged `78aaee6` | 2026-07-11T05:34:00+02:00 | integrated |
 | [#873](https://github.com/zenod-ai/zenod/issues/873) | Ticket worker | P-S4-worker | P-S4 admin gate (alfablok) + billing + domain | done | P-S1, P-S2 admin surface done | [#880](https://github.com/zenod-ai/zenod/pull/880), [#883](https://github.com/zenod-ai/zenod/pull/883) / `codex/p-s4-admin-billing-domain` | `c0a2f6b` | SHIP 2, 4, 5 | CI + focused checks; live `51242ac`; root/health 200, MCP 401, logged-out admin 404 | 2026-07-11T05:54:31+02:00 | integrated and deployed |
 | [#874](https://github.com/zenod-ai/zenod/issues/874) | Epic worker | Phylax delivery manager | P-S5 journey loop (browser + phone) + package | in progress; SHIP 10 Telegram + SHIP 11 need Human Gate inputs | P-S1..4 done | manager loop; [#917](https://github.com/zenod-ai/zenod/pull/917) | live `f6cc22c` | SHIP 1–12 | fresh QR paired; inbound keyword verified; clean text pipe; serialized Whisper voice pipe with artifact handoff; external WhatsApp MCP delivery receipt | 2026-07-12T17:38:01+02:00 | configure Telegram bot/identity; obtain second sender identity for isolation |
+| [#1103](https://github.com/zenod-ai/zenod/issues/1103) | Ticket worker | ZPF-1-worker | Freeze working journeys and architecture invariants | ready / wave 1 | none | `codex/zpf-1-baseline-contract` | `915d3c4` | Versioned no-regression harness covers content, concurrent voice, Drive receipts, restart/cap and durable auth/session/credential invariants without normalizing known failures. | ZAL-22 signup-closed candidate and existing focused suites | 2026-08-27 14:40 CEST | Dispatch from the merged control-plane base. |
+| [#1104](https://github.com/zenod-ai/zenod/issues/1104) | Ticket worker | ZPF-2-worker | Independent Phylax artifact and isolated instance modes | ready / wave 1 | none | `codex/zpf-2-phylax-artifact` | `915d3c4` | Dedicated Phylax artifact boots multiple isolated fixed-product/standalone instances with no shared runtime data and no Zenod process embedded. | Existing `AGENT=phylax` runtime and production private service | 2026-08-27 14:40 CEST | Dispatch from the merged control-plane base. |
+| [#1105](https://github.com/zenod-ai/zenod/issues/1105) | Ticket worker | ZPF-3-worker | Deployment-stable tenant auth, credentials and sessions | ready / wave 1 | none | `codex/zpf-3-auth-stability` | `915d3c4` | Direct MCP/OAuth/Drive/channel credentials survive reconcile/restart/upgrade; only explicit confirmed revoke invalidates; real-browser loopback completes. | Reviewed local auth-stability commit `aaead85`; production rotation root cause recorded | 2026-08-27 14:40 CEST | Dispatch from the merged control-plane base; port reviewed work narrowly. |
+| [#1106](https://github.com/zenod-ai/zenod/issues/1106) | Ticket worker | ZPF-4-worker | Issuer-neutral Phylax allowance and usage ledger | ready / wave 1 | none | `codex/zpf-4-phylax-ledger` | `915d3c4` | Append-only integer ledger gives exactly-once tenant grants/adjustments/usage, deterministic reset/suspension and custody-preserving cap behavior. | Existing Zenod UsageStore and transcription estimate evidence; target ownership frozen here | 2026-08-27 14:40 CEST | Dispatch when a wave-1 slot is available. |
+| [#1107](https://github.com/zenod-ai/zenod/issues/1107) | Ticket worker | ZPF-5-worker | Tenant-safe Phylax management MCP | queued / wave 2 | #1105, #1106 | `codex/zpf-5-management-mcp` | fresh integrated wave-1 `main` | Versioned, scoped, idempotent tenant/channel/credit tools; separate owner surface; hostile and rolling-version matrix green. | Frozen MCP/control contract in this spine | 2026-08-27 14:40 CEST | Dispatch after #1105 and #1106 integrate. |
+| [#1108](https://github.com/zenod-ai/zenod/issues/1108) | Ticket worker | ZPF-6-worker | Zenod provisioning, Channels BFF and combined usage | queued / wave 3 | #1107 | `codex/zpf-6-zenod-adapter` | fresh integrated #1107 `main` | Zenod lifecycle provisions/funds Phylax through MCP; browser remains Zenod-only; combined cap/projection is truthful and existing tenant assets persist. | Existing customer layer/Channels facade plus frozen issuer contract | 2026-08-27 14:40 CEST | Dispatch after #1107 integrates. |
+| [#1109](https://github.com/zenod-ai/zenod/issues/1109) | Ticket worker | ZPF-7-worker | Product UI facades, Phylax operator UI and standalone shell | queued / wave 3 | #1104, #1107 | `codex/zpf-7-ui-shells` | fresh integrated #1104/#1107 `main` | Reusable settings/metering components serve Zenod/PM facades and native Phylax while every instance retains a separate operator UI and authority boundary. | Existing Zenod Channels/Phylax admin UI plus durable visual contract | 2026-08-27 14:40 CEST | Dispatch in parallel with #1108 after dependencies integrate. |
+| [#1110](https://github.com/zenod-ai/zenod/issues/1110) | Ticket worker | ZPF-8-worker | Remove legacy coupling with no-loss compatibility migration | queued / wave 4 | #1103–#1109 | `codex/zpf-8-decouple-migrate` | fresh integrated wave-3 `main` | Phylax-local metering and fixed adapters replace piggyback/dynamic coupling only after exact migration, mixed-version, rollback and custom-binding preservation proof. | Current piggyback `transcriptionUsage` and legacy binding evidence | 2026-08-27 14:40 CEST | Dispatch after all prerequisite seams are reviewed and integrated. |
+| [#1111](https://github.com/zenod-ai/zenod/issues/1111) | Ticket worker | ZPF-9-worker | PM and standalone conformance without a core fork | queued / wave 5 | #1107, #1109, #1110 | `codex/zpf-9-three-island-conformance` | fresh integrated #1110 `main` | PM contract harness and native issuer prove three simultaneous isolated islands using the same Phylax core; downstream PM repo unchanged without authority. | Frozen three-island architecture | 2026-08-27 14:40 CEST | Dispatch after #1110 integrates. |
+| [#1112](https://github.com/zenod-ai/zenod/issues/1112) | Tester / release worker | ZPF-10-release | Final integrated-independent acceptance and closed rollout | queued / wave 6 | #1103–#1111 | `codex/zpf-10-release-acceptance` | exact integrated `main` | Exact candidate passes full automated/independent review, backups, separate-artifact closed deploy and uninterrupted real customer journey; test package delivered. | ZAL-22 production packet is the prior rollback/current baseline | 2026-08-27 14:40 CEST | Dispatch only after implementation waves integrate. |
+| [#1061](https://github.com/zenod-ai/zenod/issues/1061) | Epic worker / human gate | `/root` + Jordi | Public production-readiness gate | blocked after closed candidate | #1112, Stripe profile, live €9 journey, explicit signup approval | existing ZAL-4 operator lane | exact #1112 candidate | Readiness 13/13, final human acceptance, explicit public signup approval and rollback named. | Current production candidate is signup-closed and 11/13 | 2026-08-27 14:40 CEST | Keep signup closed; execute only after #1112 and separate exact approvals. |
 
 ## Branch And Integration
 
-- Base pinned at dispatch; no rebases until the journey passes (D19c).
-- One worktree per worker; shared clone read-only on main.
-- Manager integrates passing PRs; deploy = rebuild the ONE phylax app. Targeted tests + journey only.
+- Default integration branch: protected `main`; control-plane base is `915d3c45c2d771ac2724ea9248f80af4e40a9c12` until this spine change merges.
+- One ticket worker, dedicated `codex/` branch and separate worktree per issue. Workers write detailed progress and handoffs to their issue; only `/root` edits this spine.
+- Wave 1 may run #1103, #1104 and #1105 in parallel immediately after the control-plane merge; #1106 starts when a worker slot opens. Later waves obey the dependencies recorded above.
+- The manager independently reviews each PR, integrates small coherent changes, updates the base for subsequent workers and rejects architectural drift even when tests are green.
+- No implementation PR may deploy automatically as acceptance. ZPF-10 owns the exact backup/deploy/test sequence after all source waves integrate.
+- `review` means implementation complete, PR open, CI green and independent architecture review clean; `done` additionally requires integrated-main validation and spine reconciliation.
 
 ## Human Gates
 
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
-| Dispatch | Jordi | Ring SHIP approved | "go phylax" | Nothing before it |
+| Architecture/product contract | Jordi | Any proposal changes service ownership, island topology, MCP boundary, auth model, metering ownership or customer experience | Explicitly approve the revised spine decision before implementation | Work strictly inside the frozen contract |
+| Final-push dispatch | Jordi | 2026-08-27 backlog and goal creation | Approved by the request to create, parallelize and execute this final push | All local code, tests, docs, GitHub issues/PRs and read-only production inspection inside this spine |
 | Test phone number for the manager's laps | Jordi | P-S5 start | Provide a spare/test WhatsApp number the manager may pair and message (or approve using a temp number) | P-S1..P-S4 |
 | Real number pairing | Jordi | His own pass | Jordi scans the QR on /admin | Manager's laps on the test number |
 | Live paying tenants / other live units | Jordi | Should not occur | BLOCKED ON JORDI | All else |
+| Production backup/deploy | Jordi | ZPF-10 has an exact reviewed merge SHA, immutable images, targets, env-preservation proof and rollback | Approve the exact backup and closed deployment actions | Local/review/CI/read-only preflight |
+| Real channel acceptance | Jordi | Closed candidate is healthy and named test messages/tenant are ready | Approve the exact real WhatsApp/Telegram sends; Jordi performs final experiential pass | Automated and synthetic acceptance |
+| Billing and public signup | Jordi | #1061 reaches exact Stripe/profile/legal/live-journey gate | Separate real-card approval, then separate `public signup on` approval | Signup-closed testing and remediation |
 
 ## Recovery And Takeover
 
@@ -224,20 +247,25 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 
 ## Planner Queue
 
-- PM reconciles the 2026-08-27 locked contract and durable artifact into the pending overall sprint plan without accepting/rejecting it implicitly from this spine update.
-- Normalize the future execution board around one shared Phylax core: MCP data/control contracts; tenant mapping/provisioning; issuer-neutral allowance and usage ledgers; Zenod allowance issuer/BFF first; then PM adapter and native Phylax shell/issuer.
+- Architecture and acceptance are frozen. Route any proposed change to Jordi instead of editing issue scope silently.
+- Keep the PM repository/proposal read-only until its own steward accepts the shared contract; #1111 proves compatibility without downstream mutation.
 - Preserve historical P-S5 evidence and name its remaining Telegram and real second-tenant laps wherever live transport completeness is claimed.
-- Do not create a parallel standalone metering/settings/runtime backlog or a browser-to-Phylax credential flow.
+- Do not create a parallel standalone metering/settings/runtime backlog, browser-to-Phylax credential flow, provider child-key scheme, dynamic product router or shared database.
 
 ## Worker Queue
 
-- No new worker dispatch from this conversation update. Await the PM-reconciled sprint plan and explicit executable tickets.
-- Historical P-S1–P-S4 are integrated; P-S5 remains incomplete for Telegram and a real second-tenant/sender isolation lap.
+- Wave 1: #1103 baseline contract, #1104 independent Phylax artifact and #1105 auth stability in parallel; #1106 ledger when a slot opens.
+- Wave 2: #1107 management MCP after auth and ledger.
+- Wave 3: #1108 Zenod adapter and #1109 UI shells in parallel.
+- Wave 4: #1110 compatibility migration and coupling removal.
+- Wave 5: #1111 three-island PM/standalone conformance.
+- Wave 6: #1112 exact release acceptance, then #1061 public gates.
 
 ## Tester Queue
 
-- Future shared-core acceptance must prove the same tenant/settings/metering behavior through integrated Zenod and native Phylax funding/presentation paths without a second implementation.
-- Historical P-S5 still requires a real Telegram identity and two verified sender identities before its original uninterrupted package can be called complete.
+- Every wave gets independent review against this spine, not only unit tests.
+- #1112 must prove the same tenant/settings/metering behavior through Zenod, PM fixture and native Phylax paths without a second implementation.
+- Historical P-S5 still requires a real Telegram identity and two verified sender identities before its original uninterrupted package can be called complete; it can be satisfied inside the gated #1112 journey.
 
 ## Validation Evidence
 
@@ -307,11 +335,29 @@ Next: Jordi will give this conversation/durable contract to the PM. The PM recon
 
 Risks: the historical July spine and tickets contain duplicate-Zenod, Ring-only and three-plan assumptions. They remain useful implementation/evidence history but must not be copied forward as current product authority. Exact tool names, prices and internal allowance allocations are proposal details; changing them must not fork the core architecture.
 
+### 2026-08-27 - Epic worker - Final architecture goal bound and execution board created
+
+Context: Jordi accepted the deployment-island, backend-for-frontend and issuer-neutral metering model and explicitly requested a detailed parallel backlog plus a new persistent goal. `/root` became the active Phylax spine steward and final-push delivery manager. The goal is to deliver the frozen architecture to a final human test without rotating credentials/tokens/sessions or opportunistically redesigning working subsystems.
+
+Action: created issues #1103–#1112 as six dependency waves. Wave 1 freezes current behavior, separates the Phylax artifact, makes auth/credential/session continuity append-only and builds the independent allowance ledger. Subsequent waves expose the tenant-safe MCP, bind Zenod and reusable UI shells, remove old coupling through a no-loss compatibility migration, prove PM/standalone conformance and run one exact closed rollout. Existing #1061 remains the separate public billing/signup gate.
+
+Next: merge this control-plane update, then dispatch #1103, #1104 and #1105 in isolated worktrees from its exact main commit; queue #1106 when a slot opens. The steward reviews/integrates and advances bases between waves.
+
+Risks: current production is a signup-closed candidate, not proof of the target separate-artifact architecture. No production, credential, billing, session, channel or signup mutation is authorized by backlog creation.
+
+Assignment identity: `/root` final-push delivery manager
+
+Branch / latest commit: `codex/zenod-phylax-final-push-control-plane` from `915d3c4`; commit pending
+
+Last verified: 2026-08-27 14:40 CEST
+
+Links: [#1103](https://github.com/zenod-ai/zenod/issues/1103), [#1104](https://github.com/zenod-ai/zenod/issues/1104), [#1105](https://github.com/zenod-ai/zenod/issues/1105), [#1106](https://github.com/zenod-ai/zenod/issues/1106), [#1107](https://github.com/zenod-ai/zenod/issues/1107), [#1108](https://github.com/zenod-ai/zenod/issues/1108), [#1109](https://github.com/zenod-ai/zenod/issues/1109), [#1110](https://github.com/zenod-ai/zenod/issues/1110), [#1111](https://github.com/zenod-ai/zenod/issues/1111), [#1112](https://github.com/zenod-ai/zenod/issues/1112), [#1061](https://github.com/zenod-ai/zenod/issues/1061)
+
 ## Open Questions
 
-- No architecture question remains open for PM reconciliation.
+- No architecture question remains open for the final push. Any proposed change to service boundaries, credential ownership, routing, tenant identity, metering ownership or deployment islands must stop for Jordi's explicit approval.
 - Deferred commercial choices that do not change the core: native Phylax price; PM bundled-versus-linked Zenod memory entitlement; future self-hosted Phylax add-on; exact internal allowance allocations.
-- Exact MCP tool names are to be reconciled against existing code before ticket creation; the durable artifact names desired typed capabilities, not proof that every named tool exists.
+- Ticket workers must reconcile exact MCP tool names against existing code before implementation. The durable artifact and issues lock the required typed capabilities; they do not authorize inventing parallel protocols or a second control plane.
 
 ## Proposed Cross-Spine Updates
 
