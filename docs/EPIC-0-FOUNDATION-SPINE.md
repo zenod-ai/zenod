@@ -84,13 +84,13 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Frozen integrated-independent Zenod–Phylax final push entering parallel execution
-Last verified: 2026-08-27 14:40 CEST
+Phase: Frozen integrated-independent Zenod–Phylax final push; wave 1 active
+Last verified: 2026-08-27 15:05 CEST
 Integration target: `main`
-Fresh base commit: `915d3c45c2d771ac2724ea9248f80af4e40a9c12` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
+Fresh base commit: `3e902f49372f211f589d73722f6be9bbf33a79d5` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
 Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
-Next action: merge the final-push control plane, then dispatch #1103, #1104 and #1105 in parallel from the exact merged base; start #1106 when a slot opens and continue through the dependency waves to Jordi's final test.
-Blockers: none for local implementation after the control-plane merge. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
+Next action: independently review and integrate active #1103, #1104 and #1105; dispatch #1106 from the newest coherent main as soon as a worker slot opens, then continue through the recorded dependency waves to Jordi's final test.
+Blockers: none for wave-1 local implementation. Production backup/deploy, real channel sends, live billing and public signup remain named human gates. Public signup stays closed.
 
 ## Bootstrap Map
 
