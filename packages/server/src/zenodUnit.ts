@@ -959,12 +959,34 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     c.header("Referrer-Policy", "same-origin");
     c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
     const contentSecurityPolicy =
-      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'; form-action 'self' https://checkout.stripe.com";
+      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'";
+    // Native MCP OAuth clients use RFC 8252 loopback redirects such as
+    // http://127.0.0.1:<ephemeral-port>. Applying upgrade-insecure-requests to
+    // the consent page or its decision response rewrites that browser-only
+    // callback to HTTPS and strands the authorization flow. The authorization
+    // form also needs to follow redirects to registered HTTPS or loopback
+    // callbacks; the OAuth handler still enforces an exact registered URI.
+    // Keep every other production route upgraded and limited to the checkout
+    // form target while leaving these two routes OAuth-client compatible.
+    const isMcpOAuthBrowserRoute =
+      c.req.path === "/oauth/authorize" ||
+      c.req.path === "/oauth/authorize/decision";
+    const formActionPolicy = isMcpOAuthBrowserRoute
+      ? "form-action 'self' https: http://127.0.0.1:* http://[::1]:*"
+      : "form-action 'self' https://checkout.stripe.com";
+    const routeContentSecurityPolicy = `${contentSecurityPolicy}; ${formActionPolicy}`;
     c.header(
       "Content-Security-Policy",
-      env.NODE_ENV === "production" ? `${contentSecurityPolicy}; upgrade-insecure-requests` : contentSecurityPolicy,
+      env.NODE_ENV === "production" && !isMcpOAuthBrowserRoute
+        ? `${routeContentSecurityPolicy}; upgrade-insecure-requests`
+        : routeContentSecurityPolicy,
     );
-    if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/auth/") || c.req.path.startsWith("/checkout/")) {
+    if (
+      c.req.path.startsWith("/api/") ||
+      c.req.path.startsWith("/auth/") ||
+      c.req.path.startsWith("/checkout/") ||
+      c.req.path.startsWith("/oauth/")
+    ) {
       c.header("Cache-Control", "no-store");
     }
     if (env.NODE_ENV === "production") {
