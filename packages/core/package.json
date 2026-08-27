@@ -13,6 +13,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./state/sqlite": {
+      "types": "./dist/state/sqlite.d.ts",
+      "default": "./dist/state/sqlite.js"
+    },
+    "./version": {
+      "types": "./dist/version.d.ts",
+      "default": "./dist/version.js"
+    },
+    "./evidence-context": {
+      "types": "./dist/evidenceContext.d.ts",
+      "default": "./dist/evidenceContext.js"
     }
   },
   "bin": {

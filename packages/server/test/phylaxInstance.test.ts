@@ -1,14 +1,19 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serve } from "@hono/node-server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createMemoryTenantStore } from "@zenod/mcp-chassis";
-import { createPhylaxUnit } from "../src/phylaxUnit.js";
+import { ChassisStorage, createMemoryTenantStore } from "@zenod/mcp-chassis";
+import { createPhylaxUnit, resolvePhylaxRuntimeRoute } from "../src/phylaxUnit.js";
 import {
   assertCustomerDownstreamMutationAllowed,
   assertDedicatedPhylaxProcessEnv,
   resolvePhylaxInstanceConfig,
 } from "../src/phylaxInstance.js";
+import { defaultPhylaxTurnBindings, PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 
 const dirs: string[] = [];
 const MASTER_KEY = "44".repeat(32);
@@ -61,6 +66,126 @@ describe("dedicated Phylax deployment islands", () => {
       .not.toThrow();
     expect(() => assertCustomerDownstreamMutationAllowed(standalone, { turnBindings: {} }))
       .not.toThrow();
+  });
+
+  it("enforces product adapters at runtime instead of trusting persisted bindings", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-fixed-adapter-"));
+    dirs.push(dataDir);
+    const storage = new ChassisStorage({ dataDir, vaultEncryptionKey: MASTER_KEY });
+    const settings = new PhylaxTenantSettingsStore(dataDir, storage);
+    const registration = settings.registerPhone("tenant-a", "+34 611 111 111", "number-a");
+    expect(settings.verifyInbound("34611111111@s.whatsapp.net", registration.keyword)).toMatchObject({
+      tenantId: "tenant-a",
+      verified: true,
+    });
+    settings.update("tenant-a", {
+      downstreamUrl: "https://tenant-a.example/mcp",
+      downstreamToken: "tenant-a-token",
+      turnBindings: {
+        voice_note: { tool: "legacy_arbitrary_voice", argumentMappings: { text: { source: "message" } } },
+        text: { tool: "legacy_arbitrary_text", argumentMappings: { text: { source: "message" } } },
+        media: { tool: "legacy_arbitrary_media", argumentMappings: { text: { source: "message" } } },
+      },
+    });
+
+    const zenod = resolvePhylaxRuntimeRoute(
+      resolvePhylaxInstanceConfig({ PHYLAX_INSTANCE_MODE: "zenod" }),
+      settings,
+      "whatsapp",
+      "34611111111@s.whatsapp.net",
+    );
+    expect(zenod).toMatchObject({
+      tenantId: "tenant-a",
+      downstreamUrl: "https://tenant-a.example/mcp",
+      downstreamToken: "tenant-a-token",
+      turnBindings: defaultPhylaxTurnBindings(),
+    });
+    expect(JSON.stringify(zenod)).not.toContain("legacy_arbitrary");
+
+    const pm = resolvePhylaxRuntimeRoute(
+      resolvePhylaxInstanceConfig({ PHYLAX_INSTANCE_MODE: "pm" }),
+      settings,
+      "whatsapp",
+      "34611111111@s.whatsapp.net",
+    );
+    expect(pm).toBeNull();
+
+    const standalone = resolvePhylaxRuntimeRoute(
+      resolvePhylaxInstanceConfig({ PHYLAX_INSTANCE_MODE: "standalone" }),
+      settings,
+      "whatsapp",
+      "34611111111@s.whatsapp.net",
+    );
+    expect(standalone?.turnBindings).toMatchObject({
+      text: { tool: "legacy_arbitrary_text" },
+    });
+  });
+
+  it("exposes only Phylax MCP tools and no Zenod application routes", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-runtime-audit-"));
+    dirs.push(dataDir);
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore([{
+        token: "phylax-runtime-token",
+        tenant: { id: "tenant-a", name: "Tenant A" },
+      }]),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        PHYLAX_PREWARM_LOCAL_MODEL: "0",
+      },
+    });
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const started = serve({ fetch: unit.app.fetch, port: 0 }, () => resolve(started));
+    });
+    try {
+      const address = server.address() as AddressInfo;
+      const client = new Client({ name: "phylax-runtime-audit", version: "1" });
+      await client.connect(new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${address.port}/mcp/phylax-runtime-token`),
+      ));
+      const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
+      expect(tools).toEqual([
+        "channel_status",
+        "get_recent_conversation_transcript",
+        "install_operating_directive",
+        "notify",
+        "send_message",
+      ]);
+      for (const forbidden of [
+        "ask_brain",
+        "chat_with_zenod",
+        "get_memory",
+        "ingest_memory",
+        "list_drive_files",
+        "search_memory",
+        "store_memory",
+      ]) {
+        expect(tools).not.toContain(forbidden);
+      }
+      await client.close();
+
+      for (const [method, path] of [
+        ["POST", "/api/ask"],
+        ["POST", "/api/chat"],
+        ["GET", "/api/drive/status"],
+        ["POST", "/api/store"],
+        ["GET", "/api/vault"],
+      ] as const) {
+        const response = await unit.app.request(path, {
+          method,
+          headers: {
+            authorization: "Bearer phylax-runtime-token",
+            "content-type": "application/json",
+          },
+          ...(method === "POST" ? { body: "{}" } : {}),
+        });
+        expect(response.status, `${method} ${path}`).toBe(404);
+      }
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await unit.close();
+    }
   });
 
   it("boots two isolated modes concurrently and preserves a mounted legacy session", async () => {
@@ -135,10 +260,24 @@ describe("dedicated Phylax deployment islands", () => {
       new URL("../../../units/phylax/docker-compose.islands.yml", import.meta.url),
       "utf8",
     );
+    const packageJson = await readFile(
+      new URL("../package.json", import.meta.url),
+      "utf8",
+    );
+    const phylaxUnitSource = await readFile(
+      new URL("../src/phylaxUnit.ts", import.meta.url),
+      "utf8",
+    );
     expect(dockerfile).toContain('CMD ["node", "packages/server/dist/phylaxMain.js"]');
     expect(dockerfile).toContain('dev.zenod.runtime="phylax-only"');
+    expect(dockerfile).toContain("npm run build:phylax -w @zenod/server");
+    expect(dockerfile).toContain("/app/packages/server/dist-phylax/phylaxMain.js");
+    expect(dockerfile).not.toContain("/app/packages/server/dist ./packages/server/dist");
+    expect(dockerfile).not.toContain("/app/packages/core/dist");
     expect(dockerfile).not.toContain("apps/site/dist");
     expect(dockerfile).not.toContain("apps/ring-site/dist");
+    expect(packageJson).toContain("assert-phylax-bundle.mjs");
+    expect(phylaxUnitSource).not.toMatch(/createZenodUnit|ZenodRuntimePool|registerZenodTools/);
     expect(compose).toContain("phylax-for-zenod-data:/data");
     expect(compose).toContain("phylax-for-pm-data:/data");
     expect(compose).toContain("phylax-standalone-data:/data");

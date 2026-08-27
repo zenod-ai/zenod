@@ -30,9 +30,8 @@ COPY docs/tool-output-schemas.v4.json ./docs/tool-output-schemas.v4.json
 COPY packages ./packages
 COPY apps/web ./apps/web
 COPY apps/phylax-site ./apps/phylax-site
-RUN npm run build -w zenod \
-  && npm run build -w @zenod/mcp-chassis \
-  && npm run build -w @zenod/server \
+RUN npm run build -w @zenod/mcp-chassis \
+  && npm run build:phylax -w @zenod/server \
   && npm run build -w web \
   && npm run build -w phylax-site
 RUN npm prune --omit=dev
@@ -59,13 +58,10 @@ LABEL org.opencontainers.image.title="Phylax" \
 
 COPY --from=build /app/.gitsha ./.gitsha
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/core/package.json ./packages/core/package.json
-COPY --from=build /app/packages/core/dist ./packages/core/dist
-COPY --from=build /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=build /app/packages/mcp-chassis/package.json ./packages/mcp-chassis/package.json
 COPY --from=build /app/packages/mcp-chassis/dist ./packages/mcp-chassis/dist
 COPY --from=build /app/packages/server/package.json ./packages/server/package.json
-COPY --from=build /app/packages/server/dist ./packages/server/dist
+COPY --from=build /app/packages/server/dist-phylax/phylaxMain.js ./packages/server/dist/phylaxMain.js
 COPY --from=build /app/packages/server/node_modules ./packages/server/node_modules
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/phylax-site/dist ./apps/phylax-site/dist

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod";
+import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod/evidence-context";
 
 /**
  * Shared input schemas for the tools the Console's mesh gateway re-publishes.

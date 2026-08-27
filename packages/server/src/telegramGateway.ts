@@ -6,7 +6,12 @@ import { transcribeChannelAudio } from "./channelAudio.js";
 import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
-import { agentKeptNote, archiveVoiceNote, driveArchiveUnavailableReason, voiceArchiveFilename, type VoiceAudio } from "./voiceArchive.js";
+import {
+  agentKeptNote,
+  driveArchiveUnavailableReason,
+  voiceArchiveFilename,
+  type VoiceAudio,
+} from "./voiceArchivePrimitives.js";
 import { normalizeTelegramEntry, normalizeTelegramId, userIsAllowed, type TelegramSettings } from "./telegramConfig.js";
 import { linkifyGithubRefs } from "./githubLinks.js";
 
@@ -719,9 +724,13 @@ export class TelegramGateway {
     const peers = this.options.settings.peers();
     const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
     const archive = shouldArchiveVoice
-      ? archiveVoiceNote(this.options.settings, voiceAudio)
-          .then((res) => ({ result: res }))
-          .catch((err: unknown) => ({ error: err }))
+      ? import("./voiceArchive.js")
+          .then(async ({ archiveVoiceNote }) => {
+            return archiveUnavailableReason
+              ? null
+              : { result: await archiveVoiceNote(this.options.settings, voiceAudio) };
+          })
+          .catch((error: unknown) => ({ error }))
       : Promise.resolve(null);
     void Promise.all([poll, archive])
       .then(([job, archived]) => {

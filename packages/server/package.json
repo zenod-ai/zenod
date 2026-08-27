@@ -11,6 +11,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "node ../../scripts/build-tool-output-schemas.mjs --check && tsc",
+    "build:phylax": "node ../../scripts/build-tool-output-schemas.mjs --check && esbuild src/phylaxMain.ts --bundle --platform=node --format=esm --packages=external --alias:zenod/version=../core/src/version.ts --alias:zenod/state/sqlite=../core/src/state/sqlite.ts --alias:zenod/evidence-context=../core/src/evidenceContext.ts --external:./voiceArchive.js --outfile=dist-phylax/phylaxMain.js --metafile=dist-phylax/meta.json && node ../../scripts/assert-phylax-bundle.mjs dist-phylax/meta.json dist-phylax/phylaxMain.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "node --watch --experimental-strip-types src/main.ts",

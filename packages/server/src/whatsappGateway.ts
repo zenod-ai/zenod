@@ -21,13 +21,11 @@ import { extractJobId, pollPeerJob } from "./pollPeerJob.js";
 import { NO_SPEECH_MESSAGE } from "./transcribe.js";
 import { formatStorageReceipt } from "./storageReceipt.js";
 import {
-  archiveImage,
-  archiveVoiceNote,
   driveArchiveUnavailableReason,
   imageArchiveFilename,
   voiceArchiveFilename,
   type VoiceAudio,
-} from "./voiceArchive.js";
+} from "./voiceArchivePrimitives.js";
 import {
   maskPhoneNumber,
   normalizeWhatsAppIdentifier,
@@ -2111,9 +2109,6 @@ export class WhatsAppGateway {
     media?: { input: VoiceAudio; kind: "voice" | "image" },
   ): void {
     const jobId = extractJobId(reply);
-    // Archive the original media whenever we have the bytes. Memory filing is a
-    // separate agent decision, but the raw attachment is source evidence and must
-    // not depend on whether the model chose to keep distilled meaning.
     const archiveLabel = media?.kind === "image" ? "image" : "audio";
     const archiveUnavailableReason = media ? driveArchiveUnavailableReason(this.options.settings) : null;
     const shouldArchive = Boolean(media) && archiveUnavailableReason === null;
@@ -2123,13 +2118,19 @@ export class WhatsAppGateway {
     if (!jobId && !shouldArchive) return;
     const peers = this.options.settings.peers();
     const poll = jobId && peers.length ? pollPeerJob(peers, jobId) : Promise.resolve(null);
+    // Drive archiving is a legacy-only branch. Keep it lazy so the dedicated
+    // Phylax bundle, which always supplies portedInboundHandler, contains no
+    // Zenod Drive runtime while the universal server retains existing behavior.
     const archiveMedia = shouldArchive ? media : undefined;
     const archive = archiveMedia
-      ? (archiveMedia.kind === "image"
-          ? archiveImage(this.options.settings, archiveMedia.input)
-          : archiveVoiceNote(this.options.settings, archiveMedia.input))
-          .then((res) => ({ result: res }))
-          .catch((err: unknown) => ({ error: err }))
+      ? import("./voiceArchive.js")
+          .then(async ({ archiveImage, archiveVoiceNote }) => {
+            const result = archiveMedia.kind === "image"
+              ? await archiveImage(this.options.settings, archiveMedia.input)
+              : await archiveVoiceNote(this.options.settings, archiveMedia.input);
+            return { result };
+          })
+          .catch((error: unknown) => ({ error }))
       : Promise.resolve(null);
     void Promise.all([poll, archive])
       .then(([job, archived]) => {

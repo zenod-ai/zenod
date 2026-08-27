@@ -1,12 +1,21 @@
 import type { HttpBindings } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ChassisStorage, type UnitContext } from "@zenod/mcp-chassis";
-import { VERSION } from "zenod";
+import {
+  ChassisStorage,
+  createSqliteOAuthStore,
+  createSqliteTenantStore,
+  createUnit,
+  hashToken,
+  type TenantProvisioningStore,
+  type UnitContext,
+} from "@zenod/mcp-chassis";
+import { VERSION } from "zenod/version";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { PHYLAX_AGENT } from "./agent.js";
-import { resolvedGitSha } from "./app.js";
 import {
   captureMemoryAuthorityId,
   isCaptureMemoryTool,
@@ -45,14 +54,19 @@ import {
 import { mountPhylaxAdminChannelRoutes, PhylaxPortedRuntime } from "./phylaxPortedRuntime.js";
 import {
   effectivePhylaxTurnBindings,
+  defaultPhylaxTurnBindings,
   PhylaxTenantSettingsStore,
 } from "./phylaxTenantSettings.js";
-import { createZenodUnit, type CreateZenodUnitOptions } from "./zenodUnit.js";
 import {
   assertCustomerDownstreamMutationAllowed,
   resolvePhylaxInstanceConfig,
   type PhylaxInstanceConfig,
 } from "./phylaxInstance.js";
+import {
+  createPhylaxCustomerLayer,
+} from "./phylaxCustomerLayer.js";
+import type { CustomerLayerOptions } from "./customerLayer.js";
+import { mountStaticSurfaces } from "./staticSurfaces.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
 export const PHYLAX_DEFAULT_LOCAL_WHISPER_MODEL = "base";
@@ -66,14 +80,36 @@ const PHYLAX_TRANSPORT_RESTART_AFTER_MS = 60_000;
 
 type AppContext = Context<{ Bindings: HttpBindings }>;
 
-export interface CreatePhylaxUnitOptions extends CreateZenodUnitOptions {
+function resolvedPhylaxGitSha(env: NodeJS.ProcessEnv): string {
+  const configured = env.GIT_SHA?.trim();
+  if (configured && configured !== "unknown") return configured;
+  try {
+    const baked = readFileSync("/app/.gitsha", "utf8").trim();
+    if (baked) return baked;
+  } catch {
+    // Local/test execution has no baked source SHA.
+  }
+  return configured || "unknown";
+}
+
+export interface CreatePhylaxUnitOptions {
+  dataDir?: string;
+  /** Reuse one storage owner while preserving the existing Phylax volume layout. */
+  storage?: ChassisStorage;
+  webDist?: string;
+  siteDist?: string;
+  tenantStore?: TenantProvisioningStore;
+  customer?: CustomerLayerOptions;
+  env?: NodeJS.ProcessEnv;
+  /** Test/product extension seam; receives only the Phylax MCP context. */
+  registerAdditionalTools?: (server: McpServer, context: UnitContext) => void;
   instance?: PhylaxInstanceConfig;
 }
 
 /** Compose the shipped customer unit with the ported channels organ. */
 export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
-  const { instance: configuredInstance, ...zenodOptions } = options;
-  const env = zenodOptions.env ?? process.env;
+  const env = options.env ?? process.env;
+  const configuredInstance = options.instance;
   const instance = configuredInstance ?? resolvePhylaxInstanceConfig(env);
   const configuredRestartAfter = Number(
     env.PHYLAX_TRANSPORT_RESTART_AFTER_MS ?? PHYLAX_TRANSPORT_RESTART_AFTER_MS,
@@ -84,6 +120,10 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   const storage = options.storage ?? new ChassisStorage({
     dataDir: options.dataDir,
     vaultEncryptionKey: env.CHASSIS_VAULT_MASTER_KEY,
+  });
+  const tenantStore = options.tenantStore ?? createSqliteTenantStore({
+    dataDir: storage.dataDir,
+    busyTimeoutMs: 30_000,
   });
   const tenantSettings = new PhylaxTenantSettingsStore(storage.dataDir, storage, {
     assistantUrl: env.PHYLAX_ASSISTANT_URL?.trim() || PHYLAX_DEFAULT_ASSISTANT_URL,
@@ -120,13 +160,13 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       return status === "recorded" || status === "duplicate" ? status : "pending";
     },
   );
-  let base!: ReturnType<typeof createZenodUnit>;
   const organ = createTenantOrgan(
     storage.dataDir,
     tenantSettings,
     captureTickets,
     env,
     artifactCapabilitySecret,
+    instance,
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ channel, sender, username, text }) {
@@ -164,34 +204,43 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     );
   }
 
-  base = createZenodUnit({
-    ...zenodOptions,
-    storage,
-    agent: PHYLAX_AGENT,
-    unitName: "phylax",
-    tokenEnvVar: "PHYLAX_API_TOKEN",
-    defaultTenantName: "Self-hosted Phylax",
-    panels: ["mcp", "transcription", "connections"],
-    additionalReadTools: ["channel_status", "get_recent_conversation_transcript"],
-    registerAdditionalTools(server, context, runtimeInstance) {
-      registerTenantChannelTools(server, context, runtime, tenantSettings);
-      options.registerAdditionalTools?.(server, context, runtimeInstance);
+  const base = createUnit({
+    name: "phylax",
+    version: VERSION,
+    conduct: {
+      toolKinds: { read: ["channel_status", "get_recent_conversation_transcript"] },
     },
-    customerProduct: {
-      product: "phylax",
-      unit: "phylax",
-      defaultDomain: "https://phylax.zenod.dev",
-      signInToLanding: true,
+    tenantAuth: { store: tenantStore },
+    oauth: {
+      server: true,
+      store: createSqliteOAuthStore({ dataDir: storage.dataDir }),
     },
-    customerAdmin: {
-      githubLogin: PHYLAX_ADMIN_GITHUB_LOGIN,
-      mountRoutes: (app) => mountPhylaxAdminChannelRoutes(app, runtime),
-      close: async () => {
-        await runtime.close();
-        await captureTickets.close();
+    singleTenant: {
+      store: tenantStore,
+      tokenEnvVar: "PHYLAX_API_TOKEN",
+      env,
+      tenant: {
+        id: env.PHYLAX_TENANT_ID?.trim() || "self-host",
+        name: env.PHYLAX_TENANT_NAME?.trim() || "Self-hosted Phylax",
+        plan: "self-hosted",
       },
     },
+    storage,
+    metering: { dataDir: storage.dataDir },
+    ui: {
+      displayName: PHYLAX_AGENT.displayName,
+      tagline: PHYLAX_AGENT.tagline,
+      panels: ["mcp", "transcription", "connections"],
+    },
+    tools(server, context) {
+      registerTenantChannelTools(server, context, runtime, tenantSettings);
+      options.registerAdditionalTools?.(server, context);
+    },
   });
+  const customer = createPhylaxCustomerLayer(
+    { dataDir: storage.dataDir },
+    { ...options.customer, env, tenantStore },
+  );
   captureTickets.recoverFromCaptureJournal(
     captureJournalPath,
   );
@@ -199,6 +248,28 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   void runtime.start().catch((error) => console.error("phylax channels failed to start:", error));
 
   const app = new Hono<{ Bindings: HttpBindings }>();
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("X-Frame-Options", "DENY");
+    c.header("Referrer-Policy", "same-origin");
+    c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
+    const contentSecurityPolicy =
+      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'; form-action 'self' https://checkout.stripe.com";
+    c.header(
+      "Content-Security-Policy",
+      env.NODE_ENV === "production" ? `${contentSecurityPolicy}; upgrade-insecure-requests` : contentSecurityPolicy,
+    );
+    if (
+      (c.req.path.startsWith("/api/") || c.req.path.startsWith("/auth/") || c.req.path.startsWith("/checkout/"))
+      && !c.res.headers.has("cache-control")
+    ) {
+      c.header("Cache-Control", "no-store");
+    }
+    if (env.NODE_ENV === "production") {
+      c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+  });
   app.get("/api/health", (c) => {
     const now = Date.now();
     const whatsapp = runtime.whatsapp.status();
@@ -217,7 +288,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       status: restartRequired ? "unhealthy" : degraded ? "degraded" : "ok",
       name: PHYLAX_AGENT.name,
       version: VERSION,
-      sha: resolvedGitSha(),
+      sha: resolvedPhylaxGitSha(env),
       instance: {
         id: instance.instanceId,
         mode: instance.mode,
@@ -256,11 +327,11 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     audit: hostedChannelAudit,
   });
   app.get("/api/phylax/settings", (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     c.header("cache-control", "private, no-store");
-    const account = base.customerAccounts.list().find((candidate) => candidate.tenant_id === tenantId);
-    const token = account ? base.customerTokenVault.get(account.account_id) : null;
+    const account = customer.accounts.list().find((candidate) => candidate.tenant_id === tenantId);
+    const token = account ? customer.tokenVault.get(account.account_id) : null;
     return c.json({
       settings: tenantSettings.view(tenantId),
       phylaxNumber: runtime.whatsapp.status().linkedNumber,
@@ -273,7 +344,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     });
   });
   app.get("/api/phylax/transcription/options", async (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     c.header("cache-control", "private, no-store");
     const catalog = await openRouterTranscriptionModels(
@@ -296,7 +367,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     });
   });
   app.post("/api/phylax/downstream/tools", async (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     c.header("cache-control", "private, no-store");
     const credentials = tenantSettings.downstreamCredentials(tenantId);
@@ -327,7 +398,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     });
   });
   app.put("/api/phylax/settings", async (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     try {
       const body = parsePhylaxSettingsUpdate(await c.req.json<unknown>());
@@ -341,7 +412,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     }
   });
   app.post("/api/phylax/transcription/check", async (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     try {
       const body = parsePhylaxTranscriptionCheck(await c.req.json<unknown>());
@@ -372,7 +443,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     }
   });
   app.delete("/api/phylax/transcription/key", async (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     try {
       const body = parsePhylaxTranscriptionKeyRemoval(await c.req.json<unknown>());
@@ -387,7 +458,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     }
   });
   app.post("/api/phylax/phone-registration", async (c) => {
-    const tenantId = activeTenantId(c, base, env);
+    const tenantId = activeTenantId(c, customer, env);
     if (!tenantId) return c.json({ error: "unauthorized" }, 401);
     const body = await c.req
       .json<{ phoneNumber?: string; numberId?: string }>()
@@ -421,7 +492,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     ) {
       return c.json({ error: "not found" }, 404);
     }
-    const path = join(phylaxWhatsAppPaths(base.storage.dataDir).artifacts, tenantId, file);
+    const path = join(phylaxWhatsAppPaths(storage.dataDir).artifacts, tenantId, file);
     try {
       const bytes = await readFile(path);
       const extension = file.split(".").pop()?.toLowerCase();
@@ -438,22 +509,70 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       return c.json({ error: "not found" }, 404);
     }
   });
-  app.all("*", (c) => base.app.fetch(c.req.raw, c.env));
+
+  const adminOnly: MiddlewareHandler<{ Bindings: HttpBindings }> = async (c, next) => {
+    const session = readCustomerSession(c, env);
+    if (!session || session.login.toLowerCase() !== PHYLAX_ADMIN_GITHUB_LOGIN.toLowerCase()) {
+      return c.req.path.startsWith("/api/")
+        ? c.json({ error: "not found" }, 404)
+        : c.text("Not Found", 404);
+    }
+    await next();
+  };
+  app.use("/admin", adminOnly);
+  app.use("/admin/*", adminOnly);
+  app.use("/api/whatsapp/*", adminOnly);
+  app.use("/api/telegram/*", adminOnly);
+  mountPhylaxAdminChannelRoutes(app, runtime);
+  if (options.webDist) {
+    app.get("/admin", serveStatic({
+      root: options.webDist,
+      path: "index.html",
+      onFound: (_path, c) => c.header("Cache-Control", "no-cache, no-store, must-revalidate"),
+    }));
+  }
+
+  app.route("/", customer.app);
+  // Product APIs are always resolved before SPA fallbacks. This makes the
+  // absence of Zenod memory/Drive/application routes an observable 404.
+  app.all("/api/*", (c) => forwardPhylaxUnitRequest(c, base, customer, tenantStore, env));
+  mountStaticSurfaces(app, {
+    webDist: options.webDist,
+    siteDist: options.siteDist,
+    publicSiteHost: "phylax.zenod.dev",
+  });
+  app.all("*", (c) => forwardPhylaxUnitRequest(c, base, customer, tenantStore, env));
 
   return {
     ...base,
     app,
+    storage,
+    tenantStore,
+    customerAccounts: customer.accounts,
+    customerTokenVault: customer.tokenVault,
     phylaxRuntime: runtime,
     phylaxTenantSettings: tenantSettings,
     phylaxInstance: instance,
     hostedChannelAudit,
     ringCaptureTickets: captureTickets,
     async close() {
-      try {
-        await base.close();
-      } finally {
-        hostedChannelAudit.close();
+      const failures: unknown[] = [];
+      for (const result of await Promise.allSettled([
+        runtime.close(),
+        captureTickets.close(),
+        Promise.resolve().then(() => customer.close()),
+      ])) {
+        if (result.status === "rejected") failures.push(result.reason);
       }
+      hostedChannelAudit.close();
+      if ("close" in tenantStore && typeof tenantStore.close === "function") {
+        try {
+          tenantStore.close();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      if (failures.length > 0) throw new AggregateError(failures, "Phylax unit shutdown failed");
     },
   };
 }
@@ -652,6 +771,7 @@ function createTenantOrgan(
   captureTickets: RingCaptureTicketProducer,
   env: NodeJS.ProcessEnv,
   artifactCapabilitySecret: string,
+  instance: PhylaxInstanceConfig,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   const configuredVoiceJobDeadline = Number(
@@ -663,15 +783,12 @@ function createTenantOrgan(
     transcriptionDeadlineMs: configuredDeadline,
     voiceJobDeadlineMs: configuredVoiceJobDeadline,
     routes: {
-      resolve: (channel, sender) => {
-        const route = tenantSettings.resolve(channel, sender);
-        return route
-          ? {
-              ...route,
-              turnBindings: effectivePhylaxTurnBindings(tenantSettings.get(route.tenantId)),
-            }
-          : null;
-      },
+      resolve: (channel, sender) => resolvePhylaxRuntimeRoute(
+        instance,
+        tenantSettings,
+        channel,
+        sender,
+      ),
       reportDownstreamCredentialStatus: (tenantId, credentialRevision, status) =>
         tenantSettings.reportDownstreamCredentialStatus(tenantId, credentialRevision, status),
     },
@@ -754,6 +871,30 @@ function createTenantOrgan(
     },
   });
 }
+
+/**
+ * Data-plane adapter authority for one deployment island.
+ *
+ * Persisted destinations/credentials remain tenant-specific for rolling
+ * compatibility. Product-bound modes never inherit persisted tool bindings:
+ * Zenod uses its frozen adapter and PM fails closed until #1111 defines one.
+ */
+export function resolvePhylaxRuntimeRoute(
+  instance: PhylaxInstanceConfig,
+  tenantSettings: PhylaxTenantSettingsStore,
+  channel: "whatsapp" | "telegram",
+  sender: string,
+) {
+  const route = tenantSettings.resolve(channel, sender);
+  if (!route) return null;
+  if (instance.mode === "pm") return null;
+  return {
+    ...route,
+    turnBindings: instance.mode === "zenod"
+      ? defaultPhylaxTurnBindings()
+      : effectivePhylaxTurnBindings(tenantSettings.get(route.tenantId)),
+  };
+}
 export function phylaxTranscriptionConfigurationError(transcription: {
   provider: "local" | "groq" | "openai" | "openrouter";
   model?: string | null;
@@ -803,12 +944,52 @@ export function phylaxTranscriptionOptions(
 
 function activeTenantId(
   c: AppContext,
-  base: ReturnType<typeof createZenodUnit>,
+  customer: ReturnType<typeof createPhylaxCustomerLayer>,
   env: NodeJS.ProcessEnv,
 ): string | null {
   const session = readCustomerSession(c, env);
   if (!session) return null;
-  return base.customerAccounts.resolveActiveTenantForUser(session.github_id)?.tenant_id ?? null;
+  return customer.accounts.resolveActiveTenantForUser(session.github_id)?.tenant_id ?? null;
+}
+
+async function forwardPhylaxUnitRequest(
+  c: AppContext,
+  unit: ReturnType<typeof createUnit>,
+  customer: ReturnType<typeof createPhylaxCustomerLayer>,
+  tenantStore: TenantProvisioningStore,
+  env: NodeJS.ProcessEnv,
+): Promise<Response> {
+  const session = readCustomerSession(c, env);
+  if (!session) return unit.app.fetch(c.req.raw, c.env);
+  if (
+    c.req.path === "/mcp"
+    || c.req.path.startsWith("/mcp/")
+    || c.req.path === "/internal"
+    || c.req.path.startsWith("/internal/")
+    || c.req.path === "/api/tenants"
+    || c.req.path.startsWith("/api/tenants/")
+  ) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  if (!c.req.path.startsWith("/api/")) {
+    return unit.app.fetch(c.req.raw, c.env);
+  }
+  const account = customer.accounts.resolveActiveTenantForUser(session.github_id);
+  const token = account ? customer.tokenVault.get(account.account_id) : null;
+  const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
+  if (
+    !account?.tenant_id
+    || !token
+    || !record
+    || record.tenant.id !== account.tenant_id
+    || (record.status ?? "active") !== "active"
+  ) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  const headers = new Headers(c.req.raw.headers);
+  headers.delete("cookie");
+  headers.set("authorization", `Bearer ${token}`);
+  return unit.app.fetch(new Request(c.req.raw, { headers }), c.env);
 }
 
 function registerTenantChannelTools(

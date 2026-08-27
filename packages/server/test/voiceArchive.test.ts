@@ -75,6 +75,7 @@ describe("archiveVoiceNote", () => {
     const settings = {
       get: (key: string) => values[key] ?? null,
       getRaw: (key: string) => values[key] ?? null,
+      driveConfigured: () => true,
       googleDriveOAuthAuthority: selfHostedDriveAuthority,
     } as unknown as Settings;
 

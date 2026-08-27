@@ -4,21 +4,27 @@ Phylax is built and run independently from Zenod and PM. The dedicated image
 always starts `packages/server/dist/phylaxMain.js`; it cannot select another
 suite unit through `ZENOD_UNIT` or `AGENT`.
 
-The image reuses the existing Phylax transport, transcription, Drive archive,
-receipt, queue, tenant, and session code. This packaging boundary does not move
-those responsibilities into another service and does not introduce a second
-router.
+The image reuses the existing Phylax transport, transcription, receipt, queue,
+tenant, and session code. Its build follows the Phylax entrypoint's reachable
+module graph and rejects Zenod application, memory, MCP-tool, and Drive runtime
+modules. Drive custody remains a downstream product responsibility; Phylax
+hands off the raw artifact through its existing signed artifact seam.
 
 ## Instance modes
 
 | `PHYLAX_INSTANCE_MODE` | Downstream binding | Commercial owner |
 | --- | --- | --- |
 | `zenod` | fixed Zenod adapter | Zenod |
-| `pm` | fixed PM adapter | PM |
+| `pm` | fail-closed until #1111 installs the fixed PM adapter | PM |
 | `standalone` | one explicitly configured compatible downstream per tenant | Phylax |
 
 The default is `standalone` for rolling compatibility with the existing private
 Phylax deployment. New product-bound islands set their mode explicitly.
+Zenod mode enforces the frozen Zenod tool bindings at route resolution while
+retaining each tenant's existing destination and credential. It never executes
+persisted arbitrary tool bindings. PM mode likewise never executes persisted
+bindings and intentionally has no data-plane route until its separately frozen
+adapter contract lands in #1111.
 
 One running instance owns one WhatsApp service-number session. Instances made
 from the same image must have different values for all of the following:
@@ -47,6 +53,10 @@ docker build --platform linux/amd64 \
 The native standalone compose preserves the existing named `phylax-data`
 volume and `/data` layout. Mounting that volume in the new artifact does not
 require a state migration or a WhatsApp re-pair.
+
+`npm run build:phylax -w @zenod/server` creates the same dedicated runtime
+bundle outside Docker and fails if its reachable graph contains a forbidden
+Zenod runtime module or symbol.
 
 ## Local island proof
 
