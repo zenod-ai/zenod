@@ -140,6 +140,39 @@ describe("PhylaxAllowanceLedger", () => {
     first.close();
   });
 
+  it("rejects direct usage above currently unreserved allowance without inserting an entry", async () => {
+    const { store } = await ledger("direct-cap");
+    grant(store, "alpha", 100);
+    const usage = {
+      tenantId: "alpha",
+      periodId: "2026-08",
+      amountUnits: 101,
+      providerEventId: "direct-cap-provider",
+      operation: "whatsapp.delivery",
+      provider: "whatsapp",
+      costBasis: "actual" as const,
+      idempotencyKey: "direct-cap-usage",
+      tariffVersion: "delivery-v1",
+      auditReason: "direct allowance cap regression",
+    };
+
+    expect(() => store.recordUsage(usage)).toThrow("currently unreserved allowance");
+    expect(store.operatorProjection("alpha", "2026-08")).toMatchObject({
+      usedUnits: 0,
+      entries: [expect.objectContaining({ kind: "grant" })],
+    });
+    expect(store.customerProjection("alpha")).toMatchObject({ remainingUnits: 100, usedUnits: 0 });
+
+    const allowed = store.recordUsage({ ...usage, amountUnits: 100 });
+    expect(allowed.replayed).toBe(false);
+    expect(store.recordUsage({ ...usage, amountUnits: 100 })).toMatchObject({
+      replayed: true,
+      entry: { sequence: allowed.entry.sequence },
+    });
+    expect(store.customerProjection("alpha")).toMatchObject({ remainingUnits: 0, usedUnits: 100 });
+    store.close();
+  });
+
   it("never lets an adjustment delete usage or reclaim reserved allowance", async () => {
     const { store } = await ledger("adjustments");
     grant(store, "alpha", 10_000);
@@ -415,7 +448,7 @@ describe("PhylaxAllowanceLedger", () => {
     store.close();
   });
 
-  it("re-evaluates an expired lease against the remaining allowance cap", async () => {
+  it("re-evaluates an expired lease without letting direct usage consume its reservation", async () => {
     let now = AUGUST_START + 1;
     const { store } = await ledger("lease-cap", () => now);
     grant(store, "alpha", 200);
@@ -429,33 +462,35 @@ describe("PhylaxAllowanceLedger", () => {
       estimatedUnits: 120,
     });
     const claimed = store.claimNextPaidWork("alpha", "worker-a", 1_000, now)!;
-    store.recordUsage({
+    const directUsage = {
       tenantId: "alpha",
       periodId: "2026-08",
-      amountUnits: 100,
+      amountUnits: 81,
       providerEventId: "delivery-before-recovery",
       operation: "whatsapp.delivery",
       provider: "whatsapp",
-      costBasis: "actual",
+      costBasis: "actual" as const,
       idempotencyKey: "usage-before-recovery",
       tariffVersion: "delivery-v1",
       auditReason: "other paid work consumed the remaining cap",
-    });
+    };
+    expect(() => store.recordUsage(directUsage)).toThrow("currently unreserved allowance");
+    store.recordUsage({ ...directUsage, amountUnits: 80 });
     now += 1_001;
 
-    expect(store.claimNextPaidWork("alpha", "worker-b", 1_000, now)).toBeNull();
+    const reclaimed = store.claimNextPaidWork("alpha", "worker-b", 1_000, now)!;
+    expect(reclaimed).toMatchObject({ id: claimed.id, state: "processing", reservedUnits: 120 });
     expect(store.pendingWork("alpha")).toEqual([
       expect.objectContaining({
         id: claimed.id,
-        state: "paused",
-        pauseReason: "insufficient_allowance",
-        reservedUnits: 0,
-        leaseOwner: null,
-        leaseToken: null,
+        state: "processing",
+        pauseReason: null,
+        reservedUnits: 120,
+        leaseOwner: "worker-b",
         custodyRef: "artifact://alpha/cap",
       }),
     ]);
-    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(100);
+    expect(store.customerProjection("alpha")).toMatchObject({ usedUnits: 80, reservedUnits: 120, remainingUnits: 0 });
     store.close();
   });
 
@@ -535,6 +570,175 @@ describe("PhylaxAllowanceLedger", () => {
     });
     expect(() => store.completePaidWork(staleCompletion)).toThrow(PhylaxLedgerConflictError);
     expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(90);
+    store.close();
+  });
+
+  it("rejects actual settlement above its reservation when no unreserved allowance remains", async () => {
+    const { store } = await ledger("settlement-cap");
+    grant(store, "alpha", 100);
+    const admitted = store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "settlement-cap-work",
+      providerEventId: "settlement-cap-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/settlement-cap",
+      estimatedUnits: 100,
+    }).work;
+    const claimed = store.claimNextPaidWork("alpha", "worker-a", 10_000)!;
+    const settlement = {
+      workId: admitted.id,
+      tenantId: "alpha",
+      leaseOwner: claimed.leaseOwner!,
+      leaseToken: claimed.leaseToken!,
+      amountUnits: 120,
+      providerEventId: "settlement-cap-provider",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual" as const,
+      idempotencyKey: "settlement-cap-usage",
+      tariffVersion: "stt-v1",
+      auditReason: "actual settlement cap regression",
+    };
+
+    expect(() => store.completePaidWork(settlement)).toThrow("currently unreserved allowance");
+    expect(store.pendingWork("alpha")).toEqual([
+      expect.objectContaining({
+        id: admitted.id,
+        state: "processing",
+        reservedUnits: 100,
+        leaseOwner: "worker-a",
+        leaseToken: claimed.leaseToken,
+      }),
+    ]);
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(0);
+
+    const completed = store.completePaidWork({
+      ...settlement,
+      amountUnits: 100,
+      idempotencyKey: "settlement-equal-usage",
+    });
+    expect(completed).toMatchObject({ work: { state: "done" }, usage: { replayed: false } });
+    expect(store.customerProjection("alpha")).toMatchObject({ usedUnits: 100, reservedUnits: 0, remainingUnits: 0 });
+    store.close();
+  });
+
+  it("allows actual settlement above its reservation only when the extra is unreserved and funded", async () => {
+    const { store } = await ledger("settlement-funded");
+    grant(store, "alpha", 150);
+    const admitted = store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "settlement-funded-work",
+      providerEventId: "settlement-funded-provider",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/settlement-funded",
+      estimatedUnits: 100,
+    }).work;
+    const claimed = store.claimNextPaidWork("alpha", "worker-a", 10_000)!;
+    const settlement = {
+      workId: admitted.id,
+      tenantId: "alpha",
+      leaseOwner: claimed.leaseOwner!,
+      leaseToken: claimed.leaseToken!,
+      amountUnits: 120,
+      providerEventId: "settlement-funded-provider",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual" as const,
+      idempotencyKey: "settlement-funded-usage",
+      tariffVersion: "stt-v1",
+      auditReason: "actual settlement used funded headroom",
+    };
+
+    const completed = store.completePaidWork(settlement);
+    expect(completed).toMatchObject({ work: { state: "done" }, usage: { replayed: false } });
+    expect(store.completePaidWork(settlement).usage).toMatchObject({
+      replayed: true,
+      entry: { sequence: completed.usage.entry.sequence },
+    });
+    expect(store.customerProjection("alpha")).toMatchObject({ usedUnits: 120, reservedUnits: 0, remainingUnits: 30 });
+    store.close();
+  });
+
+  it("never lets one concurrent settlement consume another work item's reservation", async () => {
+    const { store, path } = await ledger("concurrent-settlement");
+    const peer = new PhylaxAllowanceLedger(path, () => AUGUST_START + 1);
+    grant(store, "alpha", 200);
+    const first = store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "concurrent-work-a",
+      providerEventId: "concurrent-provider-a",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/concurrent-a",
+      estimatedUnits: 100,
+    }).work;
+    const second = store.admitPaidWork({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      idempotencyKey: "concurrent-work-b",
+      providerEventId: "concurrent-provider-b",
+      operation: "transcription.audio",
+      custodyRef: "artifact://alpha/concurrent-b",
+      estimatedUnits: 100,
+    }).work;
+    const firstClaim = store.claimNextPaidWork("alpha", "worker-a", 10_000)!;
+    const secondClaim = peer.claimNextPaidWork("alpha", "worker-b", 10_000)!;
+    expect(new Set([firstClaim.id, secondClaim.id])).toEqual(new Set([first.id, second.id]));
+    const claims = new Map([firstClaim, secondClaim].map((claim) => [claim.id, claim]));
+    const firstLease = claims.get(first.id)!;
+    const secondLease = claims.get(second.id)!;
+    expect(store.customerProjection("alpha")).toMatchObject({ reservedUnits: 200, remainingUnits: 0 });
+
+    const firstSettlement = {
+      workId: first.id,
+      tenantId: "alpha",
+      leaseOwner: firstLease.leaseOwner!,
+      leaseToken: firstLease.leaseToken!,
+      amountUnits: 120,
+      providerEventId: "concurrent-provider-a",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual" as const,
+      idempotencyKey: "concurrent-usage-a",
+      tariffVersion: "stt-v1",
+      auditReason: "concurrent reservation isolation",
+    };
+    expect(() => store.completePaidWork(firstSettlement)).toThrow("currently unreserved allowance");
+    expect(store.operatorProjection("alpha", "2026-08").usedUnits).toBe(0);
+    expect(store.customerProjection("alpha")).toMatchObject({ reservedUnits: 200, remainingUnits: 0 });
+
+    peer.adjustAllowance({
+      tenantId: "alpha",
+      periodId: "2026-08",
+      amountUnits: 20,
+      source: "zenod",
+      idempotencyKey: "concurrent-top-up",
+      tariffVersion: "phylax-2026-08",
+      auditReason: "fund actual settlement headroom",
+    });
+    expect(store.completePaidWork(firstSettlement).work.state).toBe("done");
+    expect(store.customerProjection("alpha")).toMatchObject({ usedUnits: 120, reservedUnits: 100, remainingUnits: 0 });
+    expect(store.pendingWork("alpha")).toEqual([
+      expect.objectContaining({ id: second.id, state: "processing", reservedUnits: 100 }),
+    ]);
+    expect(peer.completePaidWork({
+      workId: second.id,
+      tenantId: "alpha",
+      leaseOwner: secondLease.leaseOwner!,
+      leaseToken: secondLease.leaseToken!,
+      amountUnits: 100,
+      providerEventId: "concurrent-provider-b",
+      provider: "openrouter",
+      model: "mistralai/voxtral-mini-transcribe",
+      costBasis: "actual",
+      idempotencyKey: "concurrent-usage-b",
+      tariffVersion: "stt-v1",
+      auditReason: "second reserved settlement",
+    }).work.state).toBe("done");
+    expect(store.customerProjection("alpha")).toMatchObject({ usedUnits: 220, reservedUnits: 0, remainingUnits: 0 });
+    peer.close();
     store.close();
   });
 

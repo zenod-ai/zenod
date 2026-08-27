@@ -580,6 +580,7 @@ export class PhylaxAllowanceLedger {
       occurredAt: number;
     },
     hash: string,
+    ownedReservationUnits = 0,
   ): PhylaxLedgerMutation {
     const byIdempotency = this.entryByIdempotency(normalized.tenantId, normalized.idempotencyKey);
     if (byIdempotency) return this.replayOrConflict(byIdempotency, hash);
@@ -590,6 +591,11 @@ export class PhylaxAllowanceLedger {
     );
     if (byProvider) return this.replayOrConflict(byProvider, hash);
     if (!this.period(normalized.tenantId, normalized.periodId)) throw new Error("allowance period does not exist");
+    const spendableUnits = this.availableInPeriod(normalized.tenantId, normalized.periodId)
+      + units(ownedReservationUnits, "ownedReservationUnits", { nonNegative: true });
+    if (normalized.amountUnits > spendableUnits) {
+      throw new Error("usage exceeds currently unreserved allowance");
+    }
     return {
       entry: entry(this.insertEntry({
         ...normalized,
@@ -1071,7 +1077,7 @@ export class PhylaxAllowanceLedger {
       if (current.lease_until === null || current.lease_until <= completedAt) {
         throw new Error("paid work lease expired before completion");
       }
-      const usage = this.recordUsageInTransaction(normalized, hash);
+      const usage = this.recordUsageInTransaction(normalized, hash, current.reserved_units);
       if (current.usage_entry_sequence !== null && current.usage_entry_sequence !== usage.entry.sequence) {
         throw new PhylaxLedgerConflictError("paid work already completed with a different usage entry");
       }
