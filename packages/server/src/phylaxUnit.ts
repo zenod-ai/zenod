@@ -585,6 +585,16 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
   });
   mountPhylaxAdminChannelRoutes(app, runtime);
   if (options.webDist) {
+    if (!customer) {
+      // Fixed product instances expose only the owner operator shell. Vite emits
+      // absolute /assets URLs, so protect those files with the same owner gate
+      // instead of mounting the standalone customer's public static surface.
+      app.use("/assets/*", adminOnly);
+      app.use("/assets/*", serveStatic({
+        root: options.webDist,
+        onFound: (_path, c) => c.header("Cache-Control", "no-cache, no-store, must-revalidate"),
+      }));
+    }
     app.get("/admin", serveStatic({
       root: options.webDist,
       path: "index.html",

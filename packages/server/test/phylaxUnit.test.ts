@@ -814,8 +814,14 @@ describe("Phylax customer unit mount", () => {
       const webDist = join(dataDir, "web");
       await mkdir(siteDist);
       await mkdir(webDist);
+      await mkdir(join(webDist, "assets"));
       await writeFile(join(siteDist, "index.html"), "HOSTILE STANDALONE CHECKOUT SHELL");
-      await writeFile(join(webDist, "index.html"), "PHYLAX OPERATOR SHELL");
+      await writeFile(
+        join(webDist, "index.html"),
+        'PHYLAX OPERATOR SHELL<link rel="stylesheet" href="/assets/operator.css"><script src="/assets/operator.js"></script>',
+      );
+      await writeFile(join(webDist, "assets/operator.css"), ".operator { display: block; }");
+      await writeFile(join(webDist, "assets/operator.js"), "globalThis.phylaxOperator = true;");
       const env = {
         ACCOUNT_STATE_SECRET: `fixed-${mode}-session-secret`,
         CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
@@ -830,12 +836,16 @@ describe("Phylax customer unit mount", () => {
         tenantStore: createMemoryTenantStore(),
         env,
       });
-      const sessions = new Hono();
-      sessions.get("/", (c) => {
-        issueCustomerSession(c, { id: 1, login: "alfablok" }, env);
-        return c.text("ok");
-      });
-      const ownerCookie = (await sessions.request("/")).headers.get("set-cookie")!.split(";", 1)[0]!;
+      const cookieFor = async (id: number, login: string) => {
+        const sessions = new Hono();
+        sessions.get("/", (c) => {
+          issueCustomerSession(c, { id, login }, env);
+          return c.text("ok");
+        });
+        return (await sessions.request("/")).headers.get("set-cookie")!.split(";", 1)[0]!;
+      };
+      const ownerCookie = await cookieFor(1, "alfablok");
+      const productCustomerCookie = await cookieFor(2, "product-customer");
       try {
         expect(unit.customerAccounts).toBeNull();
         expect((await unit.app.request("/api/health")).status).toBe(200);
@@ -887,6 +897,21 @@ describe("Phylax customer unit mount", () => {
         const owner = await unit.app.request("/admin", { headers: { cookie: ownerCookie } });
         expect(owner.status).toBe(200);
         expect(await owner.text()).toContain("PHYLAX OPERATOR SHELL");
+        for (const [path, contentType] of [
+          ["/assets/operator.js", "javascript"],
+          ["/assets/operator.css", "text/css"],
+        ] as const) {
+          const asset = await unit.app.request(path, { headers: { cookie: ownerCookie } });
+          expect(asset.status, `${mode} owner ${path}`).toBe(200);
+          expect(asset.headers.get("content-type"), `${mode} owner ${path}`).toContain(contentType);
+          expect((await unit.app.request(path)).status, `${mode} anonymous ${path}`).toBe(404);
+          expect((await unit.app.request(path, {
+            headers: { cookie: productCustomerCookie },
+          })).status, `${mode} product customer ${path}`).toBe(404);
+        }
+        expect((await unit.app.request("/admin", {
+          headers: { cookie: productCustomerCookie },
+        })).status).toBe(404);
       } finally {
         await unit.close();
       }

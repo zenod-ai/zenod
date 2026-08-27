@@ -10,12 +10,29 @@ mismatch_container="zpf2-phylax-mismatch-${suffix}"
 volume="zpf2-phylax-data-${suffix}"
 fixed_containers=("zpf2-phylax-zenod-${suffix}" "zpf2-phylax-pm-${suffix}")
 fixed_volumes=("zpf2-phylax-zenod-data-${suffix}" "zpf2-phylax-pm-data-${suffix}")
+contract_tmp="$(mktemp -d)"
 
 cleanup() {
   docker rm -f "$container" "$mismatch_container" "${fixed_containers[@]}" >/dev/null 2>&1 || true
   docker volume rm "$volume" "${fixed_volumes[@]}" >/dev/null 2>&1 || true
+  rm -rf "$contract_tmp"
 }
 trap cleanup EXIT
+
+session_cookie() {
+  local secret="$1" login="$2" github_id="$3"
+  node -e '
+    const { createHmac } = require("node:crypto");
+    const [secret, login, githubId] = process.argv.slice(1);
+    const payload = Buffer.from(JSON.stringify({
+      github_id: Number(githubId),
+      login,
+      exp: Date.now() + 600_000,
+    })).toString("base64url");
+    const signature = createHmac("sha256", secret).update(payload).digest("base64url");
+    process.stdout.write(`zenod_customer_session=${payload}.${signature}`);
+  ' "$secret" "$login" "$github_id"
+}
 
 if [[ "${PHYLAX_CONTRACT_SKIP_BUILD:-0}" != "1" ]]; then
   docker build --platform "$platform" \
@@ -206,7 +223,38 @@ for index in 0 1; do
   [[ "$status" == "404" ]] || { echo "fixed $mode mounted arbitrary downstream settings: $status" >&2; exit 1; }
   status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$fixed_base_url/admin")"
   [[ "$status" == "404" ]] || { echo "fixed $mode exposed owner UI anonymously: $status" >&2; exit 1; }
+  fixed_secret="zpf2-fixed-${mode}-account-state-secret"
+  owner_cookie="$(session_cookie "$fixed_secret" alfablok 1)"
+  product_cookie="$(session_cookie "$fixed_secret" product-customer 2)"
+  admin_html="$contract_tmp/${mode}-admin.html"
+  status="$(curl -sS -o "$admin_html" -w '%{http_code}' --max-time 5 -H "Cookie: $owner_cookie" "$fixed_base_url/admin")"
+  [[ "$status" == "200" ]] || { echo "fixed $mode owner UI unavailable: $status" >&2; exit 1; }
+  status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -H "Cookie: $product_cookie" "$fixed_base_url/admin")"
+  [[ "$status" == "404" ]] || { echo "fixed $mode exposed owner UI to a product customer: $status" >&2; exit 1; }
+
+  asset_list="$contract_tmp/${mode}-assets.txt"
+  node -e '
+    const html = require("node:fs").readFileSync(process.argv[1], "utf8");
+    const assets = [...html.matchAll(/(?:src|href)="([^"]+\.(?:js|css)(?:\?[^"]*)?)"/g)]
+      .map((match) => match[1]);
+    process.stdout.write([...new Set(assets)].join("\n"));
+  ' "$admin_html" > "$asset_list"
+  [[ -s "$asset_list" ]] || { echo "fixed $mode owner UI referenced no JS/CSS assets" >&2; exit 1; }
+  while IFS= read -r asset; do
+    [[ "$asset" == /assets/* ]] || { echo "fixed $mode owner UI referenced unexpected asset URL: $asset" >&2; exit 1; }
+    asset_headers="$contract_tmp/${mode}-$(basename "${asset%%\?*}").headers"
+    status="$(curl -sS -D "$asset_headers" -o /dev/null -w '%{http_code}' --max-time 5 -H "Cookie: $owner_cookie" "$fixed_base_url$asset")"
+    [[ "$status" == "200" ]] || { echo "fixed $mode owner asset unavailable ($asset): $status" >&2; exit 1; }
+    case "${asset%%\?*}" in
+      *.js) grep -Eiq '^content-type:.*javascript' "$asset_headers" || { echo "fixed $mode JS asset has wrong content type: $asset" >&2; exit 1; } ;;
+      *.css) grep -Eiq '^content-type:.*text/css' "$asset_headers" || { echo "fixed $mode CSS asset has wrong content type: $asset" >&2; exit 1; } ;;
+    esac
+    status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$fixed_base_url$asset")"
+    [[ "$status" == "404" ]] || { echo "fixed $mode exposed owner asset anonymously ($asset): $status" >&2; exit 1; }
+    status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -H "Cookie: $product_cookie" "$fixed_base_url$asset")"
+    [[ "$status" == "404" ]] || { echo "fixed $mode exposed owner asset to a product customer ($asset): $status" >&2; exit 1; }
+  done < "$asset_list"
   rm -f /tmp/zpf2-fixed-body-$$
 done
 
-echo "Phylax image contract passed: standalone customer surface, fixed-mode isolation, immutable identity, restart, mismatch, and legacy data preservation."
+echo "Phylax image contract passed: standalone customer surface, fixed owner-gated admin assets, fixed-mode isolation, immutable identity, restart, mismatch, and legacy data preservation."
