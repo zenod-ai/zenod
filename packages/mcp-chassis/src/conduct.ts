@@ -97,6 +97,8 @@ export interface ConductCheckOptions {
 export interface LongToolConductOptions {
   /** Registered poll tool that resolves this ticket to a terminal completion. */
   pollTool: string;
+  /** The tool may also return a normal synchronous result for inputs that do not request durable execution. */
+  allowSynchronousResult?: boolean;
   /** Guy-to-guy dispatches must propagate origin_ticket_id and increment depth. */
   dispatch?: boolean;
 }
@@ -217,6 +219,10 @@ export function hasEvidenceHandle(payload: ConductPayload): boolean {
 
 function isAcceptedTicket(payload: ConductPayload): boolean {
   return nonEmptyString(payload.ticket_id) && (payload.status === "accepted" || payload.state === "accepted");
+}
+
+function claimsAcceptedTicket(payload: ConductPayload): boolean {
+  return payload.status === "accepted" || payload.state === "accepted" || nonEmptyString(payload.ticket_id);
 }
 
 function conductPoll(value: unknown): PollToolContract | null {
@@ -528,6 +534,9 @@ export function assertRegisteredToolResult<
   }
   if (hasStructuredError(payload)) return result;
   if (profile.longTool) {
+    if (profile.longTool.allowSynchronousResult && !claimsAcceptedTicket(payload)) {
+      return assertConductResult(toolName, result, { kind: profile.kind });
+    }
     assertLongToolAcceptedResult(toolName, payload, input, profile.longTool);
     return result;
   }
