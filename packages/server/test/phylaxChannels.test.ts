@@ -1791,7 +1791,7 @@ describe("PhylaxChannelsOrgan", () => {
       expect(restarted.whatsappStore.channelAudit(sourceMessageId)).toMatchObject({
         tenantId: "alpha",
         outboundProviderId: attempts[0],
-        outboundStatus: "sent",
+        outboundStatus: "recovery_sent",
       });
       const mapped = new DatabaseSync(join(dataDir, "phylax-capture-jobs.sqlite"));
       expect((mapped.prepare(
@@ -3314,6 +3314,8 @@ describe("ported gateway integration", () => {
     let downstreamCalls = 0;
     const usageBegins: Array<Record<string, unknown>> = [];
     const usageSettlements: boolean[] = [];
+    const deliveryBegins: Array<Record<string, unknown>> = [];
+    const deliverySettlements: Array<{ receipt: string | null }> = [];
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
@@ -3354,6 +3356,22 @@ describe("ported gateway integration", () => {
       },
       completeVoiceTranscriptionUsage(_claim, succeeded) {
         usageSettlements.push(succeeded);
+      },
+      beginDeliveryUsage(input) {
+        deliveryBegins.push(input);
+        return {
+          state: "processing",
+          tenantId: input.tenantId,
+          providerEventId: input.providerMessageId,
+          operation: "channel.outbound.whatsapp",
+          amountUnits: 1,
+          provider: "whatsapp",
+          model: null,
+          costBasis: "estimated",
+        };
+      },
+      completeDeliveryUsage(_claim, providerReceiptId) {
+        deliverySettlements.push({ receipt: providerReceiptId });
       },
       whatsappSocketFactory: async () => ({
         ev: { on() {} },
@@ -3397,13 +3415,40 @@ describe("ported gateway integration", () => {
       })]);
       expect(usageSettlements).toEqual([true]);
       expect(sent.map((entry) => entry.text)).toEqual([
-        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "strawberry banana",
       ]);
+      const deliveriesBeforeTranscript = deliveryBegins.length;
+      await runtime.whatsapp.handleEvent({
+        messageId: "voice-transcript-question",
+        chatId: "34611111111@s.whatsapp.net",
+        senderId: "34611111111@s.whatsapp.net",
+        senderName: "Alpha",
+        chatName: "Alpha",
+        isGroup: false,
+        timestamp: 2,
+        body: "Can you give me the transcription of that audio?",
+        hasMedia: false,
+        mediaType: null,
+        mimeType: null,
+        fileName: null,
+      });
+      expect(sent.at(-1)?.text).toBe("Transcript of your latest voice note:\n\nstrawberry banana");
+      expect(downstreamCalls).toBe(1);
+      expect(deliveryBegins).toHaveLength(deliveriesBeforeTranscript + 1);
+      expect(deliveryBegins.at(-1)).toMatchObject({ tenantId: "alpha", channel: "whatsapp" });
+      expect(deliverySettlements.at(-1)?.receipt).toBe(`sent-${sent.length}`);
+      expect(runtime.whatsappStore.channelAudit("voice-transcript-question")).toMatchObject({
+        tenantId: "alpha",
+        transcriptProvenance: "phylax-persisted-voice-transcript",
+        downstreamDestination: "phylax-local#voice-transcript",
+        lifecycleState: "replied",
+        outboundStatus: "sent",
+      });
       const outbound = runtime.whatsappStore.recentTranscript({ sinceMs: 0 })
         .filter((entry) => entry.direction === "outbound");
-      expect(outbound).toHaveLength(2);
-      expect(outbound.map((entry) => entry.status)).toEqual(["processing", "recovery_sent"]);
+      expect(outbound).toHaveLength(3);
+      expect(outbound.map((entry) => entry.status)).toEqual(["processing", "recovery_sent", "sent"]);
       const traces = ["voice-owner", "voice-duplicate"].map((messageId) => runtime.whatsappStore.channelAudit(messageId));
       expect(traces.filter((trace) => trace?.lifecycleState === "replied")).toHaveLength(1);
       expect(traces.filter((trace) => trace?.lifecycleState === "coalesced")).toHaveLength(1);
@@ -3532,7 +3577,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
       expect(aborted).toBe(false);
       expect(sent).toEqual([
-        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "Long voice saved.",
       ]);
       expect(calls).toHaveLength(1);
@@ -3675,7 +3720,7 @@ describe("ported gateway integration", () => {
       }));
       expect(downstreamCalls).toHaveLength(4);
       expect(sent).toEqual(expect.arrayContaining([
-        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it.",
         "Voice handled.",
         "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
@@ -3865,7 +3910,7 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() =>
         expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
       expect(sent).toEqual([
-        'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+        'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
         "⚠️ Your voice note was transcribed, but Zenod could not confirm the final result. I will not retry it automatically because that could perform the request twice.",
       ]);
       expect(sent.join("\n")).not.toMatch(/Ring|Phylax/i);
@@ -4385,8 +4430,7 @@ describe("ported gateway integration", () => {
       },
     });
     expect(result.replyText).toContain("Saved ✓");
-    expect(result.replyText).toContain("Media: archived");
-    expect(result.replyText).not.toContain("https://drive.google.com/file/d/image-1/view");
+    expect(result.replyText).toContain("Google Drive media: https://drive.google.com/file/d/image-1/view");
     expect(result.replyText).not.toContain("Log/2026-07-31.md#^e-image1");
     await organ.close();
   });

@@ -21,6 +21,72 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
+  it("answers chat while a slow media archive is still being filed", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-media-chat-lane-"));
+    dirs.push(dir);
+    const settings = {
+      get: (key: string) => ({
+        artifact_archive_provider: "local",
+        artifact_archive_local_dir: join(dir, "archive"),
+      })[key] ?? null,
+    } as unknown as Settings;
+    let releaseMedia!: () => void;
+    const mediaGate = new Promise<void>((resolve) => {
+      releaseMedia = resolve;
+    });
+    const storeMemory = vi.fn(async () => {
+      await mediaGate;
+      return {
+        evidenceRef: "Log/2026-08-28.md#^e-media",
+        pagesTouched: ["Inbox/Voice.md"],
+        commitSha: "a".repeat(40),
+        githubUrls: [],
+      };
+    });
+    const chat = vi.fn(async () => ({
+      text: "Chat stayed responsive.",
+      sources: [],
+      actions: [],
+    }));
+    const engine = { store: storeMemory, chat } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const media = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("raw voice").toString("base64")}`,
+      filename: "voice.ogg",
+      sourceHint: "WhatsApp voice note",
+      providedTranscript: "The transcript is already ready.",
+      transcriptionProvider: "channel",
+      transcriptionDisposition: "provided",
+    });
+    for (let attempt = 0; attempt < 50 && storeMemory.mock.calls.length === 0; attempt += 1) {
+      await sleep(5);
+    }
+    expect(store.get(media.id)?.status).toBe("running");
+
+    const conversation = queue.enqueue("chat", {
+      text: "Are you still there?",
+      conversationKey: "whatsapp:alpha",
+    });
+    for (let attempt = 0; attempt < 50 && store.get(conversation.id)?.status !== "done"; attempt += 1) {
+      await sleep(5);
+    }
+
+    expect(store.get(conversation.id)).toMatchObject({
+      status: "done",
+      result: { text: "Chat stayed responsive." },
+    });
+    expect(store.get(media.id)?.status).toBe("running");
+    expect(chat).toHaveBeenCalledTimes(1);
+
+    releaseMedia();
+    await queue.close();
+    expect(store.get(media.id)?.status).toBe("done");
+    store.close();
+  });
+
   it("archives, transcribes, files, and returns the full audio media receipt", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-ingest-"));
     dirs.push(dir);

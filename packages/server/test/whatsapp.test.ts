@@ -998,6 +998,7 @@ describe("WhatsAppGateway", () => {
     expect(attempts[0]).not.toBe("");
 
     const restartedStore = new WhatsAppStore(storePath);
+    const restartedEmitter = new EventEmitter();
     const restartedGateway = new WhatsAppGateway({
       dataDir: join(dir, "session-restarted"),
       settings,
@@ -1005,7 +1006,11 @@ describe("WhatsAppGateway", () => {
       getEngine: async () => fakeEngine([]),
       portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
       socketFactory: async () => ({
-        ev: { on() {} },
+        ev: {
+          on(event, listener) {
+            restartedEmitter.on(event, listener);
+          },
+        },
         user: { id: "34999999999@s.whatsapp.net" },
         async sendMessage(_jid, _content, options) {
           const id = options?.messageId ?? "";
@@ -1017,17 +1022,17 @@ describe("WhatsAppGateway", () => {
     });
     try {
       await restartedGateway.pair();
-      const recovered = await restartedGateway.recoverPortedReceipt(
-        "alpha",
-        "capture-background-1",
-      );
+      restartedEmitter.emit("connection.update", { connection: "open" });
+      await vi.waitFor(() => expect(attempts).toHaveLength(2));
+      const recovered = attempts[1];
       expect(recovered).toBe(attempts[0]);
       expect(attempts).toEqual([recovered, recovered]);
       expect(accepted).toEqual(new Set([recovered!]));
       expect(restartedStore.channelAudit("capture-background-1")).toMatchObject({
         tenantId: "alpha",
         outboundProviderId: recovered,
-        outboundStatus: "sent",
+        outboundStatus: "recovery_sent",
+        lifecycleState: "replied",
       });
       expect(await restartedGateway.recoverPortedReceipt("beta", "capture-background-1"))
         .toBeNull();
@@ -1137,6 +1142,113 @@ describe("WhatsAppGateway", () => {
     } finally {
       await restartedGateway.close();
       restartedStore.close();
+      state.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the real terminal receipt recoverable when allowance pauses delivery", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-whatsapp-allowance-terminal-"));
+    const state = new SqliteStateStore(join(dir, "settings.sqlite"));
+    const settings = new Settings(state);
+    settings.setWhatsAppSettings({ allowedSenders: ["34611111111"] });
+    const store = new WhatsAppStore(join(dir, "whatsapp.sqlite"));
+    const socket = new FakeSocket();
+    let deliveryAllowed = false;
+    const event = {
+      messageId: "capture-allowance-terminal-1",
+      chatId: "34611111111@s.whatsapp.net",
+      senderId: "34611111111@s.whatsapp.net",
+      senderName: "Alpha",
+      chatName: "Alpha",
+      isGroup: false,
+      timestamp: 1,
+      body: "save the launch note",
+      hasMedia: false,
+      mediaType: null,
+      mimeType: null,
+      fileName: null,
+    } satisfies import("../src/whatsappStore.js").WhatsAppInboundEvent;
+    const gateway = new WhatsAppGateway({
+      dataDir: join(dir, "session"),
+      settings,
+      store,
+      getEngine: async () => fakeEngine([]),
+      portedInboundHandler: async () => {
+        store.recordChannelForwarding({
+          providerMessageId: event.messageId,
+          tenantId: "alpha",
+          senderId: event.senderId,
+          downstreamDestination: "zenod.test#tenant:alpha",
+          replyText: "Saved the launch note.",
+        });
+        return { replyText: "Saved the launch note." };
+      },
+      portedReplyIntentScope: () => ({ tenantId: "alpha", receiptEligible: true }),
+      beginPortedDeliveryUsage: (input) => deliveryAllowed
+        ? {
+            state: "processing",
+            tenantId: input.tenantId,
+            providerEventId: input.providerMessageId,
+            operation: "channel.outbound.whatsapp",
+            amountUnits: 1,
+            provider: "whatsapp",
+            model: null,
+            costBasis: "estimated",
+          }
+        : {
+            state: "paused",
+            tenantId: input.tenantId,
+            providerEventId: input.providerMessageId,
+            operation: "channel.outbound.whatsapp",
+            amountUnits: 1,
+            provider: "whatsapp",
+            model: null,
+            costBasis: "estimated",
+          },
+      socketFactory: async () => socket,
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await gateway.pair();
+      await gateway.handleEvent(event);
+      expect(socket.sent).toEqual([]);
+      expect(store.recoverableReceiptIntent("alpha", event.messageId)).toMatchObject({
+        bodyText: "Saved the launch note.",
+        state: "pending",
+        receiptEligible: true,
+      });
+
+      // A historical buggy runtime could leave a newer generic failure intent
+      // beside the real terminal result. Recovery must ignore it.
+      store.prepareOutboundIntent({
+        sourceMessageId: event.messageId,
+        tenantId: "alpha",
+        providerMessageId: "false-failure-provider-id",
+        chatId: event.chatId,
+        contactId: event.senderId,
+        bodyText: "⚠️ Zenod could not process that message. Please try again.",
+        successStatus: "failure_notice_sent",
+        receiptEligible: true,
+      });
+      expect(store.recoverableReceiptIntent("alpha", event.messageId)?.bodyText)
+        .toBe("Saved the launch note.");
+
+      deliveryAllowed = true;
+      await expect(gateway.recoverPortedReceipt("alpha", event.messageId))
+        .resolves.toBe("sent_1");
+      expect(socket.sent.map((message) => message.text)).toEqual(["Saved the launch note."]);
+      expect(socket.sent.map((message) => message.text).join("\n"))
+        .not.toContain("Zenod could not process");
+      expect(store.channelAudit(event.messageId)).toMatchObject({
+        lifecycleState: "replied",
+        outboundStatus: "recovery_sent",
+        outboundProviderId: "sent_1",
+      });
+    } finally {
+      consoleError.mockRestore();
+      await gateway.close();
+      store.close();
       state.close();
       await rm(dir, { recursive: true, force: true });
     }
