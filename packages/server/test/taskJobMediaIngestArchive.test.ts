@@ -21,6 +21,71 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
+  it("finishes media capture before durable semantic enrichment", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-capture-first-media-"));
+    dirs.push(dir);
+    const settings = {
+      get: (key: string) => ({
+        artifact_archive_provider: "local",
+        artifact_archive_local_dir: join(dir, "archive"),
+      })[key] ?? null,
+    } as unknown as Settings;
+    let releaseEnrichment!: () => void;
+    const enrichmentGate = new Promise<void>((resolve) => { releaseEnrichment = resolve; });
+    const captureEvidence = vi.fn(async () => ({
+      evidenceRef: "Log/2026-08-28.md#^e-fast01",
+      pagesTouched: [],
+      commitSha: "a".repeat(40),
+      githubUrls: [],
+      filing: "pending" as const,
+    }));
+    const enrichEvidence = vi.fn(async () => {
+      await enrichmentGate;
+      return {
+        evidenceRef: "Log/2026-08-28.md#^e-fast01",
+        pagesTouched: ["Projects/Memory.md"],
+        commitSha: "b".repeat(40),
+        githubUrls: [],
+        filing: "filed" as const,
+      };
+    });
+    const engine = { captureEvidence, enrichEvidence } as unknown as BrainEngine;
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => engine, settings);
+
+    const media = queue.enqueue("media_ingest", {
+      mediaType: "audio",
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("raw voice").toString("base64")}`,
+      filename: "voice.ogg",
+      sourceHint: "WhatsApp voice note",
+      providedTranscript: "Blue Lantern is already transcribed.",
+      transcriptionProvider: "channel",
+      transcriptionDisposition: "provided",
+    }, "alpha:whatsapp:blue-lantern");
+
+    for (let attempt = 0; attempt < 100 && store.get(media.id)?.status !== "done"; attempt += 1) await sleep(5);
+    const captured = store.get(media.id);
+    expect(captured).toMatchObject({
+      status: "done",
+      result: {
+        message: "Media artifact and extraction captured in Zenod; semantic filing continues in the background.",
+        digest: {
+          evidenceRef: "Log/2026-08-28.md#^e-fast01",
+          filing: "pending",
+          enrichmentJobId: expect.any(String),
+        },
+      },
+    });
+    expect(captureEvidence).toHaveBeenCalledTimes(1);
+    expect(enrichEvidence).toHaveBeenCalledTimes(1);
+    expect(store.get((captured!.result as MediaIngestReceipt).digest.enrichmentJobId!)?.status).toBe("running");
+
+    releaseEnrichment();
+    await queue.close();
+    expect(store.get((captured!.result as MediaIngestReceipt).digest.enrichmentJobId!)?.status).toBe("done");
+    store.close();
+  });
+
   it("answers chat while a slow media archive is still being filed", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-chat-lane-"));
     dirs.push(dir);

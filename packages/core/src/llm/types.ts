@@ -65,6 +65,8 @@ export interface ClassificationPage {
 }
 
 export interface Classification {
+  /** Spend gate: only explicit semantic integration is allowed to invoke the full-page composer. */
+  disposition?: "evidence_only" | "append_compact_note" | "integrate_page" | "needs_clarification";
   confidence: number;
   /** One line for the commit message: `memory: <summary>`. */
   summary: string;

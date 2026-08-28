@@ -453,6 +453,8 @@ function toolLabel(toolName: string, input: unknown): string {
  * OpenAI and Anthropic. (Regression-tested in test/schema-llm.test.ts.)
  */
 const classificationSchema = z.object({
+  disposition: z.enum(["evidence_only", "append_compact_note", "integrate_page", "needs_clarification"])
+    .describe("spend gate: preserve evidence only, append one compact cited note, run full semantic page integration, or request clarification"),
   confidence: z.number().min(0).max(1).describe("how sure you are about where this memory belongs"),
   summary: z.string().describe("one line, imperative, for the commit message"),
   tags: z.array(z.string()).describe("tags from the vocabulary only"),
@@ -757,6 +759,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       system: [
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
         "decide which meaning page(s) it belongs to — update existing pages when one fits, create a new one only when nothing does.",
+        "Choose exactly one spend disposition before selecting pages:",
+        "- evidence_only: the immutable Log entry is sufficient (default for short check-ins, test phrases, receipts, transient observations, and low-value captures).",
+        "- append_compact_note: one durable fact belongs on an existing page and can be represented by one short cited update without rewriting the page.",
+        "- integrate_page: use only when the user explicitly asks to integrate/synthesize/organize, or the material substantially changes durable project/domain knowledge.",
+        "- needs_clarification: the requested durable meaning cannot be determined safely.",
+        "Full-page composition is expensive. Do not select integrate_page merely because a related page exists.",
         "Folders: Areas/ (ongoing life domains), Projects/ (finite work), Notes/ (reusable knowledge).",
         `Tag vocabulary (use ONLY these): ${input.tagVocabulary.join(", ")}`,
         "Existing pages (path | title | tags | summary):",
@@ -782,6 +790,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
 
     return {
+      disposition: object.disposition,
       confidence: typeof object.confidence === "number" ? object.confidence : 0,
       summary: object.summary || "stored a memory",
       tags: Array.isArray(object.tags) ? object.tags : [],

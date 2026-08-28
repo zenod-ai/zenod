@@ -9,6 +9,7 @@ import type {
   BacklogSourceRef,
   BrainEngine,
   ChatOptions,
+  EnrichEvidenceInput,
   ExternalTaskingTools,
   Hit,
   LintReport,
@@ -1253,6 +1254,250 @@ export function createEngine(options: EngineOptions): BrainEngine {
     ].join("\n");
   }
 
+  function evidenceResult(
+    entry: { evidenceRef: string; path: string; githubUrl: string },
+    commitSha: string,
+    filing: StoreResult["filing"] = "pending",
+  ): StoreResult {
+    const canonicalLocation = { ...location, branch: commitSha };
+    return {
+      evidenceRef: entry.evidenceRef,
+      ...(githubUrl(canonicalLocation, entry.path) ? { evidenceUrl: githubUrl(canonicalLocation, entry.path) } : {}),
+      pagesTouched: [],
+      pageUrls: [],
+      commitSha,
+      githubUrls: [githubUrl(location, entry.path)].filter(Boolean),
+      filing,
+    };
+  }
+
+  /**
+   * Capture is deliberately boring: one immutable Log append and one commit.
+   * It performs no classification, composition, or semantic recognition, so a
+   * transport can truthfully acknowledge custody before expensive filing.
+   */
+  async function captureEvidence(input: StoreInput): Promise<StoreResult> {
+    assertVault(repo);
+    return queue.run(async () => {
+      await repo.pull().catch(() => {
+        // offline or empty remote — proceed against the local clone
+      });
+      lastSyncMs = now().getTime();
+
+      if (input.sourceId) {
+        const existing = (await searchEvidenceEntries(vaultPath, {
+          source: input.source,
+          ...(input.contentType ? { contentType: input.contentType } : {}),
+          sourceId: input.sourceId,
+          limit: 1,
+        }, location))[0];
+        if (existing) return evidenceResult(existing, await repo.headSha());
+      }
+
+      const evidence = await appendEvidence(
+        vaultPath,
+        input.content,
+        input.source,
+        input.verbatim ?? false,
+        now(),
+        {
+          ...(input.contentType ? { contentType: input.contentType } : {}),
+          ...(input.capturedAt ? { capturedAt: input.capturedAt } : {}),
+          ...(input.sourceId ? { sourceId: input.sourceId } : {}),
+        },
+      );
+      const evidenceRef = `${evidence.logPath}#^${evidence.anchor}`;
+      const sha = await repo.commitAndPush(`memory: capture ${input.contentType ?? "evidence"}`);
+      const canonicalLocation = { ...location, branch: sha };
+      return {
+        evidenceRef,
+        ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
+          ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
+          : {}),
+        pagesTouched: [],
+        pageUrls: [],
+        commitSha: sha,
+        githubUrls: [githubUrl(location, evidence.logPath)].filter(Boolean),
+        filing: "pending",
+      };
+    }, "interactive");
+  }
+
+  /**
+   * Background-only semantic filing for evidence that is already immutable.
+   * The typed classifier is a spend gate: only integrate_page may call the
+   * full-page composer. Evidence-only captures require no second commit.
+   */
+  async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
+    assertVault(repo);
+    return queue.run(async () => {
+      await repo.pull().catch(() => {
+        // offline or empty remote — proceed against the local clone
+      });
+      lastSyncMs = now().getTime();
+      const evidence = await getEvidenceEntry(vaultPath, input.evidenceRef, location);
+      const capturedSha = await repo.headSha();
+      const config = await loadBrainConfig(vaultPath);
+      const snapshot = await scanVault(vaultPath);
+      const segments = segmentLongMemoryContent(input.content);
+      const entities = verbatimEntityCandidates(input.content);
+      const classifications: Classification[] = [];
+      try {
+        for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+          const segment = segments[segmentIndex]!;
+          let classified: Classification | null = null;
+          let lastError: unknown;
+          for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
+            const hints = [
+              ...(input.hints ?? []),
+              "This evidence is already durably captured. Spend full-page composition only when semantic integration is explicitly justified.",
+              ...(segments.length > 1
+                ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
+                : []),
+              ...(entities.length > 0
+                ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
+                : []),
+            ];
+            reportTokenCost("classify", [
+              segment,
+              ...hints,
+              snapshot.pages.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"),
+              config.tags.join(", "),
+            ], undefined, attempt === 0 ? "enrichment-gate" : "retry");
+            try {
+              classified = await llm.classify({
+                content: segment,
+                hints,
+                pageIndex: snapshot.pages,
+                tagVocabulary: config.tags,
+              });
+              break;
+            } catch (error) {
+              lastError = error;
+            }
+          }
+          if (!classified) throw lastError ?? new Error("classification returned no result");
+          classifications.push(classified);
+        }
+      } catch (error) {
+        console.warn(`[librarian] enrichment gate unavailable for ${input.evidenceRef}: ${(error as Error).message}`);
+        return evidenceResult(evidence, capturedSha);
+      }
+
+      const classification = mergeSegmentClassifications(classifications);
+      const disposition = classifications.some((item) => item.disposition === "integrate_page")
+        ? "integrate_page"
+        : classifications.some((item) => item.disposition === "append_compact_note")
+          ? "append_compact_note"
+          : classifications.some((item) => item.disposition === "needs_clarification")
+            ? "needs_clarification"
+            : "evidence_only";
+      classification.pages = classification.pages.map((page) => ({
+        ...page,
+        path: normalizeMarkdownNotePath(page.path),
+      }));
+
+      if (disposition === "evidence_only" || disposition === "needs_clarification" || classification.pages.length === 0) {
+        return evidenceResult(evidence, capturedSha, disposition === "evidence_only" ? "filed" : "pending");
+      }
+
+      const citationDate = evidence.path.slice("Log/".length, -".md".length);
+      const citation = `[[${citationDate}#^${evidence.anchor}]]`;
+      const touched: string[] = [];
+      try {
+        if (disposition === "append_compact_note") {
+          const page = classification.pages.find((candidate) => candidate.action === "update");
+          if (!page) return evidenceResult(evidence, capturedSha, "filed");
+          const absolute = join(vaultPath, page.path);
+          const current = await readFile(absolute, "utf8");
+          const separator = current.endsWith("\n") ? "\n" : "\n\n";
+          const compactSummary = classification.summary
+            .split("\n")
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join(" ");
+          await writeFile(
+            absolute,
+            `${current}${separator}## Captured update — ${todayString(now())}\n\n- ${compactSummary} (${citation})\n`,
+          );
+          touched.push(page.path);
+        } else {
+          const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
+          for (const page of classification.pages) {
+            const folder = page.path.split("/")[0] ?? "";
+            const requiredType = MEANING_FOLDERS[folder];
+            if (!requiredType) throw new Error(`classifier proposed a non-meaning path: ${page.path}`);
+            const absolute = join(vaultPath, page.path);
+            const currentContent = await readFile(absolute, "utf8").catch(() => null);
+            const linkHints: string[] = [];
+            const indexPath = `${folder}/${folder} Index.md`;
+            if (snapshot.files.includes(indexPath)) linkHints.push(`[[${folder}/${folder} Index|${folder}]]`);
+            for (const candidate of snapshot.pages) {
+              if (candidate.path === page.path) continue;
+              linkHints.push(`[[${candidate.path.replace(/\.md$/, "")}|${candidate.title}]]`);
+              if (linkHints.length >= 4) break;
+            }
+            let lastErrors: import("../types.js").LintError[] | undefined;
+            let composed = false;
+            for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt += 1) {
+              reportTokenCost("compose", [
+                page.path,
+                currentContent ?? template,
+                evidence.content,
+                citation,
+                config.tags.join(", "),
+                ...(lastErrors?.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`) ?? []),
+              ], undefined, attempt === 0 ? "background-enrichment" : "retry");
+              const next = await llm.composePage({
+                path: page.path,
+                currentContent,
+                template,
+                evidenceEntry: evidence.content,
+                citation,
+                classification,
+                tagVocabulary: config.tags,
+                today: todayString(now()),
+                requiredType,
+                linkHints,
+                ...(lastErrors ? { previousErrors: lastErrors } : {}),
+              });
+              await mkdir(dirname(absolute), { recursive: true });
+              await writeFile(absolute, next);
+              const report = await lintVault(vaultPath, [page.path]);
+              const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+              if (errors.length === 0) {
+                composed = true;
+                break;
+              }
+              lastErrors = errors;
+            }
+            if (!composed) throw new Error(`page ${page.path} failed validation after ${COMPOSE_RETRIES + 1} attempts`);
+            touched.push(page.path);
+          }
+        }
+
+        const report = await lintVault(vaultPath, touched);
+        const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+        if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
+        const sha = await repo.commitAndPush(`memory: enrich ${classification.summary}`);
+        const canonicalLocation = { ...location, branch: sha };
+        return {
+          evidenceRef: input.evidenceRef,
+          ...(githubUrl(canonicalLocation, evidence.path) ? { evidenceUrl: githubUrl(canonicalLocation, evidence.path) } : {}),
+          pagesTouched: touched,
+          pageUrls: touched.map((path) => githubUrl(canonicalLocation, path)).filter(Boolean),
+          commitSha: sha,
+          githubUrls: [githubUrl(location, evidence.path), ...touched.map((path) => githubUrl(location, path))].filter(Boolean),
+          filing: "filed",
+        };
+      } catch (error) {
+        await repo.discardChanges();
+        console.warn(`[librarian] background enrichment pending for ${input.evidenceRef}: ${(error as Error).message}`);
+        return evidenceResult(evidence, capturedSha);
+      }
+    }, "background");
+  }
+
   /**
    * The librarian pipeline — docs/M0-SPEC.md § The librarian pipeline.
    * `priority` defaults to interactive (direct callers — MCP, Drive, chat —
@@ -1952,6 +2197,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   return {
     store,
+    captureEvidence,
+    enrichEvidence,
     ask,
     chat,
     handleTasking,

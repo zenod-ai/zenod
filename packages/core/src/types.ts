@@ -71,6 +71,11 @@ export interface StoreResult {
   queued?: boolean;
 }
 
+export interface EnrichEvidenceInput extends StoreInput {
+  /** Exact immutable evidence entry previously committed by captureEvidence. */
+  evidenceRef: string;
+}
+
 export type TokenCostOperation = "classify" | "compose" | "ask" | "chat" | "tasking" | "work";
 
 export interface TokenCostMeasurement {
@@ -277,6 +282,8 @@ export interface MemoryEntry {
 export interface MemoryEntryQuery {
   source?: Surface;
   contentType?: MemoryContentType;
+  /** Exact stable source/provider identifier. */
+  sourceId?: string;
   capturedAfter?: string;
   capturedBefore?: string;
   order?: "newest" | "oldest";
@@ -376,6 +383,10 @@ export interface BacklogDigestResult {
 export interface BrainEngine {
   /** The librarian pipeline — the only write path. */
   store(input: StoreInput): Promise<StoreResult>;
+  /** Commit immutable evidence without waiting for semantic classification/composition. */
+  captureEvidence?(input: StoreInput): Promise<StoreResult>;
+  /** Classify and optionally integrate an already-committed evidence entry. */
+  enrichEvidence?(input: EnrichEvidenceInput): Promise<StoreResult>;
   /** Describe an image via the vision model and return a plain-text description. */
   describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
   /** Read-only agent loop: synthesized answer with citations. */

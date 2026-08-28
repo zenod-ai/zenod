@@ -16,7 +16,7 @@ import { openZenodSqlite } from "./sqlite.js";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest";
+export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -77,6 +77,8 @@ export interface TaskJobInput {
   senderTimestamp?: string;
   /** media_ingest: optional filing hints. */
   mediaHints?: string[];
+  /** enrich_memory: exact already-committed immutable evidence entry. */
+  evidenceRef?: string;
 }
 
 export interface MediaIngestReceipt {
@@ -113,6 +115,8 @@ export interface MediaIngestReceipt {
     commitSha: string | null;
     githubUrls: string[];
     filing?: "filed" | "uncertain" | "inbox" | "pending";
+    /** Durable background semantic filing job; capture is already committed. */
+    enrichmentJobId?: string;
   };
   nextAdapterIssues?: string[];
 }
@@ -235,7 +239,7 @@ export class TaskJobStore {
              owner_id=NULL,
              lease_expires_at=NULL,
              updated_at=?
-         WHERE tenant_id=? AND status=? AND kind IN ('store', 'media_ingest') AND attempts < ?
+         WHERE tenant_id=? AND status=? AND kind IN ('store', 'media_ingest', 'enrich_memory') AND attempts < ?
            AND (lease_expires_at IS NULL OR lease_expires_at<=?)`,
       )
       .run(now, this.tenantId, IN_FLIGHT_STATE, MAX_CAPTURE_RESUME_ATTEMPTS, now);
@@ -246,7 +250,7 @@ export class TaskJobStore {
       .prepare(
         `UPDATE task_jobs
            SET status='interrupted',
-               error=CASE WHEN kind IN ('store', 'media_ingest')
+               error=CASE WHEN kind IN ('store', 'media_ingest', 'enrich_memory')
                           THEN 'interrupted by a server restart (gave up after ' || attempts || ' retries)'
                           ELSE 'interrupted by a server restart' END,
                owner_id=NULL,
@@ -271,7 +275,7 @@ export class TaskJobStore {
     if (normalizedKey && normalizedKey.length > 512) {
       throw new Error("idempotencyKey must be at most 512 characters");
     }
-    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest") {
+    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest" && kind !== "enrich_memory") {
       throw new Error("idempotencyKey is only supported for durable channel/capture jobs");
     }
 
