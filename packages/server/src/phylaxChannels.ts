@@ -1356,7 +1356,10 @@ export class PhylaxChannelsOrgan {
     }
   }
 
-  private startBackgroundPoll(job: PhylaxCaptureJob): void {
+  private startBackgroundPoll(
+    job: PhylaxCaptureJob,
+    handoff: PhylaxDownstreamCall["handoff"] = { sender: job.sender },
+  ): void {
     const key = `${job.tenantId}\0${job.channel}\0${job.providerMessageId}`;
     if (this.backgroundPolls.has(key)) return;
     const polling = (async () => {
@@ -1365,7 +1368,7 @@ export class PhylaxChannelsOrgan {
         if (!route || route.tenantId !== job.tenantId) {
           throw new Error("tenant route is unavailable while resuming capture");
         }
-        const completed = await this.pollCapture(job, route, { sender: job.sender }, null);
+        const completed = await this.pollCapture(job, route, handoff, null);
         if (!completed || !completed.receipt) return;
         await this.deliverTerminalReceipt(job, completed.receipt.text);
       } catch (error) {
@@ -2069,7 +2072,7 @@ export class PhylaxChannelsOrgan {
         downstream_identity: safeDownstreamDestination(call.route),
       }],
       ...(backgroundCaptureJob
-        ? { afterReply: () => this.startBackgroundPoll(backgroundCaptureJob) }
+        ? { afterReply: () => this.startBackgroundPoll(backgroundCaptureJob, handoff) }
         : {}),
     };
   }
