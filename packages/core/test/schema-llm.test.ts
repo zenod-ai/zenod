@@ -19,6 +19,7 @@ describe("classificationSchema (OpenAI-strict compatibility)", () => {
 
   it("still allows question to be null", () => {
     const parsed = classificationSchema.parse({
+      disposition: "evidence_only",
       confidence: 0.9,
       summary: "x",
       tags: [],
@@ -38,6 +39,7 @@ describe("classificationSchema (OpenAI-strict compatibility)", () => {
  */
 describe("repairStructuredJson (Z-8 fence recovery)", () => {
   const obj = {
+    disposition: "append_compact_note",
     confidence: 0.8,
     summary: "s",
     tags: ["work"],

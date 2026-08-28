@@ -14,6 +14,37 @@ import { TaskJobQueue } from "../src/taskJobQueue.js";
 const tmpDb = () => join(mkdtempSync(join(tmpdir(), "zenod-taskjob-")), "task.sqlite");
 
 describe("TaskJobStore restart durability (C-27 / #580)", () => {
+  it("re-queues interrupted semantic enrichment without duplicating its idempotent job", () => {
+    const path = tmpDb();
+    let store = new TaskJobStore(path, "tenant-alpha");
+    const accepted = store.enqueue(
+      "enrich_memory",
+      {
+        evidenceRef: "Log/2026-08-28.md#^e-a1b2c3",
+        content: "captured transcript",
+        source: "whatsapp",
+      },
+      "enrich:tenant-alpha:whatsapp:provider-1",
+    );
+    store.update(accepted.id, { status: "running" });
+    store.close();
+
+    store = new TaskJobStore(path, "tenant-alpha");
+    const replay = store.enqueue(
+      "enrich_memory",
+      { evidenceRef: "ignored", content: "ignored" },
+      "enrich:tenant-alpha:whatsapp:provider-1",
+    );
+    expect(replay).toMatchObject({
+      id: accepted.id,
+      status: "queued",
+      attempts: 1,
+      input: { evidenceRef: "Log/2026-08-28.md#^e-a1b2c3" },
+    });
+    expect(store.recent()).toHaveLength(1);
+    store.close();
+  });
+
   it("re-queues an interrupted store (write) job on boot instead of dropping it", () => {
     const path = tmpDb();
     let store = new TaskJobStore(path);

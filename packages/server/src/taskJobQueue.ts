@@ -94,7 +94,7 @@ export class TaskJobQueue {
 
   private requestDurableDrain(): void {
     if (this.activeDurableDrain) return;
-    const active = this.drain(["task", "work", "store", "media_ingest"]);
+    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory"]);
     this.activeDurableDrain = active;
     void active
       .catch((error) => console.error("[task-job] durable lane failed:", error))
@@ -165,9 +165,32 @@ export class TaskJobQueue {
           });
         } else {
           const archived = await archiveMediaInput(this.settings, job.input);
-          const result = await processMediaIngest(this.settings, job.input, archived, () => this.getEngine());
+          const result = await processMediaIngest(
+            this.settings,
+            job.input,
+            archived,
+            () => this.getEngine(),
+            job.idempotencyKey ?? job.id,
+            (input, idempotencyKey) => this.enqueue("enrich_memory", input, idempotencyKey),
+          );
           completed = this.store.updateClaimed(job.id, { status: "done", result });
         }
+      } else if (job.kind === "enrich_memory") {
+        const engine = await this.getEngine();
+        if (!engine.enrichEvidence || !job.input.evidenceRef) {
+          throw new Error("capture-first enrichment is unavailable");
+        }
+        const result = await engine.enrichEvidence({
+          evidenceRef: job.input.evidenceRef,
+          content: job.input.content ?? "",
+          source: job.input.source ?? "mcp",
+          ...(job.input.hints ? { hints: job.input.hints } : {}),
+          ...(job.input.verbatim !== undefined ? { verbatim: job.input.verbatim } : {}),
+          ...(job.input.contentType ? { contentType: job.input.contentType } : {}),
+          ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
+          ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
+        });
+        completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else {
         const engine = await this.getEngine();
         const result = await engine.work({
@@ -343,6 +366,8 @@ async function processMediaIngest(
   input: TaskJobInput,
   archived: ArchivedMediaInput,
   getEngine: () => Promise<BrainEngine>,
+  captureIdentity: string,
+  enqueueEnrichment: (input: TaskJobInput, idempotencyKey: string) => TaskJob,
 ): Promise<MediaIngestReceipt> {
   const canTranscribe = input.mediaType === "audio" || isAudioMimeType(archived.mediaType);
   const canExtractArtifact =
@@ -410,14 +435,33 @@ async function processMediaIngest(
     "",
     extraction.body,
   ].join("\n");
-  const stored = await engine.store({
+  const storeInput = {
     content,
     source: sourceFromHint(input.sourceHint),
     verbatim: true,
     contentType: input.mediaType ?? extraction.kind,
     ...(input.senderTimestamp ? { capturedAt: input.senderTimestamp } : {}),
     ...(input.mediaHints?.length ? { hints: input.mediaHints } : {}),
-  });
+    sourceId: captureIdentity,
+  } as const;
+  const stored = engine.captureEvidence
+    ? await engine.captureEvidence(storeInput)
+    : await engine.store(storeInput);
+  const enrichment = engine.captureEvidence && engine.enrichEvidence
+    ? enqueueEnrichment(
+        {
+          content,
+          source: storeInput.source,
+          hints: storeInput.hints,
+          verbatim: true,
+          contentType: storeInput.contentType,
+          ...(storeInput.capturedAt ? { capturedAt: storeInput.capturedAt } : {}),
+          sourceId: captureIdentity,
+          evidenceRef: stored.evidenceRef,
+        },
+        `enrich:${captureIdentity}`,
+      )
+    : null;
 
   return {
     status: "done",
@@ -425,7 +469,9 @@ async function processMediaIngest(
       ? "Audio archived without transcription because it exceeds the 2-hour limit; a Zenod entry pointing to the audio was filed."
       : extraction.transcriptionStatus === "skipped_unavailable"
         ? "Audio archived without another transcription attempt; a Zenod entry pointing to the audio was filed."
-      : "Media artifact archived, extracted, digested, filed, and committed.",
+      : enrichment
+        ? "Media artifact and extraction captured in Zenod; semantic filing continues in the background."
+        : "Media artifact archived, extracted, digested, filed, and committed.",
     mediaType: input.mediaType ?? extraction.kind,
     source: receiptSource(input),
     rawArtifact: { handle: archived.handle.uri, archiveUrl: archived.handle.url ?? archived.handle.uri, sha256: archived.handle.sha256 },
@@ -446,6 +492,7 @@ async function processMediaIngest(
       commitSha: stored.commitSha,
       githubUrls: stored.githubUrls,
       ...(stored.filing ? { filing: stored.filing } : {}),
+      ...(enrichment ? { enrichmentJobId: enrichment.id } : {}),
     },
   };
 }

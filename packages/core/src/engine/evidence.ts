@@ -198,6 +198,7 @@ export async function searchEvidenceEntries(
   return entries
     .filter((entry) => !query.source || entry.source === query.source)
     .filter((entry) => !query.contentType || entry.contentType === query.contentType)
+    .filter((entry) => !query.sourceId || entry.sourceId === query.sourceId)
     .filter((entry) => within(entry.capturedAt, query.capturedAfter, query.capturedBefore))
     .sort((left, right) => {
       const comparison = left.capturedAt.localeCompare(right.capturedAt) || left.evidenceRef.localeCompare(right.evidenceRef);

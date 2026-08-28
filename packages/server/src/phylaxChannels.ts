@@ -1029,7 +1029,7 @@ function terminalCaptureReceipt(
     state: "done",
     evidenceRef,
     text: sanitizePhylaxCustomerReply(appendPhylaxCaptureReceiptInvitation([
-      "Saved ✓",
+      filing === "pending" ? "Captured ✓" : "Saved ✓",
       `Recap: ${recap}`,
       ...(archiveUrl
         ? [`${archiveUrl.includes("drive.google.com")
@@ -1045,6 +1045,7 @@ function terminalCaptureReceipt(
             ]
           : extraction?.provider ? ["Media extraction: completed."] : []),
       ...(pages.length > 0 ? [`Filed: ${pages.join(", ")}`] : []),
+      ...(filing === "pending" ? ["Semantic filing: continuing safely in the background."] : []),
       ...(filing === "uncertain"
         ? [`Filing: saved to ${pages[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
         : filing === "inbox"

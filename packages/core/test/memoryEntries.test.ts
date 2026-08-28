@@ -66,6 +66,9 @@ describe("immutable memory entry retrieval", () => {
       source: "whatsapp",
       contentType: "voice_note",
     });
+
+    const exact = await searchEvidenceEntries(path, { sourceId: "wamid.first" });
+    expect(exact.map((entry) => entry.evidenceRef)).toEqual([`${older.logPath}#^${older.anchor}`]);
   });
 
   it("reads one exact anchored entry without exposing its daily-log neighbors", async () => {

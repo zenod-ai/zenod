@@ -36,6 +36,7 @@ class FakeLlm implements BrainLlm {
   classifyFailureMessage = "empty structured classification";
   composeCalls = 0;
   confidence = 0.95;
+  disposition: Classification["disposition"] = "integrate_page";
   failComposeAttempts = 0;
   classifyPath: string | null = "Areas/Insurance.md";
   answerInputs: AnswerInput[] = [];
@@ -47,6 +48,7 @@ class FakeLlm implements BrainLlm {
     this.classifyInputs.push(input);
     if (this.classifyCalls <= this.failClassifyAttempts) throw new Error(this.classifyFailureMessage);
     return {
+      disposition: this.disposition,
       confidence: this.confidence,
       summary: "note new insurance fact",
       tags: ["insurance"],
@@ -420,6 +422,114 @@ describe("BrainEngine", () => {
     expect(report.errors).toEqual([]);
     const verify = await VaultRepo.open({ workdir: join(dir, "verify"), remoteUrl: join(dir, "origin.git") });
     expect(await verify.headSha()).toBe(result.commitSha);
+  });
+
+  it("capture-first commits immutable evidence without invoking classifier or composer", async () => {
+    const e = engine();
+    const result = await e.captureEvidence!({
+      content: "Voice note transcript: Blue Lantern.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-blue-lantern",
+      verbatim: true,
+    });
+
+    expect(result).toMatchObject({ filing: "pending", pagesTouched: [] });
+    expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(llm.classifyCalls).toBe(0);
+    expect(llm.composeCalls).toBe(0);
+    const entry = await e.getEntry(result.evidenceRef);
+    expect(entry).toMatchObject({ sourceId: "wa-blue-lantern", contentType: "voice_note" });
+    expect(entry.content).toContain("Blue Lantern");
+
+    const replay = await e.captureEvidence!({
+      content: "Voice note transcript: Blue Lantern.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-blue-lantern",
+      verbatim: true,
+    });
+    expect(replay.evidenceRef).toBe(result.evidenceRef);
+    expect(replay.commitSha).toBe(result.commitSha);
+  });
+
+  it("typed evidence-only enrichment never spends a full-page compose call", async () => {
+    const e = engine();
+    const captured = await e.captureEvidence!({
+      content: "Voice note transcript: quick Blue Lantern microphone check.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-evidence-only",
+      verbatim: true,
+    });
+    llm.disposition = "evidence_only";
+
+    const result = await e.enrichEvidence!({
+      evidenceRef: captured.evidenceRef,
+      content: "Voice note transcript: quick Blue Lantern microphone check.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-evidence-only",
+      verbatim: true,
+    });
+
+    expect(result).toMatchObject({ filing: "filed", pagesTouched: [], commitSha: captured.commitSha });
+    expect(llm.classifyCalls).toBe(1);
+    expect(llm.composeCalls).toBe(0);
+  });
+
+  it("typed compact enrichment appends one cited update without full-page composition", async () => {
+    const e = engine();
+    const captured = await e.captureEvidence!({
+      content: "Insurance renewal moved to April 2027.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-compact",
+      verbatim: true,
+    });
+    llm.disposition = "append_compact_note";
+
+    const result = await e.enrichEvidence!({
+      evidenceRef: captured.evidenceRef,
+      content: "Insurance renewal moved to April 2027.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-compact",
+      verbatim: true,
+    });
+
+    expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
+    expect(llm.composeCalls).toBe(0);
+    const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
+    expect(page).toContain("## Captured update");
+    const anchor = captured.evidenceRef.split("#^")[1];
+    expect(page).toContain(`[[${captured.evidenceRef.slice(4, 14)}#^${anchor}]]`);
+  });
+
+  it("typed semantic integration composes only after capture has committed", async () => {
+    const e = engine();
+    const captured = await e.captureEvidence!({
+      content: "Integrate the renewed insurance policy into the insurance page.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-integrate",
+      verbatim: true,
+    });
+    llm.disposition = "integrate_page";
+
+    const result = await e.enrichEvidence!({
+      evidenceRef: captured.evidenceRef,
+      content: "Integrate the renewed insurance policy into the insurance page.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "wa-integrate",
+      verbatim: true,
+    });
+
+    expect(result.filing).toBe("filed");
+    expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
+    expect(result.commitSha).not.toBe(captured.commitSha);
+    expect(llm.composeCalls).toBe(1);
   });
 
   it("normalizes classifier meaning-page paths to .md before writing", async () => {

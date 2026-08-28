@@ -22,6 +22,7 @@ export type {
   ConversationCaptureTicket,
   ConversationMessage,
   ExternalTaskingTools,
+  EnrichEvidenceInput,
   Hit,
   LintError,
   LintReport,

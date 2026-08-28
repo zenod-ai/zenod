@@ -479,6 +479,7 @@ function formatMediaIngestResult(result: MediaIngestReceipt): string {
     `evidence: ${result.digest.evidenceRef ?? "none"}`,
     `pages: ${result.digest.pagesTouched.join(", ") || "none"}`,
     `commit: ${result.digest.commitSha ?? "none"}`,
+    ...(result.digest.enrichmentJobId ? [`background enrichment: ${result.digest.enrichmentJobId}`] : []),
     ...result.digest.githubUrls,
   ].join("\n");
 }
@@ -1399,7 +1400,7 @@ export function buildMcpServer(
                 ? (job.result as Reply).text
                 : job.kind === "task"
                 ? formatTaskingReply(job.result as TaskingReply)
-                : job.kind === "store"
+                : job.kind === "store" || job.kind === "enrich_memory"
                   ? formatStoreResult(job.result as StoreResult)
                   : job.kind === "media_ingest"
                     ? formatMediaIngestResult(job.result as MediaIngestReceipt)
