@@ -1801,6 +1801,84 @@ describe("Zenod chassis unit", () => {
     }
   });
 
+  it("serves a secret-free Zenod overview only to the configured owner", async () => {
+    const dataDir = await tempDir();
+    const webDist = join(dataDir, "web");
+    await mkdir(webDist, { recursive: true });
+    await writeFile(join(webDist, "index.html"), "<html>zenod-owner-admin</html>");
+    let login = "customer";
+    const unit = createZenodUnit({
+      dataDir,
+      webDist,
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "customer-session-secret",
+        GITHUB_OAUTH_CLIENT_ID: "client-id",
+        GITHUB_OAUTH_CLIENT_SECRET: "client-secret",
+        CHASSIS_VAULT_MASTER_KEY,
+        ZENOD_PUBLIC_PAID_SIGNUP: "0",
+      },
+      customer: {
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: login === "customer" ? 42 : 7, login, email: null }),
+        },
+      },
+      customerAdmin: { githubLogin: "alfablok" },
+    });
+    try {
+      unit.customerAccounts.upsert("customer", {
+        account_id: "github-42",
+        github_id: 42,
+        github_login: "customer",
+        github_email: "private@example.test",
+        stripe_email: "billing@example.test",
+        stripe_customer_id: "cus_secret",
+        mcp_token: "plain-secret-token",
+        tier: "monthly",
+        subscription_status: "active",
+        tenant_id: "github-42",
+        current_period_end: "2026-09-01T00:00:00.000Z",
+        managed_ai_status: "active",
+      });
+
+      expect((await unit.app.request("/admin")).status).toBe(404);
+      expect((await unit.app.request("/api/admin/overview")).status).toBe(404);
+      const customerCookie = await signInCustomer(unit);
+      expect((await unit.app.request("/admin", { headers: { cookie: customerCookie } })).status).toBe(404);
+      expect((await unit.app.request("/api/admin/overview", { headers: { cookie: customerCookie } })).status).toBe(404);
+
+      login = "AlFaBlOk";
+      const ownerCookie = await signInCustomer(unit);
+      const admin = await unit.app.request("/admin", { headers: { cookie: ownerCookie } });
+      expect(admin.status).toBe(200);
+      expect(await admin.text()).toContain("zenod-owner-admin");
+      const overview = await unit.app.request("/api/admin/overview", { headers: { cookie: ownerCookie } });
+      expect(overview.status).toBe(200);
+      const body = await overview.json();
+      expect(body).toMatchObject({
+        service: { status: "ok", name: "zenod" },
+        signup: { open: false },
+        totals: { accounts: 1, tenantBound: 1, active: 1 },
+        tenants: [{
+          accountId: "github-42",
+          githubLogin: "customer",
+          tenantId: "github-42",
+          tier: "monthly",
+          subscriptionStatus: "active",
+          managedAiStatus: "active",
+        }],
+      });
+      const serialized = JSON.stringify(body);
+      expect(serialized).not.toContain("private@example.test");
+      expect(serialized).not.toContain("billing@example.test");
+      expect(serialized).not.toContain("cus_secret");
+      expect(serialized).not.toContain("plain-secret-token");
+    } finally {
+      await unit.close();
+    }
+  });
+
   it("fails closed for canceled, suspended, and ambiguous customer bindings", async () => {
     const dataDir = await tempDir();
     const tenants = createMemoryTenantStore([

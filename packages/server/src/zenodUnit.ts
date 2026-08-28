@@ -1100,8 +1100,49 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     };
     app.use("/admin", adminOnly);
     app.use("/admin/*", adminOnly);
+    app.use("/api/admin/*", adminOnly);
     app.use("/api/whatsapp/*", adminOnly);
     app.use("/api/telegram/*", adminOnly);
+    app.get("/api/admin/overview", (c) => {
+      const accounts = customer.accounts.list()
+        .sort((left, right) => right.claimed_at.localeCompare(left.claimed_at));
+      const uniqueAccounts = [...new Map(
+        accounts.map((account) => [account.account_id, account]),
+      ).values()];
+      const subscriptions = {
+        active: uniqueAccounts.filter((account) => account.subscription_status === "active").length,
+        pastDue: uniqueAccounts.filter((account) => account.subscription_status === "past_due").length,
+        paused: uniqueAccounts.filter((account) => account.subscription_status === "paused").length,
+        canceled: uniqueAccounts.filter((account) => account.subscription_status === "canceled").length,
+        pending: uniqueAccounts.filter((account) =>
+          account.subscription_status === null || account.subscription_status === "checkout_pending"
+        ).length,
+      };
+      return c.json({
+        service: {
+          status: "ok",
+          name: agent.name,
+          version: VERSION,
+          sha: resolvedGitSha(),
+        },
+        signup: { open: env.ZENOD_PUBLIC_PAID_SIGNUP === "1" },
+        totals: {
+          accounts: uniqueAccounts.length,
+          tenantBound: uniqueAccounts.filter((account) => Boolean(account.tenant_id)).length,
+          ...subscriptions,
+        },
+        tenants: uniqueAccounts.map((account) => ({
+          accountId: account.account_id,
+          githubLogin: account.github_login,
+          tenantId: account.tenant_id,
+          tier: account.tier,
+          subscriptionStatus: account.subscription_status,
+          currentPeriodEnd: account.current_period_end,
+          managedAiStatus: account.managed_ai_status,
+        })),
+        generatedAt: new Date().toISOString(),
+      });
+    });
     admin.mountRoutes?.(app);
     if (options.webDist) {
       app.get("/admin", serveStatic({
