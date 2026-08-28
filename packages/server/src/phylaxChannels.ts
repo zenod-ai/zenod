@@ -1426,6 +1426,20 @@ export class PhylaxChannelsOrgan {
     return route.tenantId;
   }
 
+  recordInboundUsage(input: {
+    tenantId: string;
+    providerMessageId: string;
+    channel: PhylaxPortedChannel;
+  }): void {
+    try {
+      this.options.recordInboundUsage?.(input);
+    } catch {
+      // The durable provider event owns the message. A local metering outage
+      // must not turn it into a duplicate downstream delivery; reconciliation
+      // can use the same provider event ID.
+    }
+  }
+
   /**
    * Establish custody before any duration probe or transcription work starts.
    * The returned path is local-only queue state; only artifactRef crosses the
@@ -1683,17 +1697,11 @@ export class PhylaxChannelsOrgan {
       ...(replyEvidenceRef ? { reply_context: { evidenceRef: replyEvidenceRef } } : {}),
     };
     if (input.messageId?.trim()) {
-      try {
-        this.options.recordInboundUsage?.({
-          tenantId: route.tenantId,
-          providerMessageId: input.messageId.trim(),
-          channel: input.channel,
-        });
-      } catch {
-        // The durable provider event and capture journal already own the
-        // message. A local metering outage must not turn it into a duplicate
-        // downstream delivery; reconciliation can use that same event ID.
-      }
+      this.recordInboundUsage({
+        tenantId: route.tenantId,
+        providerMessageId: input.messageId.trim(),
+        channel: input.channel,
+      });
     }
     const auditHandoff: PhylaxDownstreamCall["handoff"] = handoff.artifact_ref
       ? {

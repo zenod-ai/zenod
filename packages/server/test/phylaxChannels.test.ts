@@ -3314,6 +3314,11 @@ describe("ported gateway integration", () => {
     let downstreamCalls = 0;
     const usageBegins: Array<Record<string, unknown>> = [];
     const usageSettlements: boolean[] = [];
+    const inboundUsage: Array<{
+      tenantId: string;
+      providerMessageId: string;
+      channel: "whatsapp" | "telegram";
+    }> = [];
     const deliveryBegins: Array<Record<string, unknown>> = [];
     const deliverySettlements: Array<{ receipt: string | null }> = [];
     const organ = new PhylaxChannelsOrgan({
@@ -3334,6 +3339,9 @@ describe("ported gateway integration", () => {
       async callDownstream() {
         downstreamCalls += 1;
         return { content: [{ type: "text", text: "strawberry banana" }] };
+      },
+      recordInboundUsage(input) {
+        inboundUsage.push(input);
       },
     });
     const runtime = new PhylaxPortedRuntime(dataDir, organ, {
@@ -3419,7 +3427,8 @@ describe("ported gateway integration", () => {
         "strawberry banana",
       ]);
       const deliveriesBeforeTranscript = deliveryBegins.length;
-      await runtime.whatsapp.handleEvent({
+      const inboundBeforeTranscript = inboundUsage.length;
+      const transcriptQuestion: WhatsAppInboundEvent = {
         messageId: "voice-transcript-question",
         chatId: "34611111111@s.whatsapp.net",
         senderId: "34611111111@s.whatsapp.net",
@@ -3432,9 +3441,16 @@ describe("ported gateway integration", () => {
         mediaType: null,
         mimeType: null,
         fileName: null,
-      });
+      };
+      await runtime.whatsapp.handleEvent(transcriptQuestion);
       expect(sent.at(-1)?.text).toBe("Transcript of your latest voice note:\n\nstrawberry banana");
       expect(downstreamCalls).toBe(1);
+      expect(inboundUsage).toHaveLength(inboundBeforeTranscript + 1);
+      expect(inboundUsage.at(-1)).toEqual({
+        tenantId: "alpha",
+        providerMessageId: "voice-transcript-question",
+        channel: "whatsapp",
+      });
       expect(deliveryBegins).toHaveLength(deliveriesBeforeTranscript + 1);
       expect(deliveryBegins.at(-1)).toMatchObject({ tenantId: "alpha", channel: "whatsapp" });
       expect(deliverySettlements.at(-1)?.receipt).toBe(`sent-${sent.length}`);
@@ -3445,6 +3461,9 @@ describe("ported gateway integration", () => {
         lifecycleState: "replied",
         outboundStatus: "sent",
       });
+      await runtime.whatsapp.handleEvent(transcriptQuestion);
+      expect(inboundUsage).toHaveLength(inboundBeforeTranscript + 1);
+      expect(deliveryBegins).toHaveLength(deliveriesBeforeTranscript + 1);
       const outbound = runtime.whatsappStore.recentTranscript({ sinceMs: 0 })
         .filter((entry) => entry.direction === "outbound");
       expect(outbound).toHaveLength(3);
