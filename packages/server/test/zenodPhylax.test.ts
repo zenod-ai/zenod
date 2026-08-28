@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { serve, type ServerType } from "@hono/node-server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CustomerAccount } from "../src/customerAccounts.js";
@@ -365,6 +367,7 @@ describe("Zenod Phylax product adapter", () => {
     const pending = first.viewForAccount("account-alpha")!;
     expect(pending).toMatchObject({
       zenodTenantId: "tenant-alpha",
+      phylaxTenantId: "tenant-alpha",
       state: "unavailable",
       lastErrorCode: "phylax_unavailable",
     });
@@ -385,6 +388,46 @@ describe("Zenod Phylax product adapter", () => {
     });
     expect(JSON.stringify(restarted.viewForAccount("account-alpha"))).not.toContain(token);
     restarted.close();
+  });
+
+  it("moves the former synthetic allowance mapping onto the existing channel tenant without rotating channel credentials", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf6-tenant-identity-repair-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const customer = account("alpha");
+    const first = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    first.setDownstreamTokenResolver(() => "existing-memory-channel-token");
+    await first.setEntitlement(customer, true);
+    const original = first.viewForAccount(customer.account_id)!;
+    expect(original.phylaxTenantId).toBe(customer.tenant_id);
+    const managementToken = remote.tokens.get(customer.tenant_id!)!;
+    first.close();
+
+    const legacyTenantId = `zenod-${createHash("sha256")
+      .update(customer.tenant_id!, "utf8")
+      .digest("hex")
+      .slice(0, 32)}`;
+    const db = new DatabaseSync(join(dataDir, "zenod-phylax-adapter.sqlite"));
+    db.prepare(
+      "UPDATE zenod_phylax_bindings SET phylax_tenant_id=? WHERE account_id=?",
+    ).run(legacyTenantId, customer.account_id);
+    db.close();
+    remote.tokens.delete(customer.tenant_id!);
+    remote.tokens.set(legacyTenantId, managementToken);
+
+    const repaired = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    repaired.setDownstreamTokenResolver(() => "existing-memory-channel-token");
+    await repaired.setEntitlement(customer, true);
+    expect(repaired.viewForAccount(customer.account_id)).toMatchObject({
+      zenodTenantId: customer.tenant_id,
+      phylaxTenantId: customer.tenant_id,
+      state: "active",
+      allocationUnits: 1_000_000,
+    });
+    expect(remote.tokens.get(customer.tenant_id!)).toBeTruthy();
+    expect(remote.tokens.get(customer.tenant_id!)).not.toBe(managementToken);
+    expect(remote.tokens.get(legacyTenantId)).toBe(managementToken);
+    repaired.close();
   });
 
   it("cold-provisions through the dedicated Phylax artifact and replays the same profile token after a lost response", async () => {

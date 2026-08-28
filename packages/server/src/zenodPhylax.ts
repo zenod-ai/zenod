@@ -190,7 +190,7 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
   };
 }
 
-function deterministicPhylaxTenantId(zenodTenantId: string): string {
+function legacyDeterministicPhylaxTenantId(zenodTenantId: string): string {
   return `zenod-${createHash("sha256").update(zenodTenantId, "utf8").digest("hex").slice(0, 32)}`;
 }
 
@@ -473,13 +473,43 @@ export class ZenodPhylaxAdapter {
   private ensureRow(account: CustomerAccount): BindingRow {
     if (!account.tenant_id) throw new Error("Zenod tenant is not provisioned");
     const existing = this.row(account.account_id);
-    const phylaxTenantId = deterministicPhylaxTenantId(account.tenant_id);
+    // Channel session, capture jobs, settings and allowance must share one
+    // tenant identity across the MCP seam. A synthetic Phylax id puts credit
+    // in a different ledger from the live WhatsApp work.
+    const phylaxTenantId = account.tenant_id;
     if (existing) {
-      if (existing.zenod_tenant_id !== account.tenant_id || existing.phylax_tenant_id !== phylaxTenantId) {
+      if (existing.zenod_tenant_id !== account.tenant_id) {
         throw new Error("Zenod-to-Phylax tenant mapping conflict");
       }
       // Decryption is an integrity gate. Never replace an unreadable credential.
       this.token(existing);
+      if (existing.phylax_tenant_id === legacyDeterministicPhylaxTenantId(account.tenant_id)) {
+        // One-time repair for the synthetic integration mapping. The old
+        // scoped token remains on the unused synthetic tenant; issue a new
+        // management token for the real tenant without rotating any user or
+        // channel credential.
+        const encrypted = this.encrypt(`zenod_${randomBytes(36).toString("base64url")}`);
+        this.db.prepare(
+          `UPDATE zenod_phylax_bindings
+           SET phylax_tenant_id=?, token_iv=?, token_ciphertext=?, token_auth_tag=?,
+               state='setting_up', ledger_revision='0', allowance_json=NULL,
+               last_error_code=NULL, updated_at=?
+           WHERE account_id=? AND zenod_tenant_id=? AND phylax_tenant_id=?`,
+        ).run(
+          phylaxTenantId,
+          encrypted.iv,
+          encrypted.ciphertext,
+          encrypted.authTag,
+          Date.now(),
+          account.account_id,
+          account.tenant_id,
+          existing.phylax_tenant_id,
+        );
+        return this.row(account.account_id)!;
+      }
+      if (existing.phylax_tenant_id !== phylaxTenantId) {
+        throw new Error("Zenod-to-Phylax tenant mapping conflict");
+      }
       return existing;
     }
     const encrypted = this.encrypt(`zenod_${randomBytes(36).toString("base64url")}`);

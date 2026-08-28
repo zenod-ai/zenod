@@ -2301,10 +2301,10 @@ describe("Zenod chassis unit", () => {
       });
       expect((ingested.structuredContent as { ticket_id?: unknown }).ticket_id).toEqual(expect.any(String));
 
-      // Other paid memory-channel tools still use the existing outer admission
-      // policy. With no managed provider usage available, ask_brain is retained
-      // there instead of bypassing the allowance boundary.
-      const admittedAsk = await fetch(endpoint, {
+      // MCP remains a direct service-to-service boundary. It must never be
+      // converted into a hosted HTTP admission ticket because that loses the
+      // live streamable-HTTP bindings required by the chassis.
+      const directAsk = await fetch(endpoint, {
         method: "POST",
         headers: {
           accept: "application/json, text/event-stream",
@@ -2318,11 +2318,8 @@ describe("Zenod chassis unit", () => {
           params: { name: "ask_brain", arguments: { question: "What did I save?" } },
         }),
       });
-      expect(admittedAsk.status).toBe(202);
-      expect(await admittedAsk.json()).toMatchObject({
-        state: "waiting_for_usage",
-        job: { status: "waiting_for_usage" },
-      });
+      expect(directAsk.status).toBe(200);
+      expect(await directAsk.json()).toMatchObject({ jsonrpc: "2.0", id: "ask-still-admitted" });
     } finally {
       await client.close().catch(() => {});
       await new Promise<void>((resolve) => server.close(() => resolve()));
