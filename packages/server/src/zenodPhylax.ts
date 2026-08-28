@@ -34,6 +34,8 @@ export interface ZenodPhylaxConfig {
   vaultSecret: string;
   masterAllowanceUnits: number;
   phylaxAllowanceUnits: number;
+  phylaxWalletTargetUnits: number;
+  phylaxWalletLowWaterUnits: number;
   unitsPerUsd: number;
   tariffVersion: string;
   downstreamUrl: string;
@@ -51,6 +53,11 @@ export interface ZenodPhylaxAllowance {
   remainingUnits: number;
   usageBasisPoints: number;
   resetsAt: number | null;
+}
+
+export interface ZenodPhylaxFundingNeed {
+  pausedWorkCount: number;
+  requiredUnits: number;
 }
 
 export interface ZenodPhylaxBindingView {
@@ -158,6 +165,25 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
   const masterAllowanceUnits = integerEnv(env.ZENOD_MASTER_ALLOWANCE_UNITS, 3_000_000);
   const phylaxAllowanceUnits = integerEnv(env.ZENOD_PHYLAX_ALLOWANCE_UNITS, 1_000_000);
   const unitsPerUsd = integerEnv(env.ZENOD_ALLOWANCE_UNITS_PER_USD, 1_000_000);
+  const walletTargetConfigured = env.ZENOD_PHYLAX_WALLET_TARGET_UNITS === undefined || (
+    Number.isSafeInteger(Number(env.ZENOD_PHYLAX_WALLET_TARGET_UNITS)) &&
+    Number(env.ZENOD_PHYLAX_WALLET_TARGET_UNITS) > 0
+  );
+  const walletLowWaterConfigured = env.ZENOD_PHYLAX_WALLET_LOW_WATER_UNITS === undefined || (
+    Number.isSafeInteger(Number(env.ZENOD_PHYLAX_WALLET_LOW_WATER_UNITS)) &&
+    Number(env.ZENOD_PHYLAX_WALLET_LOW_WATER_UNITS) > 0
+  );
+  const phylaxWalletTargetUnits = integerEnv(
+    env.ZENOD_PHYLAX_WALLET_TARGET_UNITS,
+    Math.min(phylaxAllowanceUnits, Math.max(1, Math.round(unitsPerUsd / 2))),
+  );
+  const phylaxWalletLowWaterUnits = integerEnv(
+    env.ZENOD_PHYLAX_WALLET_LOW_WATER_UNITS,
+    Math.min(
+      Math.max(1, phylaxWalletTargetUnits - 1),
+      Math.max(1, Math.round(unitsPerUsd / 10)),
+    ),
+  );
   const tariffVersion = env.ZENOD_PHYLAX_TARIFF_VERSION?.trim() || "";
   const warnPercent = Math.min(99, integerEnv(env.ZENOD_USAGE_WARN_PERCENT, 80));
   const reconcileIntervalMs = integerEnv(
@@ -172,6 +198,10 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
       Number.isSafeInteger(masterAllowanceConfigured) && masterAllowanceConfigured > 0 &&
       Number.isSafeInteger(phylaxAllowanceConfigured) && phylaxAllowanceConfigured > 0 &&
       Number.isSafeInteger(unitsPerUsdConfigured) && unitsPerUsdConfigured > 0 &&
+      walletTargetConfigured &&
+      walletLowWaterConfigured &&
+      phylaxWalletTargetUnits <= phylaxAllowanceUnits &&
+      phylaxWalletLowWaterUnits < phylaxWalletTargetUnits &&
       tariffVersion,
     ),
     origin,
@@ -179,6 +209,8 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
     vaultSecret,
     masterAllowanceUnits,
     phylaxAllowanceUnits,
+    phylaxWalletTargetUnits,
+    phylaxWalletLowWaterUnits,
     unitsPerUsd,
     tariffVersion: tariffVersion || "unconfigured",
     downstreamUrl: (
@@ -276,6 +308,25 @@ function allowance(value: unknown): ZenodPhylaxAllowance {
     resetsAt: item.resetsAt === null || Number.isSafeInteger(item.resetsAt)
       ? item.resetsAt as number | null
       : null,
+  };
+}
+
+function fundingNeed(value: unknown): ZenodPhylaxFundingNeed {
+  if (value === undefined) return { pausedWorkCount: 0, requiredUnits: 0 };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Phylax funding need is invalid");
+  }
+  const item = value as Record<string, unknown>;
+  const integer = (key: string) => {
+    const candidate = item[key];
+    if (!Number.isSafeInteger(candidate) || Number(candidate) < 0) {
+      throw new Error(`Phylax funding need ${key} is invalid`);
+    }
+    return Number(candidate);
+  };
+  return {
+    pausedWorkCount: integer("pausedWorkCount"),
+    requiredUnits: integer("requiredUnits"),
   };
 }
 
@@ -569,7 +620,7 @@ export class ZenodPhylaxAdapter {
     const allocationUnits = entitled && period
       ? currentAllowance?.periodId === period.id
         ? outstandingUnits
-        : this.config.phylaxAllowanceUnits
+        : this.config.phylaxWalletTargetUnits
       : outstandingUnits;
     const localCapacity = Math.max(
       0,
@@ -719,6 +770,9 @@ export class ZenodPhylaxAdapter {
       if (localCapacity + projection.allocatedUnits + input.amountUnits > this.config.masterAllowanceUnits) {
         throw new Error("Allowance top-up exceeds master allowance capacity");
       }
+      if (projection.allocatedUnits + input.amountUnits > this.config.phylaxAllowanceUnits) {
+        throw new Error("Allowance top-up exceeds the Phylax service cap");
+      }
       args = {
         operationId: input.operationId,
         expectedRevision: row.ledger_revision,
@@ -763,7 +817,13 @@ export class ZenodPhylaxAdapter {
   ): Promise<{ revision: string; projection: ZenodPhylaxAllowance }> {
     let args = JSON.parse(operation.arguments_json) as Record<string, unknown>;
     const remoteArgs = () => {
-      const { desiredAllocationUnits: _desiredAllocationUnits, operationKind: _operationKind, ...payload } = args;
+      const {
+        desiredAllocationUnits: _desiredAllocationUnits,
+        operationKind: _operationKind,
+        targetUnits: _targetUnits,
+        requiredUnits: _requiredUnits,
+        ...payload
+      } = args;
       return payload;
     };
     let response = await this.remote.call(token, "phylax_management_v1_credit_adjust", remoteArgs());
@@ -781,10 +841,55 @@ export class ZenodPhylaxAdapter {
       ));
       const revision = queried.revision;
       if (typeof revision !== "string") throw new Error("Phylax allowance revision is invalid");
+      const projection = allowance(queried.allowance);
+      const currentNeed = fundingNeed(queried.fundingNeed);
+      const operationKind = args.operationKind;
+      let amountUnits = Number(args.amountUnits);
+      let desiredAllocationUnits = projection.allocatedUnits + amountUnits;
+      if (operationKind === "faucet") {
+        const targetUnits = Number(args.targetUnits);
+        if (
+          !Number.isSafeInteger(targetUnits) || targetUnits <= 0 ||
+          !Number.isSafeInteger(currentNeed.requiredUnits) || currentNeed.requiredUnits < 0
+        ) throw new Error("Allowance faucet operation is invalid");
+        // Recompute from the current remote need. A concurrent grant may have
+        // already reserved the formerly-paused job, in which case remaining
+        // already excludes it and fundingNeed no longer includes it.
+        const desiredRemainingUnits = targetUnits + currentNeed.requiredUnits;
+        amountUnits = Math.max(0, desiredRemainingUnits - projection.remainingUnits);
+        desiredAllocationUnits = projection.allocatedUnits + amountUnits;
+      } else if (operationKind === "cap_reclaim") {
+        desiredAllocationUnits = Number(args.desiredAllocationUnits);
+        if (!Number.isSafeInteger(desiredAllocationUnits) || desiredAllocationUnits < 0) {
+          throw new Error("Allowance reclaim operation is invalid");
+        }
+        // A reclaim is strictly subtractive. If another controller already
+        // brought the allocation below this target, the operation is done.
+        amountUnits = Math.min(0, desiredAllocationUnits - projection.allocatedUnits);
+        desiredAllocationUnits = projection.allocatedUnits + amountUnits;
+      }
+      if (!Number.isSafeInteger(amountUnits)) throw new Error("Allowance adjustment is invalid");
+      if (amountUnits === 0) {
+        this.db.prepare(
+          `UPDATE zenod_phylax_allowance_operations SET completed_at=?
+           WHERE account_id=? AND operation_id=?`,
+        ).run(Date.now(), row.account_id, operation.operation_id);
+        return { revision, projection };
+      }
+      const exceedsCapacity = amountUnits > 0 && (
+        desiredAllocationUnits > this.config.phylaxAllowanceUnits ||
+        row.local_capacity_units + desiredAllocationUnits > this.config.masterAllowanceUnits
+      );
+      if (exceedsCapacity) {
+        this.terminalizeAllowanceOperation(operation, "allowance_capacity");
+        throw new Error("Allowance adjustment exceeds capacity");
+      }
       args = {
         ...args,
         operationId: operationId("adjust-rebase", [operation.operation_id, revision]),
         expectedRevision: revision,
+        amountUnits,
+        desiredAllocationUnits,
       };
       this.db.prepare(
         `UPDATE zenod_phylax_allowance_operations SET arguments_json=?
@@ -832,6 +937,7 @@ export class ZenodPhylaxAdapter {
       const amountUnits = Number(args.amountUnits);
       const capInvalid = args.operationKind !== "cap_reclaim" && (
         !Number.isSafeInteger(amountUnits) ||
+        current.projection.allocatedUnits + amountUnits > this.config.phylaxAllowanceUnits ||
         row.local_capacity_units + current.projection.allocatedUnits + amountUnits >
           this.config.masterAllowanceUnits
       );
@@ -936,6 +1042,86 @@ export class ZenodPhylaxAdapter {
     };
   }
 
+  private async ensureFaucetAllocation(
+    row: BindingRow,
+    token: string,
+    revision: string,
+    projection: ZenodPhylaxAllowance,
+    need: ZenodPhylaxFundingNeed,
+  ): Promise<{ revision: string; projection: ZenodPhylaxAllowance }> {
+    if (
+      row.desired_access !== "active" ||
+      !row.period_id ||
+      projection.periodId !== row.period_id
+    ) return { revision, projection };
+    const refillRequired =
+      projection.remainingUnits <= this.config.phylaxWalletLowWaterUnits ||
+      need.requiredUnits > projection.remainingUnits;
+    if (!refillRequired) return { revision, projection };
+
+    const desiredRemainingUnits = this.config.phylaxWalletTargetUnits + need.requiredUnits;
+    const amountUnits = desiredRemainingUnits - projection.remainingUnits;
+    if (amountUnits <= 0) return { revision, projection };
+    const desiredAllocationUnits = projection.allocatedUnits + amountUnits;
+    const localOperationId = operationId("faucet", [
+      row.account_id,
+      row.period_id,
+      desiredAllocationUnits,
+      this.config.phylaxAllowanceUnits,
+      this.config.masterAllowanceUnits,
+    ]);
+    let operation = this.db.prepare(
+      `SELECT * FROM zenod_phylax_allowance_operations
+       WHERE account_id=? AND operation_id=?`,
+    ).get(row.account_id, localOperationId) as unknown as AllowanceOperationRow | undefined;
+    if (!operation) {
+      const args = {
+        operationId: operationId("faucet-remote", [row.account_id, row.period_id, desiredAllocationUnits]),
+        expectedRevision: revision,
+        periodId: row.period_id,
+        amountUnits,
+        tariffVersion: this.config.tariffVersion,
+        auditReason: need.requiredUnits > projection.remainingUnits
+          ? "Refill the bounded Phylax wallet for admitted paid work"
+          : "Refill the bounded Phylax wallet at its low-water mark",
+        operationKind: "faucet",
+        targetUnits: this.config.phylaxWalletTargetUnits,
+        requiredUnits: need.requiredUnits,
+        desiredAllocationUnits,
+      };
+      const refusal = desiredAllocationUnits > this.config.phylaxAllowanceUnits ||
+        row.local_capacity_units + desiredAllocationUnits > this.config.masterAllowanceUnits
+        ? "allowance_capacity"
+        : null;
+      const createdAt = Date.now();
+      this.db.prepare(
+        `INSERT INTO zenod_phylax_allowance_operations
+         (account_id, operation_id, arguments_json, created_at, completed_at, terminal_error_code)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(
+        row.account_id,
+        localOperationId,
+        JSON.stringify(args),
+        createdAt,
+        refusal ? createdAt : null,
+        refusal,
+      );
+      operation = {
+        account_id: row.account_id,
+        operation_id: localOperationId,
+        arguments_json: JSON.stringify(args),
+        created_at: createdAt,
+        completed_at: refusal ? createdAt : null,
+        terminal_error_code: refusal,
+      };
+    }
+    if (operation.terminal_error_code) {
+      throw new Error(`Allowance faucet refused: ${operation.terminal_error_code}`);
+    }
+    if (operation.completed_at !== null) return { revision, projection };
+    return this.executeAllowanceOperation(row, token, operation);
+  }
+
   async reconcileAccount(accountId: string): Promise<void> {
     return this.serializeAccount(accountId, () => this.reconcileAccountNow(accountId));
   }
@@ -1011,6 +1197,7 @@ export class ZenodPhylaxAdapter {
       ));
       let revision = typeof current.revision === "string" ? current.revision : row.ledger_revision;
       let projection = allowance(current.allowance);
+      const need = fundingNeed(current.fundingNeed);
       ({ revision, projection } = await this.reconcileAllowanceOperations(
         row,
         token,
@@ -1042,6 +1229,13 @@ export class ZenodPhylaxAdapter {
         revision = typeof grant.revision === "string" ? grant.revision : revision;
         projection = allowance(grant.allowance);
       }
+      ({ revision, projection } = await this.ensureFaucetAllocation(
+        row,
+        token,
+        revision,
+        projection,
+        need,
+      ));
       const capacity = await this.reconcileMasterCapacity(row, token, revision, projection);
       revision = capacity.revision;
       projection = capacity.projection;
@@ -1204,6 +1398,9 @@ export class ZenodPhylaxAdapter {
         projection: local,
       },
       phylax: {
+        serviceCapUnits: this.config.phylaxAllowanceUnits,
+        walletTargetUnits: this.config.phylaxWalletTargetUnits,
+        walletLowWaterUnits: this.config.phylaxWalletLowWaterUnits,
         allocatedUnits: row?.allocation_units ?? 0,
         projection: phylax,
         state: row?.state ?? "setting_up",

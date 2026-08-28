@@ -71,7 +71,9 @@ function config(patch: Partial<ZenodPhylaxConfig> = {}): ZenodPhylaxConfig {
     controlToken: "control-secret",
     vaultSecret: "99".repeat(32),
     masterAllowanceUnits: 3_000_000,
-    phylaxAllowanceUnits: 1_000_000,
+    phylaxAllowanceUnits: 1_500_000,
+    phylaxWalletTargetUnits: 1_000_000,
+    phylaxWalletLowWaterUnits: 100_000,
     unitsPerUsd: 1_000_000,
     tariffVersion: "tariff-v1",
     downstreamUrl: "https://cloud.zenod.dev/mcp",
@@ -85,6 +87,7 @@ class FakeRemote implements ZenodPhylaxRemote {
   readonly tokens = new Map<string, string>();
   readonly calls: Array<{ token: string; tool: string; args: Record<string, unknown> }> = [];
   readonly allowance = new Map<string, ZenodPhylaxAllowance>();
+  readonly fundingNeeds = new Map<string, { pausedWorkCount: number; requiredUnits: number }>();
   readonly revisions = new Map<string, number>();
   readonly adjustmentResults = new Map<string, { revision: string; allowance: ZenodPhylaxAllowance }>();
   readonly bindings = new Map<string, {
@@ -107,6 +110,7 @@ class FakeRemote implements ZenodPhylaxRemote {
   unavailable = false;
   loseEnsureResponseOnce = false;
   loseAdjustResponseOnce = false;
+  beforeAdjustOnce: ((tenantId: string) => void) | null = null;
   channelRevision = "wa:0";
 
   async ensureTenant(input: { tenantId: string; token: string }): Promise<void> {
@@ -200,6 +204,10 @@ class FakeRemote implements ZenodPhylaxRemote {
           usageBasisPoints: 0,
           resetsAt: null,
         },
+        fundingNeed: this.fundingNeeds.get(tenantId) ?? {
+          pausedWorkCount: 0,
+          requiredUnits: 0,
+        },
       } };
     }
     if (tool === "phylax_management_v1_credit_grant") {
@@ -225,15 +233,21 @@ class FakeRemote implements ZenodPhylaxRemote {
       return { structuredContent: { revision: String(next), allowance: projection } };
     }
     if (tool === "phylax_management_v1_credit_adjust") {
+      if (this.beforeAdjustOnce) {
+        const beforeAdjust = this.beforeAdjustOnce;
+        this.beforeAdjustOnce = null;
+        beforeAdjust(tenantId);
+      }
+      const adjustmentRevision = this.revisions.get(tenantId) ?? 0;
       const key = `${tenantId}:${String(args.operationId)}`;
       const replay = this.adjustmentResults.get(key);
       if (replay) return { structuredContent: { ...replay, replayed: true } };
-      if (args.expectedRevision !== String(revision)) {
+      if (args.expectedRevision !== String(adjustmentRevision)) {
         return { isError: true, structuredContent: {
           error: { code: "stale_revision", message: "allowance revision is stale" },
         } };
       }
-      const next = revision + 1;
+      const next = adjustmentRevision + 1;
       this.revisions.set(tenantId, next);
       const current = this.allowance.get(tenantId)!;
       const amountUnits = Number(args.amountUnits);
@@ -346,9 +360,21 @@ describe("Zenod Phylax product adapter", () => {
       enabled: true,
       masterAllowanceUnits: 3_000_000,
       phylaxAllowanceUnits: 1_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
       unitsPerUsd: 1_000_000,
       tariffVersion: "tariff-v1",
     });
+    expect(loadZenodPhylaxConfig({
+      ...base,
+      ZENOD_PHYLAX_ALLOWED_ORIGINS: "https://phylax.internal",
+      ZENOD_PHYLAX_WALLET_TARGET_UNITS: "1100000",
+    }).enabled).toBe(false);
+    expect(loadZenodPhylaxConfig({
+      ...base,
+      ZENOD_PHYLAX_ALLOWED_ORIGINS: "https://phylax.internal",
+      ZENOD_PHYLAX_WALLET_TARGET_UNITS: "invalid",
+    }).enabled).toBe(false);
     expect(loadZenodPhylaxConfig({
       ...base,
       ZENOD_PHYLAX_ALLOWED_ORIGINS: "https://phylax.internal",
@@ -468,10 +494,17 @@ describe("Zenod Phylax product adapter", () => {
       return response;
     });
 
-    const adapterConfig = config({ origin });
+    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const adapterConfig = config({
+      origin,
+      masterAllowanceUnits: 3_500_000,
+      phylaxAllowanceUnits: 2_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    });
     const first = new ZenodPhylaxAdapter(join(root, "zenod"), adapterConfig);
     first.setDownstreamTokenResolver(() => "zenod-memory-token");
-    await expect(first.setEntitlement(account("alpha"), true))
+    await expect(first.setEntitlement(customer, true))
       .rejects.toThrow("simulated lost profile-token ensure response");
     const mapped = first.viewForAccount("account-alpha")!;
     first.close();
@@ -484,9 +517,32 @@ describe("Zenod Phylax product adapter", () => {
       phylaxTenantId: mapped.phylaxTenantId,
       desiredAccess: "active",
       state: "active",
-      allocationUnits: 1_000_000,
+      allocationUnits: 500_000,
       lastErrorCode: null,
     });
+    const periodId = restarted.viewForAccount("account-alpha")!.periodId!;
+    const paidWork = phylax.phylaxAllowanceLedger.admitPaidWork({
+      tenantId: mapped.phylaxTenantId,
+      periodId,
+      idempotencyKey: "artifact-oversized-work-1",
+      providerEventId: "artifact-provider-work-1",
+      operation: "transcription",
+      custodyRef: "custody://artifact-oversized-work-1",
+      estimatedUnits: 1_200_000,
+    });
+    expect(paidWork.work).toMatchObject({
+      state: "paused",
+      pauseReason: "insufficient_allowance",
+    });
+    await restarted.reconcileAccount("account-alpha");
+    expect(phylax.phylaxAllowanceLedger.pendingWork(mapped.phylaxTenantId)).toEqual([
+      expect.objectContaining({
+        state: "ready",
+        pauseReason: null,
+        reservedUnits: 1_200_000,
+      }),
+    ]);
+    expect(restarted.viewForAccount("account-alpha")?.allocationUnits).toBe(1_700_000);
     restarted.close();
   });
 
@@ -706,6 +762,236 @@ describe("Zenod Phylax product adapter", () => {
     restarted.close();
   });
 
+  it("grants a small initial wallet and refills it once at the low-water mark", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-low-water-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const faucetConfig = config({
+      phylaxAllowanceUnits: 1_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    });
+    const adapter = new ZenodPhylaxAdapter(dataDir, faucetConfig, remote);
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    await adapter.setEntitlement(customer, true);
+    const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
+    expect(remote.allowance.get(tenantId)).toMatchObject({
+      allocatedUnits: 500_000,
+      remainingUnits: 500_000,
+    });
+
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      usedUnits: 400_000,
+      remainingUnits: 100_000,
+      usageBasisPoints: 8_000,
+    });
+    await Promise.all([
+      adapter.reconcileAccount(customer.account_id),
+      adapter.reconcileAccount(customer.account_id),
+    ]);
+    expect(remote.allowance.get(tenantId)).toMatchObject({
+      allocatedUnits: 900_000,
+      usedUnits: 400_000,
+      remainingUnits: 500_000,
+    });
+    const adjustments = remote.calls.filter(
+      (call) => call.tool === "phylax_management_v1_credit_adjust",
+    );
+    expect(adjustments).toHaveLength(1);
+    expect(adjustments[0]!.args).toMatchObject({ amountUnits: 400_000 });
+    adapter.close();
+  });
+
+  it("covers one oversized admitted job exactly and wakes it through the existing grant path", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-oversized-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config({
+      phylaxAllowanceUnits: 1_500_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    }), remote);
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    await adapter.setEntitlement(customer, true);
+    const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      usedUnits: 100_000,
+      remainingUnits: 400_000,
+      usageBasisPoints: 2_000,
+    });
+    remote.fundingNeeds.set(tenantId, { pausedWorkCount: 1, requiredUnits: 700_000 });
+
+    await adapter.reconcileAccount(customer.account_id);
+    expect(remote.allowance.get(tenantId)).toMatchObject({
+      allocatedUnits: 1_300_000,
+      remainingUnits: 1_200_000,
+    });
+    const adjustments = remote.calls.filter(
+      (call) => call.tool === "phylax_management_v1_credit_adjust",
+    );
+    expect(adjustments).toHaveLength(1);
+    expect(adjustments[0]!.args.amountUnits).toBe(800_000);
+    adapter.close();
+  });
+
+  it("does not count a paused job twice when a concurrent refill reserves it", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-stale-job-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config({
+      masterAllowanceUnits: 3_500_000,
+      phylaxAllowanceUnits: 2_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    }), remote);
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    await adapter.setEntitlement(customer, true);
+    const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      usedUnits: 100_000,
+      remainingUnits: 400_000,
+      usageBasisPoints: 2_000,
+    });
+    remote.fundingNeeds.set(tenantId, { pausedWorkCount: 1, requiredUnits: 700_000 });
+    remote.beforeAdjustOnce = (id) => {
+      remote.revisions.set(id, 2);
+      remote.allowance.set(id, {
+        ...remote.allowance.get(id)!,
+        allocatedUnits: 1_300_000,
+        usedUnits: 100_000,
+        reservedUnits: 700_000,
+        remainingUnits: 500_000,
+      });
+      remote.fundingNeeds.set(id, { pausedWorkCount: 0, requiredUnits: 0 });
+    };
+
+    await adapter.reconcileAccount(customer.account_id);
+    expect(remote.allowance.get(tenantId)).toMatchObject({
+      allocatedUnits: 1_300_000,
+      reservedUnits: 700_000,
+      remainingUnits: 500_000,
+    });
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust"))
+      .toHaveLength(1);
+    adapter.close();
+  });
+
+  it("never turns a stale cap reclaim into a positive grant", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-stale-reclaim-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config({
+      masterAllowanceUnits: 2_500_000,
+      phylaxAllowanceUnits: 1_500_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    }), remote);
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    await adapter.setEntitlement(customer, true);
+    const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      allocatedUnits: 1_300_000,
+      remainingUnits: 1_300_000,
+    });
+    remote.beforeAdjustOnce = (id) => {
+      remote.revisions.set(id, 2);
+      remote.allowance.set(id, {
+        ...remote.allowance.get(id)!,
+        allocatedUnits: 900_000,
+        remainingUnits: 900_000,
+      });
+    };
+
+    await adapter.reconcileAccount(customer.account_id);
+    expect(remote.allowance.get(tenantId)).toMatchObject({
+      allocatedUnits: 900_000,
+      remainingUnits: 900_000,
+    });
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust"))
+      .toHaveLength(1);
+    adapter.close();
+  });
+
+  it("replays a lost faucet response after restart without granting twice", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-restart-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const faucetConfig = config({
+      phylaxAllowanceUnits: 1_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    });
+    const customer = account("alpha");
+    const first = new ZenodPhylaxAdapter(dataDir, faucetConfig, remote);
+    first.setDownstreamTokenResolver(() => "zenod-memory-token");
+    await first.setEntitlement(customer, true);
+    const tenantId = first.viewForAccount(customer.account_id)!.phylaxTenantId;
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      usedUnits: 450_000,
+      remainingUnits: 50_000,
+      usageBasisPoints: 9_000,
+    });
+    remote.loseAdjustResponseOnce = true;
+    await expect(first.reconcileAccount(customer.account_id)).rejects.toThrow("adjust response lost");
+    first.close();
+
+    const restarted = new ZenodPhylaxAdapter(dataDir, faucetConfig, remote);
+    restarted.setDownstreamTokenResolver(() => "zenod-memory-token");
+    await restarted.reconcileAccount(customer.account_id);
+    expect(remote.allowance.get(tenantId)).toMatchObject({
+      allocatedUnits: 950_000,
+      remainingUnits: 500_000,
+    });
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust"))
+      .toHaveLength(2);
+    restarted.close();
+  });
+
+  it("returns a durable capacity refusal and leaves oversized paid work paused", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-refusal-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config({
+      phylaxAllowanceUnits: 1_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    }), remote);
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    const customer = account("alpha");
+    await adapter.setEntitlement(customer, true);
+    const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      usedUnits: 450_000,
+      remainingUnits: 50_000,
+      usageBasisPoints: 9_000,
+    });
+    remote.fundingNeeds.set(tenantId, { pausedWorkCount: 1, requiredUnits: 600_000 });
+
+    await expect(adapter.reconcileAccount(customer.account_id))
+      .rejects.toThrow("Allowance faucet refused: allowance_capacity");
+    expect(adapter.viewForAccount(customer.account_id)).toMatchObject({
+      state: "unavailable",
+      lastErrorCode: "allowance_capacity",
+    });
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust"))
+      .toHaveLength(0);
+    await expect(adapter.reconcileAccount(customer.account_id))
+      .rejects.toThrow("Allowance faucet refused: allowance_capacity");
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust"))
+      .toHaveLength(0);
+    adapter.close();
+  });
+
   it("rebases a definitively-not-applied stale top-up without duplicating customer credit", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-stale-topup-"));
     dirs.push(dataDir);
@@ -716,19 +1002,58 @@ describe("Zenod Phylax product adapter", () => {
     await adapter.setEntitlement(customer, true);
     const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
     remote.revisions.set(tenantId, 2); // A separate, already-committed owner mutation.
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      allocatedUnits: 1_200_000,
+      remainingUnits: 1_200_000,
+    });
     const projection = await adapter.topUpAllowance({
       account: customer,
       operationId: "topup-alpha-stale-0001",
       amountUnits: 100_000,
       auditReason: "recover stale revision",
     });
-    expect(projection.allocatedUnits).toBe(1_100_000);
+    expect(projection.allocatedUnits).toBe(1_300_000);
     const adjusts = remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust");
     expect(adjusts).toHaveLength(2);
     expect(adjusts[0]!.args.expectedRevision).toBe("1");
     expect(adjusts[1]!.args.expectedRevision).toBe("2");
     expect(adjusts[1]!.args.operationId).not.toBe(adjusts[0]!.args.operationId);
-    expect(remote.allowance.get(tenantId)?.allocatedUnits).toBe(1_100_000);
+    expect(remote.allowance.get(tenantId)?.allocatedUnits).toBe(1_300_000);
+    adapter.close();
+  });
+
+  it("terminalizes a stale top-up if a concurrent grant consumes the service cap", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-stale-cap-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    await adapter.setEntitlement(customer, true);
+    const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
+    remote.revisions.set(tenantId, 2);
+    remote.allowance.set(tenantId, {
+      ...remote.allowance.get(tenantId)!,
+      allocatedUnits: 1_450_000,
+      remainingUnits: 1_450_000,
+    });
+
+    await expect(adapter.topUpAllowance({
+      account: customer,
+      operationId: "topup-alpha-stale-cap-0001",
+      amountUnits: 100_000,
+      auditReason: "must not overdraw after stale revision",
+    })).rejects.toThrow("Allowance adjustment exceeds capacity");
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_adjust"))
+      .toHaveLength(1);
+    await expect(adapter.topUpAllowance({
+      account: customer,
+      operationId: "topup-alpha-stale-cap-0001",
+      amountUnits: 100_000,
+      auditReason: "must not overdraw after stale revision",
+    })).rejects.toThrow("allowance_capacity");
+    expect(remote.allowance.get(tenantId)?.allocatedUnits).toBe(1_450_000);
     adapter.close();
   });
 

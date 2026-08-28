@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -259,6 +260,35 @@ describe("tenant-safe Phylax management MCP", () => {
       const lostResponseReplay = await alpha.callTool({ name: "phylax_management_v1_credit_grant", arguments: grantArgs });
       expect(structured(lostResponseReplay)).toEqual(structured(grant));
 
+      unit.phylaxAllowanceLedger.admitPaidWork({
+        tenantId: "alpha",
+        periodId: "2026-08",
+        idempotencyKey: "funding-need-alpha-1",
+        providerEventId: "provider-funding-need-alpha-1",
+        operation: "transcription",
+        custodyRef: "custody://funding-need-alpha-1",
+        estimatedUnits: 700,
+      });
+      const alphaProjection = await alpha.callTool({
+        name: "phylax_management_v1_credit_query",
+        arguments: {},
+      });
+      expect(structured(alphaProjection)).toMatchObject({
+        fundingNeed: { pausedWorkCount: 1, requiredUnits: 700 },
+      });
+      const ledgerDb = new DatabaseSync(join(dataDir, "phylax-allowance.sqlite"));
+      ledgerDb.prepare(
+        "UPDATE phylax_paid_work SET period_id='expired-period' WHERE tenant_id=? AND idempotency_key=?",
+      ).run("alpha", "funding-need-alpha-1");
+      ledgerDb.close();
+      const periodScopedProjection = await alpha.callTool({
+        name: "phylax_management_v1_credit_query",
+        arguments: {},
+      });
+      expect(structured(periodScopedProjection)).toMatchObject({
+        fundingNeed: { pausedWorkCount: 0, requiredUnits: 0 },
+      });
+
       const collision = await alpha.callTool({
         name: "phylax_management_v1_credit_grant",
         arguments: { ...grantArgs, amountUnits: 700 },
@@ -303,6 +333,7 @@ describe("tenant-safe Phylax management MCP", () => {
       expect(structured(betaProjection)).toMatchObject({
         revision: "0",
         allowance: { tenantId: "beta", remainingUnits: 0, state: "unavailable" },
+        fundingNeed: { pausedWorkCount: 0, requiredUnits: 0 },
       });
       expect(JSON.stringify(structured(betaProjection))).not.toContain("alpha");
     } finally {

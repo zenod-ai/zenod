@@ -243,9 +243,23 @@ function registerReadTools(
     async () => {
       try {
         assertBound(dependencies.settings, tenantId, owner);
+        const projection = dependencies.ledger.customerProjection(tenantId);
+        const pausedForAllowance = dependencies.ledger.pendingWork(tenantId).filter(
+          (work) =>
+            work.periodId === projection.periodId &&
+            work.state === "paused" &&
+            work.pauseReason === "insufficient_allowance",
+        );
         return result({
           revision: dependencies.ledger.revision(tenantId),
-          allowance: dependencies.ledger.customerProjection(tenantId),
+          allowance: projection,
+          fundingNeed: {
+            pausedWorkCount: pausedForAllowance.length,
+            requiredUnits: pausedForAllowance.reduce(
+              (maximum, work) => Math.max(maximum, work.estimatedUnits),
+              0,
+            ),
+          },
         });
       } catch (error) {
         return errorResult("binding_required", error instanceof Error ? error.message : "Binding is unavailable.");
