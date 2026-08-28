@@ -275,6 +275,11 @@ export class PhylaxPortedRuntime {
         }
         if (!media && asksForLatestVoiceTranscript(text)) {
           const tenantId = await this.organ.tenantIdFor("whatsapp", event.senderId, event.chatId);
+          this.organ.recordInboundUsage({
+            tenantId,
+            providerMessageId: event.messageId,
+            channel: "whatsapp",
+          });
           const sender = normalizeWhatsAppIdentifier(event.senderId);
           const latest = this.whatsappStore.latestVoiceTranscript(tenantId, `whatsapp:${sender}`);
           const replyText = latest
