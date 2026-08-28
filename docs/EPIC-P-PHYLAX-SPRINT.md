@@ -2,7 +2,7 @@
 
 Status: active — final integrated-independent delivery push
 Created: 2026-07-11
-Updated: 2026-08-27
+Updated: 2026-08-28
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
 GitHub issues: same repository
@@ -49,6 +49,7 @@ Stewardship transfer rule: record outgoing steward, incoming steward, absolute t
 |---|---|
 | This EpicSpine | Product shape, journey, PORT/DUPLICATE markings, pre-made decisions |
 | `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` | Binding 2026-08-27 integrated/standalone service boundary, connection/control diagrams, product UI contract, metering/allowance model and beta sequencing |
+| `docs/evidence/credit-authority-decision-2026-08-28/index.html` | Binding 2026-08-28 decision: one commercial credit authority per purchased product perimeter, controller-triggered bounded service allocations, paired/standalone funding and future L2 compatibility. It freezes the credit shape; implementation remains a separate bounded ticket. |
 | The live Zenod unit + EPIC-Z | Historical/reusable customer-shell components; not authority to copy Zenod ownership, billing, credentials or metering into the Phylax core |
 | Existing WhatsApp/Baileys + Telegram + transcription code in `packages/server` (whatsapp store, `phylaxGateway.ts`, telegram routes, transcription paths) | The channels organ being PORTED |
 | GitHub issue | One ticket's execution detail |
@@ -194,6 +195,7 @@ Later dated rows supersede conflicting July product-shape assumptions while pres
 | 2026-08-27 | Credit semantics (Jordi, binding) | Credit is internal integer-denominated allowance, never a provider key, OAuth credential, MCP token or provider balance. The selling product owns the master customer allowance and grants bounded, idempotent allocations to its mapped Phylax tenant through service-authenticated MCP. Phylax spends only its allocation, records its own actual/estimated costs and never deletes historical usage. Native Phylax billing uses the same grant operation. |
 | 2026-08-27 | Architecture change authority (Jordi, binding) | Service ownership, instance topology, MCP boundaries, auth model, metering ownership and customer experience are frozen by this spine. Ticket workers implement bounded seams only. Any proposed change returns to Jordi; no worker may reinterpret the architecture, move credentials, create another router/ledger/runtime, or refactor a working subsystem opportunistically. |
 | 2026-08-27 | Final-push mandate | `/root` is the active epic worker and spine steward. It must keep dispatching, reviewing and integrating the dependency-ordered issue board until the exact candidate is ready for Jordi's final test or a named human gate blocks progress. |
+| 2026-08-28 | One credit authority with bounded service wallets (Jordi, binding) | A purchased product perimeter has one commercial credit authority. In paired mode an authenticated controller—not the LLM—funds the Phylax service allocation when it reaches a low-water mark or a valid job requires more units than are locally available. The authority verifies the mapped service, master balance, service cap and stable operation ID, then returns the exact tranche or a typed refusal; admission retries once after a grant and otherwise pauses paid work. The allocation is escrow, not a second customer balance; Phylax remains authoritative only for its exact service-cost ledger and may never mint or overspend. Standalone Phylax uses the same ledger with its own authority. A future L2 may implement this funding/settlement interface while per-message reserve/settle remains local and off-chain. |
 
 ## Issue Ledger
 
@@ -504,7 +506,8 @@ Links: [#1112](https://github.com/zenod-ai/zenod/issues/1112), [CI 33116222429](
 
 ## Open Questions
 
-- No architecture question remains open for the final push. Any proposed change to service boundaries, credential ownership, routing, tenant identity, metering ownership or deployment islands must stop for Jordi's explicit approval.
+- The one-authority/bounded-service-wallet architecture is binding in `docs/evidence/credit-authority-decision-2026-08-28/index.html`. Implement it only through a separate bounded ticket; this decision does not authorize a broad accounting, transport or runtime refactor.
+- No other architecture question remains open for the final push. Any proposed change to service boundaries, credential ownership, routing, tenant identity, metering ownership or deployment islands must stop for Jordi's explicit approval.
 - Deferred commercial choices that do not change the core: native Phylax price; PM bundled-versus-linked Zenod memory entitlement; future self-hosted Phylax add-on; exact internal allowance allocations.
 - Ticket workers must reconcile exact MCP tool names against existing code before implementation. The durable artifact and issues lock the required typed capabilities; they do not authorize inventing parallel protocols or a second control plane.
 
@@ -515,6 +518,7 @@ Links: [#1112](https://github.com/zenod-ai/zenod/issues/1112), [CI 33116222429](
 | 2026-07-11 | `docs/EPIC-3.6-PHYLAX-MULTITENANT.md` | Mark superseded by this spine (doctrine D14/D18 carried forward; per-resource framing revised to full customer unit by Jordi 2026-07-11). | this spine | manager on bind | proposed |
 | 2026-07-11 | `docs/EPIC-3.7-DECOMMISSION-2X.md` | After SHIP approval, the old fused WhatsApp path becomes retireable (new wave). | this spine | 3.7 manager | proposed |
 | 2026-08-27 | Pending overall PM sprint proposal | Reconcile the WhatsApp-native PM lane to the locked one-core Phylax model: PM product backend invokes tenant-scoped Phylax MCP, PM owns proposals, Zenod supplies cited memory, and Phylax supplies transport plus its own metering. Sequence after Zenod beta stabilization; do not create a second runtime/metering/settings shape. | `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` and this handoff | PM | pending read-only reconciliation |
+| 2026-08-28 | `docs/EPIC-0-FOUNDATION-SPINE.md` | Roll up the accepted one-commercial-authority/bounded-service-wallet rule as the project-wide credit doctrine for paired products. | `docs/evidence/credit-authority-decision-2026-08-28/index.html` | Epic 0 steward | accepted; root rollup pending |
 
 ## Appendix
 
