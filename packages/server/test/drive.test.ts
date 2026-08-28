@@ -171,6 +171,33 @@ describe("drive client", () => {
     expect(result.message).toContain("connected as jordi@example.com");
     vi.unstubAllGlobals();
   });
+
+  it("retries a transient network failure while refreshing a user OAuth token", async () => {
+    const healthyFetch = stubFetch();
+    let tokenAttempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith("https://oauth2.googleapis.com/token") && tokenAttempts++ === 0) {
+          throw new TypeError("fetch failed");
+        }
+        return healthyFetch(input, init);
+      }),
+    );
+
+    const client = new DriveClient({
+      kind: "oauth",
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      refreshToken: "refresh-123",
+      email: "jordi@example.com",
+    });
+    const files = await client.listFiles({ folderId: "folder-9" });
+
+    expect(tokenAttempts).toBe(2);
+    expect(files.map((file) => file.name)).toContain("Launch metrics screenshot.png");
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("transcription envelope", () => {

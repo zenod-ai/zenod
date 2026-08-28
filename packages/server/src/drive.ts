@@ -62,6 +62,18 @@ function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url");
 }
 
+async function fetchWithNetworkRetry(input: string | URL, init: RequestInit): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 export class DriveClient {
   private readonly auth: DriveAuth;
   private readonly account: ServiceAccount | null;
@@ -114,7 +126,7 @@ export class DriveClient {
     const signature = signer.sign(this.account.private_key).toString("base64url");
     const assertion = `${header}.${claims}.${signature}`;
 
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetchWithNetworkRetry(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -135,7 +147,7 @@ export class DriveClient {
   /** Refresh a Google user OAuth token. Uploads then use the user's quota. */
   private async oauthToken(): Promise<string> {
     if (this.auth.kind !== "oauth") throw new Error("Google OAuth is not configured");
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetchWithNetworkRetry(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
