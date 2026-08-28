@@ -4070,6 +4070,7 @@ describe("ported gateway integration", () => {
     const sent: string[] = [];
     const storeKeys: string[] = [];
     const storeAttempts = new Map<string, number>();
+    const pollAttempts = new Map<string, number>();
     const organ = new PhylaxChannelsOrgan({
       dataDir,
       routes: {
@@ -4148,6 +4149,26 @@ describe("ported gateway integration", () => {
         expect(call.tool).toBe("get_task_result");
         const ticketId = String(call.arguments.ticket_id);
         const key = ticketId.slice("job:".length);
+        const pollAttempt = (pollAttempts.get(key) ?? 0) + 1;
+        pollAttempts.set(key, pollAttempt);
+        if (pollAttempt === 1) {
+          return {
+            content: [{ type: "text", text: "running" }],
+            structuredContent: {
+              ticket_id: ticketId,
+              jobId: ticketId,
+              kind: "media_ingest",
+              status: "running",
+              state: "running",
+            },
+          };
+        }
+        if (pollAttempt === 2) {
+          // Keep the foreground observation unresolved until its short UX
+          // deadline expires. afterReply must then carry the original voice
+          // handoff into the background poll that returns the terminal result.
+          return await new Promise<PeerToolResult>(() => {});
+        }
         return {
           content: [{ type: "text", text: "done" }],
           structuredContent: {
@@ -4174,6 +4195,7 @@ describe("ported gateway integration", () => {
           },
         };
       },
+      captureForegroundDeadlineMs: 5,
       capturePollIntervalMs: 1,
       sleep: async () => {},
     });
@@ -4217,9 +4239,13 @@ describe("ported gateway integration", () => {
       const expectedKeys = messageIds.map((messageId) => `alpha:whatsapp:${messageId}`);
       expect([...storeKeys].sort()).toEqual([...expectedKeys].sort());
       expect(storeAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 1])));
+      expect(pollAttempts).toEqual(new Map(expectedKeys.map((key) => [key, 3])));
+      expect(sent.filter((text) => text.includes("still filing this memory"))).toHaveLength(3);
       expect(sent.filter((text) => text.includes("Saved ✓"))).toHaveLength(3);
       expect(sent.filter((text) => text.includes("Google Drive audio:"))).toHaveLength(3);
       expect(sent.filter((text) => text.includes("Transcription: completed."))).toHaveLength(3);
+      expect(sent.filter((text) => text.includes("Transcript: transcript for voice-overlap-")))
+        .toHaveLength(3);
       expect(sent.filter((text) => text.includes("could not confirm the final result"))).toHaveLength(0);
       for (const messageId of messageIds) {
         expect(runtime.whatsappStore.voiceJob(messageId)?.state).not.toBe("ring_outcome_unknown");
