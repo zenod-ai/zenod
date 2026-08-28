@@ -1296,11 +1296,18 @@ export class WhatsAppGateway {
       receiptEligible: scope?.receiptEligible === true,
     });
     if (intent.state === "sent") {
-      return { sentMessageId: intent.sentProviderMessageId ?? intent.providerMessageId };
+      const sentMessageId = intent.sentProviderMessageId ?? intent.providerMessageId;
+      if (intent.receiptEligible) {
+        this.options.store.recordPortedReceiptDelivery(sourceMessageId, sentMessageId, "sent");
+      }
+      return { sentMessageId };
     }
     try {
       const delivery = await this.sendOutboundIntent(socket, intent);
       this.options.store.completeOutboundIntent(intent, delivery);
+      if (intent.receiptEligible) {
+        this.options.store.recordPortedReceiptDelivery(sourceMessageId, delivery.sentMessageId, "sent");
+      }
       return { sentMessageId: delivery.sentMessageId };
     } catch (error) {
       this.options.store.recordOutboundIntentFailure(
@@ -1338,13 +1345,20 @@ export class WhatsAppGateway {
     }
     if (!intent) return null;
     if (intent.state === "sent") {
-      return intent.sentProviderMessageId ?? intent.providerMessageId;
+      const sentMessageId = intent.sentProviderMessageId ?? intent.providerMessageId;
+      this.options.store.recordPortedReceiptDelivery(sourceMessageId, sentMessageId, "recovery_sent");
+      return sentMessageId;
     }
     const socket = this.socket;
     if (!socket) return null;
     try {
       const delivery = await this.sendOutboundIntent(socket, intent);
       this.options.store.completeOutboundIntent(intent, delivery);
+      this.options.store.recordPortedReceiptDelivery(
+        sourceMessageId,
+        delivery.sentMessageId,
+        "recovery_sent",
+      );
       return delivery.sentMessageId;
     } catch (error) {
       this.options.store.recordOutboundIntentFailure(
@@ -1583,6 +1597,11 @@ export class WhatsAppGateway {
       try {
         const delivery = await this.sendOutboundIntent(socket, intent);
         this.options.store.completeOutboundIntent(intent, delivery);
+        this.options.store.recordPortedReceiptDelivery(
+          intent.sourceMessageId,
+          delivery.sentMessageId,
+          "recovery_sent",
+        );
         this.options.recordPortedReplyDelivery?.(intent.sourceMessageId, delivery.sentMessageId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1808,6 +1827,20 @@ export class WhatsAppGateway {
       const message = error instanceof Error ? error.message : String(error);
       this.options.store.markMessageStatus(event.messageId, "failed");
       const outboundStartedAt = Date.now();
+      if (error instanceof PhylaxUsagePausedError) {
+        // The real terminal receipt is already a durable, receipt-eligible
+        // outbound intent. Adding a generic failure notice here would create a
+        // newer competing intent for the same source message; allowance wake
+        // could then recover the false failure instead of the real result.
+        // Leave the terminal intent pending so the allowance worker can resume
+        // that exact receipt without a duplicate or misleading reply.
+        this.options.store.recordChannelTiming(event.messageId, {
+          outboundSendMs: Date.now() - outboundStartedAt,
+          totalLifecycleMs: Date.now() - lifecycleStartedAt,
+        });
+        console.error(`[whatsapp] ported delivery paused for ${event.messageId}: ${message}`);
+        return;
+      }
       // The Zenod operation failed, but a provider-accepted failure notice is a
       // successful delivery. Keep those two states independent for support.
       await this.sendReply(

@@ -567,6 +567,7 @@ describe("Phylax customer unit mount", () => {
       expect(voice.replyText).toContain("Saved ✓");
       expect(voice.replyText).toContain("Google Drive audio: https://drive.google.com/file/d/voice-production/view");
       expect(voice.replyText).toContain("Transcription: completed.");
+      expect(voice.replyText).toContain("Transcript: Remember the launch sequence.");
       expect(voice.replyText).not.toContain("Log/2026-07-29.md#^voice-production");
       expect(voice.replyText).not.toContain("abc1234");
       expect(voice.replyText).toMatch(

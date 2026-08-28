@@ -54,6 +54,19 @@ function safeVoiceTranscriptionFailure(code: string | null | undefined): string 
   }
 }
 
+function asksForLatestVoiceTranscript(text: string): boolean {
+  return /\b(transcript|transcription)\b/i.test(text)
+    && /\b(audio|voice|note|latest|last|that)\b/i.test(text);
+}
+
+function transcriptReply(text: string): string {
+  const maxChars = 3_500;
+  const bounded = text.length <= maxChars
+    ? text
+    : `${text.slice(0, maxChars).trimEnd()}\n\n[…transcript continues in the filed Zenod memory]`;
+  return `Transcript of your latest voice note:\n\n${bounded}`;
+}
+
 /** Keep typed audit/retry state while exposing only bounded Zenod copy. */
 function safePortedChannelError(error: unknown): PhylaxChannelError {
   if (!(error instanceof PhylaxChannelError)) {
@@ -260,6 +273,31 @@ export class PhylaxPortedRuntime {
             replyText: "Cancelled the pending voice transcription. Nothing was sent to Zenod.",
           };
         }
+        if (!media && asksForLatestVoiceTranscript(text)) {
+          const tenantId = await this.organ.tenantIdFor("whatsapp", event.senderId, event.chatId);
+          const sender = normalizeWhatsAppIdentifier(event.senderId);
+          const latest = this.whatsappStore.latestVoiceTranscript(tenantId, `whatsapp:${sender}`);
+          const replyText = latest
+            ? transcriptReply(latest.text)
+            : "I do not have a completed voice-note transcript in this conversation yet.";
+          // This is a Phylax-local read, but its outbound delivery still belongs
+          // to the authenticated tenant and must pass through the same allowance,
+          // audit, and recovery path as any downstream reply.
+          this.whatsappStore.recordChannelForwarding({
+            providerMessageId: event.messageId,
+            tenantId,
+            senderId: sender,
+            transcriptProvenance: "phylax-persisted-voice-transcript",
+            downstreamDestination: "phylax-local#voice-transcript",
+            downstreamReceipt: latest
+              ? { kind: "persisted_voice_transcript", id: latest.providerMessageId, status: "completed" }
+              : { kind: "persisted_voice_transcript", status: "not_found" },
+            replyText,
+          });
+          return {
+            replyText,
+          };
+        }
         const senderTimestamp = normalizedWhatsAppSenderTimestamp(event.timestamp);
         const inbound = {
           channel: "whatsapp",
@@ -343,7 +381,7 @@ export class PhylaxPortedRuntime {
             deferred: true,
             replyText: durationSeconds !== null && durationSeconds > MAX_VOICE_TRANSCRIPTION_SECONDS
               ? "I received your voice note. It is over 2 hours, so Zenod will archive the original audio to your Google Drive without transcribing it and create a memory entry pointing to it."
-              : 'I received your voice note and queued it for transcription and Google Drive archiving. It may take a while. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
+              : 'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
             afterReply: () => this.kickVoiceWorker(),
             timing: { mediaDownloadMs: timing.mediaDownloadMs },
           };

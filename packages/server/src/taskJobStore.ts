@@ -318,20 +318,25 @@ export class TaskJobStore {
    * Atomically take ownership of the oldest queued job. The status predicate is
    * repeated on the UPDATE so separate processes cannot both execute one row.
    */
-  claimNextQueued(now: number = Date.now()): TaskJob | null {
+  claimNextQueued(now: number = Date.now(), kinds?: readonly TaskJobKind[]): TaskJob | null {
+    if (kinds?.length === 0) return null;
+    const kindFilter = kinds?.length
+      ? ` AND kind IN (${kinds.map(() => "?").join(", ")})`
+      : "";
+    const kindArgs = kinds ? [...kinds] : [];
     const row = this.db
       .prepare(
         `UPDATE task_jobs
          SET status='running', owner_id=?, lease_expires_at=?, updated_at=?
          WHERE tenant_id=? AND status='queued' AND id=(
            SELECT id FROM task_jobs
-           WHERE tenant_id=? AND status='queued'
+           WHERE tenant_id=? AND status='queued'${kindFilter}
            ORDER BY created_at ASC
            LIMIT 1
          )
          RETURNING *`,
       )
-      .get(this.ownerId, now + TASK_JOB_LEASE_MS, now, this.tenantId, this.tenantId) as Row | undefined;
+      .get(this.ownerId, now + TASK_JOB_LEASE_MS, now, this.tenantId, this.tenantId, ...kindArgs) as Row | undefined;
     return row ? rowToJob(row) : null;
   }
 

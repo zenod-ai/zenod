@@ -310,6 +310,13 @@ export interface WhatsAppVoiceJob {
   updatedAt: number;
 }
 
+export interface WhatsAppVoiceTranscript {
+  providerMessageId: string;
+  text: string;
+  provider: string | null;
+  createdAt: number;
+}
+
 export interface CreateWhatsAppVoiceJob {
   providerMessageId: string;
   replyToMessageId?: string | null;
@@ -903,6 +910,36 @@ export class WhatsAppStore {
       transcription: transcriptionJson
         ? JSON.parse(transcriptionJson) as Record<string, unknown>
         : null,
+    };
+  }
+
+  latestVoiceTranscript(tenantId: string, conversationKey: string): WhatsAppVoiceTranscript | null {
+    const row = this.db.prepare(
+      `SELECT provider_message_id AS providerMessageId,
+         transcription_json AS transcriptionJson, created_at AS createdAt
+       FROM whatsapp_voice_jobs
+       WHERE tenant_id = ? AND conversation_key = ?
+         AND transcription_json IS NOT NULL
+       ORDER BY created_at DESC, provider_message_id DESC
+       LIMIT 1`,
+    ).get(tenantId, conversationKey) as {
+      providerMessageId: string;
+      transcriptionJson: string;
+      createdAt: number;
+    } | undefined;
+    if (!row) return null;
+    const transcription = JSON.parse(row.transcriptionJson) as Record<string, unknown>;
+    const text = typeof transcription.text_transcript === "string"
+      ? transcription.text_transcript.trim()
+      : "";
+    if (!text) return null;
+    return {
+      providerMessageId: row.providerMessageId,
+      text,
+      provider: typeof transcription.transcription_source === "string"
+        ? transcription.transcription_source.trim() || null
+        : null,
+      createdAt: row.createdAt,
     };
   }
 
@@ -2023,6 +2060,7 @@ export class WhatsAppStore {
          error_text, created_at, updated_at
        FROM whatsapp_outbound_intents
        WHERE tenant_id = ? AND source_message_id = ? AND receipt_eligible = 1
+         AND success_status <> 'failure_notice_sent'
        ORDER BY created_at DESC
        LIMIT 1`,
     ).get(tenantId, sourceMessageId) as Record<string, unknown> | undefined;
@@ -2037,12 +2075,36 @@ export class WhatsAppStore {
        FROM whatsapp_outbound_intents i
        WHERE i.intent_state = 'pending'
          AND i.receipt_eligible = 1
+         AND i.success_status <> 'failure_notice_sent'
          AND NOT EXISTS (
            SELECT 1 FROM whatsapp_media_recovery r
            WHERE r.provider_message_id = i.source_message_id
          )
        ORDER BY i.created_at`,
     ).all() as unknown as Record<string, unknown>[]).map(outboundIntentFromRow);
+  }
+
+  recordPortedReceiptDelivery(
+    sourceMessageId: string,
+    sentProviderMessageId: string,
+    outboundStatus: "sent" | "recovery_sent",
+  ): void {
+    const now = Date.now();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(
+        "UPDATE whatsapp_messages SET processing_status = 'replied' WHERE message_id = ?",
+      ).run(sourceMessageId);
+      this.db.prepare(
+        `UPDATE whatsapp_channel_audit
+         SET lifecycle_state = 'replied', outbound_provider_id = ?, outbound_status = ?, updated_at = ?
+         WHERE provider_message_id = ?`,
+      ).run(sentProviderMessageId, outboundStatus, now, sourceMessageId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private outboundIntentById(intentId: string): WhatsAppOutboundIntent | null {

@@ -458,7 +458,11 @@ function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string)
   ].filter(Boolean).join("\n");
 }
 
-const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 4 * 60_000;
+// Durable Zenod work can take minutes, especially media filing. Do not hold the
+// WhatsApp request (and typing indicator) open for the whole operation: return
+// a truthful pending acknowledgement quickly and let the existing durable
+// capture poller deliver the terminal receipt when it is ready.
+const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 8_000;
 const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
 const MAX_CHANNEL_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
 const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
@@ -951,7 +955,19 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, tool: string): {
+function transcriptPreview(value: string): string {
+  const maxChars = 3_500;
+  return value.length <= maxChars
+    ? value
+    : `${value.slice(0, maxChars).trimEnd()} […continues in the filed Zenod memory]`;
+}
+
+function terminalCaptureReceipt(
+  result: PeerToolResult,
+  expectedJobId: string,
+  tool: string,
+  handoff?: PhylaxDownstreamCall["handoff"],
+): {
   state: "done" | "error";
   text: string;
   evidenceRef: string | null;
@@ -990,6 +1006,9 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, t
     ? rawArtifact.archiveUrl.trim()
     : null;
   const transcriptionStatus = extraction?.transcriptionStatus;
+  const transcriptText = typeof handoff?.text_transcript === "string"
+    ? handoff.text_transcript.trim()
+    : "";
   const evidenceValue = payload.evidenceRef ?? digest?.evidenceRef;
   const evidenceRef = typeof evidenceValue === "string" && evidenceValue.trim()
     ? evidenceValue.trim()
@@ -1012,14 +1031,19 @@ function terminalCaptureReceipt(result: PeerToolResult, expectedJobId: string, t
     text: sanitizePhylaxCustomerReply(appendPhylaxCaptureReceiptInvitation([
       "Saved ✓",
       `Recap: ${recap}`,
-      ...(archiveUrl && (transcriptionStatus === "transcribed" || transcriptionStatus === "skipped_duration_limit")
-        ? [`${archiveUrl.includes("drive.google.com") ? "Google Drive audio" : "Audio archive"}: ${archiveUrl}`]
+      ...(archiveUrl
+        ? [`${archiveUrl.includes("drive.google.com")
+          ? transcriptionStatus ? "Google Drive audio" : "Google Drive media"
+          : transcriptionStatus ? "Audio archive" : "Media archive"}: ${archiveUrl}`]
         : rawArtifact ? ["Media: archived"] : []),
       ...(transcriptionStatus === "skipped_duration_limit"
         ? ["Transcription: skipped because the audio exceeds the 2-hour limit."]
         : transcriptionStatus === "transcribed"
-          ? ["Transcription: completed."]
-          : []),
+          ? [
+              "Transcription: completed.",
+              ...(transcriptText ? [`Transcript: ${transcriptPreview(transcriptText)}`] : []),
+            ]
+          : extraction?.provider ? ["Media extraction: completed."] : []),
       ...(pages.length > 0 ? [`Filed: ${pages.join(", ")}`] : []),
       ...(filing === "uncertain"
         ? [`Filing: saved to ${pages[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
@@ -1314,7 +1338,7 @@ export class PhylaxChannelsOrgan {
         continue;
       }
       const result = attempt.result;
-      const terminal = terminalCaptureReceipt(result, job.jobId, job.tool);
+      const terminal = terminalCaptureReceipt(result, job.jobId, job.tool, handoff);
       if (terminal) {
         this.captureJournal.terminal(job, terminal.state, terminal.text, terminal.evidenceRef);
         return { result, receipt: terminal };

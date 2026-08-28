@@ -14,16 +14,19 @@ import {
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 
 /**
- * Background worker that drains the agentic-job queue one job at a time, fully
- * decoupled from any HTTP request. Serial by design: each turn runs a
+ * Background worker that drains durable jobs independently from HTTP requests.
+ * Agentic/capture work remains serial by design: each turn runs a
  * multi-minute LLM loop and the vault is a single serialized writer, so running
  * them concurrently only contends the write queue and hammers the provider —
  * the durable queue lets fan-out callers enqueue freely and poll for results
- * instead of holding a connection open until the (proxy/client) timeout. A
+ * instead of holding a connection open until the (proxy/client) timeout.
+ * Conversational chat has one separate lane so a slow Drive archive or image
+ * extraction cannot make an unrelated user message appear unanswered. A
  * restart marks in-flight jobs interrupted (see TaskJobStore).
  */
 export class TaskJobQueue {
-  private activeDrain: Promise<void> | null = null;
+  private activeChatDrain: Promise<void> | null = null;
+  private activeDurableDrain: Promise<void> | null = null;
   private leaseTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
@@ -39,7 +42,7 @@ export class TaskJobQueue {
     const rejection = this.admit(kind, input);
     if (rejection) throw new Error(rejection.message);
     const job = this.store.enqueue(kind, input, idempotencyKey);
-    this.requestDrain();
+    this.requestDrains();
     return job;
   }
 
@@ -69,21 +72,38 @@ export class TaskJobQueue {
   /** Resume after boot: pick up anything still queued. */
   resume(): void {
     if (this.closed) return;
-    this.requestDrain();
+    this.requestDrains();
   }
 
-  private requestDrain(): void {
-    if (this.closed || this.activeDrain) return;
-    const active = this.drain();
-    this.activeDrain = active;
+  private requestDrains(): void {
+    if (this.closed) return;
+    this.requestChatDrain();
+    this.requestDurableDrain();
+  }
+
+  private requestChatDrain(): void {
+    if (this.activeChatDrain) return;
+    const active = this.drain(["chat"]);
+    this.activeChatDrain = active;
     void active
-      .catch((error) => console.error("[task-job] queue drain failed:", error))
+      .catch((error) => console.error("[task-job] chat lane failed:", error))
       .finally(() => {
-        if (this.activeDrain === active) this.activeDrain = null;
+        if (this.activeChatDrain === active) this.activeChatDrain = null;
       });
   }
 
-  private async drain(): Promise<void> {
+  private requestDurableDrain(): void {
+    if (this.activeDurableDrain) return;
+    const active = this.drain(["task", "work", "store", "media_ingest"]);
+    this.activeDurableDrain = active;
+    void active
+      .catch((error) => console.error("[task-job] durable lane failed:", error))
+      .finally(() => {
+        if (this.activeDurableDrain === active) this.activeDurableDrain = null;
+      });
+  }
+
+  private async drain(kinds: readonly TaskJobKind[]): Promise<void> {
     if (this.leaseTimer) {
       clearTimeout(this.leaseTimer);
       this.leaseTimer = null;
@@ -91,7 +111,7 @@ export class TaskJobQueue {
     try {
       this.store.recoverExpiredRunning();
       let job: TaskJob | null;
-      while ((job = this.store.claimNextQueued())) {
+      while ((job = this.store.claimNextQueued(Date.now(), kinds))) {
         await this.process(job);
       }
     } finally {
@@ -175,7 +195,7 @@ export class TaskJobQueue {
     const delay = Math.max(1, expiresAt - Date.now() + 1);
     this.leaseTimer = setTimeout(() => {
       this.leaseTimer = null;
-      this.requestDrain();
+      this.requestDrains();
     }, delay);
     this.leaseTimer.unref?.();
   }
@@ -186,7 +206,7 @@ export class TaskJobQueue {
       clearTimeout(this.leaseTimer);
       this.leaseTimer = null;
     }
-    await this.activeDrain;
+    await Promise.all([this.activeChatDrain, this.activeDurableDrain]);
   }
 }
 
