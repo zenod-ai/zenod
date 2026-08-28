@@ -82,6 +82,44 @@ export async function gatewayKeyForSlug(provisioningKey: string, slug: string): 
   return (await listGatewayKeys(provisioningKey)).find((key) => key.slug === slug) ?? null;
 }
 
+/**
+ * Read the authoritative usage/limit policy for the inference key itself.
+ *
+ * This is intentionally separate from the management-key list endpoint. Legacy
+ * hosted tenants can already hold a correctly capped OpenRouter key in their
+ * tenant vault; requiring a second provisioning credential just to read that
+ * key's own usage would make a working tenant look unmetered.
+ */
+export async function currentGatewayKey(apiKey: string): Promise<GatewayKeyUsage> {
+  const response = await fetch("https://openrouter.ai/api/v1/key", {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!response.ok) throw new Error(`OpenRouter current key failed (${response.status})`);
+  const payload = (await response.json()) as { data?: Record<string, unknown> };
+  const row = payload.data;
+  if (!row || typeof row !== "object") throw new Error("OpenRouter current key response is malformed");
+  return {
+    name:
+      typeof row.name === "string"
+        ? row.name
+        : typeof row.label === "string"
+          ? row.label
+          : "current-key",
+    slug: null,
+    hash: typeof row.hash === "string" ? row.hash : null,
+    limit: typeof row.limit === "number" ? row.limit : null,
+    usage: typeof row.usage === "number" ? row.usage : null,
+    usage_monthly: typeof row.usage_monthly === "number" ? row.usage_monthly : null,
+    byok_usage_monthly: typeof row.byok_usage_monthly === "number" ? row.byok_usage_monthly : null,
+    limit_remaining: typeof row.limit_remaining === "number" ? row.limit_remaining : null,
+    disabled: row.disabled === true,
+    limit_reset: row.limit_reset === "monthly" ? "monthly" : null,
+    include_byok_in_limit:
+      typeof row.include_byok_in_limit === "boolean" ? row.include_byok_in_limit : null,
+    reset_at: typeof row.reset_at === "string" ? row.reset_at : null,
+  };
+}
+
 export async function customerMetering(
   summary: UsageSummary,
   provisioningKey: string | undefined,

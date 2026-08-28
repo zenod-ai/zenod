@@ -808,6 +808,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     configuredPhylaxRefreshDelay > 0
     ? configuredPhylaxRefreshDelay
     : 30_000;
+  const configuredHealthyPhylaxRefresh = Number(env.ZENOD_PHYLAX_HEALTHY_REFRESH_MS);
+  const healthyPhylaxRefreshMs = Number.isSafeInteger(configuredHealthyPhylaxRefresh) &&
+    configuredHealthyPhylaxRefresh > 0
+    ? configuredHealthyPhylaxRefresh
+    : 5 * 60_000;
   let phylaxRefreshDelayMs = initialPhylaxRefreshDelayMs;
   if (zenodPhylax?.config.enabled) {
     const schedulePhylaxRefresh = (delayMs: number) => {
@@ -828,6 +833,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           phylaxRefreshDelayMs = Math.min(phylaxRefreshDelayMs * 2, 5 * 60_000);
         } else {
           phylaxRefreshDelayMs = initialPhylaxRefreshDelayMs;
+          schedulePhylaxRefresh(healthyPhylaxRefreshMs);
         }
       })().catch((error) => {
         console.error("[zenod-phylax] authoritative refresh/bootstrap failed:", error);

@@ -17,7 +17,12 @@ import {
   type CustomerProductConfig,
 } from "./customerBilling.js";
 import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
-import { projectCustomerUsage, type CustomerUsageProjection } from "./customerMetering.js";
+import {
+  currentGatewayKey,
+  projectCustomerUsage,
+  type CustomerUsageProjection,
+  type GatewayKeyUsage,
+} from "./customerMetering.js";
 import {
   createOpenRouterManagedAiClient,
   CustomerManagedAiAuditStore,
@@ -173,6 +178,41 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     undefined,
     options.managedAiAdmissionBeforeJournal,
   );
+  const refreshCurrentTenantKeyAuthority = async (
+    account: CustomerAccount,
+  ): Promise<{ account: CustomerAccount; gateway: GatewayKeyUsage } | null> => {
+    if (product.product !== "zenod" || managedAiProvider) return null;
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime || runtime.settings.provider() !== "openrouter") return null;
+    const apiKey = runtime.settings.activeApiKey();
+    if (!apiKey) return null;
+    const gateway = await currentGatewayKey(apiKey);
+    if (
+      gateway.limit_reset !== "monthly" ||
+      gateway.limit === null ||
+      gateway.limit <= 0 ||
+      Math.abs(gateway.limit - managedAiConfig.monthlyLimitUsd) > 1e-9
+    ) {
+      throw new Error("existing OpenRouter key does not match the hosted monthly allowance policy");
+    }
+    const now = new Date();
+    const currentPeriodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    const currentPeriodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+    const refreshed = accounts.upsert(account.session_id, {
+      managed_ai_limit_usd: gateway.limit,
+      managed_ai_status: gateway.disabled ? "paused" : "active",
+      managed_ai_updated_at: now.toISOString(),
+      managed_ai_last_reconciled_at: now.toISOString(),
+      managed_ai_error_code: null,
+      ...(!account.stripe_subscription_id
+        ? {
+            current_period_start: currentPeriodStart,
+            current_period_end: currentPeriodEnd,
+          }
+        : {}),
+    });
+    return { account: refreshed, gateway };
+  };
   const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
     await bindCheckout(account, session);
   };
@@ -210,7 +250,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   );
   const localUsageForAccount = async (account: CustomerAccount) => {
     if (!managedAiProvider || !account.tenant_slug) {
-      return projectCustomerUsage(null, managedAiConfig.warnPercent);
+      try {
+        const current = await refreshCurrentTenantKeyAuthority(account);
+        return projectCustomerUsage(current?.gateway ?? null, managedAiConfig.warnPercent);
+      } catch {
+        return projectCustomerUsage(null, managedAiConfig.warnPercent);
+      }
     }
     try {
       const keys = await managedAiProvider.listKeys();
@@ -227,7 +272,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   };
   const usageForAccount = async (account: CustomerAccount) => {
     const local = await localUsageForAccount(account);
-    return options.projectUsage ? options.projectUsage(account, local) : local;
+    const refreshedAccount = accounts.get(account.session_id) ?? account;
+    return options.projectUsage ? options.projectUsage(refreshedAccount, local) : local;
   };
   const reconcileManagedAiAccounts = async (): Promise<void> => {
     const failures: unknown[] = [];
@@ -255,10 +301,19 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     for (const account of accounts.list()) {
       if (
         !account.tenant_id ||
-        !account.stripe_subscription_id ||
         account.subscription_status === null ||
         account.subscription_status === "checkout_pending"
       ) continue;
+      if (!account.stripe_subscription_id) {
+        try {
+          const refreshed = await refreshCurrentTenantKeyAuthority(account);
+          if (refreshed) refreshedAccountIds.push(account.account_id);
+          else failedAccountIds.push(account.account_id);
+        } catch {
+          failedAccountIds.push(account.account_id);
+        }
+        continue;
+      }
       if (!stripe?.subscriptions) {
         failedAccountIds.push(account.account_id);
         continue;
