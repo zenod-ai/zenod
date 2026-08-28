@@ -12,6 +12,14 @@ import {
 } from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Toaster } from "@/components/ui/sonner"
 import { Login } from "@/views/Login"
@@ -19,7 +27,6 @@ import { HostedAccount } from "@/views/HostedAccount"
 import { HostedLogin } from "@/views/HostedLogin"
 import { Settings } from "@/views/Settings"
 import { SetupWizard } from "@/views/SetupWizard"
-import { PhylaxAdminWhatsAppPairing } from "@/components/phylax-admin-channels"
 import type { ZenodEdition } from "@/views/zenod-edition"
 
 type View =
@@ -171,33 +178,170 @@ function CustomerApp() {
   )
 }
 
-function PhylaxAdmin() {
+interface ZenodAdminOverview {
+  service: { status: string; name: string; version: string; sha: string }
+  signup: { open: boolean }
+  totals: {
+    accounts: number
+    tenantBound: number
+    active: number
+    pastDue: number
+    paused: number
+    canceled: number
+    pending: number
+  }
+  tenants: Array<{
+    accountId: string
+    githubLogin: string
+    tenantId: string | null
+    tier: string | null
+    subscriptionStatus: string | null
+    currentPeriodEnd: string | null
+    managedAiStatus: string
+  }>
+  generatedAt: string
+}
+
+export function ZenodAdmin() {
+  const [overview, setOverview] = React.useState<ZenodAdminOverview | null>(
+    null
+  )
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    api<ZenodAdminOverview>("/api/admin/overview")
+      .then(setOverview)
+      .catch((cause: unknown) => setError(errorMessage(cause)))
+  }, [])
+
   return (
     <>
       <main className="mx-auto flex min-h-svh max-w-5xl flex-col gap-6 p-6 lg:p-10">
         <header className="flex flex-col gap-2 border-b pb-5">
           <p className="text-sm font-medium text-muted-foreground">
-            Phylax admin
+            Zenod admin
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">
-            Channel number
+            Service overview
           </h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Pair the Phylax-owned WhatsApp number, inspect session health, and
-            review the linked number. Tenant phone verification happens
-            separately in each tenant dashboard.
+            Read-only production health and tenant state. Customer controls and
+            Phylax operations remain on their own surfaces.
           </p>
         </header>
-        <PhylaxAdminWhatsAppPairing />
+        {!overview && !error && (
+          <div className="flex min-h-48 items-center justify-center">
+            <Spinner className="size-6 text-muted-foreground" />
+          </div>
+        )}
+        {error && (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>Cannot load Zenod admin</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {overview && (
+          <>
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader>
+                  <CardDescription>Service</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    Zenod{" "}
+                    <Badge variant="secondary">{overview.service.status}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  {overview.service.sha.slice(0, 8)} ·{" "}
+                  {overview.service.version}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardDescription>Signup</CardDescription>
+                  <CardTitle>
+                    {overview.signup.open ? "Open" : "Closed"}
+                  </CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardDescription>Accounts</CardDescription>
+                  <CardTitle>{overview.totals.accounts}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardDescription>Tenant bound</CardDescription>
+                  <CardTitle>{overview.totals.tenantBound}</CardTitle>
+                </CardHeader>
+              </Card>
+            </section>
+            <Card>
+              <CardHeader>
+                <CardTitle>Tenants</CardTitle>
+                <CardDescription>
+                  {overview.totals.active} active · {overview.totals.pastDue}{" "}
+                  past due · {overview.totals.paused} paused ·{" "}
+                  {overview.totals.canceled} canceled ·{" "}
+                  {overview.totals.pending} pending
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full min-w-[680px] text-left text-sm">
+                  <thead className="border-b text-muted-foreground">
+                    <tr>
+                      <th className="py-3 pr-4 font-medium">GitHub</th>
+                      <th className="py-3 pr-4 font-medium">Tenant</th>
+                      <th className="py-3 pr-4 font-medium">Plan</th>
+                      <th className="py-3 pr-4 font-medium">Subscription</th>
+                      <th className="py-3 font-medium">AI state</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overview.tenants.map((tenant) => (
+                      <tr
+                        key={tenant.accountId}
+                        className="border-b last:border-0"
+                      >
+                        <td className="py-3 pr-4 font-medium">
+                          {tenant.githubLogin}
+                        </td>
+                        <td className="py-3 pr-4 font-mono text-xs">
+                          {tenant.tenantId ?? "—"}
+                        </td>
+                        <td className="py-3 pr-4">{tenant.tier ?? "—"}</td>
+                        <td className="py-3 pr-4">
+                          {tenant.subscriptionStatus ?? "pending"}
+                        </td>
+                        <td className="py-3">{tenant.managedAiStatus}</td>
+                      </tr>
+                    ))}
+                    {overview.tenants.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="py-8 text-center text-muted-foreground"
+                        >
+                          No customer accounts yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </main>
-      <Toaster />
     </>
   )
 }
 
 export function App() {
   return window.location.pathname === "/admin" ? (
-    <PhylaxAdmin />
+    <ZenodAdmin />
   ) : (
     <CustomerApp />
   )

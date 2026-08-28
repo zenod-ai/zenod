@@ -78,6 +78,9 @@ const unit = mode === "callisthenes"
       ...(hasWeb ? { webDist } : {}),
       ...(hasSite ? { siteDist } : {}),
       env: process.env,
+      customerAdmin: {
+        githubLogin: process.env.ZENOD_ADMIN_GITHUB_LOGIN?.trim() || "alfablok",
+      },
     })
   : null;
 const runtime = unit ? null : new Runtime(dataDir, agent);
