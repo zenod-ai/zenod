@@ -548,46 +548,6 @@ const MANAGED_AI_HTTP_PATHS = new Set([
   "/api/test/chat",
   "/api/work",
 ]);
-const MANAGED_AI_MCP_TOOLS = new Set([
-  "ask_brain",
-  "chat_with_zenod",
-  "ingest_memory",
-  "run_task",
-  "store_memory",
-  "task_brain",
-]);
-const MEMORY_CHANNEL_DURABLE_CAPTURE_TOOLS = new Set([
-  "ingest_memory",
-  "store_memory",
-]);
-
-function managedAiMcpEnvelope(raw: Uint8Array): {
-  paid: boolean;
-  id: string | null;
-  kind: ManagedAiRawKind;
-  tool: string | null;
-} {
-  try {
-    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
-      id?: unknown;
-      method?: unknown;
-      params?: { name?: unknown; arguments?: Record<string, unknown> };
-    };
-    const args = payload.params?.arguments;
-    const mime = typeof args?.mimeType === "string" ? args.mimeType : "";
-    return {
-      paid: payload.method === "tools/call" &&
-        typeof payload.params?.name === "string" &&
-        MANAGED_AI_MCP_TOOLS.has(payload.params.name),
-      id: typeof payload.id === "string" || typeof payload.id === "number" ? String(payload.id) : null,
-      kind: mime.startsWith("audio/") ? "audio" : mime.startsWith("image/") ? "image" : "text",
-      tool: typeof payload.params?.name === "string" ? payload.params.name : null,
-    };
-  } catch {
-    return { paid: false, id: null, kind: "text", tool: null };
-  }
-}
-
 function hostedSensitiveMcpRead(raw: Uint8Array): boolean {
   try {
     const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
@@ -1259,28 +1219,19 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     if (isEntitledHosted && !credentialMismatch) {
       const raw = new Uint8Array(await downstreamRequest.clone().arrayBuffer());
       const isMcp = c.req.path === "/mcp" || c.req.path.startsWith("/mcp/");
-      const mcp = isMcp ? managedAiMcpEnvelope(raw) : { paid: false, id: null, kind: "text" as const, tool: null };
-      const profiledMcpAllowed = !directRecord?.profile ||
-        (directRecord.profile === "memory-channel" && mcp.tool !== null &&
-          (MEMORY_CHANNEL_MCP_TOOLS as readonly string[]).includes(mcp.tool));
-      // The authenticated memory-channel profile is already bound to Zenod's
-      // durable TaskJobQueue contract. Let store/ingest return that canonical
-      // ticket immediately; wrapping the MCP exchange in the outer usage queue
-      // turns a valid tools/call response into a generic HTTP 202 and strands
-      // Phylax without the job id it needs to poll safely.
-      const durableMemoryChannelCapture = isMcp &&
-        directRecord?.profile === "memory-channel" &&
-        mcp.tool !== null &&
-        MEMORY_CHANNEL_DURABLE_CAPTURE_TOOLS.has(mcp.tool);
-      const paid = !durableMemoryChannelCapture &&
-        (isMcp ? mcp.paid && profiledMcpAllowed : MANAGED_AI_HTTP_PATHS.has(c.req.path));
+      // MCP is already a complete authenticated service boundary, and Phylax
+      // owns durable channel admission/replay. Never persist and replay the raw
+      // MCP HTTP exchange through the hosted web-usage queue: the streamable
+      // MCP transport is tied to the original Node request/response bindings.
+      // Product HTTP endpoints keep their existing hosted admission policy.
+      const paid = !isMcp && MANAGED_AI_HTTP_PATHS.has(c.req.path);
       if (paid) {
         const requestUrl = new URL(c.req.url);
-        const storedPath = `${isMcp ? "/mcp" : requestUrl.pathname}${requestUrl.search}`;
+        const storedPath = `${requestUrl.pathname}${requestUrl.search}`;
         const input: ManagedAiAdmissionInput = {
           tenantId: admissionAccount!.tenant_id!,
-          idempotencyKey: admissionIdempotencyKey(c.req.raw, admissionAccount!.tenant_id!, mcp.id, raw),
-          kind: managedAiRawKind(storedPath, c.req.header("content-type") ?? null, mcp.kind, raw),
+          idempotencyKey: admissionIdempotencyKey(c.req.raw, admissionAccount!.tenant_id!, null, raw),
+          kind: managedAiRawKind(storedPath, c.req.header("content-type") ?? null, "text", raw),
           method: c.req.method,
           path: storedPath,
           contentType: c.req.header("content-type") ?? null,
