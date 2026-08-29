@@ -55,6 +55,29 @@ export { lintVault } from "./vault/lint.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";
 export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "./vault/cleanSlate.js";
 export { githubUrl, type VaultLocation } from "./vault/github.js";
+export {
+  VaultPublicationError,
+  githubVaultRevision,
+  type VaultProvider,
+  type VaultCitation,
+  type VaultPublicationOutcome,
+  type VaultPublicationFailure,
+  type VaultRepository,
+  type VaultRevision,
+  type VaultSourceRef,
+} from "./vault/repository.js";
+export {
+  assertDriveTransactionInvariant,
+  assertDriveIdempotentReplay,
+  driveTransactionIdempotencyScope,
+  isDriveTransactionTerminal,
+  type DriveFilePrecondition,
+  type DriveMutationKind,
+  type DriveMutationState,
+  type DriveTransactionMutation,
+  type DriveTransactionState,
+  type DriveVaultTransaction,
+} from "./vault/driveTransaction.js";
 export { searchVault } from "./ops/search.js";
 export { getNote, NoteNotFoundError } from "./ops/get.js";
 export { checkEvidenceImmutability, type FileChange } from "./vault/immutability.js";
