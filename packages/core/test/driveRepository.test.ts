@@ -101,12 +101,16 @@ class FakeDrive implements DriveVaultClient {
     });
   }
 
-  async ensureFolder(name: string, parentId: string): Promise<string> {
-    const existing = [...this.files.values()].find((file) => file.name === name && file.parents?.includes(parentId) && file.mimeType === "application/vnd.google-apps.folder");
+  async ensureFolder(name: string, parentId: string, options: { appProperties?: Record<string, string> } = {}): Promise<string> {
+    const existing = [...this.files.values()].find((file) => file.name === name && file.parents?.includes(parentId)
+      && file.mimeType === "application/vnd.google-apps.folder"
+      && Object.entries(options.appProperties ?? {}).every(([key, value]) => file.appProperties?.[key] === value));
     if (existing) return existing.id;
     return this.mutate(() => {
       const id = `file-${this.nextId++}`;
-      this.files.set(id, this.folder(id, name, [parentId]));
+      const folder = this.folder(id, name, [parentId]);
+      folder.appProperties = options.appProperties ?? {};
+      this.files.set(id, folder);
       return id;
     });
   }
@@ -436,20 +440,31 @@ describe("DriveVaultRepository", () => {
     }));
   });
 
-  it.each([
-    { call: 8, phase: "before" as const }, { call: 8, phase: "after" as const },
-    { call: 10, phase: "before" as const }, { call: 10, phase: "after" as const },
-  ])("recovers bootstrap idempotently after failure $phase provisioning mutation $call", async ({ call, phase }) => {
-    const drive = new FakeDrive();
-    drive.failAt = { call, phase };
-    await expect(open(drive, await temp(`bootstrap-fault-${call}-${phase}`))).rejects.toThrow();
-    expect(drive.faultTriggered).toBe(true);
-    drive.failAt = null;
-    const recovered = await open(drive, await temp(`bootstrap-recover-${call}-${phase}`));
-    expect((await recovered.currentRevision()).commitSha).toMatch(/^[0-9a-f]{40}$/);
-    expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(1);
-    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(1);
-  });
+  it("recovers bootstrap from failures before and after every mutation, starting with root creation", async () => {
+    for (const phase of ["before", "after"] as const) {
+      let reachedEnd = false;
+      for (let call = 1; call <= 20; call += 1) {
+        const drive = new FakeDrive();
+        drive.failAt = { call, phase };
+        await open(drive, await temp(`bootstrap-fault-${call}-${phase}`)).catch(() => null);
+        if (!drive.faultTriggered) {
+          reachedEnd = true;
+          break;
+        }
+        drive.failAt = null;
+        const recovered = await open(drive, await temp(`bootstrap-recover-${call}-${phase}`));
+        expect((await recovered.currentRevision()).commitSha).toMatch(/^[0-9a-f]{40}$/);
+        const roots = [...drive.files.values()].filter((file) => file.appProperties?.zenodVaultBinding === "v1:binding-one");
+        expect(roots).toHaveLength(1);
+        const roleCount = (role: string) => [...drive.files.values()].filter((file) => file.appProperties?.zenodVaultBinding === "binding-one"
+          && file.appProperties?.zenodVaultRole === role).length;
+        for (const role of ["git-folder", "control-folder", "transactions-folder", "deleted-folder", "bundle", "manifest"]) {
+          expect(roleCount(role), `${role} count after ${phase} fault ${call}`).toBe(1);
+        }
+      }
+      expect(reachedEnd, `bootstrap fault matrix exceeded 20 mutations for ${phase}`).toBe(true);
+    }
+  }, 120_000);
 
   it("rejects a prerequisite-dependent bundle that only verifies in a warm repository", async () => {
     const drive = new FakeDrive();

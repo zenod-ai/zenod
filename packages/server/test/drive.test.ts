@@ -301,6 +301,49 @@ describe("drive client", () => {
     expect(creates).toBe(0);
     vi.unstubAllGlobals();
   });
+
+  it("reclaims root and role-marked folder creations after a lost POST acknowledgement", async () => {
+    let rootCreated = false;
+    let folderCreated = false;
+    let rootPosts = 0;
+    let folderPosts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        if (body.name === "Zenod Vault") {
+          rootPosts += 1;
+          rootCreated = true;
+          throw new TypeError("connection lost after root create");
+        }
+        folderPosts += 1;
+        folderCreated = true;
+        throw new TypeError("connection lost after folder create");
+      }
+      if (url.includes("zenodVaultBinding") && url.includes("v1%3Abinding-1")) {
+        return Response.json({ files: rootCreated ? [{
+          id: "root-1", name: "Zenod Vault", mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodVaultBinding: "v1:binding-1" }, capabilities: { canAddChildren: true },
+        }] : [] });
+      }
+      return Response.json({ files: folderCreated ? [{
+        id: "git-1", name: ".git", mimeType: "application/vnd.google-apps.folder", parents: ["root-1"],
+        appProperties: { zenodVaultBinding: "binding-1", zenodVaultRole: "git-folder" },
+      }] : [] });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "token" },
+    );
+    expect(await client.ensureVaultRootFolder("binding-1")).toEqual({ folderId: "root-1", created: true });
+    expect(await client.ensureFolder(".git", "root-1", {
+      appProperties: { zenodVaultBinding: "binding-1", zenodVaultRole: "git-folder" },
+    })).toBe("git-1");
+    expect(rootPosts).toBe(1);
+    expect(folderPosts).toBe(1);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("transcription envelope", () => {

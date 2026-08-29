@@ -270,16 +270,28 @@ export class DriveClient {
   }
 
   /** Find (or create) a subfolder by name — e.g. the Archive/ inside the inbox. */
-  async ensureFolder(name: string, parentId: string): Promise<string> {
-    const existing = await this.listFiles({ folderId: parentId, nameContains: name, foldersOnly: true });
-    const match = existing.find((f) => f.name === name);
+  async ensureFolder(name: string, parentId: string, options: { appProperties?: Record<string, string> } = {}): Promise<string> {
+    const query = { folderId: parentId, nameContains: name, foldersOnly: true, ...(options.appProperties ? { appProperties: options.appProperties } : {}) };
+    const exact = (file: DriveFile): boolean => file.name === name
+      && Object.entries(options.appProperties ?? {}).every(([key, value]) => file.appProperties?.[key] === value);
+    const existing = await this.listFiles(query);
+    const matches = existing.filter(exact);
+    if (matches.length > 1) throw new Error(`Drive folder authority is ambiguous for ${name}`);
+    const match = matches[0];
     if (match) return match.id;
-    const response = await this.request(
-      "/files",
-      { fields: "id" },
-      { method: "POST", body: { name, mimeType: FOLDER_MIME, parents: [parentId] } },
-    );
-    return ((await response.json()) as { id: string }).id;
+    try {
+      const response = await this.request(
+        "/files",
+        { fields: FILE_FIELDS },
+        { method: "POST", body: { name, mimeType: FOLDER_MIME, parents: [parentId], ...options } },
+      );
+      return ((await response.json()) as { id: string }).id;
+    } catch (error) {
+      const recovered = (await this.listFiles(query)).filter(exact);
+      if (recovered.length === 1) return recovered[0]!.id;
+      if (recovered.length > 1) throw new Error(`Drive folder authority is ambiguous for ${name}`);
+      throw error;
+    }
   }
 
   /**
@@ -377,17 +389,30 @@ export class DriveClient {
     if (storedFolderId) {
       throw new Error(`Drive vault authority ${storedFolderId} is missing or no longer writable`);
     }
-    const created = await this.request("/files", { fields: MANAGED_FOLDER_FIELDS }, {
-      method: "POST",
-      body: {
-        name: "Zenod Vault",
-        mimeType: FOLDER_MIME,
-        appProperties: { [VAULT_ROOT_PROPERTY_KEY]: markerValue },
-      },
-    });
-    const folder = await created.json() as VaultFolder;
-    if (!folder.id) throw new Error("Drive API did not return the Zenod Vault folder ID");
-    return { folderId: folder.id, created: true };
+    try {
+      const created = await this.request("/files", { fields: MANAGED_FOLDER_FIELDS }, {
+        method: "POST",
+        body: {
+          name: "Zenod Vault",
+          mimeType: FOLDER_MIME,
+          appProperties: { [VAULT_ROOT_PROPERTY_KEY]: markerValue },
+        },
+      });
+      const folder = await created.json() as VaultFolder;
+      if (!folder.id) throw new Error("Drive API did not return the Zenod Vault folder ID");
+      return { folderId: folder.id, created: true };
+    } catch (error) {
+      const recoveredResponse = await this.request("/files", {
+        q: `mimeType = '${FOLDER_MIME}' and appProperties has { key='${VAULT_ROOT_PROPERTY_KEY}' and value='${markerValue.replaceAll("'", "\\'")}' }`,
+        orderBy: "createdTime asc", pageSize: "10", spaces: "drive", fields: `files(${MANAGED_FOLDER_FIELDS})`,
+      }).catch(() => null);
+      const recovered = recoveredResponse
+        ? (((await recoveredResponse.json()) as { files?: VaultFolder[] }).files ?? []).filter(matches)
+        : [];
+      if (recovered.length === 1) return { folderId: recovered[0]!.id, created: true };
+      if (recovered.length > 1) throw new Error(`Drive vault authority is ambiguous for binding ${vaultBindingId}`);
+      throw error;
+    }
   }
 
   /**

@@ -22,6 +22,10 @@ const BINDING_PROPERTY = "zenodVaultBinding";
 const ROLE_PROPERTY = "zenodVaultRole";
 const MANIFEST_ROLE = "manifest";
 const BUNDLE_ROLE = "bundle";
+const GIT_FOLDER_ROLE = "git-folder";
+const CONTROL_FOLDER_ROLE = "control-folder";
+const TRANSACTIONS_FOLDER_ROLE = "transactions-folder";
+const DELETED_FOLDER_ROLE = "deleted-folder";
 
 export interface DriveVaultFile {
   id: string;
@@ -58,7 +62,7 @@ export interface DriveVaultRootResolution {
 /** The bounded DriveClient surface required by the Drive vault adapter. */
 export interface DriveVaultClient {
   ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<DriveVaultRootResolution>;
-  ensureFolder(name: string, parentId: string): Promise<string>;
+  ensureFolder(name: string, parentId: string, options?: { appProperties?: Record<string, string> }): Promise<string>;
   listFiles(options?: {
     folderId?: string;
     nameContains?: string;
@@ -301,26 +305,29 @@ export class DriveVaultRepository implements VaultRepository {
       await this.validateControlParents(recoveredManifest, bundleFile);
     } else {
       if (root.created) {
-        this.gitFolderId = await this.options.client.ensureFolder(GIT_FOLDER, this.rootFolderId);
-        this.controlFolderId = await this.options.client.ensureFolder(CONTROL_FOLDER, this.rootFolderId);
+        this.gitFolderId = await this.ensureBootstrapFolder(GIT_FOLDER, this.rootFolderId, GIT_FOLDER_ROLE);
+        this.controlFolderId = await this.ensureBootstrapFolder(CONTROL_FOLDER, this.rootFolderId, CONTROL_FOLDER_ROLE);
       } else {
-        this.gitFolderId = await this.findUniqueChildFolder(this.rootFolderId, GIT_FOLDER) ?? "";
-        this.controlFolderId = await this.findUniqueChildFolder(this.rootFolderId, CONTROL_FOLDER) ?? "";
-        if (!this.gitFolderId || !this.controlFolderId) {
-          throw new Error("Drive vault authority is incomplete; refusing to reprovision an existing marked root");
-        }
+        await this.validateBootstrapSkeleton(this.rootFolderId, {
+          [GIT_FOLDER_ROLE]: GIT_FOLDER,
+          [CONTROL_FOLDER_ROLE]: CONTROL_FOLDER,
+        });
+        this.gitFolderId = await this.ensureBootstrapFolder(GIT_FOLDER, this.rootFolderId, GIT_FOLDER_ROLE);
+        this.controlFolderId = await this.ensureBootstrapFolder(CONTROL_FOLDER, this.rootFolderId, CONTROL_FOLDER_ROLE);
       }
+    }
+    if (!recoveredManifest && !root.created) {
+      await this.validateBootstrapSkeleton(this.controlFolderId, {
+        [TRANSACTIONS_FOLDER_ROLE]: TRANSACTIONS_FOLDER,
+        [DELETED_FOLDER_ROLE]: "deleted",
+      });
     }
     this.transactionsFolderId = recoveredManifest
       ? await this.discoverJournalFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, TRANSACTIONS_FOLDER) ?? ""
-      : root.created
-        ? await this.options.client.ensureFolder(TRANSACTIONS_FOLDER, this.controlFolderId)
-        : await this.findUniqueChildFolder(this.controlFolderId, TRANSACTIONS_FOLDER) ?? "";
+      : await this.ensureBootstrapFolder(TRANSACTIONS_FOLDER, this.controlFolderId, TRANSACTIONS_FOLDER_ROLE);
     this.deletedFolderId = recoveredManifest
       ? await this.discoverDeletedFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, "deleted") ?? ""
-      : root.created
-        ? await this.options.client.ensureFolder("deleted", this.controlFolderId)
-        : await this.findUniqueChildFolder(this.controlFolderId, "deleted") ?? "";
+      : await this.ensureBootstrapFolder("deleted", this.controlFolderId, DELETED_FOLDER_ROLE);
     if (recoveredManifest) {
       if (!this.transactionsFolderId || !this.deletedFolderId) {
         throw new Error("Drive vault control authority is incomplete");
@@ -334,8 +341,7 @@ export class DriveVaultRepository implements VaultRepository {
       }
       const bootstrap = await this.findBootstrapJournal();
       if (bootstrap) await this.provision(bootstrap.journal, bootstrap.file);
-      else if (root.created) await this.provision();
-      else throw new Error("Drive vault authority is incomplete; refusing to reprovision an existing marked root");
+      else await this.provision();
     }
     await this.ensureStandardFolders();
     await this.materializeFromAuthority();
@@ -369,6 +375,27 @@ export class DriveVaultRepository implements VaultRepository {
       .filter((file) => file.name === name && file.parents?.length === 1 && file.parents[0] === parentId);
     if (matches.length > 1) throw new Error(`Drive vault has duplicate ${name} folders`);
     return matches[0]?.id ?? null;
+  }
+
+  private async ensureBootstrapFolder(name: string, parentId: string, role: string): Promise<string> {
+    return this.options.client.ensureFolder(name, parentId, {
+      appProperties: { [BINDING_PROPERTY]: this.options.vaultBindingId, [ROLE_PROPERTY]: role },
+    });
+  }
+
+  private async validateBootstrapSkeleton(parentId: string, roleNames: Record<string, string>): Promise<void> {
+    const children = await this.listChildren(parentId);
+    const seen = new Set<string>();
+    for (const child of children) {
+      const role = child.appProperties?.[ROLE_PROPERTY];
+      if (child.mimeType !== FOLDER_MIME || child.parents?.length !== 1 || child.parents[0] !== parentId
+        || child.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId || !role || !Object.hasOwn(roleNames, role)
+        || child.name !== roleNames[role]
+        || seen.has(role)) {
+        throw new Error(`Drive vault authority is incomplete; conflicting bootstrap remnant ${child.name} (${child.id})`);
+      }
+      seen.add(role);
+    }
   }
 
   private async validateControlParents(manifestFile: DriveVaultFile, bundleFile: DriveVaultFile): Promise<void> {
