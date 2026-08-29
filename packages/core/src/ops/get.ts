@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import type { Note } from "../types.js";
 import { parseNote } from "../vault/frontmatter.js";
-import { githubSourceRef, type VaultLocation } from "../vault/github.js";
+import { vaultSourceRef, type VaultSourceContext } from "../vault/source.js";
 import { normalizeMarkdownNotePath } from "../vault/files.js";
 
 export class NoteNotFoundError extends Error {
@@ -12,7 +12,7 @@ export class NoteNotFoundError extends Error {
 }
 
 /** Deterministic note fetch — no LLM. Rejects paths that escape the vault. */
-export async function getNote(vaultPath: string, relPath: string, location: VaultLocation = {}): Promise<Note> {
+export async function getNote(vaultPath: string, relPath: string, location: VaultSourceContext = {}): Promise<Note> {
   const requested = normalize(relPath).replaceAll("\\", "/");
   if (isAbsolute(requested) || requested.startsWith("..")) {
     throw new NoteNotFoundError(relPath);
@@ -35,7 +35,7 @@ export async function getNote(vaultPath: string, relPath: string, location: Vaul
 
   const { frontmatter, body } = parseNote(raw);
   return {
-    ...githubSourceRef(location, actual),
+    ...vaultSourceRef(location, actual),
     frontmatter: frontmatter ?? {},
     body,
   };

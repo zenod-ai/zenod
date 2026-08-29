@@ -1,6 +1,6 @@
 import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,8 @@ import { createEngine, LONG_MEMORY_SEGMENT_CHARS } from "../src/engine/engine.js
 import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
+import { listMarkdownFiles } from "../src/vault/files.js";
+import type { FileChange, VaultRepository, VaultRevision } from "../src/index.js";
 import type { TokenCostMeasurement } from "../src/types.js";
 import type {
   AnswerInput,
@@ -360,6 +362,97 @@ class FakeLlm implements BrainLlm {
   }
 }
 
+/** Non-git repository proof: local Markdown snapshots with Drive-shaped durable revisions. */
+class FakeDriveVaultRepository implements VaultRepository {
+  readonly provider = "google_drive" as const;
+  private baseline = new Map<string, string>();
+  private revisionNumber = 0;
+  private revision: VaultRevision = {
+    provider: "google_drive",
+    id: "drive-revision-0",
+    committedAt: "2026-08-29T10:00:00.000Z",
+    urls: [],
+  };
+
+  private constructor(
+    readonly path: string,
+    private readonly makeUrl: (path: string, anchor?: string) => string = (path, anchor) => {
+      const suffix = anchor ? `#${encodeURIComponent(anchor)}` : "";
+      return `https://drive.google.com/drive/zenod-vault/${path.split("/").map(encodeURIComponent).join("/")}${suffix}`;
+    },
+  ) {}
+
+  static async open(
+    path: string,
+    makeUrl?: (path: string, anchor?: string) => string,
+  ): Promise<FakeDriveVaultRepository> {
+    const repository = new FakeDriveVaultRepository(path, makeUrl);
+    await repository.captureBaseline();
+    return repository;
+  }
+
+  private async captureBaseline(): Promise<void> {
+    this.baseline = new Map(await Promise.all(
+      (await listMarkdownFiles(this.path)).map(async (path) => [path, await readFile(join(this.path, path), "utf8")] as const),
+    ));
+  }
+
+  async pull(): Promise<void> {}
+
+  async currentRevision(): Promise<VaultRevision> {
+    return { ...this.revision, urls: [...this.revision.urls] };
+  }
+
+  async trackedFiles(): Promise<string[]> {
+    return [...this.baseline.keys()].sort();
+  }
+
+  async contentAtHead(path: string): Promise<string | null> {
+    return this.baseline.get(path) ?? null;
+  }
+
+  async pendingChanges(): Promise<FileChange[]> {
+    const currentPaths = await listMarkdownFiles(this.path);
+    const paths = [...new Set([...this.baseline.keys(), ...currentPaths])].sort();
+    const changes: FileChange[] = [];
+    for (const path of paths) {
+      const before = this.baseline.get(path) ?? null;
+      const after = await readFile(join(this.path, path), "utf8").catch(() => null);
+      if (before !== after) changes.push({ path, before, after });
+    }
+    return changes;
+  }
+
+  async discardChanges(): Promise<void> {
+    const currentPaths = await listMarkdownFiles(this.path);
+    for (const path of currentPaths) {
+      if (!this.baseline.has(path)) await rm(join(this.path, path), { force: true });
+    }
+    for (const [path, content] of this.baseline) {
+      await mkdir(dirname(join(this.path, path)), { recursive: true });
+      await writeFile(join(this.path, path), content);
+    }
+  }
+
+  async commitAndPublish(_message: string): Promise<VaultRevision> {
+    const changes = await this.pendingChanges();
+    if (changes.length === 0) throw new Error("no pending vault changes to publish");
+    this.revisionNumber += 1;
+    this.revision = {
+      provider: "google_drive",
+      id: `drive-revision-${this.revisionNumber}`,
+      committedAt: `2026-08-29T10:${String(this.revisionNumber).padStart(2, "0")}:00.000Z`,
+      urls: changes.map((change) => this.urlFor(change.path)!).filter(Boolean),
+    };
+    await this.captureBaseline();
+    return this.currentRevision();
+  }
+
+  urlFor(path: string, anchor?: string): string {
+    return this.makeUrl(path, anchor);
+  }
+}
+
 describe("BrainEngine", () => {
   let dir: string;
   let repo: VaultRepo;
@@ -393,6 +486,183 @@ describe("BrainEngine", () => {
   function engine() {
     return createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" } });
   }
+
+  it("runs the complete core memory loop through a non-git VaultRepository without GitHub leakage", async () => {
+    const vaultPath = join(dir, "drive-vault");
+    await cp(FIXTURE, vaultPath, { recursive: true });
+    const driveRepository = await FakeDriveVaultRepository.open(vaultPath);
+    const driveEngine = createEngine({ repo: driveRepository, llm, state, readSyncTtlMs: 0 });
+    const noGitFields = (value: unknown) => {
+      const serialized = JSON.stringify(value);
+      expect(serialized).not.toContain("commitSha");
+      expect(serialized).not.toContain("githubUrl");
+      expect(serialized).not.toContain("github.com");
+    };
+
+    const stored = await driveEngine.store({
+      content: "I just got travel insurance with Axa, policy ends March 2027, store this verbatim",
+      source: "cli",
+    });
+    expect(stored.revision).toMatchObject({ provider: "google_drive", id: "drive-revision-1" });
+    expect(stored.urls?.every((url) => url.startsWith("https://drive.google.com/"))).toBe(true);
+    noGitFields(stored);
+
+    const hits = await driveEngine.search("insurance");
+    expect(hits[0]).toMatchObject({ provider: "google_drive", path: "Areas/Insurance.md" });
+    expect(hits[0]?.url).toContain("drive.google.com");
+    noGitFields(hits);
+
+    const note = await driveEngine.get("Areas/Insurance.md");
+    expect(note).toMatchObject({ provider: "google_drive", path: "Areas/Insurance.md" });
+    noGitFields(note);
+
+    const answer = await driveEngine.ask("What insurance do I have?");
+    expect(answer.text).toContain("Axa");
+    expect(answer.sources).toEqual([
+      expect.objectContaining({ provider: "google_drive", path: "Areas/Insurance.md" }),
+    ]);
+    noGitFields(answer);
+
+    const captured = await driveEngine.captureEvidence!({
+      content: "Voice note transcript: Blue Lantern.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "drive-blue-lantern",
+      verbatim: true,
+    });
+    const replay = await driveEngine.captureEvidence!({
+      content: "Voice note transcript: Blue Lantern.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "drive-blue-lantern",
+      verbatim: true,
+    });
+    expect(replay.evidenceRef).toBe(captured.evidenceRef);
+    expect(replay.revision?.id).toBe(captured.revision?.id);
+    noGitFields(captured);
+    noGitFields(replay);
+
+    const enriched = await driveEngine.enrichEvidence!({
+      content: "Voice note transcript: Blue Lantern.",
+      source: "whatsapp",
+      contentType: "voice_note",
+      sourceId: "drive-blue-lantern",
+      verbatim: true,
+      evidenceRef: captured.evidenceRef,
+    });
+    expect(enriched.revision?.provider).toBe("google_drive");
+    noGitFields(enriched);
+
+    llm.workScript = async (_tools, writeTools) => {
+      await writeTools.writeNote(
+        "Notes/Drive Work.md",
+        "---\ntitle: Drive Work\ntype: note\ntags: []\ncreated: 2026-08-29\nupdated: 2026-08-29\nsummary: Provider-neutral work proof.\n---\n\n# Drive Work\n\nSaved through the repository boundary. Related: [[Areas/Insurance|Insurance]].\n",
+      );
+      return "write provider-neutral work proof";
+    };
+    const workResult = await driveEngine.work({ objective: "write proof", plan: "- write Notes/Drive Work.md" });
+    expect(workResult.mode, workResult.text).toBe("executed");
+    expect(workResult).toMatchObject({ committed: true, revision: { provider: "google_drive" } });
+    noGitFields(workResult);
+
+    const backlog = await driveEngine.digestBacklog({
+      rawText: "Remember to renew travel insurance.",
+      sourceRefs: [{
+        path: captured.evidenceRef,
+        url: captured.evidenceUrl ?? "",
+        provider: "google_drive",
+        revisionId: captured.revision?.id,
+      }],
+      write: true,
+    });
+    expect(backlog).toMatchObject({ revision: { provider: "google_drive" }, written: [{ provider: "google_drive" }] });
+    noGitFields(backlog);
+    expect((await driveEngine.lint()).errors).toEqual([]);
+  });
+
+  it("rejects GitHub-hosted URLs returned by a Google Drive repository across publication and reads", async () => {
+    const hostileUrl = (path: string, anchor?: string) =>
+      `https://raw.githubusercontent.com/hostile/vault/main/${path}${anchor ? `#${anchor}` : ""}`;
+
+    const publicationPath = join(dir, "hostile-drive-publication");
+    await cp(FIXTURE, publicationPath, { recursive: true });
+    const publicationRepo = await FakeDriveVaultRepository.open(publicationPath, hostileUrl);
+    const publicationEngine = createEngine({ repo: publicationRepo, llm, state, readSyncTtlMs: 0 });
+    await expect(publicationEngine.store({
+      content: "I just got travel insurance with Axa, policy ends March 2027, store this verbatim",
+      source: "cli",
+    })).rejects.toThrow("Google Drive vault URL must not reference a GitHub host");
+
+    const explicitGithubUrlsPath = join(dir, "hostile-drive-github-urls");
+    await cp(FIXTURE, explicitGithubUrlsPath, { recursive: true });
+    const explicitGithubUrlsRepo = await FakeDriveVaultRepository.open(explicitGithubUrlsPath);
+    const publish = explicitGithubUrlsRepo.commitAndPublish.bind(explicitGithubUrlsRepo);
+    explicitGithubUrlsRepo.commitAndPublish = async (message) => ({
+      ...await publish(message),
+      githubUrls: ["https://github.com/hostile/vault"],
+    });
+    const explicitGithubUrlsEngine = createEngine({ repo: explicitGithubUrlsRepo, llm, state, readSyncTtlMs: 0 });
+    await expect(explicitGithubUrlsEngine.store({
+      content: "I just got travel insurance with Axa, policy ends March 2027, store this verbatim",
+      source: "cli",
+    })).rejects.toThrow("published Google Drive revision must not contain GitHub URLs");
+
+    const readPath = join(dir, "hostile-drive-reads");
+    await cp(FIXTURE, readPath, { recursive: true });
+    const readRepo = await FakeDriveVaultRepository.open(readPath, hostileUrl);
+    const readEngine = createEngine({ repo: readRepo, llm, state, readSyncTtlMs: 0 });
+    await expect(readEngine.search("insurance")).rejects.toThrow("Google Drive vault URL must not reference a GitHub host");
+    await expect(readEngine.get("Areas/Insurance.md")).rejects.toThrow("Google Drive vault URL must not reference a GitHub host");
+    await expect(readEngine.ask("What insurance do I have?")).rejects.toThrow("Google Drive vault URL must not reference a GitHub host");
+  });
+
+  it("rejects Drive backlog source and candidate githubUrl fields before publication", async () => {
+    const sourcePath = join(dir, "hostile-drive-backlog-source");
+    await cp(FIXTURE, sourcePath, { recursive: true });
+    const sourceRepo = await FakeDriveVaultRepository.open(sourcePath);
+    const sourceEngine = createEngine({ repo: sourceRepo, llm, state, readSyncTtlMs: 0 });
+    await expect(sourceEngine.digestBacklog({
+      rawText: "Remember to renew travel insurance.",
+      sourceRefs: [{
+        path: "Log/2026-06-13.md#^e-hostile",
+        url: "https://drive.google.com/file/d/source/view",
+        provider: "google_drive",
+        githubUrl: "https://github.com/hostile/vault/blob/main/Log/2026-06-13.md",
+      }],
+      write: true,
+    })).rejects.toThrow("Google Drive backlog sources must not contain GitHub compatibility URLs");
+    expect((await sourceRepo.currentRevision()).id).toBe("drive-revision-0");
+
+    const candidatePath = join(dir, "hostile-drive-backlog-candidate");
+    await cp(FIXTURE, candidatePath, { recursive: true });
+    const candidateRepo = await FakeDriveVaultRepository.open(candidatePath);
+    const candidateEngine = createEngine({ repo: candidateRepo, llm, state, readSyncTtlMs: 0 });
+    const extractBacklog = llm.extractBacklog.bind(llm);
+    llm.extractBacklog = async (input) => {
+      const result = await extractBacklog(input);
+      return {
+        candidates: result.candidates.map((candidate) => ({
+          ...candidate,
+          source_refs: [{
+            path: "Log/2026-06-13.md#^e-hostile-candidate",
+            url: "https://drive.google.com/file/d/candidate/view",
+            provider: "google_drive",
+            githubUrl: "https://github.com/hostile/vault/blob/main/Log/2026-06-13.md",
+          }],
+        })),
+      };
+    };
+    await expect(candidateEngine.digestBacklog({
+      rawText: "Remember to renew travel insurance.",
+      sourceRefs: [{
+        path: "Log/2026-06-13.md#^e-safe",
+        url: "https://drive.google.com/file/d/safe/view",
+        provider: "google_drive",
+      }],
+      write: true,
+    })).rejects.toThrow("Google Drive backlog sources must not contain GitHub compatibility URLs");
+    expect((await candidateRepo.currentRevision()).id).toBe("drive-revision-0");
+  });
 
   it("stores a memory: evidence entry, meaning page, lint-clean commit (DoD #1 shape)", async () => {
     const result = await engine().store({
@@ -1019,9 +1289,10 @@ describe("BrainEngine", () => {
   });
 
   it("can materialize proposed backlog records when explicitly requested", async () => {
+    const legacyGithubUrl = "https://github.com/external/source/blob/main/Log/source.md#legacy-anchor";
     const result = await engine().digestBacklog({
       rawText: "Remember to renew travel insurance.",
-      sourceRefs: [{ path: "Log/2026-06-13.md#^e-test02", githubUrl: "" }],
+      sourceRefs: [{ path: "Log/2026-06-13.md#^e-test02", githubUrl: legacyGithubUrl }],
       write: true,
     });
 
@@ -1042,7 +1313,9 @@ describe("BrainEngine", () => {
     expect(result.written[0]?.url).toContain(`/blob/${result.revision?.id}/`);
     expect(result.source_refs[0]?.revisionId).toBe(result.revision?.id);
     expect(result.source_refs[0]?.url).toContain(`/blob/${result.revision?.id}/`);
+    expect(result.source_refs[0]?.githubUrl).toBe(legacyGithubUrl);
     expect(result.candidates[0]?.source_refs[0]).toEqual(result.source_refs[0]);
+    expect(result.candidates[0]?.source_refs[0]?.githubUrl).toBe(legacyGithubUrl);
     const record = await readFile(join(repo.path, result.written[0]!.path), "utf8");
     expect(record).toContain("## Acceptance Criteria");
     expect(record).toContain("Log/2026-06-13.md#^e-test02");

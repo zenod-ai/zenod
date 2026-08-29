@@ -2,8 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { MemoryContentType, MemoryEntry, MemoryEntryQuery, Surface } from "../types.js";
-import type { VaultLocation } from "../vault/github.js";
-import { githubSourceRef } from "../vault/github.js";
+import { vaultSourceRef, type VaultSourceContext } from "../vault/source.js";
 import { listMarkdownFiles } from "../vault/files.js";
 
 export interface EvidenceEntry {
@@ -121,7 +120,7 @@ function logDate(path: string): string | null {
   return date.length === 10 ? date : null;
 }
 
-function parseEvidenceFile(path: string, text: string, location: VaultLocation): MemoryEntry[] {
+function parseEvidenceFile(path: string, text: string, location: VaultSourceContext): MemoryEntry[] {
   const date = logDate(path);
   if (!date) return [];
   const lines = text.split("\n");
@@ -170,7 +169,7 @@ function parseEvidenceFile(path: string, text: string, location: VaultLocation):
       ...(sourceId ? { sourceId } : {}),
       // Obsidian block ids are not GitHub line anchors. Keep the canonical file
       // URL here and carry the exact block identity separately in evidenceRef.
-      ...githubSourceRef(location, path),
+      ...vaultSourceRef(location, path),
     };
   });
 }
@@ -184,7 +183,7 @@ function within(value: string, lower?: string, upper?: string): boolean {
 export async function searchEvidenceEntries(
   vaultPath: string,
   query: MemoryEntryQuery = {},
-  location: VaultLocation = {},
+  location: VaultSourceContext = {},
 ): Promise<MemoryEntry[]> {
   const paths = (await listMarkdownFiles(vaultPath)).filter((path) => logDate(path) !== null);
   const entries: MemoryEntry[] = [];
@@ -209,7 +208,7 @@ export async function searchEvidenceEntries(
 export async function getEvidenceEntry(
   vaultPath: string,
   evidenceRef: string,
-  location: VaultLocation = {},
+  location: VaultSourceContext = {},
 ): Promise<MemoryEntry> {
   const marker = evidenceRef.lastIndexOf("#^");
   if (marker < 0) throw new Error(`invalid evidence ref: ${evidenceRef}`);

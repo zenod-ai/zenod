@@ -58,6 +58,7 @@ export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "
 export { githubSourceRef, githubUrl, type VaultLocation } from "./vault/github.js";
 export {
   VaultPublicationError,
+  assertVaultProviderUrl,
   githubVaultRevision,
   type VaultProvider,
   type VaultCitation,

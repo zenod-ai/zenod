@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Hit } from "../types.js";
 import { listAttachmentFiles, listMarkdownFiles, tierOf } from "../vault/files.js";
 import { scanVault } from "../vault/pages.js";
-import { githubSourceRef, type VaultLocation } from "../vault/github.js";
+import { vaultSourceRef, type VaultSourceContext } from "../vault/source.js";
 
 const MAX_HITS = 20;
 
@@ -34,7 +34,7 @@ function queryTerms(query: string): string[] {
  * Pass 1 scores the frontmatter index (title, tags, summary, filename);
  * pass 2 greps note bodies (ripgrep when available, JS scan otherwise).
  */
-export async function searchVault(vaultPath: string, query: string, location: VaultLocation = {}): Promise<Hit[]> {
+export async function searchVault(vaultPath: string, query: string, location: VaultSourceContext = {}): Promise<Hit[]> {
   const terms = queryTerms(query);
   if (terms.length === 0) return [];
   const normalizedQuery = normalizePhrase(query);
@@ -118,7 +118,7 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     .map(({ path, rankedScore, snippet }) => ({
       snippet,
       score: rankedScore,
-      ...githubSourceRef(location, path),
+      ...vaultSourceRef(location, path),
     }));
 }
 
