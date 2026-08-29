@@ -85,6 +85,7 @@ export function durableStoreReceiptError(value: unknown): string | null {
       || !GIT_SHA.test(topCommit)
       || typeof nestedCommit !== "string"
       || nestedCommit !== topCommit
+      || revision.id === topCommit
     )) return "Google Drive Git commit provenance is malformed or inconsistent";
     return null;
   }

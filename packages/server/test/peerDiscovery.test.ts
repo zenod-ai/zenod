@@ -463,6 +463,21 @@ describe("generic wallet MCP discovery", () => {
       },
     },
     {
+      name: "Drive revision id synthesized from its Git bundle commit",
+      result: (() => {
+        const commitSha = "a".repeat(40);
+        return {
+          evidenceRef: "Log/2026-08-29.md#^e-equal-drive-commit",
+          revision: {
+            provider: "google_drive", id: commitSha, committedAt: "2026-08-29T10:00:00.000Z",
+            urls: ["https://drive.google.com/file/d/a/view"], commitSha,
+          },
+          urls: ["https://drive.google.com/file/d/a/view"],
+          commitSha,
+        };
+      })(),
+    },
+    {
       name: "Drive revision with a github.com subdomain URL",
       result: {
         evidenceRef: "Log/2026-08-29.md#^e-bad-drive-host",
