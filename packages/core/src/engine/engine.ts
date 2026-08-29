@@ -38,7 +38,7 @@ import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
-import type { VaultRepository, VaultRevision, VaultSourceRef } from "../vault/repository.js";
+import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
@@ -503,6 +503,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         throw new Error("published Google Drive revision id must remain independent from its Git bundle commit");
       }
     }
+    for (const url of revision.urls) assertVaultProviderUrl(revision.provider, url);
   }
 
   function repositoryUrl(path: string, anchor?: string, revision?: VaultRevision): string {
@@ -514,7 +515,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         anchor,
       );
     }
-    return repo.urlFor(path, anchor) ?? "";
+    const url = repo.urlFor(path, anchor) ?? "";
+    assertVaultProviderUrl(repo.provider, url);
+    return url;
   }
 
   function repositorySourceRef(path: string, anchor?: string, revision?: VaultRevision): VaultSourceRef {
@@ -874,7 +877,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const marker = ref.path.indexOf("#");
     const path = marker < 0 ? ref.path : ref.path.slice(0, marker);
     const anchor = marker < 0 ? undefined : ref.path.slice(marker + 1);
-    return repositorySourceRef(path, anchor, revision);
+    const pinned = repositorySourceRef(path, anchor, revision);
+    return {
+      ...pinned,
+      ...(ref.githubUrl !== undefined ? { githubUrl: ref.githubUrl } : {}),
+    };
   }
 
   async function digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult> {

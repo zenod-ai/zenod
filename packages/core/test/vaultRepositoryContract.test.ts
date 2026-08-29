@@ -3,6 +3,7 @@ import {
   VaultPublicationError,
   assertDriveIdempotentReplay,
   assertDriveTransactionInvariant,
+  assertVaultProviderUrl,
   driveTransactionIdempotencyScope,
   githubUrl,
   githubVaultRevision,
@@ -79,6 +80,23 @@ class DriveRepositoryStub implements VaultRepository {
 }
 
 describe("VaultRepository contract", () => {
+  it("rejects GitHub host families at a Google Drive provider boundary", () => {
+    for (const url of [
+      "https://github.com/hostile/vault",
+      "https://gist.github.com/hostile/id",
+      "https://githubusercontent.com/hostile",
+      "https://raw.githubusercontent.com/hostile/vault/main/note.md",
+      "https://objects.githubusercontent.com/object",
+    ]) {
+      expect(() => assertVaultProviderUrl("google_drive", url)).toThrow(
+        "Google Drive vault URL must not reference a GitHub host",
+      );
+    }
+
+    expect(() => assertVaultProviderUrl("google_drive", "https://drive.google.com/file/d/id/view")).not.toThrow();
+    expect(() => assertVaultProviderUrl("github", "https://raw.githubusercontent.com/zenod-ai/vault/main/note.md")).not.toThrow();
+  });
+
   it("compiles GitHub and Drive adapters against one repository-shaped interface", async () => {
     const driveRevision: VaultRevision = {
       provider: "google_drive",

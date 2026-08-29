@@ -57,6 +57,28 @@ export interface VaultRepository {
   urlFor(path: string, anchor?: string): string | null;
 }
 
+const GITHUB_HOST_FAMILIES = ["github.com", "githubusercontent.com"] as const;
+
+function isHostInFamily(hostname: string, family: string): boolean {
+  return hostname === family || hostname.endsWith(`.${family}`);
+}
+
+/** Fail closed when a provider boundary returns a URL owned by another provider. */
+export function assertVaultProviderUrl(provider: VaultProvider, value: string): void {
+  if (!value || provider !== "google_drive") return;
+
+  let hostname: string;
+  try {
+    hostname = new URL(value).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    throw new Error(`invalid ${provider} vault URL`);
+  }
+
+  if (GITHUB_HOST_FAMILIES.some((family) => isHostInFamily(hostname, family))) {
+    throw new Error("Google Drive vault URL must not reference a GitHub host");
+  }
+}
+
 export type VaultPublicationFailure =
   | {
       code: "failed_before_write";
