@@ -386,22 +386,46 @@
         { "required": ["revision"] },
         { "required": ["commitSha"] }
       ],
-      "allOf": [{
-        "if": {
-          "properties": {
-            "revision": {
-              "properties": { "provider": { "const": "google_drive" } },
-              "required": ["provider"]
-            }
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "revision": {
+                "properties": { "provider": { "const": "google_drive" } },
+                "required": ["provider"]
+              }
+            },
+            "required": ["revision"]
           },
-          "required": ["revision"]
+          "then": { "not": { "required": ["githubUrls"] } }
         },
-        "then": {
-          "not": {
-            "required": ["githubUrls"]
+        {
+          "if": {
+            "properties": {
+              "revision": {
+                "properties": { "provider": { "const": "google_drive" } },
+                "required": ["provider", "commitSha"]
+              }
+            },
+            "required": ["revision"]
+          },
+          "then": { "required": ["commitSha"] }
+        },
+        {
+          "if": {
+            "properties": {
+              "revision": {
+                "properties": { "provider": { "const": "google_drive" } },
+                "required": ["provider"]
+              }
+            },
+            "required": ["revision", "commitSha"]
+          },
+          "then": {
+            "properties": { "revision": { "required": ["commitSha"] } }
           }
         }
-      }],
+      ],
       "properties": {
         "kind": { "const": "memory_stored" },
         "operationId": { "type": "string" },

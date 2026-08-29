@@ -165,6 +165,34 @@ describe("v4 tool output validation", () => {
     expect(revision.id).not.toBe(commitSha);
   });
 
+  it.each([
+    ["top-only", false, true],
+    ["nested-only", true, false],
+  ] as const)("rejects %s Drive Git bundle provenance", (_name, nested, top) => {
+    const url = "https://drive.google.com/file/d/log-bundle/view";
+    const commitSha = "d".repeat(40);
+    const output = toolResponse({
+      evidence: [evidence("memory_stored", {
+        jobId: "job-drive-incomplete",
+        status: "done",
+        evidenceRef: "Log/2026-08-29.md#^e-drive-incomplete",
+        url,
+        urls: [url],
+        revision: {
+          provider: "google_drive",
+          id: "drive-txn-independent",
+          committedAt: "2026-08-29T10:00:00.000Z",
+          urls: [url],
+          ...(nested ? { commitSha } : {}),
+        },
+        ...(top ? { commitSha } : {}),
+        pagesTouched: [],
+        pageUrls: [],
+      })],
+    });
+    expect(() => validateToolResponse("zenod.store_memory", output)).toThrow(/commitSha/);
+  });
+
   it("rejects Drive terminal evidence carrying GitHub web compatibility fields", () => {
     const url = "https://drive.google.com/file/d/log-1/view";
     const output = toolResponse({

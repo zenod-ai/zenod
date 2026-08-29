@@ -362,6 +362,60 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 ]
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "commitSha"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "required": [
+                "commitSha"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision",
+                "commitSha"
+              ]
+            },
+            "then": {
+              "properties": {
+                "revision": {
+                  "required": [
+                    "commitSha"
+                  ]
+                }
+              }
+            }
           }
         ],
         "properties": {
@@ -1993,6 +2047,60 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 ]
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "commitSha"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "required": [
+                "commitSha"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision",
+                "commitSha"
+              ]
+            },
+            "then": {
+              "properties": {
+                "revision": {
+                  "required": [
+                    "commitSha"
+                  ]
+                }
+              }
+            }
           }
         ],
         "properties": {
@@ -2394,6 +2502,60 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 "required": [
                   "githubUrls"
                 ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "commitSha"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "required": [
+                "commitSha"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision",
+                "commitSha"
+              ]
+            },
+            "then": {
+              "properties": {
+                "revision": {
+                  "required": [
+                    "commitSha"
+                  ]
+                }
               }
             }
           }
@@ -6084,6 +6246,60 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 "required": [
                   "githubUrls"
                 ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "commitSha"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "required": [
+                "commitSha"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision",
+                "commitSha"
+              ]
+            },
+            "then": {
+              "properties": {
+                "revision": {
+                  "required": [
+                    "commitSha"
+                  ]
+                }
               }
             }
           }
