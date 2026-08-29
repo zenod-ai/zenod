@@ -138,7 +138,34 @@ describe("v4 tool output validation", () => {
     expect(validateToolResponse("zenod.get_task_result", output)).toBe(output);
   });
 
-  it("rejects Drive terminal evidence carrying a fabricated GitHub field", () => {
+  it("accepts an independent real Git commit in a Drive terminal revision", () => {
+    const url = "https://drive.google.com/file/d/log-bundle/view";
+    const commitSha = "d".repeat(40);
+    const revision = {
+      provider: "google_drive",
+      id: "drive-txn-with-git-bundle",
+      committedAt: "2026-08-29T10:00:00.000Z",
+      urls: [url],
+      commitSha,
+    };
+    const output = toolResponse({
+      evidence: [evidence("memory_stored", {
+        jobId: "job-drive-bundle",
+        status: "done",
+        evidenceRef: "Log/2026-08-29.md#^e-drive-bundle",
+        url,
+        urls: [url],
+        revision,
+        commitSha,
+        pagesTouched: [],
+        pageUrls: [],
+      })],
+    });
+    expect(validateToolResponse("zenod.store_memory", output)).toBe(output);
+    expect(revision.id).not.toBe(commitSha);
+  });
+
+  it("rejects Drive terminal evidence carrying GitHub web compatibility fields", () => {
     const url = "https://drive.google.com/file/d/log-1/view";
     const output = toolResponse({
       evidence: [evidence("memory_stored", {
@@ -153,7 +180,7 @@ describe("v4 tool output validation", () => {
           committedAt: "2026-08-29T10:00:00.000Z",
           urls: [url],
         },
-        commitSha: "a".repeat(40),
+        githubUrls: ["https://github.com/zenod-ai/vault/blob/main/Log/x.md"],
         pagesTouched: [],
         pageUrls: [],
       })],

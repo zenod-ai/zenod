@@ -233,10 +233,10 @@ function SourceLinks({ sources }: { sources: ChatSource[] }) {
 }
 
 function StoredReceipt({ stored }: { stored: ChatStored }) {
-  const revisionLabel = stored.commitSha
-    ? stored.commitSha.slice(0, 7)
-    : stored.revision
-      ? `${stored.revision.provider === "google_drive" ? "Drive" : "GitHub"} ${stored.revision.id}`
+  const revisionLabel = stored.revision
+    ? `${stored.revision.provider === "google_drive" ? "Drive" : "GitHub"} ${stored.revision.id}${stored.revision.provider === "google_drive" && stored.commitSha ? ` · git ${stored.commitSha.slice(0, 7)}` : ""}`
+    : stored.commitSha
+      ? stored.commitSha.slice(0, 7)
       : "saved"
   return (
     <div className="flex flex-wrap items-center gap-1.5">

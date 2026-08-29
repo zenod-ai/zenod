@@ -117,7 +117,7 @@ export interface MediaIngestReceipt {
     commitSha?: string | null;
     githubUrls?: string[];
     filing?: "filed" | "uncertain" | "inbox" | "pending";
-    /** Durable background semantic filing job; capture is already committed. */
+    /** Durable background semantic filing job; capture is already saved. */
     enrichmentJobId?: string;
   };
   nextAdapterIssues?: string[];

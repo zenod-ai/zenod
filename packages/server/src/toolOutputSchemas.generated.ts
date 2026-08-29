@@ -357,17 +357,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             },
             "then": {
               "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "commitSha"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "githubUrls"
-                    ]
-                  }
+                "required": [
+                  "githubUrls"
                 ]
               }
             }
@@ -428,7 +419,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 }
               },
               "commitSha": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{40}$"
               },
               "githubUrls": {
                 "type": "array",
@@ -469,17 +461,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 },
                 "then": {
                   "not": {
-                    "anyOf": [
-                      {
-                        "required": [
-                          "commitSha"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "githubUrls"
-                        ]
-                      }
+                    "required": [
+                      "githubUrls"
                     ]
                   }
                 }
@@ -494,7 +477,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             }
           },
           "commitSha": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{40}$"
           },
           "pagesTouched": {
             "type": "array",
@@ -2004,17 +1988,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             },
             "then": {
               "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "commitSha"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "githubUrls"
-                    ]
-                  }
+                "required": [
+                  "githubUrls"
                 ]
               }
             }
@@ -2075,7 +2050,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 }
               },
               "commitSha": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{40}$"
               },
               "githubUrls": {
                 "type": "array",
@@ -2116,17 +2092,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 },
                 "then": {
                   "not": {
-                    "anyOf": [
-                      {
-                        "required": [
-                          "commitSha"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "githubUrls"
-                        ]
-                      }
+                    "required": [
+                      "githubUrls"
                     ]
                   }
                 }
@@ -2141,7 +2108,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             }
           },
           "commitSha": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{40}$"
           },
           "pagesTouched": {
             "type": "array",
@@ -2423,17 +2391,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             },
             "then": {
               "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "commitSha"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "githubUrls"
-                    ]
-                  }
+                "required": [
+                  "githubUrls"
                 ]
               }
             }
@@ -2494,7 +2453,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 }
               },
               "commitSha": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{40}$"
               },
               "githubUrls": {
                 "type": "array",
@@ -2535,17 +2495,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 },
                 "then": {
                   "not": {
-                    "anyOf": [
-                      {
-                        "required": [
-                          "commitSha"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "githubUrls"
-                        ]
-                      }
+                    "required": [
+                      "githubUrls"
                     ]
                   }
                 }
@@ -2560,7 +2511,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             }
           },
           "commitSha": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{40}$"
           },
           "pagesTouched": {
             "type": "array",
@@ -6129,17 +6081,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             },
             "then": {
               "not": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "commitSha"
-                    ]
-                  },
-                  {
-                    "required": [
-                      "githubUrls"
-                    ]
-                  }
+                "required": [
+                  "githubUrls"
                 ]
               }
             }
@@ -6200,7 +6143,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 }
               },
               "commitSha": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{40}$"
               },
               "githubUrls": {
                 "type": "array",
@@ -6241,17 +6185,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 },
                 "then": {
                   "not": {
-                    "anyOf": [
-                      {
-                        "required": [
-                          "commitSha"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "githubUrls"
-                        ]
-                      }
+                    "required": [
+                      "githubUrls"
                     ]
                   }
                 }
@@ -6266,7 +6201,8 @@ export const TOOL_OUTPUT_SCHEMAS = (
             }
           },
           "commitSha": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{40}$"
           },
           "pagesTouched": {
             "type": "array",

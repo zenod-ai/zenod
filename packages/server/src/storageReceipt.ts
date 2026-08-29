@@ -67,6 +67,7 @@ export function formatStorageReceipt(input: StorageReceiptInput): string | null 
     lines.push(`Vault note(s): ${stored.pagesTouched.length ? stored.pagesTouched.join(", ") : "(inbox / no page returned)"}`);
     if (stored.revision?.provider === "google_drive") {
       lines.push(`Vault save revision: ${stored.revision.id}`);
+      if (stored.commitSha) lines.push(`Git history commit: ${stored.commitSha}`);
     } else if (stored.commitSha) {
       lines.push(`Vault commit: ${stored.commitSha}`);
     } else if (stored.revision) {

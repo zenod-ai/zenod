@@ -465,4 +465,73 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     await queue.close();
     store.close();
   });
+
+  it("validates committed work provenance before the async job can become done", async () => {
+    const driveCommit = "7".repeat(40);
+    const cases = [
+      {
+        name: "missing committed provenance",
+        result: { mode: "executed", text: "changed", committed: true },
+        status: "error",
+      },
+      {
+        name: "contradictory Drive bundle commit",
+        result: {
+          mode: "executed", text: "changed", committed: true,
+          revision: {
+            provider: "google_drive", id: "drive-work-1", committedAt: "2026-08-29T10:00:00.000Z",
+            urls: ["https://drive.google.com/file/d/work/view"], commitSha: driveCommit,
+          },
+          urls: ["https://drive.google.com/file/d/work/view"],
+          commitSha: "8".repeat(40),
+        },
+        status: "error",
+      },
+      {
+        name: "valid Drive revision plus independent bundle commit",
+        result: {
+          mode: "executed", text: "changed", committed: true,
+          revision: {
+            provider: "google_drive", id: "drive-work-independent", committedAt: "2026-08-29T10:00:00.000Z",
+            urls: ["https://drive.google.com/file/d/work/view"], commitSha: driveCommit,
+          },
+          urls: ["https://drive.google.com/file/d/work/view"],
+          commitSha: driveCommit,
+        },
+        status: "done",
+      },
+      {
+        name: "supported legacy Git commit",
+        result: { mode: "executed", text: "changed", committed: true, commitSha: "9".repeat(40) },
+        status: "done",
+      },
+      {
+        name: "proposal without publication",
+        result: { mode: "proposal", text: "plan", committed: false },
+        status: "done",
+      },
+      {
+        name: "no-change execution without publication",
+        result: { mode: "executed", text: "nothing changed", committed: false },
+        status: "done",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const store = new TaskJobStore(tmpDb(), `tenant-work-${testCase.name}`);
+      const queue = new TaskJobQueue(store, async () => ({
+        work: vi.fn(async () => testCase.result),
+      }) as unknown as BrainEngine);
+      const job = queue.enqueue("work", { objective: testCase.name, plan: "approved" });
+      await vi.waitFor(() => expect(store.get(job.id)?.status).toBe(testCase.status));
+      if (testCase.status === "error") {
+        expect(store.get(job.id)?.error).toMatch(/invalid durable work receipt/);
+        expect(store.get(job.id)?.result).toBeNull();
+      } else {
+        expect(store.get(job.id)?.result).toMatchObject(testCase.result);
+      }
+      await queue.close();
+      store.close();
+    }
+  });
 });

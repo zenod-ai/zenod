@@ -3,7 +3,7 @@ import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchiv
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
 import type { Settings } from "./settings.js";
-import { assertDurableStoreReceipt } from "./durableReceipt.js";
+import { assertDurableStoreReceipt, assertDurableWorkReceipt } from "./durableReceipt.js";
 import {
   TASK_JOB_LEASE_MS,
   type MediaIngestReceipt,
@@ -200,6 +200,7 @@ export class TaskJobQueue {
           objective: job.input.objective ?? "",
           ...(job.input.plan ? { plan: job.input.plan } : {}),
         });
+        assertDurableWorkReceipt(result);
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       }
       if (completed) console.log(`[task-job] ${job.id} done: ${job.kind}`);

@@ -105,10 +105,10 @@ function JobRow({
           <p>
             Filed to {job.pages.length > 0 ? job.pages.join(", ") : "the Inbox"}
             {job.archived ? " · archived in Drive" : ""}
-            {job.commitSha
-              ? ` · ${job.commitSha.slice(0, 7)}`
-              : job.revision
-                ? ` · ${job.revision.provider === "google_drive" ? "Drive" : "GitHub"} ${job.revision.id}`
+            {job.revision
+              ? ` · ${job.revision.provider === "google_drive" ? "Drive" : "GitHub"} ${job.revision.id}${job.revision.provider === "google_drive" && job.commitSha ? ` · git ${job.commitSha.slice(0, 7)}` : ""}`
+              : job.commitSha
+                ? ` · ${job.commitSha.slice(0, 7)}`
                 : ""}
           </p>
           {job.backlog && (

@@ -398,10 +398,7 @@
         },
         "then": {
           "not": {
-            "anyOf": [
-              { "required": ["commitSha"] },
-              { "required": ["githubUrls"] }
-            ]
+            "required": ["githubUrls"]
           }
         }
       }],
@@ -422,7 +419,7 @@
             "id": { "type": "string", "minLength": 1 },
             "committedAt": { "type": "string", "format": "date-time" },
             "urls": { "type": "array", "items": { "type": "string" } },
-            "commitSha": { "type": "string" },
+            "commitSha": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
             "githubUrls": { "type": "array", "items": { "type": "string" } }
           },
           "allOf": [
@@ -434,10 +431,7 @@
               "if": { "properties": { "provider": { "const": "google_drive" } }, "required": ["provider"] },
               "then": {
                 "not": {
-                  "anyOf": [
-                    { "required": ["commitSha"] },
-                    { "required": ["githubUrls"] }
-                  ]
+                  "required": ["githubUrls"]
                 }
               }
             }
@@ -445,7 +439,7 @@
           "additionalProperties": false
         },
         "urls": { "type": "array", "items": { "type": "string" } },
-        "commitSha": { "type": "string" },
+        "commitSha": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" },
         "pagesTouched": { "type": "array", "items": { "type": "string" } },
         "githubUrls": { "type": "array", "items": { "type": "string" } },
         "pageUrls": { "type": "array", "items": { "type": "string" } }

@@ -395,7 +395,7 @@ function receiptFromOutbound(row: {
     driveFileIds: driveLinks.map(driveFileIdFromLink).filter((id): id is string => Boolean(id)),
     vaultEvidenceRefs: uniqueMatches(row.bodyText, /^Vault evidence:\s*(.+)$/gm),
     vaultRevisions: uniqueMatches(row.bodyText, /^Vault (?:save )?revision:\s*(.+)$/gim),
-    vaultCommits: uniqueMatches(row.bodyText, /^Vault commit:\s*([0-9a-f]{7,40})$/gim),
+    vaultCommits: uniqueMatches(row.bodyText, /^(?:Vault commit|Git history commit):\s*([0-9a-f]{7,40})$/gim),
     vaultLinks: uniqueMatches(row.bodyText, /^-\s+(https?:\/\/[^\s)]+)$/gim),
   };
 }

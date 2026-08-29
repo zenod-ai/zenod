@@ -18,8 +18,16 @@ function sameStrings(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function isGitHubHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "github.com"
+    || host.endsWith(".github.com")
+    || host === "githubusercontent.com"
+    || host.endsWith(".githubusercontent.com");
+}
+
 function githubUrls(value: string[]): boolean {
-  return value.every((url) => new URL(url).hostname === "github.com");
+  return value.every((url) => isGitHubHost(new URL(url).hostname));
 }
 
 function revisionFrom(value: unknown): VaultRevision | null {
@@ -62,14 +70,22 @@ export function durableStoreReceiptError(value: unknown): string | null {
 
   if (revision.provider === "google_drive") {
     if (
-      topCommit !== undefined
-      || topGitHubUrls !== undefined
-      || revision.commitSha !== undefined
+      topGitHubUrls !== undefined
       || revision.githubUrls !== undefined
     ) return "Google Drive receipt contains GitHub compatibility fields";
-    if (revision.urls.some((url) => new URL(url).hostname === "github.com")) {
+    if (revision.urls.some((url) => isGitHubHost(new URL(url).hostname))) {
       return "Google Drive receipt contains a GitHub URL";
     }
+    const nestedCommit = revision.commitSha;
+    if ((topCommit === undefined) !== (nestedCommit === undefined)) {
+      return "Google Drive Git commit provenance is incomplete";
+    }
+    if (topCommit !== undefined && (
+      typeof topCommit !== "string"
+      || !GIT_SHA.test(topCommit)
+      || typeof nestedCommit !== "string"
+      || nestedCommit !== topCommit
+    )) return "Google Drive Git commit provenance is malformed or inconsistent";
     return null;
   }
 
@@ -93,4 +109,14 @@ export function durableStoreReceiptError(value: unknown): string | null {
 export function assertDurableStoreReceipt(value: unknown): asserts value is StoreResult {
   const error = durableStoreReceiptError(value);
   if (error) throw new Error(`invalid durable store receipt: ${error}`);
+}
+
+export function assertDurableWorkReceipt(value: unknown): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid durable work receipt: work result is not an object");
+  }
+  const result = value as Record<string, unknown>;
+  if (result.committed !== true) return;
+  const error = durableStoreReceiptError(result);
+  if (error) throw new Error(`invalid durable work receipt: ${error}`);
 }

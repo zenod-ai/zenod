@@ -48,4 +48,23 @@ describe("formatFilingReceipt (M-5)", () => {
 
     expect(text).toBe("Filed → Projects/Zenod.md ^e-drive (google_drive:drive-txn-1)");
   });
+
+  it("renders Drive authority before its independent Git bundle commit", () => {
+    const commitSha = "d0c0b2876fabdfed9e7b0b0ba8366a41d49c1b89";
+    const text = formatFilingReceipt({
+      evidenceRef: "Log/2026-08-29.md#^e-drive-git",
+      pagesTouched: ["Projects/Zenod.md"],
+      revision: {
+        provider: "google_drive",
+        id: "drive-txn-independent",
+        committedAt: "2026-08-29T10:00:00.000Z",
+        urls: ["https://drive.google.com/file/d/log-1/view"],
+        commitSha,
+      },
+      urls: ["https://drive.google.com/file/d/log-1/view"],
+      commitSha,
+      filing: "filed",
+    });
+    expect(text).toBe("Filed → Projects/Zenod.md ^e-drive-git (google_drive:drive-txn-independent; git:d0c0b28)");
+  });
 });

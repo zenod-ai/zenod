@@ -57,7 +57,7 @@ export interface StoreResult {
   revision?: VaultRevision;
   /** Canonical provider URLs associated with this save. */
   urls?: string[];
-  /** GitHub compatibility field. Never populated for a non-GitHub vault. */
+  /** Optional real Git commit; for Drive this refers to the durable Drive bundle. */
   commitSha?: string;
   /** Compatibility collection retained for existing consumers. */
   githubUrls?: string[];
@@ -342,6 +342,7 @@ export interface WorkResult {
   committed: boolean;
   revision?: VaultRevision;
   urls?: string[];
+  /** Optional real Git commit; independent of a Drive revision id. */
   commitSha?: string;
   changedPaths?: string[];
   githubUrls?: string[];

@@ -71,13 +71,21 @@ const githubCompatibilityFixtureSchema = z.object({
   }).strict(),
 }).strict();
 
+const driveRevisionSchema = z.object({
+  provider: z.literal("google_drive"),
+  id: z.string().min(1),
+  committedAt: z.string().datetime(),
+  urls: z.array(z.string()),
+  commitSha: z.string().regex(/^[0-9a-f]{40}$/).optional(),
+}).strict();
 const driveStoreResultSchema = z.object({
   evidenceRef: z.string(),
   evidenceUrl: z.string(),
   pagesTouched: z.array(z.string()),
   pageUrls: z.array(z.string()),
-  revision: vaultRevisionSchema.extend({ provider: z.literal("google_drive") }),
+  revision: driveRevisionSchema,
   urls: z.array(z.string()),
+  commitSha: z.string().regex(/^[0-9a-f]{40}$/).optional(),
   filing: z.enum(["filed", "uncertain", "inbox", "pending"]),
   backlog: z.unknown().optional(),
   queued: z.boolean().optional(),
@@ -300,7 +308,7 @@ describe("GitHub compatibility fixtures", () => {
 });
 
 describe("Drive provider-neutral receipt fixtures", () => {
-  it("represents saves and citations without fabricating GitHub semantics", async () => {
+  it("represents Drive authority with an independent real Git bundle commit and no GitHub semantics", async () => {
     const fixture = driveFixtureSchema.parse(JSON.parse(await readFile(
       new URL("./fixtures/gdv-5-drive-receipts.json", import.meta.url),
       "utf8",
@@ -309,10 +317,12 @@ describe("Drive provider-neutral receipt fixtures", () => {
     expect(fixture.store.revision.provider).toBe("google_drive");
     expect(fixture.store.revision.id).toBe("drive-txn-01J6H8Q3N7");
     expect(fixture.store.urls.every((url) => url.includes("drive.google.com"))).toBe(true);
-    expect(JSON.stringify(fixture)).not.toMatch(/[0-9a-f]{40}/i);
+    expect(fixture.store.commitSha).toMatch(/^[0-9a-f]{40}$/i);
+    expect(fixture.store.revision.commitSha).toBe(fixture.store.commitSha);
+    expect(fixture.store.revision.id).not.toBe(fixture.store.commitSha);
     expect(JSON.stringify(fixture)).not.toContain("github.com");
-    expect(fixture.store).not.toHaveProperty("commitSha");
     expect(fixture.store).not.toHaveProperty("githubUrls");
+    expect(fixture.store.revision).not.toHaveProperty("githubUrls");
     expect(fixture.search[0]).not.toHaveProperty("githubUrl");
     expect(fixture.get).not.toHaveProperty("githubUrl");
     expect(fixture.ask.sources[0]).not.toHaveProperty("githubUrl");
