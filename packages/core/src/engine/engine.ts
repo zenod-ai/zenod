@@ -34,11 +34,11 @@ import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault } from "../vault/lint.js";
 import { scanVault } from "../vault/pages.js";
-import { githubSourceRef, githubUrl, type VaultLocation } from "../vault/github.js";
+import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
-import type { VaultRepo } from "../git/vaultRepo.js";
+import type { VaultRepository, VaultRevision, VaultSourceRef } from "../vault/repository.js";
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
@@ -307,7 +307,7 @@ export interface EngineOptions {
    * work, ask, search, get, lint, digestBacklog) throw a clear error in that
    * mode; chat/handleTasking run with a persona-only briefing.
    */
-  repo?: VaultRepo;
+  repo?: VaultRepository;
   llm: BrainLlm;
   state: StateStore;
   location?: VaultLocation;
@@ -479,9 +479,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
   // Vaultless mode (Console shell): no repo → vaultPath is empty and every vault
   // touchpoint below guards on `repo`. assertVault() gates the vault-only methods.
   const vaultPath = repo ? repo.path : "";
-  // Assertion (not just a throw) so TS narrows `repo` to VaultRepo for the rest of
+  // Assertion (not just a throw) so TS narrows `repo` to VaultRepository for the rest of
   // a vault-only method after the guard, keeping `repo.pull()` etc. well-typed.
-  function assertVault(value: VaultRepo | undefined): asserts value is VaultRepo {
+  function assertVault(value: VaultRepository | undefined): asserts value is VaultRepository {
     if (!value) throw new Error("This agent has no vault configured — vault operations are unavailable.");
   }
   const location = options.location ?? {};
@@ -490,21 +490,67 @@ export function createEngine(options: EngineOptions): BrainEngine {
   const readSyncTtl = options.readSyncTtlMs ?? DEFAULT_READ_SYNC_TTL_MS;
   let lastSyncMs = Number.NEGATIVE_INFINITY;
 
-  async function githubPublication(
-    commitSha: string,
-    urls: string[],
-    githubUrls: string[] = urls,
-  ): Promise<Pick<StoreResult, "revision" | "urls" | "commitSha" | "githubUrls">> {
+  function assertRepositoryRevision(revision: VaultRevision): void {
     assertVault(repo);
-    const current = await repo.currentRevision();
-    if (current.provider !== "github" || current.id !== commitSha || current.commitSha !== commitSha) {
-      throw new Error(`published vault revision mismatch: expected GitHub ${commitSha}, received ${current.provider} ${current.id}`);
+    if (!revision.id || revision.provider !== repo.provider) {
+      throw new Error(`published vault revision mismatch: expected ${repo.provider}, received ${revision.provider} ${revision.id || "(empty)"}`);
     }
+    if (revision.provider === "google_drive") {
+      if (revision.githubUrls !== undefined) {
+        throw new Error("published Google Drive revision must not contain GitHub URLs");
+      }
+      if (revision.commitSha && revision.commitSha === revision.id) {
+        throw new Error("published Google Drive revision id must remain independent from its Git bundle commit");
+      }
+    }
+  }
+
+  function repositoryUrl(path: string, anchor?: string, revision?: VaultRevision): string {
+    assertVault(repo);
+    if (repo.provider === "github" && location.repo) {
+      return githubUrl(
+        revision?.commitSha ? { ...location, branch: revision.commitSha } : location,
+        path,
+        anchor,
+      );
+    }
+    return repo.urlFor(path, anchor) ?? "";
+  }
+
+  function repositorySourceRef(path: string, anchor?: string, revision?: VaultRevision): VaultSourceRef {
+    assertVault(repo);
+    const url = repositoryUrl(path, anchor, revision);
     return {
-      revision: { ...current, urls, githubUrls },
+      path: anchor ? `${path}#${anchor}` : path,
+      url,
+      provider: repo.provider,
+      ...(revision ? { revisionId: revision.id } : {}),
+      ...(repo.provider === "github" ? { githubUrl: url } : {}),
+    };
+  }
+
+  const sourceResolver = (path: string, anchor?: string) => repositorySourceRef(path, anchor);
+
+  function publicationFields(
+    revision: VaultRevision,
+    refs: Array<{ path: string; anchor?: string }>,
+  ): Pick<StoreResult, "revision" | "urls" | "commitSha" | "githubUrls"> {
+    assertVault(repo);
+    assertRepositoryRevision(revision);
+    const urls = refs.map((ref) => repositoryUrl(ref.path, ref.anchor, revision)).filter(Boolean);
+    const githubUrls = repo.provider === "github"
+      ? refs.map((ref) => repositoryUrl(ref.path)).filter(Boolean)
+      : undefined;
+    const normalizedRevision: VaultRevision = {
+      ...revision,
       urls,
-      commitSha,
-      githubUrls,
+      ...(repo.provider === "github" ? { githubUrls: githubUrls ?? [] } : {}),
+    };
+    return {
+      revision: normalizedRevision,
+      urls,
+      ...(revision.commitSha ? { commitSha: revision.commitSha } : {}),
+      ...(githubUrls ? { githubUrls } : {}),
     };
   }
 
@@ -649,12 +695,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
     if (!repo) return { searchChats };
     return {
       searchVault: async (query: string) => {
-        const hits = await searchVault(vaultPath, query, location);
+        const hits = await searchVault(vaultPath, query, sourceResolver);
         if (hits.length === 0) return "no results";
         return hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n");
       },
       readNote: async (path: string) => {
-        const note = await getNote(vaultPath, path, location);
+        const note = await getNote(vaultPath, path, sourceResolver);
         const body = note.body.length > 8000 ? `${note.body.slice(0, 8000)}\n[truncated]` : note.body;
         return `--- frontmatter: ${JSON.stringify(note.frontmatter)}\n${body}`;
       },
@@ -778,7 +824,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
 
     if (input.memoryPath?.trim()) {
-      const note = await getNote(vaultPath, input.memoryPath.trim(), location);
+      const note = await getNote(vaultPath, input.memoryPath.trim(), sourceResolver);
       return {
         content: note.body,
         sourceRefs: [{
@@ -792,8 +838,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
 
     if (input.query?.trim()) {
-      const hits = (await searchVault(vaultPath, input.query.trim(), location)).slice(0, 5);
-      const notes = await Promise.all(hits.map((hit) => getNote(vaultPath, hit.path, location)));
+      const hits = (await searchVault(vaultPath, input.query.trim(), sourceResolver)).slice(0, 5);
+      const notes = await Promise.all(hits.map((hit) => getNote(vaultPath, hit.path, sourceResolver)));
       return {
         content: notes.map((note) => `# ${note.path}\n${note.body}`).join("\n\n"),
         sourceRefs: notes.map((note) => ({
@@ -817,18 +863,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const path = `Backlog/${stamp}-${String(index + 1).padStart(2, "0")}-${slugifyTitle(candidate.title)}.md`;
       await mkdir(dirname(join(vaultPath, path)), { recursive: true });
       await writeFile(join(vaultPath, path), candidateMarkdown(candidate));
-      written.push({ ...githubSourceRef(location, path), title: candidate.title });
+      written.push({ ...repositorySourceRef(path), title: candidate.title });
     }
     return written;
   }
 
-  function pinBacklogSource(ref: BacklogSourceRef, revisionId: string): BacklogSourceRef {
-    if (ref.provider !== "github") return ref;
+  function pinBacklogSource(ref: BacklogSourceRef, revision: VaultRevision): BacklogSourceRef {
+    assertVault(repo);
+    if (ref.provider !== repo.provider) return ref;
     const marker = ref.path.indexOf("#");
     const path = marker < 0 ? ref.path : ref.path.slice(0, marker);
     const anchor = marker < 0 ? undefined : ref.path.slice(marker + 1);
-    const pinned = githubSourceRef({ ...location, branch: revisionId }, path, anchor, revisionId);
-    return { ...pinned, ...(ref.githubUrl !== undefined ? { githubUrl: ref.githubUrl } : {}) };
+    return repositorySourceRef(path, anchor, revision);
   }
 
   async function digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult> {
@@ -844,18 +890,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
           return { candidates, written: [], skipped: [{ reason: "no backlog candidates found" }], source_refs: source.sourceRefs };
         }
         const written = await writeBacklogCandidates(candidates);
-        const commitSha = await repo.commitAndPush(`backlog: propose ${candidates.length} item${candidates.length === 1 ? "" : "s"}`);
+        const revision = await repo.commitAndPublish(`backlog: propose ${candidates.length} item${candidates.length === 1 ? "" : "s"}`);
         const pinnedWritten = written.map((item) => ({
-          ...pinBacklogSource(item, commitSha),
+          ...pinBacklogSource(item, revision),
           title: item.title,
         }));
-        const urls = pinnedWritten.map((item) => item.url).filter(Boolean);
-        const githubUrls = written.map((item) => item.githubUrl ?? githubUrl(location, item.path)).filter(Boolean);
-        const publication = await githubPublication(commitSha, urls, githubUrls);
-        const sourceRefs = source.sourceRefs.map((ref) => pinBacklogSource(ref, commitSha));
+        const publication = publicationFields(revision, written.map((item) => ({ path: item.path })));
+        const sourceRefs = source.sourceRefs.map((ref) => pinBacklogSource(ref, revision));
         const pinnedCandidates = candidates.map((candidate) => ({
           ...candidate,
-          source_refs: candidate.source_refs.map((ref) => pinBacklogSource(ref, commitSha)),
+          source_refs: candidate.source_refs.map((ref) => pinBacklogSource(ref, revision)),
         }));
         return {
           candidates: pinnedCandidates,
@@ -1182,9 +1226,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   /**
    * The librarian work loop — propose (read-only plan) then execute (approved
-   * plan, validated, one commit per objective). The model arranges the working
-   * tree; this function guarantees what lands: lint + evidence immutability,
-   * commit-and-push or full rollback. Same contract as store, wider verbs.
+   * plan, validated, one durable revision per objective). The model arranges
+   * the working tree; this function guarantees what lands: lint + evidence
+   * immutability, publication or full rollback. Same contract as store, wider verbs.
    */
   async function work(input: WorkInput): Promise<WorkResult> {
     assertVault(repo);
@@ -1235,15 +1279,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
         if (errors.length === 0) {
           const summary = result.text.split("\n")[0]?.slice(0, 120) || input.objective.slice(0, 120);
-          const sha = await repo.commitAndPush(`work: ${summary}`);
+          const revision = await repo.commitAndPublish(`work: ${summary}`);
           const changedPaths = changes.map((c) => c.path);
-          const urls = changedPaths.map((path) => githubUrl({ ...location, branch: sha }, path)).filter(Boolean);
-          const githubUrls = changedPaths.map((path) => githubUrl(location, path)).filter(Boolean);
           return {
             mode: "executed",
             text: result.text,
             committed: true,
-            ...await githubPublication(sha, urls, githubUrls),
+            ...publicationFields(revision, changedPaths.map((path) => ({ path }))),
             changedPaths,
           };
         }
@@ -1310,25 +1352,39 @@ export function createEngine(options: EngineOptions): BrainEngine {
     ].join("\n");
   }
 
+  function storePublication(
+    revision: VaultRevision,
+    evidencePath: string,
+    evidenceAnchor: string | undefined,
+    pagePaths: string[],
+  ): Pick<StoreResult, "revision" | "urls" | "commitSha" | "githubUrls" | "evidenceUrl" | "pageUrls"> {
+    const evidenceUrl = repositoryUrl(evidencePath, evidenceAnchor, revision);
+    const pageUrls = pagePaths.map((path) => repositoryUrl(path, undefined, revision)).filter(Boolean);
+    return {
+      ...(evidenceUrl ? { evidenceUrl } : {}),
+      pageUrls,
+      ...publicationFields(revision, [
+        { path: evidencePath, ...(evidenceAnchor ? { anchor: evidenceAnchor } : {}) },
+        ...pagePaths.map((path) => ({ path })),
+      ]),
+    };
+  }
+
   async function evidenceResult(
     entry: { evidenceRef: string; path: string },
-    commitSha: string,
+    revision: VaultRevision,
     filing: StoreResult["filing"] = "pending",
   ): Promise<StoreResult> {
-    const canonicalLocation = { ...location, branch: commitSha };
-    const evidenceUrl = githubUrl(canonicalLocation, entry.path);
     return {
       evidenceRef: entry.evidenceRef,
-      ...(evidenceUrl ? { evidenceUrl } : {}),
       pagesTouched: [],
-      pageUrls: [],
-      ...await githubPublication(commitSha, [evidenceUrl].filter(Boolean), [githubUrl(location, entry.path)].filter(Boolean)),
+      ...storePublication(revision, entry.path, undefined, []),
       filing,
     };
   }
 
   /**
-   * Capture is deliberately boring: one immutable Log append and one commit.
+   * Capture is deliberately boring: one immutable Log append and one durable publication.
    * It performs no classification, composition, or semantic recognition, so a
    * transport can truthfully acknowledge custody before expensive filing.
    */
@@ -1346,8 +1402,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...(input.contentType ? { contentType: input.contentType } : {}),
           sourceId: input.sourceId,
           limit: 1,
-        }, location))[0];
-        if (existing) return evidenceResult(existing, await repo.headSha());
+        }, sourceResolver))[0];
+        if (existing) return evidenceResult(existing, await repo.currentRevision());
       }
 
       const evidence = await appendEvidence(
@@ -1363,15 +1419,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
         },
       );
       const evidenceRef = `${evidence.logPath}#^${evidence.anchor}`;
-      const sha = await repo.commitAndPush(`memory: capture ${input.contentType ?? "evidence"}`);
-      const canonicalLocation = { ...location, branch: sha };
-      const evidenceUrl = githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`);
+      const revision = await repo.commitAndPublish(`memory: capture ${input.contentType ?? "evidence"}`);
       return {
         evidenceRef,
-        ...(evidenceUrl ? { evidenceUrl } : {}),
         pagesTouched: [],
-        pageUrls: [],
-        ...await githubPublication(sha, [evidenceUrl].filter(Boolean), [githubUrl(location, evidence.logPath)].filter(Boolean)),
+        ...storePublication(revision, evidence.logPath, `L${evidence.line}`, []),
         filing: "pending",
       };
     }, "interactive");
@@ -1389,8 +1441,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         // offline or empty remote — proceed against the local clone
       });
       lastSyncMs = now().getTime();
-      const evidence = await getEvidenceEntry(vaultPath, input.evidenceRef, location);
-      const capturedSha = await repo.headSha();
+      const evidence = await getEvidenceEntry(vaultPath, input.evidenceRef, sourceResolver);
+      const capturedRevision = await repo.currentRevision();
       const config = await loadBrainConfig(vaultPath);
       const snapshot = await scanVault(vaultPath);
       const segments = segmentLongMemoryContent(input.content);
@@ -1435,7 +1487,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }
       } catch (error) {
         console.warn(`[librarian] enrichment gate unavailable for ${input.evidenceRef}: ${(error as Error).message}`);
-        return evidenceResult(evidence, capturedSha);
+        return evidenceResult(evidence, capturedRevision);
       }
 
       const classification = mergeSegmentClassifications(classifications);
@@ -1452,7 +1504,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }));
 
       if (disposition === "evidence_only" || disposition === "needs_clarification" || classification.pages.length === 0) {
-        return evidenceResult(evidence, capturedSha, disposition === "evidence_only" ? "filed" : "pending");
+        return evidenceResult(evidence, capturedRevision, disposition === "evidence_only" ? "filed" : "pending");
       }
 
       const citationDate = evidence.path.slice("Log/".length, -".md".length);
@@ -1461,7 +1513,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       try {
         if (disposition === "append_compact_note") {
           const page = classification.pages.find((candidate) => candidate.action === "update");
-          if (!page) return evidenceResult(evidence, capturedSha, "filed");
+          if (!page) return evidenceResult(evidence, capturedRevision, "filed");
           const absolute = join(vaultPath, page.path);
           const current = await readFile(absolute, "utf8");
           const separator = current.endsWith("\n") ? "\n" : "\n\n";
@@ -1533,26 +1585,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const report = await lintVault(vaultPath, touched);
         const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
         if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
-        const sha = await repo.commitAndPush(`memory: enrich ${classification.summary}`);
-        const canonicalLocation = { ...location, branch: sha };
-        const evidenceUrl = githubUrl(canonicalLocation, evidence.path);
-        const pageUrls = touched.map((path) => githubUrl(canonicalLocation, path)).filter(Boolean);
+        const revision = await repo.commitAndPublish(`memory: enrich ${classification.summary}`);
         return {
           evidenceRef: input.evidenceRef,
-          ...(evidenceUrl ? { evidenceUrl } : {}),
           pagesTouched: touched,
-          pageUrls,
-          ...await githubPublication(
-            sha,
-            [evidenceUrl, ...pageUrls].filter(Boolean),
-            [githubUrl(location, evidence.path), ...touched.map((path) => githubUrl(location, path))].filter(Boolean),
-          ),
+          ...storePublication(revision, evidence.path, undefined, touched),
           filing: "filed",
         };
       } catch (error) {
         await repo.discardChanges();
         console.warn(`[librarian] background enrichment pending for ${input.evidenceRef}: ${(error as Error).message}`);
-        return evidenceResult(evidence, capturedSha);
+        return evidenceResult(evidence, capturedRevision);
       }
     }, "background");
   }
@@ -1642,17 +1685,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
         // diagnostic codes; the user's vault receives only this stable reason.
         const question = `Saved, but automatic filing is pending (classification_unavailable) after ${CLASSIFY_RETRIES + 1} attempts.`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
-        const sha = await repo.commitAndPush("memory: (inbox) classification pending");
-        const canonicalLocation = { ...location, branch: sha };
+        const revision = await repo.commitAndPublish("memory: (inbox) classification pending");
         return {
           evidenceRef: retriedRef,
-          ...(githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`)
-            ? { evidenceUrl: githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`) }
-            : {}),
           pagesTouched: [stubPath],
-          pageUrls: [githubUrl(canonicalLocation, stubPath)].filter(Boolean),
-          commitSha: sha,
-          githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
+          ...storePublication(revision, retried.logPath, `L${retried.line}`, [stubPath]),
           filing: "inbox",
         };
       }
@@ -1666,18 +1703,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const question =
           classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
         const stubPath = await writeInboxStub(input.content, question, evidenceRef);
-        const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
-        const canonicalLocation = { ...location, branch: sha };
-        const pageUrls = [githubUrl(canonicalLocation, stubPath)].filter(Boolean);
+        const revision = await repo.commitAndPublish(`memory: (inbox) ${classification.summary}`);
         return {
           evidenceRef,
-          ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
-            ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
-            : {}),
           pagesTouched: [stubPath],
-          pageUrls,
-          commitSha: sha,
-          githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, stubPath)].filter(Boolean),
+          ...storePublication(revision, evidence.logPath, `L${evidence.line}`, [stubPath]),
           filing: "inbox",
         };
       }
@@ -1708,17 +1738,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
             );
           }
 
-          const sha = await repo.commitAndPush(`memory: (uncertain) ${classification.summary}`);
-          const canonicalLocation = { ...location, branch: sha };
+          const revision = await repo.commitAndPublish(`memory: (uncertain) ${classification.summary}`);
           return {
             evidenceRef,
-            ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
-              ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
-              : {}),
             pagesTouched: [page.path],
-            pageUrls: [githubUrl(canonicalLocation, page.path)].filter(Boolean),
-            commitSha: sha,
-            githubUrls: [githubUrl(location, evidence.logPath), githubUrl(location, page.path)].filter(Boolean),
+            ...storePublication(revision, evidence.logPath, `L${evidence.line}`, [page.path]),
             filing: "uncertain",
           };
         } catch (err) {
@@ -1727,17 +1751,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
           const retriedRef = `${retried.logPath}#^${retried.anchor}`;
           const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
           const stubPath = await writeInboxStub(input.content, question, retriedRef);
-          const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
-          const canonicalLocation = { ...location, branch: sha };
+          const revision = await repo.commitAndPublish(`memory: (inbox) ${classification.summary}`);
           return {
             evidenceRef: retriedRef,
-            ...(githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`)
-              ? { evidenceUrl: githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`) }
-              : {}),
             pagesTouched: [stubPath],
-            pageUrls: [githubUrl(canonicalLocation, stubPath)].filter(Boolean),
-            commitSha: sha,
-            githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
+            ...storePublication(revision, retried.logPath, `L${retried.line}`, [stubPath]),
             filing: "inbox",
           };
         }
@@ -1827,42 +1845,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const retriedRef = `${retried.logPath}#^${retried.anchor}`;
         const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
-        const sha = await repo.commitAndPush(`memory: (inbox) ${classification.summary}`);
-        const canonicalLocation = { ...location, branch: sha };
-        const pageUrls = [githubUrl(canonicalLocation, stubPath)].filter(Boolean);
+        const revision = await repo.commitAndPublish(`memory: (inbox) ${classification.summary}`);
         return {
           evidenceRef: retriedRef,
-          ...(githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`)
-            ? { evidenceUrl: githubUrl(canonicalLocation, retried.logPath, `L${retried.line}`) }
-            : {}),
           pagesTouched: [stubPath],
-          pageUrls,
-          commitSha: sha,
-          githubUrls: [githubUrl(location, retried.logPath), githubUrl(location, stubPath)].filter(Boolean),
+          ...storePublication(revision, retried.logPath, `L${retried.line}`, [stubPath]),
           filing: "inbox",
         };
       }
 
-      // 7-8. One commit per store.
-      const sha = await repo.commitAndPush(`memory: ${classification.summary}`);
-      const canonicalLocation = { ...location, branch: sha };
-      const pageUrls = touched.map((path) => githubUrl(canonicalLocation, path)).filter(Boolean);
+      // 7-8. One durable revision per store.
+      const revision = await repo.commitAndPublish(`memory: ${classification.summary}`);
       const result: StoreResult = {
         evidenceRef,
-        ...(githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`)
-          ? { evidenceUrl: githubUrl(canonicalLocation, evidence.logPath, `L${evidence.line}`) }
-          : {}),
         pagesTouched: touched,
-        pageUrls,
-        commitSha: sha,
-        githubUrls: [
-          githubUrl(location, evidence.logPath),
-          ...touched.map((path) => githubUrl(location, path)),
-        ].filter(Boolean),
+        ...storePublication(revision, evidence.logPath, `L${evidence.line}`, touched),
         filing: "filed",
       };
       if (shouldDigestForBacklog(input)) {
-        const sourceRefs = [githubSourceRef(location, evidence.logPath, `^${evidence.anchor}`)];
+        const sourceRefs = [repositorySourceRef(evidence.logPath, `^${evidence.anchor}`, revision)];
         try {
           const extracted = await llm.extractBacklog({ content: input.content, sourceRefs });
           const candidates = ensureCandidateSources(extracted.candidates, sourceRefs);
@@ -1883,13 +1884,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
         return result;
       })();
-      if (!stored.commitSha || stored.revision) return stored;
-      const urls = [stored.evidenceUrl, ...(stored.pageUrls ?? [])]
-        .filter((value): value is string => Boolean(value));
-      return {
-        ...stored,
-        ...await githubPublication(stored.commitSha, urls, stored.githubUrls ?? []),
-      };
+      return stored;
     }, priority);
   }
 
@@ -1909,7 +1904,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const [path, anchor] = contextRef.split("#^") as [string, string];
       let note: Note;
       try {
-        note = await getNote(vaultPath, path, location);
+        note = await getNote(vaultPath, path, sourceResolver);
       } catch {
         throw new ContextRefError(`Evidence context is unavailable in this tenant's vault: ${contextRef}`);
       }
@@ -1922,7 +1917,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const end = following < 0 ? note.body.length : start + 1 + following;
       const text = note.body.slice(start, end).trim();
       pinnedSpans.push({ path, text });
-      pinnedSources.push(githubSourceRef(location, path, `^${anchor}`));
+      pinnedSources.push(repositorySourceRef(path, `^${anchor}`));
     }
     const pinnedBriefing = pinnedSpans.length > 0
       ? [
@@ -1982,7 +1977,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     );
     const sources = [
       ...pinnedSources,
-      ...result.readPaths.map((path) => githubSourceRef(location, path)),
+      ...result.readPaths.map((path) => repositorySourceRef(path)),
     ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
     return {
       text: sanitizeGroundedAnswer({
@@ -2172,7 +2167,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
     return {
       text,
-      sources: result.readPaths.map((path) => githubSourceRef(location, path)),
+      sources: result.readPaths.map((path) => repositorySourceRef(path)),
       ...(stored ? { stored } : {}),
     };
   }
@@ -2274,22 +2269,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
     search: async (query: string): Promise<Hit[]> => {
       assertVault(repo);
       await syncForRead();
-      return searchVault(vaultPath, query, location);
+      return searchVault(vaultPath, query, sourceResolver);
     },
     searchEntries: async (query: MemoryEntryQuery = {}): Promise<MemoryEntry[]> => {
       assertVault(repo);
       await syncForRead();
-      return searchEvidenceEntries(vaultPath, query, location);
+      return searchEvidenceEntries(vaultPath, query, sourceResolver);
     },
     getEntry: async (evidenceRef: string): Promise<MemoryEntry> => {
       assertVault(repo);
       await syncForRead();
-      return getEvidenceEntry(vaultPath, evidenceRef, location);
+      return getEvidenceEntry(vaultPath, evidenceRef, sourceResolver);
     },
     get: async (path: string): Promise<Note> => {
       assertVault(repo);
       await syncForRead();
-      return getNote(vaultPath, path, location);
+      return getNote(vaultPath, path, sourceResolver);
     },
     lint: async (): Promise<LintReport> => {
       assertVault(repo);
