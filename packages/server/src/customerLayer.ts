@@ -31,10 +31,6 @@ import {
 import type { CustomerIdentityProvider } from "./googleDriveVaultContract.js";
 import { projectVaultCapabilities } from "./googleDriveVaultContract.js";
 import {
-  exchangeGoogleDriveOAuthCode,
-  googleDriveOAuthUrl,
-} from "./drive.js";
-import {
   currentGatewayKey,
   projectCustomerUsage,
   type CustomerUsageProjection,
@@ -87,6 +83,21 @@ export interface CustomerLayerOptions {
     local: CustomerUsageProjection,
   ) => Promise<CustomerUsageProjection> | CustomerUsageProjection;
   managedAiProvider?: ManagedAiProviderClient;
+  /** Product-owned Google Drive consent adapter; omitted by units that do not own Drive vaults. */
+  driveVaultOAuth?: {
+    authorizationUrl(input: {
+      clientId: string;
+      redirectUri: string;
+      state: string;
+      mode: "hosted-managed";
+    }): string;
+    exchangeCode(input: {
+      clientId: string;
+      clientSecret: string;
+      code: string;
+      redirectUri: string;
+    }): Promise<{ refreshToken: string; email: string | null }>;
+  };
   product?: CustomerProductConfig;
   /**
    * Optional route capabilities for product-specific customer surfaces.
@@ -703,7 +714,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         return c.json({ error: "Google Drive vault connection is already active or in progress" }, 409);
       }
       const authority = runtime.settings.googleDriveOAuthAuthority();
-      if (authority.mode !== "hosted-managed" || !authority.credentials) {
+      if (authority.mode !== "hosted-managed" || !authority.credentials || !options.driveVaultOAuth) {
         return c.json({ error: "Google Drive vault authorization is not configured" }, 503);
       }
       const bindingId = account.vault_binding_id ?? randomBytes(24).toString("base64url");
@@ -714,7 +725,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         bid: bindingId,
         flow: randomBytes(24).toString("base64url"),
       }, customerStateSecret(env));
-      return c.redirect(googleDriveOAuthUrl({
+      return c.redirect(options.driveVaultOAuth.authorizationUrl({
         clientId: authority.credentials.clientId,
         redirectUri: googleDriveVaultCallbackUrl(env, product.defaultDomain),
         state,
@@ -776,7 +787,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           vault_binding_created_at: account.vault_binding_created_at ?? now,
           vault_binding_updated_at: now,
         });
-        const result = await exchangeGoogleDriveOAuthCode({
+        if (!options.driveVaultOAuth) throw new Error("Google Drive vault authorization is unavailable");
+        const result = await options.driveVaultOAuth.exchangeCode({
           clientId: authority.credentials.clientId,
           clientSecret: authority.credentials.clientSecret,
           code,

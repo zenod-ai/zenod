@@ -24,7 +24,11 @@ import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { createApp, resolvedGitSha, type AppOptions } from "./app.js";
 import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
-import { driveClientFromSettings } from "./drive.js";
+import {
+  driveClientFromSettings,
+  exchangeGoogleDriveOAuthCode,
+  googleDriveOAuthUrl,
+} from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
 import type {
@@ -767,6 +771,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ...options.customer,
       env,
       tenantStore,
+      driveVaultOAuth: {
+        authorizationUrl: googleDriveOAuthUrl,
+        exchangeCode: exchangeGoogleDriveOAuthCode,
+      },
       product: options.customerProduct ?? options.customer?.product,
       async onEntitlementChanged(account, input) {
         await options.customer?.onEntitlementChanged?.(account, input);
