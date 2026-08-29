@@ -240,6 +240,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   };
   const identities = new CustomerIdentityStore(host.dataDir, product.product);
   const accounts = new CustomerAccountStore(host.dataDir, product.product, identities);
+  const resolveActiveVaultAccount = (userId: string): CustomerAccount | null => {
+    const active = accounts.resolveActiveTenantForUser(userId);
+    if (!active?.tenant_id) return active;
+    const authority = accounts.resolveVaultAuthorityForTenantId(active.tenant_id);
+    return authority?.binding ? authority.account : active;
+  };
   const principalForSession = (session: CustomerSession): CustomerPrincipal => {
     const principal = identities.resolve(session.provider, session.provider_subject) ?? identities.resolveOrCreate({
       provider: session.provider,
@@ -719,7 +725,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         return c.json({ error: "explicit Drive vault connection intent is required" }, 400);
       }
       principalForSession(session);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const activeAccount = accounts.resolveActiveTenantForUser(session.user_id);
+      const vaultAuthority = activeAccount?.tenant_id
+        ? accounts.resolveVaultAuthorityForTenantId(activeAccount.tenant_id)
+        : null;
+      const account = vaultAuthority?.binding ? vaultAuthority.account : activeAccount;
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       const token = account ? tokenVault.get(account.account_id) : null;
       const tenantRecord = token && options.tenantStore
@@ -755,8 +765,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const state = signState({
         mode: "connect_drive_vault",
         uid: session.user_id,
-        aid: account.account_id,
-        sid: account.session_id,
+        aid: activeAccount!.account_id,
+        sid: activeAccount!.session_id,
         tid: account.tenant_id,
         bid: bindingId,
         epoch: account.vault_authorization_epoch ?? 0,
@@ -767,8 +777,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       setGoogleDriveVaultFlowCookie(c, signState({
         mode: "connect_drive_vault",
         uid: session.user_id,
-        aid: account.account_id,
-        sid: account.session_id,
+        aid: activeAccount!.account_id,
+        sid: activeAccount!.session_id,
         tid: account.tenant_id,
         bid: bindingId,
         epoch: account.vault_authorization_epoch ?? 0,
@@ -792,8 +802,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const state = verifyState(c.req.query("state") ?? "", customerStateSecret(env));
       const proof = verifyState(getCookie(c, GOOGLE_DRIVE_VAULT_FLOW_COOKIE) ?? "", customerStateSecret(env));
       clearGoogleDriveVaultFlowCookie(c, env);
-      const account = state?.sid ? accounts.get(state.sid) : null;
+      const sessionAccount = state?.sid ? accounts.get(state.sid) : null;
       const activeAccount = accounts.resolveActiveTenantForUser(session.user_id);
+      let account = sessionAccount;
+      try {
+        const vaultAuthority = state?.tid ? accounts.resolveVaultAuthorityForTenantId(state.tid) : null;
+        if (vaultAuthority?.binding) account = vaultAuthority.account;
+      } catch {
+        return c.text("Google Drive vault connection failed: invalid or expired state.", 400);
+      }
       if (
         !state ||
         state.mode !== "connect_drive_vault" ||
@@ -805,16 +822,22 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         !state.bid ||
         state.epoch === undefined ||
         state.uid !== session.user_id ||
+        !sessionAccount?.tenant_id ||
+        sessionAccount.session_id !== state.sid ||
+        sessionAccount.account_id !== state.aid ||
+        sessionAccount.user_id !== state.uid ||
+        sessionAccount.tenant_id !== state.tid ||
         !account?.tenant_id ||
-        account.session_id !== state.sid ||
         account.account_id !== state.aid ||
         account.user_id !== state.uid ||
         account.tenant_id !== state.tid ||
         (account.vault_authorization_epoch ?? 0) !== state.epoch ||
         !activeAccount ||
+        activeAccount.session_id !== state.sid ||
         activeAccount.account_id !== state.aid ||
         activeAccount.user_id !== state.uid ||
         activeAccount.tenant_id !== state.tid ||
+        (activeAccount.subscription_status !== "active" && activeAccount.subscription_status !== "past_due") ||
         (account.vault_provider !== null && account.vault_provider !== "google_drive") ||
         (account.vault_binding_id !== null && account.vault_binding_id !== state.bid) ||
         !proof ||
@@ -928,7 +951,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
       if (!customerMutationOriginAllowed(c, env, product)) return c.json({ error: "invalid request origin" }, 403);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = resolveActiveVaultAccount(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       const token = account ? tokenVault.get(account.account_id) : null;
       const tenantRecord = token && options.tenantStore
@@ -968,7 +991,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
       if (!customerMutationOriginAllowed(c, env, product)) return c.json({ error: "invalid request origin" }, 403);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = resolveActiveVaultAccount(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || account.vault_provider !== "google_drive" || !runtime) {
         return c.json({ error: "Google Drive vault is not selected" }, 409);
@@ -992,7 +1015,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
       const principal = principalForSession(session);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = resolveActiveVaultAccount(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       const binding = account ? customerVaultBinding(account) : null;
       return c.json(projectVaultCapabilities({
@@ -1010,7 +1033,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (!principal?.github_id || !principal.github_login) {
         return c.json({ error: "GitHub identity is not connected" }, 409);
       }
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = resolveActiveVaultAccount(session.user_id);
       if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
       if (account.vault_provider && account.vault_provider !== "github") {
         return c.json({ error: "an authoritative vault provider is already selected" }, 409);
@@ -1040,7 +1063,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       }
       const installationId = c.req.query("installation_id");
       if (!installationId || !/^\d+$/.test(installationId)) return c.redirect("/app", 302);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = resolveActiveVaultAccount(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || !runtime) return c.text("Tenant runtime is unavailable.", 409);
       if (account.vault_provider && account.vault_provider !== "github") {
@@ -1054,7 +1077,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app.put("/api/vault/repository", async (c) => {
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = resolveActiveVaultAccount(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || !runtime) return c.json({ error: "tenant unavailable" }, 409);
       if (account.vault_provider && account.vault_provider !== "github") {

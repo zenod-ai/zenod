@@ -144,7 +144,7 @@ describe("customer account persistence", () => {
     const now = "2026-08-29T20:00:00.000Z";
     accounts.upsert("cs_bound", {
       account_id: "account-drive", user_id: "usr_google", tenant_id: "tenant-drive",
-      subscription_status: "active", claimed_at: now,
+      subscription_status: "canceled", claimed_at: now,
       vault_provider: "google_drive", vault_binding_id: "binding-drive", vault_binding_status: "ready",
       vault_drive_folder_id: "folder-drive", vault_drive_manifest_file_id: "manifest-drive",
       vault_binding_created_at: now, vault_binding_updated_at: now, vault_authorization_epoch: 1,
@@ -155,8 +155,9 @@ describe("customer account persistence", () => {
     });
 
     expect(accounts.get("cs_retry")).toMatchObject({ vault_provider: null });
-    expect(accounts.resolveForTenantId("tenant-drive")?.session_id).toBe("cs_bound");
-    expect(accounts.resolveActiveTenantForUser("usr_google")?.session_id).toBe("cs_bound");
+    expect(accounts.resolveForTenantId("tenant-drive")?.session_id).toBe("cs_retry");
+    expect(accounts.resolveActiveTenantForUser("usr_google")?.session_id).toBe("cs_retry");
+    expect(accounts.resolveVaultAuthorityForTenantId("tenant-drive")?.account.session_id).toBe("cs_bound");
     expect(accounts.resolveVaultAuthorityForTenantId("tenant-drive")?.binding).toMatchObject({
       provider: "google_drive", binding_id: "binding-drive", authorization_epoch: 1,
     });
@@ -169,7 +170,25 @@ describe("customer account persistence", () => {
       vault_binding_created_at: now, vault_binding_updated_at: now, vault_authorization_epoch: 1,
     });
     expect(() => accounts.resolveVaultAuthorityForTenantId("tenant-drive")).toThrow(/inconsistent authoritative/);
-    expect(() => accounts.resolveActiveTenantForUser("usr_google")).toThrow(/inconsistent authoritative/);
+    expect(accounts.resolveActiveTenantForUser("usr_google")?.session_id).toBe("cs_conflict");
+  });
+
+  it("rejects identical binding projections owned by different tenant accounts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-accounts-"));
+    tempDirs.push(dir);
+    const accounts = new CustomerAccountStore(dir);
+    const now = "2026-08-29T20:00:00.000Z";
+    const binding = {
+      tenant_id: "tenant-drive", subscription_status: "active" as const,
+      vault_provider: "google_drive" as const, vault_binding_id: "binding-drive",
+      vault_binding_status: "ready" as const, vault_drive_folder_id: "folder-drive",
+      vault_drive_manifest_file_id: "manifest-drive", vault_binding_created_at: now,
+      vault_binding_updated_at: now, vault_authorization_epoch: 1,
+    };
+    accounts.upsert("owner-a", { ...binding, account_id: "account-a", user_id: "user-a" });
+    accounts.upsert("owner-b", { ...binding, account_id: "account-b", user_id: "user-b" });
+
+    expect(() => accounts.resolveVaultAuthorityForTenantId("tenant-drive")).toThrow(/inconsistent account ownership/);
   });
 
   it("binds an out-of-order subscription event through checkout metadata", async () => {

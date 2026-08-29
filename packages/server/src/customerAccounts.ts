@@ -231,7 +231,9 @@ export class CustomerAccountStore {
   }
 
   resolveForTenantId(tenantId: string): CustomerAccount | null {
-    return this.resolveVaultAuthorityForTenantId(tenantId)?.account ?? null;
+    if (!tenantId) return null;
+    const matches = Object.values(this.load()).filter((account) => account.tenant_id === tenantId);
+    return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
   }
 
   /** Resolve a tenant-wide vault authority without letting a newer session row hide an older binding. */
@@ -243,6 +245,15 @@ export class CustomerAccountStore {
       .filter((account) => account.tenant_id === tenantId)
       .sort((a, b) => b.claimed_at.localeCompare(a.claimed_at));
     if (matches.length === 0) return null;
+    const identity = matches[0]!;
+    if (matches.some((account) =>
+      account.account_id !== identity.account_id ||
+      account.user_id !== identity.user_id ||
+      account.product !== identity.product ||
+      account.tenant_id !== identity.tenant_id
+    )) {
+      throw new Error("tenant has inconsistent account ownership for vault authority");
+    }
     const bound = matches.flatMap((account) => {
       const binding = customerVaultBinding(account);
       return binding ? [{ account, binding }] : [];
@@ -273,14 +284,7 @@ export class CustomerAccountStore {
     const active = [...latestByTenant.values()].filter(
       (account) => account.subscription_status === "active" || account.subscription_status === "past_due",
     );
-    if (active.length !== 1) return null;
-    const selected = active[0]!;
-    const authority = this.resolveVaultAuthorityForTenantId(selected.tenant_id!);
-    if (
-      authority &&
-      (authority.account.account_id !== selected.account_id || authority.account.user_id !== selected.user_id)
-    ) return null;
-    return authority?.account ?? selected;
+    return active.length === 1 ? active[0]! : null;
   }
 
   list(): CustomerAccount[] {

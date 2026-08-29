@@ -208,7 +208,7 @@ describe("GDV-7 Drive tenant runtime", () => {
       expect(alphaConsent.searchParams.get("code_challenge_method")).toBe("S256");
       const alphaState = alphaStart.state;
       expect(alphaState).toContain(".");
-      expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
         vault_provider: null,
         vault_binding_id: null,
       });
@@ -309,7 +309,7 @@ describe("GDV-7 Drive tenant runtime", () => {
       expect(disconnect.status).toBe(200);
       await expect(disconnect.json()).resolves.toEqual({ ok: true, filesDeleted: false });
       expect(providerCalls).toHaveLength(providerCallsBeforeDisconnect);
-      expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
         vault_provider: "google_drive",
         vault_binding_status: "revoked",
         vault_drive_folder_id: "folder-tenant-alpha",
@@ -324,7 +324,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         { headers: { cookie: `${alpha.cookie}; ${reconnectStart.flowCookie}` } },
       );
       expect(reconnect.status).toBe(303);
-      expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
         vault_binding_id: alphaAccount.vault_binding_id,
         vault_binding_status: "ready",
         vault_authorization_epoch: 2,
@@ -338,7 +338,7 @@ describe("GDV-7 Drive tenant runtime", () => {
 
       resolveDeferredDrive!(new Response('{"error":{"errors":[{"reason":"authError"}]}}', { status: 401 }));
       await expect(lateOldRequest).rejects.toThrow(/Drive API/);
-      expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
         vault_binding_status: "ready",
         vault_authorization_epoch: 2,
       });
@@ -500,6 +500,73 @@ describe("GDV-7 Drive tenant runtime", () => {
       expect(unit.customerAccounts.get("checkout-b")).toMatchObject({ vault_provider: null, vault_binding_id: null });
     } finally {
       await unit.close();
+    }
+  });
+
+  it("requires a fresh Drive start when the canonical checkout session changes", async () => {
+    for (const cancelOriginal of [false, true]) {
+      const dataDir = await tempDir();
+      const tenantId = `tenant-session-${cancelOriginal ? "canceled" : "active"}`;
+      const token = `token-${cancelOriginal}`;
+      const tenants = createMemoryTenantStore([{ token, tenant: { id: tenantId } }]);
+      const unit = createZenodUnit({
+        dataDir,
+        tenantStore: tenants,
+        env: {
+          NODE_ENV: "test", ACCOUNT_STATE_SECRET: `gdv7-session-${cancelOriginal}`,
+          CHASSIS_VAULT_MASTER_KEY: MASTER_KEY, GOOGLE_OIDC_CLIENT_ID: "identity-client",
+          GOOGLE_OIDC_CLIENT_SECRET: "identity-secret", CUSTOMER_APP_URL: "https://cloud.zenod.test",
+        },
+        customer: { identityProviders: { google: {
+          authorizeUrl: (state) => `https://accounts.google.test/auth?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async (code) => ({
+            id: code, login: `${code}@example.test`, email: `${code}@example.test`, email_verified: true,
+          }),
+        } } },
+      });
+      const providerCalls: string[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        providerCalls.push(String(input));
+        throw new Error("provider must not be called for stale checkout state");
+      }));
+      try {
+        const session = await googleSession(unit, `google-session-${cancelOriginal}`);
+        unit.customerAccounts.upsert("checkout-original", {
+          account_id: "account-shared", user_id: session.userId, tenant_id: tenantId,
+          tenant_slug: tenantId, subscription_status: "active",
+          claimed_at: "2026-08-29T20:00:00.000Z", checkout_completed_at: "2026-08-29T20:00:00.000Z",
+        });
+        unit.customerTokenVault.put("account-shared", token);
+        const runtime = unit.runtimes.forTenantStorage(tenantId, unit.storage.forTenant({ id: tenantId }));
+        runtime.settings.set("google_oauth_client_id", "drive-client");
+        runtime.settings.set("google_oauth_client_secret", "drive-secret");
+        const staleStart = await driveConsentStart(unit, session.cookie);
+        expect(staleStart.response.status).toBe(200);
+        if (cancelOriginal) {
+          unit.customerAccounts.upsert("checkout-original", { subscription_status: "canceled" });
+        }
+        unit.customerAccounts.upsert("checkout-new", {
+          account_id: "account-shared", user_id: session.userId, tenant_id: tenantId,
+          tenant_slug: tenantId, subscription_status: "active",
+          claimed_at: "2099-08-29T20:00:00.000Z", checkout_completed_at: "2099-08-29T20:00:00.000Z",
+        });
+
+        const staleCallback = await unit.app.request(
+          `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=stale&state=${encodeURIComponent(staleStart.state)}`,
+          { headers: { cookie: `${session.cookie}; ${staleStart.flowCookie}` } },
+        );
+        expect(staleCallback.status).toBe(400);
+        expect(providerCalls).toHaveLength(0);
+        expect(unit.customerAccounts.get("checkout-original")).toMatchObject({ vault_provider: null, vault_binding_id: null });
+        expect(unit.customerAccounts.get("checkout-new")).toMatchObject({ vault_provider: null, vault_binding_id: null });
+
+        const freshStart = await driveConsentStart(unit, session.cookie);
+        expect(freshStart.response.status).toBe(200);
+        const freshState = JSON.parse(Buffer.from(freshStart.state.split(".")[0]!, "base64url").toString("utf8")) as { sid: string };
+        expect(freshState.sid).toBe("checkout-new");
+      } finally {
+        await unit.close();
+      }
     }
   });
 
