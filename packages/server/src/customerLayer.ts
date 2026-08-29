@@ -126,6 +126,24 @@ function customerDestination(env: NodeJS.ProcessEnv, defaultDomain = "https://cl
   return (env.CUSTOMER_APP_URL || env.DOMAIN || defaultDomain).replace(/\/$/, "");
 }
 
+function customerMutationOriginAllowed(
+  c: Context,
+  env: NodeJS.ProcessEnv,
+  product: CustomerProductConfig,
+): boolean {
+  const source = c.req.header("origin") || c.req.header("referer");
+  if (!source) return false;
+  try {
+    const origin = new URL(source).origin;
+    return new Set([
+      new URL(customerDestination(env, product.defaultDomain)).origin,
+      new URL(product.defaultDomain).origin,
+    ]).has(origin);
+  } catch {
+    return false;
+  }
+}
+
 function githubCallbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): string {
   return env.GITHUB_OAUTH_CALLBACK_URL || `${customerDestination(env, defaultDomain)}/auth/github/callback`;
 }
@@ -438,6 +456,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     c: Context,
     provider: CustomerIdentityProvider,
     mode: "signin" | "link_identity",
+    response: "redirect" | "json" = "redirect",
   ) => {
     const identity = identityProviders[provider];
     const stateSecret = customerStateSecret(env);
@@ -459,12 +478,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const nonce = randomBytes(24).toString("base64url");
       const verifier = randomBytes(48).toString("base64url");
       setGoogleFlowCookie(c, signState({ ...statePayload, nonce, verifier }, stateSecret), env);
-      return c.redirect(identity.authorizeUrl(state, {
+      const url = identity.authorizeUrl(state, {
         nonce,
         codeChallenge: pkceChallenge(verifier),
-      }), 302);
+      });
+      return response === "json" ? c.json({ url }) : c.redirect(url, 302);
     }
-    return c.redirect(identity.authorizeUrl(state), 302);
+    const url = identity.authorizeUrl(state);
+    return response === "json" ? c.json({ url }) : c.redirect(url, 302);
   };
 
   const completeIdentityFlow = async (c: Context, provider: CustomerIdentityProvider) => {
@@ -513,15 +534,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
     try {
       const user = await identity.exchangeAndGetUser(code, { nonce, codeVerifier });
-      const providerSubject = provider === "github"
-        ? String(typeof user.id === "number" ? user.id : Number(user.id))
-        : String(user.id).trim();
-      if (
-        !providerSubject ||
-        (provider === "github" && (!/^\d+$/.test(providerSubject) || Number(providerSubject) <= 0))
-      ) {
+      const githubId = provider === "github"
+        ? typeof user.id === "number" ? user.id : Number(user.id)
+        : null;
+      if (provider === "github" && (githubId === null || !Number.isSafeInteger(githubId) || githubId <= 0)) {
         throw new Error(`${provider} returned an invalid user id`);
       }
+      const providerSubject = provider === "github" ? String(githubId) : String(user.id).trim();
+      if (!providerSubject) throw new Error(`${provider} returned an invalid user id`);
       const identityInput = {
         provider,
         provider_subject: providerSubject,
@@ -542,10 +562,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.redirect(signedReturnDestination(state.rh, env, product), 302);
     } catch (error) {
       console.error(`${provider} callback failed:`, error);
-      const collision = error instanceof Error && error.message.includes("already linked to another user");
+      const errorMessage = error instanceof Error ? error.message : "";
+      const ownedByAnotherUser = errorMessage.includes("already linked to another user");
+      const providerAlreadyLinked = errorMessage.includes("already linked to this user with a different subject");
+      const collision = ownedByAnotherUser || providerAlreadyLinked;
       return c.text(
-        collision
+        ownedByAnotherUser
           ? "This sign-in identity is already linked to another Zenod account."
+          : providerAlreadyLinked
+            ? `A different ${provider === "google" ? "Google" : "GitHub"} identity is already linked to this account.`
           : `Could not complete ${provider === "google" ? "Google" : "GitHub"} sign-in. Please retry.`,
         collision ? 409 : 502,
       );
@@ -559,10 +584,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.get("/auth/github/callback", (c) => completeIdentityFlow(c, "github"));
   app.get("/auth/google/callback", (c) => completeIdentityFlow(c, "google"));
 
-  app.get("/api/auth/providers/:provider/link", (c) => {
+  app.post("/api/auth/providers/:provider/link", async (c) => {
     const provider = c.req.param("provider");
     if (provider !== "github" && provider !== "google") return c.json({ error: "unknown identity provider" }, 404);
-    return startIdentityFlow(c, provider, "link_identity");
+    if (!customerMutationOriginAllowed(c, env, product)) return c.json({ error: "invalid request origin" }, 403);
+    if (!c.req.header("content-type")?.toLowerCase().includes("application/json")) {
+      return c.json({ error: "explicit link intent is required" }, 400);
+    }
+    const body = await c.req.json<{ intent?: string }>().catch(() => ({} as { intent?: string }));
+    if (body.intent !== "link_identity") return c.json({ error: "explicit link intent is required" }, 400);
+    return startIdentityFlow(c, provider, "link_identity", "json");
   });
 
   app.delete("/api/auth/providers/:provider", (c) => {
@@ -571,6 +602,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
     principalForSession(session);
+    const linkedProviders = identities.providersForUser(session.user_id);
+    const remainingProviders = linkedProviders.filter((candidate) => candidate !== provider);
+    if (remainingProviders.length === 0) {
+      return c.json({ error: "cannot unlink the last sign-in identity" }, 409);
+    }
+    if (!remainingProviders.some((candidate) => Boolean(identityProviders[candidate]))) {
+      return c.json({ error: "cannot unlink the only configured sign-in identity" }, 409);
+    }
     try {
       const remaining = identities.unlinkIdentity(session.user_id, provider);
       issueCustomerSession(c, remaining, env);

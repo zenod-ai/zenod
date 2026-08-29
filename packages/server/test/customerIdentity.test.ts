@@ -137,6 +137,44 @@ describe("provider-neutral customer identity persistence", () => {
     })).toThrow("provider identity is already linked to another user");
   });
 
+  it.each(["github", "google"] as const)(
+    "allows only one %s subject per user while same-subject linking updates metadata",
+    async (provider) => {
+      const { identities } = await identityStore();
+      const principal = identities.resolveOrCreate({
+        provider: provider === "github" ? "google" : "github",
+        provider_subject: provider === "github" ? "google-owner" : "42",
+        display_name: "Owner",
+      });
+      identities.linkIdentity(principal.user_id, {
+        provider,
+        provider_subject: "first-subject",
+        provider_login: "before",
+        email: "before@example.test",
+      });
+      const updated = identities.linkIdentity(principal.user_id, {
+        provider,
+        provider_subject: "first-subject",
+        provider_login: "after",
+        email: "after@example.test",
+        email_verified: true,
+      });
+      expect(updated).toMatchObject({
+        provider_subject: "first-subject",
+        provider_login: "after",
+        email: "after@example.test",
+        email_verified: true,
+      });
+      expect(() => identities.linkIdentity(principal.user_id, {
+        provider,
+        provider_subject: "second-subject",
+      })).toThrow(`${provider} is already linked to this user with a different subject`);
+      expect(identities.snapshot().identities.filter(
+        (candidate) => candidate.user_id === principal.user_id && candidate.provider === provider,
+      )).toHaveLength(1);
+    },
+  );
+
   it("refuses to unlink the final sign-in identity and preserves the stable user id", async () => {
     const { identities } = await identityStore();
     const principal = identities.resolveOrCreate({
@@ -161,6 +199,35 @@ describe("provider-neutral customer identity persistence", () => {
       provider_subject: "google-42",
     });
     expect(identities.providersForUser(principal.user_id)).toEqual(["google"]);
+  });
+
+  it("removes every legacy duplicate subject for an unlinked provider", async () => {
+    const { dir, identities } = await identityStore();
+    const principal = identities.resolveOrCreate({
+      provider: "github",
+      provider_subject: "42",
+      display_name: "octocat",
+    });
+    identities.linkIdentity(principal.user_id, {
+      provider: "google",
+      provider_subject: "google-one",
+    });
+    const snapshot = identities.snapshot();
+    snapshot.identities.push({
+      user_id: principal.user_id,
+      provider: "google",
+      provider_subject: "google-two",
+      provider_login: null,
+      email: null,
+      email_verified: false,
+      created_at: new Date().toISOString(),
+    });
+    await writeFile(join(dir, "customer-identities.json"), JSON.stringify(snapshot), "utf8");
+
+    identities.unlinkIdentity(principal.user_id, "google");
+    expect(identities.resolve("google", "google-one")).toBeNull();
+    expect(identities.resolve("google", "google-two")).toBeNull();
+    expect(identities.providersForUser(principal.user_id)).toEqual(["github"]);
   });
 
   it("fails closed without replacing an unreadable identity store", async () => {

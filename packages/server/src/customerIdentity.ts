@@ -230,7 +230,26 @@ export class CustomerIdentityStore {
     );
     if (existing) {
       if (existing.user_id !== userId) throw new Error("provider identity is already linked to another user");
+      const nextLogin = input.provider_login === undefined ? existing.provider_login : input.provider_login;
+      const nextEmail = input.email === undefined ? existing.email : input.email;
+      const nextVerified = input.email_verified === undefined ? existing.email_verified : input.email_verified;
+      if (
+        nextLogin !== existing.provider_login ||
+        nextEmail !== existing.email ||
+        nextVerified !== existing.email_verified
+      ) {
+        existing.provider_login = nextLogin ?? null;
+        existing.email = nextEmail ?? null;
+        existing.email_verified = nextVerified;
+        this.save(snapshot);
+      }
       return existing;
+    }
+    const providerAlreadyLinked = snapshot.identities.find(
+      (candidate) => candidate.user_id === userId && candidate.provider === input.provider,
+    );
+    if (providerAlreadyLinked) {
+      throw new Error(`${input.provider} is already linked to this user with a different subject`);
     }
     const identity: CustomerIdentityRecord = {
       user_id: userId,
@@ -248,13 +267,19 @@ export class CustomerIdentityStore {
 
   unlinkIdentity(userId: string, provider: CustomerIdentityProvider): CustomerPrincipal {
     const snapshot = this.load();
-    const matches = snapshot.identities.filter((candidate) => candidate.user_id === userId);
-    const removed = matches.find((candidate) => candidate.provider === provider);
-    if (!removed) throw new Error(`${provider} identity is not linked`);
-    if (matches.length <= 1) throw new Error("cannot unlink the last sign-in identity");
-    snapshot.identities = snapshot.identities.filter((candidate) => candidate !== removed);
-    const remaining = snapshot.identities.find((candidate) => candidate.user_id === userId);
+    const providerMatches = snapshot.identities.filter(
+      (candidate) => candidate.user_id === userId && candidate.provider === provider,
+    );
+    if (providerMatches.length === 0) throw new Error(`${provider} identity is not linked`);
+    const remaining = snapshot.identities.find(
+      (candidate) => candidate.user_id === userId && candidate.provider !== provider,
+    );
     if (!remaining) throw new Error("cannot unlink the last sign-in identity");
+    // Remove every matching row so stores written by an earlier vulnerable
+    // build cannot leave a second provider subject able to authenticate.
+    snapshot.identities = snapshot.identities.filter(
+      (candidate) => candidate.user_id !== userId || candidate.provider !== provider,
+    );
     this.save(snapshot);
     return this.principal(snapshot, remaining);
   }
@@ -266,9 +291,10 @@ export class CustomerIdentityStore {
   }
 
   providersForUser(userId: string): CustomerIdentityProvider[] {
-    return this.load().identities
+    const providers = this.load().identities
       .filter((candidate) => candidate.user_id === userId)
       .map((candidate) => candidate.provider);
+    return [...new Set(providers)];
   }
 
   ownerForAccount(accountId: string): string | null {

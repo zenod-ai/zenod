@@ -136,7 +136,12 @@ describe("hosted customer layer", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  function customerApp(identityUser = { id: 42, login: "octocat", email: "customer@example.com" }) {
+  function customerApp(identityUser: {
+    id: number | string;
+    login: string;
+    email: string | null;
+    email_verified?: boolean;
+  } = { id: 42, login: "octocat", email: "customer@example.com" }) {
     return createCustomerLayer(
       { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
       {
@@ -191,6 +196,26 @@ describe("hosted customer layer", () => {
     const match = setCookie.match(new RegExp(`(?:^|,\\s*)(${name}=[^;]+)`));
     if (!match?.[1]) throw new Error(`missing ${name} cookie`);
     return match[1];
+  }
+
+  function startIdentityLink(
+    app: ReturnType<typeof customerApp>,
+    provider: "github" | "google",
+    cookie: string,
+    origin = DESTINATION,
+    intent = "link_identity",
+  ) {
+    return app.request(`/api/auth/providers/${provider}/link`, {
+      method: "POST",
+      headers: { cookie, origin, "Content-Type": "application/json" },
+      body: JSON.stringify({ intent }),
+    });
+  }
+
+  async function identityLinkUrl(response: Response): Promise<URL> {
+    const body = await response.json() as { url?: string };
+    if (!body.url) throw new Error("identity link response has no URL");
+    return new URL(body.url);
   }
 
   it("keeps the registered callback independent from the customer destination", async () => {
@@ -337,7 +362,24 @@ describe("hosted customer layer", () => {
     }
   });
 
+  it.each(["github", "google"] as const)(
+    "requires same-origin explicit POST intent before starting %s identity linking",
+    async (provider) => {
+      const app = customerApp();
+      const cookie = await signInCookie(app);
+      expect((await app.request(`/api/auth/providers/${provider}/link`, { headers: { cookie } })).status).toBe(404);
+      const crossSite = await startIdentityLink(app, provider, cookie, "https://evil.example");
+      expect(crossSite.status).toBe(403);
+      expect(crossSite.headers.get("location")).toBeNull();
+      expect(crossSite.headers.get("set-cookie")).toBeNull();
+      const missingIntent = await startIdentityLink(app, provider, cookie, DESTINATION, "not_link_identity");
+      expect(missingIntent.status).toBe(400);
+      expect(missingIntent.headers.get("location")).toBeNull();
+    },
+  );
+
   it("links Google only from the authenticated user's proof flow and supports safe unlink", async () => {
+    let googleSubject = "google-linked-subject";
     const layer = createCustomerLayer(
       { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
       {
@@ -352,7 +394,7 @@ describe("hosted customer layer", () => {
           google: {
             authorizeUrl: (state, proof) => `https://google.test/authorize?state=${encodeURIComponent(state)}&nonce=${proof?.nonce}&challenge=${proof?.codeChallenge}`,
             exchangeAndGetUser: async () => ({
-              id: "google-linked-subject",
+              id: googleSubject,
               login: "Octo Cat",
               email: "same@example.test",
               email_verified: true,
@@ -364,12 +406,10 @@ describe("hosted customer layer", () => {
     );
     try {
       const githubCookie = await signInCookie(layer.app);
-      expect((await layer.app.request("/api/auth/providers/google/link")).status).toBe(401);
-      const linkStart = await layer.app.request("/api/auth/providers/google/link", {
-        headers: { cookie: githubCookie },
-      });
-      expect(linkStart.status).toBe(302);
-      const linkUrl = new URL(linkStart.headers.get("location")!);
+      expect((await startIdentityLink(layer.app, "google", "")).status).toBe(401);
+      const linkStart = await startIdentityLink(layer.app, "google", githubCookie);
+      expect(linkStart.status).toBe(200);
+      const linkUrl = await identityLinkUrl(linkStart);
       const flowCookie = cookiePair(linkStart.headers.get("set-cookie")!, "zenod_google_oidc_flow");
       const linked = await layer.app.request(
         `/auth/google/callback?code=proof&state=${encodeURIComponent(linkUrl.searchParams.get("state")!)}`,
@@ -379,12 +419,31 @@ describe("hosted customer layer", () => {
       expect(layer.identities.resolve("google", "google-linked-subject")?.user_id).toBe(GITHUB_USER_ID);
       expect(layer.identities.snapshot().users).toHaveLength(1);
 
+      // A stolen/ambient customer session cannot persist a second Google
+      // subject as a backdoor alongside the already linked one.
+      googleSubject = "google-attacker-subject";
+      const attackerStart = await startIdentityLink(layer.app, "google", githubCookie);
+      const attackerUrl = await identityLinkUrl(attackerStart);
+      const attacker = await layer.app.request(
+        `/auth/google/callback?code=attacker&state=${encodeURIComponent(attackerUrl.searchParams.get("state")!)}`,
+        {
+          headers: {
+            cookie: `${cookiePair(githubCookie, "zenod_customer_session")}; ${cookiePair(attackerStart.headers.get("set-cookie")!, "zenod_google_oidc_flow")}`,
+          },
+        },
+      );
+      expect(attacker.status).toBe(409);
+      expect(await attacker.text()).toMatch(/different Google identity is already linked/);
+      expect(layer.identities.resolve("google", "google-attacker-subject")).toBeNull();
+
       const unlinked = await layer.app.request("/api/auth/providers/google", {
         method: "DELETE",
         headers: { cookie: githubCookie },
       });
       expect(unlinked.status).toBe(200);
       expect(await unlinked.json()).toEqual({ ok: true, providers: ["github"] });
+      expect(layer.identities.resolve("google", "google-linked-subject")).toBeNull();
+      expect(layer.identities.resolve("google", "google-attacker-subject")).toBeNull();
       const lastIdentity = await layer.app.request("/api/auth/providers/github", {
         method: "DELETE",
         headers: { cookie: cookiePair(unlinked.headers.get("set-cookie")!, "zenod_customer_session") },
@@ -395,6 +454,134 @@ describe("hosted customer layer", () => {
       layer.close();
     }
   });
+
+  it("rejects a second GitHub subject and leaves none behind after unlink", async () => {
+    let githubIdentityId: number | string = 7001;
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identityProviders: {
+          github: {
+            authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+            exchangeAndGetUser: async () => ({ id: githubIdentityId, login: `github-${githubIdentityId}`, email: null }),
+          },
+          google: {
+            authorizeUrl: (state) => `https://google.test/authorize?state=${encodeURIComponent(state)}`,
+            exchangeAndGetUser: async () => ({ id: "google-owner", login: "Google Owner", email: null }),
+          },
+        },
+      },
+    );
+    const googlePrincipal = layer.identities.resolveOrCreate({
+      provider: "google",
+      provider_subject: "google-owner",
+      display_name: "Google Owner",
+    });
+    const cookieIssuer = new Hono();
+    cookieIssuer.get("/", (c) => {
+      issueCustomerSession(c, googlePrincipal, env);
+      return c.text("ok");
+    });
+    const googleCookie = (await cookieIssuer.request("/")).headers.get("set-cookie")!;
+    try {
+      const firstStart = await startIdentityLink(layer.app, "github", googleCookie);
+      const firstState = (await identityLinkUrl(firstStart)).searchParams.get("state")!;
+      const first = await layer.app.request(
+        `/auth/github/callback?code=first&state=${encodeURIComponent(firstState)}`,
+        { headers: { cookie: googleCookie } },
+      );
+      expect(first.status).toBe(302);
+      expect(layer.identities.resolve("github", "7001")?.user_id).toBe(googlePrincipal.user_id);
+
+      githubIdentityId = 7002;
+      const attackerStart = await startIdentityLink(layer.app, "github", googleCookie);
+      const attackerState = (await identityLinkUrl(attackerStart)).searchParams.get("state")!;
+      const attacker = await layer.app.request(
+        `/auth/github/callback?code=attacker&state=${encodeURIComponent(attackerState)}`,
+        { headers: { cookie: googleCookie } },
+      );
+      expect(attacker.status).toBe(409);
+      expect(await attacker.text()).toMatch(/different GitHub identity is already linked/);
+      expect(layer.identities.resolve("github", "7002")).toBeNull();
+
+      const unlinked = await layer.app.request("/api/auth/providers/github", {
+        method: "DELETE",
+        headers: { cookie: googleCookie },
+      });
+      expect(unlinked.status).toBe(200);
+      expect(await unlinked.json()).toEqual({ ok: true, providers: ["google"] });
+      expect(layer.identities.resolve("github", "7001")).toBeNull();
+      expect(layer.identities.resolve("github", "7002")).toBeNull();
+    } finally {
+      layer.close();
+    }
+  });
+
+  it("refuses to unlink the only configured sign-in provider", async () => {
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: null }),
+        },
+      },
+    );
+    try {
+      const githubCookie = await signInCookie(layer.app);
+      layer.identities.linkIdentity(GITHUB_USER_ID, {
+        provider: "google",
+        provider_subject: "unconfigured-google",
+      });
+      const rejected = await layer.app.request("/api/auth/providers/github", {
+        method: "DELETE",
+        headers: { cookie: githubCookie },
+      });
+      expect(rejected.status).toBe(409);
+      expect(await rejected.json()).toEqual({ error: "cannot unlink the only configured sign-in identity" });
+      expect(layer.identities.resolve("github", "42")?.user_id).toBe(GITHUB_USER_ID);
+      expect(layer.identities.resolve("google", "unconfigured-google")?.user_id).toBe(GITHUB_USER_ID);
+      expect((await layer.app.request("/api/me", { headers: { cookie: githubCookie } })).status).toBe(200);
+    } finally {
+      layer.close();
+    }
+  });
+
+  it.each(["9007199254740992", "9007199254740993"])(
+    "rejects unsafe GitHub subject %s before identity persistence",
+    async (id) => {
+      const layer = createCustomerLayer(
+        { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+        {
+          env,
+          stripe,
+          tenantStore: tenants,
+          identity: {
+            authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+            exchangeAndGetUser: async () => ({ id, login: `unsafe-${id}`, email: null }),
+          },
+        },
+      );
+      try {
+        const start = await layer.app.request("/auth/signin");
+        const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+        const callback = await layer.app.request(
+          `/auth/github/callback?code=unsafe&state=${encodeURIComponent(state)}`,
+        );
+        expect(callback.status).toBe(502);
+        expect(layer.identities.snapshot().users).toHaveLength(0);
+        expect(layer.identities.snapshot().identities).toHaveLength(0);
+      } finally {
+        layer.close();
+      }
+    },
+  );
 
   it("rejects a link when the proved provider subject belongs to another account", async () => {
     const layer = createCustomerLayer(
@@ -422,8 +609,8 @@ describe("hosted customer layer", () => {
         display_name: "Other Person",
       });
       const githubCookie = await signInCookie(layer.app);
-      const linkStart = await layer.app.request("/api/auth/providers/google/link", { headers: { cookie: githubCookie } });
-      const linkUrl = new URL(linkStart.headers.get("location")!);
+      const linkStart = await startIdentityLink(layer.app, "google", githubCookie);
+      const linkUrl = await identityLinkUrl(linkStart);
       const linked = await layer.app.request(
         `/auth/google/callback?code=proof&state=${encodeURIComponent(linkUrl.searchParams.get("state")!)}`,
         {
