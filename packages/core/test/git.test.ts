@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile, appendFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, appendFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WriteQueue } from "../src/git/queue.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
+import type { VaultRepository } from "../src/vault/repository.js";
 
 describe("WriteQueue", () => {
   it("serializes concurrent runs", async () => {
@@ -31,6 +32,44 @@ describe("WriteQueue", () => {
 });
 
 describe("VaultRepo", () => {
+  it("is the GitHub VaultRepository adapter and publishes a compatibility revision", async () => {
+    const bare = join(dir, "adapter-origin.git");
+    await simpleGit().init(["--bare", "--initial-branch=main", bare]);
+    const seed = join(dir, "adapter-seed");
+    await simpleGit().clone(bare, seed);
+    const seedGit = simpleGit(seed);
+    await seedGit.addConfig("user.name", "seed").addConfig("user.email", "seed@test");
+    await writeFile(join(seed, "README.md"), "# Vault\n");
+    await seedGit.add(["-A"]);
+    await seedGit.commit("seed");
+    await seedGit.push("origin", "main");
+
+    const githubRepository: VaultRepository = await VaultRepo.open({
+      workdir: join(dir, "adapter-work"),
+      remoteUrl: bare,
+      repo: "zenod-ai/fixture",
+    });
+    await writeFile(join(githubRepository.path, "README.md"), "# Updated vault\n");
+
+    const revision = await githubRepository.commitAndPublish("update vault");
+
+    expect(githubRepository.provider).toBe("github");
+    expect(revision).toMatchObject({
+      provider: "github",
+      id: revision.commitSha,
+      commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      githubUrls: [`https://github.com/zenod-ai/fixture/blob/${revision.commitSha}/README.md`],
+      urls: [`https://github.com/zenod-ai/fixture/blob/${revision.commitSha}/README.md`],
+    });
+    expect(Number.isNaN(Date.parse(revision.committedAt))).toBe(false);
+    expect(githubRepository.urlFor("README.md", "intro")).toBe(
+      "https://github.com/zenod-ai/fixture/blob/main/README.md#intro",
+    );
+
+    const verify = await VaultRepo.open({ workdir: join(dir, "adapter-verify"), remoteUrl: bare });
+    expect(await readFile(join(verify.path, "README.md"), "utf8")).toBe("# Updated vault\n");
+  });
+
   let dir: string;
   let bare: string;
 
