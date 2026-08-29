@@ -2582,7 +2582,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       // getRepo clones on first use (and runs the schema-v1 migration)
       try {
         const repo = await runtime.getRepo();
-        headSha = await repo.headSha();
+        headSha = (await repo.currentRevision()).commitSha ?? null;
         cloned = true;
       } catch (err) {
         cloneError = (err as Error).message;
@@ -2604,13 +2604,15 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.post("/api/vault/sync", async (c) => {
     const repo = await runtime.getRepo();
     await repo.pull();
-    return c.json({ ok: true, headSha: await repo.headSha() });
+    const revision = await repo.currentRevision();
+    return c.json({ ok: true, revision, headSha: revision.commitSha ?? null });
   });
 
   app.post("/api/vault/reclone", async (c) => {
     await runtime.reclone();
     const repo = await runtime.getRepo();
-    return c.json({ ok: true, headSha: await repo.headSha() });
+    const revision = await repo.currentRevision();
+    return c.json({ ok: true, revision, headSha: revision.commitSha ?? null });
   });
 
   app.get("/api/vault/lint", async (c) => c.json(await runtime.lint()));

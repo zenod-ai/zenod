@@ -34,6 +34,13 @@ export type DriveAuth =
   | { kind: "service_account"; serviceAccountJson: string }
   | { kind: "oauth"; clientId: string; clientSecret: string; refreshToken: string; email?: string | null };
 
+export interface DriveClientLifecycle {
+  /** Re-evaluated before every API call, including while an access token is cached. */
+  authorizationAllowed?: () => boolean;
+  /** Called only after Google itself rejects/revokes the credential. */
+  onAuthorizationRevoked?: () => void;
+}
+
 export interface DriveFile {
   id: string;
   name: string;
@@ -103,6 +110,7 @@ export class DriveClient {
   constructor(
     auth: string | DriveAuth,
     initialToken?: { accessToken: string; expiresInSeconds?: number },
+    private readonly lifecycle: DriveClientLifecycle = {},
   ) {
     this.auth = typeof auth === "string" ? { kind: "service_account", serviceAccountJson: auth } : auth;
     this.account = this.auth.kind === "service_account" ? parseServiceAccount(this.auth.serviceAccountJson) : null;
@@ -123,6 +131,9 @@ export class DriveClient {
 
   /** Mint/refresh (and cache) an access token. */
   private async token(): Promise<string> {
+    if (this.lifecycle.authorizationAllowed?.() === false) {
+      throw new Error("Google Drive authorization is unavailable for this tenant");
+    }
     if (this.accessToken && Date.now() < this.tokenExpiresAt - 60_000) return this.accessToken;
     return this.auth.kind === "oauth" ? this.oauthToken() : this.serviceAccountToken();
   }
@@ -179,6 +190,9 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
+      if (response.status === 400 || response.status === 401 || response.status === 403 || /invalid_grant|revoked/i.test(detail)) {
+        this.lifecycle.onAuthorizationRevoked?.();
+      }
       throw new Error(`Google OAuth refresh failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     const data = (await response.json()) as { access_token: string; expires_in?: number };
@@ -206,6 +220,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
+      if (response.status === 401 || response.status === 403) this.lifecycle.onAuthorizationRevoked?.();
       throw new Error(`Drive API ${path} failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return response;
@@ -451,6 +466,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
+      if (response.status === 401 || response.status === 403) this.lifecycle.onAuthorizationRevoked?.();
       throw new Error(`Drive upload failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return (await response.json()) as DriveFile;
@@ -499,6 +515,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
+      if (response.status === 401 || response.status === 403) this.lifecycle.onAuthorizationRevoked?.();
       throw new Error(`Drive update failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return await response.json() as DriveFile;

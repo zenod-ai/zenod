@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import { SqliteCredentialVault, type CredentialVault } from "./credentialVault.js";
 import {
   createBrainLlm,
@@ -17,6 +18,7 @@ import {
   STATUS_APPROVED_MERGE,
   SqliteStateStore,
   VaultRepo,
+  DriveVaultRepository,
   conversationId,
   type BrainEngine,
   type ConversationMessage,
@@ -27,6 +29,7 @@ import {
   type PeerTools,
   type TaskingInput,
   type TokenCostMeasurement,
+  type VaultRepository,
   isKnownTool,
   toolKind,
 } from "zenod";
@@ -40,6 +43,7 @@ import { formatFilingReceipt } from "./filingReceipt.js";
 import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
+import { DriveClient, driveAuthFromSettings } from "./drive.js";
 import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
@@ -89,7 +93,9 @@ import {
   Settings,
   type GoogleDriveOAuthAuthoritySource,
   type Provider,
+  type VaultProviderBindingSource,
 } from "./settings.js";
+import type { VaultBindingStatus } from "./googleDriveVaultContract.js";
 import { WhatsAppGateway } from "./whatsappGateway.js";
 import { WhatsAppStore } from "./whatsappStore.js";
 import { TelegramGateway } from "./telegramGateway.js";
@@ -99,7 +105,7 @@ import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 
 export class NotConfiguredError extends Error {
   constructor() {
-    super("Zenod is not configured yet — set vault repo, GitHub token, and Anthropic key in settings");
+    super("Zenod is not configured yet — connect an authoritative vault and configure the active model provider");
   }
 }
 
@@ -253,7 +259,14 @@ export class Runtime {
    *  lane. Null on every other agent. Wired to the protocol seams in executionLane. */
   readonly executionQueue: ExecutionQueue | null;
   private engine: BrainEngine | null = null;
-  private repo: VaultRepo | null = null;
+  private repo: VaultRepository | null = null;
+  private readonly tenantId: string;
+  private readonly vaultBindingSource?: VaultProviderBindingSource;
+  private readonly onVaultBindingUpdate?: (input: {
+    status?: VaultBindingStatus;
+    folderId?: string;
+    manifestFileId?: string;
+  }) => void;
   private readonly taskingContext = new AsyncLocalStorage<TaskingRunContext>();
   private walletPeerRefresh: Promise<PeerConfig[]> | null = null;
 
@@ -280,11 +293,20 @@ export class Runtime {
       credentialMasterKey?: string;
       settingFallbacks?: Readonly<Record<string, string>>;
       googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
+      vaultProviderBinding?: VaultProviderBindingSource;
+      onVaultBindingUpdate?: (input: {
+        status?: VaultBindingStatus;
+        folderId?: string;
+        manifestFileId?: string;
+      }) => void;
       managedTelegramInbound?: TelegramManagedInboundHandler;
       managedTelegramInboundEnabled?: () => boolean;
     } = {},
   ) {
-    this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"), options.tenantId ?? "standalone");
+    this.tenantId = options.tenantId ?? "standalone";
+    this.vaultBindingSource = options.vaultProviderBinding;
+    this.onVaultBindingUpdate = options.onVaultBindingUpdate;
+    this.state = new SqliteStateStore(join(dataDir, "zenod.sqlite"), this.tenantId);
     this.oauth = new OAuthStore(join(dataDir, "oauth.sqlite"));
     this.credentialVault =
       options.credentialVault ??
@@ -298,6 +320,7 @@ export class Runtime {
       this.credentialVault,
       options.settingFallbacks,
       options.googleDriveOAuthAuthority,
+      options.vaultProviderBinding,
     );
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
@@ -457,10 +480,56 @@ export class Runtime {
     return this.settings.peers();
   }
 
-  async getRepo(options: { ensureSchema?: boolean } = {}): Promise<VaultRepo> {
+  private driveCacheDir(bindingId: string): string {
+    const digest = createHash("sha256").update(`${this.tenantId}\0${bindingId}`).digest("hex");
+    return join(this.dataDir, "cache", "drive-vault", digest);
+  }
+
+  async getRepo(options: { ensureSchema?: boolean; allowRecovering?: boolean } = {}): Promise<VaultRepository> {
     const ensureSchema = options.ensureSchema ?? true;
-    if (this.repo) return this.repo;
-    const repoName = this.settings.get("vault_repo");
+    const binding = this.vaultBindingSource?.() ?? null;
+    if (binding && binding.status !== "ready" && !(options.allowRecovering && binding.provider === "google_drive" && binding.status === "recovering")) {
+      throw new NotConfiguredError();
+    }
+    if (this.repo && (!binding || this.repo.provider === binding.provider)) return this.repo;
+    if (binding?.provider === "google_drive") {
+      const auth = driveAuthFromSettings(this.settings);
+      if (!auth) throw new NotConfiguredError();
+      const client = new DriveClient(auth, undefined, {
+        authorizationAllowed: () => {
+          const current = this.vaultBindingSource?.();
+          return current?.provider === "google_drive" &&
+            current.binding_id === binding.binding_id &&
+            current.tenant_id === this.tenantId &&
+            (current.status === "ready" || (options.allowRecovering === true && current.status === "recovering")) &&
+            Boolean(driveAuthFromSettings(this.settings));
+        },
+        onAuthorizationRevoked: () => this.onVaultBindingUpdate?.({ status: "revoked" }),
+      });
+      const repo = await DriveVaultRepository.open({
+        client,
+        workdir: this.workdir,
+        stateDir: this.driveCacheDir(binding.binding_id),
+        tenantId: this.tenantId,
+        vaultBindingId: binding.binding_id,
+        storedRootFolderId: binding.folder_id,
+      });
+      if (ensureSchema) {
+        const created = await ensureSchemaV1(repo.path);
+        if (created.length > 0) {
+          await repo.commitAndPublish(`schema: v1 — add ${created.join(", ")}`);
+        }
+      }
+      const authority = repo.authorityBinding();
+      this.onVaultBindingUpdate?.({
+        status: "ready",
+        folderId: authority.folderId,
+        manifestFileId: authority.manifestFileId,
+      });
+      this.repo = repo;
+      return repo;
+    }
+    const repoName = binding?.provider === "github" ? binding.repo : this.settings.get("vault_repo");
     const token = this.settings.get("github_token");
     const hasApp = this.settings.hasGithubApp();
     if (!repoName || (!token && !hasApp)) throw new NotConfiguredError();
@@ -507,7 +576,7 @@ export class Runtime {
       }
     } else if (vaultless) {
       if (!this.settings.activeApiKey()) throw new NotConfiguredError();
-    } else if (!this.settings.configured()) {
+    } else if (!this.settings.activeApiKey() || !this.settings.vaultConfigured()) {
       throw new NotConfiguredError();
     }
 
@@ -558,7 +627,7 @@ export class Runtime {
             ["console", "archus"].includes(this.agent.name) ? backlogRouterSection(loadRepoInference()) : ""
           }`
         : this.agent.persona,
-      ...(repo
+      ...(repo?.provider === "github"
         ? {
             location: {
               repo: this.settings.get("vault_repo")!,
@@ -2028,6 +2097,9 @@ export class Runtime {
     this.invalidate();
     try {
       const repo = await this.getRepo({ ensureSchema: false });
+      if (!(repo instanceof VaultRepo)) {
+        throw new Error("Clean slate is not available for this vault provider");
+      }
       return await cleanSlateVault(repo, {
         push: true,
         location: {
@@ -2044,6 +2116,7 @@ export class Runtime {
   async reclone(): Promise<void> {
     this.invalidate();
     await rm(this.workdir, { recursive: true, force: true });
+    await rm(join(this.dataDir, "cache", "drive-vault"), { recursive: true, force: true });
   }
 
   async createIssueThenRun(input: CreateIssueThenRunInput): Promise<CreateIssueThenRunResult> {

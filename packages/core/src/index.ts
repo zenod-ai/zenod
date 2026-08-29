@@ -82,6 +82,7 @@ export {
 } from "./vault/driveTransaction.js";
 export {
   DriveVaultRepository,
+  type DriveVaultAuthorityBinding,
   type DriveVaultClient,
   type DriveVaultFile,
   type DriveVaultPrecondition,
