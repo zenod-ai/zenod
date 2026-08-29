@@ -429,6 +429,42 @@ describe("DriveVaultRepository", () => {
     expect([...drive.files.values()].some((file) => file.name === "manifest.json" || file.name === "repository.bundle")).toBe(false);
   });
 
+  it.each([
+    { bundle: true, archive: false, label: "nested bundle" },
+    { bundle: false, archive: true, label: "nested tombstone" },
+    { bundle: true, archive: true, label: "nested bundle and tombstone" },
+  ])("rejects $label remnants before any bootstrap write", async ({ bundle, archive }) => {
+    const drive = new FakeDrive();
+    const workdir = await temp(`nested-remnant-${Number(bundle)}-${Number(archive)}`);
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Notes/Old.md", "old authority\n");
+    await repo.commitAndPublish("seed nested authority");
+    if (archive) {
+      await rm(join(workdir, "Notes/Old.md"));
+      await repo.commitAndPublish("archive old authority");
+    }
+    const root = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultBinding === "v1:binding-one")!;
+    const git = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "git-folder")!;
+    const control = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "control-folder")!;
+    const transactions = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "transactions-folder")!;
+    for (const file of [...drive.files.values()]) {
+      const isStandardRootChild = file.parents?.includes(root.id) && file.id !== git.id && file.id !== control.id;
+      const isManifest = file.name === "manifest.json";
+      const isJournal = file.parents?.includes(transactions.id);
+      const isBundle = file.name === "repository.bundle";
+      const isArchive = file.parents?.includes([...drive.files.values()].find((candidate) => candidate.appProperties?.zenodVaultRole === "deleted-folder")!.id);
+      if (isStandardRootChild || isManifest || isJournal || (isBundle && !bundle) || (isArchive && !archive)) drive.externalRemove(file.id);
+    }
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp(`nested-remnant-restart-${Number(bundle)}-${Number(archive)}`))).rejects.toThrow(/prior-authority remnants/);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(0);
+    expect([...drive.files.values()].filter((file) => file.parents?.includes(transactions.id))).toHaveLength(0);
+    expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(bundle ? 1 : 0);
+  });
+
   it("discovers authority only through the selected root and marker-scoped children", async () => {
     const drive = new FakeDrive();
     await open(drive, await temp("bounded-discovery-seed"));

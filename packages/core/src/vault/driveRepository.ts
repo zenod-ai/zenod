@@ -286,6 +286,7 @@ export class DriveVaultRepository implements VaultRepository {
     );
     this.rootFolderId = root.folderId;
     const recoveredManifest = await this.discoverManifestFile(this.rootFolderId);
+    let bootstrap: { file: DriveVaultFile; journal: DriveJournal } | null = null;
     if (recoveredManifest) {
       this.controlFolderId = recoveredManifest.parents?.[0] ?? "";
       if (!this.controlFolderId) throw new Error("Drive vault manifest has no control-folder parent");
@@ -307,28 +308,44 @@ export class DriveVaultRepository implements VaultRepository {
       if (root.created) {
         this.gitFolderId = await this.ensureBootstrapFolder(GIT_FOLDER, this.rootFolderId, GIT_FOLDER_ROLE);
         this.controlFolderId = await this.ensureBootstrapFolder(CONTROL_FOLDER, this.rootFolderId, CONTROL_FOLDER_ROLE);
+        this.transactionsFolderId = await this.ensureBootstrapFolder(TRANSACTIONS_FOLDER, this.controlFolderId, TRANSACTIONS_FOLDER_ROLE);
+        this.deletedFolderId = await this.ensureBootstrapFolder("deleted", this.controlFolderId, DELETED_FOLDER_ROLE);
       } else {
         await this.validateBootstrapSkeleton(this.rootFolderId, {
           [GIT_FOLDER_ROLE]: GIT_FOLDER,
           [CONTROL_FOLDER_ROLE]: CONTROL_FOLDER,
         });
-        this.gitFolderId = await this.ensureBootstrapFolder(GIT_FOLDER, this.rootFolderId, GIT_FOLDER_ROLE);
-        this.controlFolderId = await this.ensureBootstrapFolder(CONTROL_FOLDER, this.rootFolderId, CONTROL_FOLDER_ROLE);
+        this.gitFolderId = await this.findBootstrapRoleFolder(this.rootFolderId, GIT_FOLDER, GIT_FOLDER_ROLE) ?? "";
+        this.controlFolderId = await this.findBootstrapRoleFolder(this.rootFolderId, CONTROL_FOLDER, CONTROL_FOLDER_ROLE) ?? "";
+        if (this.controlFolderId) {
+          await this.validateBootstrapSkeleton(this.controlFolderId, {
+            [TRANSACTIONS_FOLDER_ROLE]: TRANSACTIONS_FOLDER,
+            [DELETED_FOLDER_ROLE]: "deleted",
+          });
+          this.transactionsFolderId = await this.findBootstrapRoleFolder(this.controlFolderId, TRANSACTIONS_FOLDER, TRANSACTIONS_FOLDER_ROLE) ?? "";
+          this.deletedFolderId = await this.findBootstrapRoleFolder(this.controlFolderId, "deleted", DELETED_FOLDER_ROLE) ?? "";
+        }
+        if (this.gitFolderId && this.controlFolderId && this.transactionsFolderId && this.deletedFolderId) {
+          bootstrap = await this.findBootstrapJournal();
+        }
+        if (!bootstrap) {
+          for (const [folderId, label] of [
+            [this.gitFolderId, GIT_FOLDER],
+            [this.transactionsFolderId, `${CONTROL_FOLDER}/${TRANSACTIONS_FOLDER}`],
+            [this.deletedFolderId, `${CONTROL_FOLDER}/deleted`],
+          ] as const) {
+            if (folderId) await this.validateEmptyBootstrapFolder(folderId, label);
+          }
+        }
+        this.gitFolderId ||= await this.ensureBootstrapFolder(GIT_FOLDER, this.rootFolderId, GIT_FOLDER_ROLE);
+        this.controlFolderId ||= await this.ensureBootstrapFolder(CONTROL_FOLDER, this.rootFolderId, CONTROL_FOLDER_ROLE);
+        this.transactionsFolderId ||= await this.ensureBootstrapFolder(TRANSACTIONS_FOLDER, this.controlFolderId, TRANSACTIONS_FOLDER_ROLE);
+        this.deletedFolderId ||= await this.ensureBootstrapFolder("deleted", this.controlFolderId, DELETED_FOLDER_ROLE);
       }
     }
-    if (!recoveredManifest && !root.created) {
-      await this.validateBootstrapSkeleton(this.controlFolderId, {
-        [TRANSACTIONS_FOLDER_ROLE]: TRANSACTIONS_FOLDER,
-        [DELETED_FOLDER_ROLE]: "deleted",
-      });
-    }
-    this.transactionsFolderId = recoveredManifest
-      ? await this.discoverJournalFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, TRANSACTIONS_FOLDER) ?? ""
-      : await this.ensureBootstrapFolder(TRANSACTIONS_FOLDER, this.controlFolderId, TRANSACTIONS_FOLDER_ROLE);
-    this.deletedFolderId = recoveredManifest
-      ? await this.discoverDeletedFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, "deleted") ?? ""
-      : await this.ensureBootstrapFolder("deleted", this.controlFolderId, DELETED_FOLDER_ROLE);
     if (recoveredManifest) {
+      this.transactionsFolderId = await this.discoverJournalFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, TRANSACTIONS_FOLDER) ?? "";
+      this.deletedFolderId = await this.discoverDeletedFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, "deleted") ?? "";
       if (!this.transactionsFolderId || !this.deletedFolderId) {
         throw new Error("Drive vault control authority is incomplete");
       }
@@ -339,7 +356,7 @@ export class DriveVaultRepository implements VaultRepository {
       if (!this.transactionsFolderId || !this.deletedFolderId) {
         throw new Error("Drive vault authority is incomplete; refusing to reprovision an existing marked root");
       }
-      const bootstrap = await this.findBootstrapJournal();
+      bootstrap ??= await this.findBootstrapJournal();
       if (bootstrap) await this.provision(bootstrap.journal, bootstrap.file);
       else await this.provision();
     }
@@ -381,6 +398,26 @@ export class DriveVaultRepository implements VaultRepository {
     return this.options.client.ensureFolder(name, parentId, {
       appProperties: { [BINDING_PROPERTY]: this.options.vaultBindingId, [ROLE_PROPERTY]: role },
     });
+  }
+
+  private async findBootstrapRoleFolder(parentId: string, name: string, role: string): Promise<string | null> {
+    const matches = (await this.options.client.listFiles({
+      folderId: parentId,
+      nameContains: name,
+      foldersOnly: true,
+      pageSize: 1000,
+      allPages: true,
+      appProperties: { [BINDING_PROPERTY]: this.options.vaultBindingId, [ROLE_PROPERTY]: role },
+    })).filter((file) => file.name === name && file.parents?.length === 1 && file.parents[0] === parentId);
+    if (matches.length > 1) throw new Error(`Drive bootstrap role ${role} is ambiguous`);
+    return matches[0]?.id ?? null;
+  }
+
+  private async validateEmptyBootstrapFolder(folderId: string, label: string): Promise<void> {
+    const children = await this.listChildren(folderId);
+    if (children.length) {
+      throw new Error(`Drive vault authority is incomplete; ${label} contains prior-authority remnants`);
+    }
   }
 
   private async validateBootstrapSkeleton(parentId: string, roleNames: Record<string, string>): Promise<void> {
