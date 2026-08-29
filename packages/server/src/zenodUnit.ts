@@ -1323,6 +1323,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     storage,
     tenantStore,
     customerAccounts: customer.accounts,
+    customerIdentities: customer.identities,
     customerTokenVault: customer.tokenVault,
     customerManagedAiAdmissions: customer.managedAiAdmissions,
     zenodPhylax,

@@ -149,6 +149,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       provider: session.provider,
       provider_subject: session.provider_subject,
       display_name: session.display_name,
+      provider_login: session.provider === "github" ? session.login : null,
       avatar_url: session.avatar_url,
     });
     if (principal.user_id !== session.user_id) {
@@ -400,6 +401,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         provider: "github",
         provider_subject: String(githubId),
         display_name: user.login,
+        provider_login: user.login,
         avatar_url: user.avatar_url ?? `https://github.com/${user.login}.png`,
         email: user.email,
         email_verified: user.email_verified ?? false,
@@ -426,7 +428,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!session) return c.json({ error: "unauthorized" }, 401);
     const principal = principalForSession(session);
     return c.json({
-      login: principal?.github_login ?? session.login,
+      login: principal.provider === "github" ? principal.github_login ?? session.login : principal.display_name,
       avatar_url: principal?.avatar_url ?? session.avatar_url,
     });
   });
@@ -605,10 +607,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!stripe) return c.json({ error: "checkout is not configured" }, 503);
     const resolved = resolveCheckoutTier(tierInput, billing, newCheckoutPolicyForProduct(product));
     if ("error" in resolved) return c.json({ error: resolved.error }, 400);
-    identities.bindAccount(principal.user_id, customerAccountIdForUser(principal));
+    const accountId = existing?.account_id ?? customerAccountIdForUser(principal);
+    identities.bindAccount(principal.user_id, accountId);
     const session = await createCustomerCheckout(stripe, accounts, billing, {
       user_id: principal.user_id,
       display_name: principal.display_name,
+      account_id: accountId,
       github_id: principal.github_id,
       github_login: principal.github_login,
       email: principal.email,
@@ -655,7 +659,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.text("Checkout session not found.", 404);
     }
     const principal = principalForSession(owner);
-    if (session.client_reference_id !== customerAccountIdForUser(principal)) {
+    const pendingAccount = accounts.get(sessionId);
+    if (
+      !pendingAccount ||
+      identities.ownerForAccount(pendingAccount.account_id) !== principal.user_id ||
+      session.client_reference_id !== pendingAccount.account_id
+    ) {
       return c.text("Checkout account binding mismatch.", 403);
     }
     if (session.payment_status !== "paid" && session.status !== "complete") {

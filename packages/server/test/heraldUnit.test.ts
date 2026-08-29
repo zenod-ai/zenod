@@ -572,7 +572,7 @@ describe("Herald council unit", () => {
       });
       expect(checkout.status).toBe(200);
       expect(created).toMatchObject({
-        client_reference_id: "github-42",
+        client_reference_id: expect.stringMatching(/^user-usr_[0-9a-f]{24}$/),
         metadata: { product: "herald", unit: "herald" },
         success_url: "https://herald.zenod.dev/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
         cancel_url: "https://herald.zenod.dev/pricing?checkout=cancelled",

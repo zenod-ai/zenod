@@ -42,7 +42,7 @@ export function issueCustomerSession(
         provider_subject: user.provider_subject,
         display_name: user.display_name,
         avatar_url: user.avatar_url,
-        login: user.github_login ?? user.display_name,
+        login: user.provider === "github" ? user.github_login ?? user.display_name : user.display_name,
       }
     : {
         user_id: customerUserId("github", String(user.id)),

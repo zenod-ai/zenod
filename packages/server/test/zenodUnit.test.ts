@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
+import { Hono } from "hono";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { AddressInfo } from "node:net";
@@ -21,6 +22,8 @@ import {
   ZenodRuntimePool,
 } from "../src/zenodUnit.js";
 import { CustomerAccountStore } from "../src/customerAccounts.js";
+import { customerUserId } from "../src/customerIdentity.js";
+import { issueCustomerSession } from "../src/customerSession.js";
 import { PeerSkillStore } from "../src/peerSkillStore.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { driveAuthFromSettings } from "../src/drive.js";
@@ -1874,6 +1877,52 @@ describe("Zenod chassis unit", () => {
       expect(serialized).not.toContain("billing@example.test");
       expect(serialized).not.toContain("cus_secret");
       expect(serialized).not.toContain("plain-secret-token");
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("does not grant GitHub-admin access from a matching Google display name", async () => {
+    const dataDir = await tempDir();
+    const webDist = join(dataDir, "web");
+    await mkdir(webDist, { recursive: true });
+    await writeFile(join(webDist, "index.html"), "<html>zenod-owner-admin</html>");
+    const env = {
+      NODE_ENV: "test",
+      ACCOUNT_STATE_SECRET: "customer-session-secret",
+      CHASSIS_VAULT_MASTER_KEY,
+    };
+    const unit = createZenodUnit({
+      dataDir,
+      webDist,
+      env,
+      customerAdmin: { githubLogin: "alfablok" },
+    });
+    try {
+      const google = unit.customerIdentities.resolveOrCreate({
+        provider: "google",
+        provider_subject: "google-lookalike",
+        display_name: "AlFaBlOk",
+      });
+      unit.customerIdentities.linkIdentity(google.user_id, {
+        provider: "github",
+        provider_subject: "999",
+        provider_login: "unrelated-github-user",
+      });
+      const principal = unit.customerIdentities.resolve("google", "google-lookalike")!;
+      expect(principal.user_id).toBe(customerUserId("google", "google-lookalike"));
+      expect(principal.github_login).toBe("unrelated-github-user");
+
+      const cookieIssuer = new Hono();
+      cookieIssuer.get("/", (c) => {
+        issueCustomerSession(c, principal, env);
+        return c.text("ok");
+      });
+      const issued = await cookieIssuer.request("/");
+      const cookie = issued.headers.get("set-cookie")!.split(";")[0]!;
+
+      expect((await unit.app.request("/admin", { headers: { cookie } })).status).toBe(404);
+      expect((await unit.app.request("/api/admin/overview", { headers: { cookie } })).status).toBe(404);
     } finally {
       await unit.close();
     }

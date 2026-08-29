@@ -5,7 +5,11 @@ import type Stripe from "stripe";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteTenantStore, hashToken } from "@zenod/mcp-chassis";
-import { customerAccountId, type CustomerAccount } from "../src/customerAccounts.js";
+import {
+  customerAccountId,
+  customerAccountIdForUser,
+  type CustomerAccount,
+} from "../src/customerAccounts.js";
 import { loadCustomerBillingConfig, type CustomerStripeClient } from "../src/customerBilling.js";
 import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
@@ -16,16 +20,18 @@ import { Runtime } from "../src/runtime.js";
 
 const DESTINATION = "https://cloud.zenod.dev";
 const CALLBACK = `${DESTINATION}/auth/github/callback`;
+const GITHUB_USER_ID = customerUserId("github", "42");
+const NEW_GITHUB_ACCOUNT_ID = customerAccountIdForUser({ user_id: GITHUB_USER_ID });
 
 function checkoutSession(overrides: Partial<Stripe.Checkout.Session> = {}): Stripe.Checkout.Session {
   return {
     id: "cs_test_customer",
     object: "checkout.session",
-    client_reference_id: customerAccountId(42),
+    client_reference_id: NEW_GITHUB_ACCOUNT_ID,
     customer_details: { email: "customer@example.com" } as Stripe.Checkout.Session.CustomerDetails,
     customer_email: null,
     livemode: false,
-    metadata: { product: "zenod", unit: "zenod", tier: "monthly", account_id: customerAccountId(42) },
+    metadata: { product: "zenod", unit: "zenod", tier: "monthly", account_id: NEW_GITHUB_ACCOUNT_ID },
     mode: "subscription",
     payment_status: "paid",
     status: "complete",
@@ -62,7 +68,7 @@ describe("hosted customer layer", () => {
       cancel_at_period_end: false,
       current_period_start: 1_797_321_600,
       current_period_end: 1_800_000_000,
-      metadata: { account_id: customerAccountId(42) },
+      metadata: { account_id: NEW_GITHUB_ACCOUNT_ID },
     } as Stripe.Subscription;
     stripe = {
       checkout: {
@@ -250,7 +256,7 @@ describe("hosted customer layer", () => {
     expect(await checkout.json()).toMatchObject({ id: session.id, tier: "monthly", product: "zenod" });
     expect(createdParams).toMatchObject({
       mode: "subscription",
-      client_reference_id: customerAccountId(42),
+      client_reference_id: NEW_GITHUB_ACCOUNT_ID,
       line_items: [{ price: "price_monthly", quantity: 1 }],
       billing_address_collection: "required",
       tax_id_collection: { enabled: true },
@@ -333,10 +339,10 @@ describe("hosted customer layer", () => {
     expect(accountResponse.status).toBe(200);
     const account = await accountResponse.json();
     expect(account).toMatchObject({
-      account_id: customerAccountId(42),
+      account_id: NEW_GITHUB_ACCOUNT_ID,
       tier: "monthly",
       subscription_status: "active",
-      tenant_id: customerAccountId(42),
+      tenant_id: NEW_GITHUB_ACCOUNT_ID,
       slug: "octocat-42",
       usage: { percentageUsed: null, state: "unavailable", resetsAt: null },
     });
@@ -353,7 +359,7 @@ describe("hosted customer layer", () => {
     expect(tenants.snapshot()).toEqual([
       expect.objectContaining({
         tokenHash: hashToken(account.token),
-        tenant: { id: customerAccountId(42), name: "octocat", plan: "monthly" },
+        tenant: { id: NEW_GITHUB_ACCOUNT_ID, name: "octocat", plan: "monthly" },
         status: "active",
       }),
     ]);
@@ -413,12 +419,18 @@ describe("hosted customer layer", () => {
       });
       expect(layer.identities.ownerForAccount(accountId)).toBe(principal.user_id);
 
-      const webhook = await layer.app.request("/webhook", {
-        method: "POST",
-        headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
-        body: "{}",
+      layer.identities.linkIdentity(principal.user_id, {
+        provider: "github",
+        provider_subject: "9001",
+        provider_login: "ada-on-github",
       });
-      expect(await webhook.json()).toEqual({ received: true, result: "completed" });
+      const linkedPrincipal = layer.identities.resolve("github", "9001")!;
+      expect(customerAccountIdForUser(linkedPrincipal)).toBe(accountId);
+
+      const completedCheckout = await layer.app.request(`/checkout/complete?session_id=${session.id}`, {
+        headers: { cookie },
+      });
+      expect(completedCheckout.status).toBe(303);
       expect(layer.accounts.resolveActiveTenantForUser(principal.user_id)).toMatchObject({
         account_id: accountId,
         tenant_id: accountId,
@@ -428,6 +440,9 @@ describe("hosted customer layer", () => {
         expect.objectContaining({
           tenant: expect.objectContaining({ id: accountId, name: principal.user_id }),
         }),
+      ]);
+      expect(layer.identities.snapshot().account_owners).toEqual([
+        expect.objectContaining({ user_id: principal.user_id, account_id: accountId }),
       ]);
     } finally {
       layer.close();
@@ -742,7 +757,7 @@ describe("hosted customer layer", () => {
       body: "{}",
     });
     expect(await pastDue.json()).toEqual({ received: true, result: "past_due" });
-    expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("active");
+    expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("active");
 
     const invoice = {
       id: "in_test_customer",
@@ -775,7 +790,7 @@ describe("hosted customer layer", () => {
       body: "{}",
     });
     expect(await canceled.json()).toEqual({ received: true, result: "canceled" });
-    expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("suspended");
+    expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("suspended");
 
     vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
       type: "invoice.payment_failed",
@@ -801,7 +816,7 @@ describe("hosted customer layer", () => {
       headers: { "stripe-signature": "valid" },
       body: "{}",
     });
-    expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("active");
+    expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("active");
   });
 
   it("uses authoritative Stripe state for webhook and periodic entitlement reconciliation", async () => {
@@ -857,7 +872,7 @@ describe("hosted customer layer", () => {
       } as Stripe.Subscription;
       await layer.reconcileManagedAiAccounts();
       expect(layer.accounts.resolveForSubscription("sub_test_customer")?.subscription_status).toBe("canceled");
-      expect(tenants.snapshot().find((row) => row.tenant.id === customerAccountId(42))?.status).toBe("suspended");
+      expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("suspended");
     } finally {
       layer.close();
     }
@@ -1135,7 +1150,7 @@ describe("hosted customer layer", () => {
       headers: { "stripe-signature": "valid" },
       body: "{}",
     })).status).toBe(200);
-    const establishedToken = first.tokenVault.get(customerAccountId(42));
+    const establishedToken = first.tokenVault.get(NEW_GITHUB_ACCOUNT_ID);
     expect(establishedToken).toMatch(/^zenod_[a-f0-9]{48}$/);
     await first.close();
 
@@ -1155,11 +1170,11 @@ describe("hosted customer layer", () => {
     try {
       const reconciledCookie = await signInCookie(reconciled.app);
       reconciled.accounts.upsert(session.id, {
-        account_id: customerAccountId(42),
+        account_id: NEW_GITHUB_ACCOUNT_ID,
         github_id: 42,
         github_login: "octocat",
         tier: "monthly",
-        stripe_client_reference_id: customerAccountId(42),
+        stripe_client_reference_id: NEW_GITHUB_ACCOUNT_ID,
         subscription_status: "checkout_pending",
         claimed_at: new Date(Date.now() + 1_000).toISOString(),
       });
@@ -1170,18 +1185,18 @@ describe("hosted customer layer", () => {
       });
       expect(await webhook.json()).toEqual({ received: true, result: "completed" });
 
-      const reconciledToken = reconciled.tokenVault.get(customerAccountId(42));
+      const reconciledToken = reconciled.tokenVault.get(NEW_GITHUB_ACCOUNT_ID);
       expect(reconciledToken).toMatch(/^zenod_[a-f0-9]{48}$/);
       expect(reconciledToken).not.toBe(establishedToken);
       const establishedRecord = tenants.resolveTokenHash(hashToken(establishedToken!));
       expect(establishedRecord).toMatchObject({
-        tenant: { id: customerAccountId(42) },
+        tenant: { id: NEW_GITHUB_ACCOUNT_ID },
         status: "active",
       });
       expect(establishedRecord?.profile ?? null).toBeNull();
       const reconciledRecord = tenants.resolveTokenHash(hashToken(reconciledToken!));
       expect(reconciledRecord).toMatchObject({
-        tenant: { id: customerAccountId(42) },
+        tenant: { id: NEW_GITHUB_ACCOUNT_ID },
         status: "active",
       });
       expect(reconciledRecord?.profile ?? null).toBeNull();

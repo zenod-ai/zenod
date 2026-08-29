@@ -77,6 +77,61 @@ describe("provider-neutral customer identity persistence", () => {
     expect(identities.ownerForAccount("github-1")).toBe(first.user_id);
   });
 
+  it("uses provider-scoped GitHub login metadata and refreshes renamed profiles", async () => {
+    const { identities } = await identityStore();
+    const google = identities.resolveOrCreate({
+      provider: "google",
+      provider_subject: "google-admin-lookalike",
+      display_name: "AlFaBlOk",
+      email: "lookalike@example.test",
+      email_verified: true,
+    });
+    identities.linkIdentity(google.user_id, {
+      provider: "github",
+      provider_subject: "7001",
+      provider_login: "unrelated-user",
+    });
+
+    expect(identities.resolve("google", "google-admin-lookalike")).toMatchObject({
+      display_name: "AlFaBlOk",
+      github_id: 7001,
+      github_login: "unrelated-user",
+    });
+
+    identities.resolveOrCreate({
+      provider: "github",
+      provider_subject: "7001",
+      provider_login: "renamed-user",
+      display_name: "Renamed User",
+    });
+    expect(identities.resolve("google", "google-admin-lookalike")?.github_login).toBe("renamed-user");
+  });
+
+  it("refuses to link a provider subject already owned by another user", async () => {
+    const { identities } = await identityStore();
+    const first = identities.resolveOrCreate({
+      provider: "google",
+      provider_subject: "first-google",
+      display_name: "First",
+    });
+    const second = identities.resolveOrCreate({
+      provider: "google",
+      provider_subject: "second-google",
+      display_name: "Second",
+    });
+    identities.linkIdentity(first.user_id, {
+      provider: "github",
+      provider_subject: "42",
+      provider_login: "octocat",
+    });
+
+    expect(() => identities.linkIdentity(second.user_id, {
+      provider: "github",
+      provider_subject: "42",
+      provider_login: "octocat",
+    })).toThrow("provider identity is already linked to another user");
+  });
+
   it("fails closed without replacing an unreadable identity store", async () => {
     const { dir, identities } = await identityStore();
     const path = join(dir, "customer-identities.json");

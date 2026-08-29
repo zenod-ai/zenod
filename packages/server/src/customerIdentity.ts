@@ -117,6 +117,7 @@ export class CustomerIdentityStore {
     provider: CustomerIdentityProvider;
     provider_subject: string;
     display_name: string;
+    provider_login?: string | null;
     avatar_url?: string | null;
     email?: string | null;
     email_verified?: boolean;
@@ -127,7 +128,29 @@ export class CustomerIdentityStore {
     const existing = snapshot.identities.find(
       (candidate) => candidate.provider === input.provider && candidate.provider_subject === providerSubject,
     );
-    if (existing) return this.principal(snapshot, existing);
+    if (existing) {
+      const user = snapshot.users.find((candidate) => candidate.user_id === existing.user_id);
+      if (!user) throw new Error(`identity references unknown user ${existing.user_id}`);
+      const nextLogin = input.provider_login === undefined ? existing.provider_login : input.provider_login;
+      const nextEmail = input.email === undefined ? existing.email : input.email;
+      const nextVerified = input.email_verified === undefined ? existing.email_verified : input.email_verified;
+      const nextAvatar = input.avatar_url === undefined ? user.avatar_url : input.avatar_url;
+      const changed =
+        nextLogin !== existing.provider_login ||
+        nextEmail !== existing.email ||
+        nextVerified !== existing.email_verified ||
+        input.display_name !== user.display_name ||
+        nextAvatar !== user.avatar_url;
+      if (changed) {
+        existing.provider_login = nextLogin ?? null;
+        existing.email = nextEmail ?? null;
+        existing.email_verified = nextVerified;
+        user.display_name = input.display_name;
+        user.avatar_url = nextAvatar ?? null;
+        this.save(snapshot);
+      }
+      return this.principal(snapshot, existing);
+    }
 
     // Deliberately do not search by email. A matching address is never proof
     // that two provider subjects belong to the same customer.
@@ -143,6 +166,7 @@ export class CustomerIdentityStore {
       user_id: userId,
       provider: input.provider,
       provider_subject: providerSubject,
+      provider_login: input.provider_login ?? null,
       email: input.email ?? null,
       email_verified: input.email_verified ?? false,
       created_at: now,
@@ -167,6 +191,41 @@ export class CustomerIdentityStore {
     snapshot.account_owners.push(owner);
     this.save(snapshot);
     return owner;
+  }
+
+  /** Persistence primitive for GDV-3's separately authenticated linking flow. */
+  linkIdentity(userId: string, input: {
+    provider: CustomerIdentityProvider;
+    provider_subject: string;
+    provider_login?: string | null;
+    email?: string | null;
+    email_verified?: boolean;
+  }): CustomerIdentityRecord {
+    const snapshot = this.load();
+    if (!snapshot.users.some((candidate) => candidate.user_id === userId)) {
+      throw new Error(`cannot link identity to unknown user ${userId}`);
+    }
+    const providerSubject = input.provider_subject.trim();
+    if (!providerSubject) throw new Error("provider_subject is required");
+    const existing = snapshot.identities.find(
+      (candidate) => candidate.provider === input.provider && candidate.provider_subject === providerSubject,
+    );
+    if (existing) {
+      if (existing.user_id !== userId) throw new Error("provider identity is already linked to another user");
+      return existing;
+    }
+    const identity: CustomerIdentityRecord = {
+      user_id: userId,
+      provider: input.provider,
+      provider_subject: providerSubject,
+      provider_login: input.provider_login ?? null,
+      email: input.email ?? null,
+      email_verified: input.email_verified ?? false,
+      created_at: new Date().toISOString(),
+    };
+    snapshot.identities.push(identity);
+    this.save(snapshot);
+    return identity;
   }
 
   accountIdsForUser(userId: string): string[] {
@@ -202,7 +261,7 @@ export class CustomerIdentityStore {
       email: identity.email,
       email_verified: identity.email_verified,
       github_id: githubId !== null && Number.isSafeInteger(githubId) ? githubId : null,
-      github_login: github ? user.display_name : null,
+      github_login: github?.provider_login?.trim() || null,
     };
   }
 }

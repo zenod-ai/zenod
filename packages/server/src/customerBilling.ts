@@ -29,6 +29,7 @@ export interface CustomerStripeClient {
 export interface ProviderNeutralCheckoutOwner {
   user_id: string;
   display_name: string;
+  account_id?: string;
   github_id?: number | null;
   github_login?: string | null;
   email?: string | null;
@@ -143,7 +144,9 @@ export async function createCustomerCheckout(
   product: CustomerProductConfig = { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" },
 ): Promise<Stripe.Checkout.Session> {
   const normalizedOwner = providerNeutralCheckoutOwner(owner);
-  const accountId = customerAccountIdForUser(normalizedOwner);
+  const accountId = normalizedOwner.account_id ??
+    accounts.resolveForUser(normalizedOwner.user_id)?.account_id ??
+    customerAccountIdForUser(normalizedOwner);
   const metadata = { product: product.product, unit: product.unit, tier: checkout.tier, account_id: accountId };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",

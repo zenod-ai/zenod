@@ -229,7 +229,6 @@ export function customerAccountId(githubId: number): string {
 /** Preserve legacy GitHub IDs; provider-neutral customers use their internal ID. */
 export function customerAccountIdForUser(user: {
   user_id: string;
-  github_id?: number | null;
 }): string {
-  return user.github_id ? customerAccountId(user.github_id) : `user-${user.user_id}`;
+  return `user-${user.user_id}`;
 }

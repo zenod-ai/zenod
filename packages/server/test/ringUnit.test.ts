@@ -554,7 +554,7 @@ describe("Ring council unit", () => {
       });
       expect(checkout.status).toBe(200);
       expect(created).toMatchObject({
-        client_reference_id: "github-42",
+        client_reference_id: expect.stringMatching(/^user-usr_[0-9a-f]{24}$/),
         metadata: { product: "ring", unit: "ring" },
         success_url: "https://ring.zenod.dev/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
         cancel_url: "https://ring.zenod.dev/pricing?checkout=cancelled",

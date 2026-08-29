@@ -16,6 +16,8 @@ export interface CustomerIdentityRecord {
   provider: CustomerIdentityProvider;
   /** GitHub numeric ID rendered as text, or Google OIDC `sub`. Never email. */
   provider_subject: string;
+  /** Provider-scoped presentation handle; GitHub login for GitHub identities. */
+  provider_login?: string | null;
   email: string | null;
   email_verified: boolean;
   created_at: string;
