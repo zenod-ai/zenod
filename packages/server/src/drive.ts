@@ -216,11 +216,14 @@ export class DriveClient {
    * folderId when given; nameContains filters by name substring.
    */
   async listFiles(
-    options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean } = {},
+    options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean; appProperties?: Record<string, string> } = {},
   ): Promise<DriveFile[]> {
     const clauses = ["trashed = false", `mimeType ${options.foldersOnly ? "=" : "!="} '${FOLDER_MIME}'`];
     if (options.folderId) clauses.push(`'${options.folderId.replaceAll("'", "\\'")}' in parents`);
     if (options.nameContains) clauses.push(`name contains '${options.nameContains.replaceAll("'", "\\'")}'`);
+    for (const [key, value] of Object.entries(options.appProperties ?? {})) {
+      clauses.push(`appProperties has { key='${key.replaceAll("'", "\\'")}' and value='${value.replaceAll("'", "\\'")}' }`);
+    }
     const files: DriveFile[] = [];
     let pageToken: string | undefined;
     do {
@@ -343,7 +346,7 @@ export class DriveClient {
   }
 
   /** Recover or create the app-owned ordinary-file root for one Drive vault binding. */
-  async ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<string> {
+  async ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<{ folderId: string; created: boolean }> {
     if (!vaultBindingId || vaultBindingId.length > 100) throw new Error("Drive vault binding ID is invalid");
     const markerValue = `${VAULT_ROOT_PROPERTY_VERSION}:${vaultBindingId}`;
     type VaultFolder = DriveFile & { capabilities?: { canAddChildren?: boolean } };
@@ -355,7 +358,7 @@ export class DriveClient {
     if (storedFolderId) {
       const response = await this.request(`/files/${encodeURIComponent(storedFolderId)}`, { fields: MANAGED_FOLDER_FIELDS }).catch(() => null);
       const stored = response ? await response.json().catch(() => null) as VaultFolder | null : null;
-      if (matches(stored)) return storedFolderId;
+      if (matches(stored)) return { folderId: storedFolderId, created: false };
     }
     const response = await this.request("/files", {
       // Include trashed/non-writable marked roots so authority loss cannot be
@@ -369,7 +372,7 @@ export class DriveClient {
     const marked = (((await response.json()) as { files?: VaultFolder[] }).files ?? []).filter((folder) =>
       folder.mimeType === FOLDER_MIME && folder.appProperties?.[VAULT_ROOT_PROPERTY_KEY] === markerValue);
     if (marked.length > 1) throw new Error(`Drive vault authority is ambiguous for binding ${vaultBindingId}`);
-    if (marked[0] && matches(marked[0])) return marked[0].id;
+    if (marked[0] && matches(marked[0])) return { folderId: marked[0].id, created: false };
     if (marked[0]) throw new Error(`Drive vault authority ${marked[0].id} is no longer writable`);
     if (storedFolderId) {
       throw new Error(`Drive vault authority ${storedFolderId} is missing or no longer writable`);
@@ -384,7 +387,7 @@ export class DriveClient {
     });
     const folder = await created.json() as VaultFolder;
     if (!folder.id) throw new Error("Drive API did not return the Zenod Vault folder ID");
-    return folder.id;
+    return { folderId: folder.id, created: true };
   }
 
   /**

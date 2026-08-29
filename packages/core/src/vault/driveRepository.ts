@@ -50,9 +50,14 @@ export interface DriveVaultPrecondition {
   expectedChecksum?: string;
 }
 
+export interface DriveVaultRootResolution {
+  folderId: string;
+  created: boolean;
+}
+
 /** The bounded DriveClient surface required by the Drive vault adapter. */
 export interface DriveVaultClient {
-  ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<string>;
+  ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<DriveVaultRootResolution>;
   ensureFolder(name: string, parentId: string): Promise<string>;
   listFiles(options?: {
     folderId?: string;
@@ -60,6 +65,7 @@ export interface DriveVaultClient {
     pageSize?: number;
     foldersOnly?: boolean;
     allPages?: boolean;
+    appProperties?: Record<string, string>;
   }): Promise<DriveVaultFile[]>;
   getFile(fileId: string): Promise<DriveVaultFile>;
   download(fileId: string): Promise<Buffer>;
@@ -270,13 +276,18 @@ export class DriveVaultRepository implements VaultRepository {
   private async initialize(): Promise<void> {
     await mkdir(this.path, { recursive: true });
     await mkdir(join(this.stateDir, "transactions"), { recursive: true });
-    const recoveredManifest = await this.discoverManifestFile();
+    const root = await this.options.client.ensureVaultRootFolder(
+      this.options.vaultBindingId,
+      this.options.storedRootFolderId,
+    );
+    this.rootFolderId = root.folderId;
+    const recoveredManifest = await this.discoverManifestFile(this.rootFolderId);
     if (recoveredManifest) {
       this.controlFolderId = recoveredManifest.parents?.[0] ?? "";
       if (!this.controlFolderId) throw new Error("Drive vault manifest has no control-folder parent");
       const controlFolder = await this.options.client.getFile(this.controlFolderId);
-      this.rootFolderId = controlFolder.parents?.length === 1 ? controlFolder.parents[0]! : "";
-      if (!this.rootFolderId || (this.options.storedRootFolderId && this.options.storedRootFolderId !== this.rootFolderId)) {
+      const recoveredRootId = controlFolder.parents?.length === 1 ? controlFolder.parents[0]! : "";
+      if (recoveredRootId !== this.rootFolderId) {
         throw new Error("Drive vault manifest does not belong to the stored root authority");
       }
       const recoveredRoot = await this.options.client.getFile(this.rootFolderId);
@@ -289,50 +300,75 @@ export class DriveVaultRepository implements VaultRepository {
       if (!this.gitFolderId) throw new Error("Drive vault bundle has no Git-folder parent");
       await this.validateControlParents(recoveredManifest, bundleFile);
     } else {
-      this.rootFolderId = await this.options.client.ensureVaultRootFolder(
-        this.options.vaultBindingId,
-        this.options.storedRootFolderId,
-      );
-      this.gitFolderId = await this.options.client.ensureFolder(GIT_FOLDER, this.rootFolderId);
-      this.controlFolderId = await this.options.client.ensureFolder(CONTROL_FOLDER, this.rootFolderId);
+      if (root.created) {
+        this.gitFolderId = await this.options.client.ensureFolder(GIT_FOLDER, this.rootFolderId);
+        this.controlFolderId = await this.options.client.ensureFolder(CONTROL_FOLDER, this.rootFolderId);
+      } else {
+        this.gitFolderId = await this.findUniqueChildFolder(this.rootFolderId, GIT_FOLDER) ?? "";
+        this.controlFolderId = await this.findUniqueChildFolder(this.rootFolderId, CONTROL_FOLDER) ?? "";
+        if (!this.gitFolderId || !this.controlFolderId) {
+          throw new Error("Drive vault authority is incomplete; refusing to reprovision an existing marked root");
+        }
+      }
     }
     this.transactionsFolderId = recoveredManifest
-      ? await this.discoverJournalFolder() ?? await this.options.client.ensureFolder(TRANSACTIONS_FOLDER, this.controlFolderId)
-      : await this.options.client.ensureFolder(TRANSACTIONS_FOLDER, this.controlFolderId);
+      ? await this.discoverJournalFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, TRANSACTIONS_FOLDER) ?? ""
+      : root.created
+        ? await this.options.client.ensureFolder(TRANSACTIONS_FOLDER, this.controlFolderId)
+        : await this.findUniqueChildFolder(this.controlFolderId, TRANSACTIONS_FOLDER) ?? "";
     this.deletedFolderId = recoveredManifest
-      ? await this.discoverDeletedFolder() ?? await this.options.client.ensureFolder("deleted", this.controlFolderId)
-      : await this.options.client.ensureFolder("deleted", this.controlFolderId);
+      ? await this.discoverDeletedFolder() ?? await this.findUniqueChildFolder(this.controlFolderId, "deleted") ?? ""
+      : root.created
+        ? await this.options.client.ensureFolder("deleted", this.controlFolderId)
+        : await this.findUniqueChildFolder(this.controlFolderId, "deleted") ?? "";
     if (recoveredManifest) {
-      await this.validateManifestAuthority(recoveredManifest, this.manifest, true);
+      if (!this.transactionsFolderId || !this.deletedFolderId) {
+        throw new Error("Drive vault control authority is incomplete");
+      }
+      await this.validateManifestControlAuthority(recoveredManifest, this.manifest);
       await this.recoverTransactions();
       await this.validateManifestAuthority(this.manifestFile, this.manifest);
     } else {
+      if (!this.transactionsFolderId || !this.deletedFolderId) {
+        throw new Error("Drive vault authority is incomplete; refusing to reprovision an existing marked root");
+      }
       const bootstrap = await this.findBootstrapJournal();
       if (bootstrap) await this.provision(bootstrap.journal, bootstrap.file);
-      else {
-        const remnants = await this.authorityRemnants();
-        if (remnants.length) {
-          throw new Error(`Drive vault authority is incomplete; refusing to reprovision over: ${remnants.join(", ")}`);
-        }
-        await this.provision();
-      }
+      else if (root.created) await this.provision();
+      else throw new Error("Drive vault authority is incomplete; refusing to reprovision an existing marked root");
     }
     await this.ensureStandardFolders();
     await this.materializeFromAuthority();
     await this.importExternalEdits();
   }
 
-  private async discoverManifestFile(): Promise<DriveVaultFile | null> {
+  private async discoverManifestFile(rootFolderId: string): Promise<DriveVaultFile | null> {
     const candidates: DriveVaultFile[] = [];
-    for (const file of await this.options.client.listFiles({ pageSize: 1000, allPages: true })) {
-      if (file.mimeType !== "application/json" || file.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId) continue;
-      const parsed = await this.options.client.download(file.id)
-        .then((data) => JSON.parse(data.toString("utf8")) as Partial<DriveVaultManifest>)
-        .catch(() => null);
-      if (parsed?.schemaVersion === 1 && parsed.vaultBindingId === this.options.vaultBindingId && parsed.bundle && parsed.files) candidates.push(file);
+    const folders = await this.options.client.listFiles({ folderId: rootFolderId, foldersOnly: true, pageSize: 1000, allPages: true });
+    for (const folder of folders) {
+      const marked = await this.options.client.listFiles({
+        folderId: folder.id,
+        pageSize: 1000,
+        allPages: true,
+        appProperties: { [BINDING_PROPERTY]: this.options.vaultBindingId, [ROLE_PROPERTY]: MANIFEST_ROLE },
+      });
+      for (const file of marked) {
+        if (file.mimeType !== "application/json") continue;
+        const parsed = await this.options.client.download(file.id)
+          .then((data) => JSON.parse(data.toString("utf8")) as Partial<DriveVaultManifest>)
+          .catch(() => null);
+        if (parsed?.schemaVersion === 1 && parsed.vaultBindingId === this.options.vaultBindingId && parsed.bundle && parsed.files) candidates.push(file);
+      }
     }
     if (candidates.length > 1) throw new Error("Drive vault has multiple manifest authorities");
     return candidates[0] ?? null;
+  }
+
+  private async findUniqueChildFolder(parentId: string, name: string): Promise<string | null> {
+    const matches = (await this.options.client.listFiles({ folderId: parentId, nameContains: name, foldersOnly: true, pageSize: 1000, allPages: true }))
+      .filter((file) => file.name === name && file.parents?.length === 1 && file.parents[0] === parentId);
+    if (matches.length > 1) throw new Error(`Drive vault has duplicate ${name} folders`);
+    return matches[0]?.id ?? null;
   }
 
   private async validateControlParents(manifestFile: DriveVaultFile, bundleFile: DriveVaultFile): Promise<void> {
@@ -350,10 +386,9 @@ export class DriveVaultRepository implements VaultRepository {
 
   private async discoverJournalFolder(): Promise<string | null> {
     const parents = new Set<string>();
-    for (const file of await this.options.client.listFiles({ pageSize: 1000, allPages: true })) {
-      if (!file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-") || file.parents?.length !== 1) continue;
-      const parent = await this.options.client.getFile(file.parents[0]!).catch(() => null);
-      if (parent?.parents?.length === 1 && parent.parents[0] === this.controlFolderId) parents.add(parent.id);
+    for (const folder of await this.options.client.listFiles({ folderId: this.controlFolderId, foldersOnly: true, pageSize: 1000, allPages: true })) {
+      const files = await this.options.client.listFiles({ folderId: folder.id, pageSize: 1000, allPages: true });
+      if (files.some((file) => file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-"))) parents.add(folder.id);
     }
     if (parents.size > 1) throw new Error("Drive vault has multiple transaction journal folders");
     return [...parents][0] ?? null;
@@ -373,16 +408,6 @@ export class DriveVaultRepository implements VaultRepository {
     const folder = await this.options.client.getFile(folderId);
     if (folder.parents?.length !== 1 || folder.parents[0] !== this.controlFolderId) throw new Error("Drive vault tombstone folder is outside its control folder");
     return folderId;
-  }
-
-  private async authorityRemnants(): Promise<string[]> {
-    const remnants: string[] = [];
-    for (const file of await this.options.client.listFiles({ pageSize: 1000, allPages: true })) {
-      if (file.appProperties?.[BINDING_PROPERTY] === this.options.vaultBindingId) remnants.push(`${file.name} (${file.id})`);
-    }
-    const ordinary = await this.remoteSnapshot();
-    remnants.push(...Object.keys(ordinary));
-    return [...new Set(remnants)].sort();
   }
 
   private async ensureStandardFolders(): Promise<void> {
@@ -551,11 +576,11 @@ export class DriveVaultRepository implements VaultRepository {
     this.manifest = manifest;
   }
 
-  private async validateManifestAuthority(file: DriveVaultFile, manifest: DriveVaultManifest, allowOrdinaryDrift = false): Promise<void> {
+  private async validateManifestControlAuthority(file: DriveVaultFile, manifest: DriveVaultManifest): Promise<void> {
     if (
       file.parents?.length !== 1 || file.parents[0] !== this.controlFolderId
       || file.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
-      || (file.appProperties?.[ROLE_PROPERTY] && file.appProperties[ROLE_PROPERTY] !== MANIFEST_ROLE)
+      || file.appProperties?.[ROLE_PROPERTY] !== MANIFEST_ROLE
     ) throw new Error("Drive vault manifest is outside its bound control folder");
     const control = await this.options.client.getFile(this.controlFolderId);
     if (control.mimeType !== FOLDER_MIME || control.parents?.length !== 1 || control.parents[0] !== this.rootFolderId) {
@@ -569,19 +594,23 @@ export class DriveVaultRepository implements VaultRepository {
     if (
       bundle.name !== BUNDLE_NAME || bundle.parents?.length !== 1 || bundle.parents[0] !== this.gitFolderId
       || bundle.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
-      || (bundle.appProperties?.[ROLE_PROPERTY] && bundle.appProperties[ROLE_PROPERTY] !== BUNDLE_ROLE)
+      || bundle.appProperties?.[ROLE_PROPERTY] !== BUNDLE_ROLE
     ) throw new Error("Drive vault bundle is outside its bound Git folder");
+  }
+
+  private async validateManifestAuthority(file: DriveVaultFile, manifest: DriveVaultManifest): Promise<void> {
+    await this.validateManifestControlAuthority(file, manifest);
 
     const normalized = new Set<string>();
-    const fileIds = new Set<string>([file.id, bundle.id]);
+    const fileIds = new Set<string>([file.id, manifest.bundle.fileId]);
     const snapshot = await this.remoteSnapshot();
     for (const [path, entry] of Object.entries(manifest.files)) {
       const safe = normalizePath(path);
       if (safe !== path || normalized.has(safe) || fileIds.has(entry.fileId)) throw new Error(`Drive vault manifest path identity is invalid at ${path}`);
       normalized.add(safe);
       fileIds.add(entry.fileId);
-      if (snapshot[path]?.file.id !== entry.fileId) {
-        if (!allowOrdinaryDrift || !await this.isInsideVault(entry.fileId)) throw new Error(`Drive vault manifest file is outside its exact path at ${path}`);
+      if (snapshot[path]?.file.id !== entry.fileId || snapshot[path]?.file.mimeType !== entry.mimeType) {
+        throw new Error(`Drive vault manifest file is outside its exact path at ${path}`);
       }
     }
     for (const [path, tombstones] of Object.entries(manifest.tombstones ?? {})) {
@@ -595,21 +624,11 @@ export class DriveVaultRepository implements VaultRepository {
         if (archived.parents?.length !== 1 || archived.parents[0] !== this.deletedFolderId || archived.name !== tombstone.archivedName) {
           throw new Error(`Drive vault tombstone is outside its archive at ${path}`);
         }
+        if (sha256(await this.options.client.download(archived.id)) !== tombstone.checksum) {
+          throw new Error(`Drive vault tombstone checksum mismatch at ${path}`);
+        }
       }
     }
-  }
-
-  private async isInsideVault(fileId: string): Promise<boolean> {
-    let current = await this.options.client.getFile(fileId).catch(() => null);
-    const visited = new Set<string>();
-    while (current && !visited.has(current.id)) {
-      if (current.id === this.rootFolderId || current.id === this.controlFolderId || current.id === this.gitFolderId) return true;
-      visited.add(current.id);
-      const parent = current.parents?.length === 1 ? current.parents[0] : null;
-      if (!parent) return false;
-      current = await this.options.client.getFile(parent).catch(() => null);
-    }
-    return false;
   }
 
   private async configureGit(): Promise<void> {
@@ -632,6 +651,9 @@ export class DriveVaultRepository implements VaultRepository {
   }
 
   private async materializeFromAuthority(): Promise<void> {
+    const bundleData = await this.options.client.download(this.manifest.bundle.fileId);
+    if (sha256(bundleData) !== this.manifest.bundle.checksum) throw new Error("Drive Git bundle checksum mismatch");
+    await this.verifyBundleData(bundleData, this.manifest.commitSha);
     const localHead = await access(join(this.path, ".git"))
       .then(async () => simpleGit(this.path).revparse(["HEAD"]).then((value) => value.trim()).catch(() => null))
       .catch(() => null);
@@ -639,13 +661,10 @@ export class DriveVaultRepository implements VaultRepository {
       await this.configureGit();
       return;
     }
-    const bundleData = await this.options.client.download(this.manifest.bundle.fileId);
-    if (sha256(bundleData) !== this.manifest.bundle.checksum) throw new Error("Drive Git bundle checksum mismatch");
     const bundlePath = join(this.stateDir, `restore-${this.idFactory()}.bundle`);
     const restored = join(this.stateDir, `restore-${this.idFactory()}`);
     try {
       await writeFile(bundlePath, bundleData);
-      await simpleGit().raw(["bundle", "verify", bundlePath]);
       await rm(restored, { recursive: true, force: true });
       await simpleGit().clone(bundlePath, restored);
       const restoredGit = simpleGit(restored);
@@ -1059,6 +1078,14 @@ export class DriveVaultRepository implements VaultRepository {
       const entry = expected.files[path];
       if (!actual || !entry || actual.file.id !== entry.fileId || actual.file.version !== entry.version
         || actual.file.modifiedTime !== entry.modifiedTime || sha256(actual.data) !== entry.checksum) conflicts.push(path);
+    }
+    for (const [path, tombstones] of Object.entries(expected.tombstones ?? {})) {
+      for (const tombstone of tombstones) {
+        const archived = await this.options.client.getFile(tombstone.fileId).catch(() => null);
+        const checksum = archived ? await this.options.client.download(archived.id).then(sha256).catch(() => null) : null;
+        if (!archived || archived.name !== tombstone.archivedName || archived.parents?.length !== 1
+          || archived.parents[0] !== this.deletedFolderId || checksum !== tombstone.checksum) conflicts.push(path);
+      }
     }
     if (!conflicts.length) return;
     for (const path of conflicts) {
@@ -1623,6 +1650,7 @@ export class DriveVaultRepository implements VaultRepository {
     } else if (mutation.kind === "delete") {
       const archivedName = `${mutation.operationId}-${posix.basename(mutation.path)}`;
       if (actual.name !== archivedName || actual.parents?.length !== 1 || actual.parents[0] !== this.deletedFolderId) throw new Error(`Drive delete result escaped its archive at ${mutation.path}`);
+      if (!await this.remoteContentMatches(actual, mutation.expectedChecksum!)) throw new Error(`Drive delete result checksum mismatch at ${mutation.path}`);
     } else {
       const target = mutation.kind === "move" ? mutation.destinationPath! : mutation.path;
       const parentPath = posix.dirname(target) === "." ? "" : posix.dirname(target);
@@ -1658,8 +1686,76 @@ export class DriveVaultRepository implements VaultRepository {
     return parent;
   }
 
+  private async preflightRecovery(remote: DriveVaultFile[]): Promise<void> {
+    for (const file of remote) {
+      if (file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-")) continue;
+      const journal = await this.options.client.download(file.id)
+        .then((data) => JSON.parse(data.toString("utf8")) as DriveJournal)
+        .catch(() => null);
+      if (!journal) throw new Error(`Drive transaction journal ${file.id} is not valid JSON`);
+      if (journal.bootstrap === true) {
+        await this.validateBootstrapJournal(file, journal);
+        continue;
+      }
+      await this.validateExecutableJournal(file, journal);
+      await this.validateRecoveryManifest(journal);
+    }
+  }
+
+  /**
+   * Bind an executable journal to the exact base tree before any recovery
+   * mutation. The only permitted path drift is an already-recorded, applied
+   * move/delete from that same validated journal.
+   */
+  private async validateRecoveryManifest(journal: DriveJournal): Promise<void> {
+    const finalized = this.manifest.revisionId === journal.transactionId && this.manifest.commitSha === journal.targetCommitSha;
+    if (finalized || journal.state === "committed" || journal.state === "failed") return;
+    const snapshot = await this.remoteSnapshot();
+    for (const [path, entry] of Object.entries(this.manifest.files)) {
+      const actual = snapshot[path];
+      if (actual?.file.id === entry.fileId && actual.file.mimeType === entry.mimeType) continue;
+      const transition = journal.mutations.find((mutation) => mutation.fileId === entry.fileId
+        && mutation.path === path && (mutation.kind === "move" || mutation.kind === "delete"));
+      if (!transition) throw new Error(`Drive vault manifest file is outside its exact path before recovery at ${path}`);
+      const moved = await this.options.client.getFile(entry.fileId).catch(() => null);
+      if (!moved) throw new Error(`Drive vault recovery target disappeared at ${path}`);
+      if (transition.kind === "delete") {
+        const archivedName = `${transition.operationId}-${posix.basename(path)}`;
+        if (moved.name !== archivedName || moved.parents?.length !== 1 || moved.parents[0] !== this.deletedFolderId) {
+          throw new Error(`Drive vault recovery delete escaped its exact archive at ${path}`);
+        }
+      } else {
+        const target = transition.destinationPath!;
+        const parentPath = posix.dirname(target) === "." ? "" : posix.dirname(target);
+        const parentId = await this.resolveExistingFolder(parentPath);
+        if (!parentId || moved.name !== posix.basename(target) || moved.parents?.length !== 1 || moved.parents[0] !== parentId) {
+          throw new Error(`Drive vault recovery move escaped its exact destination at ${path}`);
+        }
+      }
+      if (transition.state !== "conflict" && !await this.remoteContentMatches(moved, transition.expectedChecksum!)) {
+        throw new Error(`Drive vault recovery result checksum mismatch at ${path}`);
+      }
+    }
+  }
+
   private async recoverTransactions(): Promise<void> {
     const remote = await this.options.client.listFiles({ folderId: this.transactionsFolderId, pageSize: 1000, allPages: true });
+    for (const file of remote.filter((candidate) => candidate.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-"))) {
+      const marker = await this.options.client.download(file.id).then((data) => JSON.parse(data.toString("utf8")) as {
+        schemaVersion?: unknown; kind?: unknown; transactionId?: unknown; tenantId?: unknown; vaultBindingId?: unknown;
+      }).catch(() => null);
+      const transactionId = file.appProperties![OPERATION_PROPERTY]!.slice("journal-conflict-".length);
+      if (!marker || marker.schemaVersion !== 1 || marker.kind !== "journal_conflict" || marker.transactionId !== transactionId
+        || marker.tenantId !== this.options.tenantId || marker.vaultBindingId !== this.options.vaultBindingId
+        || file.name !== `${transactionId}.conflict.json` || file.parents?.length !== 1 || file.parents[0] !== this.transactionsFolderId) {
+        throw new Error("Drive journal conflict marker validation failed");
+      }
+      throw new VaultPublicationError({
+        code: "conflict", message: `Drive transaction journal ${transactionId} has a preserved external edit`,
+        retryable: false, transactionId, paths: [`${CONTROL_FOLDER}/${TRANSACTIONS_FOLDER}/${transactionId}.json`],
+      });
+    }
+    await this.preflightRecovery(remote);
     for (const file of remote.sort((left, right) => Number(Boolean(right.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-"))) - Number(Boolean(left.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-"))))) {
       if (file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-")) {
         const marker = await this.options.client.download(file.id).then((data) => JSON.parse(data.toString("utf8")) as {
@@ -1722,7 +1818,7 @@ export class DriveVaultRepository implements VaultRepository {
       const manifestFile = await this.options.client.getFile(this.manifestFile.id).catch(() => null);
       if (!manifestFile) throw new Error("Drive vault manifest authority disappeared during recovery");
       await this.loadManifest(manifestFile);
-      await this.validateManifestAuthority(manifestFile, this.manifest, true);
+      await this.validateManifestControlAuthority(manifestFile, this.manifest);
       if (this.manifest.revisionId === journal.transactionId && this.manifest.commitSha === journal.targetCommitSha) {
         const results = await this.verifyFinalizedTransaction(journal, file);
         for (const [index, mutation] of journal.mutations.entries()) {

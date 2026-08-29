@@ -147,6 +147,23 @@ describe("drive client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("encodes exact app-property filters in Drive list queries", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://oauth2.googleapis.com/token")) return Response.json({ access_token: "token", expires_in: 3600 });
+      return Response.json({ files: [] });
+    }));
+    const client = new DriveClient(SA_JSON);
+    await client.listFiles({ folderId: "root-1", appProperties: { zenodVaultBinding: "binding-1", zenodVaultRole: "manifest" }, allPages: true });
+    const query = new URL(calls.find((url) => url.includes("/drive/v3/files?"))!).searchParams.get("q")!;
+    expect(query).toContain("'root-1' in parents");
+    expect(query).toContain("appProperties has { key='zenodVaultBinding' and value='binding-1' }");
+    expect(query).toContain("appProperties has { key='zenodVaultRole' and value='manifest' }");
+    vi.unstubAllGlobals();
+  });
+
   it("testDrive reports the service account email", async () => {
     vi.stubGlobal("fetch", stubFetch());
     const result = await testDrive(SA_JSON);
@@ -233,7 +250,7 @@ describe("drive client", () => {
       { accessToken: "token" },
     );
 
-    expect(await client.ensureVaultRootFolder("binding-1")).toBe("vault-root");
+    expect(await client.ensureVaultRootFolder("binding-1")).toEqual({ folderId: "vault-root", created: true });
     await expect(client.updateFile("file-1", "text/markdown", Buffer.from("new"), { expectedVersion: "stale" })).rejects.toThrow(/version changed/);
     expect((await client.updateFile("file-1", "text/markdown", Buffer.from("new"), { expectedVersion: "1" })).version).toBe("2");
     expect((await client.moveFile("file-1", "folder-2", { expectedVersion: "1" }, "moved.md")).parents).toEqual(["folder-2"]);
@@ -276,7 +293,7 @@ describe("drive client", () => {
       { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
       { accessToken: "token" },
     );
-    expect(await client.ensureVaultRootFolder("binding-1", "stored-root")).toBe("stored-root");
+    expect(await client.ensureVaultRootFolder("binding-1", "stored-root")).toEqual({ folderId: "stored-root", created: false });
     mode = "missing";
     await expect(client.ensureVaultRootFolder("binding-1", "stored-root")).rejects.toThrow(/authority stored-root is missing/);
     mode = "duplicate";

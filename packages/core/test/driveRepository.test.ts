@@ -23,6 +23,7 @@ class FakeDrive implements DriveVaultClient {
   readonly files = new Map<string, Stored>();
   readonly revisions = new Map<string, Array<DriveVaultRevisionRecord & { data: Buffer }>>();
   mutationCount = 0;
+  readonly listRequests: Array<{ folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean; appProperties?: Record<string, string> }> = [];
   failAt: { call: number; phase: "before" | "after" } | null = null;
   faultTriggered = false;
   revoked = false;
@@ -32,6 +33,7 @@ class FakeDrive implements DriveVaultClient {
   raceMutation: "update" | "move" = "update";
   failMovePhase: "before" | "after" | null = null;
   authorityRace: { targetName: string; phase: "before_patch" | "after_patch"; externalFileId: string; data: string } | null = null;
+  tombstoneRaceFileId: string | null = null;
   private nextId = 1;
 
   constructor() {
@@ -85,17 +87,17 @@ class FakeDrive implements DriveVaultClient {
     }
   }
 
-  async ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<string> {
+  async ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<{ folderId: string; created: boolean }> {
     const marker = `v1:${vaultBindingId}`;
-    if (storedFolderId && this.files.get(storedFolderId)?.appProperties?.zenodVaultBinding === marker) return storedFolderId;
+    if (storedFolderId && this.files.get(storedFolderId)?.appProperties?.zenodVaultBinding === marker) return { folderId: storedFolderId, created: false };
     const existing = [...this.files.values()].find((file) => file.appProperties?.zenodVaultBinding === marker);
-    if (existing) return existing.id;
+    if (existing) return { folderId: existing.id, created: false };
     return this.mutate(() => {
       const id = `file-${this.nextId++}`;
       const file = this.folder(id, "Zenod Vault", ["my-drive"]);
       file.appProperties = { zenodVaultBinding: marker };
       this.files.set(id, file);
-      return id;
+      return { folderId: id, created: true };
     });
   }
 
@@ -109,11 +111,13 @@ class FakeDrive implements DriveVaultClient {
     });
   }
 
-  async listFiles(options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean } = {}): Promise<DriveVaultFile[]> {
+  async listFiles(options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean; appProperties?: Record<string, string> } = {}): Promise<DriveVaultFile[]> {
     if (this.revoked) throw new Error("Drive API failed (401): authorization revoked");
+    this.listRequests.push(structuredClone(options));
     return [...this.files.values()]
       .filter((file) => !options.folderId || file.parents?.includes(options.folderId))
       .filter((file) => !options.nameContains || file.name.includes(options.nameContains))
+      .filter((file) => Object.entries(options.appProperties ?? {}).every(([key, value]) => file.appProperties?.[key] === value))
       .filter((file) => options.foldersOnly ? file.mimeType === "application/vnd.google-apps.folder" : file.mimeType !== "application/vnd.google-apps.folder")
       .slice(0, options.pageSize ?? 50)
       .map((file) => this.clone(file));
@@ -155,6 +159,12 @@ class FakeDrive implements DriveVaultClient {
       file.data = Buffer.from(data);
       this.updateMetadata(file, true);
       const response = this.clone(file);
+      if (this.tombstoneRaceFileId && file.name.endsWith(".json") && file.name !== "manifest.json"
+        && data.toString("utf8").includes('"kind": "delete"') && data.toString("utf8").includes('"state": "applied"')) {
+        const target = this.tombstoneRaceFileId;
+        this.tombstoneRaceFileId = null;
+        this.externalEdit(target, "externally changed after archive\n");
+      }
       if (race === "after_patch") this.externalEdit(fileId, this.raceData);
       if (authorityRace?.phase === "after_patch") {
         this.authorityRace = null;
@@ -401,6 +411,31 @@ describe("DriveVaultRepository", () => {
     expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(before);
   });
 
+  it("never bootstraps a second authority when all control blobs were removed from a marked root", async () => {
+    const drive = new FakeDrive();
+    await open(drive, await temp("removed-control-seed"));
+    for (const file of [...drive.files.values()]) {
+      if (file.name === "manifest.json" || file.name === "repository.bundle" || file.name.endsWith(".json")) drive.externalRemove(file.id);
+    }
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp("removed-control-restart"))).rejects.toThrow(/incomplete|existing marked root/i);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    expect([...drive.files.values()].some((file) => file.name === "manifest.json" || file.name === "repository.bundle")).toBe(false);
+  });
+
+  it("discovers authority only through the selected root and marker-scoped children", async () => {
+    const drive = new FakeDrive();
+    await open(drive, await temp("bounded-discovery-seed"));
+    drive.listRequests.length = 0;
+    await open(drive, await temp("bounded-discovery-restart"));
+    expect(drive.listRequests.every((request) => Boolean(request.folderId))).toBe(true);
+    expect(drive.listRequests).toContainEqual(expect.objectContaining({
+      appProperties: { zenodVaultBinding: "binding-one", zenodVaultRole: "manifest" },
+    }));
+  });
+
   it.each([
     { call: 8, phase: "before" as const }, { call: 8, phase: "after" as const },
     { call: 10, phase: "before" as const }, { call: 10, phase: "after" as const },
@@ -438,6 +473,17 @@ describe("DriveVaultRepository", () => {
     manifest.bundle.headRevisionId = bundle.headRevisionId;
     drive.externalWrite(manifestFile.id, Buffer.from(JSON.stringify(manifest, null, 2)));
     await expect(repo.currentRevision()).rejects.toThrow(/prerequisite|clone|bundle/i);
+    await expect(open(drive, workdir)).rejects.toThrow(/prerequisite|clone|bundle/i);
+  });
+
+  it.each(["corrupt", "missing"] as const)("verifies %s remote bundle even when the warm cache HEAD matches", async (mode) => {
+    const drive = new FakeDrive();
+    const workdir = await temp(`warm-bundle-${mode}`);
+    await open(drive, workdir);
+    const bundle = [...drive.files.values()].find((file) => file.name === "repository.bundle")!;
+    if (mode === "corrupt") drive.corrupt(bundle.id);
+    else drive.externalRemove(bundle.id);
+    await expect(open(drive, workdir)).rejects.toThrow(/bundle|not found/i);
   });
 
   it.each([
@@ -552,6 +598,21 @@ describe("DriveVaultRepository", () => {
     const manifest = JSON.parse(manifestFile.data.toString("utf8")) as { tombstones: Record<string, unknown[]> };
     expect(manifest.tombstones["Notes/Delete.md"]).toHaveLength(1);
     expect([...drive.files.values()].filter((file) => file.name.endsWith("-Delete.md"))).toHaveLength(1);
+  });
+
+  it("fails closed when archived bytes change after delete evidence is journaled", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("delete-archive-race");
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Notes/Delete.md", "delete me\n");
+    const base = await repo.commitAndPublish("seed delete race");
+    const file = [...drive.files.values()].find((candidate) => candidate.name === "Delete.md")!;
+    await rm(join(workdir, "Notes/Delete.md"));
+    drive.tombstoneRaceFileId = file.id;
+    await expect(repo.commitAndPublish("delete with archive race")).rejects.toMatchObject({ failure: { code: "partial_recovering" } });
+    const manifest = [...drive.files.values()].find((candidate) => candidate.name === "manifest.json")!;
+    expect(JSON.parse(manifest.data.toString("utf8")).revisionId).toBe(base.id);
+    await expect(open(drive, await temp("delete-archive-race-restart"))).rejects.toThrow(/checksum|authority changed|reconciliation/i);
   });
 
   it.each(["before_patch", "after_patch"] as const)("preserves an external edit racing delete %s", async (raceWindow) => {
@@ -748,5 +809,49 @@ describe("DriveVaultRepository", () => {
     await expect(open(drive, await temp("adversarial-manifest-restart"), "binding-one")).rejects.toThrow(/outside its bound/);
     expect(drive.mutationCount).toBe(beforeManifestOpen);
     expect(drive.files.get(victim.id)?.data.toString()).toBe("two\n");
+  });
+
+  it("rejects a jointly edited same-vault manifest and journal before mutating the redirected victim", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("same-vault-adversarial");
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Notes/Source.md", "source\n");
+    await writeVaultFile(workdir, "Notes/Victim.md", "victim\n");
+    await repo.commitAndPublish("seed same-vault files");
+    const source = [...drive.files.values()].find((file) => file.name === "Source.md")!;
+    const victim = [...drive.files.values()].find((file) => file.name === "Victim.md")!;
+    await writeVaultFile(workdir, "Notes/Source.md", "pending\n");
+    drive.resetMutationCounter();
+    drive.failAt = { call: 3, phase: "before" };
+    await expect(repo.commitAndPublish("pending redirected update")).rejects.toBeInstanceOf(VaultPublicationError);
+    drive.failAt = null;
+
+    const manifestFile = [...drive.files.values()].find((file) => file.name === "manifest.json")!;
+    const manifest = JSON.parse(manifestFile.data.toString("utf8"));
+    manifest.files["Notes/Source.md"] = {
+      fileId: victim.id, mimeType: victim.mimeType, version: victim.version, modifiedTime: victim.modifiedTime,
+      checksum: createHash("sha256").update(victim.data).digest("hex"), webViewLink: victim.webViewLink, headRevisionId: victim.headRevisionId,
+    };
+    drive.externalWrite(manifestFile.id, Buffer.from(JSON.stringify(manifest, null, 2)));
+
+    const pendingFile = [...drive.files.values()].find((file) => file.name.endsWith(".json") && file.name !== "manifest.json"
+      && JSON.parse(file.data.toString("utf8")).state !== "committed")!;
+    const pending = JSON.parse(pendingFile.data.toString("utf8"));
+    const update = pending.mutations.find((mutation: any) => mutation.fileId === source.id)!;
+    Object.assign(update, {
+      fileId: victim.id, expectedVersion: victim.version, expectedModifiedTime: victim.modifiedTime,
+      expectedChecksum: createHash("sha256").update(victim.data).digest("hex"),
+    });
+    const manifestMutation = pending.mutations.find((mutation: any) => mutation.path === ".zenod/manifest.json")!;
+    Object.assign(manifestMutation, {
+      fileId: manifestFile.id, expectedVersion: manifestFile.version, expectedModifiedTime: manifestFile.modifiedTime,
+      expectedChecksum: createHash("sha256").update(manifestFile.data).digest("hex"),
+    });
+    pending.intentDigest = fakeJournalDigest(pending);
+    drive.externalWrite(pendingFile.id, Buffer.from(JSON.stringify(pending, null, 2)));
+    const before = drive.mutationCount;
+    await expect(open(drive, await temp("same-vault-adversarial-restart"))).rejects.toThrow(/exact path before recovery/);
+    expect(drive.mutationCount).toBe(before);
+    expect(drive.files.get(victim.id)?.data.toString()).toBe("victim\n");
   });
 });
