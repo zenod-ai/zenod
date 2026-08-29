@@ -72,13 +72,15 @@ describe("VaultRepo", () => {
     });
     expect(initialRevision.commitSha).not.toBe(revision.commitSha);
     expect(Number.isNaN(Date.parse(initialRevision.committedAt))).toBe(false);
-    expect(await githubRepository.currentRevision()).toMatchObject({
+    const currentRevision = await githubRepository.currentRevision();
+    expect(currentRevision).toMatchObject({
       provider: "github",
       id: revision.commitSha,
       commitSha: revision.commitSha,
       githubUrls: [],
       urls: [],
     });
+    expect(currentRevision.committedAt).toBe(revision.committedAt);
     expect(githubRepository.urlFor("README.md", "intro")).toBe(
       "https://github.com/zenod-ai/fixture/blob/main/README.md#intro",
     );

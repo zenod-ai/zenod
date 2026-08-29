@@ -96,12 +96,14 @@ export class VaultRepo implements VaultRepository {
     return (await this.git.revparse(["HEAD"])).trim();
   }
 
+  private async revisionForSha(commitSha: string, githubUrls: string[]): Promise<VaultRevision> {
+    const committedAt = (await this.git.show(["-s", "--format=%cI", commitSha])).trim();
+    return githubVaultRevision({ commitSha, committedAt, githubUrls });
+  }
+
   async currentRevision(): Promise<VaultRevision> {
-    const [commitSha, committedAt] = await Promise.all([
-      this.headSha(),
-      this.git.show(["-s", "--format=%cI", "HEAD"]).then((value) => value.trim()),
-    ]);
-    return githubVaultRevision({ commitSha, committedAt, githubUrls: [] });
+    const commitSha = await this.headSha();
+    return this.revisionForSha(commitSha, []);
   }
 
   async hasHead(): Promise<boolean> {
@@ -197,13 +199,12 @@ export class VaultRepo implements VaultRepository {
       ...(this.repo ? { repo: this.repo } : {}),
       branch: commitSha,
     };
-    return githubVaultRevision({
+    return this.revisionForSha(
       commitSha,
-      committedAt: new Date().toISOString(),
-      githubUrls: changedPaths
+      changedPaths
         .map((path) => githubUrl(canonicalLocation, path))
         .filter(Boolean),
-    });
+    );
   }
 
   /** Resolve a vault path using the current GitHub branch compatibility URL. */
