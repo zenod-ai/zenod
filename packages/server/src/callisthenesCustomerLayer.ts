@@ -36,7 +36,7 @@ export function createCallisthenesCustomerLayer(
   function resolveCustomer(c: Parameters<typeof readCustomerSession>[0]) {
     const session = readCustomerSession(c, env);
     if (!session) return null;
-    const account = layer.accounts.resolveActiveTenantForUser(session.github_id);
+    const account = layer.accounts.resolveActiveTenantForUser(session.user_id);
     const token = account ? layer.tokenVault.get(account.account_id) : null;
     return account?.tenant_id && token ? { account, token } : null;
   }

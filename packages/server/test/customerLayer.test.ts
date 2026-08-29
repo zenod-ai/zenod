@@ -2,11 +2,14 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Stripe from "stripe";
+import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteTenantStore, hashToken } from "@zenod/mcp-chassis";
 import { customerAccountId, type CustomerAccount } from "../src/customerAccounts.js";
 import { loadCustomerBillingConfig, type CustomerStripeClient } from "../src/customerBilling.js";
 import { createCustomerLayer } from "../src/customerLayer.js";
+import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
+import { issueCustomerSession } from "../src/customerSession.js";
 import { customerMetering } from "../src/customerMetering.js";
 import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { Runtime } from "../src/runtime.js";
@@ -357,6 +360,80 @@ describe("hosted customer layer", () => {
     tenants.close();
   });
 
+  it("lets a non-GitHub internal identity own checkout, account, Stripe metadata, and tenant records", async () => {
+    const principal: CustomerPrincipal = {
+      user_id: customerUserId("google", "google-subject-ada"),
+      provider: "google",
+      provider_subject: "google-subject-ada",
+      display_name: "Ada Lovelace",
+      avatar_url: "https://example.test/ada.png",
+      email: "ada@example.test",
+      email_verified: true,
+      github_id: null,
+      github_login: null,
+    };
+    const accountId = `user-${principal.user_id}`;
+    session = checkoutSession({
+      client_reference_id: accountId,
+      metadata: { product: "zenod", unit: "zenod", tier: "monthly", account_id: accountId },
+    });
+    authoritativeSubscription = {
+      ...authoritativeSubscription,
+      metadata: { account_id: accountId },
+    } as Stripe.Subscription;
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      { env, stripe, tenantStore: tenants },
+    );
+    const cookieIssuer = new Hono();
+    cookieIssuer.get("/", (c) => {
+      issueCustomerSession(c, principal, env);
+      return c.text("ok");
+    });
+    const issued = await cookieIssuer.request("/");
+    const cookie = issued.headers.get("set-cookie")!;
+
+    try {
+      const checkout = await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      expect(checkout.status).toBe(200);
+      expect(createdParams).toMatchObject({
+        client_reference_id: accountId,
+        metadata: { account_id: accountId },
+        subscription_data: { metadata: { account_id: accountId } },
+      });
+      expect(layer.accounts.get(session.id)).toMatchObject({
+        account_id: accountId,
+        user_id: principal.user_id,
+        github_id: null,
+        github_login: null,
+      });
+      expect(layer.identities.ownerForAccount(accountId)).toBe(principal.user_id);
+
+      const webhook = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+        body: "{}",
+      });
+      expect(await webhook.json()).toEqual({ received: true, result: "completed" });
+      expect(layer.accounts.resolveActiveTenantForUser(principal.user_id)).toMatchObject({
+        account_id: accountId,
+        tenant_id: accountId,
+        subscription_status: "active",
+      });
+      expect(tenants.snapshot()).toEqual([
+        expect.objectContaining({
+          tenant: expect.objectContaining({ id: accountId, name: principal.user_id }),
+        }),
+      ]);
+    } finally {
+      layer.close();
+    }
+  });
+
   it("runs the generic sidecar lifecycle after local entitlement and composes one customer usage projection", async () => {
     const lifecycle: Array<{ status: string | null; entitled: boolean; localStatus: string | null }> = [];
     const layer = createCustomerLayer(
@@ -505,6 +582,9 @@ describe("hosted customer layer", () => {
       const account = await layer.app.request("/api/console/account", { headers: { cookie } });
       expect(account.status).toBe(200);
       expect(await account.json()).toMatchObject({ tier: "yearly", subscription_status: "active" });
+      expect(layer.identities.ownerForAccount(customerAccountId(42))).toBe(
+        layer.accounts.get("cs_legacy_yearly")?.user_id,
+      );
 
       const portal = await layer.app.request("/api/billing/portal", { method: "POST", headers: { cookie } });
       expect(portal.status).toBe(200);

@@ -760,6 +760,14 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   );
   zenodPhylax?.setDownstreamTokenResolver((accountId) =>
     customer.tokenVault.get(accountId));
+  const isCustomerAdminSession = (session: ReturnType<typeof readCustomerSession>): boolean => {
+    if (!session || !options.customerAdmin) return false;
+    const principal = customer.principalForSession(session);
+    return Boolean(
+      principal.github_login &&
+      principal.github_login.toLowerCase() === options.customerAdmin.githubLogin.toLowerCase(),
+    );
+  };
   let phylaxRefreshTimer: NodeJS.Timeout | null = null;
   let phylaxRefreshStopped = false;
   let phylaxRefreshRun: Promise<void> | null = null;
@@ -1050,13 +1058,13 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       routeVisible(c) {
         const session = readCustomerSession(c, env);
         return Boolean(
-          session && customer.accounts.resolveForUser(session.github_id),
+          session && customer.accounts.resolveForUser(session.user_id),
         );
       },
       async resolveTenant(c) {
         const session = readCustomerSession(c, env);
         if (!session) return null;
-        const account = customer.accounts.resolveActiveTenantForUser(session.github_id);
+        const account = customer.accounts.resolveActiveTenantForUser(session.user_id);
         const downstreamToken = account
           ? customer.tokenVault.get(account.account_id)
           : null;
@@ -1091,7 +1099,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const admin = options.customerAdmin;
     const adminOnly: MiddlewareHandler<{ Bindings: HttpBindings }> = async (c, next) => {
       const session = readCustomerSession(c, env);
-      if (!session || session.login.toLowerCase() !== admin.githubLogin.toLowerCase()) {
+      if (!isCustomerAdminSession(session)) {
         return c.req.path.startsWith("/api/")
           ? c.json({ error: "not found" }, 404)
           : c.text("Not Found", 404);
@@ -1186,12 +1194,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         : null;
       return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
     }
-    const isCustomerAdmin = Boolean(
-      session && options.customerAdmin &&
-      session.login.toLowerCase() === options.customerAdmin.githubLogin.toLowerCase(),
-    );
+    const isCustomerAdmin = isCustomerAdminSession(session);
     const hostedAccount = !isCustomerAdmin && session
-      ? customer.accounts.resolveForUser(session.github_id)
+      ? customer.accounts.resolveForUser(session.user_id)
       : directRecord
         ? customer.accounts.resolveForTenantId(directRecord.tenant.id)
         : null;
@@ -1236,7 +1241,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       const headers = new Headers(c.req.raw.headers);
       headers.delete("cookie");
       if (c.req.path.startsWith("/api/")) {
-        const account = customer.accounts.resolveActiveTenantForUser(session.github_id);
+        const account = customer.accounts.resolveActiveTenantForUser(session.user_id);
         const token = account ? customer.tokenVault.get(account.account_id) : null;
         const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
         if (
@@ -1251,7 +1256,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         headers.set("authorization", `Bearer ${token}`);
       }
       downstreamRequest = new Request(c.req.raw, { headers });
-      admissionAccount = customer.accounts.resolveActiveTenantForUser(session.github_id);
+      admissionAccount = customer.accounts.resolveActiveTenantForUser(session.user_id);
     }
     const isEntitledHosted = Boolean(
       admissionAccount?.tenant_id &&

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { customerUserId } from "./customerIdentity.js";
 
 // Transplanted from zenod-ai/cloud services/webhook/src/accounts.ts @ 6bdb318.
 // Legacy Dokploy, watchdog, claim-link, and per-tenant DNS fields are intentionally
@@ -9,6 +10,8 @@ import { dirname, join } from "node:path";
 export interface CustomerAccount {
   session_id: string;
   account_id: string;
+  /** Internal provider-neutral owner. Legacy rows derive this on read/write. */
+  user_id: string;
   product: string;
   tier: string | null;
   stripe_email: string | null;
@@ -19,8 +22,8 @@ export interface CustomerAccount {
   cancel_at_period_end: boolean;
   current_period_start: string | null;
   current_period_end: string | null;
-  github_id: number;
-  github_login: string;
+  github_id: number | null;
+  github_login: string | null;
   github_email: string | null;
   claimed_at: string;
   tenant_id: string | null;
@@ -43,12 +46,19 @@ export interface CustomerAccount {
 
 type Store = Record<string, CustomerAccount>;
 
+export interface CustomerAccountOwnership {
+  ownerForAccount(accountId: string): string | null;
+  resolveUser(userId: string): unknown | null;
+  bindAccount(userId: string, accountId: string): unknown;
+}
+
 export class CustomerAccountStore {
   readonly path: string;
 
   constructor(
     dataDir: string,
     private readonly product = "zenod",
+    private readonly ownership?: CustomerAccountOwnership,
   ) {
     const suffix = product === "zenod" ? "" : `-${product}`;
     this.path = join(dataDir, `customer-accounts${suffix}.json`);
@@ -57,7 +67,13 @@ export class CustomerAccountStore {
   private load(): Store {
     if (!existsSync(this.path)) return {};
     try {
-      return JSON.parse(readFileSync(this.path, "utf8")) as Store;
+      const store = JSON.parse(readFileSync(this.path, "utf8")) as Store;
+      for (const account of Object.values(store)) {
+        if (!account.user_id && Number.isSafeInteger(account.github_id) && account.github_id! > 0) {
+          account.user_id = customerUserId("github", String(account.github_id));
+        }
+      }
+      return store;
     } catch (error) {
       throw new Error(`customer account store is unreadable: ${this.path}`, { cause: error });
     }
@@ -77,9 +93,30 @@ export class CustomerAccountStore {
   upsert(sessionId: string, patch: Partial<CustomerAccount>): CustomerAccount {
     const store = this.load();
     const existing = store[sessionId];
-    const required = patch as Pick<CustomerAccount, "account_id" | "github_id" | "github_login">;
+    if (existing) {
+      if (patch.account_id !== undefined && patch.account_id !== existing.account_id) {
+        throw new Error("account_id cannot change for an existing customer account");
+      }
+      if (patch.user_id !== undefined && patch.user_id !== existing.user_id) {
+        throw new Error("user_id cannot change for an existing customer account");
+      }
+      if (patch.github_id !== undefined && patch.github_id !== existing.github_id) {
+        throw new Error("github_id cannot change for an existing customer account");
+      }
+      if (patch.github_login !== undefined && patch.github_login !== existing.github_login) {
+        throw new Error("github_login cannot change for an existing customer account");
+      }
+    }
+    const required = patch as Pick<CustomerAccount, "account_id">;
+    const legacyGithubId = existing?.github_id ?? patch.github_id ?? null;
+    const userId = existing?.user_id ?? patch.user_id ?? (
+      Number.isSafeInteger(legacyGithubId) && legacyGithubId! > 0
+        ? customerUserId("github", String(legacyGithubId))
+        : null
+    );
     const next: CustomerAccount = {
       account_id: existing?.account_id ?? required.account_id,
+      user_id: userId ?? "",
       product: this.product,
       tier: null,
       stripe_email: null,
@@ -90,8 +127,8 @@ export class CustomerAccountStore {
       cancel_at_period_end: false,
       current_period_start: null,
       current_period_end: null,
-      github_id: existing?.github_id ?? required.github_id,
-      github_login: existing?.github_login ?? required.github_login,
+      github_id: legacyGithubId,
+      github_login: existing?.github_login ?? patch.github_login ?? null,
       github_email: null,
       claimed_at: existing?.claimed_at ?? new Date().toISOString(),
       tenant_id: null,
@@ -113,16 +150,17 @@ export class CustomerAccountStore {
       ...patch,
       session_id: sessionId,
     };
-    if (!next.account_id || !next.github_id || !next.github_login) {
-      throw new Error("account_id, github_id, and github_login are required");
+    if (!next.account_id || !next.user_id) {
+      throw new Error("account_id and user_id are required");
     }
     store[sessionId] = next;
     this.save(store);
     return next;
   }
 
-  resolveForUser(githubId: number): CustomerAccount | null {
-    const accounts = Object.values(this.load()).filter((account) => account.github_id === githubId);
+  resolveForUser(userId: string | number): CustomerAccount | null {
+    const internalUserId = typeof userId === "number" ? customerUserId("github", String(userId)) : userId;
+    const accounts = Object.values(this.load()).filter((account) => this.isOwnedBy(account, internalUserId));
     const completed = accounts.filter((account) => account.subscription_status !== "checkout_pending");
     return (completed.length > 0 ? completed : accounts)
       .sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
@@ -156,10 +194,11 @@ export class CustomerAccountStore {
     return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
   }
 
-  resolveActiveTenantForUser(githubId: number): CustomerAccount | null {
+  resolveActiveTenantForUser(userId: string | number): CustomerAccount | null {
+    const internalUserId = typeof userId === "number" ? customerUserId("github", String(userId)) : userId;
     const latestByTenant = new Map<string, CustomerAccount>();
     for (const account of Object.values(this.load()).sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))) {
-      if (account.github_id !== githubId || !account.tenant_id || account.subscription_status === "checkout_pending") continue;
+      if (!this.isOwnedBy(account, internalUserId) || !account.tenant_id || account.subscription_status === "checkout_pending") continue;
       if (!latestByTenant.has(account.tenant_id)) latestByTenant.set(account.tenant_id, account);
     }
     const active = [...latestByTenant.values()].filter(
@@ -171,8 +210,26 @@ export class CustomerAccountStore {
   list(): CustomerAccount[] {
     return Object.values(this.load());
   }
+
+  private isOwnedBy(account: CustomerAccount, userId: string): boolean {
+    const recordedOwner = this.ownership?.ownerForAccount(account.account_id);
+    if (recordedOwner) return recordedOwner === userId;
+    if (account.user_id !== userId) return false;
+    // Lazy migration is written only after the identity itself exists. A
+    // rollback reader with no identity projection still uses the legacy row.
+    if (this.ownership?.resolveUser(userId)) this.ownership.bindAccount(userId, account.account_id);
+    return true;
+  }
 }
 
 export function customerAccountId(githubId: number): string {
   return `github-${githubId}`;
+}
+
+/** Preserve legacy GitHub IDs; provider-neutral customers use their internal ID. */
+export function customerAccountIdForUser(user: {
+  user_id: string;
+  github_id?: number | null;
+}): string {
+  return user.github_id ? customerAccountId(user.github_id) : `user-${user.user_id}`;
 }
