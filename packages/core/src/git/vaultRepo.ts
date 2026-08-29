@@ -2,6 +2,12 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { simpleGit, type SimpleGit, type StatusResult } from "simple-git";
 import type { FileChange } from "../vault/immutability.js";
+import { githubUrl } from "../vault/github.js";
+import {
+  githubVaultRevision,
+  type VaultRepository,
+  type VaultRevision,
+} from "../vault/repository.js";
 
 export interface VaultRepoOptions {
   /** Local clone directory. */
@@ -32,7 +38,9 @@ const PUSH_RETRIES = 3;
  * every turn, one commit per memory, push with pull-rebase retry ×3.
  * Never force-push, never amend, never rewrite history.
  */
-export class VaultRepo {
+export class VaultRepo implements VaultRepository {
+  readonly provider = "github" as const;
+
   private constructor(
     readonly path: string,
     private readonly git: SimpleGit,
@@ -171,5 +179,31 @@ export class VaultRepo {
   async commitAndPush(message: string): Promise<string> {
     const sha = await this.commit(message);
     return this.pushWithRetry(sha);
+  }
+
+  /** Provider-neutral publication boundary; legacy commitAndPush remains available during migration. */
+  async commitAndPublish(message: string): Promise<VaultRevision> {
+    const changedPaths = (await this.pendingChanges()).map((change) => change.path);
+    const commitSha = await this.commitAndPush(message);
+    const canonicalLocation = {
+      ...(this.repo ? { repo: this.repo } : {}),
+      branch: commitSha,
+    };
+    return githubVaultRevision({
+      commitSha,
+      committedAt: new Date().toISOString(),
+      githubUrls: changedPaths
+        .map((path) => githubUrl(canonicalLocation, path))
+        .filter(Boolean),
+    });
+  }
+
+  /** Resolve a vault path using the current GitHub branch compatibility URL. */
+  urlFor(path: string, anchor?: string): string | null {
+    const location = {
+      ...(this.repo ? { repo: this.repo } : {}),
+      branch: this.branch,
+    };
+    return githubUrl(location, path, anchor) || null;
   }
 }
