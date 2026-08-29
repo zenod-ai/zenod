@@ -1,6 +1,6 @@
 # Epic GDV · Google identity and Google Drive-only vaults
 
-Status: planned / implementation-ready
+Status: active / first implementation batch
 Created: 2026-08-29
 Updated: 2026-08-29
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md`
 Integration branch: `main`
 Planning branch: `codex/google-drive-vault-epic` merged by PR #1155
 Planning base: `bcd64987f061a9e622cb88796f1d52781a006109` (`origin/main`)
-Last reconciled commit: `a4c4826f80ed0acda93d304f21cb50129d7fb2dd` on `main`
+Last reconciled commit: `0b5aa6243333d05c5ad25f80160586a6e3545ba9` on `main`
 Active spine steward: Google Drive Vault delivery manager (`Jordi + current bound Codex task`)
 Planner: Jordi + Codex
 Epic worker: `/root` Google Drive Vault delivery manager
@@ -20,7 +20,7 @@ Tester: unassigned
 |---|---|---|---|---|
 | Epic 0 worker | Epic 0 Foundation planner | Project/root coordination | Read this spine and roll up its relationship to the active production-gate child; do not rewrite this child by default. | Root child map and cross-epic dependencies current. |
 | Planner | Google Drive Vault planner | This spine and its issue board | Own target, scope, acceptance, dependency order, issue materialization and initial dispatch. | Coherent spine, linked issues and first ready batch. |
-| Epic worker | unassigned | This entire epic | Steward this spine, dispatch one worker per issue, reconcile PRs and exact-main evidence, and deliver epic acceptance. | Google-only stranger journey ready for Jordi's test or precisely blocked. |
+| Epic worker | `/root` | This entire epic | Steward this spine, dispatch one worker per issue, reconcile PRs and exact-main evidence, and deliver epic acceptance. | Google-only stranger journey ready for Jordi's test or precisely blocked. |
 | Ticket worker | one stable identity per GDV issue | One linked GitHub issue | Work only the bound issue in a dedicated branch/worktree; write implementation detail and handoff to GitHub. | PR, latest commit, validation, blocker and next action recorded in the issue. |
 | Tester | unassigned | GDV-10 release acceptance | Validate exact integrated commit and named environment; do not broaden product scope. | Reproducible pass/fail packet and residual risks. |
 
@@ -250,10 +250,10 @@ Memory operations are provider-neutral. GitHub issue, PR and code-repository ope
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) | Planner / architect | `/root/gdv_1_contract_worker` | Freeze provider-neutral identity, vault and compatibility contract | running | - | `codex/gdv-1-contract` | `d48e48d` on `main` | Executable interfaces, migrations, failure algebra and compatibility fixtures are accepted before implementation. | Dispatched in dedicated clean worktree; issue comment records authority and handoff. | 2026-08-29 | Manager monitors/unblocks; worker delivers PR and terminal issue handoff. |
-| [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) | Ticket worker | unassigned | Generalize customer identity and account ownership | waiting | #1145 | `codex/gdv-2-provider-neutral-identity` | fresh `main` after #1145 | Existing GitHub accounts preserve IDs while sessions/account/billing/tenant/Channels resolve through internal identity. | Current GitHub-coupling inventory. | 2026-08-29 | Dispatch after #1145. |
+| [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) | Planner / architect | `/root/gdv_1_contract_worker` | Freeze provider-neutral identity, vault and compatibility contract | complete | - | [PR #1158](https://github.com/zenod-ai/zenod/pull/1158) / `codex/gdv-1-contract` | `d48e48d` on `main` | Executable interfaces, migrations, failure algebra and compatibility fixtures are accepted before implementation. | Exact head `970d931` independently reviewed clean; full CI passed; squash merged as `0b5aa62`. | 2026-08-29 | Preserve contract during dependent work. |
+| [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) | Ticket worker | `/root/gdv_2_identity_worker` | Generalize customer identity and account ownership | ready | #1145 | `codex/gdv-2-provider-neutral-identity` | `0b5aa62` on `main` | Existing GitHub accounts preserve IDs while sessions/account/billing/tenant/Channels resolve through internal identity. | GDV-1 merged green; clean dedicated worktree prepared for dispatch. | 2026-08-29 | Dispatch from exact merged contract base. |
 | [GDV-3 #1147](https://github.com/zenod-ai/zenod/issues/1147) | Ticket worker | unassigned | Add Google OIDC sign-in and secure account linking | waiting | #1145, #1146 | `codex/gdv-3-google-signin` | fresh `main` after #1146 | Google login uses verified OIDC subject, requests no Drive scope, and safely creates/links sessions. | Current `IdentityProvider` seam. | 2026-08-29 | Dispatch after identity integration. |
-| [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) | Ticket worker | unassigned | Extract repository-shaped provider-neutral vault interface | waiting | #1145 | `codex/gdv-4-vault-repository` | fresh `main` after #1145 | Existing GitHub behavior runs through `VaultRepository` with no acceptance regression. | `VaultRepo` and engine audit. | 2026-08-29 | May run beside #1146 after #1145. |
+| [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) | Ticket worker | `/root/gdv_4_repository_worker` | Extract repository-shaped provider-neutral vault interface | ready | #1145 | `codex/gdv-4-vault-repository` | `0b5aa62` on `main` | Existing GitHub behavior runs through `VaultRepository` with no acceptance regression. | GDV-1 merged green; clean dedicated worktree prepared for dispatch. | 2026-08-29 | Dispatch beside GDV-2 from exact merged contract base. |
 | [GDV-5 #1149](https://github.com/zenod-ai/zenod/issues/1149) | Ticket worker | unassigned | Generalize revisions, citations and receipts | waiting | #1145, #1148 | `codex/gdv-5-provider-neutral-receipts` | fresh `main` after #1148 | Core/MCP/jobs/peers/UI accept Drive revisions and generic URLs while GitHub legacy fields remain compatible. | Receipt/schema coupling inventory. | 2026-08-29 | Dispatch after #1148. |
 | [GDV-6 #1150](https://github.com/zenod-ai/zenod/issues/1150) | Ticket worker | unassigned | Implement recoverable Google Drive vault repository | waiting | #1145, #1148, #1149 | `codex/gdv-6-drive-vault-backend` | fresh `main` after dependencies | Drive sync/save/restart/conflict/recovery operates on app-created Markdown with no git remote and no false success. | Existing `DriveClient`; transaction target in this spine. | 2026-08-29 | Dispatch after contract and receipt seam. |
 | [GDV-7 #1151](https://github.com/zenod-ai/zenod/issues/1151) | Ticket worker | unassigned | Bind Drive credentials, backend selection and tenant runtime | waiting | #1146, #1147, #1150 | `codex/gdv-7-drive-tenant-runtime` | fresh `main` after dependencies | Paid Drive-only tenant provisions, reconstructs and fails closed on revoked consent without GitHub. | Existing tenant credential and runtime seams. | 2026-08-29 | Dispatch after identity, OAuth and backend. |
@@ -514,8 +514,19 @@ control-plane spine merge
 |---|---|---|---|---|---|---|
 | 2026-08-29 | Planning/source audit | `bcd6498` | clean worktree from `origin/main` | Inspected identity, account, billing, runtime, Drive, core repository, receipt, MCP, peer and UI seams | target/backlog ready; no implementation proof | This spine |
 | 2026-08-29 | Control-plane integration | `a4c4826` | GitHub `main` | Strict spine validation, diff/secret checks and complete repository CI | pass; target and issues #1145–#1154 integrated as delivery control plane | [PR #1155](https://github.com/zenod-ai/zenod/pull/1155) |
+| 2026-08-29 | GDV-1 contract integration | `0b5aa62` | GitHub `main` | Focused core/server tests, all-workspace typecheck, builds, schema checks, full CI and independent exact-head review | pass; four review findings fixed before merge; provider-neutral contracts frozen | [PR #1158](https://github.com/zenod-ai/zenod/pull/1158), [terminal handoff](https://github.com/zenod-ai/zenod/issues/1145#issuecomment-5461631822) |
 
 ## Handoff Journal
+
+### 2026-08-29 - Epic worker - GDV-1 integrated; first implementation batch ready
+
+Context: GDV-1 delivered the accepted provider-neutral identity, vault, transaction, readiness and compatibility contracts. Independent review found four fail-closed/coverage defects; the same worker corrected them without architecture expansion, and re-review plus full CI passed at exact head `970d931a7bd2b3976ad6f0287e5e87a6bb01a6da`.
+
+Action: merged [PR #1158](https://github.com/zenod-ai/zenod/pull/1158) to `main` as `0b5aa6243333d05c5ad25f80160586a6e3545ba9` and marked GDV-1 complete. GDV-2 and GDV-4 are the only newly dependency-ready tickets and may run in parallel from that exact base.
+
+Next: dispatch one stable worker per ticket in dedicated worktrees, monitor for contract or architecture divergence, and independently review each terminal PR before integration.
+
+Risks: identity and engine seams are broad. Workers must preserve existing GitHub identifiers and behavior, keep provider code out of filing logic, and return any architecture/new-system decision to Jordi rather than inventing it.
 
 ### 2026-08-29 - Epic worker - Bound as delivery manager and dispatched GDV-1
 
@@ -539,9 +550,9 @@ Risks: existing production/signup work remains separately gated. Drive multi-fil
 
 ## Planner Queue
 
-1. Monitor and unblock `/root/gdv_1_contract_worker` on [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145).
-2. Independently review and integrate its provider-neutral contracts and compatibility fixtures.
-3. Dispatch [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) and [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) from their resulting fresh `main` as the first parallel implementation batch.
+1. Dispatch and monitor `/root/gdv_2_identity_worker` on [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) from exact `main` `0b5aa62`.
+2. Dispatch and monitor `/root/gdv_4_repository_worker` on [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) from exact `main` `0b5aa62`.
+3. Independently review and integrate each terminal PR; do not unlock GDV-3 or GDV-5 before its direct dependency is merged.
 
 ## Open Questions
 
