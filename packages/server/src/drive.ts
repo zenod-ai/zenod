@@ -347,9 +347,8 @@ export class DriveClient {
     if (!vaultBindingId || vaultBindingId.length > 100) throw new Error("Drive vault binding ID is invalid");
     const markerValue = `${VAULT_ROOT_PROPERTY_VERSION}:${vaultBindingId}`;
     type VaultFolder = DriveFile & { capabilities?: { canAddChildren?: boolean } };
-    const matches = (folder: VaultFolder | null): folder is VaultFolder =>
+    const matches = (folder: VaultFolder | null): boolean =>
       folder?.mimeType === FOLDER_MIME
-      && folder.name === "Zenod Vault"
       && folder.appProperties?.[VAULT_ROOT_PROPERTY_KEY] === markerValue
       && folder.capabilities?.canAddChildren === true;
 
@@ -359,14 +358,22 @@ export class DriveClient {
       if (matches(stored)) return storedFolderId;
     }
     const response = await this.request("/files", {
-      q: `trashed = false and mimeType = '${FOLDER_MIME}' and appProperties has { key='${VAULT_ROOT_PROPERTY_KEY}' and value='${markerValue.replaceAll("'", "\\'")}' }`,
+      // Include trashed/non-writable marked roots so authority loss cannot be
+      // mistaken for first-time provisioning.
+      q: `mimeType = '${FOLDER_MIME}' and appProperties has { key='${VAULT_ROOT_PROPERTY_KEY}' and value='${markerValue.replaceAll("'", "\\'")}' }`,
       orderBy: "createdTime asc",
       pageSize: "10",
       spaces: "drive",
       fields: `files(${MANAGED_FOLDER_FIELDS})`,
     });
-    const recovered = ((await response.json()) as { files?: VaultFolder[] }).files?.find(matches);
-    if (recovered) return recovered.id;
+    const marked = (((await response.json()) as { files?: VaultFolder[] }).files ?? []).filter((folder) =>
+      folder.mimeType === FOLDER_MIME && folder.appProperties?.[VAULT_ROOT_PROPERTY_KEY] === markerValue);
+    if (marked.length > 1) throw new Error(`Drive vault authority is ambiguous for binding ${vaultBindingId}`);
+    if (marked[0] && matches(marked[0])) return marked[0].id;
+    if (marked[0]) throw new Error(`Drive vault authority ${marked[0].id} is no longer writable`);
+    if (storedFolderId) {
+      throw new Error(`Drive vault authority ${storedFolderId} is missing or no longer writable`);
+    }
     const created = await this.request("/files", { fields: MANAGED_FOLDER_FIELDS }, {
       method: "POST",
       body: {

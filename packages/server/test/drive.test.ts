@@ -245,6 +245,45 @@ describe("drive client", () => {
     expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(3);
     vi.unstubAllGlobals();
   });
+
+  it("recovers renamed marked vault roots and never replaces a missing stored authority", async () => {
+    let mode: "renamed" | "missing" | "duplicate" = "renamed";
+    let creates = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST") {
+        creates += 1;
+        return Response.json({ id: "unexpected" });
+      }
+      if (url.includes("/drive/v3/files/stored-root?")) {
+        if (mode === "renamed") return Response.json({
+          id: "stored-root", name: "Renamed by the user", mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodVaultBinding: "v1:binding-1" }, capabilities: { canAddChildren: true },
+        });
+        return new Response("not found", { status: 404 });
+      }
+      if (url.includes("/drive/v3/files?")) {
+        if (mode === "duplicate") return Response.json({ files: ["a", "b"].map((id) => ({
+          id, name: `renamed-${id}`, mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodVaultBinding: "v1:binding-1" }, capabilities: { canAddChildren: true },
+        })) });
+        return Response.json({ files: [] });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "token" },
+    );
+    expect(await client.ensureVaultRootFolder("binding-1", "stored-root")).toBe("stored-root");
+    mode = "missing";
+    await expect(client.ensureVaultRootFolder("binding-1", "stored-root")).rejects.toThrow(/authority stored-root is missing/);
+    mode = "duplicate";
+    await expect(client.ensureVaultRootFolder("binding-1")).rejects.toThrow(/authority is ambiguous/);
+    expect(creates).toBe(0);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("transcription envelope", () => {
