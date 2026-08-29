@@ -36,9 +36,14 @@
   },
   "mcpStructuredStore": {
     "evidenceRef": "Log/2026-08-29.md#^e-gdv001",
+    "evidenceUrl": "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
     "pagesTouched": ["Projects/Zenod.md"],
+    "pageUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
     "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "githubUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+    "githubUrls": [
+      "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
+      "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"
+    ],
     "filing": "filed"
   },
   "peerReceipt": {
@@ -46,9 +51,14 @@
     "kind": "store",
     "result": {
       "evidenceRef": "Log/2026-08-29.md#^e-gdv001",
+      "evidenceUrl": "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
       "pagesTouched": ["Projects/Zenod.md"],
+      "pageUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
       "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "githubUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+      "githubUrls": [
+        "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
+        "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"
+      ],
       "filing": "filed"
     }
   }

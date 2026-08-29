@@ -107,7 +107,10 @@ export function assertDriveTransactionInvariant(transaction: DriveVaultTransacti
   const anyConflict = transaction.mutations.some((mutation) => mutation.state === "conflict");
   const anyAttempted = transaction.mutations.some((mutation) => mutation.state !== "pending");
 
-  if (transaction.state === "committed" && (!allApplied || !transaction.committedAt)) {
+  if (
+    transaction.state === "committed"
+    && (transaction.mutations.length === 0 || !allApplied || !transaction.committedAt)
+  ) {
     throw new Error("Committed Drive transaction requires every mutation applied and committedAt");
   }
   if (transaction.state !== "committed" && transaction.committedAt) {
@@ -119,6 +122,9 @@ export function assertDriveTransactionInvariant(transaction: DriveVaultTransacti
   if (transaction.state === "recovering" && !anyApplied) {
     throw new Error("Recovering Drive transaction must record at least one applied mutation");
   }
+  if (transaction.state === "conflict" && anyApplied) {
+    throw new Error("Partially applied Drive transaction must remain recovering, even after a conflict");
+  }
   if (transaction.state === "conflict" && !anyConflict && !transaction.conflictPaths?.length) {
     throw new Error("Conflict Drive transaction must identify a conflicting mutation");
   }
@@ -127,6 +133,10 @@ export function assertDriveTransactionInvariant(transaction: DriveVaultTransacti
   }
 }
 
-export function isDriveTransactionTerminal(state: DriveTransactionState): boolean {
-  return state === "committed" || state === "conflict" || state === "failed";
+export function isDriveTransactionTerminal(
+  transaction: Pick<DriveVaultTransaction, "state" | "mutations">,
+): boolean {
+  if (transaction.state === "committed" || transaction.state === "failed") return true;
+  if (transaction.state !== "conflict") return false;
+  return transaction.mutations.every((mutation) => mutation.state !== "applied");
 }

@@ -145,6 +145,9 @@ export function assertProviderNeutralCustomerSnapshot(snapshot: ProviderNeutralC
     if (binding.status !== "authorizing" && binding.provider === "google_drive" && !binding.folder_id) {
       throw new Error("Google Drive vault binding requires folder_id");
     }
+    if (binding.status === "ready" && binding.provider === "google_drive" && !binding.manifest_file_id) {
+      throw new Error("Ready Google Drive vault binding requires manifest_file_id");
+    }
   }
 }
 
@@ -177,7 +180,12 @@ export function projectVaultCapabilities(input: {
   githubConnectionReady: boolean;
 }): VaultCapabilityProjection {
   const status = input.binding?.status;
-  const ready = status === "ready";
+  const configured = input.binding?.provider === "github"
+    ? Boolean(input.binding.repo && input.binding.branch)
+    : input.binding?.provider === "google_drive"
+      ? Boolean(input.binding.folder_id && input.binding.manifest_file_id)
+      : false;
+  const ready = status === "ready" && configured;
   const memory = {
     store: ready,
     search: ready,
@@ -195,6 +203,8 @@ export function projectVaultCapabilities(input: {
           ? "vault_conflict"
           : status === "error"
             ? "vault_error"
+            : status === "ready" && !configured
+              ? "vault_error"
             : null;
   return {
     provider: input.binding?.provider ?? null,
