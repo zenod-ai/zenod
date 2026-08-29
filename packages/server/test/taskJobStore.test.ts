@@ -414,4 +414,55 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(store.recent()).toHaveLength(2);
     store.close();
   });
+
+  it.each([
+    {
+      name: "missing durable provenance",
+      result: { evidenceRef: "Log/x.md#^e-missing", pagesTouched: [], filing: "filed" },
+      expectedStatus: "error",
+    },
+    {
+      name: "contradictory GitHub provenance",
+      result: {
+        evidenceRef: "Log/x.md#^e-git",
+        pagesTouched: [], filing: "filed",
+        revision: {
+          provider: "github", id: "a".repeat(40), committedAt: "2026-08-29T10:00:00.000Z",
+          urls: [`https://github.com/zenod-ai/vault/blob/${"a".repeat(40)}/Log/x.md`],
+          commitSha: "b".repeat(40), githubUrls: ["https://github.com/zenod-ai/vault/blob/main/Log/x.md"],
+        },
+        urls: [`https://github.com/zenod-ai/vault/blob/${"a".repeat(40)}/Log/x.md`],
+        commitSha: "a".repeat(40),
+        githubUrls: ["https://github.com/zenod-ai/vault/blob/main/Log/x.md"],
+      },
+      expectedStatus: "error",
+    },
+    {
+      name: "valid Drive provenance",
+      result: {
+        evidenceRef: "Log/x.md#^e-drive", pagesTouched: [], filing: "filed",
+        revision: {
+          provider: "google_drive", id: "drive-txn-1", committedAt: "2026-08-29T10:00:00.000Z",
+          urls: ["https://drive.google.com/file/d/log-x/view"],
+        },
+        urls: ["https://drive.google.com/file/d/log-x/view"],
+      },
+      expectedStatus: "done",
+    },
+  ])("fails closed at the TaskJobStore terminal transition for $name", async ({ result, expectedStatus }) => {
+    const store = new TaskJobStore(tmpDb(), "tenant-receipts");
+    const queue = new TaskJobQueue(store, async () => ({
+      store: vi.fn(async () => result),
+    }) as unknown as BrainEngine);
+    const job = queue.enqueue("store", { content: "receipt integrity" });
+    await vi.waitFor(() => expect(store.get(job.id)?.status).toBe(expectedStatus));
+    if (expectedStatus === "error") {
+      expect(store.get(job.id)?.error).toMatch(/invalid durable store receipt/);
+      expect(store.get(job.id)?.result).toBeNull();
+    } else {
+      expect(store.get(job.id)?.result).toMatchObject(result);
+    }
+    await queue.close();
+    store.close();
+  });
 });

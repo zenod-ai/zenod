@@ -467,6 +467,58 @@ describe("drive tools + API", () => {
     expect(stored).toHaveLength(0);
   });
 
+  it("fails Drive ingest closed when filing returns no durable receipt", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember this without a fake save";
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+    const fakeEngine = {
+      async store() {
+        return { evidenceRef: "Log/x.md#^e-missing", pagesTouched: [], filing: "filed" };
+      },
+    } as unknown as BrainEngine;
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+    await tools.ingestDriveFile("file-1");
+
+    const failed = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "error",
+    );
+    expect(failed?.error).toMatch(/invalid durable store receipt: durable revision is missing/);
+    expect(failed?.evidenceRef).toBeNull();
+    expect(failed?.revision).toBeNull();
+    expect(failed?.commitSha).toBeNull();
+  });
+
+  it("persists a valid Drive provider receipt without Git compatibility fields", async () => {
+    vi.stubGlobal("fetch", stubFetch());
+    process.env.ZENOD_WHISPER_FAKE_TRANSCRIPT = "remember this with Drive provenance";
+    runtime.settings.set("google_service_account_json", SA_JSON);
+    runtime.settings.set("google_drive_folder_id", "folder-9");
+    const urls = ["https://drive.google.com/file/d/vault-log/view"];
+    const revision = {
+      provider: "google_drive" as const,
+      id: "drive-txn-ingest-1",
+      committedAt: "2026-08-29T10:00:00.000Z",
+      urls,
+    };
+    const fakeEngine = {
+      async store() {
+        return { evidenceRef: "Log/x.md#^e-drive", pagesTouched: ["Projects/X.md"], filing: "filed", revision, urls };
+      },
+    } as unknown as BrainEngine;
+    const queue = new IngestQueue(runtime.ingestStore, runtime.settings, async () => fakeEngine);
+    const tools = buildDriveTools(runtime.settings, queue)!;
+    await tools.ingestDriveFile("file-1");
+
+    const done = await waitFor(
+      () => runtime.ingestStore.recent(1)[0],
+      (job) => job?.status === "done",
+    );
+    expect(done).toMatchObject({ revision, urls, commitSha: null, githubUrls: [] });
+  });
+
   it("uses the configured Groq key for Drive audio ingestion", async () => {
     const moves: string[] = [];
     vi.stubGlobal("fetch", stubFetch(moves));

@@ -490,11 +490,11 @@ describe("TaskJobQueue media_ingest archive integration", () => {
         stored.push(input);
         return {
           evidenceRef: "Log/2026-07-31.md#^e-capability",
-          evidenceUrl: "https://github.test/log#L8",
+          evidenceUrl: "https://github.com/zenod-ai/vault/blob/main/Log/2026-07-31.md#L8",
           pagesTouched: ["Projects/Launch.md"],
-          pageUrls: ["https://github.test/launch"],
+          pageUrls: ["https://github.com/zenod-ai/vault/blob/main/Projects/Launch.md"],
           commitSha: "d".repeat(40),
-          githubUrls: ["https://github.test/commit/" + "d".repeat(40)],
+          githubUrls: ["https://github.com/zenod-ai/vault/commit/" + "d".repeat(40)],
           filing: "filed" as const,
         };
       },
@@ -521,8 +521,8 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(stored[0]!.content).not.toContain(transientUrl);
     expect(done?.result).toMatchObject({
       digest: {
-        evidenceUrl: "https://github.test/log#L8",
-        pageUrls: ["https://github.test/launch"],
+        evidenceUrl: "https://github.com/zenod-ai/vault/blob/main/Log/2026-07-31.md#L8",
+        pageUrls: ["https://github.com/zenod-ai/vault/blob/main/Projects/Launch.md"],
         filing: "filed",
       },
     });

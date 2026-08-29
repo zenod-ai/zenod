@@ -3,6 +3,7 @@ import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchiv
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
 import type { Settings } from "./settings.js";
+import { assertDurableStoreReceipt } from "./durableReceipt.js";
 import {
   TASK_JOB_LEASE_MS,
   type MediaIngestReceipt,
@@ -154,6 +155,7 @@ export class TaskJobQueue {
           ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
           ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
+        assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else if (job.kind === "media_ingest") {
         const rejection = this.admit(job.kind, job.input);
@@ -190,6 +192,7 @@ export class TaskJobQueue {
           ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
           ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
+        assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else {
         const engine = await this.getEngine();
@@ -447,6 +450,7 @@ async function processMediaIngest(
   const stored = engine.captureEvidence
     ? await engine.captureEvidence(storeInput)
     : await engine.store(storeInput);
+  assertDurableStoreReceipt(stored);
   const enrichment = engine.captureEvidence && engine.enrichEvidence
     ? enqueueEnrichment(
         {

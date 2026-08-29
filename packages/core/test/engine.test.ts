@@ -40,7 +40,7 @@ class FakeLlm implements BrainLlm {
   failComposeAttempts = 0;
   classifyPath: string | null = "Areas/Insurance.md";
   answerInputs: AnswerInput[] = [];
-  answerOverride: ((input: AnswerInput, tools: VaultReadTools) => Promise<AnswerResult>) | null = null;
+  answerOverride: ((input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools) => Promise<AnswerResult>) | null = null;
   workInputs: WorkLoopInput[] = [];
 
   async classify(input: ClassifyInput): Promise<Classification> {
@@ -85,7 +85,7 @@ class FakeLlm implements BrainLlm {
 
   async answer(input: AnswerInput, tools: VaultReadTools, taskTools?: VaultTaskTools, _driveTools?: unknown, peerTools?: PeerTools): Promise<AnswerResult> {
     this.answerInputs.push(input);
-    if (this.answerOverride) return this.answerOverride(input, tools);
+    if (this.answerOverride) return this.answerOverride(input, tools, taskTools);
     if (taskTools && input.question.startsWith("BACKLOG:")) {
       const result = await taskTools.digestBacklog({
         rawText: input.question.slice(8).trim(),
@@ -1027,6 +1027,22 @@ describe("BrainEngine", () => {
 
     expect(result.written).toHaveLength(1);
     expect(result.written[0]?.path).toMatch(/^Backlog\/.*renew-travel-insurance\.md$/);
+    const currentRevision = await repo.currentRevision();
+    expect(result.revision).toMatchObject({
+      provider: "github",
+      id: result.commitSha,
+      commitSha: result.commitSha,
+      urls: result.urls,
+      githubUrls: result.githubUrls,
+    });
+    expect(result.revision?.committedAt).toEqual(expect.any(String));
+    expect(result.revision?.id).toBe(currentRevision.id);
+    expect(result.revision?.committedAt).toBe(currentRevision.committedAt);
+    expect(result.written[0]?.revisionId).toBe(result.revision?.id);
+    expect(result.written[0]?.url).toContain(`/blob/${result.revision?.id}/`);
+    expect(result.source_refs[0]?.revisionId).toBe(result.revision?.id);
+    expect(result.source_refs[0]?.url).toContain(`/blob/${result.revision?.id}/`);
+    expect(result.candidates[0]?.source_refs[0]).toEqual(result.source_refs[0]);
     const record = await readFile(join(repo.path, result.written[0]!.path), "utf8");
     expect(record).toContain("## Acceptance Criteria");
     expect(record).toContain("Log/2026-06-13.md#^e-test02");
@@ -1435,6 +1451,31 @@ describe("BrainEngine", () => {
     // ...but the note is still filed, just in the background.
     await vi.waitFor(async () => expect(await originMemoryCommits()).toBe(1), { timeout: 5000, interval: 50 });
     expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("queued and vaultless capture placeholders omit durable and Git-only provenance", async () => {
+    const placeholders: unknown[] = [];
+    llm.answerOverride = async (_input, _tools, taskTools) => {
+      placeholders.push(await taskTools!.captureNote("queued placeholder"));
+      return { text: "queued", readPaths: [] };
+    };
+    const filed = new Promise<void>((resolve) => {
+      void createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" }, onFilingComplete: () => resolve() })
+        .handleTasking({ text: "queue it", surface: "web", conversationKey: "placeholder-queued" });
+    });
+    await vi.waitFor(() => expect(placeholders).toHaveLength(1));
+    expect(placeholders[0]).toMatchObject({ evidenceRef: "(queued)", queued: true, filing: "pending" });
+    expect(placeholders[0]).not.toHaveProperty("revision");
+    expect(placeholders[0]).not.toHaveProperty("commitSha");
+    expect(placeholders[0]).not.toHaveProperty("githubUrls");
+    await filed;
+
+    llm.answerOverride = async () => {
+      return { text: "unavailable", readPaths: [] };
+    };
+    const vaultless = await createEngine({ llm, state }).handleTasking({ text: "save it", surface: "web", conversationKey: "placeholder-vaultless" });
+    expect(vaultless.actions).toEqual([]);
+    expect(JSON.stringify(vaultless)).not.toMatch(/commitSha|githubUrls|revision/);
   });
 
   it("M-5: fires onFilingComplete with the real StoreResult once the background filing lands", async () => {

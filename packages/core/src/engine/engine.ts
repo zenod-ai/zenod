@@ -822,6 +822,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return written;
   }
 
+  function pinBacklogSource(ref: BacklogSourceRef, revisionId: string): BacklogSourceRef {
+    if (ref.provider !== "github") return ref;
+    const marker = ref.path.indexOf("#");
+    const path = marker < 0 ? ref.path : ref.path.slice(0, marker);
+    const anchor = marker < 0 ? undefined : ref.path.slice(marker + 1);
+    const pinned = githubSourceRef({ ...location, branch: revisionId }, path, anchor, revisionId);
+    return { ...pinned, ...(ref.githubUrl !== undefined ? { githubUrl: ref.githubUrl } : {}) };
+  }
+
   async function digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult> {
     assertVault(repo);
     if (input.write) {
@@ -835,12 +844,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
           return { candidates, written: [], skipped: [{ reason: "no backlog candidates found" }], source_refs: source.sourceRefs };
         }
         const written = await writeBacklogCandidates(candidates);
-        await repo.commitAndPush(`backlog: propose ${candidates.length} item${candidates.length === 1 ? "" : "s"}`);
+        const commitSha = await repo.commitAndPush(`backlog: propose ${candidates.length} item${candidates.length === 1 ? "" : "s"}`);
+        const pinnedWritten = written.map((item) => ({
+          ...pinBacklogSource(item, commitSha),
+          title: item.title,
+        }));
+        const urls = pinnedWritten.map((item) => item.url).filter(Boolean);
+        const githubUrls = written.map((item) => item.githubUrl ?? githubUrl(location, item.path)).filter(Boolean);
+        const publication = await githubPublication(commitSha, urls, githubUrls);
+        const sourceRefs = source.sourceRefs.map((ref) => pinBacklogSource(ref, commitSha));
+        const pinnedCandidates = candidates.map((candidate) => ({
+          ...candidate,
+          source_refs: candidate.source_refs.map((ref) => pinBacklogSource(ref, commitSha)),
+        }));
         return {
-          candidates,
-          written: written.map((item) => item.url ? item : { ...githubSourceRef(location, item.path), title: item.title }),
+          candidates: pinnedCandidates,
+          ...publication,
+          written: pinnedWritten,
           skipped: [],
-          source_refs: source.sourceRefs,
+          source_refs: sourceRefs,
         };
       });
     }
@@ -924,8 +946,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
           return {
             evidenceRef: "(no vault)",
             pagesTouched: [],
-            commitSha: "(no vault)",
-            githubUrls: [],
             filing: "pending",
             queued: false,
           };
@@ -971,8 +991,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return {
           evidenceRef: "(queued)",
           pagesTouched: [],
-          commitSha: "(queued)",
-          githubUrls: [],
           filing: "pending",
           queued: true,
         };

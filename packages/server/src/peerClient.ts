@@ -4,6 +4,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "node:crypto";
 import type { StoreResult, TrustedConnectionProfile } from "zenod";
 import { VERSION } from "zenod/version";
+import { durableStoreReceiptError } from "./durableReceipt.js";
 import { validateWalletUrl } from "./walletUrl.js";
 import {
   PEER_SKILL_LIMITS,
@@ -471,6 +472,7 @@ function verifiedStoreReceipt(
 ): VerifiedStoreReceipt | null {
   if (completed.status !== "done" || completed.kind !== "store") return null;
   const receipt = objectRecord(completed.result);
+  if (!receipt || durableStoreReceiptError(receipt)) return null;
   const rawRevision = objectRecord(receipt?.revision);
   const revision = rawRevision
     && (rawRevision.provider === "github" || rawRevision.provider === "google_drive")
@@ -483,18 +485,11 @@ function verifiedStoreReceipt(
       ? rawRevision as unknown as NonNullable<StoreResult["revision"]>
       : null;
   const commitSha = typeof receipt?.commitSha === "string" ? receipt.commitSha : undefined;
-  const legacyGitHubReceipt = typeof commitSha === "string" && /^[0-9a-f]{40}$/i.test(commitSha);
   if (
     typeof receipt?.evidenceRef !== "string"
     || !receipt.evidenceRef.trim()
-    || (!revision && !legacyGitHubReceipt)
-    || (revision?.provider === "github" && (!legacyGitHubReceipt || revision.id !== commitSha))
-    || (revision?.provider === "google_drive" && (
-      commitSha !== undefined
-      || receipt.githubUrls !== undefined
-      || rawRevision?.commitSha !== undefined
-      || rawRevision?.githubUrls !== undefined
-    ))
+    || (receipt.urls !== undefined && !Array.isArray(receipt.urls))
+    || (receipt.githubUrls !== undefined && !Array.isArray(receipt.githubUrls))
   ) return null;
   const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(receipt.filing))
     ? receipt.filing as StoreResult["filing"]

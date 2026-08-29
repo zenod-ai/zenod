@@ -401,6 +401,13 @@ export interface BacklogDigestInput {
 
 export interface BacklogDigestResult {
   candidates: BacklogCandidate[];
+  /** Durable publication receipt when backlog records were written. */
+  revision?: VaultRevision;
+  /** Canonical provider URLs for written backlog records. */
+  urls?: string[];
+  /** GitHub compatibility fields, populated only by Git-backed publication. */
+  commitSha?: string;
+  githubUrls?: string[];
   written: Array<{
     path: string;
     url: string;

@@ -362,6 +362,75 @@ describe("generic wallet MCP discovery", () => {
     expect(result).not.toHaveProperty("githubUrls");
   });
 
+  it("accepts a fully consistent GitHub revision receipt", async () => {
+    const sha = "a".repeat(40);
+    const urls = [`https://github.com/zenod-ai/vault/blob/${sha}/Log/2026-08-29.md`];
+    const githubUrls = ["https://github.com/zenod-ai/vault/blob/main/Log/2026-08-29.md"];
+    const revision = { provider: "github", id: sha, committedAt: "2026-08-29T10:00:00.000Z", urls, commitSha: sha, githubUrls };
+    vi.stubGlobal("fetch", mcpFetch([], (_args, tool) => tool === "store_memory"
+      ? { content: [{ type: "text", text: "Queued." }], structuredContent: { ticket_id: "job-git", status: "queued" } }
+      : { content: [{ type: "text", text: "Saved." }], structuredContent: {
+          found: true, ticket_id: "job-git", kind: "store", status: "done",
+          result: { evidenceRef: "Log/2026-08-29.md#^e-git", revision, urls, commitSha: sha, githubUrls, filing: "filed" },
+        } }));
+
+    const result = JSON.parse(await callPeerWithArgs({
+      name: "Zenod", url: "https://1.1.1.1/mcp/token", token: "token", wallet: true,
+    }, "store_memory", { content: "test" })) as Record<string, unknown>;
+    expect(result).toMatchObject({ revision, urls, commitSha: sha, githubUrls });
+  });
+
+  it.each([
+    {
+      name: "contradictory nested GitHub SHA and arbitrary nested URLs",
+      result: (() => {
+        const topSha = "a".repeat(40);
+        return {
+          evidenceRef: "Log/2026-08-29.md#^e-bad-git",
+          revision: {
+            provider: "github", id: topSha, committedAt: "2026-08-29T10:00:00.000Z",
+            urls: [`https://github.com/zenod-ai/vault/blob/${topSha}/Log/x.md`],
+            commitSha: "b".repeat(40), githubUrls: ["https://evil.example/not-github"],
+          },
+          urls: [`https://github.com/zenod-ai/vault/blob/${topSha}/Log/x.md`],
+          commitSha: topSha,
+          githubUrls: ["https://github.com/zenod-ai/vault/blob/main/Log/x.md"],
+        };
+      })(),
+    },
+    {
+      name: "Drive revision with mismatched top-level URLs",
+      result: {
+        evidenceRef: "Log/2026-08-29.md#^e-bad-drive",
+        revision: { provider: "google_drive", id: "drive-1", committedAt: "2026-08-29T10:00:00.000Z", urls: ["https://drive.google.com/file/d/a/view"] },
+        urls: ["https://drive.google.com/file/d/b/view"],
+      },
+    },
+    {
+      name: "Drive revision with nested Git compatibility fields",
+      result: {
+        evidenceRef: "Log/2026-08-29.md#^e-bad-drive-git",
+        revision: {
+          provider: "google_drive", id: "drive-2", committedAt: "2026-08-29T10:00:00.000Z",
+          urls: ["https://drive.google.com/file/d/a/view"], commitSha: "c".repeat(40), githubUrls: [],
+        },
+        urls: ["https://drive.google.com/file/d/a/view"],
+      },
+    },
+  ])("rejects $name", async ({ result }) => {
+    vi.stubGlobal("fetch", mcpFetch([], (_args, tool) => tool === "store_memory"
+      ? { content: [{ type: "text", text: "Queued." }], structuredContent: { ticket_id: "job-adversarial", status: "queued" } }
+      : { content: [{ type: "text", text: "Saved." }], structuredContent: {
+          found: true, ticket_id: "job-adversarial", kind: "store", status: "done", result,
+        } }));
+
+    await expect(callPeerWithArgs({
+      name: "Zenod", url: "https://1.1.1.1/mcp/token", token: "token", wallet: true,
+    }, "store_memory", { content: "test" })).resolves.toBe(
+      "Zenod filing returned an invalid terminal receipt for job job-adversarial.",
+    );
+  });
+
   it("retains isError and _meta for a discovered pure-text result", async () => {
     vi.stubGlobal("fetch", mcpFetch([], () => ({
       content: [{ type: "text", text: "upstream rejected the call" }],

@@ -5,6 +5,7 @@ import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 import type { IngestJob, IngestStore } from "./ingestStore.js";
 import type { Settings } from "./settings.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
+import { assertDurableStoreReceipt } from "./durableReceipt.js";
 
 /**
  * Background worker that drains the ingest queue one job at a time, fully
@@ -177,6 +178,7 @@ export class IngestQueue {
         verbatim: true,
         ...(job.hints.length > 0 ? { hints: job.hints } : {}),
       });
+      assertDurableStoreReceipt(stored);
 
       // Archive the original (file ID — and its link — survive the move).
       let archived = false;
