@@ -131,7 +131,7 @@ async function main(): Promise<number> {
       }
       for (const hit of hits) {
         console.log(`${hit.score.toString().padStart(3)}  ${hit.path}${hit.snippet ? `  — ${hit.snippet}` : ""}`);
-        if (hit.githubUrl) console.log(`     ${hit.githubUrl}`);
+        if (hit.url) console.log(`     ${hit.url}`);
       }
       console.log(`\n${hits.length} result(s) in ${elapsed}ms`);
       return 0;
@@ -149,7 +149,7 @@ async function main(): Promise<number> {
           console.log(`--- ${JSON.stringify(note.frontmatter)}\n`);
         }
         console.log(note.body);
-        if (note.githubUrl) console.log(`\nsource: ${note.githubUrl}`);
+        if (note.url) console.log(`\nsource: ${note.url}`);
         return 0;
       } catch (err) {
         if (err instanceof NoteNotFoundError) {
@@ -206,8 +206,9 @@ async function main(): Promise<number> {
       }
       console.log(`evidence: ${result.evidenceRef}`);
       for (const page of result.pagesTouched) console.log(`filed: ${page}`);
-      console.log(`commit: ${result.commitSha}`);
-      for (const url of result.githubUrls) console.log(url);
+      if (result.revision) console.log(`saved revision: ${result.revision.provider}:${result.revision.id}`);
+      else if (result.commitSha) console.log(`commit: ${result.commitSha}`);
+      for (const url of result.urls ?? result.githubUrls ?? []) console.log(url);
       return 0;
     }
 
@@ -222,7 +223,7 @@ async function main(): Promise<number> {
       console.log(answer.text);
       if (answer.sources.length > 0) {
         console.log("\nSources:");
-        for (const s of answer.sources) console.log(`- ${s.path}${s.githubUrl ? `  ${s.githubUrl}` : ""}`);
+        for (const s of answer.sources) console.log(`- ${s.path}${s.url ? `  ${s.url}` : ""}`);
       }
       return 0;
     }

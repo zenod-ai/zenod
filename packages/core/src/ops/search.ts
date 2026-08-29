@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Hit } from "../types.js";
 import { listAttachmentFiles, listMarkdownFiles, tierOf } from "../vault/files.js";
 import { scanVault } from "../vault/pages.js";
-import { githubUrl, type VaultLocation } from "../vault/github.js";
+import { githubSourceRef, type VaultLocation } from "../vault/github.js";
 
 const MAX_HITS = 20;
 
@@ -116,10 +116,9 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     })
     .slice(0, MAX_HITS)
     .map(({ path, rankedScore, snippet }) => ({
-      path,
       snippet,
       score: rankedScore,
-      githubUrl: githubUrl(location, path),
+      ...githubSourceRef(location, path),
     }));
 }
 

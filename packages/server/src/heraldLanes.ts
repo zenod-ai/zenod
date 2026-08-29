@@ -326,7 +326,7 @@ export class HeraldLaneService {
         | Record<string, unknown>
         | undefined;
       const citation = String(
-        structured?.githubUrl ?? hit.githubUrl ?? path,
+        structured?.url ?? hit.url ?? structured?.githubUrl ?? hit.githubUrl ?? path,
       ).trim();
       const body = String(structured?.body ?? textResult(note)).trim();
       if (citation && body) sources.push({ path, citation, body });

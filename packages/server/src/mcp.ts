@@ -158,11 +158,11 @@ function enqueuedResponse(job: TaskJob) {
   };
 }
 
-function legacyEvidenceFileUrl(evidenceRef: string, githubUrls: string[]): string | undefined {
+function evidenceFileUrl(evidenceRef: string, urls: string[]): string | undefined {
   const [path] = evidenceRef.split("#", 1);
   if (!path) return undefined;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-  const base = githubUrls.find((value) => {
+  const base = urls.find((value) => {
     try {
       return new URL(value).pathname.endsWith(`/${encodedPath}`);
     } catch {
@@ -176,22 +176,28 @@ function legacyEvidenceFileUrl(evidenceRef: string, githubUrls: string[]): strin
 
 function taskJobEvidence(job: TaskJob): Array<Record<string, unknown>> {
   const result = job.result as Record<string, unknown> | null;
+  const revision = result?.revision && typeof result.revision === "object" && !Array.isArray(result.revision)
+    ? result.revision as Record<string, unknown>
+    : undefined;
   const commitSha = typeof result?.commitSha === "string" ? result.commitSha : undefined;
   const evidenceRef = typeof result?.evidenceRef === "string" ? result.evidenceRef : undefined;
   const githubUrls = Array.isArray(result?.githubUrls)
     ? result.githubUrls.filter((value): value is string => typeof value === "string")
     : [];
+  const urls = Array.isArray(result?.urls)
+    ? result.urls.filter((value): value is string => typeof value === "string")
+    : githubUrls;
   const evidenceUrl = typeof result?.evidenceUrl === "string"
     ? result.evidenceUrl
     : evidenceRef
-      ? legacyEvidenceFileUrl(evidenceRef, githubUrls)
+      ? evidenceFileUrl(evidenceRef, urls)
       : undefined;
   const pagesTouched = Array.isArray(result?.pagesTouched)
     ? result.pagesTouched.filter((value): value is string => typeof value === "string")
     : [];
   const pageUrls = Array.isArray(result?.pageUrls)
     ? result.pageUrls.filter((value): value is string => typeof value === "string")
-    : githubUrls.filter((value) => value !== evidenceUrl && value.split("#", 1)[0] !== evidenceUrl?.split("#", 1)[0]);
+    : urls.filter((value) => value !== evidenceUrl && value.split("#", 1)[0] !== evidenceUrl?.split("#", 1)[0]);
   if (job.kind === "store") {
     return [
       {
@@ -202,9 +208,11 @@ function taskJobEvidence(job: TaskJob): Array<Record<string, unknown>> {
         status: "done",
         ...(evidenceRef ? { evidenceRef } : {}),
         ...(evidenceUrl ? { url: evidenceUrl } : {}),
+        ...(revision ? { revision } : {}),
+        urls,
         ...(commitSha ? { commitSha } : {}),
         pagesTouched,
-        githubUrls,
+        ...(githubUrls.length ? { githubUrls } : {}),
         pageUrls,
       },
     ];
@@ -215,7 +223,8 @@ function taskJobEvidence(job: TaskJob): Array<Record<string, unknown>> {
       id: job.id,
       ticket_id: job.id,
       ...(commitSha ? { commitSha } : {}),
-      ...(githubUrls[0] ? { url: githubUrls[0] } : {}),
+      ...(revision ? { revision } : {}),
+      ...(urls[0] ? { url: urls[0] } : {}),
     },
   ];
 }
@@ -419,8 +428,9 @@ function formatStoreResult(result: StoreResult): string {
     `evidence: ${result.evidenceRef}`,
     ...(result.evidenceUrl ? [`evidence URL: ${result.evidenceUrl}`] : []),
     `pages: ${result.pagesTouched.join(", ")}`,
-    `commit: ${result.commitSha}`,
-    ...result.githubUrls,
+    ...(result.revision ? [`saved revision: ${result.revision.provider}:${result.revision.id}`] : []),
+    ...(result.commitSha ? [`commit: ${result.commitSha}`] : []),
+    ...(result.urls ?? result.githubUrls ?? []),
   ].join("\n");
 }
 
@@ -442,8 +452,10 @@ function ingestReceipt(job: IngestJob): Record<string, unknown> {
         }
       : null,
     pagesTouched: job.pages,
-    commitSha: job.commitSha,
-    githubUrls: job.githubUrls,
+    revision: job.revision,
+    urls: job.urls,
+    ...(job.commitSha ? { commitSha: job.commitSha } : {}),
+    ...(job.githubUrls.length ? { githubUrls: job.githubUrls } : {}),
     backlog: job.backlog,
   };
 }
@@ -461,8 +473,9 @@ function formatIngestResult(job: IngestJob): string {
     `transcript evidence: ${job.evidenceRef ?? "(missing)"}`,
     job.transcribedBy ? `transcribed by: ${job.transcribedBy}` : null,
     `pages: ${job.pages.join(", ")}`,
-    `commit: ${job.commitSha ?? "(missing)"}`,
-    ...job.githubUrls,
+    job.revision ? `saved revision: ${job.revision.provider}:${job.revision.id}` : "saved revision: (missing)",
+    ...(job.commitSha ? [`commit: ${job.commitSha}`] : []),
+    ...job.urls,
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
@@ -478,9 +491,10 @@ function formatMediaIngestResult(result: MediaIngestReceipt): string {
     `extraction: ${result.extraction.handle ?? "none"}`,
     `evidence: ${result.digest.evidenceRef ?? "none"}`,
     `pages: ${result.digest.pagesTouched.join(", ") || "none"}`,
-    `commit: ${result.digest.commitSha ?? "none"}`,
+    result.digest.revision ? `saved revision: ${result.digest.revision.provider}:${result.digest.revision.id}` : "saved revision: none",
+    ...(result.digest.commitSha ? [`commit: ${result.digest.commitSha}`] : []),
     ...(result.digest.enrichmentJobId ? [`background enrichment: ${result.digest.enrichmentJobId}`] : []),
-    ...result.digest.githubUrls,
+    ...(result.digest.urls.length ? result.digest.urls : result.digest.githubUrls ?? []),
   ].join("\n");
 }
 
@@ -515,6 +529,19 @@ function resultEvidenceUrl(job: TaskJob): string {
   return typeof evidenceUrl === "string" ? evidenceUrl : "";
 }
 
+function resultRevision(job: TaskJob): StoreResult["revision"] | undefined {
+  if (!job.result || typeof job.result !== "object") return undefined;
+  const result = job.result as unknown as Record<string, unknown>;
+  const direct = result.revision;
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) return direct as StoreResult["revision"];
+  const digest = result.digest;
+  if (!digest || typeof digest !== "object") return undefined;
+  const nested = (digest as Record<string, unknown>).revision;
+  return nested && typeof nested === "object" && !Array.isArray(nested)
+    ? nested as StoreResult["revision"]
+    : undefined;
+}
+
 function sourceFromJob(job: TaskJob): Surface {
   if (job.input.source) return job.input.source;
   const identity = captureIdentity(job.idempotencyKey);
@@ -547,6 +574,8 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
   const source = sourceFromJob(job);
   const identity = captureIdentity(job.idempotencyKey);
   const content = job.input.content ?? base?.content ?? job.input.contentHint ?? "";
+  const revision = resultRevision(job);
+  const url = resultEvidenceUrl(job) || base?.url || "";
   return {
     evidenceRef,
     path: evidenceRef.slice(0, marker),
@@ -558,7 +587,12 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
     contentType: contentTypeFromJob(job, source),
     capturedAt: job.input.capturedAt ?? job.input.senderTimestamp ?? new Date(job.createdAt).toISOString(),
     sourceId: job.input.sourceId ?? identity.sourceId,
-    githubUrl: resultEvidenceUrl(job) || base?.githubUrl || "",
+    url,
+    provider: revision?.provider ?? base?.provider ?? "github",
+    ...(revision?.id ? { revisionId: revision.id } : base?.revisionId ? { revisionId: base.revisionId } : {}),
+    ...((revision?.provider ?? base?.provider ?? "github") === "github"
+      ? { githubUrl: url || base?.githubUrl || "" }
+      : {}),
   };
 }
 
@@ -584,7 +618,10 @@ function memoryEntrySummaries(entries: MemoryEntry[]) {
     sourceId: entry.sourceId ?? null,
     chars: entry.content.length,
     snippet: entry.content.slice(0, 280),
-    githubUrl: entry.githubUrl,
+    url: entry.url,
+    provider: entry.provider,
+    ...(entry.revisionId ? { revisionId: entry.revisionId } : {}),
+    ...(entry.githubUrl !== undefined ? { githubUrl: entry.githubUrl } : {}),
   }));
 }
 
@@ -594,8 +631,9 @@ function formatWorkResult(result: WorkResult): string {
     result.mode === "proposal"
       ? [`PLAN (relay to the user for approval, then call run_task again with approvedPlan):`, result.text]
       : [
-          result.mode === "failed" ? "FAILED (rolled back, nothing committed)" : result.committed ? "EXECUTED" : "EXECUTED (no changes were needed)",
+          result.mode === "failed" ? "FAILED (rolled back, nothing saved)" : result.committed ? "EXECUTED" : "EXECUTED (no changes were needed)",
           result.text,
+          ...(result.revision ? [`saved revision: ${result.revision.provider}:${result.revision.id}`] : []),
           ...(result.commitSha ? [`commit: ${result.commitSha}`] : []),
           ...(result.changedPaths?.length ? [`changed: ${result.changedPaths.join(", ")}`] : []),
         ];
@@ -1037,13 +1075,13 @@ export function buildMcpServer(
       const output = { hits, entries };
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
-        : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.githubUrl ? `\n  ${hit.githubUrl}` : ""}`).join("\n");
+        : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}`).join("\n");
       const entryText = entries.length === 0
         ? structuralQuery ? "No memory entries match the structural filters." : ""
         : entries.map((entry) => [
             `${entry.capturedAt} · ${entry.source}/${entry.contentType ?? "unknown"} · ${entry.evidenceRef}`,
             entry.snippet,
-            entry.githubUrl,
+            entry.url,
           ].filter(Boolean).join("\n  ")).join("\n");
       return {
         content: [
@@ -1073,7 +1111,7 @@ export function buildMcpServer(
         const entry = mergeMemoryEntries([storedEntry], taskJobs?.recent?.(500) ?? [])
           .find((candidate) => candidate.evidenceRef === storedEntry.evidenceRef) ?? storedEntry;
         return {
-          content: [{ type: "text", text: `${entry.evidenceRef}\nsource: ${entry.source}\ncontentType: ${entry.contentType ?? "unknown"}\ncapturedAt: ${entry.capturedAt}\n${entry.githubUrl ? `source URL: ${entry.githubUrl}\n` : ""}${entry.content}` }],
+          content: [{ type: "text", text: `${entry.evidenceRef}\nsource: ${entry.source}\ncontentType: ${entry.contentType ?? "unknown"}\ncapturedAt: ${entry.capturedAt}\n${entry.url ? `source URL: ${entry.url}\n` : ""}${entry.content}` }],
           structuredContent: { entry },
         };
       }
@@ -1082,10 +1120,10 @@ export function buildMcpServer(
         content: [
           {
             type: "text",
-            text: `# ${note.path}\nfrontmatter: ${JSON.stringify(note.frontmatter)}\n${note.githubUrl ? `source: ${note.githubUrl}\n` : ""}\n${note.body}`,
+            text: `# ${note.path}\nfrontmatter: ${JSON.stringify(note.frontmatter)}\n${note.url ? `source: ${note.url}\n` : ""}\n${note.body}`,
           },
         ],
-        structuredContent: { path: note.path, frontmatter: note.frontmatter, body: note.body, githubUrl: note.githubUrl },
+        structuredContent: { ...note },
       };
     },
   );
@@ -1095,7 +1133,7 @@ export function buildMcpServer(
     {
       title: "Store memory",
       description:
-        "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and commits to GitHub. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. Use for anything the user wants remembered: facts, decisions, events, preferences. ASYNC: the librarian pipeline runs classify + compose LLM calls and a git commit (slower for longer memories), so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved receipt, evidence ref, pages touched, commit SHA, and filing disposition.",
+        "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and durably saves through the configured vault provider. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. Use for anything the user wants remembered: facts, decisions, events, preferences. ASYNC: the librarian pipeline runs classify + compose LLM calls and a durable vault save, so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved revision receipt, evidence ref, pages touched, URLs, and filing disposition.",
       inputSchema: STORE_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -1144,8 +1182,8 @@ export function buildMcpServer(
     {
       title: "Ingest memory artifact",
       description: hostedArchiveOnlyDrive
-        ? "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, or staged transport handles that the user wants remembered. Hosted Google Drive is archive/export-only, so Drive file references are not accepted as sources. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs."
-        : "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, commit SHA, and GitHub/archive URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
+        ? "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, or staged transport handles that the user wants remembered. Hosted Google Drive is archive/export-only, so Drive file references are not accepted as sources. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, durable revision, and provider URLs."
+        : "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, durable revision, and provider URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
       inputSchema: hostedArchiveOnlyDrive
         ? {
             ...INGEST_MEMORY_SHAPE,
@@ -1226,7 +1264,7 @@ export function buildMcpServer(
           ocrHandle: mediaType === "screenshot" || mediaType === "image" ? null : undefined,
           provider: null,
         },
-        digest: { evidenceRef: null, pagesTouched: [], commitSha: null, githubUrls: [] },
+        digest: { evidenceRef: null, pagesTouched: [], revision: null, urls: [] },
         nextAdapterIssues: ["https://github.com/zenod-ai/zenod/issues/660", "https://github.com/zenod-ai/zenod/issues/661", "https://github.com/zenod-ai/zenod/issues/662"],
       };
       return { content: [{ type: "text", text: formatMediaIngestResult(result) }], structuredContent: { ...result }, isError: true };
@@ -1290,7 +1328,7 @@ export function buildMcpServer(
         text: answer.text,
         sources: answer.sources,
       };
-      const sources = answerContent.sources.map((s) => `- ${s.path}${s.githubUrl ? ` (${s.githubUrl})` : ""}`).join("\n");
+      const sources = answerContent.sources.map((s) => `- ${s.path}${s.url ? ` (${s.url})` : ""}`).join("\n");
       const status = {
         type: "read_only_status" as const,
         text: "Read-only answer — no action was performed.",
@@ -1362,7 +1400,7 @@ export function buildMcpServer(
       {
         title: "Get task result",
         description:
-          "Poll a background job started by task_brain, run_task, store_memory, or ingest_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, the evidence ref + pages + commit for a store_memory job, or the media ingest receipt/error contract for an ingest_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
+          "Poll a background job started by task_brain, run_task, store_memory, or ingest_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, the evidence ref + pages + durable revision for a store_memory job, or the media ingest receipt/error contract for an ingest_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
         inputSchema: {
           ticket_id: z.string().min(1).optional().describe("The canonical ticket_id returned by an async tool"),
           jobId: z.string().min(1).optional().describe("Compatibility alias for ticket_id"),
@@ -1492,7 +1530,16 @@ export function buildMcpServer(
         memoryPath: z.string().min(1).optional().describe("Vault-relative note/log path to mine"),
         query: z.string().min(1).optional().describe("Vault search scope, e.g. 'recent Zenod voice notes launch backlog'"),
         sourceRefs: z
-          .array(z.object({ path: z.string().min(1), githubUrl: z.string() }))
+          .array(z.union([
+            z.object({
+              path: z.string().min(1),
+              url: z.string().min(1),
+              provider: z.enum(["github", "google_drive"]),
+              revisionId: z.string().optional(),
+              githubUrl: z.string().optional(),
+            }),
+            z.object({ path: z.string().min(1), githubUrl: z.string().min(1) }),
+          ]))
           .optional()
           .describe("Optional source refs to attach to rawText candidates"),
         write: z.boolean().optional().describe("When true, write proposed backlog records under Backlog/"),
@@ -1505,7 +1552,9 @@ export function buildMcpServer(
         ...(rawText ? { rawText } : {}),
         ...(memoryPath ? { memoryPath } : {}),
         ...(query ? { query } : {}),
-        ...(sourceRefs ? { sourceRefs } : {}),
+        ...(sourceRefs ? { sourceRefs: sourceRefs.map((source) => "url" in source
+          ? source
+          : { path: source.path, url: source.githubUrl, provider: "github" as const, githubUrl: source.githubUrl }) } : {}),
         ...(write !== undefined ? { write } : {}),
       });
       const lines = [
@@ -1514,7 +1563,7 @@ export function buildMcpServer(
           const sources = candidate.source_refs.map((ref) => ref.path).join(", ");
           return `${index + 1}. [${candidate.priority}/${candidate.type}/${candidate.status}] ${candidate.title}${sources ? ` — ${sources}` : ""}`;
         }),
-        ...(result.written.length > 0 ? ["", "Written:", ...result.written.map((item) => `- ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`)] : []),
+        ...(result.written.length > 0 ? ["", "Written:", ...result.written.map((item) => `- ${item.path}${item.url ? ` (${item.url})` : ""}`)] : []),
         ...(result.skipped.length > 0 ? ["", "Skipped:", ...result.skipped.map((item) => `- ${item.title ? `${item.title}: ` : ""}${item.reason}`)] : []),
       ];
       return { content: [{ type: "text", text: lines.join("\n") }], structuredContent: { ...result } };

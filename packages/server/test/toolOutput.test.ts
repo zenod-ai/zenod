@@ -60,6 +60,10 @@ describe("v4 tool output validation", () => {
           status: "done",
           evidenceRef: "Log/2026-07-12.md#^e-cobalt",
           url: `https://github.com/owner/vault/blob/${"a".repeat(40)}/Log/2026-07-12.md#L42`,
+          urls: [
+            `https://github.com/owner/vault/blob/${"a".repeat(40)}/Log/2026-07-12.md#L42`,
+            `https://github.com/owner/vault/blob/${"a".repeat(40)}/Projects/Council.md`,
+          ],
           commitSha: "a".repeat(40),
           pagesTouched: ["Projects/Council.md"],
           githubUrls: [
@@ -101,6 +105,61 @@ describe("v4 tool output validation", () => {
     };
 
     expect(() => validateToolResponse("zenod.get_task_result", output)).toThrow(/evidenceRef|url/);
+  });
+
+  it("accepts a Drive terminal revision without GitHub compatibility fields", () => {
+    const url = "https://drive.google.com/file/d/log-1/view";
+    const revision = {
+      provider: "google_drive",
+      id: "drive-txn-1",
+      committedAt: "2026-08-29T10:00:00.000Z",
+      urls: [url],
+    };
+    const output = {
+      found: true,
+      ticket_id: "job-drive",
+      jobId: "job-drive",
+      kind: "store",
+      status: "done",
+      state: "done",
+      result: { evidenceRef: "Log/2026-08-29.md#^e-drive", pagesTouched: [], revision, urls: [url] },
+      evidence: [evidence("memory_stored", {
+        jobId: "job-drive",
+        status: "done",
+        evidenceRef: "Log/2026-08-29.md#^e-drive",
+        url,
+        urls: [url],
+        revision,
+        pagesTouched: [],
+        pageUrls: [],
+      })],
+    };
+
+    expect(validateToolResponse("zenod.get_task_result", output)).toBe(output);
+  });
+
+  it("rejects Drive terminal evidence carrying a fabricated GitHub field", () => {
+    const url = "https://drive.google.com/file/d/log-1/view";
+    const output = toolResponse({
+      evidence: [evidence("memory_stored", {
+        jobId: "job-drive",
+        status: "done",
+        evidenceRef: "Log/2026-08-29.md#^e-drive",
+        url,
+        urls: [url],
+        revision: {
+          provider: "google_drive",
+          id: "drive-txn-1",
+          committedAt: "2026-08-29T10:00:00.000Z",
+          urls: [url],
+        },
+        commitSha: "a".repeat(40),
+        pagesTouched: [],
+        pageUrls: [],
+      })],
+    });
+
+    expect(() => validateToolResponse("zenod.store_memory", output)).toThrow(/must NOT be valid/);
   });
 
   it("rejects evidence shapes outside a tool's public contract", () => {

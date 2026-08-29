@@ -11,6 +11,10 @@ import type { StoreResult } from "zenod";
 export function formatFilingReceipt(result: StoreResult): string {
   const anchorMatch = /#(\^[a-z0-9-]+)/i.exec(result.evidenceRef);
   const page = result.pagesTouched[0] || "(inbox)";
-  const sha = result.commitSha ? result.commitSha.slice(0, 7) : result.commitSha;
-  return anchorMatch ? `Filed → ${page} ${anchorMatch[1]} (${sha})` : `Filed → ${page} (${sha})`;
+  const durableId = result.commitSha
+    ? result.commitSha.slice(0, 7)
+    : result.revision
+      ? `${result.revision.provider}:${result.revision.id}`
+      : "revision unavailable";
+  return anchorMatch ? `Filed → ${page} ${anchorMatch[1]} (${durableId})` : `Filed → ${page} (${durableId})`;
 }

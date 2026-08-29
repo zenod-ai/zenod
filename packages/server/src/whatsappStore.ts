@@ -111,6 +111,7 @@ export interface WhatsAppTranscriptReceipt {
   driveLinks: string[];
   driveFileIds: string[];
   vaultEvidenceRefs: string[];
+  vaultRevisions: string[];
   vaultCommits: string[];
   vaultLinks: string[];
 }
@@ -393,8 +394,9 @@ function receiptFromOutbound(row: {
     driveLinks,
     driveFileIds: driveLinks.map(driveFileIdFromLink).filter((id): id is string => Boolean(id)),
     vaultEvidenceRefs: uniqueMatches(row.bodyText, /^Vault evidence:\s*(.+)$/gm),
+    vaultRevisions: uniqueMatches(row.bodyText, /^Vault (?:save )?revision:\s*(.+)$/gim),
     vaultCommits: uniqueMatches(row.bodyText, /^Vault commit:\s*([0-9a-f]{7,40})$/gim),
-    vaultLinks: uniqueMatches(row.bodyText, /(https:\/\/github\.com\/[^\s)]+)/g),
+    vaultLinks: uniqueMatches(row.bodyText, /^-\s+(https?:\/\/[^\s)]+)$/gim),
   };
 }
 

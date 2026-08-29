@@ -1,0 +1,79 @@
+{
+  "store": {
+    "evidenceRef": "Log/2026-08-29.md#^e-drive01",
+    "evidenceUrl": "https://drive.google.com/file/d/drive-log-1/view",
+    "pagesTouched": ["Projects/Zenod.md"],
+    "pageUrls": ["https://drive.google.com/file/d/drive-project-1/view"],
+    "revision": {
+      "provider": "google_drive",
+      "id": "drive-txn-01J6H8Q3N7",
+      "committedAt": "2026-08-29T10:00:00.000Z",
+      "urls": [
+        "https://drive.google.com/file/d/drive-log-1/view",
+        "https://drive.google.com/file/d/drive-project-1/view"
+      ]
+    },
+    "urls": [
+      "https://drive.google.com/file/d/drive-log-1/view",
+      "https://drive.google.com/file/d/drive-project-1/view"
+    ],
+    "filing": "filed"
+  },
+  "search": [{
+    "path": "Projects/Zenod.md",
+    "snippet": "Google Drive vault",
+    "score": 0.95,
+    "url": "https://drive.google.com/file/d/drive-project-1/view",
+    "provider": "google_drive",
+    "revisionId": "drive-txn-01J6H8Q3N7"
+  }],
+  "get": {
+    "path": "Projects/Zenod.md",
+    "frontmatter": { "type": "project" },
+    "body": "# Zenod",
+    "url": "https://drive.google.com/file/d/drive-project-1/view",
+    "provider": "google_drive",
+    "revisionId": "drive-txn-01J6H8Q3N7"
+  },
+  "ask": {
+    "text": "Zenod can use a repository-shaped vault.",
+    "sources": [{
+      "path": "Projects/Zenod.md",
+      "url": "https://drive.google.com/file/d/drive-project-1/view",
+      "provider": "google_drive",
+      "revisionId": "drive-txn-01J6H8Q3N7"
+    }]
+  },
+  "mcpStructuredStore": {
+    "evidenceRef": "Log/2026-08-29.md#^e-drive01",
+    "evidenceUrl": "https://drive.google.com/file/d/drive-log-1/view",
+    "pagesTouched": ["Projects/Zenod.md"],
+    "pageUrls": ["https://drive.google.com/file/d/drive-project-1/view"],
+    "revision": {
+      "provider": "google_drive",
+      "id": "drive-txn-01J6H8Q3N7",
+      "committedAt": "2026-08-29T10:00:00.000Z",
+      "urls": ["https://drive.google.com/file/d/drive-log-1/view", "https://drive.google.com/file/d/drive-project-1/view"]
+    },
+    "urls": ["https://drive.google.com/file/d/drive-log-1/view", "https://drive.google.com/file/d/drive-project-1/view"],
+    "filing": "filed"
+  },
+  "peerReceipt": {
+    "status": "done",
+    "kind": "store",
+    "result": {
+      "evidenceRef": "Log/2026-08-29.md#^e-drive01",
+      "evidenceUrl": "https://drive.google.com/file/d/drive-log-1/view",
+      "pagesTouched": ["Projects/Zenod.md"],
+      "pageUrls": ["https://drive.google.com/file/d/drive-project-1/view"],
+      "revision": {
+        "provider": "google_drive",
+        "id": "drive-txn-01J6H8Q3N7",
+        "committedAt": "2026-08-29T10:00:00.000Z",
+        "urls": ["https://drive.google.com/file/d/drive-log-1/view", "https://drive.google.com/file/d/drive-project-1/view"]
+      },
+      "urls": ["https://drive.google.com/file/d/drive-log-1/view", "https://drive.google.com/file/d/drive-project-1/view"],
+      "filing": "filed"
+    }
+  }
+}

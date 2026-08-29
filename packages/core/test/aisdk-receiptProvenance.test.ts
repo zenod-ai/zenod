@@ -119,7 +119,7 @@ describe("AI SDK peer mutation provenance", () => {
         text: "The prior voice note was about el Conflent.",
         sources: [{
           path: "Log/2026-07-30.md#^e-23ece7",
-          githubUrl: "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md#%5Ee-23ece7",
+          url: "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-07-30.md#%5Ee-23ece7",
         }],
         status: {
           type: "read_only_status",

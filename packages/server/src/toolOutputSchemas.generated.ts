@@ -320,10 +320,58 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "status",
           "evidenceRef",
           "url",
-          "commitSha",
+          "urls",
           "pagesTouched",
-          "githubUrls",
           "pageUrls"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "revision"
+            ]
+          },
+          {
+            "required": [
+              "commitSha"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "commitSha"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "githubUrls"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         ],
         "properties": {
           "kind": {
@@ -349,6 +397,101 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "url": {
             "type": "string"
+          },
+          "revision": {
+            "type": "object",
+            "required": [
+              "provider",
+              "id",
+              "committedAt",
+              "urls"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  "github",
+                  "google_drive"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "committedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "commitSha": {
+                "type": "string"
+              },
+              "githubUrls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "commitSha",
+                    "githubUrls"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "commitSha"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "githubUrls"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "commitSha": {
             "type": "string"
@@ -414,7 +557,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
         "required": [
           "kind",
           "path",
-          "content"
+          "content",
+          "url",
+          "provider"
         ],
         "properties": {
           "kind": {
@@ -430,6 +575,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "type": "object"
           },
           "content": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "google_drive"
+            ]
+          },
+          "revisionId": {
             "type": "string"
           },
           "githubUrl": {
@@ -1438,7 +1595,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
         "required": [
           "kind",
           "path",
-          "content"
+          "content",
+          "url",
+          "provider"
         ],
         "properties": {
           "kind": {
@@ -1454,6 +1613,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "type": "object"
           },
           "content": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "google_drive"
+            ]
+          },
+          "revisionId": {
             "type": "string"
           },
           "githubUrl": {
@@ -1605,7 +1776,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
         "required": [
           "kind",
           "path",
-          "content"
+          "content",
+          "url",
+          "provider"
         ],
         "properties": {
           "kind": {
@@ -1621,6 +1794,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "type": "object"
           },
           "content": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "google_drive"
+            ]
+          },
+          "revisionId": {
             "type": "string"
           },
           "githubUrl": {
@@ -1782,10 +1967,58 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "status",
           "evidenceRef",
           "url",
-          "commitSha",
+          "urls",
           "pagesTouched",
-          "githubUrls",
           "pageUrls"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "revision"
+            ]
+          },
+          {
+            "required": [
+              "commitSha"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "commitSha"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "githubUrls"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         ],
         "properties": {
           "kind": {
@@ -1811,6 +2044,101 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "url": {
             "type": "string"
+          },
+          "revision": {
+            "type": "object",
+            "required": [
+              "provider",
+              "id",
+              "committedAt",
+              "urls"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  "github",
+                  "google_drive"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "committedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "commitSha": {
+                "type": "string"
+              },
+              "githubUrls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "commitSha",
+                    "githubUrls"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "commitSha"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "githubUrls"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "commitSha": {
             "type": "string"
@@ -2058,10 +2386,58 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "status",
           "evidenceRef",
           "url",
-          "commitSha",
+          "urls",
           "pagesTouched",
-          "githubUrls",
           "pageUrls"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "revision"
+            ]
+          },
+          {
+            "required": [
+              "commitSha"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "commitSha"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "githubUrls"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         ],
         "properties": {
           "kind": {
@@ -2087,6 +2463,101 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "url": {
             "type": "string"
+          },
+          "revision": {
+            "type": "object",
+            "required": [
+              "provider",
+              "id",
+              "committedAt",
+              "urls"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  "github",
+                  "google_drive"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "committedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "commitSha": {
+                "type": "string"
+              },
+              "githubUrls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "commitSha",
+                    "githubUrls"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "commitSha"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "githubUrls"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "commitSha": {
             "type": "string"
@@ -5621,10 +6092,58 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "status",
           "evidenceRef",
           "url",
-          "commitSha",
+          "urls",
           "pagesTouched",
-          "githubUrls",
           "pageUrls"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "revision"
+            ]
+          },
+          {
+            "required": [
+              "commitSha"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "revision": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                }
+              },
+              "required": [
+                "revision"
+              ]
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "commitSha"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "githubUrls"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         ],
         "properties": {
           "kind": {
@@ -5650,6 +6169,101 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "url": {
             "type": "string"
+          },
+          "revision": {
+            "type": "object",
+            "required": [
+              "provider",
+              "id",
+              "committedAt",
+              "urls"
+            ],
+            "properties": {
+              "provider": {
+                "enum": [
+                  "github",
+                  "google_drive"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "committedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "commitSha": {
+                "type": "string"
+              },
+              "githubUrls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "github"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "commitSha",
+                    "githubUrls"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "provider": {
+                      "const": "google_drive"
+                    }
+                  },
+                  "required": [
+                    "provider"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "commitSha"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "githubUrls"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "commitSha": {
             "type": "string"
@@ -5715,7 +6329,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
         "required": [
           "kind",
           "path",
-          "content"
+          "content",
+          "url",
+          "provider"
         ],
         "properties": {
           "kind": {
@@ -5731,6 +6347,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "type": "object"
           },
           "content": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "google_drive"
+            ]
+          },
+          "revisionId": {
             "type": "string"
           },
           "githubUrl": {

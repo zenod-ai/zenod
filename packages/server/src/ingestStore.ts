@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { BacklogDigestResult } from "zenod";
+import type { BacklogDigestResult, VaultRevision } from "zenod";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
@@ -40,6 +40,8 @@ export interface IngestJob {
   sourceLink: string | null;
   transcribedBy: string | null;
   pages: string[];
+  revision: VaultRevision | null;
+  urls: string[];
   commitSha: string | null;
   githubUrls: string[];
   backlog: BacklogDigestResult | null;
@@ -61,6 +63,8 @@ interface Row {
   error: string | null;
   evidence_ref: string | null;
   pages: string | null;
+  revision_json: string | null;
+  urls_json: string | null;
   commit_sha: string | null;
   github_urls: string | null;
   backlog_json: string | null;
@@ -86,6 +90,8 @@ function rowToJob(row: Row): IngestJob {
     sourceLink: row.cached_source_link,
     transcribedBy: row.cached_provider,
     pages: JSON.parse(row.pages || "[]") as string[],
+    revision: row.revision_json ? JSON.parse(row.revision_json) as VaultRevision : null,
+    urls: JSON.parse(row.urls_json || "[]") as string[],
     commitSha: row.commit_sha,
     githubUrls: JSON.parse((row as Row & { github_urls?: string | null }).github_urls || "[]") as string[],
     backlog: row.backlog_json ? (JSON.parse(row.backlog_json) as BacklogDigestResult) : null,
@@ -110,6 +116,8 @@ export interface JobPatch {
   error?: string | null;
   evidenceRef?: string | null;
   pages?: string[];
+  revision?: VaultRevision | null;
+  urls?: string[];
   commitSha?: string | null;
   githubUrls?: string[];
   backlog?: BacklogDigestResult | null;
@@ -164,6 +172,8 @@ export class IngestStore {
       `ALTER TABLE ingest_jobs ADD COLUMN cached_source_link TEXT`,
       `ALTER TABLE ingest_jobs ADD COLUMN backlog_json TEXT`,
       `ALTER TABLE ingest_jobs ADD COLUMN github_urls TEXT`,
+      `ALTER TABLE ingest_jobs ADD COLUMN revision_json TEXT`,
+      `ALTER TABLE ingest_jobs ADD COLUMN urls_json TEXT`,
     ]) {
       try {
         this.db.exec(statement);
@@ -252,6 +262,8 @@ export class IngestStore {
     if (patch.error !== undefined) push("error", patch.error);
     if (patch.evidenceRef !== undefined) push("evidence_ref", patch.evidenceRef);
     if (patch.pages !== undefined) push("pages", JSON.stringify(patch.pages));
+    if (patch.revision !== undefined) push("revision_json", patch.revision ? JSON.stringify(patch.revision) : null);
+    if (patch.urls !== undefined) push("urls_json", JSON.stringify(patch.urls));
     if (patch.commitSha !== undefined) push("commit_sha", patch.commitSha);
     if (patch.githubUrls !== undefined) push("github_urls", JSON.stringify(patch.githubUrls));
     if (patch.backlog !== undefined) push("backlog_json", patch.backlog ? JSON.stringify(patch.backlog) : null);

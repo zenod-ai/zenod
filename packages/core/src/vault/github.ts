@@ -12,3 +12,21 @@ export function githubUrl(location: VaultLocation, path: string, anchor?: string
   const suffix = anchor ? `#${encodeURIComponent(anchor)}` : "";
   return `https://github.com/${location.repo}/blob/${branch}/${encodedPath}${suffix}`;
 }
+
+/** Provider-neutral citation with the legacy GitHub URL retained for compatibility. */
+export function githubSourceRef(
+  location: VaultLocation,
+  path: string,
+  anchor?: string,
+  revisionId?: string,
+): VaultSourceRef {
+  const url = githubUrl(location, path, anchor);
+  return {
+    path: anchor ? `${path}#${anchor}` : path,
+    url,
+    provider: "github",
+    ...(revisionId ? { revisionId } : {}),
+    githubUrl: url,
+  };
+}
+import type { VaultSourceRef } from "./repository.js";

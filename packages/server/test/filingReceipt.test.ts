@@ -31,4 +31,21 @@ describe("formatFilingReceipt (M-5)", () => {
     });
     expect(text).toBe("Filed → Areas/Insurance.md (abc1234)");
   });
+
+  it("renders a Drive revision without fabricating a short SHA", () => {
+    const text = formatFilingReceipt({
+      evidenceRef: "Log/2026-08-29.md#^e-drive",
+      pagesTouched: ["Projects/Zenod.md"],
+      revision: {
+        provider: "google_drive",
+        id: "drive-txn-1",
+        committedAt: "2026-08-29T10:00:00.000Z",
+        urls: ["https://drive.google.com/file/d/log-1/view"],
+      },
+      urls: ["https://drive.google.com/file/d/log-1/view"],
+      filing: "filed",
+    });
+
+    expect(text).toBe("Filed → Projects/Zenod.md ^e-drive (google_drive:drive-txn-1)");
+  });
 });

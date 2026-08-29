@@ -2044,13 +2044,13 @@ export class WhatsAppGateway {
     const filed = [
       stored?.evidenceRef ? `evidence ${stored.evidenceRef}` : null,
       ...(stored?.pagesTouched ?? []).map((page) => `memory ${page}`),
-      stored?.commitSha ? `commit ${stored.commitSha}` : null,
+      stored?.revision ? `saved revision ${stored.revision.provider}:${stored.revision.id}` : null,
     ].filter(Boolean);
     const backlog = stored?.backlog;
     const backlogLine = backlog
       ? [
           `Backlog: ${backlog.written.length} written, ${backlog.candidates.length} proposed, ${backlog.skipped.length} skipped.`,
-          ...backlog.written.slice(0, 5).map((item) => `- wrote ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`),
+          ...backlog.written.slice(0, 5).map((item) => `- wrote ${item.path}${item.url ? ` (${item.url})` : ""}`),
           ...backlog.candidates
             .filter((candidate) => !backlog.written.some((item) => item.title === candidate.title))
             .slice(0, 5)

@@ -205,8 +205,10 @@ export class IngestQueue {
         progress: 100,
         evidenceRef: stored.evidenceRef,
         pages: stored.pagesTouched,
-        commitSha: stored.commitSha,
-        githubUrls: stored.githubUrls,
+        revision: stored.revision ?? null,
+        urls: stored.urls ?? [],
+        commitSha: stored.commitSha ?? null,
+        githubUrls: stored.githubUrls ?? [],
         backlog: stored.backlog ?? null,
         archived,
       });

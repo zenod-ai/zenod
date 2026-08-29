@@ -209,6 +209,8 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(receipt.digest).toEqual({
       evidenceRef: "Log/2026-07-09.md#^e-audio",
       pagesTouched: ["Areas/Insurance.md"],
+      revision: null,
+      urls: [],
       commitSha: "c".repeat(40),
       githubUrls: ["https://github.com/owner/vault/blob/main/Areas/Insurance.md"],
     });

@@ -64,4 +64,26 @@ describe("formatStorageReceipt", () => {
     expect(receipt).toContain("Saved — filed to Inbox");
     expect(receipt).not.toContain("Where should this go?");
   });
+
+  it("renders a Drive save revision and links without commit language", () => {
+    const receipt = formatStorageReceipt({
+      storeResult: {
+        evidenceRef: "Log/2026-08-29.md#^e-drive",
+        pagesTouched: ["Projects/Zenod.md"],
+        revision: {
+          provider: "google_drive",
+          id: "drive-txn-1",
+          committedAt: "2026-08-29T10:00:00.000Z",
+          urls: ["https://drive.google.com/file/d/log-1/view"],
+        },
+        urls: ["https://drive.google.com/file/d/log-1/view"],
+        filing: "filed",
+      },
+    });
+
+    expect(receipt).toContain("Vault save revision: drive-txn-1");
+    expect(receipt).toContain("https://drive.google.com/file/d/log-1/view");
+    expect(receipt).not.toContain("Vault commit");
+    expect(receipt).not.toContain("GitHub");
+  });
 });

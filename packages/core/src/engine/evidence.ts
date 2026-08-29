@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { MemoryContentType, MemoryEntry, MemoryEntryQuery, Surface } from "../types.js";
 import type { VaultLocation } from "../vault/github.js";
-import { githubUrl } from "../vault/github.js";
+import { githubSourceRef } from "../vault/github.js";
 import { listMarkdownFiles } from "../vault/files.js";
 
 export interface EvidenceEntry {
@@ -160,7 +160,6 @@ function parseEvidenceFile(path: string, text: string, location: VaultLocation):
     const evidenceRef = `${path}#^${heading.anchor}`;
     return {
       evidenceRef,
-      path,
       anchor: heading.anchor,
       title: heading.title,
       content: content.join("\n").trimEnd(),
@@ -171,7 +170,7 @@ function parseEvidenceFile(path: string, text: string, location: VaultLocation):
       ...(sourceId ? { sourceId } : {}),
       // Obsidian block ids are not GitHub line anchors. Keep the canonical file
       // URL here and carry the exact block identity separately in evidenceRef.
-      githubUrl: githubUrl(location, path),
+      ...githubSourceRef(location, path),
     };
   });
 }

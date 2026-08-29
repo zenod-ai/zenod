@@ -317,6 +317,51 @@ describe("generic wallet MCP discovery", () => {
     expect(result).not.toContain("Stored.");
   });
 
+  it("accepts a Drive durable revision receipt without requiring or inventing a commit SHA", async () => {
+    const revision = {
+      provider: "google_drive",
+      id: "drive-txn-verified",
+      committedAt: "2026-08-29T10:00:00.000Z",
+      urls: ["https://drive.google.com/file/d/log-1/view"],
+    };
+    const fetcher = mcpFetch([], (_args, tool) => tool === "store_memory"
+      ? {
+          content: [{ type: "text", text: "Queued." }],
+          structuredContent: { ticket_id: "job-drive", jobId: "job-drive", status: "queued", state: "accepted" },
+        }
+      : {
+          content: [{ type: "text", text: "Saved." }],
+          structuredContent: {
+            found: true,
+            ticket_id: "job-drive",
+            jobId: "job-drive",
+            kind: "store",
+            status: "done",
+            state: "done",
+            result: {
+              evidenceRef: "Log/2026-08-29.md#^e-drive",
+              evidenceUrl: revision.urls[0],
+              pagesTouched: ["Projects/Zenod.md"],
+              revision,
+              urls: revision.urls,
+              filing: "filed",
+            },
+          },
+        });
+    vi.stubGlobal("fetch", fetcher);
+
+    const result = JSON.parse(await callPeerWithArgs({
+      name: "Zenod",
+      url: "https://1.1.1.1/mcp/memory-scoped-token",
+      token: "memory-scoped-token",
+      wallet: true,
+    }, "store_memory", { content: "test" })) as Record<string, unknown>;
+
+    expect(result).toMatchObject({ status: "done", revision, urls: revision.urls });
+    expect(result).not.toHaveProperty("commitSha");
+    expect(result).not.toHaveProperty("githubUrls");
+  });
+
   it("retains isError and _meta for a discovered pure-text result", async () => {
     vi.stubGlobal("fetch", mcpFetch([], () => ({
       content: [{ type: "text", text: "upstream rejected the call" }],

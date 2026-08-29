@@ -11,15 +11,28 @@ import {
   type ProviderNeutralCustomerSnapshot,
 } from "../src/googleDriveVaultContract.js";
 
-const githubSourceSchema = z.object({
+const vaultRevisionSchema = z.object({
+  provider: z.enum(["github", "google_drive"]),
+  id: z.string().min(1),
+  committedAt: z.string().datetime(),
+  urls: z.array(z.string()),
+  commitSha: z.string().optional(),
+  githubUrls: z.array(z.string()).optional(),
+}).strict();
+const vaultSourceSchema = z.object({
   path: z.string(),
-  githubUrl: z.string(),
+  url: z.string(),
+  provider: z.enum(["github", "google_drive"]),
+  revisionId: z.string().optional(),
+  githubUrl: z.string().optional(),
 }).strict();
 const githubStoreResultSchema = z.object({
   evidenceRef: z.string(),
   evidenceUrl: z.string(),
   pagesTouched: z.array(z.string()),
   pageUrls: z.array(z.string()),
+  revision: vaultRevisionSchema,
+  urls: z.array(z.string()),
   commitSha: z.string().regex(/^[0-9a-f]{40}$/),
   githubUrls: z.array(z.string()),
   filing: z.enum(["filed", "uncertain", "inbox", "pending"]),
@@ -32,17 +45,23 @@ const githubCompatibilityFixtureSchema = z.object({
     path: z.string(),
     snippet: z.string(),
     score: z.number(),
+    url: z.string(),
+    provider: z.literal("github"),
+    revisionId: z.string().optional(),
     githubUrl: z.string(),
   }).strict()),
   get: z.object({
     path: z.string(),
     frontmatter: z.record(z.string(), z.unknown()),
     body: z.string(),
+    url: z.string(),
+    provider: z.literal("github"),
+    revisionId: z.string().optional(),
     githubUrl: z.string(),
   }).strict(),
   ask: z.object({
     text: z.string(),
-    sources: z.array(githubSourceSchema),
+    sources: z.array(vaultSourceSchema),
   }).strict(),
   mcpStructuredStore: githubStoreResultSchema,
   peerReceipt: z.object({
@@ -50,6 +69,26 @@ const githubCompatibilityFixtureSchema = z.object({
     kind: z.literal("store"),
     result: githubStoreResultSchema,
   }).strict(),
+}).strict();
+
+const driveStoreResultSchema = z.object({
+  evidenceRef: z.string(),
+  evidenceUrl: z.string(),
+  pagesTouched: z.array(z.string()),
+  pageUrls: z.array(z.string()),
+  revision: vaultRevisionSchema.extend({ provider: z.literal("google_drive") }),
+  urls: z.array(z.string()),
+  filing: z.enum(["filed", "uncertain", "inbox", "pending"]),
+  backlog: z.unknown().optional(),
+  queued: z.boolean().optional(),
+}).strict();
+const driveFixtureSchema = z.object({
+  store: driveStoreResultSchema,
+  search: z.array(vaultSourceSchema.extend({ snippet: z.string(), score: z.number(), provider: z.literal("google_drive") })),
+  get: vaultSourceSchema.extend({ frontmatter: z.record(z.string(), z.unknown()), body: z.string(), provider: z.literal("google_drive") }),
+  ask: z.object({ text: z.string(), sources: z.array(vaultSourceSchema) }).strict(),
+  mcpStructuredStore: driveStoreResultSchema,
+  peerReceipt: z.object({ status: z.literal("done"), kind: z.literal("store"), result: driveStoreResultSchema }).strict(),
 }).strict();
 
 type Equal<Left, Right> =
@@ -250,9 +289,33 @@ describe("GitHub compatibility fixtures", () => {
 
     expect(fixture.store.commitSha).toMatch(/^[0-9a-f]{40}$/);
     expect(fixture.store.githubUrls).toHaveLength(2);
+    expect(fixture.store.revision.id).toBe(fixture.store.commitSha);
+    expect(fixture.store.revision.committedAt).toBe("2026-08-29T10:00:00.000Z");
     expect(fixture.search[0]?.githubUrl).toContain("github.com");
     expect(fixture.get.githubUrl).toContain("github.com");
     expect(fixture.ask.sources[0]?.githubUrl).toContain("github.com");
+    expect(fixture.mcpStructuredStore).toEqual(fixture.store);
+    expect(fixture.peerReceipt).toEqual({ status: "done", kind: "store", result: fixture.store });
+  });
+});
+
+describe("Drive provider-neutral receipt fixtures", () => {
+  it("represents saves and citations without fabricating GitHub semantics", async () => {
+    const fixture = driveFixtureSchema.parse(JSON.parse(await readFile(
+      new URL("./fixtures/gdv-5-drive-receipts.json", import.meta.url),
+      "utf8",
+    )));
+
+    expect(fixture.store.revision.provider).toBe("google_drive");
+    expect(fixture.store.revision.id).toBe("drive-txn-01J6H8Q3N7");
+    expect(fixture.store.urls.every((url) => url.includes("drive.google.com"))).toBe(true);
+    expect(JSON.stringify(fixture)).not.toMatch(/[0-9a-f]{40}/i);
+    expect(JSON.stringify(fixture)).not.toContain("github.com");
+    expect(fixture.store).not.toHaveProperty("commitSha");
+    expect(fixture.store).not.toHaveProperty("githubUrls");
+    expect(fixture.search[0]).not.toHaveProperty("githubUrl");
+    expect(fixture.get).not.toHaveProperty("githubUrl");
+    expect(fixture.ask.sources[0]).not.toHaveProperty("githubUrl");
     expect(fixture.mcpStructuredStore).toEqual(fixture.store);
     expect(fixture.peerReceipt).toEqual({ status: "done", kind: "store", result: fixture.store });
   });

@@ -404,6 +404,13 @@ describe("BrainEngine", () => {
     expect(result).not.toHaveProperty("question");
     expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(result.revision).toMatchObject({
+      provider: "github",
+      id: result.commitSha,
+      commitSha: result.commitSha,
+    });
+    expect(Number.isNaN(Date.parse(result.revision!.committedAt))).toBe(false);
+    expect(result.urls).toEqual([result.evidenceUrl, ...(result.pageUrls ?? [])]);
     expect(result.evidenceRef).toMatch(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/);
     expect(result.evidenceUrl).toBe(`https://github.com/zenod-ai/fixture/blob/${result.commitSha}/Log/${result.evidenceRef.slice(4, 14)}.md${new URL(result.evidenceUrl!).hash}`);
     expect(result.evidenceUrl).toMatch(/\/blob\/[0-9a-f]{40}\/Log\/\d{4}-\d{2}-\d{2}\.md#L\d+$/);
@@ -746,6 +753,8 @@ describe("BrainEngine", () => {
     expect(answer.text).toContain("^e-a1b2c3");
     expect(answer.sources[0]).toEqual({
       path: contextRef,
+      provider: "github",
+      url: expect.stringContaining("Log/2026-07-29.md"),
       githubUrl: expect.stringContaining("Log/2026-07-29.md"),
     });
   });
@@ -1112,6 +1121,8 @@ describe("BrainEngine", () => {
     expect(result.mode).toBe("executed");
     expect(result.committed).toBe(true);
     expect(result.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(result.revision).toMatchObject({ provider: "github", id: result.commitSha, commitSha: result.commitSha });
+    expect(result.urls?.length).toBeGreaterThan(0);
     expect(result.changedPaths).toContain("Notes/Swept.md");
     await expect(readFile(join(repo.path, "Inbox/junk.md"), "utf8")).rejects.toThrow();
     expect((await engine().lint()).errors).toEqual([]);

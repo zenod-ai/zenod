@@ -471,7 +471,7 @@ async function processMediaIngest(
         ? "Audio archived without another transcription attempt; a Zenod entry pointing to the audio was filed."
       : enrichment
         ? "Media artifact and extraction captured in Zenod; semantic filing continues in the background."
-        : "Media artifact archived, extracted, digested, filed, and committed.",
+        : "Media artifact archived, extracted, digested, filed, and durably saved.",
     mediaType: input.mediaType ?? extraction.kind,
     source: receiptSource(input),
     rawArtifact: { handle: archived.handle.uri, archiveUrl: archived.handle.url ?? archived.handle.uri, sha256: archived.handle.sha256 },
@@ -489,8 +489,10 @@ async function processMediaIngest(
       ...(stored.evidenceUrl ? { evidenceUrl: stored.evidenceUrl } : {}),
       pagesTouched: stored.pagesTouched,
       ...(stored.pageUrls ? { pageUrls: stored.pageUrls } : {}),
-      commitSha: stored.commitSha,
-      githubUrls: stored.githubUrls,
+      revision: stored.revision ?? null,
+      urls: stored.urls ?? [],
+      ...(stored.commitSha !== undefined ? { commitSha: stored.commitSha } : {}),
+      ...(stored.githubUrls !== undefined ? { githubUrls: stored.githubUrls } : {}),
       ...(stored.filing ? { filing: stored.filing } : {}),
       ...(enrichment ? { enrichmentJobId: enrichment.id } : {}),
     },
@@ -682,7 +684,7 @@ function mediaIngestUnavailableReceipt(input: TaskJobInput, rawArtifact: Artifac
       ocrHandle: input.mediaType === "screenshot" || input.mediaType === "image" ? null : undefined,
       provider: null,
     },
-    digest: { evidenceRef: null, pagesTouched: [], commitSha: null, githubUrls: [] },
+    digest: { evidenceRef: null, pagesTouched: [], revision: null, urls: [] },
     nextAdapterIssues: ["https://github.com/zenod-ai/zenod/issues/660", "https://github.com/zenod-ai/zenod/issues/661", "https://github.com/zenod-ai/zenod/issues/662"],
   };
 }
