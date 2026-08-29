@@ -42,15 +42,20 @@ export interface IdentityAuthorizationProof {
 }
 
 export interface StatePayload {
-  mode?: "signin" | "link_identity" | "connect_repo";
+  mode?: "signin" | "link_identity" | "connect_repo" | "connect_drive_vault";
   provider?: CustomerIdentityProvider;
   flow?: string;
   nonce?: string;
   verifier?: string;
   rh?: string;
   uid?: string;
+  aid?: string;
+  sid?: string;
   gid?: number;
   login?: string;
+  tid?: string;
+  bid?: string;
+  epoch?: number;
   exp?: number;
 }
 

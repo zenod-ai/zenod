@@ -216,6 +216,65 @@ describe("drive client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("rechecks tenant authorization before using a cached access token", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "cached-token" },
+      { authorizationAllowed: () => false },
+    );
+
+    await expect(client.listFiles()).rejects.toThrow(/authorization is unavailable/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["refresh rejection", "token"],
+    ["Drive API rejection", "api"],
+  ] as const)("marks the tenant binding revoked after a Google %s", async (_label, failureAt) => {
+    const revoked = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("https://oauth2.googleapis.com/token")) {
+        return failureAt === "token"
+          ? new Response('{"error":"invalid_grant"}', { status: 400 })
+          : Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return new Response("permission revoked", { status: 401 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      undefined,
+      { onAuthorizationRevoked: revoked },
+    );
+
+    await expect(client.listFiles()).rejects.toThrow(failureAt === "token" ? /OAuth refresh failed/ : /Drive API/);
+    expect(revoked).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("does not revoke consent for a Drive quota or file-permission 403", async () => {
+    const revoked = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("https://oauth2.googleapis.com/token")) {
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return Response.json({
+        error: { errors: [{ reason: "rateLimitExceeded" }], message: "quota exceeded" },
+      }, { status: 403 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      undefined,
+      { onAuthorizationRevoked: revoked },
+    );
+
+    await expect(client.listFiles()).rejects.toThrow(/Drive API/);
+    expect(revoked).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("supports the bounded vault root/update/move/revision seam with optimistic checks", async () => {
     const calls: Array<{ url: string; method: string; body: RequestInit["body"] }> = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -105,6 +105,11 @@ export interface DriveVaultRepositoryOptions {
   idFactory?: () => string;
 }
 
+export interface DriveVaultAuthorityBinding {
+  folderId: string;
+  manifestFileId: string;
+}
+
 interface ManifestFile {
   fileId: string;
   mimeType: string;
@@ -937,6 +942,14 @@ export class DriveVaultRepository implements VaultRepository {
     const localHead = (await this.git.revparse(["HEAD"])).trim();
     if (localHead !== this.manifest.commitSha) await this.materializeFromAuthority();
     return this.revision([]);
+  }
+
+  /** Durable Drive IDs discovered or created during bootstrap; safe for the tenant binding record. */
+  authorityBinding(): DriveVaultAuthorityBinding {
+    if (!this.rootFolderId || !this.manifestFile?.id) {
+      throw new Error("Drive vault authority is not initialized");
+    }
+    return { folderId: this.rootFolderId, manifestFileId: this.manifestFile.id };
   }
 
   async trackedFiles(): Promise<string[]> {

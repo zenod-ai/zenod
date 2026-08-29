@@ -24,7 +24,11 @@ import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { createApp, resolvedGitSha, type AppOptions } from "./app.js";
 import { ChassisCredentialVault } from "./credentialVault.js";
 import { buildDriveTools } from "./driveTools.js";
-import { driveClientFromSettings } from "./drive.js";
+import {
+  driveClientFromSettings,
+  exchangeGoogleDriveOAuthCode,
+  googleDriveOAuthUrl,
+} from "./drive.js";
 import { buildMcpServer } from "./mcp.js";
 import { Runtime } from "./runtime.js";
 import type {
@@ -34,6 +38,7 @@ import type {
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
+import type { VaultBindingStatus, VaultProviderBindingRecord } from "./googleDriveVaultContract.js";
 import type {
   ManagedAiAdmissionJob,
   ManagedAiAdmissionNoticeKind,
@@ -84,6 +89,18 @@ export class ZenodRuntimePool {
     private readonly googleDriveOAuthAuthorityForTenant?: (
       tenantId: string,
     ) => GoogleDriveOAuthAuthority,
+    private readonly vaultProviderBindingForTenant?: (
+      tenantId: string,
+    ) => VaultProviderBindingRecord | null,
+    private readonly onVaultBindingUpdateForTenant?: (
+      tenantId: string,
+      input: {
+        status?: VaultBindingStatus;
+        folderId?: string;
+        manifestFileId?: string;
+        expectedAuthorizationEpoch?: number;
+      },
+    ) => void,
   ) {}
 
   forContext(context: UnitContext): Runtime {
@@ -116,6 +133,12 @@ export class ZenodRuntimePool {
             googleDriveOAuthAuthority: () =>
               this.googleDriveOAuthAuthorityForTenant!(tenantId),
           }
+        : {}),
+      ...(this.vaultProviderBindingForTenant
+        ? { vaultProviderBinding: () => this.vaultProviderBindingForTenant!(tenantId) }
+        : {}),
+      ...(this.onVaultBindingUpdateForTenant
+        ? { onVaultBindingUpdate: (input) => this.onVaultBindingUpdateForTenant!(tenantId, input) }
         : {}),
       ...(this.managedTelegramInbound
         ? { managedTelegramInbound: (input) => this.managedTelegramInbound!(tenantId, input) }
@@ -636,6 +659,18 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   let googleDriveOAuthAuthorityForTenant: (
     tenantId: string,
   ) => GoogleDriveOAuthAuthority = () => ({ mode: "self-hosted" });
+  let vaultProviderBindingForTenant: (
+    tenantId: string,
+  ) => VaultProviderBindingRecord | null = () => null;
+  let onVaultBindingUpdateForTenant: (
+    tenantId: string,
+    input: {
+      status?: VaultBindingStatus;
+      folderId?: string;
+      manifestFileId?: string;
+      expectedAuthorizationEpoch?: number;
+    },
+  ) => void = () => {};
   const runtimes = new ZenodRuntimePool(
     env,
     sharedGithubApp,
@@ -647,6 +682,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     },
     (tenantId) => isHostedCustomerTenant(tenantId),
     (tenantId) => googleDriveOAuthAuthorityForTenant(tenantId),
+    (tenantId) => vaultProviderBindingForTenant(tenantId),
+    (tenantId, input) => onVaultBindingUpdateForTenant(tenantId, input),
   );
   const unit = createUnit({
     name: unitName,
@@ -743,6 +780,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ...options.customer,
       env,
       tenantStore,
+      driveVaultOAuth: {
+        authorizationUrl: googleDriveOAuthUrl,
+        exchangeCode: exchangeGoogleDriveOAuthCode,
+      },
       product: options.customerProduct ?? options.customer?.product,
       async onEntitlementChanged(account, input) {
         await options.customer?.onEntitlementChanged?.(account, input);
@@ -820,14 +861,33 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
   googleDriveOAuthAuthorityForTenant = (tenantId) => {
-    const accounts = customer.accounts.list().filter(
+    const allAccounts = customer.accounts.list();
+    const accounts = allAccounts.filter(
       (candidate) => candidate.tenant_id === tenantId,
     );
     if (accounts.length === 0) return { mode: "self-hosted" };
-    if (accounts.length !== 1) {
+    const account = customer.accounts.resolveForTenantId(tenantId);
+    const accountIds = new Set(accounts.map((candidate) => candidate.account_id));
+    const userIds = new Set(accounts.map((candidate) => candidate.user_id));
+    const activeForOwner = account
+      ? customer.accounts.resolveActiveTenantForUser(account.user_id)
+      : null;
+    const accountCollision = account
+      ? allAccounts.some((candidate) =>
+          candidate.account_id === account.account_id &&
+          (candidate.user_id !== account.user_id ||
+            (candidate.tenant_id !== null && candidate.tenant_id !== tenantId)))
+      : true;
+    if (
+      !account ||
+      accountIds.size !== 1 ||
+      userIds.size !== 1 ||
+      accountCollision ||
+      activeForOwner?.tenant_id !== tenantId ||
+      activeForOwner.account_id !== account.account_id
+    ) {
       return { mode: "hosted-managed", credentials: null };
     }
-    const account = accounts[0]!;
     const entitled = account.subscription_status === "active" ||
       account.subscription_status === "past_due";
     const token = customer.tokenVault.get(account.account_id);
@@ -845,6 +905,23 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       credentials: null,
       ...(entitled && tenantActive ? { tenantCredentialsAllowed: true } : {}),
     };
+  };
+  vaultProviderBindingForTenant = (tenantId) => {
+    return customer.accounts.resolveVaultAuthorityForTenantId(tenantId)?.binding ?? null;
+  };
+  onVaultBindingUpdateForTenant = (tenantId, input) => {
+    const account = customer.accounts.resolveVaultAuthorityForTenantId(tenantId)?.account ?? null;
+    if (!account || account.vault_provider !== "google_drive") return;
+    if (
+      input.expectedAuthorizationEpoch !== undefined &&
+      (account.vault_authorization_epoch ?? 0) !== input.expectedAuthorizationEpoch
+    ) return;
+    customer.accounts.upsert(account.session_id, {
+      ...(input.status ? { vault_binding_status: input.status } : {}),
+      ...(input.folderId ? { vault_drive_folder_id: input.folderId } : {}),
+      ...(input.manifestFileId ? { vault_drive_manifest_file_id: input.manifestFileId } : {}),
+      vault_binding_updated_at: new Date().toISOString(),
+    });
   };
   const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
     const account = customer.accounts.resolveForTenantId(input.tenantId);

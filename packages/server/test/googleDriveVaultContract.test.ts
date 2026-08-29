@@ -222,6 +222,12 @@ describe("provider-neutral customer persistence contract", () => {
       ],
     })).toThrow(/authoritative vault tenant_id/);
   });
+
+  it("rejects invalid vault authorization epochs", () => {
+    const valid = snapshot();
+    valid.vault_bindings[0]!.authorization_epoch = -1;
+    expect(() => assertProviderNeutralCustomerSnapshot(valid)).toThrow(/authorization_epoch/);
+  });
 });
 
 describe("vault readiness and capability projection", () => {
