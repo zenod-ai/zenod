@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md`
 Integration branch: `main`
 Planning branch: `codex/google-drive-vault-epic` merged by PR #1155
 Planning base: `bcd64987f061a9e622cb88796f1d52781a006109` (`origin/main`)
-Last reconciled commit: `20853d9c702a171f7d2bcca72491f61f3873a247` on `main`
+Last reconciled commit: `8ab04a6a881b8146d31ffd74244a9728b627026b` on `main`
 Active spine steward: Google Drive Vault delivery manager (`Jordi + current bound Codex task`)
 Planner: Jordi + Codex
 Epic worker: `/root` Google Drive Vault delivery manager
@@ -55,7 +55,7 @@ Cross-spine rule: record proposed rollups here and ask the appropriate steward t
 
 ## Mission
 
-Allow a person with no GitHub account to sign in with Google, subscribe, create a user-owned Zenod Markdown vault in ordinary Google Drive, and use the complete Zenod memory loop through web, MCP and supported phone channels. For a Drive-only tenant, Google Drive is the sole durable authority for vault files: Zenod translates its existing local filing transaction into recoverable Drive file saves instead of creating or pushing a git commit.
+Allow a person with no GitHub account to sign in with Google, subscribe, create a user-owned Zenod Markdown vault in ordinary Google Drive, and use the complete Zenod memory loop through web, MCP and supported phone channels. For a Drive-only tenant, Google Drive is the sole durable authority for vault files and their Git history: Zenod translates its existing local filing transaction into recoverable Drive file saves plus a bundled real Git repository, without creating a GitHub repository or remote.
 
 ## Target Experience
 
@@ -68,8 +68,8 @@ The required uninterrupted Hosted journey is:
 5. Grant separate offline `drive.file` authorization.
 6. Zenod creates or recovers one visible, private, user-owned `Zenod Vault` folder in My Drive.
 7. Zenod seeds the normal Markdown schema and exposes a working web/MCP/channel memory tenant.
-8. A stored memory creates/updates ordinary Markdown files in Drive and returns a Drive revision/save receipt with Drive links, never a fabricated git SHA.
-9. A restart reconstructs the working cache entirely from Drive and preserves search, get, ask, store and evidence immutability.
+8. A stored memory creates/updates ordinary Markdown files in Drive, records a real Git commit in an app-created `.git/repository.bundle`, and returns a Drive revision/save receipt with Drive links plus the real commit SHA.
+9. A restart reconstructs the working cache and local `.git` entirely from Drive and preserves history, diff, rollback, search, get, ask, store and evidence immutability.
 10. The user can continue forever without GitHub. GitHub remains an optional identity, vault and code-tasking integration.
 
 ## Definition Of Done
@@ -79,7 +79,7 @@ The required uninterrupted Hosted journey is:
 - [ ] Every existing GitHub customer retains the same account ID, tenant ID, subscription binding, MCP token, GitHub App installation and vault behavior.
 - [ ] The core engine depends on a repository-shaped provider-neutral vault contract while the filing, Markdown, lint, search, evidence and work flows remain shared.
 - [ ] The GitHub adapter preserves current clone/pull/diff/commit/push behavior and current receipts.
-- [ ] The Google Drive adapter maintains an app-created ordinary Markdown tree using `drive.file`, with Drive as the only durable vault authority.
+- [ ] The Google Drive adapter maintains an app-created ordinary Markdown tree and recoverable `.git/repository.bundle` using `drive.file`, with Drive as the only durable vault/history authority.
 - [ ] Drive publication has optimistic concurrency, a durable transaction journal, idempotent recovery and no false-success path for partial multi-file saves.
 - [ ] Store/search/get/ask, attachments, ingestion, MCP, web and supported phone paths return provider-neutral citations and revision receipts.
 - [ ] GitHub-only issue/code/tasking capabilities are gated without disabling memory for Drive-only users.
@@ -96,7 +96,7 @@ The required uninterrupted Hosted journey is:
 - Supporting concurrent dual-write to GitHub and Drive.
 - Automatically switching an existing tenant's authoritative vault provider.
 - Silently linking accounts by matching email addresses.
-- Fabricating a 40-character commit hash for Drive saves.
+- Fabricating a 40-character commit hash from a Drive revision or transaction ID. Drive may report only a real Git commit that exists in its durable bundle.
 - Making every GitHub issue, PR or code-execution feature work without a separately connected GitHub identity.
 - Moving billing records, OAuth refresh tokens, channel journals, usage ledgers or other operational state into Drive.
 - Claiming that all user message content exists only in Drive; this epic makes the **vault files** Drive-authoritative. A stricter operational-data-retention contract would be a separate privacy epic.
@@ -104,13 +104,13 @@ The required uninterrupted Hosted journey is:
 
 ## Current State
 
-Phase: Google identity and GDV-4 repository foundation integrated; GDV-5 ready
+Phase: GDV-5 receipt-integrity review fixes running; Drive Git-bundle architecture approved for GDV-6
 Last verified: 2026-08-29 CEST
 Integration target: `main`
-Fresh base commit: `20853d9c702a171f7d2bcca72491f61f3873a247` on `main`
+Fresh base commit: `8ab04a6a881b8146d31ffd74244a9728b627026b` on `main`
 Control-plane merge: [PR #1155](https://github.com/zenod-ai/zenod/pull/1155), merged as `a4c4826f80ed0acda93d304f21cb50129d7fb2dd`
 Current production relationship: additive sibling epic. The active Phylax/configuration gate remains authoritative for production and is not modified here.
-Next action: dispatch GDV-5 from exact `main` `20853d9` to generalize result, receipt and citation shapes without fabricating Git semantics; keep GDV-4 open until GDV-5 integrates and the engine conversion resumes.
+Next action: finish exact-head review fixes on GDV-5 PR #1168 under the updated truthful dual-provenance rule: Drive revision ID remains authoritative, while optional `commitSha` is accepted only for a real commit present in the durable Drive Git bundle. Then integrate GDV-5 before resuming GDV-4.
 Blockers: none for the approved source sequence. Real Google OAuth credentials/consent verification, deployment, billing and public signup remain later human gates.
 
 ## Bootstrap Map
@@ -246,6 +246,8 @@ Memory operations are provider-neutral. GitHub issue, PR and code-repository ope
 | 2026-08-29 | Preserve existing external IDs during migration. | Renaming GitHub-derived account/tenant/Stripe bindings creates unnecessary billing, entitlement and credential risk. | Current customer-account and billing implementation |
 | 2026-08-29 | Keep one authoritative backend and no automatic provider migration in v1. | Dual-write and silent switching create split-brain and conflict semantics beyond the required Google-only journey. | Planner risk review |
 | 2026-08-29 | Add `currentRevision(): Promise<VaultRevision>` and stage GDV-4 foundation → GDV-5 receipts/citations → remaining GDV-4 engine conversion. | The engine needs truthful current durable provenance, while legacy mandatory `commitSha`/GitHub URL results cannot represent Drive. Staging removes the circular dependency without fabricating git semantics. | Jordi's explicit “yes continue” approval after the named GDV-4 gate |
+| 2026-08-29 | Keep real Git history inside Drive authority as one recoverable bundle, not as loose synchronized `.git` internals. | Git needs filesystem locking and atomic object/ref updates that Drive's independent file API does not provide. An app-created `.git/repository.bundle` is one verifiable blob that can reconstruct local `.git`, while ordinary Markdown stays visible and Drive remains the only remote authority. | Jordi's direction to add `.git` inside Drive for a near-GitHub history experience; safe bundle form follows the existing final-publication adapter |
+| 2026-08-29 | Drive receipts may carry dual provenance: authoritative Drive revision/transaction `id` plus optional real bundled Git `commitSha`; never derive one from the other. | The Drive transaction proves remote durability, while the commit identifies the exact Git tree/history. Keeping both prevents false Git semantics and supports diff/rollback. `githubUrls` remain absent for Drive. | Updated Git-bundle storage decision |
 
 ## Issue Ledger
 
@@ -255,8 +257,8 @@ Memory operations are provider-neutral. GitHub issue, PR and code-repository ope
 | [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) | Ticket worker | `/root/gdv_2_identity_worker` | Generalize customer identity and account ownership | complete | #1145 | [PR #1161](https://github.com/zenod-ai/zenod/pull/1161) / `codex/gdv-2-provider-neutral-identity` | `0b5aa62` on `main` | Existing GitHub accounts preserve IDs while sessions/account/billing/tenant/Channels resolve through internal identity. | Two P1 lifecycle/security findings fixed; exact head `9b528e7` re-reviewed clean and full CI passed; merged as `45c9722`. | 2026-08-29 | Preserve stable owner mappings and provider-scoped login metadata in GDV-3. |
 | [GDV-3 #1147](https://github.com/zenod-ai/zenod/issues/1147) | Ticket worker | `/root/gdv_3_google_signin_worker` | Add Google OIDC sign-in and secure account linking | complete | #1145, #1146 | [PR #1163](https://github.com/zenod-ai/zenod/pull/1163) / `codex/gdv-3-google-signin` | `45c9722` on `main` | Google login uses verified OIDC subject, requests no Drive scope, and safely creates/links sessions. | Four adversarial review findings fixed; exact head `20d3f49` re-reviewed clean and full CI passed; merged as `fe057ad`. | 2026-08-29 | Live credentials/browser-provider smoke remain later human gates; preserve identity contract in GDV-7/8. |
 | [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) | Ticket worker | `/root/gdv_4_repository_worker` | Extract repository-shaped provider-neutral vault interface | waiting on GDV-5 / foundation integrated | #1145; approved staged sequence | [foundation PR #1166](https://github.com/zenod-ai/zenod/pull/1166); [draft comparison PR #1160](https://github.com/zenod-ai/zenod/pull/1160) | `21abd35` on `main` | Existing GitHub behavior runs through `VaultRepository` with no acceptance regression. | Exact head `40d6be8` passed full CI and independent review after durable-timestamp consistency fix; foundation merged as `20853d9`; #1148 remains open. | 2026-08-29 | Resume engine conversion from fresh main only after GDV-5 integrates. |
-| [GDV-5 #1149](https://github.com/zenod-ai/zenod/issues/1149) | Ticket worker | unassigned | Generalize revisions, citations and receipts | ready | #1145, GDV-4 foundation slice | `codex/gdv-5-provider-neutral-receipts` | `20853d9` on `main` | Core/MCP/jobs/peers/UI accept Drive revisions and generic URLs while GitHub legacy fields remain compatible. | GDV-4 foundation is reviewed and integrated; provider-neutral current revision is available without fake SHA semantics. | 2026-08-29 | Dispatch one ticket worker from exact fresh main. |
-| [GDV-6 #1150](https://github.com/zenod-ai/zenod/issues/1150) | Ticket worker | unassigned | Implement recoverable Google Drive vault repository | waiting | #1145, #1148, #1149 | `codex/gdv-6-drive-vault-backend` | fresh `main` after dependencies | Drive sync/save/restart/conflict/recovery operates on app-created Markdown with no git remote and no false success. | Existing `DriveClient`; transaction target in this spine. | 2026-08-29 | Dispatch after contract and receipt seam. |
+| [GDV-5 #1149](https://github.com/zenod-ai/zenod/issues/1149) | Ticket worker | `/root/gdv_5_receipts_worker` | Generalize revisions, citations and receipts | running / review fixes | #1145, GDV-4 foundation slice | [PR #1168](https://github.com/zenod-ai/zenod/pull/1168) / `codex/gdv-5-provider-neutral-receipts` | `8ab04a6` on `main` | Core/MCP/jobs/peers/UI accept Drive revisions and generic URLs while GitHub legacy fields remain compatible; Drive may include only a real bundled Git SHA and never GitHub URLs. | First exact-head review found async/peer/backlog/placeholder integrity gaps; fixes are green locally. User-approved bundle history requires the final validator/schema delta before re-review. | 2026-08-29 | Finish dual-provenance and residual async/host validation fixes; re-review exact head and integrate. |
+| [GDV-6 #1150](https://github.com/zenod-ai/zenod/issues/1150) | Ticket worker | unassigned | Implement recoverable Google Drive vault repository and bundled Git history | waiting | #1145, #1148, #1149 | `codex/gdv-6-drive-vault-backend` | fresh `main` after dependencies | Drive sync/save/restart/conflict/recovery operates on app-created Markdown plus `.git/repository.bundle`, with no GitHub remote and no false success. | Existing `DriveClient`; transaction target and approved Git-bundle decision in this spine. | 2026-08-29 | Dispatch after receipt seam and remaining GDV-4 engine conversion. |
 | [GDV-7 #1151](https://github.com/zenod-ai/zenod/issues/1151) | Ticket worker | unassigned | Bind Drive credentials, backend selection and tenant runtime | waiting | #1146, #1147, #1150 | `codex/gdv-7-drive-tenant-runtime` | fresh `main` after dependencies | Paid Drive-only tenant provisions, reconstructs and fails closed on revoked consent without GitHub. | Existing tenant credential and runtime seams. | 2026-08-29 | Dispatch after identity, OAuth and backend. |
 | [GDV-8 #1152](https://github.com/zenod-ai/zenod/issues/1152) | Ticket worker | unassigned | Deliver Google-first onboarding and provider-aware account UI | waiting | #1146, #1147, #1149, #1151 | `codex/gdv-8-google-onboarding` | fresh `main` after dependencies | Public/login/checkout/vault/account flow is truthful and complete at supported responsive sizes. | Existing Hosted portal/UI. | 2026-08-29 | Dispatch after backend journey exists. |
 | [GDV-9 #1153](https://github.com/zenod-ai/zenod/issues/1153) | Ticket worker | unassigned | Capability-gate GitHub-only operations and update public/operator contracts | waiting | #1148, #1149, #1151 | `codex/gdv-9-capabilities-and-contracts` | fresh `main` after dependencies | Drive-only memory is complete; GitHub issue/code tools fail typed and copy/legal/readiness/runbooks match reality. | GitHub tasking and copy inventory. | 2026-08-29 | May run beside #1152 after runtime integration. |
@@ -345,27 +347,29 @@ Scope:
 
 - Add generic revision and URL fields to store/work/search/get/ask/backlog/ingest results.
 - Update MCP schemas, generated schemas, task journals, peer receipt verification, notifications, WhatsApp receipts and web presentation.
-- Preserve optional `commitSha`/`githubUrl(s)` fields for GitHub compatibility during migration.
+- Preserve optional `commitSha`/`githubUrl(s)` fields for GitHub compatibility during migration; allow Drive `commitSha` only when it is a real commit in the durable Drive bundle, while Drive never emits `githubUrl(s)`.
 - Remove validation that equates successful durable storage with a 40-character SHA.
 
 Acceptance:
 
 - GitHub results remain byte/shape compatible where promised.
-- Drive fixtures return revision/save language and Drive links with no fake commit.
+- Drive fixtures return revision/save language and Drive links; any `commitSha` is independently verified real Git provenance and is never derived from the Drive revision ID.
 - Async job and peer paths accept and verify provider-specific durable receipts.
 - No customer-facing Drive path says “committed to GitHub.”
 
 ### GDV-6 · Implement recoverable Google Drive vault repository
 
-Objective: translate the repository-shaped publish boundary into ordinary Google Drive file saves while Drive remains the sole durable vault authority.
+Objective: translate the repository-shaped publish boundary into ordinary Google Drive file saves plus recoverable real Git history while Drive remains the sole durable authority.
 
 Scope:
 
 - Create/recover a separately marked `Zenod Vault` folder and seed the Markdown schema.
 - Map paths to stable Drive IDs; download authorized files to a rebuildable tenant-local workspace.
 - Implement create/update/move/delete and attachment upload using `drive.file`.
+- Create an app-owned `.git` folder containing one full, verifiable `repository.bundle`; never synchronize live loose Git internals file-by-file through Drive.
+- Reconstruct the ephemeral local `.git` from the bundle on cold start, import external Markdown edits as explicit commits, and expose real history/diff/rollback without configuring a GitHub or network Git remote.
 - Implement manifest, base revisions/checksums, optimistic conflict checks, durable transaction journal, idempotent retry and restart reconciliation.
-- Optionally use local ephemeral git for diff/reset only; never configure or persist a git remote for Drive tenants.
+- Publish Markdown mutations, bundle and manifest as one recoverable transaction; the manifest finalizes both the Drive revision identity and exact bundled Git commit.
 - Separate vault folder state from the existing archive/export folder.
 
 Acceptance:
@@ -374,6 +378,7 @@ Acceptance:
 - Injected failure after each remote mutation recovers deterministically after restart.
 - Concurrent external edits are detected and never silently overwritten.
 - Rebuild from empty local cache yields the same searchable Markdown vault.
+- Rebuild from empty local cache verifies the bundle and yields the same Git HEAD/history as the finalized manifest; corruption or mismatch fails closed and recovers from the transaction journal.
 - Disconnect/revocation fails closed and never deletes Drive files.
 
 ### GDV-7 · Bind Drive credentials, backend selection and tenant runtime
@@ -449,7 +454,7 @@ Scope and acceptance matrix:
 - OAuth revocation/reconnect and entitlement suspension/resume.
 - Two-tenant file/token/cache/receipt isolation.
 - Existing GitHub Hosted journey and self-host regression.
-- Proof that the Google-only journey created no GitHub account, repository, App installation, remote or commit.
+- Proof that the Google-only journey created no GitHub account, repository, App installation or Git remote, while the reported real Git commit exists in the Drive bundle and the Drive revision remains authoritative.
 
 Terminal state: exact commit, environment, commands, fixtures/screenshots, pass/fail, residual risks and separately named production/credential/signup gates are recorded in a durable evidence packet.
 
@@ -523,6 +528,16 @@ control-plane spine merge
 
 ## Handoff Journal
 
+### 2026-08-29 - Epic worker - Real Git history added to Drive-only target
+
+Context: during GDV-5 review, Jordi clarified that Drive-only vaults should retain a near-GitHub history experience by keeping `.git` material in Google Drive. A literal loose `.git` tree cannot be safely synchronized through independent Drive file mutations because Git relies on atomic ref/object updates and locks.
+
+Action: accepted the intent in a recoverable form: the app-created Drive vault contains visible ordinary Markdown plus `.git/repository.bundle`, a single verifiable full Git bundle. Drive remains the only remote authority. Cold start reconstructs local `.git` from the bundle; no GitHub repository or Git remote exists. Receipt contracts carry the independent authoritative Drive revision ID and may additionally carry only the real bundled Git commit SHA; they never derive one from the other and never emit Drive `githubUrls`.
+
+Next: finish GDV-5 validation/schema changes for this dual provenance, merge after clean exact-head review, then resume GDV-4 engine conversion. GDV-6 implements the bundle and recoverable Drive transaction only after those seams integrate.
+
+Risks: the bundle must be published and finalized with the Markdown transaction, not treated as a separately successful backup. A bundle/manifest mismatch, partial upload or invalid Git object graph must fail closed and recover through the existing transaction journal design.
+
 ### 2026-08-29 - Epic worker - GDV-4 foundation integrated; GDV-5 ready
 
 Context: the resumed GDV-4 slice reproduced the reviewed GitHub adapter on fresh main and added the approved `currentRevision()` contract. Independent review found publication timestamps came from wall-clock time while current revisions used commit time; the worker unified both paths on the explicit durable Git SHA and added race/consistency coverage.
@@ -531,7 +546,7 @@ Action: merged [PR #1166](https://github.com/zenod-ai/zenod/pull/1166) as `20853
 
 Next: dispatch GDV-5 from exact fresh main to generalize revision, receipt and citation surfaces while preserving optional GitHub compatibility fields. Resume the remaining GDV-4 engine conversion only after GDV-5 integrates.
 
-Risks: GDV-5 crosses public schemas and multiple consumers. It must preserve promised GitHub shapes, remove false mandatory-SHA assumptions, and never populate GitHub fields for Drive fixtures.
+Risks: GDV-5 crosses public schemas and multiple consumers. It must preserve promised GitHub shapes, remove false mandatory-SHA assumptions, and distinguish an optional real bundled Git commit from GitHub-only URL fields in Drive fixtures.
 
 ### 2026-08-29 - Epic worker - GDV-4 architecture and sequencing approved
 
@@ -595,9 +610,9 @@ Risks: existing production/signup work remains separately gated. Drive multi-fil
 
 ## Planner Queue
 
-1. Dispatch GDV-5 on `codex/gdv-5-provider-neutral-receipts` from exact `main` `20853d9`.
-2. Independently review and integrate GDV-5 with GitHub compatibility and Drive no-fake-SHA fixtures proven.
-3. Resume remaining GDV-4 engine conversion from the resulting fresh main, then independently review before closing #1148.
+1. Finish and independently re-review GDV-5 PR #1168 under the Drive-revision plus real-bundled-commit contract.
+2. Integrate GDV-5, then resume remaining GDV-4 engine conversion from fresh main and close #1148 only after complete acceptance.
+3. Dispatch GDV-6 to implement ordinary Drive Markdown plus transactional `.git/repository.bundle`; never synchronize loose Git internals or configure a Git remote.
 
 ## Open Questions
 
