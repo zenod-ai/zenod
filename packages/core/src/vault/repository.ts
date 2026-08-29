@@ -43,6 +43,8 @@ export interface VaultRepository {
   readonly provider: VaultProvider;
 
   pull(): Promise<void>;
+  /** Return the durable revision currently materialized in the local workspace. */
+  currentRevision(): Promise<VaultRevision>;
   trackedFiles(): Promise<string[]>;
   contentAtHead(path: string): Promise<string | null>;
   pendingChanges(): Promise<FileChange[]>;

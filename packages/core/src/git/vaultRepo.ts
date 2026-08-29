@@ -2,6 +2,12 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { simpleGit, type SimpleGit, type StatusResult } from "simple-git";
 import type { FileChange } from "../vault/immutability.js";
+import { githubUrl } from "../vault/github.js";
+import {
+  githubVaultRevision,
+  type VaultRepository,
+  type VaultRevision,
+} from "../vault/repository.js";
 
 export interface VaultRepoOptions {
   /** Local clone directory. */
@@ -32,7 +38,9 @@ const PUSH_RETRIES = 3;
  * every turn, one commit per memory, push with pull-rebase retry ×3.
  * Never force-push, never amend, never rewrite history.
  */
-export class VaultRepo {
+export class VaultRepo implements VaultRepository {
+  readonly provider = "github" as const;
+
   private constructor(
     readonly path: string,
     private readonly git: SimpleGit,
@@ -86,6 +94,16 @@ export class VaultRepo {
 
   async headSha(): Promise<string> {
     return (await this.git.revparse(["HEAD"])).trim();
+  }
+
+  private async revisionForSha(commitSha: string, githubUrls: string[]): Promise<VaultRevision> {
+    const committedAt = (await this.git.show(["-s", "--format=%cI", commitSha])).trim();
+    return githubVaultRevision({ commitSha, committedAt, githubUrls });
+  }
+
+  async currentRevision(): Promise<VaultRevision> {
+    const commitSha = await this.headSha();
+    return this.revisionForSha(commitSha, []);
   }
 
   async hasHead(): Promise<boolean> {
@@ -171,5 +189,30 @@ export class VaultRepo {
   async commitAndPush(message: string): Promise<string> {
     const sha = await this.commit(message);
     return this.pushWithRetry(sha);
+  }
+
+  /** Provider-neutral publication boundary; legacy commitAndPush remains available during migration. */
+  async commitAndPublish(message: string): Promise<VaultRevision> {
+    const changedPaths = (await this.pendingChanges()).map((change) => change.path);
+    const commitSha = await this.commitAndPush(message);
+    const canonicalLocation = {
+      ...(this.repo ? { repo: this.repo } : {}),
+      branch: commitSha,
+    };
+    return this.revisionForSha(
+      commitSha,
+      changedPaths
+        .map((path) => githubUrl(canonicalLocation, path))
+        .filter(Boolean),
+    );
+  }
+
+  /** Resolve a vault path using the current GitHub branch compatibility URL. */
+  urlFor(path: string, anchor?: string): string | null {
+    const location = {
+      ...(this.repo ? { repo: this.repo } : {}),
+      branch: this.branch,
+    };
+    return githubUrl(location, path, anchor) || null;
   }
 }
