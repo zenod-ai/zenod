@@ -428,18 +428,42 @@ export class DriveVaultRepository implements VaultRepository {
     }
     await this.validateEmptyBootstrapFolder(this.deletedFolderId, `${CONTROL_FOLDER}/deleted`);
 
+    const [bundleMutation, manifestMutation] = bootstrap.journal.mutations;
     const gitChildren = await this.listChildren(this.gitFolderId);
-    if (!gitChildren.length) return;
-    const bundleMutation = bootstrap.journal.mutations.find((mutation) => mutation.path === `${GIT_FOLDER}/${BUNDLE_NAME}`);
-    const bundle = gitChildren.length === 1 ? gitChildren[0] : null;
-    if (!bundleMutation || !bundle || bundle.mimeType === FOLDER_MIME || bundle.name !== BUNDLE_NAME
-      || bundle.parents?.length !== 1 || bundle.parents[0] !== this.gitFolderId
-      || bundle.appProperties?.[OPERATION_PROPERTY] !== bundleMutation.operationId
-      || bundle.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
-      || bundle.appProperties?.[ROLE_PROPERTY] !== BUNDLE_ROLE
-      || sha256(await this.options.client.download(bundle.id)) !== bundleMutation.checksum) {
-      throw new Error("Drive bootstrap replay Git folder contains unauthorized remnants");
+    const bundle = gitChildren.length === 1 ? gitChildren[0]! : null;
+    const exactBundle = bundle && bundleMutation
+      ? await this.isExactBootstrapResult(bundle, bundleMutation, this.gitFolderId, BUNDLE_NAME, BUNDLE_ROLE)
+      : false;
+    const invalidCommonState = manifestMutation?.state !== "pending" || manifestMutation.resultingFile
+      || bootstrap.journal.manifest || bootstrap.journal.committedAt
+      || gitChildren.length > 1 || (bundle !== null && !exactBundle)
+      || bundleMutation?.state === "conflict" || bundleMutation?.state === "failed";
+    const validPrepared = bootstrap.journal.state === "prepared"
+      && bundleMutation?.state === "pending" && !bundleMutation.resultingFile && gitChildren.length === 0;
+    const validApplyingPending = bootstrap.journal.state === "applying"
+      && bundleMutation?.state === "pending" && !bundleMutation.resultingFile
+      && (gitChildren.length === 0 || exactBundle);
+    const validApplyingApplied = bootstrap.journal.state === "applying"
+      && bundleMutation?.state === "applied" && exactBundle
+      && bundleMutation.resultingFile?.id === bundle?.id;
+    if (invalidCommonState || (!validPrepared && !validApplyingPending && !validApplyingApplied)) {
+      throw new Error("Drive bootstrap replay journal state does not match its durable authority results");
     }
+  }
+
+  private async isExactBootstrapResult(
+    file: DriveVaultFile,
+    mutation: JournalMutation,
+    parentId: string,
+    name: string,
+    role: string,
+  ): Promise<boolean> {
+    return file.mimeType !== FOLDER_MIME && file.name === name
+      && file.parents?.length === 1 && file.parents[0] === parentId
+      && file.appProperties?.[OPERATION_PROPERTY] === mutation.operationId
+      && file.appProperties?.[BINDING_PROPERTY] === this.options.vaultBindingId
+      && file.appProperties?.[ROLE_PROPERTY] === role
+      && sha256(await this.options.client.download(file.id)) === mutation.checksum;
   }
 
   private async validateBootstrapSkeleton(parentId: string, roleNames: Record<string, string>): Promise<void> {
@@ -569,6 +593,39 @@ export class DriveVaultRepository implements VaultRepository {
       || manifest.operationId !== operationIdFor(journal.transactionId, manifest.kind, manifest.path)
     ) throw new Error("Drive bootstrap mutation validation failed");
     this.assertJournalContract(journal);
+  }
+
+  private async validateBootstrapManifestReplayState(journal: DriveJournal, bundle: DriveVaultFile): Promise<void> {
+    const [bundleMutation, manifestMutation] = journal.mutations;
+    const exactBundle = bundleMutation
+      ? await this.isExactBootstrapResult(bundle, bundleMutation, this.gitFolderId, BUNDLE_NAME, BUNDLE_ROLE)
+      : false;
+    const exactManifest = manifestMutation
+      && this.manifestFile.name === MANIFEST_NAME
+      && this.manifestFile.parents?.length === 1 && this.manifestFile.parents[0] === this.controlFolderId
+      && this.manifestFile.appProperties?.[OPERATION_PROPERTY] === manifestMutation.operationId
+      && this.manifestFile.appProperties?.[BINDING_PROPERTY] === this.options.vaultBindingId
+      && this.manifestFile.appProperties?.[ROLE_PROPERTY] === MANIFEST_ROLE;
+    const resultIdsMatch = bundleMutation?.resultingFile?.id === bundle.id
+      && manifestMutation?.resultingFile?.id === this.manifestFile.id;
+    const bootstrapManifest = this.manifest.revisionId === journal.transactionId;
+    const validLostAck = journal.state === "applying" && exactBundle && exactManifest
+      && bundleMutation?.resultingFile?.id === bundle.id
+      && bundleMutation?.state === "applied"
+      && manifestMutation?.state === "pending" && !manifestMutation.resultingFile
+      && !journal.manifest && !journal.committedAt;
+    const recordedManifest = journal.manifest;
+    const validCommittedRecord = recordedManifest?.revisionId === journal.transactionId
+      && recordedManifest.commitSha === journal.targetCommitSha
+      && recordedManifest.vaultBindingId === this.options.vaultBindingId
+      && recordedManifest.bundle.fileId === bundle.id;
+    const validCommitted = journal.state === "committed" && resultIdsMatch
+      && bundleMutation?.state === "applied" && manifestMutation?.state === "applied"
+      && Boolean(journal.committedAt) && validCommittedRecord
+      && (!bootstrapManifest || JSON.stringify(recordedManifest) === JSON.stringify(this.manifest));
+    if (!validLostAck && !validCommitted) {
+      throw new Error("Drive bootstrap manifest replay state does not match its durable authority results");
+    }
   }
 
   private async provision(existingJournal?: DriveJournal, existingJournalFile?: DriveVaultFile): Promise<void> {
@@ -1864,11 +1921,12 @@ export class DriveVaultRepository implements VaultRepository {
       if (!journal) throw new Error(`Drive transaction journal ${file.id} is not valid JSON`);
       if (journal.bootstrap === true) {
         await this.validateBootstrapJournal(file, journal);
+        const bundle = await this.options.client.getFile(this.manifest.bundle.fileId);
+        await this.validateBootstrapManifestReplayState(journal, bundle);
         if (journal.state !== "committed") {
           if (this.manifest.revisionId !== journal.transactionId || this.manifest.commitSha !== journal.targetCommitSha) {
             throw new Error("Drive bootstrap journal conflicts with manifest authority");
           }
-          const bundle = await this.options.client.getFile(this.manifest.bundle.fileId);
           const bundleMutation = journal.mutations[0]!;
           const manifestMutation = journal.mutations[1]!;
           if (bundle.appProperties?.[OPERATION_PROPERTY] !== bundleMutation.operationId

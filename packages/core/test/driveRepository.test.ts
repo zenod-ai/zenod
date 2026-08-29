@@ -271,6 +271,18 @@ async function writeVaultFile(workdir: string, path: string, data: string | Buff
   await writeFile(join(workdir, path), data);
 }
 
+function bootstrapJournalFile(drive: FakeDrive): Stored {
+  return [...drive.files.values()].find((file) => file.name.endsWith(".json") && file.name !== "manifest.json")!;
+}
+
+function readBootstrapJournal(drive: FakeDrive): any {
+  return JSON.parse(bootstrapJournalFile(drive).data.toString("utf8"));
+}
+
+function writeBootstrapJournal(drive: FakeDrive, journal: any): void {
+  drive.externalWrite(bootstrapJournalFile(drive).id, Buffer.from(JSON.stringify(journal, null, 2)));
+}
+
 function fakeJournalDigest(journal: any): string {
   return createHash("sha256").update(JSON.stringify({
     schemaVersion: journal.schemaVersion,
@@ -489,11 +501,131 @@ describe("DriveVaultRepository", () => {
     const before = drive.mutationCount;
     const beforeIds = [...drive.files.keys()].sort();
     await expect(open(drive, await temp(`bootstrap-replay-extra-restart-${Number(oldBundle)}-${Number(archive)}-${Number(transactionFolder)}`)))
-      .rejects.toThrow(/unauthorized remnants|prior-authority remnants/);
+      .rejects.toThrow(/unauthorized remnants|prior-authority remnants|state.*durable authority/i);
     expect(drive.mutationCount).toBe(before);
     expect([...drive.files.keys()].sort()).toEqual(beforeIds);
     expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(0);
     expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(oldBundle ? 1 : 0);
+  });
+
+  it.each([
+    { call: 8, phase: "before" as const, prepared: true, label: "prepared with both mutations pending and empty Git" },
+    { call: 8, phase: "before" as const, prepared: false, label: "applying with a pending bundle and empty Git" },
+    { call: 8, phase: "after" as const, prepared: false, label: "applying with a pending lost-ACK bundle" },
+    { call: 10, phase: "before" as const, prepared: false, label: "applying with an applied bundle" },
+  ])("replays the valid bootstrap state/tree matrix: $label", async ({ call, phase, prepared }) => {
+    const drive = new FakeDrive();
+    drive.failAt = { call, phase };
+    await expect(open(drive, await temp(`bootstrap-state-valid-seed-${call}-${phase}-${Number(prepared)}`))).rejects.toThrow();
+    expect(drive.faultTriggered).toBe(true);
+    drive.failAt = null;
+    if (prepared) {
+      const journal = readBootstrapJournal(drive);
+      journal.state = "prepared";
+      writeBootstrapJournal(drive, journal);
+    }
+    const recovered = await open(drive, await temp(`bootstrap-state-valid-restart-${call}-${phase}-${Number(prepared)}`));
+    expect((await recovered.currentRevision()).commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(1);
+    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(1);
+  });
+
+  it.each(["recovering", "conflict", "failed", "committed"] as const)(
+    "rejects a %s bootstrap journal without manifest authority before replay writes",
+    async (state) => {
+      const drive = new FakeDrive();
+      drive.failAt = { call: 8, phase: "before" };
+      await expect(open(drive, await temp(`bootstrap-terminal-seed-${state}`))).rejects.toThrow();
+      drive.failAt = null;
+      const journal = readBootstrapJournal(drive);
+      journal.state = state;
+      if (state === "conflict") journal.mutations[0].state = "conflict";
+      if (state === "committed") journal.committedAt = "2026-08-29T12:00:00.000Z";
+      writeBootstrapJournal(drive, journal);
+      const before = drive.mutationCount;
+      const beforeIds = [...drive.files.keys()].sort();
+      await expect(open(drive, await temp(`bootstrap-terminal-restart-${state}`))).rejects.toThrow(/bootstrap|transaction/i);
+      expect(drive.mutationCount).toBe(before);
+      expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    },
+  );
+
+  it("rejects a prepared bootstrap journal with a bundle result before replay writes", async () => {
+    const drive = new FakeDrive();
+    drive.failAt = { call: 8, phase: "after" };
+    await expect(open(drive, await temp("bootstrap-prepared-bundle-seed"))).rejects.toThrow();
+    drive.failAt = null;
+    const journal = readBootstrapJournal(drive);
+    journal.state = "prepared";
+    writeBootstrapJournal(drive, journal);
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp("bootstrap-prepared-bundle-restart"))).rejects.toThrow(/state.*durable authority/i);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+  });
+
+  it("rejects a missing applied bootstrap bundle before replay writes", async () => {
+    const drive = new FakeDrive();
+    drive.failAt = { call: 10, phase: "before" };
+    await expect(open(drive, await temp("bootstrap-applied-bundle-missing-seed"))).rejects.toThrow();
+    drive.failAt = null;
+    const bundle = [...drive.files.values()].find((file) => file.name === "repository.bundle")!;
+    drive.externalRemove(bundle.id);
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp("bootstrap-applied-bundle-missing-restart"))).rejects.toThrow(/state.*durable authority/i);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(0);
+    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(0);
+  });
+
+  it("rejects a journal-recorded applied manifest when the manifest result is absent", async () => {
+    const drive = new FakeDrive();
+    drive.failAt = { call: 10, phase: "before" };
+    await expect(open(drive, await temp("bootstrap-journal-applied-manifest-missing-seed"))).rejects.toThrow();
+    drive.failAt = null;
+    const journal = readBootstrapJournal(drive);
+    journal.mutations[1].state = "applied";
+    journal.mutations[1].resultingFile = {
+      id: "missing-manifest", name: "manifest.json", mimeType: "application/json",
+      parents: [[...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "control-folder")!.id],
+    };
+    writeBootstrapJournal(drive, journal);
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp("bootstrap-journal-applied-manifest-missing-restart"))).rejects.toThrow(/bootstrap|transaction/i);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(0);
+  });
+
+  it("rejects a missing applied bootstrap manifest before replay writes", async () => {
+    const drive = new FakeDrive();
+    await open(drive, await temp("bootstrap-applied-manifest-missing-seed"));
+    const manifest = [...drive.files.values()].find((file) => file.name === "manifest.json")!;
+    drive.externalRemove(manifest.id);
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp("bootstrap-applied-manifest-missing-restart"))).rejects.toThrow(/manifest authority|bootstrap/i);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(0);
+  });
+
+  it("rejects a tampered applied bootstrap manifest before recovery writes", async () => {
+    const drive = new FakeDrive();
+    await open(drive, await temp("bootstrap-applied-manifest-tampered-seed"));
+    const manifest = [...drive.files.values()].find((file) => file.name === "manifest.json")!;
+    const body = JSON.parse(manifest.data.toString("utf8"));
+    body.commitSha = "1".repeat(40);
+    drive.externalWrite(manifest.id, Buffer.from(JSON.stringify(body, null, 2)));
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp("bootstrap-applied-manifest-tampered-restart"))).rejects.toThrow(/manifest replay state|bootstrap journal conflicts/i);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
   });
 
   it("discovers authority only through the selected root and marker-scoped children", async () => {
