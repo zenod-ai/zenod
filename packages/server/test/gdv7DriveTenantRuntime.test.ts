@@ -21,12 +21,13 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
+function cookiePair(setCookie: string, name: string): string {
+  const match = setCookie.match(new RegExp(`(?:^|,\\s*)(${name}=[^;]+)`));
+  if (!match?.[1]) throw new Error(`missing ${name} cookie`);
+  return match[1];
+}
+
 async function googleSession(unit: ReturnType<typeof createZenodUnit>, subject: string): Promise<{ cookie: string; userId: string }> {
-  const cookiePair = (setCookie: string, name: string): string => {
-    const match = setCookie.match(new RegExp(`(?:^|,\\s*)(${name}=[^;]+)`));
-    if (!match?.[1]) throw new Error(`missing ${name} cookie`);
-    return match[1];
-  };
   const start = await unit.app.request("/auth/google/start");
   const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
   const flowCookie = cookiePair(start.headers.get("set-cookie")!, "zenod_google_oidc_flow");
@@ -36,6 +37,24 @@ async function googleSession(unit: ReturnType<typeof createZenodUnit>, subject: 
   const cookie = cookiePair(callback.headers.get("set-cookie")!, "zenod_customer_session");
   const me = await unit.app.request("/api/me", { headers: { cookie } });
   return { cookie, userId: (await me.json() as { user_id: string }).user_id };
+}
+
+async function driveConsentStart(unit: ReturnType<typeof createZenodUnit>, cookie: string, origin = "https://cloud.zenod.test") {
+  const response = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
+    method: "POST",
+    headers: { cookie, origin, "content-type": "application/json" },
+    body: JSON.stringify({ intent: "connect_drive_vault" }),
+  });
+  const body = await response.json() as { url?: string };
+  const url = body.url ? new URL(body.url) : null;
+  return {
+    response,
+    url,
+    state: url?.searchParams.get("state") ?? "",
+    flowCookie: response.headers.get("set-cookie")
+      ? cookiePair(response.headers.get("set-cookie")!, "zenod_google_drive_vault_flow")
+      : "",
+  };
 }
 
 function fakeDriveRepository(input: DriveVaultRepositoryOptions): VaultRepository & { authorityBinding(): { folderId: string; manifestFileId: string } } {
@@ -105,11 +124,17 @@ describe("GDV-7 Drive tenant runtime", () => {
       return fakeDriveRepository(input) as DriveVaultRepository;
     });
     const providerCalls: string[] = [];
+    let deferNextDriveResponse = false;
+    let resolveDeferredDrive: ((response: Response) => void) | null = null;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       providerCalls.push(url);
       if (url === "https://oauth2.googleapis.com/token") {
-        const code = new URLSearchParams(String(init?.body)).get("code") ?? "unknown";
+        const tokenBody = new URLSearchParams(String(init?.body));
+        const code = tokenBody.get("code") ?? "unknown";
+        if (tokenBody.get("grant_type") === "authorization_code") {
+          expect(tokenBody.get("code_verifier")).toBeTruthy();
+        }
         if (code === "exchange-fail") {
           return Response.json({ error: "invalid_grant" }, { status: 400 });
         }
@@ -117,6 +142,13 @@ describe("GDV-7 Drive tenant runtime", () => {
       }
       if (url === "https://www.googleapis.com/oauth2/v2/userinfo") {
         return Response.json({ email: "drive-owner@example.test" });
+      }
+      if (url.startsWith("https://www.googleapis.com/drive/v3/")) {
+        if (deferNextDriveResponse) {
+          deferNextDriveResponse = false;
+          return await new Promise<Response>((resolve) => { resolveDeferredDrive = resolve; });
+        }
+        return Response.json({ files: [] });
       }
       throw new Error(`unexpected provider request ${url}`);
     }));
@@ -142,33 +174,62 @@ describe("GDV-7 Drive tenant runtime", () => {
         runtime.settings.set("google_oauth_client_id", `${account.tenant}-drive-client`);
         runtime.settings.set("google_oauth_client_secret", `${account.tenant}-drive-secret`);
       }
+      unit.customerAccounts.upsert("checkout-alpha-retry", {
+        account_id: "account-alpha",
+        user_id: alpha.userId,
+        tier: "monthly",
+        subscription_status: "active",
+        tenant_id: "tenant-alpha",
+        tenant_slug: "tenant-alpha",
+        claimed_at: "2099-08-29T20:01:00.000Z",
+        checkout_completed_at: new Date().toISOString(),
+      });
 
-      const alphaStart = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
+      const ambientGet = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
         headers: { cookie: alpha.cookie },
       });
-      expect(alphaStart.status).toBe(302);
-      const alphaConsent = new URL(alphaStart.headers.get("location")!);
+      expect(ambientGet.status).not.toBe(302);
+      const evilOrigin = await driveConsentStart(unit, alpha.cookie, "https://evil.example");
+      expect(evilOrigin.response.status).toBe(403);
+      const missingIntent = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
+        method: "POST",
+        headers: { cookie: alpha.cookie, origin: "https://cloud.zenod.test", "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(missingIntent.status).toBe(400);
+      const alphaStart = await driveConsentStart(unit, alpha.cookie);
+      expect(alphaStart.response.status).toBe(200);
+      const alphaConsent = alphaStart.url!;
       expect(alphaConsent.searchParams.get("scope")?.split(" ").sort()).toEqual([
         "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/userinfo.email",
       ]);
-      const alphaState = alphaConsent.searchParams.get("state")!;
+      expect(alphaConsent.searchParams.get("code_challenge")).toBeTruthy();
+      expect(alphaConsent.searchParams.get("code_challenge_method")).toBe("S256");
+      const alphaState = alphaStart.state;
       expect(alphaState).toContain(".");
       expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
         vault_provider: null,
         vault_binding_id: null,
       });
 
+      const missingFlow = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=missing-flow&state=${encodeURIComponent(alphaState)}`,
+        { headers: { cookie: alpha.cookie } },
+      );
+      expect(missingFlow.status).toBe(400);
+      expect(providerCalls).toHaveLength(0);
+
       const crossTenant = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=cross-tenant&state=${encodeURIComponent(alphaState)}`,
-        { headers: { cookie: beta.cookie } },
+        { headers: { cookie: `${beta.cookie}; ${alphaStart.flowCookie}` } },
       );
       expect(crossTenant.status).toBe(400);
       expect(providerCalls).toHaveLength(0);
 
       const alphaCallback = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=alpha-drive&state=${encodeURIComponent(alphaState)}`,
-        { headers: { cookie: alpha.cookie } },
+        { headers: { cookie: `${alpha.cookie}; ${alphaStart.flowCookie}` } },
       );
       expect(alphaCallback.status).toBe(303);
       expect(opened).toHaveLength(1);
@@ -181,11 +242,11 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_drive_manifest_file_id: "manifest-tenant-alpha",
       });
       const alphaRuntime = unit.runtimes.get("tenant-alpha")!;
-      const encryptedToken = alphaRuntime.state.getSetting("google_oauth_refresh_token")!;
+      const encryptedToken = alphaRuntime.state.getSetting("google_drive_vault_oauth_refresh_token")!;
       expect(encryptedToken).toMatch(/^zenod-secret:v1:/);
       expect(encryptedToken).not.toContain("alpha-drive-refresh");
       const betaRuntime = unit.runtimes.get("tenant-beta")!;
-      expect(betaRuntime.credentialVault.materialize("google_oauth_refresh_token", encryptedToken)).toBeNull();
+      expect(betaRuntime.credentialVault.materialize("google_drive_vault_oauth_refresh_token", encryptedToken)).toBeNull();
 
       const ready = await unit.app.request("/api/vault/provider", { headers: { cookie: alpha.cookie } });
       await expect(ready.json()).resolves.toMatchObject({
@@ -204,6 +265,8 @@ describe("GDV-7 Drive tenant runtime", () => {
         storedRootFolderId: "folder-tenant-alpha",
       });
       expect(opened[1]!.stateDir).toBe(opened[0]!.stateDir);
+      const oldDriveClient = opened[1]!.client;
+      await oldDriveClient.listFiles();
 
       await tenants.setTenantStatus("tenant-alpha", "suspended");
       const beforeSuspendedRecovery = opened.length;
@@ -215,6 +278,10 @@ describe("GDV-7 Drive tenant runtime", () => {
       expect(opened).toHaveLength(beforeSuspendedRecovery);
       await tenants.setTenantStatus("tenant-alpha", "active");
 
+      alphaRuntime.settings.setRaw("google_oauth_refresh_token", "archive-refresh-token");
+      deferNextDriveResponse = true;
+      const lateOldRequest = oldDriveClient.listFiles();
+      await vi.waitFor(() => expect(resolveDeferredDrive).not.toBeNull());
       const providerCallsBeforeDisconnect = providerCalls.length;
       const disconnect = await unit.app.request("https://cloud.zenod.test/api/vault/drive/disconnect", {
         method: "POST",
@@ -229,15 +296,60 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_drive_folder_id: "folder-tenant-alpha",
         vault_drive_manifest_file_id: "manifest-tenant-alpha",
       });
-      expect(alphaRuntime.settings.getRaw("google_oauth_refresh_token")).toBeNull();
+      expect(alphaRuntime.settings.getRaw("google_drive_vault_oauth_refresh_token")).toBeNull();
+      expect(alphaRuntime.settings.getRaw("google_oauth_refresh_token")).toBe("archive-refresh-token");
 
-      const betaStart = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
-        headers: { cookie: beta.cookie },
+      const reconnectStart = await driveConsentStart(unit, alpha.cookie);
+      const reconnect = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=alpha-reconnect&state=${encodeURIComponent(reconnectStart.state)}`,
+        { headers: { cookie: `${alpha.cookie}; ${reconnectStart.flowCookie}` } },
+      );
+      expect(reconnect.status).toBe(303);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
+        vault_binding_id: alphaAccount.vault_binding_id,
+        vault_binding_status: "ready",
+        vault_authorization_epoch: 2,
       });
-      const betaState = new URL(betaStart.headers.get("location")!).searchParams.get("state")!;
+      expect(alphaRuntime.settings.getRaw("google_oauth_refresh_token")).toBe("archive-refresh-token");
+      alphaRuntime.settings.setRaw("google_oauth_refresh_token", "archive-rotated-token");
+      expect(alphaRuntime.settings.getRaw("google_drive_vault_oauth_refresh_token")).toBe("alpha-reconnect-refresh");
+      alphaRuntime.settings.setRaw("google_oauth_refresh_token", "");
+      expect(alphaRuntime.settings.vaultConfigured()).toBe(true);
+      expect(alphaRuntime.settings.getRaw("google_drive_vault_oauth_refresh_token")).toBe("alpha-reconnect-refresh");
+
+      resolveDeferredDrive!(new Response('{"error":{"errors":[{"reason":"authError"}]}}', { status: 401 }));
+      await expect(lateOldRequest).rejects.toThrow(/Drive API/);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-alpha")).toMatchObject({
+        vault_binding_status: "ready",
+        vault_authorization_epoch: 2,
+      });
+      const callsBeforeOldRevival = providerCalls.length;
+      await expect(oldDriveClient.listFiles()).rejects.toThrow(/authorization is unavailable/);
+      expect(providerCalls).toHaveLength(callsBeforeOldRevival);
+
+      const suspendedStart = await driveConsentStart(unit, beta.cookie);
+      await tenants.setTenantStatus("tenant-beta", "suspended");
+      const suspendedCallback = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=suspended&state=${encodeURIComponent(suspendedStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${suspendedStart.flowCookie}` } },
+      );
+      expect(suspendedCallback.status).toBe(409);
+      await tenants.setTenantStatus("tenant-beta", "active");
+      const suspendedReplay = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=after-suspension&state=${encodeURIComponent(suspendedStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${suspendedStart.flowCookie}` } },
+      );
+      expect(suspendedReplay.status).toBe(400);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+
+      const betaStart = await driveConsentStart(unit, beta.cookie);
+      const betaState = betaStart.state;
       const exchangeFailure = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=exchange-fail&state=${encodeURIComponent(betaState)}`,
-        { headers: { cookie: beta.cookie } },
+        { headers: { cookie: `${beta.cookie}; ${betaStart.flowCookie}` } },
       );
       expect(exchangeFailure.status).toBe(502);
       const failedBinding = unit.customerAccounts.resolveForTenantId("tenant-beta")!;
@@ -248,20 +360,26 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_drive_manifest_file_id: null,
       });
 
-      const credentialRetryStart = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
-        headers: { cookie: beta.cookie },
-      });
-      const credentialRetryState = new URL(credentialRetryStart.headers.get("location")!).searchParams.get("state")!;
+      const callsBeforeFailedReplay = providerCalls.length;
+      const failedReplay = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=fresh-after-failure&state=${encodeURIComponent(betaState)}`,
+        { headers: { cookie: `${beta.cookie}; ${betaStart.flowCookie}` } },
+      );
+      expect(failedReplay.status).toBe(400);
+      expect(providerCalls).toHaveLength(callsBeforeFailedReplay);
+
+      const credentialRetryStart = await driveConsentStart(unit, beta.cookie);
+      const credentialRetryState = credentialRetryStart.state;
       const stateBindingId = (state: string) => (JSON.parse(Buffer.from(state.split(".")[0]!, "base64url").toString("utf8")) as { bid: string }).bid;
       expect(stateBindingId(credentialRetryState)).toBe(failedBinding.vault_binding_id);
       const originalSetRaw = betaRuntime.settings.setRaw.bind(betaRuntime.settings);
       const setRaw = vi.spyOn(betaRuntime.settings, "setRaw").mockImplementation((key, value) => {
-        if (key === "google_oauth_refresh_token") throw new Error("encrypted credential authority unavailable");
+        if (key === "google_drive_vault_oauth_refresh_token") throw new Error("encrypted credential authority unavailable");
         originalSetRaw(key, value);
       });
       const credentialFailure = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=credential-fail&state=${encodeURIComponent(credentialRetryState)}`,
-        { headers: { cookie: beta.cookie } },
+        { headers: { cookie: `${beta.cookie}; ${credentialRetryStart.flowCookie}` } },
       );
       expect(credentialFailure.status).toBe(502);
       expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
@@ -270,17 +388,15 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_drive_folder_id: null,
         vault_drive_manifest_file_id: null,
       });
-      expect(opened).toHaveLength(2);
+      expect(opened).toHaveLength(3);
       setRaw.mockRestore();
 
-      const successfulRetryStart = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
-        headers: { cookie: beta.cookie },
-      });
-      const successfulRetryState = new URL(successfulRetryStart.headers.get("location")!).searchParams.get("state")!;
+      const successfulRetryStart = await driveConsentStart(unit, beta.cookie);
+      const successfulRetryState = successfulRetryStart.state;
       expect(stateBindingId(successfulRetryState)).toBe(failedBinding.vault_binding_id);
       const successfulRetry = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=beta-drive&state=${encodeURIComponent(successfulRetryState)}`,
-        { headers: { cookie: beta.cookie } },
+        { headers: { cookie: `${beta.cookie}; ${successfulRetryStart.flowCookie}` } },
       );
       expect(successfulRetry.status).toBe(303);
       expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
@@ -293,7 +409,7 @@ describe("GDV-7 Drive tenant runtime", () => {
       const callsBeforeReplay = providerCalls.length;
       const replay = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=replay&state=${encodeURIComponent(successfulRetryState)}`,
-        { headers: { cookie: beta.cookie } },
+        { headers: { cookie: `${beta.cookie}; ${successfulRetryStart.flowCookie}` } },
       );
       expect(replay.status).toBe(400);
       expect(providerCalls).toHaveLength(callsBeforeReplay);
@@ -301,6 +417,36 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_binding_id: failedBinding.vault_binding_id,
         vault_binding_status: "ready",
       });
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("fails hosted Drive credential authority closed for conflicting tenant ownership rows", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([{ token: "alpha-token", tenant: { id: "tenant-alpha" } }]);
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "gdv7-conflicting-owner-secret",
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+      },
+    });
+    try {
+      unit.customerAccounts.upsert("owner-a", {
+        account_id: "account-a", user_id: "user-a", tenant_id: "tenant-alpha", subscription_status: "active",
+      });
+      unit.customerAccounts.upsert("owner-b", {
+        account_id: "account-b", user_id: "user-b", tenant_id: "tenant-alpha", subscription_status: "active",
+      });
+      unit.customerTokenVault.put("account-a", "alpha-token");
+      const runtime = unit.runtimes.forTenantStorage("tenant-alpha", unit.storage.forTenant({ id: "tenant-alpha" }));
+      runtime.settings.set("google_oauth_client_id", "drive-client");
+      runtime.settings.set("google_oauth_client_secret", "drive-secret");
+
+      expect(runtime.settings.googleDriveOAuthAuthority()).toEqual({ mode: "hosted-managed", credentials: null });
     } finally {
       await unit.close();
     }

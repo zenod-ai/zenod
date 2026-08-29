@@ -43,7 +43,7 @@ import { formatFilingReceipt } from "./filingReceipt.js";
 import { ExecutionQueue, type ExecutionTicket } from "./executionQueue.js";
 import { buildExecutionQueue, mergedGithubPullEvidence } from "./executionLane.js";
 import { buildDriveTools } from "./driveTools.js";
-import { DriveClient, driveAuthFromSettings } from "./drive.js";
+import { DriveClient, driveVaultAuthFromSettings } from "./drive.js";
 import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
@@ -260,12 +260,14 @@ export class Runtime {
   readonly executionQueue: ExecutionQueue | null;
   private engine: BrainEngine | null = null;
   private repo: VaultRepository | null = null;
+  private repoAuthorityKey: string | null = null;
   private readonly tenantId: string;
   private readonly vaultBindingSource?: VaultProviderBindingSource;
   private readonly onVaultBindingUpdate?: (input: {
     status?: VaultBindingStatus;
     folderId?: string;
     manifestFileId?: string;
+    expectedAuthorizationEpoch?: number;
   }) => void;
   private readonly taskingContext = new AsyncLocalStorage<TaskingRunContext>();
   private walletPeerRefresh: Promise<PeerConfig[]> | null = null;
@@ -298,6 +300,7 @@ export class Runtime {
         status?: VaultBindingStatus;
         folderId?: string;
         manifestFileId?: string;
+        expectedAuthorizationEpoch?: number;
       }) => void;
       managedTelegramInbound?: TelegramManagedInboundHandler;
       managedTelegramInboundEnabled?: () => boolean;
@@ -405,6 +408,7 @@ export class Runtime {
   invalidate(): void {
     this.engine = null;
     this.repo = null;
+    this.repoAuthorityKey = null;
   }
 
   /**
@@ -488,12 +492,16 @@ export class Runtime {
   async getRepo(options: { ensureSchema?: boolean; allowRecovering?: boolean } = {}): Promise<VaultRepository> {
     const ensureSchema = options.ensureSchema ?? true;
     const binding = this.vaultBindingSource?.() ?? null;
+    const authorizationEpoch = binding?.authorization_epoch ?? 0;
+    const authorityKey = binding
+      ? `${binding.provider}:${binding.binding_id}:${authorizationEpoch}`
+      : "legacy:github";
     if (binding && binding.status !== "ready" && !(options.allowRecovering && binding.provider === "google_drive" && binding.status === "recovering")) {
       throw new NotConfiguredError();
     }
-    if (this.repo && (!binding || this.repo.provider === binding.provider)) return this.repo;
+    if (this.repo && this.repoAuthorityKey === authorityKey) return this.repo;
     if (binding?.provider === "google_drive") {
-      const auth = driveAuthFromSettings(this.settings);
+      const auth = driveVaultAuthFromSettings(this.settings);
       if (!auth) throw new NotConfiguredError();
       const client = new DriveClient(auth, undefined, {
         authorizationAllowed: () => {
@@ -501,10 +509,14 @@ export class Runtime {
           return current?.provider === "google_drive" &&
             current.binding_id === binding.binding_id &&
             current.tenant_id === this.tenantId &&
+            (current.authorization_epoch ?? 0) === authorizationEpoch &&
             (current.status === "ready" || (options.allowRecovering === true && current.status === "recovering")) &&
-            Boolean(driveAuthFromSettings(this.settings));
+            Boolean(driveVaultAuthFromSettings(this.settings));
         },
-        onAuthorizationRevoked: () => this.onVaultBindingUpdate?.({ status: "revoked" }),
+        onAuthorizationRevoked: () => this.onVaultBindingUpdate?.({
+          status: "revoked",
+          expectedAuthorizationEpoch: authorizationEpoch,
+        }),
       });
       const repo = await DriveVaultRepository.open({
         client,
@@ -525,8 +537,10 @@ export class Runtime {
         status: "ready",
         folderId: authority.folderId,
         manifestFileId: authority.manifestFileId,
+        expectedAuthorizationEpoch: authorizationEpoch,
       });
       this.repo = repo;
+      this.repoAuthorityKey = authorityKey;
       return repo;
     }
     const repoName = binding?.provider === "github" ? binding.repo : this.settings.get("vault_repo");
@@ -549,6 +563,7 @@ export class Runtime {
       }
     }
     this.repo = repo;
+    this.repoAuthorityKey = authorityKey;
     return this.repo;
   }
 

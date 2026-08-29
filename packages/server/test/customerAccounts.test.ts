@@ -124,7 +124,14 @@ describe("customer account persistence", () => {
       manifest_file_id: "manifest-drive",
     }));
     expect(() => accounts.upsert("cs_drive", { vault_provider: "github" })).toThrow(/vault_provider cannot change/);
+    expect(() => accounts.upsert("cs_drive", { vault_provider: null })).toThrow(/vault_provider cannot change/);
     expect(() => accounts.upsert("cs_drive", { vault_binding_id: "replacement" })).toThrow(/vault_binding_id cannot change/);
+    expect(() => accounts.upsert("cs_drive", { vault_binding_id: null })).toThrow(/vault_binding_id cannot change/);
+    expect(() => accounts.upsert("cs_drive", { vault_drive_folder_id: "replacement-folder" })).toThrow(/vault_drive_folder_id cannot change/);
+    expect(() => accounts.upsert("cs_drive", { vault_drive_folder_id: null })).toThrow(/vault_drive_folder_id cannot change/);
+    expect(() => accounts.upsert("cs_drive", { vault_drive_manifest_file_id: "replacement-manifest" })).toThrow(/vault_drive_manifest_file_id cannot change/);
+    expect(() => accounts.upsert("cs_drive", { vault_drive_manifest_file_id: null })).toThrow(/vault_drive_manifest_file_id cannot change/);
+    expect(() => customerVaultBinding({ ...account, vault_provider: null })).toThrow(/binding is incomplete/);
     expect(accounts.get("cs_drive")).toEqual(account);
   });
 

@@ -44,6 +44,8 @@ interface VaultProviderBindingBase {
   status: VaultBindingStatus;
   created_at: string;
   updated_at: string;
+  /** Credential generation used to fence stale provider clients after reconnect. */
+  authorization_epoch?: number;
 }
 
 export interface GithubVaultProviderBindingRecord extends VaultProviderBindingBase {
@@ -141,6 +143,12 @@ export function assertProviderNeutralCustomerSnapshot(snapshot: ProviderNeutralC
   }
   for (const binding of snapshot.vault_bindings) {
     if (!binding.tenant_id || !binding.binding_id) throw new Error("vault binding identity is incomplete");
+    if (
+      binding.authorization_epoch !== undefined &&
+      (!Number.isSafeInteger(binding.authorization_epoch) || binding.authorization_epoch < 0)
+    ) {
+      throw new Error("vault binding authorization_epoch must be a non-negative safe integer");
+    }
     if (binding.status !== "authorizing" && binding.provider === "github" && (!binding.repo || !binding.branch)) {
       throw new Error("GitHub vault binding requires repo and branch");
     }

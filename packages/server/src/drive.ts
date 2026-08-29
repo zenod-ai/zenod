@@ -101,6 +101,11 @@ async function fetchWithNetworkRetry(input: string | URL, init: RequestInit): Pr
   throw lastError;
 }
 
+function googleCredentialWasRejected(status: number, detail: string): boolean {
+  if (status === 401) return true;
+  return /invalid_grant|invalid[_ ]credentials|authError|invalid_client|credential[^\n]{0,40}revoked/i.test(detail);
+}
+
 export class DriveClient {
   private readonly auth: DriveAuth;
   private readonly account: ServiceAccount | null;
@@ -190,7 +195,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      if (response.status === 400 || response.status === 401 || response.status === 403 || /invalid_grant|revoked/i.test(detail)) {
+      if (googleCredentialWasRejected(response.status, detail)) {
         this.lifecycle.onAuthorizationRevoked?.();
       }
       throw new Error(`Google OAuth refresh failed (${response.status}): ${detail.slice(0, 200)}`);
@@ -220,7 +225,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      if (response.status === 401 || response.status === 403) this.lifecycle.onAuthorizationRevoked?.();
+      if (googleCredentialWasRejected(response.status, detail)) this.lifecycle.onAuthorizationRevoked?.();
       throw new Error(`Drive API ${path} failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return response;
@@ -466,7 +471,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      if (response.status === 401 || response.status === 403) this.lifecycle.onAuthorizationRevoked?.();
+      if (googleCredentialWasRejected(response.status, detail)) this.lifecycle.onAuthorizationRevoked?.();
       throw new Error(`Drive upload failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return (await response.json()) as DriveFile;
@@ -515,7 +520,7 @@ export class DriveClient {
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      if (response.status === 401 || response.status === 403) this.lifecycle.onAuthorizationRevoked?.();
+      if (googleCredentialWasRejected(response.status, detail)) this.lifecycle.onAuthorizationRevoked?.();
       throw new Error(`Drive update failed (${response.status}): ${detail.slice(0, 200)}`);
     }
     return await response.json() as DriveFile;
@@ -601,6 +606,21 @@ export function driveAuthFromSettings(settings: Settings): DriveAuth | null {
   return serviceAccountJson ? { kind: "service_account", serviceAccountJson } : null;
 }
 
+/** Hosted authoritative vault credential; deliberately separate from legacy archive OAuth. */
+export function driveVaultAuthFromSettings(settings: Settings): DriveAuth | null {
+  const authority = settings.googleDriveOAuthAuthority();
+  if (authority.mode !== "hosted-managed" || !authority.credentials) return null;
+  const refreshToken = settings.getRaw("google_drive_vault_oauth_refresh_token");
+  return refreshToken
+    ? {
+        kind: "oauth",
+        ...authority.credentials,
+        refreshToken,
+        email: settings.getRaw("google_drive_vault_oauth_email"),
+      }
+    : null;
+}
+
 export function driveClientFromSettings(settings: Settings): DriveClient | null {
   const auth = driveAuthFromSettings(settings);
   return auth ? new DriveClient(auth) : null;
@@ -612,6 +632,7 @@ export function googleDriveOAuthUrl(input: {
   redirectUri: string;
   state: string;
   mode?: "self-hosted" | "hosted-managed";
+  codeChallenge?: string;
 }): string {
   const url = new URL(GOOGLE_AUTH_URL);
   url.searchParams.set("client_id", input.clientId);
@@ -624,6 +645,10 @@ export function googleDriveOAuthUrl(input: {
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("prompt", "consent");
   url.searchParams.set("state", input.state);
+  if (input.codeChallenge) {
+    url.searchParams.set("code_challenge", input.codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+  }
   return url.toString();
 }
 
@@ -632,6 +657,7 @@ export async function exchangeGoogleDriveOAuthCode(input: {
   clientSecret: string;
   code: string;
   redirectUri: string;
+  codeVerifier?: string;
 }): Promise<{ refreshToken: string; accessToken: string | null; email: string | null }> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
@@ -642,6 +668,7 @@ export async function exchangeGoogleDriveOAuthCode(input: {
       client_secret: input.clientSecret,
       code: input.code,
       redirect_uri: input.redirectUri,
+      ...(input.codeVerifier ? { code_verifier: input.codeVerifier } : {}),
     }),
   });
   if (!response.ok) {

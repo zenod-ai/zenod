@@ -44,6 +44,24 @@ describe("runtime tasking tools", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("does not fall back to legacy GitHub when the authoritative binding projection is corrupt", async () => {
+    const agent = runtime.agent;
+    runtime.close();
+    runtime = new Runtime(dir, agent, {
+      seedFromEnv: false,
+      vaultProviderBinding: () => {
+        throw new Error("authoritative vault binding is incomplete");
+      },
+    });
+    runtime.settings.set("vault_repo", "zenod-ai/legacy-fallback-must-not-run");
+    runtime.settings.set("github_token", "ghp_legacy");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await expect(runtime.getRepo()).rejects.toThrow(/authoritative vault binding is incomplete/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("approveQueue adds owner:agent with status:queued so queued issues are visible to the runner", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     vi.stubGlobal(

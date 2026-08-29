@@ -254,6 +254,27 @@ describe("drive client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not revoke consent for a Drive quota or file-permission 403", async () => {
+    const revoked = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith("https://oauth2.googleapis.com/token")) {
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return Response.json({
+        error: { errors: [{ reason: "rateLimitExceeded" }], message: "quota exceeded" },
+      }, { status: 403 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      undefined,
+      { onAuthorizationRevoked: revoked },
+    );
+
+    await expect(client.listFiles()).rejects.toThrow(/Drive API/);
+    expect(revoked).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("supports the bounded vault root/update/move/revision seam with optimistic checks", async () => {
     const calls: Array<{ url: string; method: string; body: RequestInit["body"] }> = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

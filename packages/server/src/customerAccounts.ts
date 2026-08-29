@@ -46,6 +46,8 @@ export interface CustomerAccount {
   vault_drive_manifest_file_id: string | null;
   vault_binding_created_at: string | null;
   vault_binding_updated_at: string | null;
+  /** Monotonic credential generation fencing stale Drive clients after reconnect. */
+  vault_authorization_epoch: number;
   checkout_completed_at: string | null;
   /** Safe OpenRouter child-key metadata. The inference key itself lives only in the tenant credential vault. */
   managed_ai_key_hash: string | null;
@@ -159,6 +161,7 @@ export class CustomerAccountStore {
       vault_drive_manifest_file_id: null,
       vault_binding_created_at: null,
       vault_binding_updated_at: null,
+      vault_authorization_epoch: 0,
       checkout_completed_at: null,
       managed_ai_key_hash: null,
       managed_ai_key_name: null,
@@ -175,11 +178,24 @@ export class CustomerAccountStore {
     if (!next.account_id || !next.user_id) {
       throw new Error("account_id and user_id are required");
     }
-    if (existing?.vault_provider && patch.vault_provider && patch.vault_provider !== existing.vault_provider) {
+    const patches = (field: keyof CustomerAccount): boolean => Object.prototype.hasOwnProperty.call(patch, field);
+    if (existing?.vault_provider != null && patches("vault_provider") && patch.vault_provider !== existing.vault_provider) {
       throw new Error("authoritative vault_provider cannot change without an explicit migration");
     }
-    if (existing?.vault_binding_id && patch.vault_binding_id && patch.vault_binding_id !== existing.vault_binding_id) {
+    if (existing?.vault_binding_id != null && patches("vault_binding_id") && patch.vault_binding_id !== existing.vault_binding_id) {
       throw new Error("authoritative vault_binding_id cannot change");
+    }
+    for (const field of ["vault_drive_folder_id", "vault_drive_manifest_file_id"] as const) {
+      if (existing?.[field] != null && patches(field) && patch[field] !== existing[field]) {
+        throw new Error(`authoritative ${field} cannot change`);
+      }
+    }
+    const existingEpoch = existing?.vault_authorization_epoch ?? 0;
+    if (
+      patches("vault_authorization_epoch") &&
+      (!Number.isSafeInteger(patch.vault_authorization_epoch) || patch.vault_authorization_epoch! < existingEpoch)
+    ) {
+      throw new Error("vault_authorization_epoch cannot decrease or become invalid");
     }
     if (next.vault_provider && (!next.vault_binding_id || !next.tenant_id || !next.vault_binding_status)) {
       throw new Error("authoritative vault binding is incomplete");
@@ -255,7 +271,21 @@ export class CustomerAccountStore {
 
 /** Project the flattened compatibility account row into the provider-neutral runtime contract. */
 export function customerVaultBinding(account: CustomerAccount): VaultProviderBindingRecord | null {
-  if (!account.vault_provider) return null;
+  if (!account.vault_provider) {
+    if (
+      account.vault_binding_id ||
+      account.vault_binding_status ||
+      account.vault_branch ||
+      account.vault_drive_folder_id ||
+      account.vault_drive_manifest_file_id ||
+      account.vault_binding_created_at ||
+      account.vault_binding_updated_at ||
+      (account.vault_authorization_epoch ?? 0) !== 0
+    ) {
+      throw new Error("authoritative vault binding is incomplete");
+    }
+    return null;
+  }
   if (
     !account.tenant_id ||
     !account.vault_binding_id ||
@@ -271,6 +301,7 @@ export function customerVaultBinding(account: CustomerAccount): VaultProviderBin
     status: account.vault_binding_status,
     created_at: account.vault_binding_created_at,
     updated_at: account.vault_binding_updated_at,
+    authorization_epoch: account.vault_authorization_epoch ?? 0,
   };
   return account.vault_provider === "github"
     ? {

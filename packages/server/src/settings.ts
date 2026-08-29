@@ -145,6 +145,7 @@ const CREDENTIAL_SECRET_KEYS: ReadonlySet<string> = new Set([
   ...SECRET_KEYS,
   "github_app_private_key",
   "google_oauth_refresh_token",
+  "google_drive_vault_oauth_refresh_token",
 ]);
 
 function peerTokenKey(name: string): string {
@@ -634,6 +635,14 @@ export class Settings {
     );
   }
 
+  /** Authoritative Drive vault consent is isolated from the legacy archive/ingest OAuth credential. */
+  driveVaultConfigured(): boolean {
+    const authority = this.googleDriveOAuthAuthority();
+    return authority.mode === "hosted-managed" && Boolean(
+      authority.credentials && this.getRaw("google_drive_vault_oauth_refresh_token"),
+    );
+  }
+
   googleDriveOAuthAuthority(): GoogleDriveOAuthAuthority {
     const authority = this.googleDriveOAuthAuthoritySource?.() ?? { mode: "self-hosted" };
     if (authority.mode === "self-hosted") return authority;
@@ -790,7 +799,7 @@ export class Settings {
     if (binding) {
       if (binding.status !== "ready") return false;
       if (binding.provider === "google_drive") {
-        return Boolean(binding.folder_id && binding.manifest_file_id && this.driveConfigured());
+        return Boolean(binding.folder_id && binding.manifest_file_id && this.driveVaultConfigured());
       }
       return Boolean(
         binding.repo &&
