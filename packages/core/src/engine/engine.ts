@@ -818,6 +818,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }));
   }
 
+  function assertBacklogSourceRef(ref: BacklogSourceRef): void {
+    assertVault(repo);
+    if (ref.provider === "google_drive") assertVaultProviderUrl(ref.provider, ref.url);
+    if (ref.githubUrl !== undefined && (repo.provider !== "github" || ref.provider !== "github")) {
+      throw new Error("Google Drive backlog sources must not contain GitHub compatibility URLs");
+    }
+  }
+
   async function collectBacklogSource(input: BacklogDigestInput): Promise<{ content: string; sourceRefs: BacklogSourceRef[] }> {
     if (input.rawText?.trim()) {
       const sourceRefs = (input.sourceRefs ?? []).map((source) => "url" in source
@@ -873,6 +881,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   function pinBacklogSource(ref: BacklogSourceRef, revision: VaultRevision): BacklogSourceRef {
     assertVault(repo);
+    assertBacklogSourceRef(ref);
     if (ref.provider !== repo.provider) return ref;
     const marker = ref.path.indexOf("#");
     const path = marker < 0 ? ref.path : ref.path.slice(0, marker);
@@ -880,7 +889,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const pinned = repositorySourceRef(path, anchor, revision);
     return {
       ...pinned,
-      ...(ref.githubUrl !== undefined ? { githubUrl: ref.githubUrl } : {}),
+      ...(repo.provider === "github" && ref.provider === "github" && ref.githubUrl !== undefined
+        ? { githubUrl: ref.githubUrl }
+        : {}),
     };
   }
 
@@ -891,8 +902,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         await repo.pull().catch(() => {});
         lastSyncMs = now().getTime();
         const source = await collectBacklogSource(input);
+        source.sourceRefs.forEach(assertBacklogSourceRef);
         const extracted = await llm.extractBacklog(source);
         const candidates = ensureCandidateSources(extracted.candidates, source.sourceRefs);
+        candidates.flatMap((candidate) => candidate.source_refs).forEach(assertBacklogSourceRef);
         if (candidates.length === 0) {
           return { candidates, written: [], skipped: [{ reason: "no backlog candidates found" }], source_refs: source.sourceRefs };
         }
@@ -920,8 +933,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
     await syncForRead();
     const source = await collectBacklogSource(input);
+    source.sourceRefs.forEach(assertBacklogSourceRef);
     const extracted = await llm.extractBacklog(source);
     const candidates = ensureCandidateSources(extracted.candidates, source.sourceRefs);
+    candidates.flatMap((candidate) => candidate.source_refs).forEach(assertBacklogSourceRef);
     return {
       candidates,
       written: [],

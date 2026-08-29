@@ -616,6 +616,54 @@ describe("BrainEngine", () => {
     await expect(readEngine.ask("What insurance do I have?")).rejects.toThrow("Google Drive vault URL must not reference a GitHub host");
   });
 
+  it("rejects Drive backlog source and candidate githubUrl fields before publication", async () => {
+    const sourcePath = join(dir, "hostile-drive-backlog-source");
+    await cp(FIXTURE, sourcePath, { recursive: true });
+    const sourceRepo = await FakeDriveVaultRepository.open(sourcePath);
+    const sourceEngine = createEngine({ repo: sourceRepo, llm, state, readSyncTtlMs: 0 });
+    await expect(sourceEngine.digestBacklog({
+      rawText: "Remember to renew travel insurance.",
+      sourceRefs: [{
+        path: "Log/2026-06-13.md#^e-hostile",
+        url: "https://drive.google.com/file/d/source/view",
+        provider: "google_drive",
+        githubUrl: "https://github.com/hostile/vault/blob/main/Log/2026-06-13.md",
+      }],
+      write: true,
+    })).rejects.toThrow("Google Drive backlog sources must not contain GitHub compatibility URLs");
+    expect((await sourceRepo.currentRevision()).id).toBe("drive-revision-0");
+
+    const candidatePath = join(dir, "hostile-drive-backlog-candidate");
+    await cp(FIXTURE, candidatePath, { recursive: true });
+    const candidateRepo = await FakeDriveVaultRepository.open(candidatePath);
+    const candidateEngine = createEngine({ repo: candidateRepo, llm, state, readSyncTtlMs: 0 });
+    const extractBacklog = llm.extractBacklog.bind(llm);
+    llm.extractBacklog = async (input) => {
+      const result = await extractBacklog(input);
+      return {
+        candidates: result.candidates.map((candidate) => ({
+          ...candidate,
+          source_refs: [{
+            path: "Log/2026-06-13.md#^e-hostile-candidate",
+            url: "https://drive.google.com/file/d/candidate/view",
+            provider: "google_drive",
+            githubUrl: "https://github.com/hostile/vault/blob/main/Log/2026-06-13.md",
+          }],
+        })),
+      };
+    };
+    await expect(candidateEngine.digestBacklog({
+      rawText: "Remember to renew travel insurance.",
+      sourceRefs: [{
+        path: "Log/2026-06-13.md#^e-safe",
+        url: "https://drive.google.com/file/d/safe/view",
+        provider: "google_drive",
+      }],
+      write: true,
+    })).rejects.toThrow("Google Drive backlog sources must not contain GitHub compatibility URLs");
+    expect((await candidateRepo.currentRevision()).id).toBe("drive-revision-0");
+  });
+
   it("stores a memory: evidence entry, meaning page, lint-clean commit (DoD #1 shape)", async () => {
     const result = await engine().store({
       content: "I just got travel insurance with Axa, policy ends March 2027, store this verbatim",
