@@ -8,7 +8,7 @@ Primary document: `docs/EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md`
 Integration branch: `main`
 Planning branch: `codex/google-drive-vault-epic` merged by PR #1155
 Planning base: `bcd64987f061a9e622cb88796f1d52781a006109` (`origin/main`)
-Last reconciled commit: `45c9722a48200390f1d0921d3af569717f87a5bc` on `main`
+Last reconciled commit: `fe057ad796f4d71f4c57aae4886fd6fea432c1b0` on `main`
 Active spine steward: Google Drive Vault delivery manager (`Jordi + current bound Codex task`)
 Planner: Jordi + Codex
 Epic worker: `/root` Google Drive Vault delivery manager
@@ -104,13 +104,13 @@ The required uninterrupted Hosted journey is:
 
 ## Current State
 
-Phase: GDV-3 Google identity ready; GDV-4 paused at named architecture gate
+Phase: Google identity path integrated; Drive vault path paused at named architecture gate
 Last verified: 2026-08-29 CEST
 Integration target: `main`
-Fresh base commit: `45c9722a48200390f1d0921d3af569717f87a5bc` on `main`
+Fresh base commit: `fe057ad796f4d71f4c57aae4886fd6fea432c1b0` on `main`
 Control-plane merge: [PR #1155](https://github.com/zenod-ai/zenod/pull/1155), merged as `a4c4826f80ed0acda93d304f21cb50129d7fb2dd`
 Current production relationship: additive sibling epic. The active Phylax/configuration gate remains authoritative for production and is not modified here.
-Next action: dispatch GDV-3 from exact merged identity base `45c9722`; continue to hold GDV-4 at draft PR #1160 until Jordi approves a provider-neutral `currentRevision()` read and sequencing the relevant GDV-5 receipt/citation work before the remaining engine conversion.
+Next action: obtain Jordi's approval for a provider-neutral `currentRevision(): Promise<VaultRevision>` read and the staged sequence: integrate the safe GDV-4 adapter/current-revision foundation, run the relevant GDV-5 receipt/citation generalization, then finish GDV-4 engine conversion without fabricating git fields.
 Blockers: GDV-4 cannot truthfully complete the non-git engine loop while legacy results require `commitSha` and GitHub URLs; fabricating a SHA is forbidden. Real Google OAuth credentials/consent verification, deployment, billing and public signup remain later human gates.
 
 ## Bootstrap Map
@@ -252,7 +252,7 @@ Memory operations are provider-neutral. GitHub issue, PR and code-repository ope
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) | Planner / architect | `/root/gdv_1_contract_worker` | Freeze provider-neutral identity, vault and compatibility contract | complete | - | [PR #1158](https://github.com/zenod-ai/zenod/pull/1158) / `codex/gdv-1-contract` | `d48e48d` on `main` | Executable interfaces, migrations, failure algebra and compatibility fixtures are accepted before implementation. | Exact head `970d931` independently reviewed clean; full CI passed; squash merged as `0b5aa62`. | 2026-08-29 | Preserve contract during dependent work. |
 | [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) | Ticket worker | `/root/gdv_2_identity_worker` | Generalize customer identity and account ownership | complete | #1145 | [PR #1161](https://github.com/zenod-ai/zenod/pull/1161) / `codex/gdv-2-provider-neutral-identity` | `0b5aa62` on `main` | Existing GitHub accounts preserve IDs while sessions/account/billing/tenant/Channels resolve through internal identity. | Two P1 lifecycle/security findings fixed; exact head `9b528e7` re-reviewed clean and full CI passed; merged as `45c9722`. | 2026-08-29 | Preserve stable owner mappings and provider-scoped login metadata in GDV-3. |
-| [GDV-3 #1147](https://github.com/zenod-ai/zenod/issues/1147) | Ticket worker | `/root/gdv_3_google_signin_worker` | Add Google OIDC sign-in and secure account linking | ready | #1145, #1146 | `codex/gdv-3-google-signin` | `45c9722` on `main` | Google login uses verified OIDC subject, requests no Drive scope, and safely creates/links sessions. | GDV-2 merged green after independent identity/security review. | 2026-08-29 | Dispatch from exact merged identity base. |
+| [GDV-3 #1147](https://github.com/zenod-ai/zenod/issues/1147) | Ticket worker | `/root/gdv_3_google_signin_worker` | Add Google OIDC sign-in and secure account linking | complete | #1145, #1146 | [PR #1163](https://github.com/zenod-ai/zenod/pull/1163) / `codex/gdv-3-google-signin` | `45c9722` on `main` | Google login uses verified OIDC subject, requests no Drive scope, and safely creates/links sessions. | Four adversarial review findings fixed; exact head `20d3f49` re-reviewed clean and full CI passed; merged as `fe057ad`. | 2026-08-29 | Live credentials/browser-provider smoke remain later human gates; preserve identity contract in GDV-7/8. |
 | [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) | Ticket worker | `/root/gdv_4_repository_worker` | Extract repository-shaped provider-neutral vault interface | blocked | #1145; architecture decision | [draft PR #1160](https://github.com/zenod-ai/zenod/pull/1160) / `codex/gdv-4-vault-repository` | `0b5aa62` on `main` | Existing GitHub behavior runs through `VaultRepository` with no acceptance regression. | Safe adapter commit `c192314` is CI-green; engine conversion cannot preserve truthful non-git receipts without current-revision read plus GDV-5 sequencing. | 2026-08-29 | Await Jordi approval; do not fabricate `commitSha` or merge partial acceptance. |
 | [GDV-5 #1149](https://github.com/zenod-ai/zenod/issues/1149) | Ticket worker | unassigned | Generalize revisions, citations and receipts | waiting | #1145, #1148 | `codex/gdv-5-provider-neutral-receipts` | fresh `main` after #1148 | Core/MCP/jobs/peers/UI accept Drive revisions and generic URLs while GitHub legacy fields remain compatible. | Receipt/schema coupling inventory. | 2026-08-29 | Dispatch after #1148. |
 | [GDV-6 #1150](https://github.com/zenod-ai/zenod/issues/1150) | Ticket worker | unassigned | Implement recoverable Google Drive vault repository | waiting | #1145, #1148, #1149 | `codex/gdv-6-drive-vault-backend` | fresh `main` after dependencies | Drive sync/save/restart/conflict/recovery operates on app-created Markdown with no git remote and no false success. | Existing `DriveClient`; transaction target in this spine. | 2026-08-29 | Dispatch after contract and receipt seam. |
@@ -516,9 +516,20 @@ control-plane spine merge
 | 2026-08-29 | Control-plane integration | `a4c4826` | GitHub `main` | Strict spine validation, diff/secret checks and complete repository CI | pass; target and issues #1145–#1154 integrated as delivery control plane | [PR #1155](https://github.com/zenod-ai/zenod/pull/1155) |
 | 2026-08-29 | GDV-1 contract integration | `0b5aa62` | GitHub `main` | Focused core/server tests, all-workspace typecheck, builds, schema checks, full CI and independent exact-head review | pass; four review findings fixed before merge; provider-neutral contracts frozen | [PR #1158](https://github.com/zenod-ai/zenod/pull/1158), [terminal handoff](https://github.com/zenod-ai/zenod/issues/1145#issuecomment-5461631822) |
 | 2026-08-29 | GDV-2 identity integration | `45c9722` | GitHub `main` | 1,147 server tests, monorepo typecheck/build/tests, full CI and independent exact-head security/lifecycle review | pass; stable account ownership, provider-scoped GitHub login and legacy identifiers preserved | [PR #1161](https://github.com/zenod-ai/zenod/pull/1161), [review-fix handoff](https://github.com/zenod-ai/zenod/issues/1146#issuecomment-5461766856) |
+| 2026-08-29 | GDV-3 Google OIDC integration | `fe057ad` | GitHub `main` | 1,169 server tests, focused adversarial identity/link tests, all-workspace typecheck, full CI and independent exact-head security review | pass; no Drive scopes or live config; duplicate-provider, cross-site link, unlink-lockout and unsafe-subject findings fixed | [PR #1163](https://github.com/zenod-ai/zenod/pull/1163), [review-fix evidence](https://github.com/zenod-ai/zenod/issues/1147#issuecomment-5461955646) |
 | 2026-08-29 | GDV-4 safe adapter slice | `c192314` | draft branch / PR CI | 14 focused tests, core typecheck, diff check and full PR CI | pass for adapter slice only; not GDV-4 acceptance | [draft PR #1160](https://github.com/zenod-ai/zenod/pull/1160), [architecture gate](https://github.com/zenod-ai/zenod/issues/1148#issuecomment-5461674225) |
 
 ## Handoff Journal
+
+### 2026-08-29 - Epic worker - Google identity path integrated; Drive path awaits architecture permission
+
+Context: GDV-3 added Google OIDC through the existing provider-neutral identity seam with identity-only scopes. Independent adversarial review found duplicate-provider persistence, cross-site ambient linking, configured-provider unlink lockout and unsafe GitHub numeric-subject normalization. The worker fixed all four without adding a service or touching production configuration; exact-head re-review and full CI passed.
+
+Action: merged [PR #1163](https://github.com/zenod-ai/zenod/pull/1163) as `fe057ad796f4d71f4c57aae4886fd6fea432c1b0` and marked GDV-3 complete. GDV-1 through GDV-3 are now integrated. No later ticket is dependency-ready because GDV-4/GDV-5 remain at the named provider-neutral revision/receipt sequencing gate.
+
+Next: ask Jordi to approve the minimal `currentRevision()` contract and staged GDV-4 foundation → relevant GDV-5 receipts → remaining GDV-4 engine conversion. Keep draft PR #1160 and all Drive/runtime/UI tickets unmerged meanwhile.
+
+Risks: real Google credentials and browser-provider behavior are still unproved human gates. The Drive path must preserve truthful provider-neutral revisions and must never place a Drive transaction ID into `commitSha`.
 
 ### 2026-08-29 - Epic worker - GDV-2 integrated; GDV-3 ready and GDV-4 architecture-gated
 
@@ -562,9 +573,9 @@ Risks: existing production/signup work remains separately gated. Drive multi-fil
 
 ## Planner Queue
 
-1. Dispatch and monitor `/root/gdv_3_google_signin_worker` on [GDV-3 #1147](https://github.com/zenod-ai/zenod/issues/1147) from exact `main` `45c9722`.
-2. Obtain Jordi's decision on the GDV-4 `currentRevision()` contract and GDV-5-before-final-GDV-4 sequencing; keep draft PR #1160 unmerged meanwhile.
-3. Independently review and integrate GDV-3; do not unlock GDV-7 identity dependency until GDV-3 is merged.
+1. Obtain Jordi's decision on the GDV-4 `currentRevision()` contract and staged GDV-4/GDV-5 sequencing; keep draft PR #1160 unmerged meanwhile.
+2. If approved, refresh the safe adapter branch from `fe057ad`, implement only the current-revision foundation, independently review and integrate it without closing GDV-4.
+3. Dispatch the relevant GDV-5 receipt/citation generalization, then resume GDV-4 engine conversion from fresh merged `main`; never synthesize a Drive `commitSha`.
 
 ## Open Questions
 
