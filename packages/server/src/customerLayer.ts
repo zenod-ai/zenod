@@ -1,7 +1,9 @@
 import Stripe from "stripe";
+import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Runtime } from "./runtime.js";
 import { CustomerAccountStore, customerAccountIdForUser, type CustomerAccount } from "./customerAccounts.js";
 import {
@@ -18,12 +20,15 @@ import {
 } from "./customerBilling.js";
 import {
   CustomerIdentityStore,
+  GoogleOidcIdentityProvider,
   GithubIdentityProvider,
   signState,
   verifyState,
   type CustomerPrincipal,
   type IdentityProvider,
+  type StatePayload,
 } from "./customerIdentity.js";
+import type { CustomerIdentityProvider } from "./googleDriveVaultContract.js";
 import {
   currentGatewayKey,
   projectCustomerUsage,
@@ -59,7 +64,10 @@ import {
 
 export interface CustomerLayerOptions {
   env?: NodeJS.ProcessEnv;
+  /** Legacy test/integration seam for the GitHub identity provider. */
   identity?: IdentityProvider;
+  /** Provider-neutral sign-in seams. Explicit providers override env-backed defaults. */
+  identityProviders?: Partial<Record<CustomerIdentityProvider, IdentityProvider>>;
   stripe?: CustomerStripeClient;
   tenantStore?: import("@zenod/mcp-chassis").TenantProvisioningStore;
   onCheckoutCompleted?: (account: CustomerAccount, session: Stripe.Checkout.Session) => Promise<void> | void;
@@ -100,7 +108,9 @@ export interface CustomerLayerHost {
 }
 
 export function customerAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET && customerStateSecret(env));
+  const github = env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET;
+  const google = env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET;
+  return Boolean((github || google) && customerStateSecret(env));
 }
 
 function customerStateSecret(env: NodeJS.ProcessEnv): string {
@@ -116,8 +126,35 @@ function customerDestination(env: NodeJS.ProcessEnv, defaultDomain = "https://cl
   return (env.CUSTOMER_APP_URL || env.DOMAIN || defaultDomain).replace(/\/$/, "");
 }
 
-function callbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): string {
+function githubCallbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): string {
   return env.GITHUB_OAUTH_CALLBACK_URL || `${customerDestination(env, defaultDomain)}/auth/github/callback`;
+}
+
+function googleCallbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): string {
+  return env.GOOGLE_OIDC_CALLBACK_URL || `${customerDestination(env, defaultDomain)}/auth/google/callback`;
+}
+
+const GOOGLE_OIDC_FLOW_COOKIE = "zenod_google_oidc_flow";
+
+function pkceChallenge(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
+function setGoogleFlowCookie(c: Context, proof: string, env: NodeJS.ProcessEnv): void {
+  setCookie(c, GOOGLE_OIDC_FLOW_COOKIE, proof, {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "Lax",
+    path: "/auth/google/callback",
+    maxAge: 10 * 60,
+  });
+}
+
+function clearGoogleFlowCookie(c: Context, env: NodeJS.ProcessEnv): void {
+  deleteCookie(c, GOOGLE_OIDC_FLOW_COOKIE, {
+    path: "/auth/google/callback",
+    secure: env.NODE_ENV === "production",
+  });
 }
 
 function signedReturnDestination(
@@ -171,11 +208,29 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       throw new Error(`STRIPE_MODE=${billing.stripeMode} requires a matching Stripe key`);
     }
   }
-  const identity =
+  const githubIdentity =
+    options.identityProviders?.github ??
     options.identity ??
     (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET
-      ? new GithubIdentityProvider(env.GITHUB_OAUTH_CLIENT_ID, env.GITHUB_OAUTH_CLIENT_SECRET, callbackUrl(env, product.defaultDomain))
+      ? new GithubIdentityProvider(
+          env.GITHUB_OAUTH_CLIENT_ID,
+          env.GITHUB_OAUTH_CLIENT_SECRET,
+          githubCallbackUrl(env, product.defaultDomain),
+        )
       : null);
+  const googleIdentity =
+    options.identityProviders?.google ??
+    (product.product === "zenod" && env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET
+      ? new GoogleOidcIdentityProvider(
+          env.GOOGLE_OIDC_CLIENT_ID,
+          env.GOOGLE_OIDC_CLIENT_SECRET,
+          googleCallbackUrl(env, product.defaultDomain),
+        )
+      : null);
+  const identityProviders: Partial<Record<CustomerIdentityProvider, IdentityProvider>> = {
+    ...(githubIdentity ? { github: githubIdentity } : {}),
+    ...(googleIdentity ? { google: googleIdentity } : {}),
+  };
   const stripe =
     options.stripe ??
     (env.STRIPE_SECRET_KEY
@@ -379,38 +434,150 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     });
   }
 
-  app.get("/auth/signin", (c) => {
-    if (!identity || !customerStateSecret(env)) return c.text("Sign-in is not configured.", 503);
+  const startIdentityFlow = (
+    c: Context,
+    provider: CustomerIdentityProvider,
+    mode: "signin" | "link_identity",
+  ) => {
+    const identity = identityProviders[provider];
+    const stateSecret = customerStateSecret(env);
+    if (!identity || !stateSecret) return c.text("Sign-in is not configured.", 503);
+    const session = mode === "link_identity" ? readCustomerSession(c, env) : null;
+    if (mode === "link_identity" && !session) return c.json({ error: "unauthorized" }, 401);
+    if (session) principalForSession(session);
     const requestedHost = trustedReturnHost(c.req.header("x-forwarded-host") || c.req.header("host"));
-    const state = signState({ mode: "signin", ...(requestedHost ? { rh: requestedHost } : {}) }, customerStateSecret(env));
+    const flow = randomBytes(24).toString("base64url");
+    const statePayload: StatePayload = {
+      mode,
+      provider,
+      flow,
+      ...(mode === "signin" && requestedHost ? { rh: requestedHost } : {}),
+      ...(session ? { uid: session.user_id } : {}),
+    };
+    const state = signState(statePayload, stateSecret);
+    if (provider === "google") {
+      const nonce = randomBytes(24).toString("base64url");
+      const verifier = randomBytes(48).toString("base64url");
+      setGoogleFlowCookie(c, signState({ ...statePayload, nonce, verifier }, stateSecret), env);
+      return c.redirect(identity.authorizeUrl(state, {
+        nonce,
+        codeChallenge: pkceChallenge(verifier),
+      }), 302);
+    }
     return c.redirect(identity.authorizeUrl(state), 302);
-  });
+  };
 
-  app.get("/auth/github/callback", async (c) => {
+  const completeIdentityFlow = async (c: Context, provider: CustomerIdentityProvider) => {
+    const identity = identityProviders[provider];
     if (!identity) return c.text("Sign-in is not configured.", 503);
     const code = c.req.query("code") ?? "";
     const state = verifyState(c.req.query("state") ?? "", customerStateSecret(env));
-    if (!code || !state || state.mode !== "signin") {
+    const legacyGithubSignin = provider === "github" && state?.mode === "signin" && !state.provider && !state.flow;
+    if (
+      !code ||
+      !state ||
+      (state.mode !== "signin" && state.mode !== "link_identity") ||
+      (!legacyGithubSignin && (state.provider !== provider || !state.flow))
+    ) {
       return c.text("Invalid or expired sign-in. Please retry.", 400);
     }
+    let nonce: string | undefined;
+    let codeVerifier: string | undefined;
+    if (provider === "google") {
+      const proof = verifyState(getCookie(c, GOOGLE_OIDC_FLOW_COOKIE) ?? "", customerStateSecret(env));
+      clearGoogleFlowCookie(c, env);
+      if (
+        !proof ||
+        proof.provider !== provider ||
+        proof.mode !== state.mode ||
+        proof.flow !== state.flow ||
+        proof.uid !== state.uid ||
+        !proof.nonce ||
+        !proof.verifier
+      ) {
+        return c.text("Invalid or expired Google sign-in. Please retry.", 400);
+      }
+      nonce = proof.nonce;
+      codeVerifier = proof.verifier;
+    }
+    const currentSession = state.mode === "link_identity" ? readCustomerSession(c, env) : null;
+    if (state.mode === "link_identity" && (!currentSession || currentSession.user_id !== state.uid)) {
+      return c.text("An authenticated session is required to link this identity.", 401);
+    }
+    if (currentSession) {
+      try {
+        principalForSession(currentSession);
+      } catch {
+        return c.text("An authenticated session is required to link this identity.", 401);
+      }
+    }
     try {
-      const user = await identity.exchangeAndGetUser(code);
-      const githubId = typeof user.id === "number" ? user.id : Number(user.id);
-      if (!Number.isSafeInteger(githubId) || githubId <= 0) throw new Error("GitHub returned an invalid user id");
-      const principal = identities.resolveOrCreate({
-        provider: "github",
-        provider_subject: String(githubId),
+      const user = await identity.exchangeAndGetUser(code, { nonce, codeVerifier });
+      const providerSubject = provider === "github"
+        ? String(typeof user.id === "number" ? user.id : Number(user.id))
+        : String(user.id).trim();
+      if (
+        !providerSubject ||
+        (provider === "github" && (!/^\d+$/.test(providerSubject) || Number(providerSubject) <= 0))
+      ) {
+        throw new Error(`${provider} returned an invalid user id`);
+      }
+      const identityInput = {
+        provider,
+        provider_subject: providerSubject,
         display_name: user.login,
-        provider_login: user.login,
-        avatar_url: user.avatar_url ?? `https://github.com/${user.login}.png`,
-        email: user.email,
-        email_verified: user.email_verified ?? false,
-      });
+        provider_login: provider === "github" ? user.login : null,
+        avatar_url: user.avatar_url ?? (provider === "github" ? `https://github.com/${user.login}.png` : null),
+        // Preserve GitHub's established metadata behavior. Google email is an
+        // attribute only after the OIDC token marks it verified.
+        email: provider === "google" && user.email_verified !== true ? null : user.email,
+        email_verified: user.email_verified === true,
+      };
+      if (state.mode === "link_identity") {
+        identities.linkIdentity(currentSession!.user_id, identityInput);
+        return c.redirect(`${customerDestination(env, product.defaultDomain)}/app/account?identity=${provider}-linked`, 302);
+      }
+      const principal = identities.resolveOrCreate(identityInput);
       issueCustomerSession(c, principal, env);
       return c.redirect(signedReturnDestination(state.rh, env, product), 302);
     } catch (error) {
-      console.error("github callback failed:", error);
-      return c.text("Could not complete GitHub sign-in. Please retry.", 502);
+      console.error(`${provider} callback failed:`, error);
+      const collision = error instanceof Error && error.message.includes("already linked to another user");
+      return c.text(
+        collision
+          ? "This sign-in identity is already linked to another Zenod account."
+          : `Could not complete ${provider === "google" ? "Google" : "GitHub"} sign-in. Please retry.`,
+        collision ? 409 : 502,
+      );
+    }
+  };
+
+  // Preserve the established GitHub entry point while exposing provider-specific starts.
+  app.get("/auth/signin", (c) => startIdentityFlow(c, "github", "signin"));
+  app.get("/auth/github/start", (c) => startIdentityFlow(c, "github", "signin"));
+  app.get("/auth/google/start", (c) => startIdentityFlow(c, "google", "signin"));
+  app.get("/auth/github/callback", (c) => completeIdentityFlow(c, "github"));
+  app.get("/auth/google/callback", (c) => completeIdentityFlow(c, "google"));
+
+  app.get("/api/auth/providers/:provider/link", (c) => {
+    const provider = c.req.param("provider");
+    if (provider !== "github" && provider !== "google") return c.json({ error: "unknown identity provider" }, 404);
+    return startIdentityFlow(c, provider, "link_identity");
+  });
+
+  app.delete("/api/auth/providers/:provider", (c) => {
+    const provider = c.req.param("provider");
+    if (provider !== "github" && provider !== "google") return c.json({ error: "unknown identity provider" }, 404);
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    principalForSession(session);
+    try {
+      const remaining = identities.unlinkIdentity(session.user_id, provider);
+      issueCustomerSession(c, remaining, env);
+      return c.json({ ok: true, providers: identities.providersForUser(session.user_id) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "could not unlink identity";
+      return c.json({ error: message }, message.includes("last sign-in identity") ? 409 : 404);
     }
   });
 
@@ -428,13 +595,26 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!session) return c.json({ error: "unauthorized" }, 401);
     const principal = principalForSession(session);
     return c.json({
+      user_id: principal.user_id,
+      provider: principal.provider,
+      providers: identities.providersForUser(principal.user_id),
+      display_name: principal.display_name,
       login: principal.provider === "github" ? principal.github_login ?? session.login : principal.display_name,
       avatar_url: principal?.avatar_url ?? session.avatar_url,
     });
   });
 
   app.get("/api/auth/status", (c) =>
-    c.json({ needsSetup: false, configured: true, customerAuth: true, authMethod: "github" }),
+    c.json({
+      needsSetup: false,
+      configured: Object.keys(identityProviders).length > 0,
+      customerAuth: true,
+      authMethod: githubIdentity ? "github" : "google",
+      signInMethods: [
+        ...(githubIdentity ? ["github"] : []),
+        ...(googleIdentity ? ["google"] : []),
+      ],
+    }),
   );
   app.all("/api/auth/login", (c) => c.json({ error: "not found" }, 404));
   app.all("/api/auth/setup", (c) => c.json({ error: "not found" }, 404));
