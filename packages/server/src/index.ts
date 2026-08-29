@@ -41,6 +41,28 @@ export { createRingCustomerLayer } from "./ringCustomerLayer.js";
 export { createHeraldUnit } from "./heraldUnit.js";
 export { createHeraldCustomerLayer } from "./heraldCustomerLayer.js";
 export {
+  FROZEN_LEGACY_CUSTOMER_IDENTIFIER_FIELDS,
+  PROVIDER_NEUTRAL_CUSTOMER_SCHEMA_VERSION,
+  assertLegacyCustomerIdentifiersFrozen,
+  assertProviderNeutralCustomerSnapshot,
+  customerIdentityKey,
+  projectVaultCapabilities,
+} from "./googleDriveVaultContract.js";
+export type {
+  CustomerAccountOwnerRecord,
+  CustomerIdentityProvider,
+  CustomerIdentityRecord,
+  CustomerUserRecord,
+  FrozenLegacyCustomerIdentifiers,
+  GithubVaultProviderBindingRecord,
+  GoogleDriveVaultProviderBindingRecord,
+  ProviderNeutralCustomerSnapshot,
+  VaultBindingStatus,
+  VaultCapabilityProjection,
+  VaultMemoryCapability,
+  VaultProviderBindingRecord,
+} from "./googleDriveVaultContract.js";
+export {
   HERALD_DEFAULT_PROPOSAL_COUNT,
   HERALD_MAX_PROPOSAL_COUNT,
   HERALD_MIN_CADENCE_MINUTES,
