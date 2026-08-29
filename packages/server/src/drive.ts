@@ -1,4 +1,4 @@
-import { createSign } from "node:crypto";
+import { createHash, createSign } from "node:crypto";
 import type { Settings } from "./settings.js";
 
 /**
@@ -17,11 +17,13 @@ const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const SCOPE = "https://www.googleapis.com/auth/drive";
 const HOSTED_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const USERINFO_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
-const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,parents";
+const FILE_FIELDS = "id,name,mimeType,size,modifiedTime,webViewLink,parents,version,md5Checksum,appProperties,headRevisionId";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const MANAGED_ROOT_PROPERTY_KEY = "zenodManagedRoot";
 const MANAGED_ROOT_PROPERTY_VERSION = "v2";
 const MANAGED_FOLDER_FIELDS = `${FILE_FIELDS},appProperties,capabilities/canAddChildren`;
+const VAULT_ROOT_PROPERTY_KEY = "zenodVaultBinding";
+const VAULT_ROOT_PROPERTY_VERSION = "v1";
 
 export interface ServiceAccount {
   client_email: string;
@@ -41,6 +43,24 @@ export interface DriveFile {
   modifiedTime?: string;
   webViewLink?: string;
   parents?: string[];
+  version?: string;
+  md5Checksum?: string;
+  appProperties?: Record<string, string>;
+  headRevisionId?: string;
+}
+
+export interface DriveFilePrecondition {
+  expectedVersion?: string;
+  expectedModifiedTime?: string;
+  /** SHA-256 of the current content, used when metadata alone is insufficient. */
+  expectedChecksum?: string;
+}
+
+export interface DriveRevision {
+  id: string;
+  modifiedTime?: string;
+  md5Checksum?: string;
+  keepForever?: boolean;
 }
 
 export function parseServiceAccount(json: string): ServiceAccount {
@@ -196,21 +216,28 @@ export class DriveClient {
    * folderId when given; nameContains filters by name substring.
    */
   async listFiles(
-    options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean } = {},
+    options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean } = {},
   ): Promise<DriveFile[]> {
     const clauses = ["trashed = false", `mimeType ${options.foldersOnly ? "=" : "!="} '${FOLDER_MIME}'`];
     if (options.folderId) clauses.push(`'${options.folderId.replaceAll("'", "\\'")}' in parents`);
     if (options.nameContains) clauses.push(`name contains '${options.nameContains.replaceAll("'", "\\'")}'`);
-    const response = await this.request("/files", {
-      q: clauses.join(" and "),
-      orderBy: "modifiedTime desc",
-      pageSize: String(options.pageSize ?? 50),
-      fields: `files(${FILE_FIELDS})`,
-      includeItemsFromAllDrives: "true",
-      corpora: "allDrives",
-    });
-    const data = (await response.json()) as { files: DriveFile[] };
-    return data.files;
+    const files: DriveFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const response = await this.request("/files", {
+        q: clauses.join(" and "),
+        orderBy: "modifiedTime desc",
+        pageSize: String(options.pageSize ?? 50),
+        fields: `nextPageToken,files(${FILE_FIELDS})`,
+        includeItemsFromAllDrives: "true",
+        corpora: "allDrives",
+        ...(pageToken ? { pageToken } : {}),
+      });
+      const data = (await response.json()) as { files?: DriveFile[]; nextPageToken?: string };
+      files.push(...(data.files ?? []));
+      pageToken = options.allPages ? data.nextPageToken : undefined;
+    } while (pageToken);
+    return files;
   }
 
   async getFile(fileId: string): Promise<DriveFile> {
@@ -315,6 +342,44 @@ export class DriveClient {
     return folder.id;
   }
 
+  /** Recover or create the app-owned ordinary-file root for one Drive vault binding. */
+  async ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<string> {
+    if (!vaultBindingId || vaultBindingId.length > 100) throw new Error("Drive vault binding ID is invalid");
+    const markerValue = `${VAULT_ROOT_PROPERTY_VERSION}:${vaultBindingId}`;
+    type VaultFolder = DriveFile & { capabilities?: { canAddChildren?: boolean } };
+    const matches = (folder: VaultFolder | null): folder is VaultFolder =>
+      folder?.mimeType === FOLDER_MIME
+      && folder.name === "Zenod Vault"
+      && folder.appProperties?.[VAULT_ROOT_PROPERTY_KEY] === markerValue
+      && folder.capabilities?.canAddChildren === true;
+
+    if (storedFolderId) {
+      const response = await this.request(`/files/${encodeURIComponent(storedFolderId)}`, { fields: MANAGED_FOLDER_FIELDS }).catch(() => null);
+      const stored = response ? await response.json().catch(() => null) as VaultFolder | null : null;
+      if (matches(stored)) return storedFolderId;
+    }
+    const response = await this.request("/files", {
+      q: `trashed = false and mimeType = '${FOLDER_MIME}' and appProperties has { key='${VAULT_ROOT_PROPERTY_KEY}' and value='${markerValue.replaceAll("'", "\\'")}' }`,
+      orderBy: "createdTime asc",
+      pageSize: "10",
+      spaces: "drive",
+      fields: `files(${MANAGED_FOLDER_FIELDS})`,
+    });
+    const recovered = ((await response.json()) as { files?: VaultFolder[] }).files?.find(matches);
+    if (recovered) return recovered.id;
+    const created = await this.request("/files", { fields: MANAGED_FOLDER_FIELDS }, {
+      method: "POST",
+      body: {
+        name: "Zenod Vault",
+        mimeType: FOLDER_MIME,
+        appProperties: { [VAULT_ROOT_PROPERTY_KEY]: markerValue },
+      },
+    });
+    const folder = await created.json() as VaultFolder;
+    if (!folder.id) throw new Error("Drive API did not return the Zenod Vault folder ID");
+    return folder.id;
+  }
+
   /**
    * Upload a new binary file into a folder. Uses the multipart upload endpoint
    * (metadata + media in one request), which the JSON-only `request()` helper
@@ -325,9 +390,10 @@ export class DriveClient {
     mimeType: string,
     data: Buffer,
     parentFolderId: string,
+    options: { appProperties?: Record<string, string> } = {},
   ): Promise<DriveFile> {
     const boundary = `zenod-${base64url(name).slice(0, 16)}-boundary`;
-    const metadata = JSON.stringify({ name, mimeType, parents: [parentFolderId] });
+    const metadata = JSON.stringify({ name, mimeType, parents: [parentFolderId], ...options });
     const body = Buffer.concat([
       Buffer.from(
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n` +
@@ -355,19 +421,106 @@ export class DriveClient {
     return (await response.json()) as DriveFile;
   }
 
+  private async assertFilePrecondition(fileId: string, precondition: DriveFilePrecondition): Promise<DriveFile> {
+    const current = await this.getFile(fileId);
+    if (precondition.expectedVersion && current.version !== precondition.expectedVersion) {
+      throw new Error(`Drive file conflict: version changed for ${fileId}`);
+    }
+    if (precondition.expectedModifiedTime && current.modifiedTime !== precondition.expectedModifiedTime) {
+      throw new Error(`Drive file conflict: modified time changed for ${fileId}`);
+    }
+    if (precondition.expectedChecksum) {
+      const checksum = createHash("sha256").update(await this.download(fileId)).digest("hex");
+      if (checksum !== precondition.expectedChecksum) throw new Error(`Drive file conflict: checksum changed for ${fileId}`);
+    }
+    return current;
+  }
+
+  /** Replace one ordinary file after verifying its captured Drive version/content. */
+  async updateFile(
+    fileId: string,
+    mimeType: string,
+    data: Buffer,
+    precondition: DriveFilePrecondition,
+  ): Promise<DriveFile> {
+    await this.assertFilePrecondition(fileId, precondition);
+    const boundary = `zenod-update-${fileId.slice(0, 12)}-boundary`;
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{}\r\n`
+        + `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
+      ),
+      data,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const url = new URL(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}`);
+    url.searchParams.set("uploadType", "multipart");
+    url.searchParams.set("supportsAllDrives", "true");
+    url.searchParams.set("fields", FILE_FIELDS);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${await this.token()}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+      body,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Drive update failed (${response.status}): ${detail.slice(0, 200)}`);
+    }
+    return await response.json() as DriveFile;
+  }
+
   /** Move a file into a folder (e.g. inbox → Archive). The file ID — and so its webViewLink — is unchanged. */
-  async moveFile(fileId: string, toFolderId: string): Promise<void> {
-    const response = await this.request(`/files/${encodeURIComponent(fileId)}`, { fields: "parents" });
-    const { parents } = (await response.json()) as { parents?: string[] };
-    await this.request(
+  async moveFile(
+    fileId: string,
+    toFolderId: string,
+    precondition: DriveFilePrecondition = {},
+    newName?: string,
+  ): Promise<DriveFile> {
+    const { parents } = await this.assertFilePrecondition(fileId, precondition);
+    const moved = await this.request(
       `/files/${encodeURIComponent(fileId)}`,
       {
         addParents: toFolderId,
         ...(parents?.length ? { removeParents: parents.join(",") } : {}),
-        fields: "id",
+        fields: FILE_FIELDS,
       },
-      { method: "PATCH", body: {} },
+      { method: "PATCH", body: newName ? { name: newName } : {} },
     );
+    return await moved.json() as DriveFile;
+  }
+
+  /** List the complete API-visible blob revision history (pagination included). */
+  async listRevisions(fileId: string): Promise<DriveRevision[]> {
+    const revisions: DriveRevision[] = [];
+    let pageToken: string | undefined;
+    do {
+      const response = await this.request(`/files/${encodeURIComponent(fileId)}/revisions`, {
+        fields: "nextPageToken,revisions(id,modifiedTime,md5Checksum,keepForever)",
+        pageSize: "1000",
+        ...(pageToken ? { pageToken } : {}),
+      });
+      const page = await response.json() as { revisions?: DriveRevision[]; nextPageToken?: string };
+      revisions.push(...(page.revisions ?? []));
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    return revisions;
+  }
+
+  /** Pin a non-head blob revision before downloading it for conflict preservation. */
+  async keepRevision(fileId: string, revisionId: string): Promise<void> {
+    await this.request(
+      `/files/${encodeURIComponent(fileId)}/revisions/${encodeURIComponent(revisionId)}`,
+      { fields: "id,keepForever" },
+      { method: "PATCH", body: { keepForever: true } },
+    );
+  }
+
+  async downloadRevision(fileId: string, revisionId: string): Promise<Buffer> {
+    const response = await this.request(
+      `/files/${encodeURIComponent(fileId)}/revisions/${encodeURIComponent(revisionId)}`,
+      { alt: "media" },
+    );
+    return Buffer.from(await response.arrayBuffer());
   }
 }
 

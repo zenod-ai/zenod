@@ -1,0 +1,519 @@
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { simpleGit } from "simple-git";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  createEngine,
+  DriveVaultRepository,
+  ensureSchemaV1,
+  SqliteStateStore,
+  VaultPublicationError,
+  type BrainLlm,
+  type DriveVaultClient,
+  type DriveVaultFile,
+  type DriveVaultPrecondition,
+  type DriveVaultRevisionRecord,
+} from "../src/index.js";
+
+interface Stored extends DriveVaultFile { data: Buffer }
+
+class FakeDrive implements DriveVaultClient {
+  readonly files = new Map<string, Stored>();
+  readonly revisions = new Map<string, Array<DriveVaultRevisionRecord & { data: Buffer }>>();
+  mutationCount = 0;
+  failAt: { call: number; phase: "before" | "after" } | null = null;
+  faultTriggered = false;
+  revoked = false;
+  raceWindow: "before_patch" | "after_patch" | null = null;
+  raceData = "# Concurrent external edit\n";
+  raceTargetName = "Home.md";
+  raceMutation: "update" | "move" = "update";
+  failMovePhase: "before" | "after" | null = null;
+  private nextId = 1;
+
+  constructor() {
+    this.files.set("my-drive", this.folder("my-drive", "My Drive", []));
+  }
+
+  private folder(id: string, name: string, parents: string[]): Stored {
+    return { id, name, parents, mimeType: "application/vnd.google-apps.folder", version: "1", modifiedTime: "2026-08-29T00:00:00.000Z", appProperties: {}, data: Buffer.alloc(0) };
+  }
+
+  private async mutate<T>(run: () => T): Promise<T> {
+    if (this.revoked) throw new Error("Drive API failed (401): authorization revoked");
+    this.mutationCount += 1;
+    const shouldFail = this.failAt?.call === this.mutationCount;
+    if (shouldFail && this.failAt?.phase === "before") {
+      this.faultTriggered = true;
+      this.failAt = null;
+      throw new Error("injected failure before remote mutation");
+    }
+    const result = run();
+    if (shouldFail && this.failAt?.phase === "after") {
+      this.faultTriggered = true;
+      this.failAt = null;
+      throw new Error("injected failure after remote mutation");
+    }
+    return result;
+  }
+
+  private clone(file: Stored): DriveVaultFile {
+    const { data: _, ...metadata } = file;
+    return structuredClone(metadata);
+  }
+
+  private getStored(id: string): Stored {
+    if (this.revoked) throw new Error("Drive API failed (401): authorization revoked");
+    const file = this.files.get(id);
+    if (!file) throw new Error(`Drive API failed (404): ${id} not found`);
+    return file;
+  }
+
+  private updateMetadata(file: Stored, contentChanged = false): void {
+    file.version = String(Number(file.version ?? "0") + 1);
+    file.modifiedTime = `2026-08-29T00:00:${String(this.mutationCount).padStart(2, "0")}.000Z`;
+    file.md5Checksum = createHash("md5").update(file.data).digest("hex");
+    if (contentChanged) {
+      const history = this.revisions.get(file.id) ?? [];
+      const revision = { id: `rev-${file.id}-${history.length + 1}`, modifiedTime: file.modifiedTime, md5Checksum: file.md5Checksum, keepForever: false, data: Buffer.from(file.data) };
+      history.push(revision);
+      this.revisions.set(file.id, history);
+      file.headRevisionId = revision.id;
+    }
+  }
+
+  async ensureVaultRootFolder(vaultBindingId: string, storedFolderId?: string | null): Promise<string> {
+    const marker = `v1:${vaultBindingId}`;
+    if (storedFolderId && this.files.get(storedFolderId)?.appProperties?.zenodVaultBinding === marker) return storedFolderId;
+    const existing = [...this.files.values()].find((file) => file.appProperties?.zenodVaultBinding === marker);
+    if (existing) return existing.id;
+    return this.mutate(() => {
+      const id = `file-${this.nextId++}`;
+      const file = this.folder(id, "Zenod Vault", ["my-drive"]);
+      file.appProperties = { zenodVaultBinding: marker };
+      this.files.set(id, file);
+      return id;
+    });
+  }
+
+  async ensureFolder(name: string, parentId: string): Promise<string> {
+    const existing = [...this.files.values()].find((file) => file.name === name && file.parents?.includes(parentId) && file.mimeType === "application/vnd.google-apps.folder");
+    if (existing) return existing.id;
+    return this.mutate(() => {
+      const id = `file-${this.nextId++}`;
+      this.files.set(id, this.folder(id, name, [parentId]));
+      return id;
+    });
+  }
+
+  async listFiles(options: { folderId?: string; nameContains?: string; pageSize?: number; foldersOnly?: boolean; allPages?: boolean } = {}): Promise<DriveVaultFile[]> {
+    if (this.revoked) throw new Error("Drive API failed (401): authorization revoked");
+    return [...this.files.values()]
+      .filter((file) => !options.folderId || file.parents?.includes(options.folderId))
+      .filter((file) => !options.nameContains || file.name.includes(options.nameContains))
+      .filter((file) => options.foldersOnly ? file.mimeType === "application/vnd.google-apps.folder" : file.mimeType !== "application/vnd.google-apps.folder")
+      .slice(0, options.pageSize ?? 50)
+      .map((file) => this.clone(file));
+  }
+
+  async getFile(fileId: string): Promise<DriveVaultFile> { return this.clone(this.getStored(fileId)); }
+  async download(fileId: string): Promise<Buffer> { return Buffer.from(this.getStored(fileId).data); }
+
+  async uploadFile(name: string, mimeType: string, data: Buffer, parentFolderId: string, options: { appProperties?: Record<string, string> } = {}): Promise<DriveVaultFile> {
+    return this.mutate(() => {
+      const id = `file-${this.nextId++}`;
+      const file: Stored = { id, name, mimeType, data: Buffer.from(data), parents: [parentFolderId], appProperties: options.appProperties ?? {}, webViewLink: `https://drive.google.test/file/${id}`, version: "0" };
+      this.updateMetadata(file, true);
+      this.files.set(id, file);
+      return this.clone(file);
+    });
+  }
+
+  private assertPrecondition(file: Stored, precondition: DriveVaultPrecondition): void {
+    if (precondition.expectedVersion && file.version !== precondition.expectedVersion) throw new Error(`Drive file conflict: version changed for ${file.id}`);
+    if (precondition.expectedModifiedTime && file.modifiedTime !== precondition.expectedModifiedTime) throw new Error(`Drive file conflict: modified time changed for ${file.id}`);
+    if (precondition.expectedChecksum && createHash("sha256").update(file.data).digest("hex") !== precondition.expectedChecksum) throw new Error(`Drive file conflict: checksum changed for ${file.id}`);
+  }
+
+  async updateFile(fileId: string, mimeType: string, data: Buffer, precondition: DriveVaultPrecondition): Promise<DriveVaultFile> {
+    const file = this.getStored(fileId);
+    this.assertPrecondition(file, precondition);
+    return this.mutate(() => {
+      const race = file.name === this.raceTargetName ? this.raceWindow : null;
+      if (race === "before_patch") this.externalEdit(fileId, this.raceData);
+      file.mimeType = mimeType;
+      file.data = Buffer.from(data);
+      this.updateMetadata(file, true);
+      const response = this.clone(file);
+      if (race === "after_patch") this.externalEdit(fileId, this.raceData);
+      if (race) this.raceWindow = null;
+      return response;
+    });
+  }
+
+  async moveFile(fileId: string, toFolderId: string, precondition: DriveVaultPrecondition = {}, newName?: string): Promise<DriveVaultFile> {
+    const file = this.getStored(fileId);
+    this.assertPrecondition(file, precondition);
+    const race = this.raceMutation === "move" && file.name === this.raceTargetName ? this.raceWindow : null;
+    if (this.failMovePhase === "before") {
+      this.failMovePhase = null;
+      throw new Error("injected failure before Drive move");
+    }
+    if (race === "before_patch") this.externalEdit(fileId, this.raceData);
+    const moved = await this.mutate(() => {
+      file.parents = [toFolderId];
+      if (newName) file.name = newName;
+      this.updateMetadata(file);
+      return this.clone(file);
+    });
+    if (race === "after_patch") this.externalEdit(fileId, this.raceData);
+    if (race) this.raceWindow = null;
+    if (this.failMovePhase === "after") {
+      this.failMovePhase = null;
+      throw new Error("injected failure after Drive move");
+    }
+    return moved;
+  }
+
+  async listRevisions(fileId: string): Promise<DriveVaultRevisionRecord[]> {
+    return (this.revisions.get(fileId) ?? []).map(({ data: _, ...revision }) => structuredClone(revision));
+  }
+
+  async keepRevision(fileId: string, revisionId: string): Promise<void> {
+    const revision = this.revisions.get(fileId)?.find((candidate) => candidate.id === revisionId);
+    if (!revision) throw new Error(`Drive revision ${revisionId} not found`);
+    await this.mutate(() => { revision.keepForever = true; });
+  }
+
+  async downloadRevision(fileId: string, revisionId: string): Promise<Buffer> {
+    const revision = this.revisions.get(fileId)?.find((candidate) => candidate.id === revisionId);
+    if (!revision || !revision.keepForever) throw new Error(`Drive revision ${revisionId} is not preserved`);
+    return Buffer.from(revision.data);
+  }
+
+  resetMutationCounter(): void { this.mutationCount = 0; this.faultTriggered = false; }
+
+  externalEdit(fileId: string, data: string): void {
+    const file = this.getStored(fileId);
+    file.data = Buffer.from(data);
+    this.mutationCount += 1;
+    this.updateMetadata(file, true);
+  }
+
+  corrupt(fileId: string): void { this.getStored(fileId).data = Buffer.from("corrupt"); }
+}
+
+const dirs: string[] = [];
+
+async function temp(name: string): Promise<string> {
+  const path = await mkdtemp(join(tmpdir(), `zenod-drive-${name}-`));
+  dirs.push(path, `${path}.state`);
+  return path;
+}
+
+async function open(client: FakeDrive, workdir: string, binding = "binding-one"): Promise<DriveVaultRepository> {
+  return DriveVaultRepository.open({
+    client,
+    workdir,
+    stateDir: `${workdir}.state`,
+    tenantId: `tenant-${binding}`,
+    vaultBindingId: binding,
+    now: () => new Date("2026-08-29T12:00:00.000Z"),
+  });
+}
+
+async function writeVaultFile(workdir: string, path: string, data: string | Buffer): Promise<void> {
+  await mkdir(dirname(join(workdir, path)), { recursive: true });
+  await writeFile(join(workdir, path), data);
+}
+
+afterEach(async () => {
+  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+});
+
+describe("DriveVaultRepository", () => {
+  it("runs the real engine store/search/get/ask loop and publishes Log plus meaning page", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("engine");
+    const repo = await open(drive, workdir);
+    await ensureSchemaV1(workdir);
+    const state = new SqliteStateStore(":memory:");
+    const llm: BrainLlm = {
+      async classify() {
+        return {
+          disposition: "integrate_page",
+          confidence: 0.95,
+          summary: "record insurance renewal",
+          tags: ["insurance"],
+          pages: [{ path: "Areas/Insurance.md", action: "create", title: "Insurance" }],
+        };
+      },
+      async composePage(input) {
+        return [
+          "---", "title: Insurance", "type: area", "tags: [insurance]",
+          `created: ${input.today}`, `updated: ${input.today}`,
+          "summary: Active insurance details.", "---", "", "# Insurance", "",
+          `- Policy renewal recorded (${input.citation}).`,
+          "- See [[Areas/Areas Index|Areas]].", "",
+        ].join("\n");
+      },
+      async describeImage() { return "image"; },
+      async answer() { return { text: "The policy renewal is recorded.", readPaths: ["Areas/Insurance.md"] }; },
+      async work() { return { text: "No work" }; },
+      async extractBacklog() { return { candidates: [] }; },
+    };
+    try {
+      const engine = createEngine({ repo, llm, state, readSyncTtlMs: 0 });
+      const stored = await engine.store({ content: "My insurance renews in March 2027.", source: "cli" });
+      expect(stored.revision).toMatchObject({
+        provider: "google_drive",
+        id: expect.any(String),
+        commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      });
+      expect(stored.revision?.id).not.toBe(stored.revision?.commitSha);
+      expect(stored.githubUrls).toBeUndefined();
+      expect([...drive.files.values()].some((file) => file.name === "Insurance.md")).toBe(true);
+      expect([...drive.files.values()].some((file) => file.name === "2026-08-29.md")).toBe(true);
+      expect((await engine.search("insurance"))[0]?.provider).toBe("google_drive");
+      expect((await engine.get("Areas/Insurance.md")).provider).toBe("google_drive");
+      expect((await engine.ask("What did I record?")).text).toContain("renewal");
+    } finally {
+      state.close();
+    }
+  });
+
+  it("publishes ordinary Markdown and attachments with independent Drive/Git provenance and cold-start reconstruction", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("publish");
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Log/2026-08-29.md", "# evidence\n");
+    await writeVaultFile(workdir, "Areas/Home.md", "# Home\n");
+    await writeVaultFile(workdir, "_attachments/source.bin", Buffer.from([0, 1, 2, 255]));
+
+    const revision = await repo.commitAndPublish("memory: capture evidence");
+
+    expect(revision.provider).toBe("google_drive");
+    expect(revision.id).not.toBe(revision.commitSha);
+    expect(revision.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(revision.githubUrls).toBeUndefined();
+    expect(revision.urls).toHaveLength(3);
+    expect(await simpleGit(workdir).getRemotes()).toEqual([]);
+
+    const rebuilt = await temp("rebuilt");
+    const recovered = await open(drive, rebuilt);
+    expect(await readFile(join(rebuilt, "Areas/Home.md"), "utf8")).toBe("# Home\n");
+    expect(await readFile(join(rebuilt, "_attachments/source.bin"))).toEqual(Buffer.from([0, 1, 2, 255]));
+    expect((await recovered.currentRevision()).commitSha).toBe(revision.commitSha);
+    expect(await simpleGit(rebuilt).getRemotes()).toEqual([]);
+  });
+
+  it("imports an external Markdown edit as an explicit Git commit", async () => {
+    const drive = new FakeDrive();
+    const first = await temp("external-first");
+    const repo = await open(drive, first);
+    await writeVaultFile(first, "Areas/Home.md", "# Home\n");
+    const published = await repo.commitAndPublish("seed home");
+    const fileId = [...drive.files.values()].find((file) => file.name === "Home.md")!.id;
+    drive.externalEdit(fileId, "# Home\n\nEdited in Drive.\n");
+
+    const second = await temp("external-second");
+    const imported = await open(drive, second);
+    const revision = await imported.currentRevision();
+    expect(revision.commitSha).not.toBe(published.commitSha);
+    expect((await simpleGit(second).log()).latest?.message).toBe("Import external Google Drive edits");
+    expect(await readFile(join(second, "Areas/Home.md"), "utf8")).toContain("Edited in Drive");
+  });
+
+  it("rejects local or external evidence rewrites before publication/import", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("immutability");
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Log/2026-08-29.md", "# Original evidence\n");
+    await repo.commitAndPublish("seed evidence");
+    await writeVaultFile(workdir, "Log/2026-08-29.md", "# Rewritten locally\n");
+    await expect(repo.commitAndPublish("rewrite")).rejects.toMatchObject({ failure: { code: "failed_before_write" } });
+    await repo.discardChanges();
+
+    const log = [...drive.files.values()].find((file) => file.name === "2026-08-29.md")!;
+    drive.externalEdit(log.id, "# Rewritten externally\n");
+    const restarted = await temp("immutability-restart");
+    await expect(open(drive, restarted)).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Log/2026-08-29.md"] } });
+  });
+
+  it("preserves stable Drive IDs across update and move, then deletes explicitly", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("mutations");
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Areas/Home.md", "# Home\n");
+    await repo.commitAndPublish("create");
+    const created = [...drive.files.values()].find((file) => file.name === "Home.md")!;
+
+    await writeVaultFile(workdir, "Areas/Home.md", "# Home updated\n");
+    await repo.commitAndPublish("update");
+    expect(drive.files.get(created.id)?.data.toString()).toBe("# Home updated\n");
+
+    await mkdir(join(workdir, "Notes"), { recursive: true });
+    await import("node:fs/promises").then(({ rename }) => rename(join(workdir, "Areas/Home.md"), join(workdir, "Notes/Home.md")));
+    await repo.commitAndPublish("move");
+    expect(drive.files.get(created.id)?.name).toBe("Home.md");
+    expect(repo.urlFor("Areas/Home.md")).toBeNull();
+    expect(repo.urlFor("Notes/Home.md")).toContain(created.id);
+
+    await rm(join(workdir, "Notes/Home.md"));
+    await repo.commitAndPublish("delete");
+    expect(drive.files.has(created.id)).toBe(true);
+    expect(repo.urlFor("Notes/Home.md")).toBeNull();
+    expect(drive.files.get(created.id)?.name).toContain("Home.md");
+    expect(drive.files.get(created.id)?.parents).toContain(
+      [...drive.files.values()].find((file) => file.name === "deleted")!.id,
+    );
+    const manifestFile = [...drive.files.values()].find((file) => file.name === "manifest.json")!;
+    const manifest = JSON.parse(manifestFile.data.toString("utf8")) as { tombstones: Record<string, Array<{ fileId: string; archivedName: string }>> };
+    expect(manifest.tombstones["Notes/Home.md"]).toEqual([
+      expect.objectContaining({ fileId: created.id, archivedName: expect.stringMatching(/-Home\.md$/) }),
+    ]);
+
+    const restartedDir = await temp("mutations-restart");
+    const restarted = await open(drive, restartedDir);
+    expect(await readFile(join(restartedDir, "Notes/Home.md"), "utf8").catch(() => null)).toBeNull();
+    expect(restarted.urlFor("Notes/Home.md")).toBeNull();
+  });
+
+  it.each(["before", "after"] as const)("replays a delete idempotently after a failure %s the archive move", async (phase) => {
+    const drive = new FakeDrive();
+    const workdir = await temp(`delete-fault-${phase}`);
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Notes/Delete.md", "delete me\n");
+    await repo.commitAndPublish("seed delete");
+    await rm(join(workdir, "Notes/Delete.md"));
+    drive.failMovePhase = phase;
+    await expect(repo.commitAndPublish("delete with fault")).rejects.toMatchObject({ failure: { code: "partial_recovering" } });
+
+    const restartedDir = await temp(`delete-fault-restart-${phase}`);
+    const restarted = await open(drive, restartedDir);
+    expect(restarted.urlFor("Notes/Delete.md")).toBeNull();
+    const manifestFile = [...drive.files.values()].find((file) => file.name === "manifest.json")!;
+    const manifest = JSON.parse(manifestFile.data.toString("utf8")) as { tombstones: Record<string, unknown[]> };
+    expect(manifest.tombstones["Notes/Delete.md"]).toHaveLength(1);
+    expect([...drive.files.values()].filter((file) => file.name.endsWith("-Delete.md"))).toHaveLength(1);
+  });
+
+  it.each(["before_patch", "after_patch"] as const)("preserves an external edit racing delete %s", async (raceWindow) => {
+    const drive = new FakeDrive();
+    const workdir = await temp(`delete-race-${raceWindow}`);
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Notes/Home.md", "# Home\n");
+    await repo.commitAndPublish("seed delete race");
+    await rm(join(workdir, "Notes/Home.md"));
+    drive.raceMutation = "move";
+    drive.raceWindow = raceWindow;
+    drive.raceData = `# Delete race ${raceWindow}\n`;
+
+    await expect(repo.commitAndPublish("racing delete")).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Notes/Home.md"] } });
+    const conflictFiles = await readdir(join(`${workdir}.state`, "conflicts"), { recursive: true });
+    const materialized = conflictFiles.find((path) => String(path).endsWith("Home.md"))!;
+    expect(await readFile(join(`${workdir}.state`, "conflicts", materialized), "utf8")).toBe(`# Delete race ${raceWindow}\n`);
+    const restartedDir = await temp(`delete-race-restart-${raceWindow}`);
+    await expect(open(drive, restartedDir)).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Notes/Home.md"] } });
+  });
+
+  it("fails closed on concurrent edits and revoked authorization without deleting Drive files", async () => {
+    const drive = new FakeDrive();
+    const workdir = await temp("conflict");
+    const repo = await open(drive, workdir);
+    await writeVaultFile(workdir, "Areas/Home.md", "# Home\n");
+    await repo.commitAndPublish("seed home");
+    await writeVaultFile(workdir, "Areas/Home.md", "# Local edit\n");
+    const file = [...drive.files.values()].find((candidate) => candidate.name === "Home.md")!;
+    drive.externalEdit(file.id, "# External edit\n");
+    await expect(repo.commitAndPublish("local edit")).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Areas/Home.md"] } });
+
+    const count = drive.files.size;
+    drive.revoked = true;
+    await expect(repo.pull()).rejects.toThrow(/authorization revoked/);
+    expect(drive.files.size).toBe(count);
+  });
+
+  it.each(["before_patch", "after_patch"] as const)(
+    "preserves and materializes an external blob revision racing %s without finalizing",
+    async (raceWindow) => {
+      const drive = new FakeDrive();
+      const workdir = await temp(`race-${raceWindow}`);
+      const repo = await open(drive, workdir);
+      await writeVaultFile(workdir, "Areas/Home.md", "# Home\n");
+      const base = await repo.commitAndPublish("seed home");
+      await writeVaultFile(workdir, "Areas/Home.md", "# Zenod update\n");
+      drive.raceWindow = raceWindow;
+      drive.raceData = `# External ${raceWindow}\n`;
+
+      await expect(repo.commitAndPublish("racing update")).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Areas/Home.md"] } });
+      expect((await repo.currentRevision()).id).toBe(base.id);
+      const conflictRoot = join(`${workdir}.state`, "conflicts");
+      const conflictFiles = await readdir(conflictRoot, { recursive: true });
+      expect(conflictFiles.some((path) => String(path).endsWith("Home.md"))).toBe(true);
+      const materialized = conflictFiles.find((path) => String(path).endsWith("Home.md"))!;
+      expect(await readFile(join(conflictRoot, materialized), "utf8")).toBe(`# External ${raceWindow}\n`);
+
+      const externalRevision = [...drive.revisions.values()].flat().find((revision) => revision.data.toString() === `# External ${raceWindow}\n`)!;
+      const home = [...drive.files.values()].find((file) => file.name === "Home.md")!;
+      expect(externalRevision.id === home.headRevisionId || externalRevision.keepForever).toBe(true);
+      const restarted = await temp(`race-restart-${raceWindow}`);
+      await expect(open(drive, restarted)).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Areas/Home.md"] } });
+    },
+  );
+
+  it("recovers idempotently after failures before and after every publication mutation", async () => {
+    for (const phase of ["before", "after"] as const) {
+      let reachedEnd = false;
+      for (let failureCall = 1; failureCall <= 20; failureCall += 1) {
+        const drive = new FakeDrive();
+        const workdir = await temp(`fault-${phase}-${failureCall}`);
+        const repo = await open(drive, workdir);
+        await writeVaultFile(workdir, "Log/2026-08-29.md", "# evidence\n");
+        await writeVaultFile(workdir, "Areas/Home.md", "# Home\n");
+        drive.resetMutationCounter();
+        drive.failAt = { call: failureCall, phase };
+        await repo.commitAndPublish("fault matrix").catch((error) => {
+          expect(error).toBeInstanceOf(VaultPublicationError);
+        });
+        if (!drive.faultTriggered) {
+          reachedEnd = true;
+          break;
+        }
+        drive.failAt = null;
+        const recoveredDir = await temp(`fault-recover-${phase}-${failureCall}`);
+        const recovered = await open(drive, recoveredDir);
+        if (phase === "before" && failureCall === 1) {
+          expect(await readFile(join(recoveredDir, "Log/2026-08-29.md"), "utf8").catch(() => null)).toBeNull();
+          expect((await recovered.currentRevision()).commitSha).toMatch(/^[0-9a-f]{40}$/);
+          continue;
+        }
+        expect(await readFile(join(recoveredDir, "Log/2026-08-29.md"), "utf8")).toBe("# evidence\n");
+        expect(await readFile(join(recoveredDir, "Areas/Home.md"), "utf8")).toBe("# Home\n");
+        expect((await recovered.currentRevision()).commitSha).toMatch(/^[0-9a-f]{40}$/);
+        expect([...drive.files.values()].filter((file) => file.name === "2026-08-29.md")).toHaveLength(1);
+        expect([...drive.files.values()].filter((file) => file.name === "Home.md")).toHaveLength(1);
+      }
+      expect(reachedEnd, `fault matrix exceeded 20 remote mutations for ${phase}`).toBe(true);
+    }
+  }, 120_000);
+
+  it("isolates two vault bindings and detects bundle corruption", async () => {
+    const drive = new FakeDrive();
+    const oneDir = await temp("one");
+    const twoDir = await temp("two");
+    const one = await open(drive, oneDir, "binding-one");
+    const two = await open(drive, twoDir, "binding-two");
+    await writeVaultFile(oneDir, "Notes/One.md", "one\n");
+    await writeVaultFile(twoDir, "Notes/Two.md", "two\n");
+    await one.commitAndPublish("one");
+    await two.commitAndPublish("two");
+    expect(one.urlFor("Notes/Two.md")).toBeNull();
+    expect(two.urlFor("Notes/One.md")).toBeNull();
+    const bundle = [...drive.files.values()].find((file) => file.name === "repository.bundle" && file.parents?.includes([...drive.files.values()].find((folder) => folder.name === ".git" && folder.parents?.includes([...drive.files.values()].find((root) => root.appProperties?.zenodVaultBinding === "v1:binding-one")!.id))!.id))!;
+    drive.corrupt(bundle.id);
+    await expect(one.currentRevision()).rejects.toThrow(/bundle checksum mismatch/);
+  });
+});

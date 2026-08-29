@@ -198,6 +198,53 @@ describe("drive client", () => {
     expect(files.map((file) => file.name)).toContain("Launch metrics screenshot.png");
     vi.unstubAllGlobals();
   });
+
+  it("supports the bounded vault root/update/move/revision seam with optimistic checks", async () => {
+    const calls: Array<{ url: string; method: string; body: RequestInit["body"] }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      calls.push({ url, method, body: init?.body });
+      if (url.includes("/drive/v3/files?") && method === "GET") return Response.json({ files: [] });
+      if (url.includes("/drive/v3/files?") && method === "POST") {
+        return Response.json({ id: "vault-root", name: "Zenod Vault", mimeType: "application/vnd.google-apps.folder" });
+      }
+      if (url.includes("/drive/v3/files/file-1/revisions?") && method === "GET") {
+        return Response.json({ revisions: [{ id: "rev-1", md5Checksum: "abc", keepForever: false }] });
+      }
+      if (url.includes("/drive/v3/files/file-1/revisions/rev-1") && method === "PATCH") {
+        return Response.json({ id: "rev-1", keepForever: true });
+      }
+      if (url.includes("/drive/v3/files/file-1/revisions/rev-1") && url.includes("alt=media")) {
+        return new Response("preserved revision");
+      }
+      if (url.includes("/upload/drive/v3/files/file-1") && method === "PATCH") {
+        return Response.json({ ...FILES[0], version: "2", md5Checksum: "next" });
+      }
+      if (url.includes("/drive/v3/files/file-1") && url.includes("alt=media")) return new Response("old");
+      if (url.includes("/drive/v3/files/file-1") && method === "PATCH") {
+        return Response.json({ ...FILES[0], name: "moved.md", parents: ["folder-2"], version: "2" });
+      }
+      if (url.includes("/drive/v3/files/file-1")) return Response.json({ ...FILES[0], version: "1" });
+      return new Response("not found", { status: 404 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "token" },
+    );
+
+    expect(await client.ensureVaultRootFolder("binding-1")).toBe("vault-root");
+    await expect(client.updateFile("file-1", "text/markdown", Buffer.from("new"), { expectedVersion: "stale" })).rejects.toThrow(/version changed/);
+    expect((await client.updateFile("file-1", "text/markdown", Buffer.from("new"), { expectedVersion: "1" })).version).toBe("2");
+    expect((await client.moveFile("file-1", "folder-2", { expectedVersion: "1" }, "moved.md")).parents).toEqual(["folder-2"]);
+    expect(await client.listRevisions("file-1")).toEqual([{ id: "rev-1", md5Checksum: "abc", keepForever: false }]);
+    await client.keepRevision("file-1", "rev-1");
+    expect((await client.downloadRevision("file-1", "rev-1")).toString()).toBe("preserved revision");
+
+    expect(calls.some((call) => call.method === "POST" && String(call.body).includes("zenodVaultBinding"))).toBe(true);
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(3);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("transcription envelope", () => {

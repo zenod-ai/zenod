@@ -80,6 +80,14 @@ export {
   type DriveTransactionState,
   type DriveVaultTransaction,
 } from "./vault/driveTransaction.js";
+export {
+  DriveVaultRepository,
+  type DriveVaultClient,
+  type DriveVaultFile,
+  type DriveVaultPrecondition,
+  type DriveVaultRevisionRecord,
+  type DriveVaultRepositoryOptions,
+} from "./vault/driveRepository.js";
 export { searchVault } from "./ops/search.js";
 export { getNote, NoteNotFoundError } from "./ops/get.js";
 export { checkEvidenceImmutability, type FileChange } from "./vault/immutability.js";
