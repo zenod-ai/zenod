@@ -327,6 +327,7 @@ export class DriveVaultRepository implements VaultRepository {
         }
         if (this.gitFolderId && this.controlFolderId && this.transactionsFolderId && this.deletedFolderId) {
           bootstrap = await this.findBootstrapJournal();
+          if (bootstrap) await this.validateBootstrapReplayTree(bootstrap);
         }
         if (!bootstrap) {
           for (const [folderId, label] of [
@@ -417,6 +418,27 @@ export class DriveVaultRepository implements VaultRepository {
     const children = await this.listChildren(folderId);
     if (children.length) {
       throw new Error(`Drive vault authority is incomplete; ${label} contains prior-authority remnants`);
+    }
+  }
+
+  private async validateBootstrapReplayTree(bootstrap: { file: DriveVaultFile; journal: DriveJournal }): Promise<void> {
+    const transactionChildren = await this.listChildren(this.transactionsFolderId);
+    if (transactionChildren.length !== 1 || transactionChildren[0]?.id !== bootstrap.file.id) {
+      throw new Error("Drive bootstrap replay transaction folder contains unauthorized remnants");
+    }
+    await this.validateEmptyBootstrapFolder(this.deletedFolderId, `${CONTROL_FOLDER}/deleted`);
+
+    const gitChildren = await this.listChildren(this.gitFolderId);
+    if (!gitChildren.length) return;
+    const bundleMutation = bootstrap.journal.mutations.find((mutation) => mutation.path === `${GIT_FOLDER}/${BUNDLE_NAME}`);
+    const bundle = gitChildren.length === 1 ? gitChildren[0] : null;
+    if (!bundleMutation || !bundle || bundle.mimeType === FOLDER_MIME || bundle.name !== BUNDLE_NAME
+      || bundle.parents?.length !== 1 || bundle.parents[0] !== this.gitFolderId
+      || bundle.appProperties?.[OPERATION_PROPERTY] !== bundleMutation.operationId
+      || bundle.appProperties?.[BINDING_PROPERTY] !== this.options.vaultBindingId
+      || bundle.appProperties?.[ROLE_PROPERTY] !== BUNDLE_ROLE
+      || sha256(await this.options.client.download(bundle.id)) !== bundleMutation.checksum) {
+      throw new Error("Drive bootstrap replay Git folder contains unauthorized remnants");
     }
   }
 

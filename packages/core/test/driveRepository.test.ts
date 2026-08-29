@@ -465,6 +465,37 @@ describe("DriveVaultRepository", () => {
     expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(bundle ? 1 : 0);
   });
 
+  it.each([
+    { oldBundle: true, archive: false, transactionFolder: false, label: "old bundle" },
+    { oldBundle: false, archive: true, transactionFolder: false, label: "old archive" },
+    { oldBundle: false, archive: false, transactionFolder: true, label: "transaction subfolder" },
+    { oldBundle: true, archive: true, transactionFolder: true, label: "combined extras" },
+  ])("rejects $label beside a valid bootstrap journal before replay writes", async ({ oldBundle, archive, transactionFolder }) => {
+    const drive = new FakeDrive();
+    drive.failAt = { call: 8, phase: "before" };
+    await expect(open(drive, await temp(`bootstrap-replay-extra-seed-${Number(oldBundle)}-${Number(archive)}-${Number(transactionFolder)}`))).rejects.toThrow();
+    expect(drive.faultTriggered).toBe(true);
+    drive.failAt = null;
+    const git = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "git-folder")!;
+    const transactions = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "transactions-folder")!;
+    const deleted = [...drive.files.values()].find((file) => file.appProperties?.zenodVaultRole === "deleted-folder")!;
+    if (oldBundle) {
+      await drive.uploadFile("repository.bundle", "application/octet-stream", Buffer.from("old bundle"), git.id, {
+        appProperties: { zenodOperationId: "old-bundle", zenodVaultBinding: "binding-one", zenodVaultRole: "bundle" },
+      });
+    }
+    if (archive) await drive.uploadFile("old-archive.md", "text/markdown", Buffer.from("old archive\n"), deleted.id);
+    if (transactionFolder) await drive.ensureFolder("foreign", transactions.id);
+    const before = drive.mutationCount;
+    const beforeIds = [...drive.files.keys()].sort();
+    await expect(open(drive, await temp(`bootstrap-replay-extra-restart-${Number(oldBundle)}-${Number(archive)}-${Number(transactionFolder)}`)))
+      .rejects.toThrow(/unauthorized remnants|prior-authority remnants/);
+    expect(drive.mutationCount).toBe(before);
+    expect([...drive.files.keys()].sort()).toEqual(beforeIds);
+    expect([...drive.files.values()].filter((file) => file.name === "manifest.json")).toHaveLength(0);
+    expect([...drive.files.values()].filter((file) => file.name === "repository.bundle")).toHaveLength(oldBundle ? 1 : 0);
+  });
+
   it("discovers authority only through the selected root and marker-scoped children", async () => {
     const drive = new FakeDrive();
     await open(drive, await temp("bounded-discovery-seed"));
