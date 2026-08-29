@@ -96,6 +96,14 @@ export class VaultRepo implements VaultRepository {
     return (await this.git.revparse(["HEAD"])).trim();
   }
 
+  async currentRevision(): Promise<VaultRevision> {
+    const [commitSha, committedAt] = await Promise.all([
+      this.headSha(),
+      this.git.show(["-s", "--format=%cI", "HEAD"]).then((value) => value.trim()),
+    ]);
+    return githubVaultRevision({ commitSha, committedAt, githubUrls: [] });
+  }
+
   async hasHead(): Promise<boolean> {
     return this.git.revparse(["--verify", "HEAD"]).then(() => true).catch(() => false);
   }

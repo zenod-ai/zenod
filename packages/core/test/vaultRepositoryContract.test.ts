@@ -15,6 +15,7 @@ import {
 interface LegacyGithubRepoShape {
   readonly path: string;
   pull(): Promise<void>;
+  headSha(): Promise<string>;
   trackedFiles(): Promise<string[]>;
   contentAtHead(path: string): Promise<string | null>;
   pendingChanges(): ReturnType<VaultRepository["pendingChanges"]>;
@@ -35,6 +36,13 @@ class GithubCompatibilityWrapper implements VaultRepository {
 
   get path(): string { return this.legacy.path; }
   pull(): Promise<void> { return this.legacy.pull(); }
+  async currentRevision(): Promise<VaultRevision> {
+    return githubVaultRevision({
+      commitSha: await this.legacy.headSha(),
+      committedAt: this.now(),
+      githubUrls: [],
+    });
+  }
   trackedFiles(): Promise<string[]> { return this.legacy.trackedFiles(); }
   contentAtHead(path: string): Promise<string | null> { return this.legacy.contentAtHead(path); }
   pendingChanges(): ReturnType<VaultRepository["pendingChanges"]> { return this.legacy.pendingChanges(); }
@@ -58,6 +66,7 @@ class DriveRepositoryStub implements VaultRepository {
   constructor(private readonly revision: VaultRevision) {}
 
   async pull() {}
+  async currentRevision() { return this.revision; }
   async trackedFiles() { return ["Log/2026-08-29.md"]; }
   async contentAtHead(path: string) { return path.endsWith(".md") ? "baseline" : null; }
   async pendingChanges() { return []; }
@@ -81,6 +90,7 @@ describe("VaultRepository contract", () => {
     const legacy: LegacyGithubRepoShape = {
       path: "/tmp/github",
       async pull() {},
+      async headSha() { return "a".repeat(40); },
       async trackedFiles() { return ["Log/2026-08-29.md"]; },
       async contentAtHead() { return "baseline"; },
       async pendingChanges() { return []; },
@@ -99,6 +109,7 @@ describe("VaultRepository contract", () => {
     const [githubRevision, publishedDriveRevision] = await Promise.all(
       repositories.map((repo) => repo.commitAndPublish("store memory")),
     );
+    const currentRevisions = await Promise.all(repositories.map((repo) => repo.currentRevision()));
 
     expect(githubRevision).toMatchObject({
       provider: "github",
@@ -109,6 +120,15 @@ describe("VaultRepository contract", () => {
     expect(publishedDriveRevision).toEqual(driveRevision);
     expect(publishedDriveRevision).not.toHaveProperty("commitSha");
     expect(publishedDriveRevision).not.toHaveProperty("githubUrls");
+    expect(currentRevisions[0]).toEqual({
+      provider: "github",
+      id: "a".repeat(40),
+      committedAt: "2026-08-29T10:00:00.000Z",
+      urls: [],
+      commitSha: "a".repeat(40),
+      githubUrls: [],
+    });
+    expect(currentRevisions[1]).toEqual(publishedDriveRevision);
   });
 
   it("keeps publication failure outcomes distinct and machine-readable", () => {

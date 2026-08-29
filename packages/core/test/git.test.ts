@@ -49,6 +49,7 @@ describe("VaultRepo", () => {
       remoteUrl: bare,
       repo: "zenod-ai/fixture",
     });
+    const initialRevision = await githubRepository.currentRevision();
     await writeFile(join(githubRepository.path, "README.md"), "# Updated vault\n");
 
     const revision = await githubRepository.commitAndPublish("update vault");
@@ -62,6 +63,22 @@ describe("VaultRepo", () => {
       urls: [`https://github.com/zenod-ai/fixture/blob/${revision.commitSha}/README.md`],
     });
     expect(Number.isNaN(Date.parse(revision.committedAt))).toBe(false);
+    expect(initialRevision).toMatchObject({
+      provider: "github",
+      id: initialRevision.commitSha,
+      commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
+      githubUrls: [],
+      urls: [],
+    });
+    expect(initialRevision.commitSha).not.toBe(revision.commitSha);
+    expect(Number.isNaN(Date.parse(initialRevision.committedAt))).toBe(false);
+    expect(await githubRepository.currentRevision()).toMatchObject({
+      provider: "github",
+      id: revision.commitSha,
+      commitSha: revision.commitSha,
+      githubUrls: [],
+      urls: [],
+    });
     expect(githubRepository.urlFor("README.md", "intro")).toBe(
       "https://github.com/zenod-ai/fixture/blob/main/README.md#intro",
     );
