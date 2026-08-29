@@ -147,6 +147,23 @@ describe("drive client", () => {
     vi.unstubAllGlobals();
   });
 
+  it("encodes exact app-property filters in Drive list queries", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith("https://oauth2.googleapis.com/token")) return Response.json({ access_token: "token", expires_in: 3600 });
+      return Response.json({ files: [] });
+    }));
+    const client = new DriveClient(SA_JSON);
+    await client.listFiles({ folderId: "root-1", appProperties: { zenodVaultBinding: "binding-1", zenodVaultRole: "manifest" }, allPages: true });
+    const query = new URL(calls.find((url) => url.includes("/drive/v3/files?"))!).searchParams.get("q")!;
+    expect(query).toContain("'root-1' in parents");
+    expect(query).toContain("appProperties has { key='zenodVaultBinding' and value='binding-1' }");
+    expect(query).toContain("appProperties has { key='zenodVaultRole' and value='manifest' }");
+    vi.unstubAllGlobals();
+  });
+
   it("testDrive reports the service account email", async () => {
     vi.stubGlobal("fetch", stubFetch());
     const result = await testDrive(SA_JSON);
@@ -196,6 +213,135 @@ describe("drive client", () => {
 
     expect(tokenAttempts).toBe(2);
     expect(files.map((file) => file.name)).toContain("Launch metrics screenshot.png");
+    vi.unstubAllGlobals();
+  });
+
+  it("supports the bounded vault root/update/move/revision seam with optimistic checks", async () => {
+    const calls: Array<{ url: string; method: string; body: RequestInit["body"] }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      calls.push({ url, method, body: init?.body });
+      if (url.includes("/drive/v3/files?") && method === "GET") return Response.json({ files: [] });
+      if (url.includes("/drive/v3/files?") && method === "POST") {
+        return Response.json({ id: "vault-root", name: "Zenod Vault", mimeType: "application/vnd.google-apps.folder" });
+      }
+      if (url.includes("/drive/v3/files/file-1/revisions?") && method === "GET") {
+        return Response.json({ revisions: [{ id: "rev-1", md5Checksum: "abc", keepForever: false }] });
+      }
+      if (url.includes("/drive/v3/files/file-1/revisions/rev-1") && method === "PATCH") {
+        return Response.json({ id: "rev-1", keepForever: true });
+      }
+      if (url.includes("/drive/v3/files/file-1/revisions/rev-1") && url.includes("alt=media")) {
+        return new Response("preserved revision");
+      }
+      if (url.includes("/upload/drive/v3/files/file-1") && method === "PATCH") {
+        return Response.json({ ...FILES[0], version: "2", md5Checksum: "next" });
+      }
+      if (url.includes("/drive/v3/files/file-1") && url.includes("alt=media")) return new Response("old");
+      if (url.includes("/drive/v3/files/file-1") && method === "PATCH") {
+        return Response.json({ ...FILES[0], name: "moved.md", parents: ["folder-2"], version: "2" });
+      }
+      if (url.includes("/drive/v3/files/file-1")) return Response.json({ ...FILES[0], version: "1" });
+      return new Response("not found", { status: 404 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "token" },
+    );
+
+    expect(await client.ensureVaultRootFolder("binding-1")).toEqual({ folderId: "vault-root", created: true });
+    await expect(client.updateFile("file-1", "text/markdown", Buffer.from("new"), { expectedVersion: "stale" })).rejects.toThrow(/version changed/);
+    expect((await client.updateFile("file-1", "text/markdown", Buffer.from("new"), { expectedVersion: "1" })).version).toBe("2");
+    expect((await client.moveFile("file-1", "folder-2", { expectedVersion: "1" }, "moved.md")).parents).toEqual(["folder-2"]);
+    expect(await client.listRevisions("file-1")).toEqual([{ id: "rev-1", md5Checksum: "abc", keepForever: false }]);
+    await client.keepRevision("file-1", "rev-1");
+    expect((await client.downloadRevision("file-1", "rev-1")).toString()).toBe("preserved revision");
+
+    expect(calls.some((call) => call.method === "POST" && String(call.body).includes("zenodVaultBinding"))).toBe(true);
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(3);
+    vi.unstubAllGlobals();
+  });
+
+  it("recovers renamed marked vault roots and never replaces a missing stored authority", async () => {
+    let mode: "renamed" | "missing" | "duplicate" = "renamed";
+    let creates = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST") {
+        creates += 1;
+        return Response.json({ id: "unexpected" });
+      }
+      if (url.includes("/drive/v3/files/stored-root?")) {
+        if (mode === "renamed") return Response.json({
+          id: "stored-root", name: "Renamed by the user", mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodVaultBinding: "v1:binding-1" }, capabilities: { canAddChildren: true },
+        });
+        return new Response("not found", { status: 404 });
+      }
+      if (url.includes("/drive/v3/files?")) {
+        if (mode === "duplicate") return Response.json({ files: ["a", "b"].map((id) => ({
+          id, name: `renamed-${id}`, mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodVaultBinding: "v1:binding-1" }, capabilities: { canAddChildren: true },
+        })) });
+        return Response.json({ files: [] });
+      }
+      return new Response("not found", { status: 404 });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "token" },
+    );
+    expect(await client.ensureVaultRootFolder("binding-1", "stored-root")).toEqual({ folderId: "stored-root", created: false });
+    mode = "missing";
+    await expect(client.ensureVaultRootFolder("binding-1", "stored-root")).rejects.toThrow(/authority stored-root is missing/);
+    mode = "duplicate";
+    await expect(client.ensureVaultRootFolder("binding-1")).rejects.toThrow(/authority is ambiguous/);
+    expect(creates).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
+  it("reclaims root and role-marked folder creations after a lost POST acknowledgement", async () => {
+    let rootCreated = false;
+    let folderCreated = false;
+    let rootPosts = 0;
+    let folderPosts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST") {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        if (body.name === "Zenod Vault") {
+          rootPosts += 1;
+          rootCreated = true;
+          throw new TypeError("connection lost after root create");
+        }
+        folderPosts += 1;
+        folderCreated = true;
+        throw new TypeError("connection lost after folder create");
+      }
+      if (url.includes("zenodVaultBinding") && url.includes("v1%3Abinding-1")) {
+        return Response.json({ files: rootCreated ? [{
+          id: "root-1", name: "Zenod Vault", mimeType: "application/vnd.google-apps.folder",
+          appProperties: { zenodVaultBinding: "v1:binding-1" }, capabilities: { canAddChildren: true },
+        }] : [] });
+      }
+      return Response.json({ files: folderCreated ? [{
+        id: "git-1", name: ".git", mimeType: "application/vnd.google-apps.folder", parents: ["root-1"],
+        appProperties: { zenodVaultBinding: "binding-1", zenodVaultRole: "git-folder" },
+      }] : [] });
+    }));
+    const client = new DriveClient(
+      { kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" },
+      { accessToken: "token" },
+    );
+    expect(await client.ensureVaultRootFolder("binding-1")).toEqual({ folderId: "root-1", created: true });
+    expect(await client.ensureFolder(".git", "root-1", {
+      appProperties: { zenodVaultBinding: "binding-1", zenodVaultRole: "git-folder" },
+    })).toBe("git-1");
+    expect(rootPosts).toBe(1);
+    expect(folderPosts).toBe(1);
     vi.unstubAllGlobals();
   });
 });
