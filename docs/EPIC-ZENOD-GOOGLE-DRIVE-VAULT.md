@@ -6,9 +6,9 @@ Updated: 2026-08-29
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md`
 Integration branch: `main`
-Planning branch: `codex/google-drive-vault-epic`
+Planning branch: `codex/google-drive-vault-epic` merged by PR #1155
 Planning base: `bcd64987f061a9e622cb88796f1d52781a006109` (`origin/main`)
-Last reconciled commit: `bcd64987f061a9e622cb88796f1d52781a006109` plus this planning worktree
+Last reconciled commit: `a4c4826f80ed0acda93d304f21cb50129d7fb2dd` on `main`
 Active spine steward: Google Drive Vault delivery manager (`Jordi + current bound Codex task`)
 Planner: Jordi + Codex
 Epic worker: unassigned
@@ -104,13 +104,13 @@ The required uninterrupted Hosted journey is:
 
 ## Current State
 
-Phase: Target accepted; control-plane documentation validated and complete issue backlog materialized
+Phase: Control-plane target and complete backlog merged; first contract ticket ready
 Last verified: 2026-08-29 CEST
 Integration target: `main`
 Fresh base commit: `bcd64987f061a9e622cb88796f1d52781a006109` from `origin/main`
-Planning branch: `codex/google-drive-vault-epic`
+Control-plane merge: [PR #1155](https://github.com/zenod-ai/zenod/pull/1155), merged as `a4c4826f80ed0acda93d304f21cb50129d7fb2dd`
 Current production relationship: additive sibling epic. The active Phylax/configuration gate remains authoritative for production and is not modified here.
-Next action: merge the control-plane document to `main`, then dispatch [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) from that merged main to freeze shared contracts before implementation.
+Next action: dispatch [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) from exact `main` base `a4c4826f80ed0acda93d304f21cb50129d7fb2dd` to freeze shared contracts before implementation.
 Blockers: none for source planning or local implementation. Real Google OAuth credentials/consent verification, deployment, billing and public signup remain later human gates.
 
 ## Bootstrap Map
@@ -250,7 +250,7 @@ Memory operations are provider-neutral. GitHub issue, PR and code-repository ope
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) | Planner / architect | unassigned | Freeze provider-neutral identity, vault and compatibility contract | ready after control-plane merge | - | `codex/gdv-1-contract` | planning merge on `main` | Executable interfaces, migrations, failure algebra and compatibility fixtures are accepted before implementation. | This spine and source audit. | 2026-08-29 | Dispatch first from merged `main`. |
+| [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) | Planner / architect | unassigned | Freeze provider-neutral identity, vault and compatibility contract | ready | - | `codex/gdv-1-contract` | `a4c4826` on `main` | Executable interfaces, migrations, failure algebra and compatibility fixtures are accepted before implementation. | Spine [PR #1155](https://github.com/zenod-ai/zenod/pull/1155), full CI green. | 2026-08-29 | Dispatch first from exact merged `main`. |
 | [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) | Ticket worker | unassigned | Generalize customer identity and account ownership | waiting | #1145 | `codex/gdv-2-provider-neutral-identity` | fresh `main` after #1145 | Existing GitHub accounts preserve IDs while sessions/account/billing/tenant/Channels resolve through internal identity. | Current GitHub-coupling inventory. | 2026-08-29 | Dispatch after #1145. |
 | [GDV-3 #1147](https://github.com/zenod-ai/zenod/issues/1147) | Ticket worker | unassigned | Add Google OIDC sign-in and secure account linking | waiting | #1145, #1146 | `codex/gdv-3-google-signin` | fresh `main` after #1146 | Google login uses verified OIDC subject, requests no Drive scope, and safely creates/links sessions. | Current `IdentityProvider` seam. | 2026-08-29 | Dispatch after identity integration. |
 | [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) | Ticket worker | unassigned | Extract repository-shaped provider-neutral vault interface | waiting | #1145 | `codex/gdv-4-vault-repository` | fresh `main` after #1145 | Existing GitHub behavior runs through `VaultRepository` with no acceptance regression. | `VaultRepo` and engine audit. | 2026-08-29 | May run beside #1146 after #1145. |
@@ -513,6 +513,7 @@ control-plane spine merge
 | Date | Scope | Commit | Environment | Method | Result | Evidence |
 |---|---|---|---|---|---|---|
 | 2026-08-29 | Planning/source audit | `bcd6498` | clean worktree from `origin/main` | Inspected identity, account, billing, runtime, Drive, core repository, receipt, MCP, peer and UI seams | target/backlog ready; no implementation proof | This spine |
+| 2026-08-29 | Control-plane integration | `a4c4826` | GitHub `main` | Strict spine validation, diff/secret checks and complete repository CI | pass; target and issues #1145–#1154 integrated as delivery control plane | [PR #1155](https://github.com/zenod-ai/zenod/pull/1155) |
 
 ## Handoff Journal
 
@@ -522,16 +523,15 @@ Context: Jordi required Google sign-in and complete Drive-only vault operation. 
 
 Action: fetched `origin/main` and created clean planning worktree `/Users/jordi/Documents/GitHub/zenod-google-drive-vault` on `codex/google-drive-vault-epic` from exact base `bcd64987f061a9e622cb88796f1d52781a006109`.
 
-Next: merge this validated control-plane document, then dispatch [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) from the merged main.
+Next: dispatch [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) from exact merged-main base `a4c4826f80ed0acda93d304f21cb50129d7fb2dd`.
 
 Risks: existing production/signup work remains separately gated. Drive multi-file publication is not atomic; GDV-1 and GDV-6 must make recovery/failure truth explicit before the UI can offer Google Drive as an authoritative vault.
 
 ## Planner Queue
 
-1. Commit and open the validated control-plane PR against `main`.
-2. Review the exact PR diff and required checks.
-3. Merge the control-plane document to `main`.
-4. Dispatch [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) from the merged main base.
+1. Dispatch [GDV-1 #1145](https://github.com/zenod-ai/zenod/issues/1145) from exact base `a4c4826f80ed0acda93d304f21cb50129d7fb2dd`.
+2. Review and integrate its provider-neutral contracts and compatibility fixtures.
+3. Dispatch [GDV-2 #1146](https://github.com/zenod-ai/zenod/issues/1146) and [GDV-4 #1148](https://github.com/zenod-ai/zenod/issues/1148) from their resulting fresh `main` as the first parallel implementation batch.
 
 ## Open Questions
 
@@ -543,7 +543,7 @@ Risks: existing production/signup work remains separately gated. Drive multi-fil
 
 | Target Spine | Proposed Change | Evidence | Suggested Owner | Status |
 |---|---|---|---|---|
-| `docs/EPIC-0-FOUNDATION-SPINE.md` | Add this child as the Google-access/storage expansion track while preserving `docs/EPIC-P-PHYLAX-SPRINT.md` as the active production gate. | This spine and linked GDV issues. | Epic 0 Foundation planner | proposed after control-plane merge |
+| `docs/EPIC-0-FOUNDATION-SPINE.md` | Add this child as the Google-access/storage expansion track while preserving `docs/EPIC-P-PHYLAX-SPRINT.md` as the active production gate. | Merged spine [PR #1155](https://github.com/zenod-ai/zenod/pull/1155) and issues #1145–#1154. | Epic 0 Foundation planner | ready for root-steward reconciliation |
 | `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` | Record that GitHub-only onboarding is superseded only after GDV-10 and a separately approved rollout; do not change current production truth beforehand. | Future GDV-10 evidence. | Zenod Alpha steward | waiting |
 
 ## Resume Contract
