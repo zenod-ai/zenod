@@ -248,6 +248,25 @@ describe("GDV-7 Drive tenant runtime", () => {
       const betaRuntime = unit.runtimes.get("tenant-beta")!;
       expect(betaRuntime.credentialVault.materialize("google_drive_vault_oauth_refresh_token", encryptedToken)).toBeNull();
 
+      unit.customerAccounts.upsert("checkout-alpha-late-null", {
+        account_id: "account-alpha",
+        user_id: alpha.userId,
+        tier: "monthly",
+        subscription_status: "active",
+        tenant_id: "tenant-alpha",
+        tenant_slug: "tenant-alpha",
+        claimed_at: "2100-08-29T20:01:00.000Z",
+        checkout_completed_at: new Date().toISOString(),
+      });
+      expect(unit.customerAccounts.get("checkout-alpha-late-null")).toMatchObject({
+        session_id: "checkout-alpha-late-null",
+        vault_provider: null,
+      });
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.binding).toMatchObject({
+        provider: "google_drive",
+        binding_id: alphaAccount.vault_binding_id,
+      });
+
       const ready = await unit.app.request("/api/vault/provider", { headers: { cookie: alpha.cookie } });
       await expect(ready.json()).resolves.toMatchObject({
         provider: "google_drive",
@@ -417,6 +436,68 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_binding_id: failedBinding.vault_binding_id,
         vault_binding_status: "ready",
       });
+    } finally {
+      await unit.close();
+    }
+  });
+
+  it("rejects a Drive callback when the active account changes after consent starts", async () => {
+    const dataDir = await tempDir();
+    const tenants = createMemoryTenantStore([{ token: "swap-token", tenant: { id: "tenant-swap" } }]);
+    const unit = createZenodUnit({
+      dataDir,
+      tenantStore: tenants,
+      env: {
+        NODE_ENV: "test",
+        ACCOUNT_STATE_SECRET: "gdv7-account-swap-secret",
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        GOOGLE_OIDC_CLIENT_ID: "identity-client",
+        GOOGLE_OIDC_CLIENT_SECRET: "identity-secret",
+        CUSTOMER_APP_URL: "https://cloud.zenod.test",
+      },
+      customer: {
+        identityProviders: {
+          google: {
+            authorizeUrl: (state) => `https://accounts.google.test/auth?state=${encodeURIComponent(state)}`,
+            exchangeAndGetUser: async (code) => ({
+              id: code, login: `${code}@example.test`, email: `${code}@example.test`, email_verified: true,
+            }),
+          },
+        },
+      },
+    });
+    const providerCalls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      providerCalls.push(String(input));
+      throw new Error("provider must not be called after an account swap");
+    }));
+    try {
+      const session = await googleSession(unit, "google-swap");
+      unit.customerAccounts.upsert("checkout-a", {
+        account_id: "account-a", user_id: session.userId, tenant_id: "tenant-swap",
+        tenant_slug: "tenant-swap", subscription_status: "active",
+        claimed_at: "2026-08-29T20:00:00.000Z", checkout_completed_at: "2026-08-29T20:00:00.000Z",
+      });
+      unit.customerTokenVault.put("account-a", "swap-token");
+      const runtime = unit.runtimes.forTenantStorage("tenant-swap", unit.storage.forTenant({ id: "tenant-swap" }));
+      runtime.settings.set("google_oauth_client_id", "drive-client");
+      runtime.settings.set("google_oauth_client_secret", "drive-secret");
+      const start = await driveConsentStart(unit, session.cookie);
+      expect(start.response.status).toBe(200);
+
+      unit.customerAccounts.upsert("checkout-b", {
+        account_id: "account-b", user_id: session.userId, tenant_id: "tenant-swap",
+        tenant_slug: "tenant-swap", subscription_status: "active",
+        claimed_at: "2099-08-29T20:00:00.000Z", checkout_completed_at: "2099-08-29T20:00:00.000Z",
+      });
+      const callback = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=swap&state=${encodeURIComponent(start.state)}`,
+        { headers: { cookie: `${session.cookie}; ${start.flowCookie}` } },
+      );
+      expect(callback.status).toBe(400);
+      expect(providerCalls).toHaveLength(0);
+      expect(unit.customerAccounts.get("checkout-a")).toMatchObject({ vault_provider: null, vault_binding_id: null });
+      expect(unit.customerAccounts.get("checkout-b")).toMatchObject({ vault_provider: null, vault_binding_id: null });
     } finally {
       await unit.close();
     }

@@ -755,8 +755,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const state = signState({
         mode: "connect_drive_vault",
         uid: session.user_id,
+        aid: account.account_id,
+        sid: account.session_id,
         tid: account.tenant_id,
         bid: bindingId,
+        epoch: account.vault_authorization_epoch ?? 0,
         flow,
         nonce,
       }, customerStateSecret(env));
@@ -764,8 +767,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       setGoogleDriveVaultFlowCookie(c, signState({
         mode: "connect_drive_vault",
         uid: session.user_id,
+        aid: account.account_id,
+        sid: account.session_id,
         tid: account.tenant_id,
         bid: bindingId,
+        epoch: account.vault_authorization_epoch ?? 0,
         flow,
         nonce,
         verifier,
@@ -786,24 +792,39 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const state = verifyState(c.req.query("state") ?? "", customerStateSecret(env));
       const proof = verifyState(getCookie(c, GOOGLE_DRIVE_VAULT_FLOW_COOKIE) ?? "", customerStateSecret(env));
       clearGoogleDriveVaultFlowCookie(c, env);
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
+      const account = state?.sid ? accounts.get(state.sid) : null;
+      const activeAccount = accounts.resolveActiveTenantForUser(session.user_id);
       if (
         !state ||
         state.mode !== "connect_drive_vault" ||
         !state.flow ||
         !state.nonce ||
+        !state.aid ||
+        !state.sid ||
         !state.tid ||
         !state.bid ||
+        state.epoch === undefined ||
         state.uid !== session.user_id ||
         !account?.tenant_id ||
+        account.session_id !== state.sid ||
+        account.account_id !== state.aid ||
+        account.user_id !== state.uid ||
         account.tenant_id !== state.tid ||
+        (account.vault_authorization_epoch ?? 0) !== state.epoch ||
+        !activeAccount ||
+        activeAccount.account_id !== state.aid ||
+        activeAccount.user_id !== state.uid ||
+        activeAccount.tenant_id !== state.tid ||
         (account.vault_provider !== null && account.vault_provider !== "google_drive") ||
         (account.vault_binding_id !== null && account.vault_binding_id !== state.bid) ||
         !proof ||
         proof.mode !== "connect_drive_vault" ||
         proof.uid !== state.uid ||
+        proof.aid !== state.aid ||
+        proof.sid !== state.sid ||
         proof.tid !== state.tid ||
         proof.bid !== state.bid ||
+        proof.epoch !== state.epoch ||
         proof.flow !== state.flow ||
         proof.nonce !== state.nonce ||
         !proof.verifier ||
@@ -947,7 +968,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
       if (!customerMutationOriginAllowed(c, env, product)) return c.json({ error: "invalid request origin" }, 403);
-      const account = accounts.resolveForUser(session.user_id);
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || account.vault_provider !== "google_drive" || !runtime) {
         return c.json({ error: "Google Drive vault is not selected" }, 409);
@@ -971,7 +992,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
       const principal = principalForSession(session);
-      const account = accounts.resolveForUser(session.user_id);
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       const binding = account ? customerVaultBinding(account) : null;
       return c.json(projectVaultCapabilities({

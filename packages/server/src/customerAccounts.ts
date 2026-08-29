@@ -179,6 +179,9 @@ export class CustomerAccountStore {
       throw new Error("account_id and user_id are required");
     }
     const patches = (field: keyof CustomerAccount): boolean => Object.prototype.hasOwnProperty.call(patch, field);
+    if (existing?.tenant_id != null && patches("tenant_id") && patch.tenant_id !== existing.tenant_id) {
+      throw new Error("tenant_id cannot change or become null after tenant assignment");
+    }
     if (existing?.vault_provider != null && patches("vault_provider") && patch.vault_provider !== existing.vault_provider) {
       throw new Error("authoritative vault_provider cannot change without an explicit migration");
     }
@@ -228,9 +231,28 @@ export class CustomerAccountStore {
   }
 
   resolveForTenantId(tenantId: string): CustomerAccount | null {
+    return this.resolveVaultAuthorityForTenantId(tenantId)?.account ?? null;
+  }
+
+  /** Resolve a tenant-wide vault authority without letting a newer session row hide an older binding. */
+  resolveVaultAuthorityForTenantId(
+    tenantId: string,
+  ): { account: CustomerAccount; binding: VaultProviderBindingRecord | null } | null {
     if (!tenantId) return null;
-    const matches = Object.values(this.load()).filter((account) => account.tenant_id === tenantId);
-    return matches.sort((a, b) => b.claimed_at.localeCompare(a.claimed_at))[0] ?? null;
+    const matches = Object.values(this.load())
+      .filter((account) => account.tenant_id === tenantId)
+      .sort((a, b) => b.claimed_at.localeCompare(a.claimed_at));
+    if (matches.length === 0) return null;
+    const bound = matches.flatMap((account) => {
+      const binding = customerVaultBinding(account);
+      return binding ? [{ account, binding }] : [];
+    });
+    if (bound.length === 0) return { account: matches[0]!, binding: null };
+    const expected = JSON.stringify(bound[0]!.binding);
+    if (bound.some(({ binding }) => JSON.stringify(binding) !== expected)) {
+      throw new Error("tenant has inconsistent authoritative vault bindings");
+    }
+    return bound[0]!;
   }
 
   resolveForStripeCustomer(customerId: string): CustomerAccount | null {
@@ -251,7 +273,14 @@ export class CustomerAccountStore {
     const active = [...latestByTenant.values()].filter(
       (account) => account.subscription_status === "active" || account.subscription_status === "past_due",
     );
-    return active.length === 1 ? active[0]! : null;
+    if (active.length !== 1) return null;
+    const selected = active[0]!;
+    const authority = this.resolveVaultAuthorityForTenantId(selected.tenant_id!);
+    if (
+      authority &&
+      (authority.account.account_id !== selected.account_id || authority.account.user_id !== selected.user_id)
+    ) return null;
+    return authority?.account ?? selected;
   }
 
   list(): CustomerAccount[] {

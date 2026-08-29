@@ -49,10 +49,13 @@ export interface StatePayload {
   verifier?: string;
   rh?: string;
   uid?: string;
+  aid?: string;
+  sid?: string;
   gid?: number;
   login?: string;
   tid?: string;
   bid?: string;
+  epoch?: number;
   exp?: number;
 }
 

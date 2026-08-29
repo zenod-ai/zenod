@@ -38,7 +38,6 @@ import type {
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
-import { customerVaultBinding } from "./customerAccounts.js";
 import type { VaultBindingStatus, VaultProviderBindingRecord } from "./googleDriveVaultContract.js";
 import type {
   ManagedAiAdmissionJob,
@@ -908,11 +907,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     };
   };
   vaultProviderBindingForTenant = (tenantId) => {
-    const account = customer.accounts.resolveForTenantId(tenantId);
-    return account ? customerVaultBinding(account) : null;
+    return customer.accounts.resolveVaultAuthorityForTenantId(tenantId)?.binding ?? null;
   };
   onVaultBindingUpdateForTenant = (tenantId, input) => {
-    const account = customer.accounts.resolveForTenantId(tenantId);
+    const account = customer.accounts.resolveVaultAuthorityForTenantId(tenantId)?.account ?? null;
     if (!account || account.vault_provider !== "google_drive") return;
     if (
       input.expectedAuthorizationEpoch !== undefined &&
