@@ -4,6 +4,24 @@
     "evidenceUrl": "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
     "pagesTouched": ["Projects/Zenod.md"],
     "pageUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+    "revision": {
+      "provider": "github",
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "committedAt": "2026-08-29T10:00:00.000Z",
+      "urls": [
+        "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
+        "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"
+      ],
+      "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "githubUrls": [
+        "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
+        "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"
+      ]
+    },
+    "urls": [
+      "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
+      "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"
+    ],
     "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "githubUrls": [
       "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
@@ -16,6 +34,8 @@
       "path": "Projects/Zenod.md",
       "snippet": "Google Drive vault",
       "score": 0.95,
+      "url": "https://github.com/zenod-ai/vault/blob/main/Projects/Zenod.md",
+      "provider": "github",
       "githubUrl": "https://github.com/zenod-ai/vault/blob/main/Projects/Zenod.md"
     }
   ],
@@ -23,6 +43,8 @@
     "path": "Projects/Zenod.md",
     "frontmatter": { "type": "project" },
     "body": "# Zenod",
+    "url": "https://github.com/zenod-ai/vault/blob/main/Projects/Zenod.md",
+    "provider": "github",
     "githubUrl": "https://github.com/zenod-ai/vault/blob/main/Projects/Zenod.md"
   },
   "ask": {
@@ -30,6 +52,8 @@
     "sources": [
       {
         "path": "Projects/Zenod.md",
+        "url": "https://github.com/zenod-ai/vault/blob/main/Projects/Zenod.md",
+        "provider": "github",
         "githubUrl": "https://github.com/zenod-ai/vault/blob/main/Projects/Zenod.md"
       }
     ]
@@ -39,6 +63,15 @@
     "evidenceUrl": "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
     "pagesTouched": ["Projects/Zenod.md"],
     "pageUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+    "revision": {
+      "provider": "github",
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "committedAt": "2026-08-29T10:00:00.000Z",
+      "urls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001", "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+      "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "githubUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001", "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"]
+    },
+    "urls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001", "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
     "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "githubUrls": [
       "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
@@ -54,6 +87,15 @@
       "evidenceUrl": "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",
       "pagesTouched": ["Projects/Zenod.md"],
       "pageUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+      "revision": {
+        "provider": "github",
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "committedAt": "2026-08-29T10:00:00.000Z",
+        "urls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001", "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
+        "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "githubUrls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001", "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"]
+      },
+      "urls": ["https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001", "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Projects/Zenod.md"],
       "commitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "githubUrls": [
         "https://github.com/zenod-ai/vault/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/Log/2026-08-29.md#%5Ee-gdv001",

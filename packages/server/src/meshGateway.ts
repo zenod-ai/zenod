@@ -222,7 +222,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "zenod",
     title: "Store a memory",
     description:
-      "File a memory into the user's vault through Zenod's librarian pipeline: it records immutable evidence, classifies where the meaning belongs, files it onto the right page with citations or an uncertainty marker, validates, and commits to GitHub. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. ASYNC: returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved receipt, evidence ref, pages touched, commit SHA, and filing disposition.",
+      "File a memory into the user's vault through Zenod's librarian pipeline: it records immutable evidence, classifies where the meaning belongs, files it onto the right page with citations or an uncertainty marker, validates, and durably saves through the configured vault provider. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. ASYNC: returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved receipt, evidence ref, pages touched, provider revision, and filing disposition.",
     inputSchema: STORE_MEMORY_SHAPE,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
@@ -234,7 +234,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "zenod",
     title: "Check filing status",
     description:
-      "Poll an async job started by store_memory, by its jobId. Returns the current status: 'queued'/'running' (poll again shortly), 'done' (with the result — evidence ref, pages touched, commit SHA, and any question for the user), 'error' (with the message), or 'interrupted' (re-issue the original store_memory call).",
+      "Poll an async job started by store_memory, by its jobId. Returns the current status: 'queued'/'running' (poll again shortly), 'done' (with the result — evidence ref, pages touched, provider revision, and any filing disposition), 'error' (with the message), or 'interrupted' (re-issue the original store_memory call).",
     inputSchema: GET_TASK_RESULT_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },

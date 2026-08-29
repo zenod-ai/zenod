@@ -3,6 +3,7 @@ import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchiv
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
 import type { Settings } from "./settings.js";
+import { assertDurableStoreReceipt, assertDurableWorkReceipt } from "./durableReceipt.js";
 import {
   TASK_JOB_LEASE_MS,
   type MediaIngestReceipt,
@@ -154,6 +155,7 @@ export class TaskJobQueue {
           ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
           ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
+        assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else if (job.kind === "media_ingest") {
         const rejection = this.admit(job.kind, job.input);
@@ -190,6 +192,7 @@ export class TaskJobQueue {
           ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
           ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
+        assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       } else {
         const engine = await this.getEngine();
@@ -197,6 +200,7 @@ export class TaskJobQueue {
           objective: job.input.objective ?? "",
           ...(job.input.plan ? { plan: job.input.plan } : {}),
         });
+        assertDurableWorkReceipt(result);
         completed = this.store.updateClaimed(job.id, { status: "done", result });
       }
       if (completed) console.log(`[task-job] ${job.id} done: ${job.kind}`);
@@ -447,6 +451,7 @@ async function processMediaIngest(
   const stored = engine.captureEvidence
     ? await engine.captureEvidence(storeInput)
     : await engine.store(storeInput);
+  assertDurableStoreReceipt(stored);
   const enrichment = engine.captureEvidence && engine.enrichEvidence
     ? enqueueEnrichment(
         {
@@ -471,7 +476,7 @@ async function processMediaIngest(
         ? "Audio archived without another transcription attempt; a Zenod entry pointing to the audio was filed."
       : enrichment
         ? "Media artifact and extraction captured in Zenod; semantic filing continues in the background."
-        : "Media artifact archived, extracted, digested, filed, and committed.",
+        : "Media artifact archived, extracted, digested, filed, and durably saved.",
     mediaType: input.mediaType ?? extraction.kind,
     source: receiptSource(input),
     rawArtifact: { handle: archived.handle.uri, archiveUrl: archived.handle.url ?? archived.handle.uri, sha256: archived.handle.sha256 },
@@ -489,8 +494,10 @@ async function processMediaIngest(
       ...(stored.evidenceUrl ? { evidenceUrl: stored.evidenceUrl } : {}),
       pagesTouched: stored.pagesTouched,
       ...(stored.pageUrls ? { pageUrls: stored.pageUrls } : {}),
-      commitSha: stored.commitSha,
-      githubUrls: stored.githubUrls,
+      revision: stored.revision ?? null,
+      urls: stored.urls ?? [],
+      ...(stored.commitSha !== undefined ? { commitSha: stored.commitSha } : {}),
+      ...(stored.githubUrls !== undefined ? { githubUrls: stored.githubUrls } : {}),
       ...(stored.filing ? { filing: stored.filing } : {}),
       ...(enrichment ? { enrichmentJobId: enrichment.id } : {}),
     },
@@ -682,7 +689,7 @@ function mediaIngestUnavailableReceipt(input: TaskJobInput, rawArtifact: Artifac
       ocrHandle: input.mediaType === "screenshot" || input.mediaType === "image" ? null : undefined,
       provider: null,
     },
-    digest: { evidenceRef: null, pagesTouched: [], commitSha: null, githubUrls: [] },
+    digest: { evidenceRef: null, pagesTouched: [], revision: null, urls: [] },
     nextAdapterIssues: ["https://github.com/zenod-ai/zenod/issues/660", "https://github.com/zenod-ai/zenod/issues/661", "https://github.com/zenod-ai/zenod/issues/662"],
   };
 }

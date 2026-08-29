@@ -4,6 +4,7 @@
  */
 
 import type { ChatToolEvent } from "./llm/types.js";
+import type { VaultCitation, VaultRevision } from "./vault/repository.js";
 export { EVIDENCE_CONTEXT_REF_PATTERN } from "./evidenceContext.js";
 
 export type Surface = "cli" | "mcp" | "whatsapp" | "telegram" | "web" | "drive" | "selftest";
@@ -52,9 +53,14 @@ export interface StoreResult {
   pagesTouched: string[];
   /** Canonical URLs for meaning pages, kept separate from the evidence-entry URL. */
   pageUrls?: string[];
-  commitSha: string;
+  /** Provider-neutral durable publication receipt. Absent only for queued/non-vault placeholders. */
+  revision?: VaultRevision;
+  /** Canonical provider URLs associated with this save. */
+  urls?: string[];
+  /** Optional real Git commit; for Drive this refers to the durable Drive bundle. */
+  commitSha?: string;
   /** Compatibility collection retained for existing consumers. */
-  githubUrls: string[];
+  githubUrls?: string[];
   /** Durable filing disposition for this store operation. */
   filing: "filed" | "uncertain" | "inbox" | "pending";
   /**
@@ -252,17 +258,17 @@ export interface ExternalTaskingTools {
   approveMerge(input: { repo?: string; issueNumbers: number[] }): Promise<string>;
 }
 
-export interface SourceRef {
-  /** Vault-relative path, optionally with a block anchor. */
-  path: string;
-  githubUrl: string;
-}
+export type SourceRef = VaultCitation;
 
 export interface Hit {
   path: string;
   snippet: string;
   score: number;
-  githubUrl: string;
+  url: string;
+  provider: VaultCitation["provider"];
+  revisionId?: string;
+  /** GitHub compatibility field. Never populated for a non-GitHub vault. */
+  githubUrl?: string;
 }
 
 export interface MemoryEntry {
@@ -276,7 +282,11 @@ export interface MemoryEntry {
   contentType?: MemoryContentType;
   capturedAt: string;
   sourceId?: string;
-  githubUrl: string;
+  url: string;
+  provider: VaultCitation["provider"];
+  revisionId?: string;
+  /** GitHub compatibility field. Never populated for a non-GitHub vault. */
+  githubUrl?: string;
 }
 
 export interface MemoryEntryQuery {
@@ -294,7 +304,11 @@ export interface Note {
   path: string;
   frontmatter: Record<string, unknown>;
   body: string;
-  githubUrl: string;
+  url: string;
+  provider: VaultCitation["provider"];
+  revisionId?: string;
+  /** GitHub compatibility field. Never populated for a non-GitHub vault. */
+  githubUrl?: string;
 }
 
 export interface LintError {
@@ -315,8 +329,8 @@ export interface WorkInput {
   objective: string;
   /**
    * The approved plan from a previous propose run. Absent → propose mode
-   * (read-only survey, returns a plan, commits nothing). Present → execute
-   * mode (write loop, validated, one commit).
+   * (read-only survey, returns a plan, saves nothing). Present → execute
+   * mode (write loop, validated, one durable revision).
    */
   plan?: string;
 }
@@ -326,6 +340,9 @@ export interface WorkResult {
   /** Proposal: the plan to relay for approval. Executed: summary. Failed: why. */
   text: string;
   committed: boolean;
+  revision?: VaultRevision;
+  urls?: string[];
+  /** Optional real Git commit; independent of a Drive revision id. */
   commitSha?: string;
   changedPaths?: string[];
   githubUrls?: string[];
@@ -339,6 +356,16 @@ export type BacklogDifficulty = "low" | "medium" | "high" | "unknown";
 
 export interface BacklogSourceRef {
   /** Vault-relative path, optionally with a block anchor. */
+  path: string;
+  url: string;
+  provider: VaultCitation["provider"];
+  revisionId?: string;
+  /** GitHub compatibility field. Never populated for a non-GitHub vault. */
+  githubUrl?: string;
+}
+
+/** Legacy GitHub-only input retained for callers migrating to BacklogSourceRef. */
+export interface GitHubBacklogSourceRef {
   path: string;
   githubUrl: string;
 }
@@ -368,14 +395,28 @@ export interface BacklogDigestInput {
   /** Search scope, e.g. "mine recent Zenod voice notes for launch backlog". */
   query?: string;
   /** Optional source refs to attach to rawText candidates. */
-  sourceRefs?: BacklogSourceRef[];
+  sourceRefs?: Array<BacklogSourceRef | GitHubBacklogSourceRef>;
   /** When true, write proposed backlog records to the vault backlog surface. */
   write?: boolean;
 }
 
 export interface BacklogDigestResult {
   candidates: BacklogCandidate[];
-  written: Array<{ path: string; githubUrl: string; title: string }>;
+  /** Durable publication receipt when backlog records were written. */
+  revision?: VaultRevision;
+  /** Canonical provider URLs for written backlog records. */
+  urls?: string[];
+  /** GitHub compatibility fields, populated only by Git-backed publication. */
+  commitSha?: string;
+  githubUrls?: string[];
+  written: Array<{
+    path: string;
+    url: string;
+    provider: VaultCitation["provider"];
+    revisionId?: string;
+    githubUrl?: string;
+    title: string;
+  }>;
   skipped: Array<{ title?: string; reason: string }>;
   source_refs: BacklogSourceRef[];
 }

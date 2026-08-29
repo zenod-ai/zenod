@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import type { Note } from "../types.js";
 import { parseNote } from "../vault/frontmatter.js";
-import { githubUrl, type VaultLocation } from "../vault/github.js";
+import { githubSourceRef, type VaultLocation } from "../vault/github.js";
 import { normalizeMarkdownNotePath } from "../vault/files.js";
 
 export class NoteNotFoundError extends Error {
@@ -35,9 +35,8 @@ export async function getNote(vaultPath: string, relPath: string, location: Vaul
 
   const { frontmatter, body } = parseNote(raw);
   return {
-    path: actual,
+    ...githubSourceRef(location, actual),
     frontmatter: frontmatter ?? {},
     body,
-    githubUrl: githubUrl(location, actual),
   };
 }

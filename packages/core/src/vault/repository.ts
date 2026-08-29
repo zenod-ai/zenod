@@ -6,15 +6,19 @@ export type VaultProvider = "github" | "google_drive";
 /**
  * Provider-neutral durable publication identity.
  *
- * GitHub adapters populate the legacy fields during the compatibility window.
- * Drive adapters must not fabricate them.
+ * GitHub adapters populate both compatibility fields during the migration window.
+ * Drive adapters may include commitSha only when it names a real commit in the
+ * durable Drive Git bundle; revision.id remains the independent Drive authority.
+ * Drive adapters never populate githubUrls.
  */
 export interface VaultRevision {
   provider: VaultProvider;
   id: string;
   committedAt: string;
   urls: string[];
+  /** Optional real Git commit stored by the provider; never derive it from id. */
   commitSha?: string;
+  /** GitHub web compatibility URLs; never populated by Drive authority. */
   githubUrls?: string[];
 }
 

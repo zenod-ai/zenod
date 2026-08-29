@@ -219,13 +219,13 @@ function SourceLinks({ sources }: { sources: ChatSource[] }) {
       {sources.map((source) => (
         <a
           key={source.path}
-          href={source.githubUrl || undefined}
+          href={source.url || undefined}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
         >
           {source.path}
-          {source.githubUrl && <ExternalLinkIcon className="size-3" />}
+          {source.url && <ExternalLinkIcon className="size-3" />}
         </a>
       ))}
     </div>
@@ -233,11 +233,16 @@ function SourceLinks({ sources }: { sources: ChatSource[] }) {
 }
 
 function StoredReceipt({ stored }: { stored: ChatStored }) {
+  const revisionLabel = stored.revision
+    ? `${stored.revision.provider === "google_drive" ? "Drive" : "GitHub"} ${stored.revision.id}${stored.revision.provider === "google_drive" && stored.commitSha ? ` · git ${stored.commitSha.slice(0, 7)}` : ""}`
+    : stored.commitSha
+      ? stored.commitSha.slice(0, 7)
+      : "saved"
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge variant="secondary">memory stored</Badge>
       <span className="text-xs text-muted-foreground">
-        {stored.pagesTouched.join(", ")} · {stored.commitSha.slice(0, 7)}
+        {stored.pagesTouched.join(", ")} · {revisionLabel}
       </span>
     </div>
   )

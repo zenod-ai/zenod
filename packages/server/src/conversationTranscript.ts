@@ -29,6 +29,7 @@ export interface ConversationTranscriptReceipt {
   driveLinks: string[];
   driveFileIds: string[];
   vaultEvidenceRefs: string[];
+  vaultRevisions: string[];
   vaultCommits: string[];
   vaultLinks: string[];
 }

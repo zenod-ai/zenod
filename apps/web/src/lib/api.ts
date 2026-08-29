@@ -318,7 +318,10 @@ export type IngestJob = {
   error: string | null
   evidenceRef: string | null
   pages: string[]
+  revision: VaultRevision | null
+  urls: string[]
   commitSha: string | null
+  githubUrls: string[]
   backlog: BacklogDigestResult | null
   archived: boolean
   cached: boolean
@@ -336,9 +339,9 @@ export type BacklogDigestResult = {
     summary: string
     open_questions: string[]
   }>
-  written: Array<{ path: string; githubUrl: string; title: string }>
+  written: Array<{ path: string; url: string; provider: VaultProvider; revisionId?: string; githubUrl?: string; title: string }>
   skipped: Array<{ title?: string; reason: string }>
-  source_refs: Array<{ path: string; githubUrl: string }>
+  source_refs: Array<{ path: string; url: string; provider: VaultProvider; revisionId?: string; githubUrl?: string }>
 }
 
 export type IngestJobsResponse = {
@@ -564,14 +567,30 @@ export type LintResult = {
 
 export type ChatSource = {
   path: string
-  githubUrl: string
+  url: string
+  provider: VaultProvider
+  revisionId?: string
+  githubUrl?: string
+}
+
+export type VaultProvider = "github" | "google_drive"
+
+export type VaultRevision = {
+  provider: VaultProvider
+  id: string
+  committedAt: string
+  urls: string[]
+  commitSha?: string
+  githubUrls?: string[]
 }
 
 export type ChatStored = {
   evidenceRef: string
   pagesTouched: string[]
-  commitSha: string
-  githubUrls: string[]
+  revision?: VaultRevision
+  urls?: string[]
+  commitSha?: string
+  githubUrls?: string[]
   question?: string
 }
 

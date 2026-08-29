@@ -286,7 +286,7 @@ describe("MCP endpoint", () => {
       mediaType: string;
       rawArtifact: { handle: string | null; archiveUrl: string | null };
       extraction: { handle: string | null; ocrHandle?: string | null };
-      digest: { evidenceRef: string | null; pagesTouched: string[]; commitSha: string | null; githubUrls: string[] };
+      digest: { evidenceRef: string | null; pagesTouched: string[]; revision: null; urls: string[] };
       nextAdapterIssues: string[];
     };
     expect(receipt.status).toBe("error");
@@ -295,7 +295,7 @@ describe("MCP endpoint", () => {
     expect(receipt.rawArtifact.handle).toMatch(/^file:\/\//);
     expect(receipt.rawArtifact.archiveUrl).toBe(receipt.rawArtifact.handle);
     expect(receipt.extraction).toEqual({ handle: null, ocrHandle: null, provider: null });
-    expect(receipt.digest).toEqual({ evidenceRef: null, pagesTouched: [], commitSha: null, githubUrls: [] });
+    expect(receipt.digest).toEqual({ evidenceRef: null, pagesTouched: [], revision: null, urls: [] });
     expect(receipt.nextAdapterIssues).toEqual(
       expect.arrayContaining([
         "https://github.com/zenod-ai/zenod/issues/660",
@@ -334,6 +334,8 @@ describe("MCP endpoint", () => {
       evidenceUrl: `https://github.com/o/r/blob/${"0".repeat(40)}/Log/2026-06-11.md#L3`,
       pagesTouched: ["Areas/Insurance.md"],
       pageUrls: [`https://github.com/o/r/blob/${"0".repeat(40)}/Areas/Insurance.md`],
+      revision: null,
+      urls: [],
       commitSha: "0".repeat(40),
       githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
       filing: "filed",
@@ -405,8 +407,10 @@ describe("MCP endpoint", () => {
         "Drive audio: voice-2026-06-24T14-06-08-990Z-34611111111.ogg\n" +
         "Drive link: https://drive.google.com/file/d/drive-file-voice-mcp-1/view?usp=drivesdk\n" +
         "Vault evidence: Log/2026-06-24.md#^e-test\n" +
+        "Vault save revision: drive-revision-voice-mcp-1\n" +
         "Vault commit: 1234567890abcdef\n" +
         "Vault link(s):\n" +
+        "- https://drive.google.com/file/d/vault-file-voice-mcp-1/view\n" +
         "- https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-06-24.md",
       status: "sent",
       sentMessageId: "sent_voice_mcp_1_receipt",
@@ -430,11 +434,13 @@ describe("MCP endpoint", () => {
     const entries = (result.structuredContent as { entries: Array<Record<string, unknown>> }).entries;
     expect(entries).toHaveLength(3);
     const inbound = entries.find((entry) => entry.direction === "inbound") as
-      | { media?: Array<{ storageStatus?: string }>; linkedReceipts?: Array<{ driveFileIds?: string[]; vaultEvidenceRefs?: string[] }> }
+      | { media?: Array<{ storageStatus?: string }>; linkedReceipts?: Array<{ driveFileIds?: string[]; vaultEvidenceRefs?: string[]; vaultRevisions?: string[]; vaultLinks?: string[] }> }
       | undefined;
     expect(inbound?.media?.[0]?.storageStatus).toBe("archived");
     expect(inbound?.linkedReceipts?.[0]?.driveFileIds).toContain("drive-file-voice-mcp-1");
     expect(inbound?.linkedReceipts?.[0]?.vaultEvidenceRefs).toContain("Log/2026-06-24.md#^e-test");
+    expect(inbound?.linkedReceipts?.[0]?.vaultRevisions).toContain("drive-revision-voice-mcp-1");
+    expect(inbound?.linkedReceipts?.[0]?.vaultLinks).toContain("https://drive.google.com/file/d/vault-file-voice-mcp-1/view");
     const outboundEntries = entries.filter((entry) => entry.direction === "outbound");
     expect(outboundEntries.every((entry) => !("media" in entry) && !("linkedReceipts" in entry))).toBe(true);
 
@@ -669,6 +675,7 @@ describe("MCP endpoint", () => {
         status: "done",
         evidenceRef: "Log/2026-06-11.md#^e-abc123",
         url: `https://github.com/o/r/blob/${"0".repeat(40)}/Log/2026-06-11.md#L3`,
+        urls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],
         commitSha: "0".repeat(40),
         pagesTouched: ["Areas/Insurance.md"],
         githubUrls: ["https://github.com/o/r/blob/main/Areas/Insurance.md"],

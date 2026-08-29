@@ -125,8 +125,10 @@ function typedAnswerContentText(action: TaskingAction): string | undefined {
     if (!source || typeof source !== "object" || Array.isArray(source)) return undefined;
     const value = source as Record<string, unknown>;
     if (typeof value.path !== "string") return undefined;
+    if (value.url !== undefined && typeof value.url !== "string") return undefined;
     if (value.githubUrl !== undefined && typeof value.githubUrl !== "string") return undefined;
-    sourceLines.push(`- ${value.path}${value.githubUrl ? ` (${value.githubUrl})` : ""}`);
+    const url = value.url ?? value.githubUrl;
+    sourceLines.push(`- ${value.path}${url ? ` (${url})` : ""}`);
   }
   const expected = `${sourceLines.length > 0
     ? `${answer.text}\n\nSources:\n${sourceLines.join("\n")}`

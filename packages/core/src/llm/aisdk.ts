@@ -152,19 +152,25 @@ function hostPeerActionResult(result: string): string {
   if (answer.type !== "answer_content" || typeof answer.text !== "string") return result;
   const rawSources = answer.sources ?? [];
   if (!Array.isArray(rawSources)) return result;
-  const sources: Array<{ path: string; githubUrl?: string }> = [];
+  const sources: Array<{ path: string; url?: string }> = [];
   for (const source of rawSources) {
     if (!source || typeof source !== "object" || Array.isArray(source)) return result;
     const candidate = source as Record<string, unknown>;
     if (typeof candidate.path !== "string") return result;
+    if (candidate.url !== undefined && typeof candidate.url !== "string") return result;
     if (candidate.githubUrl !== undefined && typeof candidate.githubUrl !== "string") return result;
+    const url = typeof candidate.url === "string"
+      ? candidate.url
+      : typeof candidate.githubUrl === "string"
+        ? candidate.githubUrl
+        : undefined;
     sources.push({
       path: candidate.path,
-      ...(typeof candidate.githubUrl === "string" ? { githubUrl: candidate.githubUrl } : {}),
+      ...(url !== undefined ? { url } : {}),
     });
   }
   const sourceLines = sources.map((source) =>
-    `- ${source.path}${source.githubUrl ? ` (${source.githubUrl})` : ""}`,
+    `- ${source.path}${source.url ? ` (${source.url})` : ""}`,
   );
   const status = {
     type: "read_only_status" as const,
@@ -525,7 +531,10 @@ const backlogCandidateSchema = z.object({
   source_refs: z.array(
     z.object({
       path: z.string().describe("vault-relative path, optionally with a block anchor"),
-      githubUrl: z.string().describe("GitHub URL for the source, or empty string when unavailable"),
+      url: z.string().describe("canonical provider URL for the source, or empty string when unavailable"),
+      provider: z.enum(["github", "google_drive"]),
+      revisionId: z.string().optional(),
+      githubUrl: z.string().optional().describe("GitHub compatibility URL; omit for non-GitHub vaults"),
     }),
   ),
   summary: z.string(),
@@ -867,7 +876,17 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     return {
       candidates: object.candidates.map((candidate) => {
         const { target_repo, ...rest } = candidate;
-        return target_repo ? { ...rest, target_repo } : rest;
+        const normalized = {
+          ...rest,
+          source_refs: rest.source_refs.map((source) => ({
+            path: source.path,
+            url: source.url,
+            provider: source.provider,
+            ...(source.revisionId ? { revisionId: source.revisionId } : {}),
+            ...(source.githubUrl !== undefined ? { githubUrl: source.githubUrl } : {}),
+          })),
+        };
+        return target_repo ? { ...normalized, target_repo } : normalized;
       }),
     };
   }
@@ -928,19 +947,19 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 // is a side-effect — the model must still reply to the user's actual
                 // message, never answer with only a capture/queue acknowledgment
                 // (that produced the "Queued for filing." non-replies on voice notes).
-                return "Captured in the background (filing to the vault, not yet committed — do not claim it is already filed). This is a side-effect: now reply to the user's actual message. Do NOT reply with only a capture/queue acknowledgment.";
+                return "Captured in the background (filing to the vault, not yet durably saved — do not claim it is already filed). This is a side-effect: now reply to the user's actual message. Do NOT reply with only a capture/queue acknowledgment.";
               }
               return [
                 `Filed: ${result.evidenceRef}`,
                 ...(result.pagesTouched.length > 0 ? [`Pages: ${result.pagesTouched.join(", ")}`] : []),
-                `Commit: ${result.commitSha}`,
-                ...(result.githubUrls.length > 0 ? ["URLs:", ...result.githubUrls.map((url) => `- ${url}`)] : []),
+                result.revision ? `Saved revision: ${result.revision.provider}:${result.revision.id}` : null,
+                ...(result.urls?.length ? ["URLs:", ...result.urls.map((url) => `- ${url}`)] : []),
                 ...(result.filing === "uncertain"
                   ? [`Saved — filed to ${result.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`]
                   : result.filing === "inbox"
                     ? ["Saved — filed to Inbox; the filing question is logged in the note."]
                     : []),
-              ].join("\n");
+              ].filter((line): line is string => line !== null).join("\n");
             },
           }),
           propose_vault_task: tool({
@@ -953,7 +972,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           }),
           execute_vault_task: tool({
             description:
-              "Execute a previously proposed vault plan. ONLY call this after the user has explicitly approved that plan in this conversation ('yes', 'go ahead', 'do it'). Pass the approved plan exactly as it was shown (minus any parts the user rejected). Changes are validated and land as one git commit; evidence (Log/, _attachments/) can never be touched.",
+              "Execute a previously proposed vault plan. ONLY call this after the user has explicitly approved that plan in this conversation ('yes', 'go ahead', 'do it'). Pass the approved plan exactly as it was shown (minus any parts the user rejected). Changes are validated and publish as one durable vault revision; evidence (Log/, _attachments/) can never be touched.",
             inputSchema: z.object({
               objective: z.string().describe("the original objective"),
               plan: z.string().describe("the user-approved plan, verbatim"),
@@ -968,7 +987,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               memoryPath: z.string().nullable().describe("vault-relative note/log path to mine; null when using rawText or query"),
               query: z.string().nullable().describe("vault search scope, e.g. 'recent Zenod voice notes launch backlog'; null when using rawText or memoryPath"),
               sourceRefs: z
-                .array(z.object({ path: z.string(), githubUrl: z.string() }))
+                .array(z.object({
+                  path: z.string(),
+                  url: z.string().optional(),
+                  provider: z.enum(["github", "google_drive"]).optional(),
+                  revisionId: z.string().optional(),
+                  githubUrl: z.string().optional(),
+                }))
                 .nullable()
                 .describe("source refs to attach to rawText candidates; null for none"),
               write: z
@@ -981,7 +1006,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 ...(rawText ? { rawText } : {}),
                 ...(memoryPath ? { memoryPath } : {}),
                 ...(query ? { query } : {}),
-                ...(sourceRefs ? { sourceRefs } : {}),
+                ...(sourceRefs ? {
+                  sourceRefs: sourceRefs.map((source) => ({
+                    path: source.path,
+                    url: source.url ?? source.githubUrl ?? "",
+                    provider: source.provider ?? "github",
+                    ...(source.revisionId ? { revisionId: source.revisionId } : {}),
+                    ...(source.githubUrl !== undefined ? { githubUrl: source.githubUrl } : {}),
+                  })),
+                } : {}),
                 ...(write !== null ? { write: Boolean(write) } : {}),
               });
               return [
@@ -991,7 +1024,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   return `${index + 1}. [${candidate.priority}/${candidate.type}/${candidate.status}] ${candidate.title}${sources ? ` — ${sources}` : ""}`;
                 }),
                 ...(result.written.length > 0
-                  ? ["Written:", ...result.written.map((item) => `- ${item.path}${item.githubUrl ? ` (${item.githubUrl})` : ""}`)]
+                  ? ["Written:", ...result.written.map((item) => `- ${item.path}${item.url ? ` (${item.url})` : ""}`)]
                   : []),
                 ...(result.skipped.length > 0
                   ? ["Skipped:", ...result.skipped.map((item) => `- ${item.title ? `${item.title}: ` : ""}${item.reason}`)]

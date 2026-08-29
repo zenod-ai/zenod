@@ -579,7 +579,7 @@ export class Runtime {
           eventType: "filing.receipt",
           text: formatFilingReceipt(result),
           severity: "info",
-          dedupeKey: `filing:${result.commitSha}`,
+          dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
         });
       },
     });

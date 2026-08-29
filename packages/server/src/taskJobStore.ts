@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { MemoryContentType, Reply, StoreResult, Surface, TaskingReply, WorkResult } from "zenod";
+import type { MemoryContentType, Reply, StoreResult, Surface, TaskingReply, VaultRevision, WorkResult } from "zenod";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
@@ -112,10 +112,12 @@ export interface MediaIngestReceipt {
     evidenceUrl?: string;
     pagesTouched: string[];
     pageUrls?: string[];
-    commitSha: string | null;
-    githubUrls: string[];
+    revision: VaultRevision | null;
+    urls: string[];
+    commitSha?: string | null;
+    githubUrls?: string[];
     filing?: "filed" | "uncertain" | "inbox" | "pending";
-    /** Durable background semantic filing job; capture is already committed. */
+    /** Durable background semantic filing job; capture is already saved. */
     enrichmentJobId?: string;
   };
   nextAdapterIssues?: string[];

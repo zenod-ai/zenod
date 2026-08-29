@@ -105,7 +105,11 @@ function JobRow({
           <p>
             Filed to {job.pages.length > 0 ? job.pages.join(", ") : "the Inbox"}
             {job.archived ? " · archived in Drive" : ""}
-            {job.commitSha ? ` · ${job.commitSha.slice(0, 7)}` : ""}
+            {job.revision
+              ? ` · ${job.revision.provider === "google_drive" ? "Drive" : "GitHub"} ${job.revision.id}${job.revision.provider === "google_drive" && job.commitSha ? ` · git ${job.commitSha.slice(0, 7)}` : ""}`
+              : job.commitSha
+                ? ` · ${job.commitSha.slice(0, 7)}`
+                : ""}
           </p>
           {job.backlog && (
             <div className="flex flex-col gap-1 rounded-md bg-muted/60 p-2">
@@ -116,10 +120,10 @@ function JobRow({
               {job.backlog.written.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {job.backlog.written.map((item) => (
-                    item.githubUrl ? (
+                    item.url ? (
                       <a
                         key={item.path}
-                        href={item.githubUrl}
+                        href={item.url}
                         target="_blank"
                         rel="noreferrer"
                         className="rounded bg-background px-1.5 py-0.5 underline underline-offset-2"

@@ -41,7 +41,7 @@ export const ZENOD_PUBLISHED_SKILL: UnitSkillManifest = {
     "Keep synthetic evidence distinct from real user facts and say unknown when citations do not support an attribute.",
   ],
   receiptExpectations: [
-    "Durable writes return terminal evidence references, touched pages, a commit SHA, or a loud error.",
+    "Durable writes return terminal evidence references, touched pages, a provider revision, or a loud error.",
     "Asynchronous writes return an accepted ticket that must be polled through get_task_result.",
   ],
   bundleUrl: ZENOD_SKILL_BUNDLE_PATH,

@@ -1,12 +1,15 @@
 import type { VoiceArchiveResult } from "./voiceArchive.js";
+import type { VaultRevision } from "zenod";
 
 type StoreFiling = "filed" | "uncertain" | "inbox" | "pending";
 
 interface StoreResultLike {
   evidenceRef: string;
   pagesTouched: string[];
-  commitSha: string;
-  githubUrls: string[];
+  revision?: VaultRevision;
+  urls: string[];
+  commitSha?: string;
+  githubUrls?: string[];
   filing: StoreFiling;
 }
 
@@ -33,8 +36,10 @@ function asStoreResult(value: unknown): StoreResultLike | null {
   return {
     evidenceRef: v.evidenceRef,
     pagesTouched: Array.isArray(v.pagesTouched) ? v.pagesTouched.filter((p): p is string => typeof p === "string") : [],
-    commitSha: typeof v.commitSha === "string" ? v.commitSha : "",
-    githubUrls: Array.isArray(v.githubUrls) ? v.githubUrls.filter((u): u is string => typeof u === "string") : [],
+    ...(v.revision && typeof v.revision === "object" ? { revision: v.revision } : {}),
+    urls: Array.isArray(v.urls) ? v.urls.filter((u): u is string => typeof u === "string") : [],
+    ...(typeof v.commitSha === "string" ? { commitSha: v.commitSha } : {}),
+    ...(Array.isArray(v.githubUrls) ? { githubUrls: v.githubUrls.filter((u): u is string => typeof u === "string") } : {}),
     filing,
   };
 }
@@ -60,10 +65,18 @@ export function formatStorageReceipt(input: StorageReceiptInput): string | null 
     }
     lines.push(`Vault evidence: ${stored.evidenceRef}`);
     lines.push(`Vault note(s): ${stored.pagesTouched.length ? stored.pagesTouched.join(", ") : "(inbox / no page returned)"}`);
-    if (stored.commitSha) lines.push(`Vault commit: ${stored.commitSha}`);
-    if (stored.githubUrls.length) {
+    if (stored.revision?.provider === "google_drive") {
+      lines.push(`Vault save revision: ${stored.revision.id}`);
+      if (stored.commitSha) lines.push(`Git history commit: ${stored.commitSha}`);
+    } else if (stored.commitSha) {
+      lines.push(`Vault commit: ${stored.commitSha}`);
+    } else if (stored.revision) {
+      lines.push(`Vault revision: ${stored.revision.id}`);
+    }
+    const links = stored.urls.length ? stored.urls : stored.githubUrls ?? [];
+    if (links.length) {
       lines.push("Vault link(s):");
-      for (const url of stored.githubUrls) lines.push(`- ${url}`);
+      for (const url of links) lines.push(`- ${url}`);
     }
   } else if (input.filingStatus === "error") {
     lines.push(`Vault filing: failed${input.filingError ? ` — ${input.filingError}` : ""}`);

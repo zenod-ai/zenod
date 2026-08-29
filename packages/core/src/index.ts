@@ -11,6 +11,7 @@ export type {
   BacklogOwner,
   BacklogPriority,
   BacklogSourceRef,
+  GitHubBacklogSourceRef,
   BacklogStatus,
   AttachmentInput,
   BrainEngine,
@@ -54,7 +55,7 @@ export { scanVault, extractPageLinks, extractCitations, type PageIndexEntry, typ
 export { lintVault } from "./vault/lint.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";
 export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "./vault/cleanSlate.js";
-export { githubUrl, type VaultLocation } from "./vault/github.js";
+export { githubSourceRef, githubUrl, type VaultLocation } from "./vault/github.js";
 export {
   VaultPublicationError,
   githubVaultRevision,

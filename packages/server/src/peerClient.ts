@@ -4,6 +4,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createHash } from "node:crypto";
 import type { StoreResult, TrustedConnectionProfile } from "zenod";
 import { VERSION } from "zenod/version";
+import { durableStoreReceiptError } from "./durableReceipt.js";
 import { validateWalletUrl } from "./walletUrl.js";
 import {
   PEER_SKILL_LIMITS,
@@ -459,7 +460,9 @@ interface VerifiedStoreReceipt {
   evidenceUrl?: string;
   pagesTouched?: string[];
   pageUrls?: string[];
-  commitSha: string;
+  revision?: StoreResult["revision"];
+  urls?: string[];
+  commitSha?: string;
   githubUrls?: string[];
   filing: StoreResult["filing"];
 }
@@ -469,11 +472,24 @@ function verifiedStoreReceipt(
 ): VerifiedStoreReceipt | null {
   if (completed.status !== "done" || completed.kind !== "store") return null;
   const receipt = objectRecord(completed.result);
+  if (!receipt || durableStoreReceiptError(receipt)) return null;
+  const rawRevision = objectRecord(receipt?.revision);
+  const revision = rawRevision
+    && (rawRevision.provider === "github" || rawRevision.provider === "google_drive")
+    && typeof rawRevision.id === "string"
+    && rawRevision.id.trim()
+    && typeof rawRevision.committedAt === "string"
+    && !Number.isNaN(Date.parse(rawRevision.committedAt))
+    && Array.isArray(rawRevision.urls)
+    && rawRevision.urls.every((value) => typeof value === "string")
+      ? rawRevision as unknown as NonNullable<StoreResult["revision"]>
+      : null;
+  const commitSha = typeof receipt?.commitSha === "string" ? receipt.commitSha : undefined;
   if (
     typeof receipt?.evidenceRef !== "string"
     || !receipt.evidenceRef.trim()
-    || typeof receipt.commitSha !== "string"
-    || receipt.commitSha.length !== 40
+    || (receipt.urls !== undefined && !Array.isArray(receipt.urls))
+    || (receipt.githubUrls !== undefined && !Array.isArray(receipt.githubUrls))
   ) return null;
   const filing = ["filed", "uncertain", "inbox", "pending"].includes(String(receipt.filing))
     ? receipt.filing as StoreResult["filing"]
@@ -485,7 +501,9 @@ function verifiedStoreReceipt(
     ...(typeof receipt.evidenceUrl === "string" ? { evidenceUrl: receipt.evidenceUrl } : {}),
     ...(Array.isArray(receipt.pagesTouched) ? { pagesTouched: receipt.pagesTouched.filter((value): value is string => typeof value === "string") } : {}),
     ...(Array.isArray(receipt.pageUrls) ? { pageUrls: receipt.pageUrls.filter((value): value is string => typeof value === "string") } : {}),
-    commitSha: receipt.commitSha,
+    ...(revision ? { revision } : {}),
+    ...(Array.isArray(receipt.urls) ? { urls: receipt.urls.filter((value): value is string => typeof value === "string") } : {}),
+    ...(commitSha !== undefined ? { commitSha } : {}),
     ...(Array.isArray(receipt.githubUrls) ? { githubUrls: receipt.githubUrls.filter((value): value is string => typeof value === "string") } : {}),
     filing,
   };
@@ -522,7 +540,9 @@ export async function callPeerWithArgs(
           ...(receipt.evidenceUrl ? { evidenceUrl: receipt.evidenceUrl } : {}),
           ...(receipt.pagesTouched ? { pagesTouched: receipt.pagesTouched } : {}),
           ...(receipt.pageUrls ? { pageUrls: receipt.pageUrls } : {}),
-          commitSha: receipt.commitSha,
+          ...(receipt.revision ? { revision: receipt.revision } : {}),
+          ...(receipt.urls ? { urls: receipt.urls } : {}),
+          ...(receipt.commitSha ? { commitSha: receipt.commitSha } : {}),
           ...(receipt.githubUrls ? { githubUrls: receipt.githubUrls } : {}),
           filing: receipt.filing,
         });
