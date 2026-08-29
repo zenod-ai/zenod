@@ -10,12 +10,12 @@ export interface LocalTenantBindingOptions {
   tokenVault: CustomerTokenVault;
 }
 
-function tenantSlug(login: string, githubId: number): string {
-  const loginSlug = login
+function tenantSlug(displayName: string, stableSuffix: string): string {
+  const loginSlug = displayName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "github";
-  return `${loginSlug}-${githubId}`;
+    .replace(/^-+|-+$/g, "") || "customer";
+  return `${loginSlug}-${stableSuffix}`;
 }
 
 function priorTenantBinding(accounts: CustomerAccountStore, account: CustomerAccount): CustomerAccount | null {
@@ -25,7 +25,7 @@ function priorTenantBinding(accounts: CustomerAccountStore, account: CustomerAcc
       .filter(
         (candidate) =>
           candidate.session_id !== account.session_id &&
-          candidate.github_id === account.github_id &&
+          candidate.user_id === account.user_id &&
           candidate.tenant_id &&
           candidate.tenant_slug,
       )
@@ -39,13 +39,15 @@ function reserveBinding(
   tokenVault: CustomerTokenVault,
 ): CustomerAccount {
   const current = accounts.get(account.session_id);
-  if (!current || current.account_id !== account.account_id || current.github_id !== account.github_id) {
+  if (!current || current.account_id !== account.account_id || current.user_id !== account.user_id) {
     throw new Error("checkout account changed before tenant binding");
   }
 
   const prior = priorTenantBinding(accounts, current);
   const tenantId = current.account_id;
-  const slug = current.tenant_slug ?? prior?.tenant_slug ?? tenantSlug(current.github_login, current.github_id);
+  const displayName = current.github_login ?? current.user_id;
+  const suffix = current.github_id ? String(current.github_id) : current.user_id.slice(-8);
+  const slug = current.tenant_slug ?? prior?.tenant_slug ?? tenantSlug(displayName, suffix);
   if (!tokenVault.get(current.account_id)) tokenVault.put(current.account_id, generateTenantToken());
 
   return accounts.upsert(current.session_id, {
@@ -71,7 +73,7 @@ export function createLocalTenantBindingAdapter(options: LocalTenantBindingOptio
     try {
       const provisioned = await store.provisionTenant({
         tenantId: reserved.tenant_id,
-        name: reserved.github_login,
+        name: reserved.github_login ?? reserved.user_id,
         plan: reserved.tier ?? "hosted",
         token,
         status: "active",

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import type { Runtime } from "./runtime.js";
-import { CustomerAccountStore, customerAccountId, type CustomerAccount } from "./customerAccounts.js";
+import { CustomerAccountStore, customerAccountIdForUser, type CustomerAccount } from "./customerAccounts.js";
 import {
   completeCustomerCheckout,
   createCustomerCheckout,
@@ -16,7 +16,14 @@ import {
   type CustomerStripeClient,
   type CustomerProductConfig,
 } from "./customerBilling.js";
-import { GithubIdentityProvider, signState, verifyState, type IdentityProvider } from "./customerIdentity.js";
+import {
+  CustomerIdentityStore,
+  GithubIdentityProvider,
+  signState,
+  verifyState,
+  type CustomerPrincipal,
+  type IdentityProvider,
+} from "./customerIdentity.js";
 import {
   currentGatewayKey,
   projectCustomerUsage,
@@ -31,7 +38,12 @@ import {
   type ManagedAiProviderClient,
 } from "./customerManagedAi.js";
 import { CustomerManagedAiAdmissionQueue } from "./customerManagedAiAdmission.js";
-import { clearCustomerSession, issueCustomerSession, readCustomerSession } from "./customerSession.js";
+import {
+  clearCustomerSession,
+  issueCustomerSession,
+  readCustomerSession,
+  type CustomerSession,
+} from "./customerSession.js";
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
 import { hashToken } from "@zenod/mcp-chassis";
@@ -130,7 +142,26 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     repositoryConnection: options.capabilities?.repositoryConnection ?? true,
     managedAiApplication: options.capabilities?.managedAiApplication ?? true,
   };
-  const accounts = new CustomerAccountStore(host.dataDir, product.product);
+  const identities = new CustomerIdentityStore(host.dataDir, product.product);
+  const accounts = new CustomerAccountStore(host.dataDir, product.product, identities);
+  const principalForSession = (session: CustomerSession): CustomerPrincipal => {
+    const principal = identities.resolve(session.provider, session.provider_subject) ?? identities.resolveOrCreate({
+      provider: session.provider,
+      provider_subject: session.provider_subject,
+      display_name: session.display_name,
+      provider_login: session.provider === "github" ? session.login : null,
+      avatar_url: session.avatar_url,
+    });
+    if (principal.user_id !== session.user_id) {
+      throw new Error("customer session identity does not match its provider binding");
+    }
+    // Lazy projection keeps legacy account/session identifiers byte-for-byte
+    // stable while making the new ownership join authoritative for new code.
+    for (const account of accounts.list()) {
+      if (account.user_id === principal.user_id) identities.bindAccount(principal.user_id, account.account_id);
+    }
+    return principal;
+  };
   const billing = loadCustomerBillingConfig(env, product);
   assertPublicSignupIsReady(env);
   const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
@@ -366,7 +397,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const user = await identity.exchangeAndGetUser(code);
       const githubId = typeof user.id === "number" ? user.id : Number(user.id);
       if (!Number.isSafeInteger(githubId) || githubId <= 0) throw new Error("GitHub returned an invalid user id");
-      issueCustomerSession(c, { id: githubId, login: user.login }, env);
+      const principal = identities.resolveOrCreate({
+        provider: "github",
+        provider_subject: String(githubId),
+        display_name: user.login,
+        provider_login: user.login,
+        avatar_url: user.avatar_url ?? `https://github.com/${user.login}.png`,
+        email: user.email,
+        email_verified: user.email_verified ?? false,
+      });
+      issueCustomerSession(c, principal, env);
       return c.redirect(signedReturnDestination(state.rh, env, product), 302);
     } catch (error) {
       console.error("github callback failed:", error);
@@ -386,9 +426,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.get("/api/me", (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
+    const principal = principalForSession(session);
     return c.json({
-      login: session.login,
-      avatar_url: `https://github.com/${session.login}.png`,
+      login: principal.provider === "github" ? principal.github_login ?? session.login : principal.display_name,
+      avatar_url: principal?.avatar_url ?? session.avatar_url,
     });
   });
 
@@ -407,12 +448,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app.get("/api/github/app/start", (c) => {
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
-      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const principal = principalForSession(session);
+      if (!principal?.github_id || !principal.github_login) {
+        return c.json({ error: "GitHub identity is not connected" }, 409);
+      }
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
       const sharedApp = host.sharedGithubApp;
       if (!sharedApp) return c.json({ error: "GitHub repository connection is not configured" }, 503);
       const state = signState(
-        { mode: "connect_repo", gid: session.github_id, login: session.login },
+        { mode: "connect_repo", uid: session.user_id, gid: principal.github_id, login: principal.github_login },
         customerStateSecret(env),
       );
       return c.json({
@@ -425,14 +470,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app.get("/github/setup", (c) => {
       const session = readCustomerSession(c, env);
       if (!session) return c.redirect("/auth/signin", 302);
+      const principal = principalForSession(session);
+      if (!principal?.github_id) return c.text("A connected GitHub identity is required.", 409);
       const stateRaw = c.req.query("state") ?? "";
       const state = stateRaw ? verifyState(stateRaw, customerStateSecret(env)) : null;
-      if (state?.mode !== "connect_repo" || state.gid !== session.github_id) {
+      if (state?.mode !== "connect_repo" || (state.uid ? state.uid !== session.user_id : state.gid !== principal.github_id)) {
         return c.text("This repository connection link is invalid or expired.", 400);
       }
       const installationId = c.req.query("installation_id");
       if (!installationId || !/^\d+$/.test(installationId)) return c.redirect("/app", 302);
-      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || !runtime) return c.text("Tenant runtime is unavailable.", 409);
       runtime.settings.setRaw("github_app_installation_id", installationId);
@@ -443,7 +490,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app.put("/api/vault/repository", async (c) => {
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
-      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || !runtime) return c.json({ error: "tenant unavailable" }, 409);
       const body = await c.req
@@ -466,7 +513,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.get("/api/console/account", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveForUser(session.github_id);
+    const account = accounts.resolveForUser(session.user_id);
     if (!account || account.subscription_status === "checkout_pending") {
       return c.json({ error: "no_account" }, 404);
     }
@@ -503,7 +550,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app.get("/api/customer-usage", async (c) => {
       const session = readCustomerSession(c, env);
       if (!session) return c.json({ error: "unauthorized" }, 401);
-      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
       return c.json(await usageForAccount(account));
     });
@@ -513,7 +560,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       // Bearer-authenticated channel/MCP callers are resolved by the Zenod unit,
       // which owns the tenant token store. Cookie customers stay on this seam.
       if (!session) return next();
-      const account = accounts.resolveActiveTenantForUser(session.github_id);
+      const account = accounts.resolveActiveTenantForUser(session.user_id);
       if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
       const job = managedAiAdmissions.getForTenant(c.req.param("id"), account.tenant_id);
       return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
@@ -523,7 +570,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   app.post("/api/token/regenerate", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
-    const account = accounts.resolveActiveTenantForUser(session.github_id);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
     if (!account?.tenant_id || !options.tenantStore) return c.json({ error: "no_account" }, 404);
     const currentToken = tokenVault.get(account.account_id);
     const current = currentToken ? await options.tenantStore.resolveTokenHash(hashToken(currentToken)) : null;
@@ -549,17 +596,27 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   async function startCheckout(c: Context<{ Bindings: HttpBindings }>, tierInput: unknown) {
     const owner = readCustomerSession(c, env);
     if (!owner) return c.json({ error: "sign in before subscribing" }, 401);
-    if (!checkoutEnabledForOwner(owner.github_id, env)) {
+    const principal = principalForSession(owner);
+    if (!checkoutEnabledForOwner(principal, env)) {
       return c.json({ error: "paid signup is not open" }, 503);
     }
-    const existing = accounts.resolveForUser(owner.github_id);
+    const existing = accounts.resolveForUser(owner.user_id);
     if (existing?.subscription_status === "active" || existing?.subscription_status === "past_due") {
       return c.json({ error: "an active subscription already exists" }, 409);
     }
     if (!stripe) return c.json({ error: "checkout is not configured" }, 503);
     const resolved = resolveCheckoutTier(tierInput, billing, newCheckoutPolicyForProduct(product));
     if ("error" in resolved) return c.json({ error: resolved.error }, 400);
-    const session = await createCustomerCheckout(stripe, accounts, billing, owner, resolved, product);
+    const accountId = existing?.account_id ?? customerAccountIdForUser(principal);
+    identities.bindAccount(principal.user_id, accountId);
+    const session = await createCustomerCheckout(stripe, accounts, billing, {
+      user_id: principal.user_id,
+      display_name: principal.display_name,
+      account_id: accountId,
+      github_id: principal.github_id,
+      github_login: principal.github_login,
+      email: principal.email,
+    }, resolved, product);
     return c.json({ id: session.id, url: session.url, product: product.product, tier: resolved.tier });
   }
 
@@ -579,7 +636,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const owner = readCustomerSession(c, env);
     if (!owner) return c.json({ error: "unauthorized" }, 401);
     if (!stripe) return c.json({ error: "billing is not configured" }, 503);
-    const account = accounts.resolveForUser(owner.github_id);
+    const account = accounts.resolveForUser(owner.user_id);
     if (!account?.stripe_customer_id) return c.json({ error: "billing account unavailable" }, 409);
     try {
       return c.json({ url: await createCustomerPortalSession(stripe, billing, account) });
@@ -601,7 +658,13 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     } catch {
       return c.text("Checkout session not found.", 404);
     }
-    if (session.client_reference_id !== customerAccountId(owner.github_id)) {
+    const principal = principalForSession(owner);
+    const pendingAccount = accounts.get(sessionId);
+    if (
+      !pendingAccount ||
+      identities.ownerForAccount(pendingAccount.account_id) !== principal.user_id ||
+      session.client_reference_id !== pendingAccount.account_id
+    ) {
       return c.text("Checkout account binding mismatch.", 403);
     }
     if (session.payment_status !== "paid" && session.status !== "complete") {
@@ -669,6 +732,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   return {
     app,
     accounts,
+    identities,
+    principalForSession,
     tokenVault,
     managedAi,
     usageForAccount,

@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
-import { CustomerAccountStore, customerAccountId, type CustomerAccount } from "./customerAccounts.js";
+import { CustomerAccountStore, customerAccountIdForUser, type CustomerAccount } from "./customerAccounts.js";
+import { customerUserId } from "./customerIdentity.js";
 
 // Checkout behavior is transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // @ 6bdb318. The old queue/provisioner call is represented only by
@@ -25,9 +26,32 @@ export interface CustomerStripeClient {
   };
 }
 
-export interface CheckoutOwner {
+export interface ProviderNeutralCheckoutOwner {
+  user_id: string;
+  display_name: string;
+  account_id?: string;
+  github_id?: number | null;
+  github_login?: string | null;
+  email?: string | null;
+}
+
+/** Compatibility input for existing product-layer callers during migration. */
+export interface LegacyGithubCheckoutOwner {
   github_id: number;
   login: string;
+}
+
+export type CheckoutOwner = ProviderNeutralCheckoutOwner | LegacyGithubCheckoutOwner;
+
+function providerNeutralCheckoutOwner(owner: CheckoutOwner): ProviderNeutralCheckoutOwner {
+  return "user_id" in owner
+    ? owner
+    : {
+        user_id: customerUserId("github", String(owner.github_id)),
+        display_name: owner.login,
+        github_id: owner.github_id,
+        github_login: owner.login,
+      };
 }
 
 export type CheckoutTier = "monthly" | "yearly";
@@ -119,7 +143,10 @@ export async function createCustomerCheckout(
   checkout: { tier: CheckoutTier; price: string },
   product: CustomerProductConfig = { product: "zenod", unit: "zenod", defaultDomain: "https://cloud.zenod.dev" },
 ): Promise<Stripe.Checkout.Session> {
-  const accountId = customerAccountId(owner.github_id);
+  const normalizedOwner = providerNeutralCheckoutOwner(owner);
+  const accountId = normalizedOwner.account_id ??
+    accounts.resolveForUser(normalizedOwner.user_id)?.account_id ??
+    customerAccountIdForUser(normalizedOwner);
   const metadata = { product: product.product, unit: product.unit, tier: checkout.tier, account_id: accountId };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -140,8 +167,10 @@ export async function createCustomerCheckout(
     tier: checkout.tier,
     stripe_client_reference_id: accountId,
     subscription_status: "checkout_pending",
-    github_id: owner.github_id,
-    github_login: owner.login,
+    user_id: normalizedOwner.user_id,
+    github_id: normalizedOwner.github_id ?? null,
+    github_login: normalizedOwner.github_login ?? null,
+    github_email: normalizedOwner.email ?? null,
     claimed_at: new Date().toISOString(),
   });
   return session;

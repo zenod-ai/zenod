@@ -138,15 +138,22 @@ export function checkoutEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 export function checkoutEnabledForOwner(
-  githubId: number,
+  owner: number | { user_id: string; github_id?: number | null },
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (checkoutEnabled(env)) return true;
   if (env.STRIPE_MODE !== "live") return false;
-  return (env.ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS ?? "")
+  const githubId = typeof owner === "number" ? owner : owner.github_id;
+  const githubAllowed = (env.ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS ?? "")
     .split(",")
     .map((value) => Number(value.trim()))
     .some((value) => Number.isSafeInteger(value) && value > 0 && value === githubId);
+  if (githubAllowed) return true;
+  if (typeof owner === "number") return false;
+  return (env.ZENOD_LIVE_CHECKOUT_TESTER_USER_IDS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .some((value) => Boolean(value) && value === owner.user_id);
 }
 
 export function assertPublicSignupIsReady(env: NodeJS.ProcessEnv = process.env): void {

@@ -1089,7 +1089,7 @@ function activeTenantId(
 ): string | null {
   const session = readCustomerSession(c, env);
   if (!session) return null;
-  return customer.accounts.resolveActiveTenantForUser(session.github_id)?.tenant_id ?? null;
+  return customer.accounts.resolveActiveTenantForUser(session.user_id)?.tenant_id ?? null;
 }
 
 async function forwardPhylaxUnitRequest(
@@ -1114,7 +1114,7 @@ async function forwardPhylaxUnitRequest(
   if (!c.req.path.startsWith("/api/")) {
     return unit.app.fetch(c.req.raw, c.env);
   }
-  const account = customer.accounts.resolveActiveTenantForUser(session.github_id);
+  const account = customer.accounts.resolveActiveTenantForUser(session.user_id);
   const token = account ? customer.tokenVault.get(account.account_id) : null;
   const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
   if (
