@@ -283,7 +283,7 @@ describe("hosted customer layer", () => {
   });
 
   it("signs a new and returning customer in with Google without Drive consent", async () => {
-    env.ZENOD_LIVE_CHECKOUT_TESTER_USER_IDS = customerUserId("google", "google-subject-ada");
+    env.ZENOD_LIVE_CHECKOUT_TESTER_GOOGLE_EMAILS = " ADA@EXAMPLE.TEST ";
     const exchange = vi.fn(async (_code: string, proof?: { nonce?: string; codeVerifier?: string }) => {
       expect(proof?.nonce).toMatch(/^[A-Za-z0-9_-]+$/);
       expect(proof?.codeVerifier).toMatch(/^[A-Za-z0-9_-]+$/);
