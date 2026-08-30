@@ -110,28 +110,35 @@ export function HostedAccount() {
   const [billingError, setBillingError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    Promise.all([
-      optionalJson<Me>("/api/me"),
-      optionalJson<Account>("/api/console/account"),
-      optionalJson<VaultCapabilityProjection>("/api/vault/provider"),
-      optionalJson<VaultStatus>("/api/vault"),
-    ])
-      .then(([nextMe, nextAccount, nextVault, nextVaultStatus]) => {
+    void (async () => {
+      try {
+        const nextMe = await optionalJson<Me>("/api/me")
+        const [nextAccount, nextVault] = await Promise.all([
+          optionalJson<Account>("/api/console/account"),
+          optionalJson<VaultCapabilityProjection>("/api/vault/provider"),
+        ])
+        // `/api/vault` is tenant-runtime scoped. A valid new identity has no
+        // tenant yet, so probing it before checkout returns 401 even though
+        // the customer session is healthy.
+        const nextVaultStatus = nextAccount
+          ? await optionalJson<VaultStatus>("/api/vault")
+          : null
         setMe(nextMe)
         setAccount(nextAccount)
         setVault(nextVault)
         setVaultStatus(nextVaultStatus)
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (error instanceof AccountRequestError && error.status === 401) {
           setSessionExpired(true)
-          return
+        } else {
+          setLoadError(
+            "Could not load your Zenod account. Check your connection and try again."
+          )
         }
-        setLoadError(
-          "Could not load your Zenod account. Check your connection and try again."
-        )
-      })
-      .finally(() => setLoading(false))
+      } finally {
+        setLoading(false)
+      }
+    })()
   }, [])
 
   if (loading) {

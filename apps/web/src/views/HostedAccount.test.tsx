@@ -35,20 +35,18 @@ const unselectedVault = {
 
 describe("Hosted account plan contract", () => {
   it("offers one €9 monthly plan with managed usage and WhatsApp included", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        const path = String(input)
-        if (path === "/api/me") return Response.json(me)
-        if (path === "/api/console/account")
-          return Response.json({ error: "no_account" }, { status: 404 })
-        if (path === "/api/vault/provider")
-          return Response.json({ error: "no_account" }, { status: 404 })
-        if (path === "/api/vault")
-          return Response.json({ error: "no_account" }, { status: 404 })
-        throw new Error(`Unexpected request: ${path}`)
-      })
-    )
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input)
+      if (path === "/api/me") return Response.json(me)
+      if (path === "/api/console/account")
+        return Response.json({ error: "no_account" }, { status: 404 })
+      if (path === "/api/vault/provider")
+        return Response.json({ error: "no_account" }, { status: 404 })
+      if (path === "/api/vault")
+        return Response.json({ error: "unauthorized" }, { status: 401 })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    vi.stubGlobal("fetch", fetchMock)
 
     render(<HostedAccount />)
 
@@ -66,6 +64,7 @@ describe("Hosted account plan contract", () => {
     expect(document.body.textContent).not.toMatch(
       /subscribe yearly|annual plan|€5|€50/i
     )
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/vault")
   })
 
   it("keeps a historical yearly subscription visible and manageable without offering it anew", async () => {
