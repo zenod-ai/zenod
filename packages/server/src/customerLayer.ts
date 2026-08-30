@@ -55,7 +55,6 @@ import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
 import { hashToken } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
-import { GithubApiError, inspectGithubAppInstallation } from "zenod";
 import {
   assertPublicSignupIsReady,
   checkoutEnabledForOwner,
@@ -1183,9 +1182,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (taskingOnly) {
         let verified;
         try {
-          verified = await inspectGithubAppInstallation(runtime.settings, installationId);
+          verified = await runtime.inspectGithubAppInstallation(installationId);
         } catch (error) {
-          const status = error instanceof GithubApiError ? error.status : null;
+          const status = error && typeof error === "object" && "status" in error && typeof error.status === "number"
+            ? error.status
+            : null;
           const reconnectRequired = status === 401 || status === 404;
           return c.json({
             error: {

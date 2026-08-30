@@ -36,6 +36,9 @@ import {
 import {
   GithubApiError,
   GithubConnectionRequiredError,
+  clearGithubAuthorizationCache,
+  inspectGithubAppInstallation,
+  type GithubAppInstallationIdentity,
   isGithubAuthorizationRevoked,
   installationToken,
   installationTokenForRepo,
@@ -294,6 +297,10 @@ export class Runtime {
     }
   }
 
+  inspectGithubAppInstallation(installationId: string): Promise<GithubAppInstallationIdentity> {
+    return inspectGithubAppInstallation(this.settings, installationId);
+  }
+
   constructor(
     readonly dataDir: string,
     readonly agent: AgentDefinition = ZENOD_AGENT,
@@ -335,6 +342,7 @@ export class Runtime {
       options.vaultProviderBinding,
       () => `${this.tenantId}:${this.vaultBindingSource?.()?.binding_id ?? "unbound"}`,
       () => this.invalidate(),
+      (installationId) => clearGithubAuthorizationCache(this.settings, installationId),
     );
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
