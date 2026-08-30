@@ -132,9 +132,9 @@ apps/web/src/views/ZenodPortalPanels.overview.test.tsx
 apps/web/src/views/settings/VaultTab.hosted.test.tsx
 ```
 
-## Remaining validation on this branch
+## Full repository validation
 
-Before merge, the evidence-only branch still requires the normal proportional repository checks and exact PR CI:
+The evidence snapshot `c04bdd0095c73c7468d5a4db7df877b7bf8db17b` passed the normal proportional repository checks:
 
 ```sh
 npm run typecheck
@@ -144,7 +144,19 @@ npm run schemas:check
 git diff --check origin/main...HEAD
 ```
 
-The terminal issue handoff and this packet must be updated with exact results and CI/review links. Passing local acceptance is not by itself merge authorization.
+Results:
+
+- all-workspace typecheck: PASS;
+- production core, chassis, server, customer web and public-site builds: PASS;
+- configured workspace tests: PASS, 2,080 assertions plus six explicitly skipped core cases;
+- repository Node script tests: PASS, 194 assertions;
+- complete local test total: PASS, 2,274 assertions plus six skips;
+- generated schemas: PASS, 27 self-contained tool schemas;
+- diff/whitespace check: PASS;
+- dependency audit after lockfile install: zero vulnerabilities;
+- build observation: the existing Vite customer-web chunk-size warning remains non-blocking; no new warning or failure was introduced.
+
+Exact PR CI and independent review remain required before merge. Passing local acceptance is not by itself merge authorization.
 
 ## Human gates and residual risk
 
