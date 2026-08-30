@@ -412,8 +412,6 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
   "vault_repo",
   "vault_branch",
   "artifact_archive_provider",
-  "google_oauth_client_id",
-  "google_oauth_client_secret",
   "telegram_enabled",
   "telegram_allowed_users",
   "telegram_accept_all",
@@ -459,7 +457,7 @@ function projectHostedDriveStatus(
     : !oauthAvailable
       ? "Google Drive connection is unavailable."
       : !oauthClientConfigured
-        ? "Add this tenant's Google OAuth client ID and client secret to connect Google Drive."
+        ? "Google Drive connection is not configured by the Zenod operator."
       : !configured
         ? "Connect Google Drive to enable archive/export copies."
         : !folderId
@@ -500,10 +498,10 @@ async function projectHostedCustomerResponse(
         }, { status: 503, headers });
       }
       return Response.json({
-        error: "google_drive_oauth_credentials_required",
-        message: "Save this tenant's Google OAuth client ID and client secret first.",
+        error: "google_drive_oauth_unavailable",
+        message: "Google Drive connection is unavailable for this tenant.",
         oauthAvailable: false,
-      }, { status: 400, headers });
+      }, { status: 503, headers });
     }
   }
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return response;
@@ -643,6 +641,15 @@ function responseFromReceipt(receipt: ManagedAiTerminalReceipt): Response {
 
 export function createZenodUnit(options: CreateZenodUnitOptions) {
   const env = options.env ?? process.env;
+  // Hosted tenants share one operator-owned public OAuth client configuration,
+  // captured once at process composition. Tenant settings never seed or override
+  // this pair, while every refresh token and Drive binding remains tenant-local.
+  const hostedDriveOAuthCredentials = env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET
+    ? Object.freeze({
+        clientId: env.GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+      })
+    : null;
   const agent = options.agent ?? ZENOD_AGENT;
   const unitName = options.unitName ?? "zenod";
   const storage = options.storage ?? new ChassisStorage({
@@ -907,8 +914,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       (synchronousRecord.status ?? "active") === "active";
     return {
       mode: "hosted-managed",
-      credentials: null,
-      ...(entitled && tenantActive ? { tenantCredentialsAllowed: true } : {}),
+      credentials: entitled && tenantActive ? hostedDriveOAuthCredentials : null,
     };
   };
   vaultProviderBindingForTenant = (tenantId) => {
@@ -1390,9 +1396,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       }
     }
     const response = await unit.app.fetch(downstreamRequest, c.env);
-    const hostedDriveAllowed = admissionAccount?.tenant_id
-      ? runtimes.get(admissionAccount.tenant_id)?.settings.googleDriveTenantCredentialsAllowed() === true
-      : false;
+    const hostedDriveAuthority = admissionAccount?.tenant_id
+      ? runtimes.get(admissionAccount.tenant_id)?.settings.googleDriveOAuthAuthority()
+      : undefined;
+    const hostedDriveAllowed = hostedDriveAuthority?.mode === "hosted-managed" &&
+      hostedDriveAuthority.credentials !== null;
     const canonicalDirectToken = session && hostedAccount
       ? customer.tokenVault.get(hostedAccount.account_id)
       : null;
