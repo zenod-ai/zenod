@@ -618,7 +618,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         env.ZENOD_PUBLIC_GOOGLE_SIGNUP !== "1" &&
         !checkoutOwnerAllowlisted({
           user_id: customerUserId("google", providerSubject),
+          provider: "google",
           github_id: null,
+          email: user.email,
+          email_verified: user.email_verified,
         }, env)
       ) {
         return c.text("Google signup is not open. Existing Google customers can still sign in.", 403);

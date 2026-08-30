@@ -5,6 +5,7 @@ import {
   assertPublicSignupIsReady,
   checkoutEnabled,
   checkoutEnabledForOwner,
+  checkoutOwnerAllowlisted,
   productionReadinessReport,
   ZENOD_LEGAL_VERSION,
 } from "../src/productionReadiness.js";
@@ -85,6 +86,26 @@ describe("production readiness gate", () => {
     const report = productionReadinessReport(readyEnv, now);
     expect(report).toMatchObject({ ready: true, publicGoogleSignup: false, googleSignupReady: false });
     expect(report.checks.map((check) => check.id)).not.toContain("google_drive_vault_acceptance");
+  });
+
+  it("admits only an exact verified Google tester email while public signup stays closed", () => {
+    const env = {
+      STRIPE_MODE: "live",
+      ZENOD_PUBLIC_PAID_SIGNUP: "0",
+      ZENOD_LIVE_CHECKOUT_TESTER_GOOGLE_EMAILS: "jordi@alpha9.io",
+    };
+    const owner = {
+      user_id: "usr_google",
+      provider: "google" as const,
+      github_id: null,
+      email: "JORDI@ALPHA9.IO",
+      email_verified: true,
+    };
+    expect(checkoutOwnerAllowlisted(owner, env)).toBe(true);
+    expect(checkoutEnabledForOwner(owner, env)).toBe(true);
+    expect(checkoutOwnerAllowlisted({ ...owner, email_verified: false }, env)).toBe(false);
+    expect(checkoutOwnerAllowlisted({ ...owner, email: "other@alpha9.io" }, env)).toBe(false);
+    expect(checkoutOwnerAllowlisted({ ...owner, provider: "github" }, env)).toBe(false);
   });
 
   it("opens Google signup only with OAuth/config/legal and exact-commit acceptance evidence", () => {

@@ -209,7 +209,13 @@ export function checkoutEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 export function checkoutEnabledForOwner(
-  owner: number | { user_id: string; github_id?: number | null },
+  owner: number | {
+    user_id: string;
+    provider?: "github" | "google";
+    github_id?: number | null;
+    email?: string | null;
+    email_verified?: boolean;
+  },
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (checkoutEnabled(env)) return true;
@@ -218,7 +224,13 @@ export function checkoutEnabledForOwner(
 }
 
 export function checkoutOwnerAllowlisted(
-  owner: number | { user_id: string; github_id?: number | null },
+  owner: number | {
+    user_id: string;
+    provider?: "github" | "google";
+    github_id?: number | null;
+    email?: string | null;
+    email_verified?: boolean;
+  },
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   const githubId = typeof owner === "number" ? owner : owner.github_id;
@@ -228,10 +240,17 @@ export function checkoutOwnerAllowlisted(
     .some((value) => Number.isSafeInteger(value) && value > 0 && value === githubId);
   if (githubAllowed) return true;
   if (typeof owner === "number") return false;
-  return (env.ZENOD_LIVE_CHECKOUT_TESTER_USER_IDS ?? "")
+  const userAllowed = (env.ZENOD_LIVE_CHECKOUT_TESTER_USER_IDS ?? "")
     .split(",")
     .map((value) => value.trim())
     .some((value) => Boolean(value) && value === owner.user_id);
+  if (userAllowed) return true;
+  if (owner.provider !== "google" || owner.email_verified !== true || !owner.email) return false;
+  const email = owner.email.trim().toLowerCase();
+  return (env.ZENOD_LIVE_CHECKOUT_TESTER_GOOGLE_EMAILS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .some((value) => Boolean(value) && value === email);
 }
 
 export function assertPublicSignupIsReady(env: NodeJS.ProcessEnv = process.env): void {
