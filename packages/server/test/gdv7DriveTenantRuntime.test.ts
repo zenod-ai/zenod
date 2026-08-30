@@ -213,11 +213,22 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_binding_id: null,
       });
 
+      const expiredSession = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=expired-session&state=${encodeURIComponent(alphaState)}`,
+      );
+      expect(expiredSession.status).toBe(401);
+      expect(await expiredSession.text()).toContain("Return to Zenod vault setup and retry");
+
       const missingFlow = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=missing-flow&state=${encodeURIComponent(alphaState)}`,
         { headers: { cookie: alpha.cookie } },
       );
       expect(missingFlow.status).toBe(400);
+      expect(missingFlow.headers.get("cache-control")).toBe("no-store");
+      const missingFlowPage = await missingFlow.text();
+      expect(missingFlowPage).toContain("Return to Zenod vault setup and retry");
+      expect(missingFlowPage).not.toContain(alphaState);
+      expect(missingFlowPage).not.toContain("missing-flow");
       expect(providerCalls).toHaveLength(0);
 
       const crossTenant = await unit.app.request(
@@ -317,6 +328,19 @@ describe("GDV-7 Drive tenant runtime", () => {
       });
       expect(alphaRuntime.settings.getRaw("google_drive_vault_oauth_refresh_token")).toBeNull();
       expect(alphaRuntime.settings.getRaw("google_oauth_refresh_token")).toBe("archive-refresh-token");
+
+      const deniedStart = await driveConsentStart(unit, alpha.cookie);
+      const denied = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?error=access_denied&state=${encodeURIComponent(deniedStart.state)}`,
+        { headers: { cookie: `${alpha.cookie}; ${deniedStart.flowCookie}` } },
+      );
+      expect(denied.status).toBe(303);
+      expect(denied.headers.get("location")).toBe("https://cloud.zenod.test/app?vault=authorization-denied#vault");
+      expect(denied.headers.get("location")).not.toContain(deniedStart.state);
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
+        vault_provider: "google_drive",
+        vault_binding_status: "revoked",
+      });
 
       const reconnectStart = await driveConsentStart(unit, alpha.cookie);
       const reconnect = await unit.app.request(

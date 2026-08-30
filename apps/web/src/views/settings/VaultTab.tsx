@@ -297,20 +297,58 @@ export function VaultTab({
     const legacyGithub =
       vault.provider === null && Boolean(status?.vaultConfigured && status.repo)
     const github = vault.provider === "github" || legacyGithub
+    const repositoryVerified = Boolean(status?.cloned && !status.cloneError)
+    const ready = Boolean((vault.ready || legacyGithub) && repositoryVerified)
     const providerName = drive ? "Google Drive" : github ? "GitHub" : null
+    const blocker =
+      vault.ready && !repositoryVerified ? "vault_error" : vault.blocker
     const blockerCopy =
-      vault.blocker === "vault_authorization_required"
-        ? "Google Drive permission is missing or expired. Reconnect the same vault to restore access."
-        : vault.blocker === "vault_recovering"
-          ? "Zenod is rebuilding and verifying the vault from Drive. Memory stays unavailable until recovery finishes."
-          : vault.blocker === "vault_conflict"
-            ? "A Drive edit overlapped a Zenod save. Review the preserved files in Drive, then retry recovery."
-            : vault.blocker === "vault_error"
-              ? "Zenod could not verify the durable Drive vault. Retry recovery or reconnect Drive permission."
+      blocker === "vault_authorization_required"
+        ? drive
+          ? "Google Drive permission is missing or expired. Reconnect the same vault to restore access."
+          : "GitHub permission is missing or expired. Reconnect the GitHub App and repository to restore access."
+        : blocker === "vault_recovering"
+          ? drive
+            ? "Zenod is rebuilding and verifying the vault from Drive. Memory stays unavailable until recovery finishes."
+            : "Zenod is cloning and verifying the GitHub repository. Memory stays unavailable until verification finishes."
+          : blocker === "vault_conflict"
+            ? drive
+              ? "A Drive edit overlapped a Zenod save. Review the preserved files in Drive, then retry recovery."
+              : "The GitHub repository state needs review before Zenod can safely continue. Review the repository, then reconnect it."
+            : blocker === "vault_error"
+              ? drive
+                ? `Zenod could not verify the durable Drive vault${status?.cloneError ? `: ${status.cloneError}` : "."} Retry recovery or reconnect Drive permission.`
+                : `Zenod could not verify the durable GitHub vault${status?.cloneError ? `: ${status.cloneError}` : "."} Reconnect the GitHub App or repository.`
               : null
+
+    const callbackStatus = new URLSearchParams(window.location.search).get(
+      "vault"
+    )
+    const driveAuthorizationDenied = callbackStatus === "authorization-denied"
+    const driveAuthorizationExpired = callbackStatus === "authorization-error"
 
     return (
       <div className="flex flex-col gap-4">
+        {driveAuthorizationDenied ? (
+          <Alert>
+            <TriangleAlertIcon />
+            <AlertTitle>Google Drive permission was not granted</AlertTitle>
+            <AlertDescription>
+              Nothing changed. Use Google Drive or reconnect Drive below to try
+              again.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {driveAuthorizationExpired ? (
+          <Alert>
+            <TriangleAlertIcon />
+            <AlertTitle>Google Drive setup link expired</AlertTitle>
+            <AlertDescription>
+              Return here after signing in, then use Google Drive or reconnect
+              Drive below to start a fresh, secure setup.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {vault.provider === null && !legacyGithub ? (
           <Alert>
             <FolderIcon />
@@ -325,21 +363,28 @@ export function VaultTab({
         {blockerCopy ? (
           <Alert
             variant={
-              vault.blocker === "vault_conflict" ||
-              vault.blocker === "vault_error"
+              blocker === "vault_conflict" || blocker === "vault_error"
                 ? "destructive"
                 : "default"
             }
           >
             <TriangleAlertIcon />
             <AlertTitle>
-              {vault.blocker === "vault_conflict"
-                ? "Drive conflict needs review"
-                : vault.blocker === "vault_recovering"
-                  ? "Recovering your Drive vault"
-                  : vault.blocker === "vault_error"
-                    ? "Drive vault needs recovery"
-                    : "Reconnect Google Drive"}
+              {blocker === "vault_conflict"
+                ? drive
+                  ? "Drive conflict needs review"
+                  : "GitHub vault conflict needs review"
+                : blocker === "vault_recovering"
+                  ? drive
+                    ? "Recovering your Drive vault"
+                    : "Preparing your GitHub vault"
+                  : blocker === "vault_error"
+                    ? drive
+                      ? "Drive vault needs recovery"
+                      : "GitHub vault needs attention"
+                    : drive
+                      ? "Reconnect Google Drive"
+                      : "Reconnect GitHub"}
             </AlertTitle>
             <AlertDescription>{blockerCopy}</AlertDescription>
           </Alert>
@@ -352,8 +397,8 @@ export function VaultTab({
                 <CardTitle className="flex items-center gap-2">
                   Google Drive
                   {drive ? (
-                    <Badge variant={vault.ready ? "secondary" : "outline"}>
-                      {vault.ready ? "Ready" : "Needs attention"}
+                    <Badge variant={ready ? "secondary" : "outline"}>
+                      {ready ? "Ready" : "Needs attention"}
                     </Badge>
                   ) : null}
                 </CardTitle>
@@ -378,8 +423,8 @@ export function VaultTab({
               </CardContent>
               <CardFooter className="flex-wrap gap-2">
                 {vault.provider === null ||
-                vault.blocker === "vault_authorization_required" ||
-                vault.blocker === "vault_error" ? (
+                blocker === "vault_authorization_required" ||
+                blocker === "vault_error" ? (
                   <Button
                     disabled={vaultBusy !== null}
                     onClick={() => void startDriveVault()}
@@ -389,9 +434,9 @@ export function VaultTab({
                   </Button>
                 ) : null}
                 {drive &&
-                (vault.blocker === "vault_recovering" ||
-                  vault.blocker === "vault_conflict" ||
-                  vault.blocker === "vault_error") ? (
+                (blocker === "vault_recovering" ||
+                  blocker === "vault_conflict" ||
+                  blocker === "vault_error") ? (
                   <Button
                     variant="outline"
                     disabled={vaultBusy !== null}
@@ -405,7 +450,7 @@ export function VaultTab({
                     Retry recovery
                   </Button>
                 ) : null}
-                {drive && vault.ready ? (
+                {drive && ready ? (
                   <Button
                     variant="outline"
                     disabled={syncing}
@@ -441,12 +486,8 @@ export function VaultTab({
                 <CardTitle className="flex items-center gap-2">
                   GitHub
                   {github ? (
-                    <Badge
-                      variant={
-                        vault.ready || legacyGithub ? "secondary" : "outline"
-                      }
-                    >
-                      {vault.ready || legacyGithub ? "Ready" : "Setup needed"}
+                    <Badge variant={ready ? "secondary" : "outline"}>
+                      {ready ? "Ready" : "Setup needed"}
                     </Badge>
                   ) : null}
                 </CardTitle>
@@ -519,7 +560,7 @@ export function VaultTab({
           </Card>
         ) : null}
 
-        {vault.ready || legacyGithub ? (
+        {ready ? (
           <Card>
             <CardHeader>
               <CardTitle>Memory readiness</CardTitle>
@@ -531,7 +572,7 @@ export function VaultTab({
               {Object.entries(vault.memory).map(([capability, ready]) => (
                 <Badge
                   key={capability}
-                  variant={ready || legacyGithub ? "secondary" : "outline"}
+                  variant={ready ? "secondary" : "outline"}
                 >
                   {capability}
                 </Badge>

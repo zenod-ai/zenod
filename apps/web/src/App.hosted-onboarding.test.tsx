@@ -66,6 +66,8 @@ describe("Hosted vault onboarding boot", () => {
             provider: null,
             blocker: "vault_not_selected",
           })
+        if (path === "/api/vault")
+          return Response.json({ cloned: false, cloneError: null })
         throw new Error(`Unexpected fetch: ${path}`)
       })
     )
@@ -102,6 +104,8 @@ describe("Hosted vault onboarding boot", () => {
           return Response.json({ account_id: "account-1", vault_repo: null })
         if (path === "/api/vault/provider")
           return Response.json({ ready: false, provider: null })
+        if (path === "/api/vault")
+          return Response.json({ cloned: false, cloneError: null })
         throw new Error(`Unexpected fetch: ${path}`)
       })
     )
@@ -116,4 +120,116 @@ describe("Hosted vault onboarding boot", () => {
     ).not.toBeNull()
     expect(document.body.textContent).not.toMatch(/admin password/i)
   })
+
+  it.each(["/api/console/account", "/api/vault/provider", "/api/vault"])(
+    "returns a customer %s 401 to configured sign-in choices",
+    async (unauthorizedPath) => {
+      mocks.api.mockImplementation((path: string) => {
+        if (path === "/api/auth/status")
+          return Promise.resolve({
+            needsSetup: false,
+            configured: true,
+            hostedMode: null,
+            customerAuth: true,
+            authMethod: "google",
+            signInMethods: ["google", "github"],
+          })
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = String(input)
+          if (path === unauthorizedPath)
+            return Response.json({ error: "unauthorized" }, { status: 401 })
+          if (path === "/api/me")
+            return Response.json({ provider: "google", providers: ["google"] })
+          if (path === "/api/console/account")
+            return Response.json({ account_id: "account-1", vault_repo: null })
+          if (path === "/api/vault/provider")
+            return Response.json({ ready: false, provider: null })
+          if (path === "/api/vault")
+            return Response.json({ cloned: false, cloneError: null })
+          throw new Error(`Unexpected fetch: ${path}`)
+        })
+      )
+
+      render(<App />)
+
+      expect(
+        await screen.findByRole("link", { name: "Continue with Google" })
+      ).not.toBeNull()
+      expect(
+        screen.getByRole("link", { name: "Continue with GitHub" })
+      ).not.toBeNull()
+    }
+  )
+
+  it.each([
+    {
+      name: "provider-ready while repository verification fails",
+      providerResponse: Response.json({
+        ready: true,
+        provider: "google_drive",
+        blocker: null,
+      }),
+      vaultResponse: Response.json({
+        cloned: false,
+        cloneError: "Drive bundle is corrupt",
+      }),
+    },
+    {
+      name: "missing authoritative provider projection",
+      providerResponse: Response.json(
+        { error: "authority missing" },
+        { status: 500 }
+      ),
+      vaultResponse: Response.json({ cloned: true, cloneError: null }),
+    },
+  ])(
+    "keeps $name in Vault instead of showing a false-ready overview",
+    async ({ providerResponse, vaultResponse }) => {
+      mocks.api.mockImplementation((path: string) => {
+        if (path === "/api/auth/status")
+          return Promise.resolve({
+            needsSetup: false,
+            configured: true,
+            hostedMode: null,
+            customerAuth: true,
+            authMethod: "google",
+            signInMethods: ["google"],
+          })
+        if (path === "/api/settings")
+          return Promise.resolve({ settings: { provider: "openrouter" } })
+        if (path === "/api/overview")
+          return Promise.resolve({
+            unit: { name: "zenod" },
+            tenant: { id: "tenant-1" },
+            usage: null,
+          })
+        return Promise.reject(new Error(`Unexpected API call: ${path}`))
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = String(input)
+          if (path === "/api/me")
+            return Response.json({ provider: "google", providers: ["google"] })
+          if (path === "/api/console/account")
+            return Response.json({ account_id: "account-1", vault_repo: null })
+          if (path === "/api/vault/provider") return providerResponse.clone()
+          if (path === "/api/vault") return vaultResponse.clone()
+          throw new Error(`Unexpected fetch: ${path}`)
+        })
+      )
+
+      render(<App />)
+
+      const vaultTab = await screen.findByRole("tab", {
+        name: "Vault & sources",
+      })
+      expect(vaultTab.getAttribute("data-state")).toBe("active")
+      expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
+    }
+  )
 })

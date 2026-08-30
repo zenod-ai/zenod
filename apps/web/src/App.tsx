@@ -121,6 +121,10 @@ function CustomerApp() {
             return
           }
           const account = await fetch("/api/console/account")
+          if (account.status === 401) {
+            setView({ kind: "hosted-login", methods: signInMethods })
+            return
+          }
           if (
             window.location.pathname === "/account" ||
             account.status === 404
@@ -131,14 +135,32 @@ function CustomerApp() {
           const accountProjection = account.ok
             ? ((await account.json()) as { vault_repo?: string | null })
             : null
-          const vault = await fetch("/api/vault/provider")
+          const [vault, vaultStatusResponse] = await Promise.all([
+            fetch("/api/vault/provider"),
+            fetch("/api/vault"),
+          ])
+          if (vault.status === 401 || vaultStatusResponse.status === 401) {
+            setView({ kind: "hosted-login", methods: signInMethods })
+            return
+          }
           const vaultProjection = vault.ok
             ? ((await vault.json()) as { ready?: boolean })
             : null
+          const vaultStatus = vaultStatusResponse.ok
+            ? ((await vaultStatusResponse.json()) as {
+                cloned?: boolean
+                cloneError?: string | null
+              })
+            : null
           const legacyGithubVault = Boolean(accountProjection?.vault_repo)
+          const repositoryVerified = Boolean(
+            vaultStatus?.cloned && !vaultStatus.cloneError
+          )
           loadSettings(
             "hosted",
-            vaultProjection?.ready || legacyGithubVault ? undefined : "vault",
+            (vaultProjection?.ready || legacyGithubVault) && repositoryVerified
+              ? undefined
+              : "vault",
             signInMethods
           )
           return

@@ -26,6 +26,7 @@ import { VaultTab } from "./VaultTab"
 afterEach(() => {
   cleanup()
   mocks.api.mockReset()
+  window.history.replaceState(null, "", "/app#vault")
 })
 
 const vaultStatus = {
@@ -185,5 +186,91 @@ describe("Hosted authoritative vault onboarding", () => {
     ).toBeNull()
     expect(screen.queryByText("Choose where Zenod keeps your vault")).toBeNull()
     expect(screen.getByText(/GitHub is the durable authority/i)).not.toBeNull()
+  })
+
+  it.each([
+    ["vault_authorization_required", "Reconnect GitHub"],
+    ["vault_recovering", "Preparing your GitHub vault"],
+    ["vault_conflict", "GitHub vault conflict needs review"],
+    ["vault_error", "GitHub vault needs attention"],
+  ] as const)(
+    "keeps GitHub %s recovery on GitHub actions and copy",
+    async (blocker, title) => {
+      mockHostedVault(projection("github", blocker), ["github"])
+
+      render(<VaultTab edition="hosted" allowReclone={false} />)
+
+      expect(await screen.findByText(title)).not.toBeNull()
+      expect(screen.getByText("GitHub repository setup")).not.toBeNull()
+      expect(document.body.textContent).not.toMatch(
+        /Drive permission|Retry recovery|Reconnect Drive|Drive conflict/i
+      )
+    }
+  )
+
+  it("does not claim Ready when a bound Drive repository has not verified", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/vault")
+        return Promise.resolve({
+          ...vaultStatus,
+          vaultConfigured: true,
+          cloned: false,
+          cloneError: "Repository bundle could not be opened",
+        })
+      if (path === "/api/vault/provider")
+        return Promise.resolve(projection("google_drive", null))
+      if (path === "/api/me") return Promise.resolve({ providers: ["google"] })
+      return Promise.reject(new Error(`Unexpected API call: ${path}`))
+    })
+
+    render(<VaultTab edition="hosted" allowReclone={false} />)
+
+    expect(await screen.findByText("Drive vault needs recovery")).not.toBeNull()
+    expect(
+      screen.getByText(/Repository bundle could not be opened/i)
+    ).not.toBeNull()
+    expect(screen.queryByText("Ready")).toBeNull()
+    expect(screen.queryByText("Memory readiness")).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Retry recovery" })
+    ).not.toBeNull()
+  })
+
+  it("turns a denied Drive callback into an actionable vault retry journey", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app?vault=authorization-denied#vault"
+    )
+    mockHostedVault(projection(null, "vault_not_selected"))
+
+    render(<VaultTab edition="hosted" allowReclone={false} />)
+
+    expect(
+      await screen.findByText("Google Drive permission was not granted")
+    ).not.toBeNull()
+    expect(document.body.textContent).toMatch(/Nothing changed/i)
+    expect(
+      screen.getByRole("button", { name: "Use Google Drive" })
+    ).not.toBeNull()
+  })
+
+  it("turns an expired Drive callback into a fresh setup journey", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app?vault=authorization-error#vault"
+    )
+    mockHostedVault(projection(null, "vault_not_selected"))
+
+    render(<VaultTab edition="hosted" allowReclone={false} />)
+
+    expect(
+      await screen.findByText("Google Drive setup link expired")
+    ).not.toBeNull()
+    expect(document.body.textContent).toMatch(/fresh, secure setup/i)
+    expect(
+      screen.getByRole("button", { name: "Use Google Drive" })
+    ).not.toBeNull()
   })
 })

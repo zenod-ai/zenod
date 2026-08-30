@@ -20,7 +20,7 @@ import {
 } from "@/components/hosted-usage-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import type { VaultCapabilityProjection } from "@/lib/api"
+import type { VaultCapabilityProjection, VaultStatus } from "@/lib/api"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
 
@@ -49,14 +49,22 @@ type Account = {
   token_hint: string | null
   vault_repo: string | null
   vault_repo_url: string | null
-  vault: VaultCapabilityProjection
   usage: HostedCustomerUsage
+}
+
+class AccountRequestError extends Error {
+  readonly status: number
+
+  constructor(status: number) {
+    super(`${status}`)
+    this.status = status
+  }
 }
 
 async function optionalJson<T>(path: string): Promise<T | null> {
   const response = await fetch(path)
   if (response.status === 404) return null
-  if (!response.ok) throw new Error(`${response.status}`)
+  if (!response.ok) throw new AccountRequestError(response.status)
   return response.json() as Promise<T>
 }
 
@@ -91,7 +99,12 @@ function subscriptionLabel(tier: string | null): string {
 export function HostedAccount() {
   const [me, setMe] = React.useState<Me | null>(null)
   const [account, setAccount] = React.useState<Account | null>(null)
+  const [vault, setVault] = React.useState<VaultCapabilityProjection | null>(
+    null
+  )
+  const [vaultStatus, setVaultStatus] = React.useState<VaultStatus | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [sessionExpired, setSessionExpired] = React.useState(false)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [billingBusy, setBillingBusy] = React.useState(false)
   const [billingError, setBillingError] = React.useState<string | null>(null)
@@ -100,12 +113,20 @@ export function HostedAccount() {
     Promise.all([
       optionalJson<Me>("/api/me"),
       optionalJson<Account>("/api/console/account"),
+      optionalJson<VaultCapabilityProjection>("/api/vault/provider"),
+      optionalJson<VaultStatus>("/api/vault"),
     ])
-      .then(([nextMe, nextAccount]) => {
+      .then(([nextMe, nextAccount, nextVault, nextVaultStatus]) => {
         setMe(nextMe)
         setAccount(nextAccount)
+        setVault(nextVault)
+        setVaultStatus(nextVaultStatus)
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        if (error instanceof AccountRequestError && error.status === 401) {
+          setSessionExpired(true)
+          return
+        }
         setLoadError(
           "Could not load your Zenod account. Check your connection and try again."
         )
@@ -113,15 +134,28 @@ export function HostedAccount() {
       .finally(() => setLoading(false))
   }, [])
 
-  React.useEffect(() => {
-    if (!loading && !me) window.location.assign("/auth/signin")
-  }, [loading, me])
-
   if (loading) {
     return (
       <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
         Loading your Zenod account…
       </div>
+    )
+  }
+
+  if (sessionExpired || (!me && !loadError)) {
+    return (
+      <main className="mx-auto flex min-h-svh w-full max-w-xl items-center p-6">
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>Your session has expired</AlertTitle>
+          <AlertDescription className="flex flex-col items-start gap-3">
+            <span>Sign in again with any method available for this Zenod.</span>
+            <Button asChild>
+              <a href="/">Continue to sign in</a>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </main>
     )
   }
 
@@ -142,13 +176,7 @@ export function HostedAccount() {
     )
   }
 
-  if (!me) {
-    return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-        Redirecting...
-      </div>
-    )
-  }
+  if (!me) return null
 
   const endpoint = account?.mcp_url ?? ""
   const token = account?.token ?? "<your token>"
@@ -159,7 +187,12 @@ export function HostedAccount() {
     ? `claude mcp add --transport http zenod ${endpoint} --header "Authorization: Bearer ${token}"`
     : ""
   const legacyGithubVault = Boolean(
-    account?.vault.provider === null && account.vault_repo
+    vault?.provider === null && account?.vault_repo
+  )
+  const vaultReady = Boolean(
+    (vault?.ready || legacyGithubVault) &&
+    vaultStatus?.cloned &&
+    !vaultStatus.cloneError
   )
 
   async function openBillingPortal() {
@@ -308,22 +341,22 @@ export function HostedAccount() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 Your memory vault
-                {account.vault.ready || legacyGithubVault ? (
+                {vaultReady ? (
                   <Badge variant="secondary">Ready</Badge>
                 ) : (
                   <Badge variant="outline">Setup needed</Badge>
                 )}
               </CardTitle>
               <CardDescription>
-                {account.vault.provider === "google_drive"
+                {vault?.provider === "google_drive"
                   ? "Google Drive is the durable authority for your Markdown files and bundled Git history."
-                  : account.vault.provider === "github" || legacyGithubVault
+                  : vault?.provider === "github" || legacyGithubVault
                     ? "GitHub is the durable authority for your repository and commit history."
                     : "Choose Google Drive or GitHub as the one durable authority for this vault."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
-              {(account.vault.provider === "github" || legacyGithubVault) &&
+              {(vault?.provider === "github" || legacyGithubVault) &&
               account.vault_repo ? (
                 <a
                   className="inline-flex items-center gap-2 text-sm underline"
@@ -333,7 +366,7 @@ export function HostedAccount() {
                   <ExternalLinkIcon className="size-3.5" />
                 </a>
               ) : null}
-              {account.vault.provider === "google_drive" ? (
+              {vault?.provider === "google_drive" ? (
                 <Button asChild variant="link" className="rounded-none">
                   <a
                     href="https://drive.google.com/drive/my-drive"
@@ -347,17 +380,11 @@ export function HostedAccount() {
               ) : null}
               <Button
                 asChild
-                variant={
-                  account.vault.ready || legacyGithubVault
-                    ? "outline"
-                    : "default"
-                }
+                variant={vaultReady ? "outline" : "default"}
                 className="rounded-none"
               >
                 <a href="/app#vault">
-                  {account.vault.ready || legacyGithubVault
-                    ? "Manage vault"
-                    : "Finish vault setup"}
+                  {vaultReady ? "Manage vault" : "Finish vault setup"}
                 </a>
               </Button>
             </CardContent>
