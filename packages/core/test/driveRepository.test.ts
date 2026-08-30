@@ -391,6 +391,28 @@ describe("DriveVaultRepository", () => {
     expect(await readFile(join(rebuilt, "_attachments/source.bin"))).toEqual(Buffer.from([0, 1, 2, 255]));
     expect((await recovered.currentRevision()).commitSha).toBe(revision.commitSha);
     expect(await simpleGit(rebuilt).getRemotes()).toEqual([]);
+
+    const rebuiltState = new SqliteStateStore(":memory:");
+    const rebuiltLlm: BrainLlm = {
+      async classify() { throw new Error("cold-start read proof must not classify"); },
+      async composePage() { throw new Error("cold-start read proof must not compose"); },
+      async describeImage() { return "image"; },
+      async answer() { return { text: "The reconstructed Home note is available.", readPaths: ["Areas/Home.md"] }; },
+      async work() { return { text: "No work" }; },
+      async extractBacklog() { return { candidates: [] }; },
+    };
+    try {
+      const rebuiltEngine = createEngine({ repo: recovered, llm: rebuiltLlm, state: rebuiltState, readSyncTtlMs: 0 });
+      expect((await rebuiltEngine.search("Home"))[0]).toMatchObject({ path: "Areas/Home.md", provider: "google_drive" });
+      expect(await rebuiltEngine.get("Areas/Home.md")).toMatchObject({ body: "# Home\n", provider: "google_drive" });
+      const rebuiltAnswer = await rebuiltEngine.ask("Is the Home note still available?");
+      expect(rebuiltAnswer.text).toContain("reconstructed Home note");
+      expect(rebuiltAnswer.sources).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "Areas/Home.md", provider: "google_drive" }),
+      ]));
+    } finally {
+      rebuiltState.close();
+    }
   });
 
   it("imports an external Markdown edit as an explicit Git commit", async () => {

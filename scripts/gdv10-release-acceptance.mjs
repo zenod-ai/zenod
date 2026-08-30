@@ -1,8 +1,41 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
+const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+  encoding: "utf8",
+}).trim();
+const expectedSha = process.env.GDV10_EXPECTED_SHA?.trim();
+const expectedBaseSha = process.env.GDV10_EXPECTED_BASE_SHA?.trim();
+const receiptPath = process.env.GDV10_RECEIPT_PATH?.trim();
+
+if (resolve(process.cwd()) !== resolve(repositoryRoot)) {
+  throw new Error(`GDV-10 acceptance must run from repository root ${repositoryRoot}`);
+}
+if (!expectedSha || !/^[0-9a-f]{40}$/.test(expectedSha)) {
+  throw new Error("GDV10_EXPECTED_SHA must be the exact 40-character candidate SHA");
+}
+if (sourceSha !== expectedSha) {
+  throw new Error(`GDV-10 candidate mismatch: expected ${expectedSha}, found ${sourceSha}`);
+}
+if (!expectedBaseSha || !/^[0-9a-f]{40}$/.test(expectedBaseSha)) {
+  throw new Error("GDV10_EXPECTED_BASE_SHA must be the exact 40-character integration base SHA");
+}
+const mergeBase = execFileSync("git", ["merge-base", sourceSha, expectedBaseSha], {
+  encoding: "utf8",
+}).trim();
+if (mergeBase !== expectedBaseSha) {
+  throw new Error(`GDV-10 base mismatch: ${expectedBaseSha} is not the candidate base`);
+}
+const dirty = execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+  encoding: "utf8",
+});
+if (dirty.trim()) {
+  throw new Error(`GDV-10 acceptance requires a clean tree:\n${dirty.trimEnd()}`);
+}
 const startedAt = new Date().toISOString();
 
 const steps = [
@@ -86,6 +119,7 @@ const receipt = {
   acceptance: "GDV-10 Google-only release acceptance and GitHub regression",
   status: failed ? "fail" : "pass",
   sourceSha,
+  integrationBaseSha: expectedBaseSha,
   command: "npm run acceptance:gdv10",
   startedAt,
   completedAt: new Date().toISOString(),
@@ -94,5 +128,8 @@ const receipt = {
   steps: results,
 };
 
+if (receiptPath) {
+  writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+}
 process.stdout.write(`\nGDV10_RELEASE_ACCEPTANCE_RECEIPT ${JSON.stringify(receipt)}\n`);
 process.exitCode = failed ? 1 : 0;
