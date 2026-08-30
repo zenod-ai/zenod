@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "acceptance": "GDV-10 Google-only release acceptance and GitHub regression",
+  "status": "pass",
+  "sourceSha": "a0e2bad2350992bed89b891a1f05a4aedc288260",
+  "integrationBaseSha": "3802672df535461a28853c8d363f205f6278e262",
+  "command": "npm run acceptance:gdv10",
+  "startedAt": "2026-08-30T09:54:57.385Z",
+  "completedAt": "2026-08-30T09:57:26.828Z",
+  "boundary": "deterministic local integration with fake Google identity, OAuth, Drive, channel and billing/provider boundaries; no live credentials, grants, card, Drive mutation, deployment, or public signup",
+  "steps": [
+    {
+      "id": "workspace-dependencies",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "id": "chassis-dependencies",
+      "status": "pass",
+      "exitCode": 0
+    },
+    {
+      "id": "drive-authority-and-memory-loop",
+      "status": "pass",
+      "exitCode": 0,
+      "testFiles": 2,
+      "tests": 56
+    },
+    {
+      "id": "hosted-runtime-transports-and-regressions",
+      "status": "pass",
+      "exitCode": 0,
+      "testFiles": 14,
+      "tests": 272
+    },
+    {
+      "id": "google-first-and-github-ui-regression",
+      "status": "pass",
+      "exitCode": 0,
+      "testFiles": 5,
+      "tests": 36
+    }
+  ]
+}
