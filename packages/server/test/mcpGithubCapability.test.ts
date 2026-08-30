@@ -1,8 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { BrainEngine } from "zenod";
+import { createGithubIssue, type BrainEngine } from "zenod";
 import { buildMcpServer } from "../src/mcp.js";
+import { Runtime } from "../src/runtime.js";
 
 async function catalog(input: {
   edit?: Parameters<typeof buildMcpServer>[5];
@@ -138,6 +143,61 @@ describe("MCP GitHub capability projection", () => {
     } finally {
       await client.close();
       await server.close();
+    }
+  });
+
+  it("uses the real tenant installation stack for MCP revocation and same-ID reconnect", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gdv9-mcp-revocation-"));
+    const runtime = new Runtime(dir, undefined, { tenantId: "tenant-real-stack" });
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    runtime.settings.setRaw("github_app_id", "shared-app");
+    runtime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    runtime.settings.setRaw("github_app_installation_id", "111");
+    let generation = 0;
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input).replace("https://api.github.com", "");
+      calls.push(path);
+      if (path === "/app/installations/111/access_tokens") {
+        generation += 1;
+        return Response.json({ token: `tenant-token-${generation}`, expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+      }
+      if (path === "/repos/o/r/issues" && generation === 1) return new Response("Bad credentials secret", { status: 401 });
+      if (path === "/repos/o/r/issues" && generation === 2) {
+        return Response.json({ number: 7, html_url: "https://github.com/o/r/issues/7", labels: [] }, { status: 201 });
+      }
+      return new Response(`unexpected ${path}`, { status: 500 });
+    });
+    const invalidate = vi.spyOn(runtime, "invalidate");
+    const { client, server } = await catalog({
+      create: (input) => createGithubIssue(runtime.settings, input),
+      githubCapability: () => runtime.settings.githubConnectionConfigured(),
+      onGithubAuthorizationRevoked: () => runtime.settings.onGithubAuthorizationRevoked(),
+    });
+    try {
+      const revoked = await client.callTool({ name: "create_issue", arguments: { repo: "o/r", title: "blocked", body: "no mutation" } });
+      expect(revoked).toMatchObject({ isError: true, structuredContent: { error: { code: "github_connection_required" } } });
+      expect(JSON.stringify(revoked)).not.toContain("secret");
+      expect(runtime.settings.githubConnectionConfigured()).toBe(false);
+      const denied = await client.callTool({ name: "create_issue", arguments: { repo: "o/r", title: "still blocked", body: "no mutation" } });
+      expect(denied).toMatchObject({ structuredContent: { error: { code: "github_connection_required" } } });
+      expect(calls).toEqual(["/app/installations/111/access_tokens", "/repos/o/r/issues"]);
+
+      runtime.settings.replaceGithubInstallationAuthorization("111");
+      const connected = await client.callTool({ name: "create_issue", arguments: { repo: "o/r", title: "connected", body: "allowed" } });
+      expect(connected).toMatchObject({ structuredContent: { issueNumber: 7 } });
+      expect(calls).toEqual([
+        "/app/installations/111/access_tokens",
+        "/repos/o/r/issues",
+        "/app/installations/111/access_tokens",
+        "/repos/o/r/issues",
+      ]);
+      expect(invalidate).toHaveBeenCalled();
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

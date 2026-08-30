@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { SqliteStateStore } from "zenod/state/sqlite";
+import { clearGithubAuthorizationCache } from "zenod";
 import {
   normalizeOptionalConfigString,
   normalizeAllowedSenders,
@@ -193,6 +194,8 @@ export class Settings {
     private readonly rawFallbacks: Readonly<Record<string, string>> = {},
     private readonly googleDriveOAuthAuthoritySource?: GoogleDriveOAuthAuthoritySource,
     private readonly vaultProviderBindingSource?: VaultProviderBindingSource,
+    private readonly githubAuthorizationScopeSource?: () => string,
+    private readonly githubAuthorizationRevokedCallback?: () => void,
   ) {
     this.migrateCredentialSecrets();
   }
@@ -815,8 +818,25 @@ export class Settings {
     return Boolean(this.get("github_token") || this.hasGithubApp());
   }
 
+  githubAuthorizationScope(): string {
+    return this.githubAuthorizationScopeSource?.() || "standalone:unbound";
+  }
+
+  onGithubAuthorizationRevoked(): void {
+    this.revokeGithubAuthorization();
+    this.githubAuthorizationRevokedCallback?.();
+  }
+
+  /** Replace tenant authorization and evict both old and same-ID cached tokens. */
+  replaceGithubInstallationAuthorization(installationId: string): void {
+    clearGithubAuthorizationCache(this);
+    clearGithubAuthorizationCache(this, installationId);
+    this.setRaw("github_app_installation_id", installationId);
+  }
+
   /** Invalidate only tenant authorization; retain shared App identity/configuration for reconnect. */
   revokeGithubAuthorization(): void {
+    clearGithubAuthorizationCache(this);
     this.setRaw("github_app_installation_id", "");
     this.setRaw("github_token", "");
   }

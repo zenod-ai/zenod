@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appJwt, appStatus, createGithubIssue, disconnectApp, editGithubIssue, githubAppInstallationUrl, installationToken } from "zenod";
+import { appJwt, appStatus, clearGithubAuthorizationCache, createGithubIssue, disconnectApp, editGithubIssue, githubAppInstallationUrl, installationToken } from "zenod";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -60,6 +60,62 @@ describe("GitHub App flow", () => {
     expect(settings.hasGithubApp()).toBe(false);
   });
 
+  it("isolates cached installation tokens by tenant and evicts them on same-ID and new-ID reconnect", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ type: "pkcs1", format: "pem" }) as string;
+    const connection = (scope: string) => {
+      const values = new Map<string, string>([
+        ["github_app_id", "shared-app"],
+        ["github_app_private_key", pem],
+        ["github_app_installation_id", "111"],
+      ]);
+      return {
+        getRaw: (key: string) => values.get(key) ?? null,
+        setRaw: (key: string, value: string) => { if (value) values.set(key, value); else values.delete(key); },
+        hasGithubApp: () => Boolean(values.get("github_app_id") && values.get("github_app_private_key") && values.get("github_app_installation_id")),
+        githubAuthorizationScope: () => scope,
+      };
+    };
+    const tenantA = connection("tenant-a:drive-binding-a");
+    const tenantB = connection("tenant-b:drive-binding-b");
+    const minted: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input).replace("https://api.github.com", "");
+      minted.push(path);
+      const token = `token-${minted.length}`;
+      return Response.json({ token, expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+    });
+    expect(await installationToken(tenantA)).toBe("token-1");
+    expect(await installationToken(tenantB)).toBe("token-2");
+    expect(await installationToken(tenantA)).toBe("token-1");
+
+    clearGithubAuthorizationCache(tenantA, "111");
+    expect(await installationToken(tenantA)).toBe("token-3");
+    clearGithubAuthorizationCache(tenantA, "222");
+    tenantA.setRaw("github_app_installation_id", "222");
+    expect(await installationToken(tenantA)).toBe("token-4");
+    expect(minted).toEqual([
+      "/app/installations/111/access_tokens",
+      "/app/installations/111/access_tokens",
+      "/app/installations/111/access_tokens",
+      "/app/installations/222/access_tokens",
+    ]);
+  });
+
+  it("classifies a missing stored installation as reconnect-required and invalidates tenant authorization", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    runtime.settings.setRaw("github_app_id", "shared-app");
+    runtime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    runtime.settings.setRaw("github_app_installation_id", "gone-404");
+    const invalidate = vi.spyOn(runtime, "invalidate");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+
+    await expect(installationToken(runtime.settings)).rejects.toMatchObject({ code: "github_connection_required" });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(runtime.settings.githubConnectionConfigured()).toBe(false);
+    expect(runtime.settings.getRaw("github_app_id")).toBe("shared-app");
+  });
+
   it("reports app status and counts a connected app as configured", async () => {
     const settings = runtime.settings;
     expect(appStatus(settings)).toEqual({ created: false, installed: false, slug: null, installationId: null });
@@ -112,10 +168,7 @@ describe("GitHub App flow", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       const path = String(url).replace("https://api.github.com", "");
       const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "");
-      if (path === "/repos/zenod-ai/fallback-fixture/installation") {
-        return new Response(JSON.stringify({ id: 888 }), { status: 200 });
-      }
-      if (path === "/app/installations/888/access_tokens") {
+      if (path === "/app/installations/fallback-installation/access_tokens") {
         return new Response(
           JSON.stringify({ token: "ghs_repo_scoped_without_issue_write", expires_at: new Date(Date.now() + 3600_000).toISOString() }),
           { status: 201 },
@@ -145,7 +198,7 @@ describe("GitHub App flow", () => {
     expect(issueCalls).toEqual(["Bearer ghs_repo_scoped_without_issue_write", "Bearer ghp_fallback"]);
   });
 
-  it("refuses repo mutations through an app that is not installed on the target repo unless a PAT exists", async () => {
+  it("never discovers an installation from a caller repo and lets only the stored installation token attempt mutation", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const settings = runtime.settings;
     settings.setRaw("github_app_id", "public-create-trap-app");
@@ -156,8 +209,15 @@ describe("GitHub App flow", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       const path = String(url).replace("https://api.github.com", "");
       calls.push({ path, method: init?.method ?? "GET" });
-      if (path === "/repos/zenod-ai/uninstalled-public/installation") {
-        return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
+      if (path === "/app/installations/stored-installation/access_tokens") {
+        return new Response(JSON.stringify({
+          token: "stored-only-token",
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        }), { status: 201 });
+      }
+      if (path === "/repos/zenod-ai/uninstalled-public/issues") {
+        expect(String((init?.headers as Record<string, string>).Authorization)).toBe("Bearer stored-only-token");
+        return new Response("Resource not accessible by integration", { status: 403 });
       }
       return new Response(`unexpected ${init?.method ?? "GET"} ${path}`, { status: 500 });
     });
@@ -167,9 +227,13 @@ describe("GitHub App flow", () => {
         repo: "zenod-ai/uninstalled-public",
         title: "Should not be publicly created",
       }),
-    ).rejects.toThrow(/GitHub App is not installed on zenod-ai\/uninstalled-public|Configure a GitHub token/);
+    ).rejects.toThrow(/GitHub returned 403/);
 
-    expect(calls).toEqual([{ path: "/repos/zenod-ai/uninstalled-public/installation", method: "GET" }]);
+    expect(calls).toEqual([
+      { path: "/app/installations/stored-installation/access_tokens", method: "POST" },
+      { path: "/repos/zenod-ai/uninstalled-public/issues", method: "POST" },
+    ]);
+    expect(calls.some((call) => call.path.endsWith("/installation"))).toBe(false);
   });
 
   it("selects the active provider's key for configured()", () => {

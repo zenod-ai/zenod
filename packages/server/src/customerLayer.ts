@@ -55,6 +55,7 @@ import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
 import { hashToken } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
+import { GithubApiError, inspectGithubAppInstallation } from "zenod";
 import {
   assertPublicSignupIsReady,
   checkoutEnabledForOwner,
@@ -1080,7 +1081,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
 
     // The existing Zenod Memory GitHub App is configured to return here after the
     // customer grants it access to their brain repository.
-    app.get("/github/setup", (c) => {
+    app.get("/github/setup", async (c) => {
       const session = readCustomerSession(c, env);
       if (!session) return c.redirect("/auth/signin", 302);
       const principal = principalForSession(session);
@@ -1108,7 +1109,40 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       ) {
         return c.text("An authoritative vault provider is already selected.", 409);
       }
-      runtime.settings.setRaw("github_app_installation_id", installationId);
+      if (taskingOnly) {
+        let verified;
+        try {
+          verified = await inspectGithubAppInstallation(runtime.settings, installationId);
+        } catch (error) {
+          const status = error instanceof GithubApiError ? error.status : null;
+          const reconnectRequired = status === 401 || status === 404;
+          return c.json({
+            error: {
+              code: reconnectRequired ? "github_connection_required" : "github_installation_verification_failed",
+              message: status === 404
+                ? "That GitHub App installation no longer exists. Reinstall the App from Zenod settings."
+                : "Zenod could not verify that GitHub App installation. Try connecting it again.",
+            },
+          }, status === 404 ? 409 : 502);
+        }
+        if (verified.accountType !== "User") {
+          return c.json({
+            error: {
+              code: "github_organization_installation_not_supported",
+              message: "Drive tasking currently supports personal GitHub App installations only; organization authorization is not yet available.",
+            },
+          }, 403);
+        }
+        if (verified.accountId !== principal.github_id) {
+          return c.json({
+            error: {
+              code: "github_installation_identity_mismatch",
+              message: "Install the GitHub App on the same personal GitHub account linked to this Zenod account.",
+            },
+          }, 403);
+        }
+      }
+      runtime.settings.replaceGithubInstallationAuthorization(installationId);
       runtime.invalidate();
       return c.redirect("/app?github=connected", 302);
     });

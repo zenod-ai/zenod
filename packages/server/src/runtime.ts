@@ -33,7 +33,16 @@ import {
   isKnownTool,
   toolKind,
 } from "zenod";
-import { installationToken, installationTokenForRepo, editGithubIssue, mintExecutionIssue, setExecutionState } from "zenod";
+import {
+  GithubApiError,
+  GithubConnectionRequiredError,
+  isGithubAuthorizationRevoked,
+  installationToken,
+  installationTokenForRepo,
+  editGithubIssue,
+  mintExecutionIssue,
+  setExecutionState,
+} from "zenod";
 import { z, type ZodTypeAny } from "zod";
 import { ZENOD_AGENT, type AgentDefinition } from "./agent.js";
 import { loadProjectRegistry, projectRegistrySection, resolveProject } from "./projectRegistry.js";
@@ -324,6 +333,8 @@ export class Runtime {
       options.settingFallbacks,
       options.googleDriveOAuthAuthority,
       options.vaultProviderBinding,
+      () => `${this.tenantId}:${this.vaultBindingSource?.()?.binding_id ?? "unbound"}`,
+      () => this.invalidate(),
     );
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
@@ -1259,6 +1270,7 @@ export class Runtime {
           const appToken = await installationTokenForRepo(this.settings, repo, { strict: true });
           return pat && pat !== appToken ? [appToken, pat] : [appToken];
         } catch (err) {
+          if (isGithubAuthorizationRevoked(err)) throw err;
           if (pat) return [pat];
           throw err;
         }
@@ -1274,7 +1286,7 @@ export class Runtime {
     const method = (init.method ?? "GET").toUpperCase();
     const requireRepoInstallation = method !== "GET" && method !== "HEAD";
     const tokens = await this.githubTokens(repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : undefined, requireRepoInstallation);
-    if (tokens.length === 0) throw new Error("GitHub token or app installation is required");
+    if (tokens.length === 0) throw new GithubConnectionRequiredError();
     for (let index = 0; index < tokens.length; index += 1) {
       const response = await fetch(`https://api.github.com${path}`, {
         ...init,
@@ -1292,7 +1304,14 @@ export class Runtime {
       }
       const body = await response.text().catch(() => "");
       if (response.status === 403 && index + 1 < tokens.length) continue;
-      throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
+      const error = new GithubApiError("api_request", response.status, body.slice(0, 300));
+      if (response.status === 401) {
+        this.settings.onGithubAuthorizationRevoked();
+        const required = new GithubConnectionRequiredError();
+        required.cause = error;
+        throw required;
+      }
+      throw error;
     }
     throw new Error("GitHub request failed");
   }

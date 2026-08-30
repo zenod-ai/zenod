@@ -9,6 +9,10 @@ export interface ConnectionSettings {
   getRaw(key: string): string | null;
   setRaw(key: string, value: string): void;
   hasGithubApp(): boolean;
+  /** Stable tenant + vault-binding isolation key for cached App authorization. */
+  githubAuthorizationScope?(): string;
+  /** Existing host seam: clear tenant auth and invalidate its runtime/catalog. */
+  onGithubAuthorizationRevoked?(): void;
 }
 
 /** GitHub App credentials plus the tenant-specific installation selection. */
@@ -57,6 +61,108 @@ interface InstallationToken {
 
 const tokenCache = new Map<string, InstallationToken>();
 
+export class GithubApiError extends Error {
+  constructor(
+    readonly operation: "installation_lookup" | "installation_token" | "api_request",
+    readonly status: number,
+    detail = "",
+  ) {
+    super(operation === "api_request"
+      ? `GitHub returned ${status}${detail ? `: ${detail}` : ""}`
+      : operation === "installation_token"
+        ? `GitHub installation token request failed: ${status}${detail ? ` ${detail}` : ""}`
+        : `GitHub installation lookup failed: ${status}${detail ? ` ${detail}` : ""}`);
+    this.name = "GithubApiError";
+  }
+}
+
+export class GithubConnectionRequiredError extends Error {
+  readonly code = "github_connection_required";
+
+  constructor(message = "Reconnect GitHub before using issue and code-repository tools. Memory remains available.") {
+    super(message);
+    this.name = "GithubConnectionRequiredError";
+  }
+}
+
+export function isGithubAuthorizationRevoked(error: unknown): boolean {
+  if (error instanceof GithubConnectionRequiredError) return true;
+  if (error instanceof GithubApiError) {
+    return error.status === 401 || (error.operation === "installation_token" && error.status === 404);
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /GitHub returned 401\b/i.test(message) ||
+    /GitHub installation token request failed:\s*(?:401|404)\b/i.test(message) ||
+    /GitHub App token request[^\n]*failed \((?:401|404)\)/i.test(message);
+}
+
+export function isGithubConnectionRequiredError(error: unknown): error is GithubConnectionRequiredError {
+  return error instanceof GithubConnectionRequiredError ||
+    Boolean(error && typeof error === "object" && "code" in error && error.code === "github_connection_required");
+}
+
+function authorizationScope(settings: ConnectionSettings): string {
+  return settings.githubAuthorizationScope?.() || "standalone:unbound";
+}
+
+function tokenCacheKey(settings: ConnectionSettings, appId: string, installationId: string): string {
+  return `${authorizationScope(settings)}:${appId}:${installationId}`;
+}
+
+export function clearGithubAuthorizationCache(settings: ConnectionSettings, installationId?: string | null): void {
+  const appId = settings.getRaw("github_app_id");
+  const selected = installationId ?? settings.getRaw("github_app_installation_id");
+  if (!appId || !selected) return;
+  tokenCache.delete(tokenCacheKey(settings, appId, selected));
+}
+
+function connectionRequired(settings: ConnectionSettings, cause: unknown): GithubConnectionRequiredError {
+  settings.onGithubAuthorizationRevoked?.();
+  const error = new GithubConnectionRequiredError();
+  error.cause = cause;
+  return error;
+}
+
+export interface GithubAppInstallationIdentity {
+  installationId: string;
+  accountId: number;
+  accountType: "User" | "Organization" | string;
+  accountLogin: string | null;
+}
+
+/** Verify a callback installation through the existing App API before tenant persistence. */
+export async function inspectGithubAppInstallation(
+  settings: ConnectionSettings,
+  installationId: string,
+): Promise<GithubAppInstallationIdentity> {
+  const appId = settings.getRaw("github_app_id");
+  const pem = settings.getRaw("github_app_private_key");
+  if (!appId || !pem) throw new GithubConnectionRequiredError("GitHub App verification is not configured.");
+  const response = await fetch(`https://api.github.com/app/installations/${encodeURIComponent(installationId)}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${appJwt(appId, pem)}`,
+      "User-Agent": "zenod",
+    },
+  });
+  if (!response.ok) {
+    throw new GithubApiError("installation_lookup", response.status, (await response.text()).slice(0, 300));
+  }
+  const data = await response.json() as {
+    id?: number;
+    account?: { id?: number; type?: string; login?: string | null };
+  };
+  if (!Number.isSafeInteger(data.id) || String(data.id) !== installationId || !Number.isSafeInteger(data.account?.id)) {
+    throw new Error("GitHub returned an invalid installation identity response");
+  }
+  return {
+    installationId,
+    accountId: data.account!.id!,
+    accountType: data.account?.type ?? "",
+    accountLogin: data.account?.login ?? null,
+  };
+}
+
 /** Mint (and cache) a short-lived installation token. */
 export async function installationToken(settings: ConnectionSettings): Promise<string> {
   const appId = settings.getRaw("github_app_id");
@@ -64,7 +170,7 @@ export async function installationToken(settings: ConnectionSettings): Promise<s
   const installationId = settings.getRaw("github_app_installation_id");
   if (!appId || !pem || !installationId) throw new Error("GitHub App is not fully connected");
 
-  const cacheKey = `${appId}:${installationId}`;
+  const cacheKey = tokenCacheKey(settings, appId, installationId);
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt - Date.now() > 5 * 60 * 1000) return cached.token;
 
@@ -77,7 +183,9 @@ export async function installationToken(settings: ConnectionSettings): Promise<s
     },
   });
   if (!response.ok) {
-    throw new Error(`GitHub installation token request failed: ${response.status} ${await response.text()}`);
+    const error = new GithubApiError("installation_token", response.status, (await response.text()).slice(0, 300));
+    if (isGithubAuthorizationRevoked(error)) throw connectionRequired(settings, error);
+    throw error;
   }
   const data = (await response.json()) as { token: string; expires_at: string };
   tokenCache.set(cacheKey, { token: data.token, expiresAt: Date.parse(data.expires_at) });
@@ -85,52 +193,18 @@ export async function installationToken(settings: ConnectionSettings): Promise<s
 }
 
 /**
- * Mint a token for the installation that actually owns `repo` (owner/name), so
- * the App works across EVERY account it is installed on — not just the one
- * stored installation. Falls back to the stored single-installation token on any
- * failure, so behaviour is never worse than the previous single-repo path.
+ * Compatibility entry point for repo callers. Authorization is always minted
+ * from this tenant's stored installation; caller-supplied repo names never
+ * select or discover another installation. The resulting token's GitHub API
+ * access check is the authority for whether that repo is reachable.
  */
 export async function installationTokenForRepo(
   settings: ConnectionSettings,
   repo: string,
-  options: { strict?: boolean } = {},
+  _options: { strict?: boolean } = {},
 ): Promise<string> {
-  const appId = settings.getRaw("github_app_id");
-  const pem = settings.getRaw("github_app_private_key");
-  if (!appId || !pem || !repo.includes("/")) return installationToken(settings);
-  const cacheKey = `repo:${repo}`;
-  const cached = tokenCache.get(cacheKey);
-  if (cached && cached.expiresAt - Date.now() > 5 * 60 * 1000) return cached.token;
-  try {
-    const jwt = appJwt(appId, pem);
-    const headers = { Accept: "application/vnd.github+json", Authorization: `Bearer ${jwt}`, "User-Agent": "zenod" };
-    const found = await fetch(`https://api.github.com/repos/${repoPath(repo)}/installation`, { headers });
-    if (!found.ok) {
-      if (options.strict) {
-        throw new Error(
-          `GitHub App is not installed on ${repo} or cannot access it (${found.status}). Install the app on that repo or configure a GitHub token.`,
-        );
-      }
-      return installationToken(settings);
-    }
-    const installation = (await found.json()) as { id: number };
-    const minted = await fetch(`https://api.github.com/app/installations/${installation.id}/access_tokens`, {
-      method: "POST",
-      headers,
-    });
-    if (!minted.ok) {
-      if (options.strict) {
-        throw new Error(`GitHub App token request for ${repo} failed (${minted.status}). Configure a GitHub token or reinstall the app.`);
-      }
-      return installationToken(settings);
-    }
-    const data = (await minted.json()) as { token: string; expires_at: string };
-    tokenCache.set(cacheKey, { token: data.token, expiresAt: Date.parse(data.expires_at) });
-    return data.token;
-  } catch {
-    if (options.strict) throw new Error(`GitHub App is not installed on ${repo} or cannot access it. Configure a GitHub token or reinstall the app.`);
-    return installationToken(settings);
-  }
+  void repo;
+  return installationToken(settings);
 }
 
 /** Parse `owner/name` from a `/repos/owner/name/...` GitHub API path. */
@@ -154,7 +228,11 @@ export async function listInstallationRepos(settings: ConnectionSettings): Promi
     const response = await fetch(`https://api.github.com/installation/repositories?per_page=100&page=${page}`, {
       headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "User-Agent": "zenod" },
     });
-    if (!response.ok) throw new Error(`GitHub repository listing failed: ${response.status}`);
+    if (!response.ok) {
+      const error = new GithubApiError("api_request", response.status, (await response.text()).slice(0, 300));
+      if (isGithubAuthorizationRevoked(error)) throw connectionRequired(settings, error);
+      throw error;
+    }
     const data = (await response.json()) as {
       total_count: number;
       repositories: Array<{ full_name: string; private: boolean; default_branch: string }>;
@@ -169,6 +247,7 @@ export async function listInstallationRepos(settings: ConnectionSettings): Promi
 }
 
 export function disconnectApp(settings: ConnectionSettings): void {
+  clearGithubAuthorizationCache(settings);
   for (const key of [
     "github_app_id",
     "github_app_slug",
@@ -177,7 +256,6 @@ export function disconnectApp(settings: ConnectionSettings): void {
   ] as const) {
     settings.setRaw(key, "");
   }
-  tokenCache.clear();
 }
 
 export interface EditGithubIssueInput {
@@ -267,6 +345,7 @@ async function configuredGithubTokens(settings: ConnectionSettings, repo?: strin
         const appToken = await installationTokenForRepo(settings, repo, { strict: true });
         return pat && pat !== appToken ? [appToken, pat] : [appToken];
       } catch (err) {
+        if (isGithubAuthorizationRevoked(err)) throw err;
         if (pat) return [pat];
         throw err;
       }
@@ -299,7 +378,9 @@ async function githubRequest<T>(settings: ConnectionSettings, path: string, init
     }
     const body = await response.text().catch(() => "");
     if (response.status === 403 && index + 1 < tokens.length) continue;
-    throw new Error(`GitHub returned ${response.status}${body ? `: ${body.slice(0, 300)}` : ""}`);
+    const error = new GithubApiError("api_request", response.status, body.slice(0, 300));
+    if (isGithubAuthorizationRevoked(error)) throw connectionRequired(settings, error);
+    throw error;
   }
   throw new Error("GitHub request failed");
 }

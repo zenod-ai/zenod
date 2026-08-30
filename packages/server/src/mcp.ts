@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   ContextRefError,
+  isGithubAuthorizationRevoked,
   VERSION,
   type BrainEngine,
   type CleanSlateResult,
@@ -647,13 +648,6 @@ function githubConnectionRequired(tool: string) {
     structuredContent: { error: { code: "github_connection_required", message } },
     isError: true,
   };
-}
-
-function githubAuthorizationRevoked(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /GitHub returned 401\b/i.test(message) ||
-    /GitHub installation token request failed:\s*(?:401|404)\b/i.test(message) ||
-    /GitHub App token request[^\n]*failed \((?:401|404)\)/i.test(message);
 }
 
 /**
@@ -1604,7 +1598,7 @@ export function buildMcpServer(
         try {
           result = await editGithubIssue(input);
         } catch (error) {
-          if (!githubAuthorizationRevoked(error)) throw error;
+          if (!isGithubAuthorizationRevoked(error)) throw error;
           onGithubAuthorizationRevoked?.();
           return githubConnectionRequired("edit_github_issue");
         }
@@ -1634,7 +1628,7 @@ export function buildMcpServer(
         try {
           result = await createGithubIssue(input);
         } catch (error) {
-          if (!githubAuthorizationRevoked(error)) throw error;
+          if (!isGithubAuthorizationRevoked(error)) throw error;
           onGithubAuthorizationRevoked?.();
           return githubConnectionRequired("create_issue");
         }

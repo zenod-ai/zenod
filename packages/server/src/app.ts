@@ -2645,7 +2645,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   app.get("/api/github/app/setup", (c) => {
     const installationId = c.req.query("installation_id");
     if (installationId) {
-      settings.setRaw("github_app_installation_id", installationId);
+      settings.replaceGithubInstallationAuthorization(installationId);
       runtime.invalidate();
     }
     const returnTo = c.req.query("return_to") === "/app" ? "/app" : "/";

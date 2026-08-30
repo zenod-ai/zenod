@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { generateKeyPairSync } from "node:crypto";
 import type Stripe from "stripe";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -994,8 +995,23 @@ describe("hosted customer layer", () => {
       vault_drive_manifest_file_id: "drive-manifest",
     });
     runtime.settings.setRaw("github_app_id", "123");
-    runtime.settings.setRaw("github_app_private_key", "shared-key");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    runtime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
     runtime.settings.setRaw("github_app_slug", "zenod-tasking");
+    const githubFetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input).replace("https://api.github.com", "");
+      if (path === "/app/installations/404") return new Response("Not Found", { status: 404 });
+      if (path === "/app/installations/999") {
+        return Response.json({ id: 999, account: { id: 999, type: "User", login: "victim" } });
+      }
+      if (path === "/app/installations/888") {
+        return Response.json({ id: 888, account: { id: 4242, type: "Organization", login: "linked-org" } });
+      }
+      if (path === "/app/installations/777") {
+        return Response.json({ id: 777, account: { id: 4242, type: "User", login: "drive-tasker" } });
+      }
+      return new Response(`unexpected ${path}`, { status: 500 });
+    });
     const cookieIssuer = new Hono();
     cookieIssuer.get("/", (c) => {
       issueCustomerSession(c, principal, env);
@@ -1012,6 +1028,27 @@ describe("hosted customer layer", () => {
       expect(start.status).toBe(200);
       const installUrl = new URL((await start.json() as { url: string }).url);
       const state = installUrl.searchParams.get("state")!;
+      const missing = await layer.app.request(
+        `/github/setup?installation_id=404&state=${encodeURIComponent(state)}`,
+        { headers: { cookie } },
+      );
+      expect(missing.status).toBe(409);
+      expect(await missing.json()).toMatchObject({ error: { code: "github_connection_required" } });
+      expect(runtime.settings.getRaw("github_app_installation_id")).toBeNull();
+      const organization = await layer.app.request(
+        `/github/setup?installation_id=888&state=${encodeURIComponent(state)}`,
+        { headers: { cookie } },
+      );
+      expect(organization.status).toBe(403);
+      expect(await organization.json()).toMatchObject({ error: { code: "github_organization_installation_not_supported" } });
+      expect(runtime.settings.getRaw("github_app_installation_id")).toBeNull();
+      const victim = await layer.app.request(
+        `/github/setup?installation_id=999&state=${encodeURIComponent(state)}`,
+        { headers: { cookie } },
+      );
+      expect(victim.status).toBe(403);
+      expect(await victim.json()).toMatchObject({ error: { code: "github_installation_identity_mismatch" } });
+      expect(runtime.settings.getRaw("github_app_installation_id")).toBeNull();
       const connected = await layer.app.request(
         `/github/setup?installation_id=777&state=${encodeURIComponent(state)}`,
         { headers: { cookie } },
@@ -1019,6 +1056,12 @@ describe("hosted customer layer", () => {
       expect(connected.status).toBe(302);
       expect(runtime.settings.getRaw("github_app_installation_id")).toBe("777");
       expect(runtime.settings.githubConnectionConfigured()).toBe(true);
+      expect(githubFetch.mock.calls.map(([input]) => String(input))).toEqual([
+        "https://api.github.com/app/installations/404",
+        "https://api.github.com/app/installations/888",
+        "https://api.github.com/app/installations/999",
+        "https://api.github.com/app/installations/777",
+      ]);
       expect(layer.accounts.get(account.session_id)).toMatchObject({
         vault_provider: "google_drive",
         vault_binding_id: "drive-binding",

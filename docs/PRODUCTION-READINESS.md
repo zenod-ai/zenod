@@ -97,7 +97,8 @@ google_oauth_refresh_token
 Each tenant connects its own Google account; refresh token, account and app-created folder remain
 tenant-scoped. A Drive-selected tenant uses that folder as the sole remote vault authority, with ordinary
 Markdown plus sibling root controls `.zenod/` and `.git/repository.bundle`; GitHub is optional tasking,
-not a memory prerequisite.
+not a memory prerequisite. Hosted Drive tasking currently accepts personal GitHub App installations
+only, verified against the linked GitHub numeric identity; organization installations fail closed.
 The legacy archive/source Drive connection remains separate. Self-hosted BYO Drive source/inbox behavior
 is unchanged.
 

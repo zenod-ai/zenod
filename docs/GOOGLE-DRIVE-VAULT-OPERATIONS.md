@@ -17,6 +17,13 @@ The root contains ordinary visible Markdown and attachments plus two sibling app
 `.git/repository.bundle`, never `.zenod/.git/repository.bundle`. A Drive transaction ID and bundled Git commit SHA are independent.
 Never derive one from the other or emit a GitHub URL for a Drive file.
 
+Optional GitHub tasking does not change Drive authority. The callback verifies the returned App
+installation through GitHub and, until an organization-authorization proof exists, accepts only a
+personal installation whose account ID exactly matches the linked GitHub identity. Repo names never
+select installations: every task request uses the tenant's stored installation token and GitHub itself
+decides whether that token can access the requested repo. A 401 or missing installation clears tenant
+authorization and its cached token; reconnecting (including the same installation ID) mints a fresh token.
+
 ## Cache and restart
 
 The tenant runtime keeps a local workspace and binding-scoped state directory under tenant-owned storage.
