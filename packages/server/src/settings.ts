@@ -193,6 +193,9 @@ export class Settings {
     private readonly rawFallbacks: Readonly<Record<string, string>> = {},
     private readonly googleDriveOAuthAuthoritySource?: GoogleDriveOAuthAuthoritySource,
     private readonly vaultProviderBindingSource?: VaultProviderBindingSource,
+    private readonly githubAuthorizationScopeSource?: () => string,
+    private readonly githubAuthorizationRevokedCallback?: () => void,
+    private readonly githubAuthorizationCacheClear?: (installationId?: string | null) => void,
   ) {
     this.migrateCredentialSecrets();
   }
@@ -808,6 +811,39 @@ export class Settings {
       );
     }
     return Boolean(this.get("vault_repo") && (this.get("github_token") || this.hasGithubApp()));
+  }
+
+  /** GitHub tasking is optional and independent of the selected vault provider. */
+  githubConnectionConfigured(): boolean {
+    if (this.githubTaskingAuthorizationMode() === "app_only") return this.hasGithubApp();
+    return Boolean(this.get("github_token") || this.hasGithubApp());
+  }
+
+  githubTaskingAuthorizationMode(): "app_only" | "legacy" {
+    return this.vaultProviderBindingSource?.()?.provider === "google_drive" ? "app_only" : "legacy";
+  }
+
+  githubAuthorizationScope(): string {
+    return this.githubAuthorizationScopeSource?.() || "standalone:unbound";
+  }
+
+  onGithubAuthorizationRevoked(): void {
+    this.revokeGithubAuthorization();
+    this.githubAuthorizationRevokedCallback?.();
+  }
+
+  /** Replace tenant authorization and evict both old and same-ID cached tokens. */
+  replaceGithubInstallationAuthorization(installationId: string): void {
+    this.githubAuthorizationCacheClear?.();
+    this.githubAuthorizationCacheClear?.(installationId);
+    this.setRaw("github_app_installation_id", installationId);
+  }
+
+  /** Invalidate only tenant authorization; retain shared App identity/configuration for reconnect. */
+  revokeGithubAuthorization(): void {
+    this.githubAuthorizationCacheClear?.();
+    this.setRaw("github_app_installation_id", "");
+    this.setRaw("github_token", "");
   }
 
   /** The full engine can run: a reachable vault plus the active provider's key. */

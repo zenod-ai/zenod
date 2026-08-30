@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   ContextRefError,
+  isGithubAuthorizationRevoked,
   VERSION,
   type BrainEngine,
   type CleanSlateResult,
@@ -640,6 +641,15 @@ function formatWorkResult(result: WorkResult): string {
   return lines.join("\n");
 }
 
+function githubConnectionRequired(tool: string) {
+  const message = `Connect GitHub before using ${tool}. Memory and local Markdown backlog tools remain available.`;
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { error: { code: "github_connection_required", message } },
+    isError: true,
+  };
+}
+
 /**
  * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
  * appear only while a Google Drive connection is configured. Built fresh per
@@ -667,6 +677,8 @@ export function buildMcpServer(
   mediaIngest?: MediaIngestJobs,
   existingServer?: McpServer,
   chatInterceptor?: ChatTurnInterceptor,
+  githubCapability?: () => boolean,
+  onGithubAuthorizationRevoked?: () => void,
 ): McpServer {
   const server =
     existingServer ??
@@ -1581,7 +1593,15 @@ export function buildMcpServer(
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       },
       async (input) => {
-        const result = await editGithubIssue(input);
+        if (githubCapability && !githubCapability()) return githubConnectionRequired("edit_github_issue");
+        let result;
+        try {
+          result = await editGithubIssue(input);
+        } catch (error) {
+          if (!isGithubAuthorizationRevoked(error)) throw error;
+          onGithubAuthorizationRevoked?.();
+          return githubConnectionRequired("edit_github_issue");
+        }
         const lines = [
           `Edited ${result.repo}#${result.issueNumber}: ${result.issueUrl}`,
           ...(result.operations.length ? [`operations: ${result.operations.join(", ")}`] : ["operations: none"]),
@@ -1603,7 +1623,15 @@ export function buildMcpServer(
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       },
       async (input) => {
-        const result = await createGithubIssue(input);
+        if (githubCapability && !githubCapability()) return githubConnectionRequired("create_issue");
+        let result;
+        try {
+          result = await createGithubIssue(input);
+        } catch (error) {
+          if (!isGithubAuthorizationRevoked(error)) throw error;
+          onGithubAuthorizationRevoked?.();
+          return githubConnectionRequired("create_issue");
+        }
         return {
           content: [{ type: "text", text: `Created ${result.repo}#${result.issueNumber}: ${result.issueUrl}` }],
           structuredContent: { ...result },

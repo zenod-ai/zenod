@@ -25,6 +25,7 @@ import {
   consumePendingHostedTier,
   createHostedCheckout,
   DASHBOARD_URL,
+  GOOGLE_SIGN_IN_PATH,
   type CustomerSession,
   type PaidTier,
   PRICING_OPTIONS,
@@ -252,13 +253,22 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
               </a>
             </>
           ) : (
-            <a
-              href={SIGN_IN_PATH}
-              className="flex h-full items-center gap-2 border-l border-border px-4 font-medium transition-colors hover:text-rust sm:px-5"
-            >
-              <GithubIcon className="size-4" />
-              <span className="hidden sm:inline">GitHub </span>Sign in
-            </a>
+            <>
+              <a
+                href={GOOGLE_SIGN_IN_PATH}
+                className="flex h-full items-center gap-2 border-l border-border px-3 font-medium transition-colors hover:text-rust sm:px-4"
+              >
+                <KeyRoundIcon className="size-4" />
+                <span className="hidden sm:inline">Google </span>Sign in
+              </a>
+              <a
+                href={SIGN_IN_PATH}
+                aria-label="Sign in with GitHub"
+                className="flex h-full items-center border-l border-border px-3 transition-colors hover:text-rust sm:px-4"
+              >
+                <GithubIcon className="size-4" />
+              </a>
+            </>
           )}
           <a
             href="/pricing"
@@ -336,7 +346,7 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
       ) : null}
       <p className="label-caps mt-5 text-muted-foreground/70">
         {customer.paidSignupReady
-          ? "Paid plans use Stripe checkout. GitHub is the only sign-in method."
+          ? "Paid plans use Stripe checkout. Sign in with a supported Google or GitHub account."
           : "Hosted signups open only after billing, legal, support, and restore checks are green."}
       </p>
     </section>
@@ -352,7 +362,7 @@ const comparisonRows: Array<{
 }> = [
   {
     capability: "Memory you can open in a text editor",
-    zenod: <Yes note="markdown repo in your GitHub" />,
+    zenod: <Yes note="Hosted: GitHub or Drive · self-hosted: GitHub" />,
     basicMemory: <Yes note="markdown files" />,
     rawMcp: <Yes note="your vault" />,
     memoryApis: <No note="their database" />,
@@ -435,8 +445,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
                 evidence, distills it into living ideas, and serves your knowledge to every AI agent
                 you use — one brain across all of them. Self-host free with your AI provider and
                 Telegram, or choose Zenod Hosted for €9/month + VAT with managed AI usage and
-                WhatsApp included. Your memory stays plain markdown in{" "}
-                <em className="text-foreground not-italic">your</em> GitHub account.
+                WhatsApp included. Self-hosted uses your GitHub vault; Hosted lets you choose plain
+                Markdown in <em className="text-foreground not-italic">your</em> GitHub or Google Drive account.
               </p>
 
               <div className="mt-10 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
@@ -520,7 +530,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
               {
                 icon: KeyRoundIcon,
                 title: "You hold the keys",
-                body: "Your vault is a plain markdown git repo in your GitHub account. Self-hosted runs on your server with your AI provider key; Hosted manages the service for you. Open it in Obsidian any time. Export with zero loss — it's just files.",
+                body: "Self-hosted runs on your server with your AI provider key and uses ordinary Markdown in your GitHub repository. Hosted manages the service for you and can use your GitHub repository or an app-created Google Drive folder. Open it in Obsidian any time. Export with zero loss — it's just files.",
               },
               {
                 icon: GitCommitIcon,
@@ -565,11 +575,11 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
             {[
               {
                 title: "Your data, period.",
-                body: "The library is a private repo in your GitHub account. It exists with or without us, readable by anything you authorize. The engine is open source (AGPL) — nothing funny going on.",
+                body: "Self-hosted keeps the library in your private GitHub repository; Hosted can instead use an app-created Drive folder. It exists with or without us, readable by anything you authorize. The engine is open source (AGPL) — nothing funny going on.",
               },
               {
                 title: "A librarian you hire, not a landlord.",
-                body: "Zenod is a memory manager you hire to keep that repo tidy. Switch managers any time and the library stays — every book, every index. We're betting you'll stay because we're good at the job.",
+                body: "Zenod is a memory manager you hire to keep that vault tidy. Switch managers any time and the library stays — every book, every index. We're betting you'll stay because we're good at the job.",
               },
               {
                 title: "Ten agents, zero retraining.",
@@ -825,8 +835,8 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
             </h1>
             <p className="mt-6 max-w-2xl pb-14 leading-relaxed text-muted-foreground">
               Self-host free with your AI provider and Telegram, or choose Zenod Hosted for €9/month
-              + VAT with managed AI usage and WhatsApp included. Either way, your memory stays in a
-              plain markdown repository in your GitHub account.
+              + VAT with managed AI usage and WhatsApp included. Either way, your memory stays in
+              ordinary Markdown. Self-hosted uses your GitHub repository; Hosted can use GitHub or an app-created Google Drive folder.
             </p>
           </div>
           <PricingSection customer={customer} />

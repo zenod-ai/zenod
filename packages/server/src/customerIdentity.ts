@@ -42,7 +42,7 @@ export interface IdentityAuthorizationProof {
 }
 
 export interface StatePayload {
-  mode?: "signin" | "link_identity" | "connect_repo" | "connect_drive_vault";
+  mode?: "signin" | "link_identity" | "connect_repo" | "connect_github_tasking" | "connect_drive_vault";
   provider?: CustomerIdentityProvider;
   flow?: string;
   nonce?: string;

@@ -1,4 +1,5 @@
 export const SIGN_IN_PATH = "/auth/signin"
+export const GOOGLE_SIGN_IN_PATH = "/auth/google/start"
 export const DASHBOARD_URL = "https://cloud.zenod.dev/app"
 export const CHECKOUT_PATH = "/create-checkout-session"
 
@@ -15,14 +16,14 @@ export const PRICING_OPTIONS: ReadonlyArray<{
     name: "Self-hosted",
     price: "Free",
     cadence: "forever",
-    description: "Run Zenod on your own infrastructure with your AI provider and Telegram bot.",
+    description: "Run Zenod on your own infrastructure with your AI provider, Telegram bot, and GitHub vault.",
     tier: null,
   },
   {
     name: "Hosted",
     price: "€9",
     cadence: "per month + VAT",
-    description: "Zenod managed for you, with managed AI usage and WhatsApp included.",
+    description: "Zenod managed for you with a user-owned Google Drive or GitHub vault, managed AI usage and WhatsApp included.",
     tier: "monthly",
   },
 ]
@@ -44,6 +45,8 @@ export interface CustomerSession {
 export interface PublicProductionReadiness {
   ready: boolean
   publicPaidSignup: boolean
+  publicGoogleSignup: boolean
+  googleSignupReady: boolean
 }
 
 export async function readProductionReadiness(
@@ -56,10 +59,14 @@ export async function readProductionReadiness(
   const payload = (await response.json().catch(() => ({}))) as {
     ready?: unknown
     publicPaidSignup?: unknown
+    publicGoogleSignup?: unknown
+    googleSignupReady?: unknown
   }
   return {
     ready: payload.ready === true,
     publicPaidSignup: payload.publicPaidSignup === true,
+    publicGoogleSignup: payload.publicGoogleSignup === true,
+    googleSignupReady: payload.googleSignupReady === true,
   }
 }
 

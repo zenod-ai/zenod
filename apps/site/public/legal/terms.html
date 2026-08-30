@@ -16,25 +16,29 @@
 </head>
 <body>
 <h1>Terms of Service</h1>
-<p><strong>Effective 26 August 2026 · Version 2026-08-26.</strong> These Terms govern the hosted
+<p><strong>Effective 30 August 2026 · Version 2026-08-30.</strong> These Terms govern the hosted
 Zenod beta service (the "Service") operated by Alpha Analytics SL, trading as Zenod ("we", "us").
 Our business address is Aribau 168, 1º 1ª, 08036 Barcelona, Spain. By creating a paid
 subscription you agree to these Terms and ask us to begin providing the Service immediately.</p>
 
 <h2>1. What the Service is</h2>
 <p>Zenod is an early-access memory service for AI agents. It stores each customer in a logically
-isolated tenant inside the hosted Zenod service and reads or writes a Git-based knowledge vault that
-you connect. The hosted software is based on the open-source Zenod runtime. The Hosted plan includes
+isolated tenant inside the hosted Zenod service and reads or writes the user-owned GitHub or Google
+Drive Markdown vault that you select. A Drive vault includes bundled Git history maintained by Zenod.
+The hosted software is based on the open-source Zenod runtime. The Hosted plan includes
 managed AI usage and WhatsApp access.</p>
 
 <h2>2. Eligibility and account</h2>
-<p>You must be at least 18 and able to enter into a contract. GitHub is the account identity provider.
-You are responsible for your GitHub account, the repositories you connect, and keeping issued MCP
+<p>You must be at least 18 and able to enter into a contract. You may sign in with a supported Google
+or GitHub identity. You are responsible for connected accounts and storage, and for keeping issued MCP
 tokens confidential. Contact us immediately if you believe a token or connected account is compromised.</p>
 
 <h2>3. You own your vault and your data</h2>
-<p>Your memory and outputs live in a Git repository in the GitHub account you authorize. You can clone
-or disconnect it at any time. We claim no ownership of your content.</p>
+<p>Your memory and outputs live as ordinary Markdown in the GitHub repository or app-created Google
+Drive vault you authorize. You can access or disconnect that storage at any time. We claim no ownership
+of your content. A Drive vault keeps durable transaction journals and reversible tombstones in `.zenod/`,
+plus bundled Git history in the sibling `.git/repository.bundle`. Disconnecting hosted Zenod does not
+itself delete the customer-owned remote vault.</p>
 
 <h2>4. Credentials and connected accounts</h2>
 <p>You connect third-party accounts (GitHub, Google Drive, and others) via their own OAuth or
@@ -69,9 +73,11 @@ as professional, medical, legal, or financial advice, and review consequential a
 
 <h2>8. Suspension, export, and deletion</h2>
 <p>We may suspend access for non-payment, security risk, abuse, or a material breach of these Terms.
-Where practicable we will give notice and a chance to cure. You can clone your vault at any time. On a
+Where practicable we will give notice and a chance to cure. You can clone a GitHub vault or directly
+access the ordinary Markdown in a Drive vault at any time. On a
 verified deletion request we revoke hosted access and delete tenant runtime data according to the
-retention periods in the Privacy Policy; Git repositories in your account remain under your control.</p>
+retention periods in the Privacy Policy; customer-owned GitHub repositories and Drive vault folders
+remain under your control.</p>
 
 <h2>9. Liability</h2>
 <p>Nothing in these Terms excludes liability or remedies that cannot legally be excluded, including

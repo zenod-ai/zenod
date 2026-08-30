@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { generateKeyPairSync } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { serve, type ServerType } from "@hono/node-server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +112,113 @@ describe("runtime tasking tools", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toContain("/repos/zenod-ai/fixture/issues");
     expect(calls[0]?.init.method).toBe("POST");
+  });
+
+  it("AI tasking invalidates a revoked tenant installation and makes no further mutation attempt", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    runtime.settings.set("github_token", "");
+    runtime.settings.setRaw("github_app_id", "tasking-app");
+    runtime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    runtime.settings.setRaw("github_app_installation_id", "111");
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input).replace("https://api.github.com", "");
+      calls.push(path);
+      if (path === "/app/installations/111/access_tokens") {
+        return Response.json({ token: "revoked-token", expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+      }
+      if (path === "/repos/zenod-ai/fixture/issues") return new Response("Bad credentials", { status: 401 });
+      return new Response("unexpected", { status: 500 });
+    }));
+    const invalidate = vi.spyOn(runtime, "invalidate");
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+
+    await expect(tools.createIssue({ title: "blocked", body: "no mutation" })).rejects.toMatchObject({
+      code: "github_connection_required",
+    });
+    expect(runtime.settings.githubConnectionConfigured()).toBe(false);
+    expect(invalidate).toHaveBeenCalled();
+    await expect(tools.createIssue({ title: "still blocked", body: "no mutation" })).rejects.toMatchObject({
+      code: "github_connection_required",
+    });
+    expect(calls).toEqual([
+      "/app/installations/111/access_tokens",
+      "/repos/zenod-ai/fixture/issues",
+    ]);
+  });
+
+  it("does not expose PAT-only AI tasking for a Drive-authoritative tenant", async () => {
+    const agent = runtime.agent;
+    await runtime.close();
+    runtime = new Runtime(dir, agent, {
+      seedFromEnv: false,
+      tenantId: "drive-pat-only",
+      vaultProviderBinding: () => ({
+        provider: "google_drive",
+        binding_id: "drive-binding",
+        tenant_id: "drive-pat-only",
+        status: "ready",
+        folder_id: "folder",
+        manifest_file_id: "manifest",
+        created_at: "2026-08-30T00:00:00.000Z",
+        updated_at: "2026-08-30T00:00:00.000Z",
+        authorization_epoch: 0,
+      }),
+    });
+    runtime.settings.set("github_token", "ghp_must-not-run");
+    expect(runtime.settings.githubConnectionConfigured()).toBe(false);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+
+    await expect(tools.createIssue({ title: "blocked", body: "no mutation" })).rejects.toMatchObject({
+      code: "github_connection_required",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not retry a Drive-authoritative App denial with a stored PAT", async () => {
+    const agent = runtime.agent;
+    await runtime.close();
+    runtime = new Runtime(dir, agent, {
+      seedFromEnv: false,
+      tenantId: "drive-app-only",
+      vaultProviderBinding: () => ({
+        provider: "google_drive",
+        binding_id: "drive-binding",
+        tenant_id: "drive-app-only",
+        status: "ready",
+        folder_id: "folder",
+        manifest_file_id: "manifest",
+        created_at: "2026-08-30T00:00:00.000Z",
+        updated_at: "2026-08-30T00:00:00.000Z",
+        authorization_epoch: 0,
+      }),
+    });
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    runtime.settings.setRaw("github_app_id", "drive-app");
+    runtime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    runtime.settings.setRaw("github_app_installation_id", "111");
+    runtime.settings.set("github_token", "ghp_must-not-run");
+    const calls: Array<{ path: string; authorization: string }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).replace("https://api.github.com", "");
+      const authorization = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "");
+      calls.push({ path, authorization });
+      if (path === "/app/installations/111/access_tokens") {
+        return Response.json({ token: "drive-app-token", expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+      }
+      if (path === "/repos/zenod-ai/fixture/issues") return new Response("Resource not accessible", { status: 403 });
+      return new Response("unexpected", { status: 500 });
+    }));
+    const tools = (runtime as unknown as { buildTaskingTools(): ExternalTaskingTools }).buildTaskingTools();
+
+    await expect(tools.createIssue({ title: "denied", body: "no mutation" })).rejects.toMatchObject({ status: 403 });
+    expect(calls).toEqual([
+      { path: "/app/installations/111/access_tokens", authorization: expect.stringMatching(/^Bearer /) },
+      { path: "/repos/zenod-ai/fixture/issues", authorization: "Bearer drive-app-token" },
+    ]);
+    expect(calls.some((call) => call.authorization.includes("ghp_must-not-run"))).toBe(false);
   });
 
   it("queryBacklog resolves explicit mixed issue and PR ids instead of fuzzy-searching only open issues", async () => {

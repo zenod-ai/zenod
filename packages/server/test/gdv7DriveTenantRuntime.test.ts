@@ -28,6 +28,16 @@ function cookiePair(setCookie: string, name: string): string {
 }
 
 async function googleSession(unit: ReturnType<typeof createZenodUnit>, subject: string): Promise<{ cookie: string; userId: string }> {
+  // These GDV-7 journeys exercise Drive consent for an existing customer, not
+  // public acquisition. Seed that precondition explicitly now that unknown
+  // Google identities are gated by default.
+  unit.customerIdentities.resolveOrCreate({
+    provider: "google",
+    provider_subject: subject,
+    display_name: `${subject}@example.test`,
+    email: `${subject}@example.test`,
+    email_verified: true,
+  });
   const start = await unit.app.request("/auth/google/start");
   const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
   const flowCookie = cookiePair(start.headers.get("set-cookie")!, "zenod_google_oidc_flow");

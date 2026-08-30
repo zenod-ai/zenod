@@ -18,13 +18,14 @@
 </head>
 <body>
 <h1>Data Handling</h1>
-<p><strong>Effective 13 August 2026 · Version 2026-08-13.</strong> This page explains, in plain
+<p><strong>Effective 30 August 2026 · Version 2026-08-30.</strong> This page explains, in plain
 terms, where your data lives and who touches it in hosted Zenod. It complements the
 <a href="/legal/privacy.html">Privacy Policy</a>.</p>
 
-<p>The design principle behind hosted Zenod: <strong>the customer owns the vault repo.</strong> Your
-knowledge is not locked inside our database — it is a Git repository you can clone, read, and take with
-you at any time. This page maps each kind of data to where it lives and how it is isolated.</p>
+<p>The design principle behind hosted Zenod: <strong>the customer owns the vault storage.</strong> Your
+knowledge is not locked inside our database — it is ordinary Markdown in your selected GitHub repository
+or app-created Google Drive folder. A Drive vault also carries a verified Git repository bundle for
+history and reconstruction. This page maps each kind of data to where it lives and how it is isolated.</p>
 
 <h2>The tenant boundary</h2>
 <p>Hosted Zenod is a multi-tenant service. Each request is authenticated to a tenant; tokens are stored
@@ -36,8 +37,9 @@ cross-tenant token, session, settings, and storage boundaries.</p>
 <table>
   <thead><tr><th>Data</th><th>Location</th><th>Isolation / ownership</th></tr></thead>
   <tbody>
-    <tr><td>Memory and agent outputs (the "vault")</td><td>A Git repository in the GitHub account you
-      authorize</td><td>You own it; directly cloneable and portable</td></tr>
+    <tr><td>Memory and agent outputs (the "vault")</td><td>A Git repository in the GitHub account or an
+      app-created folder in the Google Drive account you authorize</td><td>You own it; ordinary Markdown
+      remains directly readable and portable</td></tr>
     <tr><td>Connected-account credentials (GitHub / Drive tokens)</td><td>Encrypted tenant-scoped store
       in the hosted data volume</td><td>Never written to the vault; available only in the authenticated tenant context</td></tr>
     <tr><td>Model-usage ledger (tokens, cost per call)</td><td>Tenant-prefixed SQLite state</td>
@@ -45,20 +47,24 @@ cross-tenant token, session, settings, and storage boundaries.</p>
     <tr><td>Payment details</td><td>Stripe</td><td>We never see or store card numbers</td></tr>
     <tr><td>Message content sent to the LLM</td><td>Transits to the model provider to produce a
       response</td><td>Processed under the configured provider's terms; Zenod does not use it to train models</td></tr>
+    <tr><td>Drive recovery journals and reversible tombstones</td><td>The Drive vault's `.zenod/transactions/`
+      and `.zenod/deleted/` control paths, with tenant-scoped recovery state on our infrastructure</td>
+      <td>Durable recovery records retained indefinitely under the current policy; they are not temporary cache</td></tr>
     <tr><td>Operational logs</td><td>Our infrastructure</td><td>Minimal, for reliability and support</td></tr>
   </tbody>
 </table>
 
 <h2>Backups</h2>
-<p>Your vault is committed and pushed to its Git repository when a write journey completes. Hosted
+<p>A completed GitHub write is committed and pushed. A completed Drive write publishes ordinary files,
+a transaction manifest, durable recovery journal, and verified `.git/repository.bundle` before Zenod reports success. Hosted
 runtime state is also covered by checksummed, access-restricted cold volume backups. Public paid signup
 fails closed unless an operator has recorded a successful isolated restore verification within the
 preceding 31 days.</p>
 
 <h2>Export and deletion</h2>
-<p>Export: clone your vault repo any time. On a verified account deletion request we revoke the tenant's
+<p>Export: clone a GitHub vault or copy the ordinary files and bundled history from Drive any time. On a verified account deletion request we revoke the tenant's
 MCP tokens and connected credentials and remove tenant runtime data according to the Privacy Policy.
-Deleting hosted data does not delete a repository in your GitHub account.</p>
+Deleting hosted data does not delete a repository in your GitHub account or an app-created vault in your Drive account.</p>
 
 <h2>Who processes your data</h2>
 <p>See the sub-processor list in the <a href="/legal/privacy.html">Privacy Policy</a> (model providers,

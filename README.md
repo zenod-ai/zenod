@@ -2,9 +2,9 @@
 
 **An open-source AI memory agent with self-hosted and managed-hosted modes.**
 
-Zenod is the interface between AI agents and your personal knowledge vault — a plain markdown
-Obsidian vault living as a git repo in your own GitHub account. Run it on your own server or use the
-managed hosted beta. Agents talk to Zenod through MCP; Zenod reads and writes the vault on their
+Zenod is the interface between AI agents and your personal knowledge vault. Self-hosted Zenod uses
+ordinary Markdown in your own GitHub repository; Zenod Hosted can use either a user-owned GitHub
+repository or an app-created Google Drive vault, with real Git history in either case. Agents talk to Zenod through MCP; Zenod reads and writes the vault on their
 behalf, enforcing its organization rules so memory compounds instead of rotting.
 
 Named after [Zenodotus of Ephesus](https://en.wikipedia.org/wiki/Zenodotus), first librarian of the Library of Alexandria.
@@ -20,7 +20,9 @@ runtime deployed at `cloud.zenod.dev`. The deal is simple:
 - **Auditable memory.** Every memory Zenod stores is a git commit in your vault. `git log` is the audit trail; every fact has a provenance link back to the evidence that produced it.
 
 The hosted service uses the same engine and image with tenant-scoped storage, encrypted credential
-custody, GitHub sign-in, Stripe billing, and fail-closed production-readiness checks. Self-hosting does
+custody, Google or GitHub sign-in, user-selected Drive or GitHub vault authority, Stripe billing, and
+fail-closed production-readiness checks. GitHub issue/code tasking remains an optional connection;
+memory and local Markdown backlog work do not require it. Self-hosting does
 not depend on the hosted customer layer: if you can run a container, you never need the hosted service.
 
 ## What Zenod does

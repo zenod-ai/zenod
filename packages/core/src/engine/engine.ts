@@ -41,6 +41,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
+import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
@@ -966,7 +967,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   function noExternalTool(name: string): string {
-    return `${name} is not configured for this engine instance.`;
+    return JSON.stringify({
+      error: {
+        code: "github_connection_required",
+        message: `Connect GitHub before using ${name}. Memory and local Markdown backlog tools remain available.`,
+      },
+    });
   }
 
   function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void, rawEvidence?: TaskingInput["rawEvidence"]): VaultTaskTools {
@@ -999,6 +1005,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
           return result;
         } catch (err) {
           sameTurnMutations.delete(key);
+          if (isGithubConnectionRequiredError(err)) {
+            const result = JSON.stringify({ error: { code: err.code, message: err.message } });
+            recordAction(tool, input, result, true);
+            return result;
+          }
           recordAction(tool, input, `ERROR: ${(err as Error).message}`, true);
           throw err;
         }
@@ -1007,6 +1018,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       return pending;
     };
     return {
+      githubAvailable: Boolean(options.taskingTools),
       captureNote: async (content: string, hints?: string[]) => {
         if (!repo) {
           return {
