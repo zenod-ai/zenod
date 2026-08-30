@@ -17,6 +17,7 @@
     "schemas:build": "node scripts/build-tool-output-schemas.mjs",
     "acceptance:zal17:drive": "node scripts/zal17-drive-journey.mjs",
     "acceptance:zal20:drive": "node scripts/zal20-drive-journey.mjs",
+    "acceptance:gdv10": "node scripts/gdv10-release-acceptance.mjs",
     "test:phylax-image-contract": "bash scripts/zpf2-phylax-image-contract.sh",
     "dev:web": "npm run dev -w web",
     "dev:site": "npm run dev -w site",
