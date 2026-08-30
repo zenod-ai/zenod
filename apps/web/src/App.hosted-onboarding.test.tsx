@@ -22,6 +22,7 @@ vi.mock("@/components/google-drive-connect", () => ({
 vi.mock("@/components/ui/sonner", () => ({ Toaster: () => null }))
 
 import { App } from "./App"
+import { ApiError } from "@/lib/api"
 
 afterEach(() => {
   cleanup()
@@ -74,5 +75,45 @@ describe("Hosted vault onboarding boot", () => {
     const vaultTab = await screen.findByRole("tab", { name: "Vault & sources" })
     expect(vaultTab.getAttribute("data-state")).toBe("active")
     expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
+  })
+
+  it("returns an expired Hosted session to configured customer sign-in choices", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status")
+        return Promise.resolve({
+          needsSetup: false,
+          configured: true,
+          hostedMode: null,
+          customerAuth: true,
+          authMethod: "github",
+          signInMethods: ["google", "github"],
+        })
+      if (path === "/api/settings")
+        return Promise.reject(new ApiError(401, "session expired"))
+      return Promise.reject(new Error(`Unexpected API call: ${path}`))
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me")
+          return Response.json({ provider: "google", providers: ["google"] })
+        if (path === "/api/console/account")
+          return Response.json({ account_id: "account-1", vault_repo: null })
+        if (path === "/api/vault/provider")
+          return Response.json({ ready: false, provider: null })
+        throw new Error(`Unexpected fetch: ${path}`)
+      })
+    )
+
+    render(<App />)
+
+    expect(
+      await screen.findByRole("link", { name: "Continue with Google" })
+    ).not.toBeNull()
+    expect(
+      screen.getByRole("link", { name: "Continue with GitHub" })
+    ).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(/admin password/i)
   })
 })

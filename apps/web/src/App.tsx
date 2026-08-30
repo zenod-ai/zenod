@@ -80,7 +80,11 @@ function CustomerApp() {
   >()
 
   const loadSettings = React.useCallback(
-    (edition: ZenodEdition = "self-hosted", initialTab?: "vault") => {
+    (
+      edition: ZenodEdition = "self-hosted",
+      initialTab?: "vault",
+      hostedMethods: Array<"github" | "google"> = ["github"]
+    ) => {
       setHostedInitialTab(initialTab)
       api<SettingsResponse>("/api/settings")
         .then((result) => {
@@ -88,7 +92,11 @@ function CustomerApp() {
         })
         .catch((err: unknown) => {
           if (isUnauthorized(err)) {
-            setView({ kind: "login" })
+            setView(
+              edition === "hosted"
+                ? { kind: "hosted-login", methods: hostedMethods }
+                : { kind: "login" }
+            )
           } else {
             setView({ kind: "error", message: errorMessage(err) })
           }
@@ -101,13 +109,14 @@ function CustomerApp() {
     api<AuthStatus>("/api/auth/status")
       .then(async (status) => {
         if (status.customerAuth) {
+          const signInMethods =
+            status.signInMethods ??
+            (status.authMethod === "google" ? ["google"] : ["github"])
           const me = await fetch("/api/me")
           if (me.status === 401) {
             setView({
               kind: "hosted-login",
-              methods:
-                status.signInMethods ??
-                (status.authMethod === "google" ? ["google"] : ["github"]),
+              methods: signInMethods,
             })
             return
           }
@@ -129,7 +138,8 @@ function CustomerApp() {
           const legacyGithubVault = Boolean(accountProjection?.vault_repo)
           loadSettings(
             "hosted",
-            vaultProjection?.ready || legacyGithubVault ? undefined : "vault"
+            vaultProjection?.ready || legacyGithubVault ? undefined : "vault",
+            signInMethods
           )
           return
         }
