@@ -8,7 +8,7 @@ Issue: [GDV-10 #1154](https://github.com/zenod-ai/zenod/issues/1154)
 
 Integrated implementation base: `3802672df535461a28853c8d363f205f6278e262`
 
-Exact acceptance-runner candidate: `a0e2bad2350992bed89b891a1f05a4aedc288260`
+Exact acceptance-runner candidate: recorded by the runtime receipt in [issue #1154](https://github.com/zenod-ai/zenod/issues/1154); it is intentionally not duplicated as a self-referential checked-in result
 
 Integration target: `main`
 
@@ -27,7 +27,7 @@ No screenshot is included. The UI evidence is deterministic component and route 
 | Worktree | `/Users/jordi/Documents/GitHub/zenod-gdv-10-release-acceptance` |
 | Branch | `codex/gdv-10-release-acceptance` |
 | Base | `3802672df535461a28853c8d363f205f6278e262` |
-| Runner commit | `a0e2bad2350992bed89b891a1f05a4aedc288260` |
+| Runner commit | exact clean `HEAD` asserted by `GDV10_EXPECTED_SHA` and emitted in the terminal receipt |
 | OS | macOS 26.5.1 (25F80), local developer workstation |
 | Node | `v22.22.3` |
 | npm | `10.9.8` |
@@ -43,12 +43,14 @@ Run:
 
 ```sh
 npm ci
+GDV10_EXPECTED_SHA="$(git rev-parse HEAD)" \
+GDV10_EXPECTED_BASE_SHA=3802672df535461a28853c8d363f205f6278e262 \
 npm run acceptance:gdv10
 ```
 
-The checked-in runner builds the core and MCP chassis dependencies, then executes the exact focused matrix and emits `GDV10_RELEASE_ACCEPTANCE_RECEIPT` as one JSON line. The preserved result is in [`receipt.json`](./receipt.json).
+The checked-in runner refuses a tracked or untracked dirty tree, a SHA mismatch, a wrong repository root, or a candidate outside the declared integration base. It builds the core and MCP chassis dependencies, executes the exact focused matrix, parses and validates every Vitest test/file summary, and emits `GDV10_RELEASE_ACCEPTANCE_RECEIPT` as one JSON line. The exact clean-head receipt is preserved in the terminal issue/PR handoff rather than committed into the tree it attests.
 
-Result at `a0e2bad2350992bed89b891a1f05a4aedc288260`:
+Expected and runner-validated focused result:
 
 | Step | Files | Tests | Result |
 |---|---:|---:|---|
@@ -58,7 +60,7 @@ Result at `a0e2bad2350992bed89b891a1f05a4aedc288260`:
 | Core and MCP-chassis prerequisite builds | - | - | PASS |
 | Total focused assertions | 21 | 364 | PASS |
 
-The run started `2026-08-30T09:54:57.385Z` and completed `2026-08-30T09:57:26.828Z`.
+The runtime receipt records the exact SHA, base, start/completion timestamps and per-step counts.
 
 ## Acceptance matrix
 
@@ -71,7 +73,7 @@ The run started `2026-08-30T09:54:57.385Z` and completed `2026-08-30T09:57:26.82
 | MCP store/search/get/ask | `mcp.test.ts` proves authenticated `store_memory`, structural `search_memory`, exact `get_memory`, `ask_brain`, idempotent replay and typed terminal evidence. `driveRepository.test.ts` runs the real shared engine store/search/get/ask loop with `provider: google_drive`. | PASS, layered local integration |
 | Supported phone storage and receipt | `whatsapp.test.ts`, `hostedChannels.test.ts` and `zenodUnit.test.ts` prove tenant-bound Hosted channel admission, explicit memory capture, idempotent delayed storage receipts, restart behavior and suspension projection. The shared engine/Drive tests prove the resulting vault mutation. Voice notes are not silently auto-filed: storage follows the supported explicit capture/tasking path. | PASS, layered local integration |
 | Exact Markdown and attachment bytes | `driveRepository.test.ts` publishes ordinary `Log` and meaning-page Markdown plus `_attachments/source.bin`, verifies Drive URLs and exact attachment bytes, clears the local cache, reconstructs, and re-verifies bytes and Git HEAD. | PASS |
-| Search/get/ask before and after reconstruction | The real engine loop proves store/search/get/ask. Cold-start tests reconstruct ordinary files and `.git` from Drive and preserve the finalized revision/HEAD; the same repository contract is then available to the shared reads. | PASS |
+| Search/get/ask before and after reconstruction | The warm real-engine loop proves store/search/get/ask. The cold-start test destroys the local cache, reconstructs ordinary files and `.git` from Drive, creates a new shared engine on the recovered repository, then reruns search/get/ask and verifies Google Drive provider-neutral sources, the finalized HEAD and no Git remote. | PASS |
 | External edit and rename | Drive tests import external Markdown edits as explicit Git commits, preserve stable file IDs across moves/renames, recover renamed marked authority nodes, and reject missing/tampered authority rather than reprovisioning. | PASS |
 | Concurrent conflict | Local-versus-external file races, before/after patch races, manifest/journal races and delete races return typed conflict, materialize recoverable conflict bytes and do not advance the authoritative revision. | PASS |
 | Failure before, between and at finalization | The publication matrix injects failures before and after every remote mutation across the multi-file transaction. Restart recovery is idempotent; Log and meaning files appear at most once; a failed-before-first-write remains absent; no partial transaction reports success. Bootstrap has a corresponding every-mutation fault matrix. | PASS |
@@ -134,7 +136,7 @@ apps/web/src/views/settings/VaultTab.hosted.test.tsx
 
 ## Full repository validation
 
-The evidence snapshot `c04bdd0095c73c7468d5a4db7df877b7bf8db17b` passed the normal proportional repository checks:
+The exact clean immutable head named in the terminal issue handoff passed the normal proportional repository checks:
 
 ```sh
 npm run typecheck

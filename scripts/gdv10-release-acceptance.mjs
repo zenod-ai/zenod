@@ -1,5 +1,4 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -10,7 +9,6 @@ const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 }).trim();
 const expectedSha = process.env.GDV10_EXPECTED_SHA?.trim();
 const expectedBaseSha = process.env.GDV10_EXPECTED_BASE_SHA?.trim();
-const receiptPath = process.env.GDV10_RECEIPT_PATH?.trim();
 
 if (resolve(process.cwd()) !== resolve(repositoryRoot)) {
   throw new Error(`GDV-10 acceptance must run from repository root ${repositoryRoot}`);
@@ -90,6 +88,24 @@ const steps = [
 const results = [];
 let failed = false;
 
+function vitestSummary(output) {
+  const plain = output.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+  const files = plain.match(/Test Files\s+(\d+) passed/);
+  const tests = plain.match(/Tests\s+(\d+) passed(?:\s+\|\s+(\d+) skipped)?/);
+  if (!files || !tests) return null;
+  return {
+    testFiles: Number(files[1]),
+    tests: Number(tests[1]),
+    skipped: Number(tests[2] ?? 0),
+  };
+}
+
+const expectedSummaries = {
+  "drive-authority-and-memory-loop": { testFiles: 2, tests: 56, skipped: 0 },
+  "hosted-runtime-transports-and-regressions": { testFiles: 14, tests: 272, skipped: 0 },
+  "google-first-and-github-ui-regression": { testFiles: 5, tests: 36, skipped: 0 },
+};
+
 for (const step of steps) {
   const stepStartedAt = new Date().toISOString();
   const [executable, ...args] = step.command;
@@ -101,14 +117,22 @@ for (const step of steps) {
   });
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
+  const summary = expectedSummaries[step.id] ? vitestSummary(result.stdout ?? "") : null;
+  const expectedSummary = expectedSummaries[step.id];
+  const summaryMatches = !expectedSummary || JSON.stringify(summary) === JSON.stringify(expectedSummary);
+  const stepPassed = result.status === 0 && summaryMatches;
+  if (expectedSummary && !summaryMatches) {
+    process.stderr.write(`GDV10_SUMMARY_MISMATCH ${step.id}: expected ${JSON.stringify(expectedSummary)}, found ${JSON.stringify(summary)}\n`);
+  }
   results.push({
     id: step.id,
-    status: result.status === 0 ? "pass" : "fail",
-    exitCode: result.status ?? 1,
+    status: stepPassed ? "pass" : "fail",
+    exitCode: stepPassed ? 0 : result.status === 0 ? 1 : result.status ?? 1,
+    ...(summary ?? {}),
     startedAt: stepStartedAt,
     completedAt: new Date().toISOString(),
   });
-  if (result.status !== 0) {
+  if (!stepPassed) {
     failed = true;
     break;
   }
@@ -128,8 +152,5 @@ const receipt = {
   steps: results,
 };
 
-if (receiptPath) {
-  writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-}
 process.stdout.write(`\nGDV10_RELEASE_ACCEPTANCE_RECEIPT ${JSON.stringify(receipt)}\n`);
 process.exitCode = failed ? 1 : 0;
