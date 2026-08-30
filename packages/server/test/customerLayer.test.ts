@@ -282,6 +282,7 @@ describe("hosted customer layer", () => {
   });
 
   it("signs a new and returning customer in with Google without Drive consent", async () => {
+    env.ZENOD_LIVE_CHECKOUT_TESTER_USER_IDS = customerUserId("google", "google-subject-ada");
     const exchange = vi.fn(async (_code: string, proof?: { nonce?: string; codeVerifier?: string }) => {
       expect(proof?.nonce).toMatch(/^[A-Za-z0-9_-]+$/);
       expect(proof?.codeVerifier).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -357,6 +358,60 @@ describe("hosted customer layer", () => {
       expect(returning.status).toBe(302);
       expect(layer.identities.snapshot().users).toHaveLength(1);
       expect(exchange).toHaveBeenCalledTimes(2);
+    } finally {
+      layer.close();
+    }
+  });
+
+  it("blocks unknown Google acquisition by default while preserving returning Google sign-in", async () => {
+    const exchange = vi.fn(async () => ({
+      id: "returning-google-subject",
+      login: "Returning Customer",
+      email: "returning@example.test",
+      email_verified: true,
+      provider: "google" as const,
+    }));
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identityProviders: {
+          google: {
+            authorizeUrl: (state, proof) =>
+              `https://google.test/authorize?state=${encodeURIComponent(state)}&nonce=${proof?.nonce}&challenge=${proof?.codeChallenge}`,
+            exchangeAndGetUser: exchange,
+          },
+        },
+      },
+    );
+    try {
+      const blockedStart = await layer.app.request("/auth/google/start");
+      const blockedUrl = new URL(blockedStart.headers.get("location")!);
+      const blocked = await layer.app.request(
+        `/auth/google/callback?code=new&state=${encodeURIComponent(blockedUrl.searchParams.get("state")!)}`,
+        { headers: { cookie: cookiePair(blockedStart.headers.get("set-cookie")!, "zenod_google_oidc_flow") } },
+      );
+      expect(blocked.status).toBe(403);
+      expect(await blocked.text()).toMatch(/Existing Google customers can still sign in/);
+      expect(layer.identities.snapshot().users).toHaveLength(0);
+
+      layer.identities.resolveOrCreate({
+        provider: "google",
+        provider_subject: "returning-google-subject",
+        display_name: "Returning Customer",
+        email: "returning@example.test",
+        email_verified: true,
+      });
+      const returningStart = await layer.app.request("/auth/google/start");
+      const returningUrl = new URL(returningStart.headers.get("location")!);
+      const returning = await layer.app.request(
+        `/auth/google/callback?code=returning&state=${encodeURIComponent(returningUrl.searchParams.get("state")!)}`,
+        { headers: { cookie: cookiePair(returningStart.headers.get("set-cookie")!, "zenod_google_oidc_flow") } },
+      );
+      expect(returning.status).toBe(302);
+      expect(layer.identities.snapshot().users).toHaveLength(1);
     } finally {
       layer.close();
     }
@@ -841,6 +896,16 @@ describe("hosted customer layer", () => {
     const cookie = issued.headers.get("set-cookie")!;
 
     try {
+      const closedCheckout = await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      expect(closedCheckout.status).toBe(503);
+      expect(await closedCheckout.json()).toEqual({ error: "Google signup is not open" });
+      expect(createdParams).toBeNull();
+
+      env.ZENOD_PUBLIC_GOOGLE_SIGNUP = "1";
       const checkout = await layer.app.request("/create-checkout-session", {
         method: "POST",
         headers: { cookie, "Content-Type": "application/json" },
@@ -885,6 +950,89 @@ describe("hosted customer layer", () => {
       expect(layer.identities.snapshot().account_owners).toEqual([
         expect.objectContaining({ user_id: principal.user_id, account_id: accountId }),
       ]);
+    } finally {
+      layer.close();
+    }
+  });
+
+  it("adds a GitHub App for tasking to a Drive-authoritative tenant without switching vault authority", async () => {
+    const google = customerUserId("google", "drive-owner");
+    const layer = createCustomerLayer(
+      {
+        dataDir: runtime.dataDir,
+        runtimeForAccount: () => runtime,
+        sharedGithubApp: { id: "123", slug: "zenod-tasking", privateKeyPem: "shared-key" },
+      },
+      { env, stripe, tenantStore: tenants },
+    );
+    layer.identities.resolveOrCreate({
+      provider: "google",
+      provider_subject: "drive-owner",
+      display_name: "Drive Owner",
+      email: "owner@example.test",
+      email_verified: true,
+    });
+    layer.identities.linkIdentity(google, {
+      provider: "github",
+      provider_subject: "4242",
+      provider_login: "drive-tasker",
+    });
+    const principal = layer.identities.resolve("google", "drive-owner")!;
+    const account = layer.accounts.upsert("drive-account", {
+      account_id: "drive-account",
+      user_id: google,
+      github_id: 4242,
+      github_login: "drive-tasker",
+      tenant_id: "drive-tenant",
+      subscription_status: "active",
+      vault_provider: "google_drive",
+      vault_binding_id: "drive-binding",
+      vault_binding_status: "ready",
+      vault_binding_created_at: "2026-08-30T10:00:00.000Z",
+      vault_binding_updated_at: "2026-08-30T10:00:00.000Z",
+      vault_drive_folder_id: "drive-folder",
+      vault_drive_manifest_file_id: "drive-manifest",
+    });
+    runtime.settings.setRaw("github_app_id", "123");
+    runtime.settings.setRaw("github_app_private_key", "shared-key");
+    runtime.settings.setRaw("github_app_slug", "zenod-tasking");
+    const cookieIssuer = new Hono();
+    cookieIssuer.get("/", (c) => {
+      issueCustomerSession(c, principal, env);
+      return c.text("ok");
+    });
+    const cookie = (await cookieIssuer.request("/")).headers.get("set-cookie")!;
+    try {
+      const implicit = await layer.app.request("/api/github/app/start", { headers: { cookie } });
+      expect(implicit.status).toBe(400);
+      const start = await layer.app.request(
+        "/api/github/app/start?intent=connect_github_tasking",
+        { headers: { cookie } },
+      );
+      expect(start.status).toBe(200);
+      const installUrl = new URL((await start.json() as { url: string }).url);
+      const state = installUrl.searchParams.get("state")!;
+      const connected = await layer.app.request(
+        `/github/setup?installation_id=777&state=${encodeURIComponent(state)}`,
+        { headers: { cookie } },
+      );
+      expect(connected.status).toBe(302);
+      expect(runtime.settings.getRaw("github_app_installation_id")).toBe("777");
+      expect(runtime.settings.githubConnectionConfigured()).toBe(true);
+      expect(layer.accounts.get(account.session_id)).toMatchObject({
+        vault_provider: "google_drive",
+        vault_binding_id: "drive-binding",
+        vault_drive_folder_id: "drive-folder",
+        vault_drive_manifest_file_id: "drive-manifest",
+      });
+
+      const forbiddenSwitch = await layer.app.request("/api/vault/repository", {
+        method: "PUT",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ repo: "owner/not-a-vault", branch: "main" }),
+      });
+      expect(forbiddenSwitch.status).toBe(409);
+      expect(layer.accounts.get(account.session_id)?.vault_provider).toBe("google_drive");
     } finally {
       layer.close();
     }

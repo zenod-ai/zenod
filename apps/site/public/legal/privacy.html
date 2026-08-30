@@ -16,7 +16,7 @@
 </head>
 <body>
 <h1>Privacy Policy</h1>
-<p><strong>Effective 29 August 2026 · Version 2026-08-29.</strong> This policy explains how Alpha
+<p><strong>Effective 30 August 2026 · Version 2026-08-30.</strong> This policy explains how Alpha
 Analytics SL, trading as Zenod, processes personal data as the controller for hosted Zenod. Our
 business address is Aribau 168, 1º 1ª, 08036 Barcelona, Spain. Contact:
 <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p>
@@ -56,7 +56,9 @@ the EEA under their published transfer safeguards. Ask us for the current sub-pr
 <p>The hosted service runs in the EU. Customer data is logically isolated by tenant inside the shared
 runtime and tenant-prefixed storage. Your vault lives in the GitHub account or Google Drive account you designate.
 Drive OAuth tokens are kept in encrypted tenant-scoped custody, not in the Drive vault itself. Rebuildable
-local cache and transaction journals may temporarily mirror vault data on Zenod infrastructure.</p>
+local cache may temporarily mirror vault data on Zenod infrastructure. Transaction journals are durable
+recovery records while the tenant is active; Drive-side journals and reversible tombstones live under
+the vault's `.zenod/` control folder and are retained indefinitely under the current policy.</p>
 
 <h2>6. Retention and deletion</h2>
 <p>We keep active account data while the Service is provided. Following a verified deletion request, we

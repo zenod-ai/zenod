@@ -77,6 +77,22 @@ describe("GitHub App flow", () => {
     expect(settings.configured()).toBe(true); // no PAT needed
   });
 
+  it("revokes tenant GitHub authorization without deleting shared App configuration", () => {
+    const settings = runtime.settings;
+    settings.setRaw("github_app_id", "123");
+    settings.setRaw("github_app_private_key", "shared-private-key");
+    settings.setRaw("github_app_slug", "zenod-memory-v01a");
+    settings.setRaw("github_app_installation_id", "777");
+    settings.setRaw("github_token", "tenant-token");
+    settings.revokeGithubAuthorization();
+    expect(settings.githubConnectionConfigured()).toBe(false);
+    expect(settings.getRaw("github_app_installation_id")).toBeNull();
+    expect(settings.get("github_token")).toBeNull();
+    expect(settings.getRaw("github_app_id")).toBe("123");
+    expect(settings.getRaw("github_app_private_key")).toBe("shared-private-key");
+    expect(settings.getRaw("github_app_slug")).toBe("zenod-memory-v01a");
+  });
+
   it("builds only the existing app installation URL for customer repository access", () => {
     runtime.settings.setRaw("github_app_slug", "zenod-memory-v01a");
     expect(githubAppInstallationUrl(runtime.settings)).toBe(

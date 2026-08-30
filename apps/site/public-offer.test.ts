@@ -37,4 +37,12 @@ describe("public Zenod offer", () => {
       expect(copy).toMatch(/(?:plain|ordinary) Markdown/i)
     }
   })
+
+  it("keeps sign-in and storage claims provider- and edition-aware", () => {
+    const copy = page.replace(/\s+/g, " ")
+    expect(page).toContain('GOOGLE_SIGN_IN_PATH')
+    expect(page).toContain('aria-label="Sign in with GitHub"')
+    expect(copy).toMatch(/Self-hosted uses your GitHub vault; Hosted lets you choose/i)
+    expect(copy).toMatch(/Hosted: GitHub or Drive · self-hosted: GitHub/i)
+  })
 })

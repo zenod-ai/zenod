@@ -34,8 +34,12 @@ const googleReadyEnv: NodeJS.ProcessEnv = {
   GOOGLE_OIDC_CLIENT_ID: "google-oidc-client",
   GOOGLE_OIDC_CLIENT_SECRET: "google-oidc-secret",
   GOOGLE_OIDC_CALLBACK_URL: "https://cloud.zenod.dev/auth/google/callback",
+  GOOGLE_OAUTH_CLIENT_ID: "google-drive-client",
+  GOOGLE_OAUTH_CLIENT_SECRET: "google-drive-secret",
+  GOOGLE_DRIVE_VAULT_OAUTH_CALLBACK_URL: "https://cloud.zenod.dev/api/vault/drive/oauth/callback",
   ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT: "2026-08-12T00:00:00.000Z",
   ZENOD_GDV_ACCEPTANCE_SHA: "a".repeat(40),
+  GIT_SHA: "a".repeat(40),
   ZENOD_GDV_ACCEPTANCE_VERIFIED_AT: "2026-08-12T00:00:00.000Z",
 };
 
@@ -45,7 +49,7 @@ describe("production readiness gate", () => {
       new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
       "utf8",
     );
-    expect(terms).toContain("Version 2026-08-29");
+    expect(terms).toContain("Version 2026-08-30");
     expect(terms).toContain("€9 per month plus applicable VAT");
     expect(terms).toContain("managed AI usage and WhatsApp access");
     expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i);
@@ -58,12 +62,22 @@ describe("production readiness gate", () => {
       new URL("../../../apps/site/public/legal/data-handling.html", import.meta.url),
       "utf8",
     );
+    const driveRunbook = await readFile(
+      new URL("../../../docs/GOOGLE-DRIVE-VAULT-OPERATIONS.md", import.meta.url),
+      "utf8",
+    );
     for (const document of [terms, privacy, handling]) {
-      expect(document).toContain("Version 2026-08-29");
+      expect(document).toContain("Version 2026-08-30");
       expect(document).toMatch(/GitHub/);
       expect(document).toMatch(/Google Drive|Drive vault/);
       expect(document).toMatch(/Markdown/);
     }
+    expect(terms).toContain(".git/repository.bundle");
+    expect(privacy).toMatch(/journals are durable/i);
+    expect(privacy).toMatch(/retained indefinitely/i);
+    expect(handling).toContain(".zenod/transactions/");
+    expect(handling).not.toMatch(/journals?[^.]*temporar(?:y|ily)/i);
+    expect(driveRunbook).toContain("`.git/repository.bundle`, never `.zenod/.git/repository.bundle`");
   });
 
   it("keeps GitHub signup readiness independent of Google-only acceptance", () => {
@@ -93,6 +107,24 @@ describe("production readiness gate", () => {
       expect.arrayContaining(["google_drive_vault_oauth", "google_drive_vault_acceptance"]),
     );
     expect(() => assertPublicSignupIsReady(missingEvidence)).toThrow(/google_drive_vault/);
+  });
+
+  it("fails Google readiness for a mismatched deployed SHA or incomplete Drive OAuth inputs", () => {
+    const now = new Date("2026-08-13T00:00:00.000Z");
+    const shaMismatch = productionReadinessReport({ ...googleReadyEnv, GIT_SHA: "b".repeat(40) }, now);
+    expect(shaMismatch.checks.find((check) => check.id === "google_drive_vault_acceptance")?.ok).toBe(false);
+
+    const missingDriveClient = productionReadinessReport({
+      ...googleReadyEnv,
+      GOOGLE_OAUTH_CLIENT_SECRET: undefined,
+    }, now);
+    expect(missingDriveClient.checks.find((check) => check.id === "google_drive_vault_oauth")?.ok).toBe(false);
+
+    const wrongDriveCallback = productionReadinessReport({
+      ...googleReadyEnv,
+      GOOGLE_DRIVE_VAULT_OAUTH_CALLBACK_URL: "https://cloud.zenod.dev/auth/google/callback",
+    }, now);
+    expect(wrongDriveCallback.checks.find((check) => check.id === "google_drive_vault_oauth")?.ok).toBe(false);
   });
 
   it("opens paid signup only when every live requirement is evidenced", () => {

@@ -2,9 +2,9 @@
 
 **An open-source AI memory agent with self-hosted and managed-hosted modes.**
 
-Zenod is the interface between AI agents and your personal knowledge vault — ordinary Markdown in
-your own GitHub repository or app-created Google Drive vault, with real Git history in either case. Run it on your own server or use the
-managed hosted beta. Agents talk to Zenod through MCP; Zenod reads and writes the vault on their
+Zenod is the interface between AI agents and your personal knowledge vault. Self-hosted Zenod uses
+ordinary Markdown in your own GitHub repository; Zenod Hosted can use either a user-owned GitHub
+repository or an app-created Google Drive vault, with real Git history in either case. Agents talk to Zenod through MCP; Zenod reads and writes the vault on their
 behalf, enforcing its organization rules so memory compounds instead of rotting.
 
 Named after [Zenodotus of Ephesus](https://en.wikipedia.org/wiki/Zenodotus), first librarian of the Library of Alexandria.

@@ -96,7 +96,8 @@ google_oauth_refresh_token
 
 Each tenant connects its own Google account; refresh token, account and app-created folder remain
 tenant-scoped. A Drive-selected tenant uses that folder as the sole remote vault authority, with ordinary
-Markdown plus `.zenod/.git/repository.bundle`; GitHub is optional tasking, not a memory prerequisite.
+Markdown plus sibling root controls `.zenod/` and `.git/repository.bundle`; GitHub is optional tasking,
+not a memory prerequisite.
 The legacy archive/source Drive connection remains separate. Self-hosted BYO Drive source/inbox behavior
 is unchanged.
 
@@ -138,17 +139,22 @@ ZENOD_PUBLIC_GOOGLE_SIGNUP
 GOOGLE_OIDC_CLIENT_ID
 GOOGLE_OIDC_CLIENT_SECRET
 GOOGLE_OIDC_CALLBACK_URL
+GOOGLE_OAUTH_CLIENT_ID
+GOOGLE_OAUTH_CLIENT_SECRET
+GOOGLE_DRIVE_VAULT_OAUTH_CALLBACK_URL
 ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT
 ZENOD_GDV_ACCEPTANCE_SHA
 ZENOD_GDV_ACCEPTANCE_VERIFIED_AT
+GIT_SHA
 ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS
 ```
 
 `PRICE_MONTHLY` is the sole price reference required for new Zenod checkout and now points to the approved €9 live price. Any existing `PRICE_YEARLY` value is legacy configuration: preserve it in snapshots and do not delete or reinterpret it, but Zenod readiness and new checkout do not depend on it. Keep `ZENOD_PUBLIC_PAID_SIGNUP=0` until the remaining gates pass.
 
-Keep `ZENOD_PUBLIC_GOOGLE_SIGNUP=0` until GDV-10, OAuth configuration/verification, legal review, and
-Jordi's separate public-Google-signup approval are complete. Never set verification timestamps before
-the named evidence exists.
+Keep `ZENOD_PUBLIC_GOOGLE_SIGNUP=0` until GDV-10, exact identity and Drive OAuth client/callback
+configuration, legal review, and Jordi's separate public-Google-signup approval are complete.
+`ZENOD_GDV_ACCEPTANCE_SHA` must equal the exact 40-character deployed `GIT_SHA`; a passing result from
+another build is invalid. Never set verification timestamps before the named evidence exists.
 
 ### Private existing Phylax / Channels
 

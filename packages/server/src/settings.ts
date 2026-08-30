@@ -815,6 +815,12 @@ export class Settings {
     return Boolean(this.get("github_token") || this.hasGithubApp());
   }
 
+  /** Invalidate only tenant authorization; retain shared App identity/configuration for reconnect. */
+  revokeGithubAuthorization(): void {
+    this.setRaw("github_app_installation_id", "");
+    this.setRaw("github_token", "");
+  }
+
   /** The full engine can run: a reachable vault plus the active provider's key. */
   configured(): boolean {
     return this.vaultConfigured() && Boolean(this.activeApiKey());

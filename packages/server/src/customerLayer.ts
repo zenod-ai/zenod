@@ -22,6 +22,7 @@ import {
   CustomerIdentityStore,
   GoogleOidcIdentityProvider,
   GithubIdentityProvider,
+  customerUserId,
   signState,
   verifyState,
   type CustomerPrincipal,
@@ -57,6 +58,7 @@ import type { SharedGithubApp } from "./sharedGithubApp.js";
 import {
   assertPublicSignupIsReady,
   checkoutEnabledForOwner,
+  checkoutOwnerAllowlisted,
   productionReadinessReport,
 } from "./productionReadiness.js";
 
@@ -171,7 +173,8 @@ function googleCallbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): stri
 }
 
 function googleDriveVaultCallbackUrl(env: NodeJS.ProcessEnv, defaultDomain?: string): string {
-  return `${customerDestination(env, defaultDomain)}/api/vault/drive/oauth/callback`;
+  return env.GOOGLE_DRIVE_VAULT_OAUTH_CALLBACK_URL ||
+    `${customerDestination(env, defaultDomain)}/api/vault/drive/oauth/callback`;
 }
 
 const GOOGLE_OIDC_FLOW_COOKIE = "zenod_google_oidc_flow";
@@ -589,6 +592,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       }
       const providerSubject = provider === "github" ? String(githubId) : String(user.id).trim();
       if (!providerSubject) throw new Error(`${provider} returned an invalid user id`);
+      if (
+        provider === "google" &&
+        state.mode === "signin" &&
+        !identities.resolve("google", providerSubject) &&
+        env.ZENOD_PUBLIC_GOOGLE_SIGNUP !== "1" &&
+        !checkoutOwnerAllowlisted({
+          user_id: customerUserId("google", providerSubject),
+          github_id: null,
+        }, env)
+      ) {
+        return c.text("Google signup is not open. Existing Google customers can still sign in.", 403);
+      }
       const identityInput = {
         provider,
         provider_subject: providerSubject,
@@ -1035,13 +1050,27 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       }
       const account = resolveActiveVaultAccount(session.user_id);
       if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
-      if (account.vault_provider && account.vault_provider !== "github") {
+      const taskingOnly = account.vault_provider === "google_drive";
+      const driveBindingId = taskingOnly ? account.vault_binding_id : null;
+      if (account.vault_provider && account.vault_provider !== "github" && !taskingOnly) {
         return c.json({ error: "an authoritative vault provider is already selected" }, 409);
+      }
+      if (taskingOnly && !driveBindingId) {
+        return c.json({ error: "the authoritative Drive vault binding is incomplete" }, 409);
+      }
+      if (taskingOnly && c.req.query("intent") !== "connect_github_tasking") {
+        return c.json({ error: "explicit GitHub tasking connection intent is required" }, 400);
       }
       const sharedApp = host.sharedGithubApp;
       if (!sharedApp) return c.json({ error: "GitHub repository connection is not configured" }, 503);
       const state = signState(
-        { mode: "connect_repo", uid: session.user_id, gid: principal.github_id, login: principal.github_login },
+        {
+          mode: taskingOnly ? "connect_github_tasking" : "connect_repo",
+          uid: session.user_id,
+          gid: principal.github_id,
+          login: principal.github_login,
+          ...(taskingOnly ? { tid: account.tenant_id, bid: driveBindingId! } : {}),
+        },
         customerStateSecret(env),
       );
       return c.json({
@@ -1058,7 +1087,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (!principal?.github_id) return c.text("A connected GitHub identity is required.", 409);
       const stateRaw = c.req.query("state") ?? "";
       const state = stateRaw ? verifyState(stateRaw, customerStateSecret(env)) : null;
-      if (state?.mode !== "connect_repo" || (state.uid ? state.uid !== session.user_id : state.gid !== principal.github_id)) {
+      if (
+        (state?.mode !== "connect_repo" && state?.mode !== "connect_github_tasking") ||
+        (state.uid ? state.uid !== session.user_id : state.gid !== principal.github_id)
+      ) {
         return c.text("This repository connection link is invalid or expired.", 400);
       }
       const installationId = c.req.query("installation_id");
@@ -1066,7 +1098,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       const account = resolveActiveVaultAccount(session.user_id);
       const runtime = account ? host.runtimeForAccount?.(account) ?? null : null;
       if (!account?.tenant_id || !runtime) return c.text("Tenant runtime is unavailable.", 409);
-      if (account.vault_provider && account.vault_provider !== "github") {
+      const taskingOnly = state.mode === "connect_github_tasking";
+      if (
+        taskingOnly
+          ? account.vault_provider !== "google_drive" ||
+            account.tenant_id !== state.tid ||
+            account.vault_binding_id !== state.bid
+          : Boolean(account.vault_provider && account.vault_provider !== "github")
+      ) {
         return c.text("An authoritative vault provider is already selected.", 409);
       }
       runtime.settings.setRaw("github_app_installation_id", installationId);
@@ -1203,10 +1242,19 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const owner = readCustomerSession(c, env);
     if (!owner) return c.json({ error: "sign in before subscribing" }, 401);
     const principal = principalForSession(owner);
+    const existing = accounts.resolveForUser(owner.user_id);
+    if (
+      principal.provider === "google" &&
+      principal.github_id === null &&
+      env.ZENOD_PUBLIC_GOOGLE_SIGNUP !== "1" &&
+      !existing &&
+      !checkoutOwnerAllowlisted(principal, env)
+    ) {
+      return c.json({ error: "Google signup is not open" }, 503);
+    }
     if (!checkoutEnabledForOwner(principal, env)) {
       return c.json({ error: "paid signup is not open" }, 503);
     }
-    const existing = accounts.resolveForUser(owner.user_id);
     if (existing?.subscription_status === "active" || existing?.subscription_status === "past_due") {
       return c.json({ error: "an active subscription already exists" }, 409);
     }

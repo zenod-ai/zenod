@@ -3134,6 +3134,10 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
           undefined,
           options.chatInterceptor,
           () => settings.githubConnectionConfigured(),
+          () => {
+            settings.revokeGithubAuthorization();
+            runtime.invalidate();
+          },
         );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

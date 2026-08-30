@@ -649,6 +649,13 @@ function githubConnectionRequired(tool: string) {
   };
 }
 
+function githubAuthorizationRevoked(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /GitHub returned 401\b/i.test(message) ||
+    /GitHub installation token request failed:\s*(?:401|404)\b/i.test(message) ||
+    /GitHub App token request[^\n]*failed \((?:401|404)\)/i.test(message);
+}
+
 /**
  * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
  * appear only while a Google Drive connection is configured. Built fresh per
@@ -677,6 +684,7 @@ export function buildMcpServer(
   existingServer?: McpServer,
   chatInterceptor?: ChatTurnInterceptor,
   githubCapability?: () => boolean,
+  onGithubAuthorizationRevoked?: () => void,
 ): McpServer {
   const server =
     existingServer ??
@@ -1592,7 +1600,14 @@ export function buildMcpServer(
       },
       async (input) => {
         if (githubCapability && !githubCapability()) return githubConnectionRequired("edit_github_issue");
-        const result = await editGithubIssue(input);
+        let result;
+        try {
+          result = await editGithubIssue(input);
+        } catch (error) {
+          if (!githubAuthorizationRevoked(error)) throw error;
+          onGithubAuthorizationRevoked?.();
+          return githubConnectionRequired("edit_github_issue");
+        }
         const lines = [
           `Edited ${result.repo}#${result.issueNumber}: ${result.issueUrl}`,
           ...(result.operations.length ? [`operations: ${result.operations.join(", ")}`] : ["operations: none"]),
@@ -1615,7 +1630,14 @@ export function buildMcpServer(
       },
       async (input) => {
         if (githubCapability && !githubCapability()) return githubConnectionRequired("create_issue");
-        const result = await createGithubIssue(input);
+        let result;
+        try {
+          result = await createGithubIssue(input);
+        } catch (error) {
+          if (!githubAuthorizationRevoked(error)) throw error;
+          onGithubAuthorizationRevoked?.();
+          return githubConnectionRequired("create_issue");
+        }
         return {
           content: [{ type: "text", text: `Created ${result.repo}#${result.issueNumber}: ${result.issueUrl}` }],
           structuredContent: { ...result },

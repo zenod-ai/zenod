@@ -10,10 +10,11 @@ Google Drive is the sole durable remote authority for a Drive-backed tenant. Zen
 least-privilege `drive.file` scope and only discovers the app-created root bound to that exact tenant and
 vault binding. It does not scan the user's whole Drive.
 
-The root contains ordinary visible Markdown and attachments. Zenod's app-owned `.zenod/` control folder
-contains `manifest.json`, the authoritative completed Drive revision and file-ID/checksum map;
-`.git/repository.bundle`, a verified full Git bundle; `transactions/`, durable idempotent journals; and
-`deleted/`, reversible tombstones. A Drive transaction ID and bundled Git commit SHA are independent.
+The root contains ordinary visible Markdown and attachments plus two sibling app-owned control folders.
+`.zenod/` contains `manifest.json`, the authoritative completed Drive revision and file-ID/checksum map,
+`transactions/`, durable idempotent journals, and `deleted/`, reversible tombstones. The root-level
+`.git/` contains `repository.bundle`, a verified full Git bundle. Therefore the exact bundle path is
+`.git/repository.bundle`, never `.zenod/.git/repository.bundle`. A Drive transaction ID and bundled Git commit SHA are independent.
 Never derive one from the other or emit a GitHub URL for a Drive file.
 
 ## Cache and restart

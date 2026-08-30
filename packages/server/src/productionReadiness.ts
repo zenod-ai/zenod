@@ -1,4 +1,4 @@
-export const ZENOD_LEGAL_VERSION = "2026-08-29";
+export const ZENOD_LEGAL_VERSION = "2026-08-30";
 
 export interface ReadinessCheck {
   id: string;
@@ -24,6 +24,15 @@ function publicHttpsUrl(value: string | undefined): boolean {
   }
 }
 
+function exactPublicCallback(base: string, path: string, configured: string | undefined): boolean {
+  if (!publicHttpsUrl(base) || !publicHttpsUrl(configured)) return false;
+  try {
+    return new URL(configured!).toString() === new URL(path, base.endsWith("/") ? base : `${base}/`).toString();
+  } catch {
+    return false;
+  }
+}
+
 function isRecentIsoDate(value: string | undefined, now: Date, maxAgeDays: number): boolean {
   if (!value) return false;
   const timestamp = Date.parse(value);
@@ -40,31 +49,48 @@ export function productionReadinessReport(
   const accountStateSecret = env.ACCOUNT_STATE_SECRET ?? "";
   const customerAppUrl = env.CUSTOMER_APP_URL ?? "";
   const publicGoogleSignup = env.ZENOD_PUBLIC_GOOGLE_SIGNUP === "1";
+  const googleIdentityConfigured = Boolean(
+    env.GOOGLE_OIDC_CLIENT_ID &&
+    env.GOOGLE_OIDC_CLIENT_SECRET &&
+    exactPublicCallback(customerAppUrl, "/auth/google/callback", env.GOOGLE_OIDC_CALLBACK_URL),
+  );
+  const googleDriveVaultConfigured = Boolean(
+    env.GOOGLE_OAUTH_CLIENT_ID &&
+    env.GOOGLE_OAUTH_CLIENT_SECRET &&
+    exactPublicCallback(
+      customerAppUrl,
+      "/api/vault/drive/oauth/callback",
+      env.GOOGLE_DRIVE_VAULT_OAUTH_CALLBACK_URL,
+    ),
+  );
+  const acceptanceSha = env.ZENOD_GDV_ACCEPTANCE_SHA ?? "";
+  const deployedSha = env.GIT_SHA ?? "";
+  const exactAcceptanceBuild = /^[0-9a-f]{40}$/.test(acceptanceSha) && acceptanceSha === deployedSha;
   const googleChecks: ReadinessCheck[] = [
     {
       id: "google_identity_oauth",
-      ok: Boolean(env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET && publicHttpsUrl(env.GOOGLE_OIDC_CALLBACK_URL)),
-      detail: env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET && publicHttpsUrl(env.GOOGLE_OIDC_CALLBACK_URL)
-        ? "Google OIDC credentials and an explicit public HTTPS callback are configured"
-        : "Google OIDC client ID, secret, and explicit public HTTPS callback are required",
+      ok: googleIdentityConfigured,
+      detail: googleIdentityConfigured
+        ? "Google OIDC credentials and the exact Hosted callback are configured"
+        : "Google OIDC client ID, secret, and exact Hosted callback are required",
     },
     {
       id: "google_drive_vault_oauth",
-      ok: isRecentIsoDate(env.ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT, now, 90),
-      detail: isRecentIsoDate(env.ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT, now, 90)
-        ? "The Drive vault OAuth project, branding, callback, and drive.file scopes were verified within 90 days"
-        : "Drive vault OAuth project/configuration verification is missing or stale",
+      ok: googleDriveVaultConfigured && isRecentIsoDate(env.ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT, now, 90),
+      detail: googleDriveVaultConfigured && isRecentIsoDate(env.ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT, now, 90)
+        ? "The exact Drive OAuth client, callback, project, branding, and drive.file scope were verified within 90 days"
+        : "Exact Drive OAuth client/callback inputs or recent configuration verification are missing",
     },
     {
       id: "google_drive_vault_acceptance",
       ok:
-        /^[0-9a-f]{40}$/.test(env.ZENOD_GDV_ACCEPTANCE_SHA ?? "") &&
+        exactAcceptanceBuild &&
         isRecentIsoDate(env.ZENOD_GDV_ACCEPTANCE_VERIFIED_AT, now, 31),
       detail:
-        /^[0-9a-f]{40}$/.test(env.ZENOD_GDV_ACCEPTANCE_SHA ?? "") &&
+        exactAcceptanceBuild &&
         isRecentIsoDate(env.ZENOD_GDV_ACCEPTANCE_VERIFIED_AT, now, 31)
-          ? "Google-only acceptance is recorded against an exact commit within 31 days"
-          : "Exact-commit Google-only acceptance evidence is missing or stale",
+          ? "Google-only acceptance is recorded against this exact deployed build within 31 days"
+          : "Acceptance SHA must equal the exact 40-character deployed GIT_SHA and have recent dated evidence",
     },
   ];
   const checks: ReadinessCheck[] = [
@@ -188,6 +214,13 @@ export function checkoutEnabledForOwner(
 ): boolean {
   if (checkoutEnabled(env)) return true;
   if (env.STRIPE_MODE !== "live") return false;
+  return checkoutOwnerAllowlisted(owner, env);
+}
+
+export function checkoutOwnerAllowlisted(
+  owner: number | { user_id: string; github_id?: number | null },
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   const githubId = typeof owner === "number" ? owner : owner.github_id;
   const githubAllowed = (env.ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS ?? "")
     .split(",")

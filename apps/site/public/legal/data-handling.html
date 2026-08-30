@@ -18,7 +18,7 @@
 </head>
 <body>
 <h1>Data Handling</h1>
-<p><strong>Effective 29 August 2026 · Version 2026-08-29.</strong> This page explains, in plain
+<p><strong>Effective 30 August 2026 · Version 2026-08-30.</strong> This page explains, in plain
 terms, where your data lives and who touches it in hosted Zenod. It complements the
 <a href="/legal/privacy.html">Privacy Policy</a>.</p>
 
@@ -47,13 +47,16 @@ cross-tenant token, session, settings, and storage boundaries.</p>
     <tr><td>Payment details</td><td>Stripe</td><td>We never see or store card numbers</td></tr>
     <tr><td>Message content sent to the LLM</td><td>Transits to the model provider to produce a
       response</td><td>Processed under the configured provider's terms; Zenod does not use it to train models</td></tr>
+    <tr><td>Drive recovery journals and reversible tombstones</td><td>The Drive vault's `.zenod/transactions/`
+      and `.zenod/deleted/` control paths, with tenant-scoped recovery state on our infrastructure</td>
+      <td>Durable recovery records retained indefinitely under the current policy; they are not temporary cache</td></tr>
     <tr><td>Operational logs</td><td>Our infrastructure</td><td>Minimal, for reliability and support</td></tr>
   </tbody>
 </table>
 
 <h2>Backups</h2>
 <p>A completed GitHub write is committed and pushed. A completed Drive write publishes ordinary files,
-a transaction manifest, and a verified full Git bundle before Zenod reports success. Hosted
+a transaction manifest, durable recovery journal, and verified `.git/repository.bundle` before Zenod reports success. Hosted
 runtime state is also covered by checksummed, access-restricted cold volume backups. Public paid signup
 fails closed unless an operator has recorded a successful isolated restore verification within the
 preceding 31 days.</p>
