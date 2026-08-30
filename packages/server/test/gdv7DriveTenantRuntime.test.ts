@@ -211,6 +211,146 @@ describe("GDV-7 Drive tenant runtime", () => {
         checkout_completed_at: new Date().toISOString(),
       });
 
+      const principalFailureStart = await driveConsentStart(unit, beta.cookie);
+      const principalFailureCalls = providerCalls.length;
+      const principalSpy = vi
+        .spyOn(unit.customerIdentities, "resolve")
+        .mockImplementationOnce(() => {
+          throw new Error("identity store unavailable");
+        });
+      const principalFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=identity-fail&state=${encodeURIComponent(principalFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${principalFailureStart.flowCookie}` } },
+      );
+      principalSpy.mockRestore();
+      await expectScrubbedDriveRedirect(principalFailure, "drive_expired", [
+        principalFailureStart.state,
+        "identity-fail",
+        "account-beta",
+        "checkout-beta",
+        "tenant-beta",
+      ]);
+      expect(providerCalls).toHaveLength(principalFailureCalls);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+
+      const activeAccountFailureStart = await driveConsentStart(unit, beta.cookie);
+      const activeAccountFailureCalls = providerCalls.length;
+      const activeAccountSpy = vi
+        .spyOn(unit.customerAccounts, "resolveActiveTenantForUser")
+        .mockImplementationOnce(() => {
+          throw new Error("customer account store unavailable");
+        });
+      const activeAccountFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=store-fail&state=${encodeURIComponent(activeAccountFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${activeAccountFailureStart.flowCookie}` } },
+      );
+      activeAccountSpy.mockRestore();
+      await expectScrubbedDriveRedirect(activeAccountFailure, "drive_expired", [
+        activeAccountFailureStart.state,
+        "store-fail",
+        "account-beta",
+        "checkout-beta",
+        "tenant-beta",
+      ]);
+      expect(providerCalls).toHaveLength(activeAccountFailureCalls);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+
+      const tenantLookupFailureStart = await driveConsentStart(unit, beta.cookie);
+      const tenantLookupFailureCalls = providerCalls.length;
+      const tenantLookupSpy = vi
+        .spyOn(tenants, "resolveTokenHash")
+        .mockRejectedValueOnce(new Error("tenant store unavailable"));
+      const tenantLookupFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=tenant-store-fail&state=${encodeURIComponent(tenantLookupFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${tenantLookupFailureStart.flowCookie}` } },
+      );
+      tenantLookupSpy.mockRestore();
+      await expectScrubbedDriveRedirect(tenantLookupFailure, "drive_tenant", [
+        tenantLookupFailureStart.state,
+        "tenant-store-fail",
+        "account-beta",
+        "checkout-beta",
+        "tenant-beta",
+      ]);
+      expect(providerCalls).toHaveLength(tenantLookupFailureCalls);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+      const tenantLookupReplay = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=tenant-store-replay&state=${encodeURIComponent(tenantLookupFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${tenantLookupFailureStart.flowCookie}` } },
+      );
+      await expectScrubbedDriveRedirect(tenantLookupReplay, "drive_expired", [
+        tenantLookupFailureStart.state,
+        "tenant-store-replay",
+      ]);
+      expect(providerCalls).toHaveLength(tenantLookupFailureCalls);
+
+      const tokenLookupFailureStart = await driveConsentStart(unit, beta.cookie);
+      const tokenLookupFailureCalls = providerCalls.length;
+      const tokenLookupSpy = vi
+        .spyOn(unit.customerTokenVault, "get")
+        .mockImplementationOnce(() => {
+          throw new Error("tenant token authority unavailable");
+        });
+      const tokenLookupFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=token-fail&state=${encodeURIComponent(tokenLookupFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${tokenLookupFailureStart.flowCookie}` } },
+      );
+      tokenLookupSpy.mockRestore();
+      await expectScrubbedDriveRedirect(tokenLookupFailure, "drive_tenant", [
+        tokenLookupFailureStart.state,
+        "token-fail",
+        "account-beta",
+        "tenant-beta",
+      ]);
+      expect(providerCalls).toHaveLength(tokenLookupFailureCalls);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+
+      const flowWriteFailureStart = await driveConsentStart(unit, beta.cookie);
+      const betaFaultRuntime = unit.runtimes.get("tenant-beta")!;
+      const flowWriteFailureCalls = providerCalls.length;
+      const flowWriteSpy = vi
+        .spyOn(betaFaultRuntime.settings, "setRaw")
+        .mockImplementationOnce(() => {
+          throw new Error("flow store unavailable");
+        });
+      const flowWriteFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=flow-write-fail&state=${encodeURIComponent(flowWriteFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${flowWriteFailureStart.flowCookie}` } },
+      );
+      flowWriteSpy.mockRestore();
+      await expectScrubbedDriveRedirect(flowWriteFailure, "drive_expired", [
+        flowWriteFailureStart.state,
+        "flow-write-fail",
+        "account-beta",
+        "tenant-beta",
+      ]);
+      expect(providerCalls).toHaveLength(flowWriteFailureCalls);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+      const flowWriteReplay = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=flow-write-replay&state=${encodeURIComponent(flowWriteFailureStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${flowWriteFailureStart.flowCookie}` } },
+      );
+      await expectScrubbedDriveRedirect(flowWriteReplay, "drive_expired", [
+        flowWriteFailureStart.state,
+        "flow-write-replay",
+      ]);
+      expect(providerCalls).toHaveLength(flowWriteFailureCalls);
+
       const ambientGet = await unit.app.request("https://cloud.zenod.test/api/vault/drive/oauth/start", {
         headers: { cookie: alpha.cookie },
       });
@@ -356,6 +496,29 @@ describe("GDV-7 Drive tenant runtime", () => {
       });
       expect(alphaRuntime.settings.getRaw("google_drive_vault_oauth_refresh_token")).toBeNull();
       expect(alphaRuntime.settings.getRaw("google_oauth_refresh_token")).toBe("archive-refresh-token");
+
+      const boundTenantFailureStart = await driveConsentStart(unit, alpha.cookie);
+      const callsBeforeBoundTenantFailure = providerCalls.length;
+      const boundTenantLookupSpy = vi
+        .spyOn(tenants, "resolveTokenHash")
+        .mockRejectedValueOnce(new Error("tenant store unavailable during reconnect"));
+      const boundTenantFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=bound-tenant-fail&state=${encodeURIComponent(boundTenantFailureStart.state)}`,
+        { headers: { cookie: `${alpha.cookie}; ${boundTenantFailureStart.flowCookie}` } },
+      );
+      boundTenantLookupSpy.mockRestore();
+      await expectScrubbedDriveRedirect(boundTenantFailure, "drive_tenant", [
+        boundTenantFailureStart.state,
+        "bound-tenant-fail",
+        "account-alpha",
+        "tenant-alpha",
+      ]);
+      expect(providerCalls).toHaveLength(callsBeforeBoundTenantFailure);
+      expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
+        vault_provider: "google_drive",
+        vault_binding_id: alphaAccount.vault_binding_id,
+        vault_binding_status: "revoked",
+      });
 
       const deniedStart = await driveConsentStart(unit, alpha.cookie);
       const denied = await unit.app.request(

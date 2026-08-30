@@ -817,161 +817,204 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     app.get("/api/vault/drive/oauth/callback", async (c) => {
       c.header("Cache-Control", "no-store");
       c.header("Referrer-Policy", "no-referrer");
-      const session = readCustomerSession(c, env);
-      if (!session) return driveVaultCallbackFailure(c, env, product, "drive_session");
-      principalForSession(session);
-      const state = verifyState(c.req.query("state") ?? "", customerStateSecret(env));
-      const proof = verifyState(getCookie(c, GOOGLE_DRIVE_VAULT_FLOW_COOKIE) ?? "", customerStateSecret(env));
-      clearGoogleDriveVaultFlowCookie(c, env);
-      const sessionAccount = state?.sid ? accounts.get(state.sid) : null;
-      const activeAccount = accounts.resolveActiveTenantForUser(session.user_id);
-      let account = sessionAccount;
+      let failureCode: DriveVaultCallbackError = "drive_session";
+      let safelyIdentifiedAccount: CustomerAccount | null = null;
+      let validatedFlowRuntime: Runtime | null = null;
       try {
+        const session = readCustomerSession(c, env);
+        if (!session) return driveVaultCallbackFailure(c, env, product, "drive_session");
+        failureCode = "drive_expired";
+        principalForSession(session);
+        const state = verifyState(c.req.query("state") ?? "", customerStateSecret(env));
+        const proof = verifyState(getCookie(c, GOOGLE_DRIVE_VAULT_FLOW_COOKIE) ?? "", customerStateSecret(env));
+        clearGoogleDriveVaultFlowCookie(c, env);
+        const sessionAccount = state?.sid ? accounts.get(state.sid) : null;
+        const activeAccount = accounts.resolveActiveTenantForUser(session.user_id);
+        let account = sessionAccount;
         const vaultAuthority = state?.tid ? accounts.resolveVaultAuthorityForTenantId(state.tid) : null;
         if (vaultAuthority?.binding) account = vaultAuthority.account;
-      } catch {
-        return driveVaultCallbackFailure(c, env, product, "drive_expired");
-      }
-      if (
-        !state ||
-        state.mode !== "connect_drive_vault" ||
-        !state.flow ||
-        !state.nonce ||
-        !state.aid ||
-        !state.sid ||
-        !state.tid ||
-        !state.bid ||
-        state.epoch === undefined ||
-        state.uid !== session.user_id ||
-        !sessionAccount?.tenant_id ||
-        sessionAccount.session_id !== state.sid ||
-        sessionAccount.account_id !== state.aid ||
-        sessionAccount.user_id !== state.uid ||
-        sessionAccount.tenant_id !== state.tid ||
-        !account?.tenant_id ||
-        account.account_id !== state.aid ||
-        account.user_id !== state.uid ||
-        account.tenant_id !== state.tid ||
-        (account.vault_authorization_epoch ?? 0) !== state.epoch ||
-        !activeAccount ||
-        activeAccount.session_id !== state.sid ||
-        activeAccount.account_id !== state.aid ||
-        activeAccount.user_id !== state.uid ||
-        activeAccount.tenant_id !== state.tid ||
-        (activeAccount.subscription_status !== "active" && activeAccount.subscription_status !== "past_due") ||
-        (account.vault_provider !== null && account.vault_provider !== "google_drive") ||
-        (account.vault_binding_id !== null && account.vault_binding_id !== state.bid) ||
-        !proof ||
-        proof.mode !== "connect_drive_vault" ||
-        proof.uid !== state.uid ||
-        proof.aid !== state.aid ||
-        proof.sid !== state.sid ||
-        proof.tid !== state.tid ||
-        proof.bid !== state.bid ||
-        proof.epoch !== state.epoch ||
-        proof.flow !== state.flow ||
-        proof.nonce !== state.nonce ||
-        !proof.verifier ||
-        (account.vault_provider === "google_drive" &&
-          account.vault_binding_status !== "revoked" &&
-          account.vault_binding_status !== "error")
-      ) {
-        return driveVaultCallbackFailure(c, env, product, "drive_expired");
-      }
-      const runtime = host.runtimeForAccount?.(account) ?? null;
-      const expectedFlow = createHash("sha256").update(c.req.query("state") ?? "").digest("hex");
-      if (!runtime || runtime.settings.getRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING) !== expectedFlow) {
-        return driveVaultCallbackFailure(c, env, product, "drive_expired");
-      }
-      // Consume before any error handling or exchange so every accepted callback is one-shot.
-      runtime.settings.setRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING, "");
-      const token = tokenVault.get(account.account_id);
-      const tenantRecord = token && options.tenantStore
-        ? await options.tenantStore.resolveTokenHash(hashToken(token))
-        : null;
-      if (!tenantRecord || tenantRecord.tenant.id !== account.tenant_id || (tenantRecord.status ?? "active") !== "active") {
-        return driveVaultCallbackFailure(c, env, product, "drive_tenant");
-      }
-      if (c.req.query("error")) {
-        if (account.vault_provider === "google_drive") {
-          accounts.upsert(account.session_id, {
-            vault_binding_status: "revoked",
-            vault_binding_updated_at: new Date().toISOString(),
-          });
+        if (
+          !state ||
+          state.mode !== "connect_drive_vault" ||
+          !state.flow ||
+          !state.nonce ||
+          !state.aid ||
+          !state.sid ||
+          !state.tid ||
+          !state.bid ||
+          state.epoch === undefined ||
+          state.uid !== session.user_id ||
+          !sessionAccount?.tenant_id ||
+          sessionAccount.session_id !== state.sid ||
+          sessionAccount.account_id !== state.aid ||
+          sessionAccount.user_id !== state.uid ||
+          sessionAccount.tenant_id !== state.tid ||
+          !account?.tenant_id ||
+          account.account_id !== state.aid ||
+          account.user_id !== state.uid ||
+          account.tenant_id !== state.tid ||
+          (account.vault_authorization_epoch ?? 0) !== state.epoch ||
+          !activeAccount ||
+          activeAccount.session_id !== state.sid ||
+          activeAccount.account_id !== state.aid ||
+          activeAccount.user_id !== state.uid ||
+          activeAccount.tenant_id !== state.tid ||
+          (activeAccount.subscription_status !== "active" && activeAccount.subscription_status !== "past_due") ||
+          (account.vault_provider !== null && account.vault_provider !== "google_drive") ||
+          (account.vault_binding_id !== null && account.vault_binding_id !== state.bid) ||
+          !proof ||
+          proof.mode !== "connect_drive_vault" ||
+          proof.uid !== state.uid ||
+          proof.aid !== state.aid ||
+          proof.sid !== state.sid ||
+          proof.tid !== state.tid ||
+          proof.bid !== state.bid ||
+          proof.epoch !== state.epoch ||
+          proof.flow !== state.flow ||
+          proof.nonce !== state.nonce ||
+          !proof.verifier ||
+          (account.vault_provider === "google_drive" &&
+            account.vault_binding_status !== "revoked" &&
+            account.vault_binding_status !== "error")
+        ) {
+          return driveVaultCallbackFailure(c, env, product, "drive_expired");
         }
-        return driveVaultCallbackFailure(c, env, product, "drive_denied");
-      }
-      const code = c.req.query("code") ?? "";
-      const authority = runtime.settings.googleDriveOAuthAuthority();
-      if (!code || authority.mode !== "hosted-managed" || !authority.credentials) {
-        return driveVaultCallbackFailure(c, env, product, "drive_config");
-      }
-      let callbackStage: "exchange" | "bootstrap" = "exchange";
-      try {
-        const now = new Date().toISOString();
-        accounts.upsert(account.session_id, {
-          vault_provider: "google_drive",
-          vault_binding_id: state.bid,
-          vault_binding_status: "authorizing",
-          vault_binding_created_at: account.vault_binding_created_at ?? now,
-          vault_binding_updated_at: now,
-        });
-        if (!options.driveVaultOAuth) throw new Error("Google Drive vault authorization is unavailable");
-        const result = await options.driveVaultOAuth.exchangeCode({
-          clientId: authority.credentials.clientId,
-          clientSecret: authority.credentials.clientSecret,
-          code,
-          redirectUri: googleDriveVaultCallbackUrl(env, product.defaultDomain),
-          codeVerifier: proof.verifier,
-        });
-        const currentTenantRecord = token && options.tenantStore
+        safelyIdentifiedAccount = account;
+        const runtime = host.runtimeForAccount?.(account) ?? null;
+        const expectedFlow = createHash("sha256").update(c.req.query("state") ?? "").digest("hex");
+        if (!runtime || runtime.settings.getRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING) !== expectedFlow) {
+          return driveVaultCallbackFailure(c, env, product, "drive_expired");
+        }
+        // Consume before any error handling or exchange so every accepted callback is one-shot.
+        validatedFlowRuntime = runtime;
+        runtime.settings.setRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING, "");
+        failureCode = "drive_tenant";
+        const token = tokenVault.get(account.account_id);
+        const tenantRecord = token && options.tenantStore
           ? await options.tenantStore.resolveTokenHash(hashToken(token))
           : null;
-        if (
-          !currentTenantRecord ||
-          currentTenantRecord.tenant.id !== account.tenant_id ||
-          (currentTenantRecord.status ?? "active") !== "active"
-        ) {
-          throw new Error("tenant became unavailable during Google Drive authorization");
+        if (!tenantRecord || tenantRecord.tenant.id !== account.tenant_id || (tenantRecord.status ?? "active") !== "active") {
+          return driveVaultCallbackFailure(c, env, product, "drive_tenant");
         }
-        const currentAccount = accounts.get(account.session_id);
-        if (
-          !currentAccount ||
-          currentAccount.vault_provider !== "google_drive" ||
-          currentAccount.vault_binding_id !== state.bid ||
-          currentAccount.vault_binding_status !== "authorizing" ||
-          (currentAccount.vault_authorization_epoch ?? 0) !== (account.vault_authorization_epoch ?? 0)
-        ) {
-          throw new Error("Drive vault authorization changed during callback");
+        if (c.req.query("error")) {
+          failureCode = "drive_denied";
+          if (account.vault_provider === "google_drive") {
+            accounts.upsert(account.session_id, {
+              vault_binding_status: "revoked",
+              vault_binding_updated_at: new Date().toISOString(),
+            });
+          }
+          return driveVaultCallbackFailure(c, env, product, "drive_denied");
         }
-        runtime.settings.setRaw("google_drive_vault_oauth_refresh_token", result.refreshToken);
-        runtime.settings.setRaw("google_drive_vault_oauth_email", result.email ?? "");
-        const authorizationEpoch = (currentAccount.vault_authorization_epoch ?? 0) + 1;
-        accounts.upsert(account.session_id, {
-          vault_binding_status: "recovering",
-          vault_authorization_epoch: authorizationEpoch,
-          vault_binding_updated_at: new Date().toISOString(),
-        });
-        callbackStage = "bootstrap";
-        runtime.invalidate();
-        const repo = await runtime.getRepo({ allowRecovering: true });
-        const revision = await repo.currentRevision();
-        return c.redirect(`${customerDestination(env, product.defaultDomain)}/app?vault=google-drive&revision=${encodeURIComponent(revision.id)}`, 303);
-      } catch (error) {
-        const latest = accounts.get(account.session_id);
-        if (latest?.vault_binding_status !== "revoked") {
+        failureCode = "drive_config";
+        const code = c.req.query("code") ?? "";
+        const authority = runtime.settings.googleDriveOAuthAuthority();
+        if (!code || authority.mode !== "hosted-managed" || !authority.credentials) {
+          return driveVaultCallbackFailure(c, env, product, "drive_config");
+        }
+        let callbackStage: "exchange" | "bootstrap" = "exchange";
+        try {
+          failureCode = "drive_exchange";
+          const now = new Date().toISOString();
           accounts.upsert(account.session_id, {
-            vault_binding_status: "error",
+            vault_provider: "google_drive",
+            vault_binding_id: state.bid,
+            vault_binding_status: "authorizing",
+            vault_binding_created_at: account.vault_binding_created_at ?? now,
+            vault_binding_updated_at: now,
+          });
+          if (!options.driveVaultOAuth) throw new Error("Google Drive vault authorization is unavailable");
+          const result = await options.driveVaultOAuth.exchangeCode({
+            clientId: authority.credentials.clientId,
+            clientSecret: authority.credentials.clientSecret,
+            code,
+            redirectUri: googleDriveVaultCallbackUrl(env, product.defaultDomain),
+            codeVerifier: proof.verifier,
+          });
+          const currentTenantRecord = token && options.tenantStore
+            ? await options.tenantStore.resolveTokenHash(hashToken(token))
+            : null;
+          if (
+            !currentTenantRecord ||
+            currentTenantRecord.tenant.id !== account.tenant_id ||
+            (currentTenantRecord.status ?? "active") !== "active"
+          ) {
+            throw new Error("tenant became unavailable during Google Drive authorization");
+          }
+          const currentAccount = accounts.get(account.session_id);
+          if (
+            !currentAccount ||
+            currentAccount.vault_provider !== "google_drive" ||
+            currentAccount.vault_binding_id !== state.bid ||
+            currentAccount.vault_binding_status !== "authorizing" ||
+            (currentAccount.vault_authorization_epoch ?? 0) !== (account.vault_authorization_epoch ?? 0)
+          ) {
+            throw new Error("Drive vault authorization changed during callback");
+          }
+          runtime.settings.setRaw("google_drive_vault_oauth_refresh_token", result.refreshToken);
+          runtime.settings.setRaw("google_drive_vault_oauth_email", result.email ?? "");
+          const authorizationEpoch = (currentAccount.vault_authorization_epoch ?? 0) + 1;
+          accounts.upsert(account.session_id, {
+            vault_binding_status: "recovering",
+            vault_authorization_epoch: authorizationEpoch,
             vault_binding_updated_at: new Date().toISOString(),
           });
+          callbackStage = "bootstrap";
+          failureCode = "drive_bootstrap";
+          runtime.invalidate();
+          const repo = await runtime.getRepo({ allowRecovering: true });
+          const revision = await repo.currentRevision();
+          return c.redirect(`${customerDestination(env, product.defaultDomain)}/app?vault=google-drive&revision=${encodeURIComponent(revision.id)}`, 303);
+        } catch (error) {
+          const latest = accounts.get(account.session_id);
+          if (
+            latest?.vault_provider === "google_drive" &&
+            latest.vault_binding_id === state.bid &&
+            latest.vault_binding_status !== "revoked"
+          ) {
+            accounts.upsert(account.session_id, {
+              vault_binding_status: "error",
+              vault_binding_updated_at: new Date().toISOString(),
+            });
+          }
+          console.error("Google Drive vault callback failed:", error instanceof Error ? error.message : "unknown error");
+          return driveVaultCallbackFailure(
+            c,
+            env,
+            product,
+            callbackStage === "exchange" ? "drive_exchange" : "drive_bootstrap",
+          );
         }
-        console.error("Google Drive vault callback failed:", error instanceof Error ? error.message : "unknown error");
-        return driveVaultCallbackFailure(
-          c,
-          env,
-          product,
-          callbackStage === "exchange" ? "drive_exchange" : "drive_bootstrap",
-        );
+      } catch (error) {
+        if (validatedFlowRuntime) {
+          try {
+            validatedFlowRuntime.settings.setRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING, "");
+          } catch {
+            // Cookie clearing still prevents browser replay while a failed settings authority remains unavailable.
+          }
+        }
+        if (
+          safelyIdentifiedAccount?.vault_provider === "google_drive" &&
+          safelyIdentifiedAccount.vault_binding_id
+        ) {
+          try {
+            const latest = accounts.get(safelyIdentifiedAccount.session_id);
+            if (
+              latest?.account_id === safelyIdentifiedAccount.account_id &&
+              latest.vault_binding_id === safelyIdentifiedAccount.vault_binding_id &&
+              latest.vault_binding_status !== "revoked"
+            ) {
+              accounts.upsert(safelyIdentifiedAccount.session_id, {
+                vault_binding_status: "error",
+                vault_binding_updated_at: new Date().toISOString(),
+              });
+            }
+          } catch {
+            // The scrubbed redirect remains the terminal boundary when the account store itself is unavailable.
+          }
+        }
+        console.error("Google Drive vault callback failed before exchange:", error instanceof Error ? error.message : "unknown error");
+        return driveVaultCallbackFailure(c, env, product, failureCode);
       }
     });
 
