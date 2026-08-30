@@ -1,6 +1,6 @@
 # Epic GDV · Google identity and Google Drive-only vaults
 
-Status: ready for credential-backed human acceptance
+Status: credential-backed new/unpaid Google acceptance in progress
 Created: 2026-08-29
 Updated: 2026-08-30
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -86,7 +86,7 @@ The required uninterrupted Hosted journey is:
 - [x] The public site, Hosted onboarding, account/vault UI, legal/privacy disclosures, readiness checks and operator runbook describe both supported providers truthfully.
 - [x] Exact integrated commit `0ca15e8` passes the deterministic local/fake-provider Google-only, restart, conflict, interrupted-save, revocation and two-tenant-isolation matrix; the uninterrupted credential-backed browser journey remains a named human gate.
 - [x] Existing GitHub and self-host acceptance suites regress green.
-- [x] No production deploy, live OAuth mutation, real-card billing, existing-tenant migration or public-signup change occurred; each remains separately gated.
+- [x] Exact source `f2f5db9` is deployed signup-closed to production after a verified backup/restore drill; no public-signup opening, live-card charge, existing-tenant migration or provider switch occurred.
 
 ## Non-Goals
 
@@ -104,14 +104,14 @@ The required uninterrupted Hosted journey is:
 
 ## Current State
 
-Phase: Deterministic local release acceptance complete; credential-backed staging requires human approval
+Phase: Exact production candidate deployed closed; isolated credential-backed new/unpaid-user acceptance running
 Last verified: 2026-08-30 CEST
 Integration target: `main`
 Fresh base commit: `f2f5db946d182fa7e1f244d7bcb7b14e3145ff72` on `main`
 Control-plane merge: [PR #1155](https://github.com/zenod-ai/zenod/pull/1155), merged as `a4c4826f80ed0acda93d304f21cb50129d7fb2dd`
-Current production relationship: additive sibling epic. The active Phylax/configuration gate remains authoritative for production and is not modified here.
-Next action: Jordi/operator approves the exact Google Cloud project, OIDC/Drive clients, callbacks, branding/scopes and a disposable credential-backed staging environment; then execute the uninterrupted Google-only browser/Drive/phone acceptance against one pinned image. Deployment, billing and public signup remain separate later approvals.
-Blockers: deterministic source/local acceptance has no blocker and is complete. Credential-backed staging is blocked on the named Google Cloud configuration and test-environment approval; production deployment, billing and public signup remain separate human gates.
+Current production relationship: `cloud.zenod.dev` runs immutable image `ghcr.io/zenod-ai/zenod:sha-f2f5db9` and reports exact source `f2f5db946d182fa7e1f244d7bcb7b14e3145ff72`. Public paid and Google signup remain closed. The pre-existing `AlfaBlok` tenant is legacy GitHub-authoritative and is not a migration target for this acceptance.
+Next action: complete [GDV-12 #1185](https://github.com/zenod-ai/zenod/issues/1185) on the empty `cloud-test.zenod.dev` application: create the dedicated test OAuth/billing inputs, prove the never-seen Google identity's unpaid fail-closed boundary, then test-mode checkout, Drive-only authority/rebuild/reconnect and optional GitHub coexistence.
+Blockers: the empty staging application, volume, domain and exact image are live and healthy. The next action is at the explicit action-time gate for creating a dedicated staging Google OAuth client and Stripe test-mode credentials/objects. Production public signup, live billing and existing-tenant migration remain closed separate gates.
 
 ## Bootstrap Map
 
@@ -264,6 +264,7 @@ Memory operations are provider-neutral. GitHub issue, PR and code-repository ope
 | [GDV-9 #1153](https://github.com/zenod-ai/zenod/issues/1153) | Ticket worker | `/root/gdv_9_capabilities_worker` | Capability-gate GitHub-only operations and update public/operator contracts | complete | #1148, #1149, #1151 | [PR #1178](https://github.com/zenod-ai/zenod/pull/1178) / `codex/gdv-9-capabilities-and-contracts` | `3dd2763` on `main`; final head includes `1cf01a3` | Drive-only memory is complete; GitHub issue/code tools fail typed and copy/legal/readiness/runbooks match reality. | Exact head `663ed7e` passed full CI and independent review after public-gate, build-evidence, tenant-installation, token-cache, remote-revocation and PAT-fallback fixes; merged as `536a85c`. | 2026-08-30 | Preserve App-only Drive tasking and default-closed public Google signup in GDV-10. |
 | [GDV-10 #1154](https://github.com/zenod-ai/zenod/issues/1154) | Tester / integrator | `/root/gdv_10_acceptance_worker` | Prove Google-only release acceptance and GitHub regression | complete / local | #1146 through #1153 | [PR #1180](https://github.com/zenod-ai/zenod/pull/1180) / `codex/gdv-10-release-acceptance` | `3802672` on `main` | Full no-GitHub journey, restart, conflict, partial failure, revocation, isolation and GitHub regression pass with durable evidence. | Exact head `4783239` passed the clean-head 364-test acceptance runner, 2,274 full-suite assertions plus 6 skips, full CI and independent review; merged as `0ca15e8`. | 2026-08-30 | Await approval for the separately named credential-backed staging gate; do not deploy or open signup. |
 | [GDV-11 #1182](https://github.com/zenod-ai/zenod/issues/1182) | Ticket worker | `/root/gdv_11_oauth_worker` | Wire host-managed Drive OAuth credentials into tenant runtime | complete | Credential-backed preflight after #1154 | [PR #1183](https://github.com/zenod-ai/zenod/pull/1183) / `codex/gdv-11-hosted-drive-oauth` | `9f28b5c` on `main` | Eligible Hosted tenants use the immutable process-level Drive OAuth client pair without tenant settings seeding or secret exposure; missing/partial config fails closed. | Exact head `fd9db0b` passed 137 focused review tests, full repository CI and clean independent security review; merged as `f2f5db9`. | 2026-08-30 | Configure the approved Google Cloud clients only in the named credential-backed staging gate. |
+| [GDV-12 #1185](https://github.com/zenod-ai/zenod/issues/1185) | Epic worker / live tester | `/root` Google Drive Vault delivery manager | Credential-backed new Google and unpaid-user acceptance | active / staging baseline live | #1182, #1154, explicit provider/test-environment approval | `cloud-test.zenod.dev`; exact `main` `f2f5db9` | A never-seen Google identity is powerless before checkout, then test checkout creates exactly one tenant and Drive-only store/search/get/ask/rebuild/reconnect works without GitHub authority; optional GitHub adds tasking only. | Empty dedicated app `v7wgMKSmXRz9KIUpItjS7`, volume `zenod-cloud-test-data:/data`, domain and exact image are healthy; signup/checkout remain closed before credential creation. Production was separately backed up/restored and remains closed. | 2026-08-30 | Create dedicated staging OAuth and Stripe test inputs at the named human gate, then walk the uninterrupted journey and record provider artifacts/receipts without secrets. |
 
 ## Ticket Contracts
 
@@ -534,8 +535,20 @@ control-plane spine merge
 | 2026-08-30 | GDV-9 capability and contract integration | `536a85c` | GitHub `main` | 104 focused server, 66 core, 117 web and 12 site tests, all-workspace typecheck/build, 27 schemas, Phylax bundle/image checks, exact-head CI and independent review | pass; Google signup defaults closed and build-bound, Drive memory remains provider-neutral, Drive tasking is tenant-installation/App-only, revoked capability fails typed without PAT fallback, and public/operator contracts match authority | [PR #1178](https://github.com/zenod-ai/zenod/pull/1178), [integration evidence](https://github.com/zenod-ai/zenod/issues/1153#issuecomment-5467930930) |
 | 2026-08-30 | GDV-10 deterministic release acceptance | `0ca15e8` | GitHub `main`; local fake-provider acceptance | Exact clean-head runner: 21 files/364 assertions; full repository 2,274 assertions plus 6 skips; typecheck/build, 27 schemas, exact-head CI and independent claim/evidence review | pass for deterministic local acceptance; fresh-engine search/get/ask after empty-cache bundle reconstruction, fault/conflict/revocation/isolation, layered web/MCP/phone, GitHub/self-host regression and no-GitHub-publication proof verified; live gates remain closed | [PR #1180](https://github.com/zenod-ai/zenod/pull/1180), [evidence packet](docs/evidence/zenod-google-drive-vault-release-acceptance-2026-08-30/README.md), [exact receipt](https://github.com/zenod-ai/zenod/issues/1154#issuecomment-5468103555), [terminal handoff](https://github.com/zenod-ai/zenod/issues/1154#issuecomment-5468131045) |
 | 2026-08-30 | GDV-11 host-managed OAuth integration | `f2f5db9` | GitHub `main`; deterministic env/fetch mocks | 137 focused independent-review tests, 1,235 server tests, full repository tests/typecheck/build/schema checks, Phylax boundary/image contract, exact-head CI and independent review | pass; one complete process-level Drive OAuth pair is frozen into eligible Hosted tenant authority while client settings remain hidden/immutable and refresh tokens, bindings, folders and caches remain tenant-local | [PR #1183](https://github.com/zenod-ai/zenod/pull/1183), [issue #1182](https://github.com/zenod-ai/zenod/issues/1182) |
+| 2026-08-30 | Closed production candidate deployment | `f2f5db9` | `cloud.zenod.dev`; Dokploy application `2dkayH_eAur427leH64MT` | Fresh production-volume archive/checksum; separate disposable-volume restore verifier; immutable image/env deployment; public health exact-SHA probe; signed-in legacy-tenant UI inspection | pass for closed deployment; backup restore verified, exact health SHA reported, production signup remains closed, and the existing GitHub-authoritative tenant remains present/unmigrated | Backup `/var/backups/zenod/zenod-data-20260830T151626Z.tar.gz` plus checksum; live `/api/health` receipt |
+| 2026-08-30 | GDV-12 empty staging baseline | `f2f5db9` | `cloud-test.zenod.dev`; Dokploy application `v7wgMKSmXRz9KIUpItjS7` | Create isolated Docker application/domain/dedicated volume with fresh secrets; rotate the first disposable secret set before use; deploy immutable image; public health/readiness probes | pass for baseline only; exact health SHA, empty dedicated authority, signup and checkout closed, readiness fail-closed before OAuth/billing configuration | [issue #1185](https://github.com/zenod-ai/zenod/issues/1185) |
 
 ## Handoff Journal
+
+### 2026-08-30 - Epic worker - Closed production candidate deployed; empty new-user staging ready
+
+Context: Jordi approved direct production deployment and credential-backed testing, but read-only production inspection disproved the assumption that no customer state existed. The live service contained an active legacy GitHub-authoritative `AlfaBlok` tenant, so provider immutability correctly prevented using that tenant as a clean Drive-only acceptance identity.
+
+Action: created a fresh full production-volume archive and checksum, restored it into a disposable volume and ran the verifier successfully, then deployed immutable image `ghcr.io/zenod-ai/zenod:sha-f2f5db9` with exact `GIT_SHA=f2f5db946d182fa7e1f244d7bcb7b14e3145ff72` while keeping public paid and Google signup closed. Created [GDV-12 #1185](https://github.com/zenod-ai/zenod/issues/1185) and an isolated empty Dokploy application at `cloud-test.zenod.dev` with dedicated volume `zenod-cloud-test-data:/data`; its exact-SHA health probe passes and signup/checkout are closed. A diagnostic Dokploy response exposed only the first fresh staging-only secret set, so it was rotated before any user, OAuth or data activity. No production credential or customer data was exposed or changed.
+
+Next: at the explicit action-time gate, create a separate staging Google OAuth web client and Stripe test-mode checkout inputs. Then prove the never-seen Google identity is unpaid and powerless before checkout, complete a no-live-charge subscription, authorize Drive separately, exercise Drive-only store/search/get/ask/rebuild/reconnect, and optionally link GitHub only after Drive authority is fixed.
+
+Risks: `cloud-test.zenod.dev` is intentionally disposable but still an external application. Do not reuse production live Stripe keys, open production signup, migrate the legacy tenant, create a GitHub vault, disclose OAuth/Stripe secrets, or claim full live acceptance until every GDV-12 check has named evidence.
 
 ### 2026-08-30 - Epic worker - Credential preflight defect fixed; staging choice and credentials remain
 
