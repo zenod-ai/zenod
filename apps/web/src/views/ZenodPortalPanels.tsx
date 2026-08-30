@@ -7,7 +7,13 @@ import {
   WalletCardsIcon,
 } from "lucide-react"
 
-import { api, errorMessage, type HostedChannelsResponse } from "@/lib/api"
+import {
+  api,
+  errorMessage,
+  type HostedChannelsResponse,
+  type VaultCapabilityProjection,
+  type VaultStatus,
+} from "@/lib/api"
 import { HostedChannelsConnections } from "@/views/settings/ConnectionsTab"
 import { reconcileHostedChannelOperations } from "@/lib/hosted-channel-operations"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -122,6 +128,39 @@ export function ZenodOverview({
   onNavigate: (section: ZenodPortalSection) => void
 }) {
   const hosted = edition === "hosted"
+  const [vaultAuthority, setVaultAuthority] = React.useState<{
+    projection: VaultCapabilityProjection
+    status: VaultStatus
+  } | null>(null)
+
+  React.useEffect(() => {
+    if (!hosted) return
+    let cancelled = false
+    Promise.all([
+      api<VaultCapabilityProjection>("/api/vault/provider"),
+      api<VaultStatus>("/api/vault"),
+    ])
+      .then(([projection, status]) => {
+        if (!cancelled) setVaultAuthority({ projection, status })
+      })
+      .catch(() => {
+        if (!cancelled) setVaultAuthority(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hosted])
+
+  const hostedVaultCopy =
+    vaultAuthority?.projection.provider === "google_drive"
+      ? "Google Drive is the durable authority for your Markdown vault and bundled Git history. Imports and archive exports remain separate."
+      : vaultAuthority?.projection.provider === "github" ||
+          (vaultAuthority?.projection.provider === null &&
+            vaultAuthority.status.vaultConfigured &&
+            vaultAuthority.status.repo)
+        ? "GitHub is the durable authority for your repository and commit history. Imports and archive exports remain separate."
+        : "Choose Google Drive or GitHub as the durable authority for your vault. Imports and archive exports remain separate."
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -155,7 +194,7 @@ export function ZenodOverview({
             <CardTitle>Vault &amp; sources</CardTitle>
             <CardDescription>
               {hosted
-                ? "GitHub is the source; Drive is an optional archive/export destination."
+                ? hostedVaultCopy
                 : "GitHub memory plus optional Google Drive."}
             </CardDescription>
           </CardHeader>

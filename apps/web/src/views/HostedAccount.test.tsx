@@ -11,7 +11,27 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const me = { login: "octocat", avatar_url: "https://github.com/octocat.png" }
+const me = {
+  login: "octocat",
+  display_name: "Octocat",
+  avatar_url: "https://github.com/octocat.png",
+  provider: "github",
+  providers: ["github"],
+}
+
+const unselectedVault = {
+  provider: null,
+  ready: false,
+  memory: {
+    store: false,
+    search: false,
+    get: false,
+    ask: false,
+    attachments: false,
+  },
+  githubTasking: false,
+  blocker: "vault_not_selected",
+}
 
 describe("Hosted account plan contract", () => {
   it("offers one €9 monthly plan with managed usage and WhatsApp included", async () => {
@@ -21,6 +41,10 @@ describe("Hosted account plan contract", () => {
         const path = String(input)
         if (path === "/api/me") return Response.json(me)
         if (path === "/api/console/account")
+          return Response.json({ error: "no_account" }, { status: 404 })
+        if (path === "/api/vault/provider")
+          return Response.json({ error: "no_account" }, { status: 404 })
+        if (path === "/api/vault")
           return Response.json({ error: "no_account" }, { status: 404 })
         throw new Error(`Unexpected request: ${path}`)
       })
@@ -38,6 +62,7 @@ describe("Hosted account plan contract", () => {
     expect(
       screen.getByText(/managed AI usage and WhatsApp included/i)
     ).not.toBeNull()
+    expect(document.body.textContent).toMatch(/GitHub is not required/i)
     expect(document.body.textContent).not.toMatch(
       /subscribe yearly|annual plan|€5|€50/i
     )
@@ -61,6 +86,7 @@ describe("Hosted account plan contract", () => {
             token_hint: null,
             vault_repo: null,
             vault_repo_url: null,
+            vault: unselectedVault,
             usage: {
               percentageUsed: 10,
               state: "normal",
@@ -68,6 +94,10 @@ describe("Hosted account plan contract", () => {
             },
           })
         }
+        if (path === "/api/vault/provider")
+          return Response.json(unselectedVault)
+        if (path === "/api/vault")
+          return Response.json({ cloned: false, cloneError: null })
         throw new Error(`Unexpected request: ${path}`)
       })
     )
@@ -79,5 +109,200 @@ describe("Hosted account plan contract", () => {
       screen.getByRole("button", { name: /Manage billing/i })
     ).not.toBeNull()
     expect(screen.queryByRole("link", { name: /Subscribe yearly/i })).toBeNull()
+    expect(
+      screen
+        .getByRole("link", { name: "Finish vault setup" })
+        .getAttribute("href")
+    ).toBe("/app#vault")
+  })
+
+  it("presents a Google-only Drive vault without GitHub account assumptions", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me")
+          return Response.json({
+            login: "Ada",
+            display_name: "Ada",
+            avatar_url: null,
+            provider: "google",
+            providers: ["google"],
+          })
+        if (path === "/api/console/account")
+          return Response.json({
+            account_id: "user-ada",
+            tier: "monthly",
+            subscription_status: "active",
+            cancel_at_period_end: false,
+            current_period_end: null,
+            mcp_url: "https://cloud.zenod.dev/mcp/token",
+            token: "token",
+            token_hint: "oken",
+            vault_repo: null,
+            vault_repo_url: null,
+            usage: { percentageUsed: 10, state: "normal", resetsAt: null },
+          })
+        if (path === "/api/vault/provider")
+          return Response.json({
+            ...unselectedVault,
+            provider: "google_drive",
+            ready: true,
+            memory: {
+              store: true,
+              search: true,
+              get: true,
+              ask: true,
+              attachments: true,
+            },
+            blocker: null,
+          })
+        if (path === "/api/vault")
+          return Response.json({ cloned: true, cloneError: null })
+        throw new Error(`Unexpected request: ${path}`)
+      })
+    )
+
+    render(<HostedAccount />)
+
+    expect(await screen.findByText(/signed in with Google/i)).not.toBeNull()
+    expect(
+      screen.getByText(/Google Drive is the durable authority/i)
+    ).not.toBeNull()
+    expect(
+      screen.getByRole("link", { name: /Open Google Drive/i })
+    ).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(
+      /Connect a repository|bound to this GitHub account/i
+    )
+  })
+
+  it.each(["/api/me", "/api/console/account"])(
+    "returns an expired customer session from %s to the provider chooser",
+    async (unauthorizedPath) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const path = String(input)
+          if (path === unauthorizedPath)
+            return Response.json({ error: "unauthorized" }, { status: 401 })
+          if (path === "/api/me")
+            return Response.json({
+              ...me,
+              provider: "google",
+              providers: ["google"],
+            })
+          if (path === "/api/console/account")
+            return Response.json({ error: "no_account" }, { status: 404 })
+          if (path === "/api/vault/provider")
+            return Response.json({ error: "no_account" }, { status: 404 })
+          if (path === "/api/vault")
+            return Response.json({ error: "no_account" }, { status: 404 })
+          throw new Error(`Unexpected request: ${path}`)
+        })
+      )
+
+      render(<HostedAccount />)
+
+      expect(await screen.findByText("Your session has expired")).not.toBeNull()
+      expect(
+        screen
+          .getByRole("link", { name: "Continue to sign in" })
+          .getAttribute("href")
+      ).toBe("/")
+      expect(document.body.innerHTML).not.toContain("/auth/signin")
+    }
+  )
+
+  it("uses the authoritative older Drive binding when the latest commercial row has no vault", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me") return Response.json(me)
+        if (path === "/api/console/account")
+          return Response.json({
+            account_id: "account-retry",
+            tier: "monthly",
+            subscription_status: "active",
+            cancel_at_period_end: false,
+            current_period_end: null,
+            mcp_url: null,
+            token: null,
+            token_hint: null,
+            vault_repo: null,
+            vault_repo_url: null,
+            vault: unselectedVault,
+            usage: { percentageUsed: 0, state: "normal", resetsAt: null },
+          })
+        if (path === "/api/vault/provider")
+          return Response.json({
+            ...unselectedVault,
+            provider: "google_drive",
+            ready: true,
+            memory: Object.fromEntries(
+              Object.keys(unselectedVault.memory).map((key) => [key, true])
+            ),
+            blocker: null,
+          })
+        if (path === "/api/vault")
+          return Response.json({ cloned: true, cloneError: null })
+        throw new Error(`Unexpected request: ${path}`)
+      })
+    )
+
+    render(<HostedAccount />)
+
+    expect(
+      await screen.findByText(/Google Drive is the durable authority/i)
+    ).not.toBeNull()
+    expect(screen.getByRole("link", { name: "Manage vault" })).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(
+      /Setup needed|Choose Google Drive or GitHub/i
+    )
+  })
+
+  it("keeps an authoritative GitHub vault on the legacy customer path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me") return Response.json(me)
+        if (path === "/api/console/account")
+          return Response.json({
+            account_id: "github-42",
+            tier: "monthly",
+            subscription_status: "active",
+            cancel_at_period_end: false,
+            current_period_end: null,
+            mcp_url: null,
+            token: null,
+            token_hint: null,
+            vault_repo: "octocat/brain",
+            vault_repo_url: "https://github.com/octocat/brain",
+            usage: { percentageUsed: 0, state: "normal", resetsAt: null },
+          })
+        if (path === "/api/vault/provider")
+          return Response.json({
+            ...unselectedVault,
+            provider: "github",
+            ready: true,
+            memory: Object.fromEntries(
+              Object.keys(unselectedVault.memory).map((key) => [key, true])
+            ),
+            blocker: null,
+          })
+        if (path === "/api/vault")
+          return Response.json({ cloned: true, cloneError: null })
+        throw new Error(`Unexpected request: ${path}`)
+      })
+    )
+
+    render(<HostedAccount />)
+
+    expect(
+      await screen.findByText(/GitHub is the durable authority/i)
+    ).not.toBeNull()
+    expect(screen.getByRole("link", { name: "octocat/brain" })).not.toBeNull()
   })
 })

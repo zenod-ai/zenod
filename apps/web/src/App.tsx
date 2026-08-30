@@ -33,7 +33,7 @@ type View =
   | { kind: "loading" }
   | { kind: "setup" }
   | { kind: "login" }
-  | { kind: "hosted-login" }
+  | { kind: "hosted-login"; methods: Array<"github" | "google"> }
   | { kind: "hosted-account" }
   | { kind: "settings"; settings: SettingsValues; edition: ZenodEdition }
   | { kind: "error"; message: string }
@@ -53,11 +53,16 @@ function consumeGithubReturn(): boolean {
   return true
 }
 
-function initialTabFromHash(): "channels" | undefined {
-  return window.location.hash === "#ring-router-products" ||
+function initialTabFromHash(): "channels" | "vault" | "account" | undefined {
+  if (
+    window.location.hash === "#ring-router-products" ||
     window.location.hash === "#phylax-channels"
-    ? "channels"
-    : undefined
+  ) {
+    return "channels"
+  }
+  if (window.location.hash === "#vault") return "vault"
+  if (window.location.hash === "#account") return "account"
+  return undefined
 }
 
 function CustomerApp() {
@@ -70,15 +75,28 @@ function CustomerApp() {
     }
   }, [githubReturn])
 
+  const [hostedInitialTab, setHostedInitialTab] = React.useState<
+    "vault" | undefined
+  >()
+
   const loadSettings = React.useCallback(
-    (edition: ZenodEdition = "self-hosted") => {
+    (
+      edition: ZenodEdition = "self-hosted",
+      initialTab?: "vault",
+      hostedMethods: Array<"github" | "google"> = ["github"]
+    ) => {
+      setHostedInitialTab(initialTab)
       api<SettingsResponse>("/api/settings")
         .then((result) => {
           setView({ kind: "settings", settings: result.settings, edition })
         })
         .catch((err: unknown) => {
           if (isUnauthorized(err)) {
-            setView({ kind: "login" })
+            setView(
+              edition === "hosted"
+                ? { kind: "hosted-login", methods: hostedMethods }
+                : { kind: "login" }
+            )
           } else {
             setView({ kind: "error", message: errorMessage(err) })
           }
@@ -91,12 +109,22 @@ function CustomerApp() {
     api<AuthStatus>("/api/auth/status")
       .then(async (status) => {
         if (status.customerAuth) {
+          const signInMethods =
+            status.signInMethods ??
+            (status.authMethod === "google" ? ["google"] : ["github"])
           const me = await fetch("/api/me")
           if (me.status === 401) {
-            setView({ kind: "hosted-login" })
+            setView({
+              kind: "hosted-login",
+              methods: signInMethods,
+            })
             return
           }
           const account = await fetch("/api/console/account")
+          if (account.status === 401) {
+            setView({ kind: "hosted-login", methods: signInMethods })
+            return
+          }
           if (
             window.location.pathname === "/account" ||
             account.status === 404
@@ -104,7 +132,54 @@ function CustomerApp() {
             setView({ kind: "hosted-account" })
             return
           }
-          loadSettings("hosted")
+          const accountProjection = account.ok
+            ? ((await account.json()) as { vault_repo?: string | null })
+            : null
+          const [vault, vaultStatusResponse] = await Promise.all([
+            fetch("/api/vault/provider").catch(() => null),
+            fetch("/api/vault").catch(() => null),
+          ])
+          if (vault?.status === 401 || vaultStatusResponse?.status === 401) {
+            setView({ kind: "hosted-login", methods: signInMethods })
+            return
+          }
+          const vaultProjection = vault?.ok
+            ? await vault
+                .json()
+                .then(
+                  (payload) =>
+                    payload as {
+                      ready?: boolean
+                      provider?: "github" | "google_drive" | null
+                    }
+                )
+                .catch(() => null)
+            : null
+          const vaultStatus = vaultStatusResponse?.ok
+            ? await vaultStatusResponse
+                .json()
+                .then(
+                  (payload) =>
+                    payload as {
+                      cloned?: boolean
+                      cloneError?: string | null
+                    }
+                )
+                .catch(() => null)
+            : null
+          const legacyGithubVault = Boolean(
+            vaultProjection?.provider === null && accountProjection?.vault_repo
+          )
+          const repositoryVerified = Boolean(
+            vaultStatus?.cloned && !vaultStatus.cloneError
+          )
+          loadSettings(
+            "hosted",
+            (vaultProjection?.ready || legacyGithubVault) && repositoryVerified
+              ? undefined
+              : "vault",
+            signInMethods
+          )
           return
         }
         if (status.needsSetup) {
@@ -155,7 +230,7 @@ function CustomerApp() {
       {view.kind === "login" && (
         <Login onSuccess={() => loadSettings("self-hosted")} />
       )}
-      {view.kind === "hosted-login" && <HostedLogin />}
+      {view.kind === "hosted-login" && <HostedLogin methods={view.methods} />}
       {view.kind === "hosted-account" && <HostedAccount />}
       {view.kind === "settings" && (
         <Settings
@@ -163,6 +238,7 @@ function CustomerApp() {
           edition={view.edition}
           initialTab={
             initialTabFromHash() ??
+            hostedInitialTab ??
             (githubReturn &&
             (view.settings.provider === "openai"
               ? view.settings.openai_api_key

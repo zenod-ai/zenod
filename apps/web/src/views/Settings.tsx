@@ -95,7 +95,8 @@ function HostedAccountLink() {
       <div>
         <h2 className="text-lg font-semibold">Account</h2>
         <p className="text-sm text-muted-foreground">
-          GitHub identity, subscription state, access, and billing management.
+          Sign-in identities, subscription state, vault access, and billing
+          management.
         </p>
       </div>
       <Card>
