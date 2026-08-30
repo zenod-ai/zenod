@@ -198,6 +198,49 @@ describe("GitHub App flow", () => {
     expect(issueCalls).toEqual(["Bearer ghs_repo_scoped_without_issue_write", "Bearer ghp_fallback"]);
   });
 
+  it("core issue mutation never retries a Drive-bound App 403 with PAT", async () => {
+    const driveRuntime = new Runtime(dir, undefined, {
+      seedFromEnv: false,
+      tenantId: "drive-core-app-only",
+      vaultProviderBinding: () => ({
+        provider: "google_drive",
+        binding_id: "drive-binding",
+        tenant_id: "drive-core-app-only",
+        status: "ready",
+        folder_id: "folder",
+        manifest_file_id: "manifest",
+        created_at: "2026-08-30T00:00:00.000Z",
+        updated_at: "2026-08-30T00:00:00.000Z",
+        authorization_epoch: 0,
+      }),
+    });
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    driveRuntime.settings.setRaw("github_app_id", "drive-core-app");
+    driveRuntime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    driveRuntime.settings.setRaw("github_app_installation_id", "111");
+    driveRuntime.settings.set("github_token", "ghp_must-not-run");
+    const authorizations: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input).replace("https://api.github.com", "");
+      const authorization = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "");
+      if (path === "/app/installations/111/access_tokens") {
+        return Response.json({ token: "drive-core-token", expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+      }
+      if (path === "/repos/victim/repo/issues") {
+        authorizations.push(authorization);
+        return new Response("Resource not accessible", { status: 403 });
+      }
+      return new Response(`unexpected ${path}`, { status: 500 });
+    });
+    try {
+      await expect(createGithubIssue(driveRuntime.settings, { repo: "victim/repo", title: "blocked" }))
+        .rejects.toMatchObject({ status: 403 });
+      expect(authorizations).toEqual(["Bearer drive-core-token"]);
+    } finally {
+      await driveRuntime.close();
+    }
+  });
+
   it("never discovers an installation from a caller repo and lets only the stored installation token attempt mutation", async () => {
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const settings = runtime.settings;

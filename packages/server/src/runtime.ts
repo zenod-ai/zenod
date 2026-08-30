@@ -602,7 +602,7 @@ export class Runtime {
     // The Callistheness agent is vaultless and owns no repo; it just needs an LLM key.
     // Its send tools are wired below into the same generic tool slot the mesh uses.
     const outbound = this.agent.outbound === true;
-    if (githubBacked) {
+    if (githubBacked && vaultless) {
       // Backlog agent (Archus) / executor (Epaminon): needs an LLM key + GitHub
       // access, but NO vault.
       if (!this.settings.activeApiKey() || !(this.settings.get("github_token") || this.settings.hasGithubApp())) {
@@ -672,7 +672,7 @@ export class Runtime {
       ...(driveTools ? { driveTools } : {}),
       // GitHub tasking tools for vault agents and backlog agents (Archus) — NOT the
       // bare Console, NOT the executor (Epaminon writes no backlog), NOT Callistheness.
-      ...(githubBacked || this.settings.githubConnectionConfigured()
+      ...(this.settings.githubConnectionConfigured()
         ? { taskingTools: this.buildTaskingTools() }
         : {}),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
@@ -1272,6 +1272,12 @@ export class Runtime {
 
   private async githubTokens(repo?: string, requireRepoInstallation = false): Promise<string[]> {
     const pat = this.settings.get("github_token");
+    if (this.settings.githubTaskingAuthorizationMode() === "app_only") {
+      if (!this.settings.hasGithubApp()) throw new GithubConnectionRequiredError();
+      return [repo
+        ? await installationTokenForRepo(this.settings, repo, { strict: requireRepoInstallation })
+        : await installationToken(this.settings)];
+    }
     if (this.settings.hasGithubApp()) {
       if (repo && requireRepoInstallation) {
         try {

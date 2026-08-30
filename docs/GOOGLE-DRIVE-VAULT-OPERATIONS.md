@@ -23,6 +23,9 @@ personal installation whose account ID exactly matches the linked GitHub identit
 select installations: every task request uses the tenant's stored installation token and GitHub itself
 decides whether that token can access the requested repo. A 401 or missing installation clears tenant
 authorization and its cached token; reconnecting (including the same installation ID) mints a fresh token.
+For a Drive-authoritative tenant, a stored PAT alone never enables tasking and is never used as a retry
+after an App denial. PAT-only and App-to-PAT fallback remain legacy behavior only for self-hosted and
+GitHub-authoritative tenants.
 
 ## Cache and restart
 

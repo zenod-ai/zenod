@@ -11,6 +11,8 @@ export interface ConnectionSettings {
   hasGithubApp(): boolean;
   /** Stable tenant + vault-binding isolation key for cached App authorization. */
   githubAuthorizationScope?(): string;
+  /** Drive-authoritative hosted tenants are App-only; legacy/self-host paths retain PAT behavior. */
+  githubTaskingAuthorizationMode?(): "app_only" | "legacy";
   /** Existing host seam: clear tenant auth and invalidate its runtime/catalog. */
   onGithubAuthorizationRevoked?(): void;
 }
@@ -339,6 +341,10 @@ function defaultIssueRepo(settings: ConnectionSettings): string | null {
 
 async function configuredGithubTokens(settings: ConnectionSettings, repo?: string, requireRepoInstallation = false): Promise<string[]> {
   const pat = settings.getRaw("github_token");
+  if (settings.githubTaskingAuthorizationMode?.() === "app_only") {
+    if (!settings.hasGithubApp()) throw new GithubConnectionRequiredError();
+    return [repo ? await installationTokenForRepo(settings, repo, { strict: requireRepoInstallation }) : await installationToken(settings)];
+  }
   if (settings.hasGithubApp()) {
     if (repo && requireRepoInstallation) {
       try {

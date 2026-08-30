@@ -815,7 +815,12 @@ export class Settings {
 
   /** GitHub tasking is optional and independent of the selected vault provider. */
   githubConnectionConfigured(): boolean {
+    if (this.githubTaskingAuthorizationMode() === "app_only") return this.hasGithubApp();
     return Boolean(this.get("github_token") || this.hasGithubApp());
+  }
+
+  githubTaskingAuthorizationMode(): "app_only" | "legacy" {
+    return this.vaultProviderBindingSource?.()?.provider === "google_drive" ? "app_only" : "legacy";
   }
 
   githubAuthorizationScope(): string {

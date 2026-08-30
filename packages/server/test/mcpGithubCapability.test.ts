@@ -200,4 +200,109 @@ describe("MCP GitHub capability projection", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("projects typed MCP denial with zero provider calls for a PAT-only Drive tenant", async () => {
+    vi.restoreAllMocks();
+    const dir = await mkdtemp(join(tmpdir(), "gdv9-mcp-drive-pat-"));
+    const runtime = new Runtime(dir, undefined, {
+      seedFromEnv: false,
+      tenantId: "drive-pat-only",
+      vaultProviderBinding: () => ({
+        provider: "google_drive",
+        binding_id: "drive-binding",
+        tenant_id: "drive-pat-only",
+        status: "ready",
+        folder_id: "folder",
+        manifest_file_id: "manifest",
+        created_at: "2026-08-30T00:00:00.000Z",
+        updated_at: "2026-08-30T00:00:00.000Z",
+        authorization_epoch: 0,
+      }),
+    });
+    runtime.settings.set("github_token", "ghp_must-not-run");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const { client, server, tools } = await catalog({
+      create: (input) => createGithubIssue(runtime.settings, input),
+      githubCapability: () => runtime.settings.githubConnectionConfigured(),
+      onGithubAuthorizationRevoked: () => runtime.settings.onGithubAuthorizationRevoked(),
+    });
+    try {
+      expect(tools.map((tool) => tool.name)).toContain("create_issue");
+      const denied = await client.callTool({
+        name: "create_issue",
+        arguments: { repo: "victim/repo", title: "blocked", body: "no mutation" },
+      });
+      expect(denied).toMatchObject({
+        isError: true,
+        structuredContent: { error: { code: "github_connection_required" } },
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not retry a Drive-bound MCP App 403 with PAT or misclassify it as revocation", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "gdv9-mcp-drive-app-"));
+    const runtime = new Runtime(dir, undefined, {
+      seedFromEnv: false,
+      tenantId: "drive-app-only",
+      vaultProviderBinding: () => ({
+        provider: "google_drive",
+        binding_id: "drive-binding",
+        tenant_id: "drive-app-only",
+        status: "ready",
+        folder_id: "folder",
+        manifest_file_id: "manifest",
+        created_at: "2026-08-30T00:00:00.000Z",
+        updated_at: "2026-08-30T00:00:00.000Z",
+        authorization_epoch: 0,
+      }),
+    });
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    runtime.settings.setRaw("github_app_id", "drive-mcp-app");
+    runtime.settings.setRaw("github_app_private_key", privateKey.export({ type: "pkcs1", format: "pem" }) as string);
+    runtime.settings.setRaw("github_app_installation_id", "111");
+    runtime.settings.set("github_token", "ghp_must-not-run");
+    const authorizations: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input).replace("https://api.github.com", "");
+      const authorization = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "");
+      if (path === "/app/installations/111/access_tokens") {
+        return Response.json({ token: "drive-mcp-token", expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+      }
+      if (path === "/repos/victim/repo/issues") {
+        authorizations.push(authorization);
+        return new Response("Resource not accessible", { status: 403 });
+      }
+      return new Response(`unexpected ${path}`, { status: 500 });
+    });
+    const revoke = vi.fn();
+    const { client, server } = await catalog({
+      create: (input) => createGithubIssue(runtime.settings, input),
+      githubCapability: () => runtime.settings.githubConnectionConfigured(),
+      onGithubAuthorizationRevoked: revoke,
+    });
+    try {
+      const denied = await client.callTool({
+        name: "create_issue",
+        arguments: { repo: "victim/repo", title: "blocked", body: "no mutation" },
+      });
+      expect(denied.isError).toBe(true);
+      expect(JSON.stringify(denied)).not.toContain("github_connection_required");
+      expect(authorizations).toEqual(["Bearer drive-mcp-token"]);
+      expect(revoke).not.toHaveBeenCalled();
+      expect(runtime.settings.githubConnectionConfigured()).toBe(true);
+    } finally {
+      await client.close();
+      await server.close();
+      await runtime.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
