@@ -8,6 +8,10 @@ import { createZenodUnit } from "../src/zenodUnit.js";
 
 const dirs: string[] = [];
 const MASTER_KEY = "71".repeat(32);
+const HOSTED_DRIVE_OAUTH_ENV = {
+  GOOGLE_OAUTH_CLIENT_ID: "hosted-drive-client",
+  GOOGLE_OAUTH_CLIENT_SECRET: "hosted-drive-secret",
+} as const;
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "gdv7-runtime-"));
@@ -130,6 +134,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
         GOOGLE_OIDC_CLIENT_ID: "identity-client",
         GOOGLE_OIDC_CLIENT_SECRET: "identity-secret",
+        ...HOSTED_DRIVE_OAUTH_ENV,
         CUSTOMER_APP_URL: "https://cloud.zenod.test",
       },
       customer: {
@@ -167,6 +172,8 @@ describe("GDV-7 Drive tenant runtime", () => {
       providerCalls.push(url);
       if (url === "https://oauth2.googleapis.com/token") {
         const tokenBody = new URLSearchParams(String(init?.body));
+        expect(tokenBody.get("client_id")).toBe(HOSTED_DRIVE_OAUTH_ENV.GOOGLE_OAUTH_CLIENT_ID);
+        expect(tokenBody.get("client_secret")).toBe(HOSTED_DRIVE_OAUTH_ENV.GOOGLE_OAUTH_CLIENT_SECRET);
         const code = tokenBody.get("code") ?? "unknown";
         if (tokenBody.get("grant_type") === "authorization_code") {
           expect(tokenBody.get("code_verifier")).toBeTruthy();
@@ -602,22 +609,16 @@ describe("GDV-7 Drive tenant runtime", () => {
         vault_binding_id: null,
       });
 
-      const missingConfigStart = await driveConsentStart(unit, beta.cookie);
+      // Stored tenant client values cannot disable or replace the captured host pair.
       betaRuntime.settings.setRaw("google_oauth_client_id", "");
       betaRuntime.settings.setRaw("google_oauth_client_secret", "");
-      const callsBeforeMissingConfig = providerCalls.length;
-      const missingConfig = await unit.app.request(
-        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=config-missing&state=${encodeURIComponent(missingConfigStart.state)}`,
-        { headers: { cookie: `${beta.cookie}; ${missingConfigStart.flowCookie}` } },
-      );
-      await expectScrubbedDriveRedirect(missingConfig, "drive_config", [missingConfigStart.state, "config-missing"]);
-      expect(providerCalls).toHaveLength(callsBeforeMissingConfig);
-      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
-        vault_provider: null,
-        vault_binding_id: null,
+      expect(betaRuntime.settings.googleDriveOAuthAuthority()).toEqual({
+        mode: "hosted-managed",
+        credentials: {
+          clientId: HOSTED_DRIVE_OAUTH_ENV.GOOGLE_OAUTH_CLIENT_ID,
+          clientSecret: HOSTED_DRIVE_OAUTH_ENV.GOOGLE_OAUTH_CLIENT_SECRET,
+        },
       });
-      betaRuntime.settings.set("google_oauth_client_id", "tenant-beta-drive-client");
-      betaRuntime.settings.set("google_oauth_client_secret", "tenant-beta-drive-secret");
 
       const betaStart = await driveConsentStart(unit, beta.cookie);
       const betaState = betaStart.state;
@@ -720,6 +721,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
         GOOGLE_OIDC_CLIENT_ID: "identity-client",
         GOOGLE_OIDC_CLIENT_SECRET: "identity-secret",
+        ...HOSTED_DRIVE_OAUTH_ENV,
         CUSTOMER_APP_URL: "https://cloud.zenod.test",
       },
       customer: {
@@ -782,7 +784,8 @@ describe("GDV-7 Drive tenant runtime", () => {
         env: {
           NODE_ENV: "test", ACCOUNT_STATE_SECRET: `gdv7-session-${cancelOriginal}`,
           CHASSIS_VAULT_MASTER_KEY: MASTER_KEY, GOOGLE_OIDC_CLIENT_ID: "identity-client",
-          GOOGLE_OIDC_CLIENT_SECRET: "identity-secret", CUSTOMER_APP_URL: "https://cloud.zenod.test",
+          GOOGLE_OIDC_CLIENT_SECRET: "identity-secret", ...HOSTED_DRIVE_OAUTH_ENV,
+          CUSTOMER_APP_URL: "https://cloud.zenod.test",
         },
         customer: { identityProviders: { google: {
           authorizeUrl: (state) => `https://accounts.google.test/auth?state=${encodeURIComponent(state)}`,
@@ -847,6 +850,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         NODE_ENV: "test",
         ACCOUNT_STATE_SECRET: "gdv7-conflicting-owner-secret",
         CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        ...HOSTED_DRIVE_OAUTH_ENV,
       },
     });
     try {
