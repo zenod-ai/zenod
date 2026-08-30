@@ -48,8 +48,7 @@ import type { ZenodEdition } from "@/views/zenod-edition"
 
 const CONSOLE_DRIVE_API_URL =
   "https://console.cloud.google.com/apis/library/drive.googleapis.com"
-const CONSOLE_OAUTH_URL =
-  "https://console.cloud.google.com/apis/credentials"
+const CONSOLE_OAUTH_URL = "https://console.cloud.google.com/apis/credentials"
 
 /** Google Drive triangle, lucide-style props (lucide ships no brand icons). */
 function DriveIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -70,21 +69,13 @@ function parseClientEmail(json: string): string | null {
   if (!json || json.includes("••••")) return null
   try {
     const parsed = JSON.parse(json) as { client_email?: string }
-    return typeof parsed.client_email === "string"
-      ? parsed.client_email
-      : null
+    return typeof parsed.client_email === "string" ? parsed.client_email : null
   } catch {
     return null
   }
 }
 
-function Step({
-  n,
-  children,
-}: {
-  n: number
-  children: React.ReactNode
-}) {
+function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs">
@@ -249,7 +240,7 @@ export function GoogleDriveConnect({
   }
 
   const connected = Boolean(status?.configured)
-  const showSetup = !connected || setupOpen
+  const showSetup = hosted ? setupOpen : !connected || setupOpen
   const hostedStatus = status && "oauthAvailable" in status ? status : null
   const selfHostedStatus = status && "authMode" in status ? status : null
   const connectedLabel = hosted
@@ -276,7 +267,7 @@ export function GoogleDriveConnect({
         </CardTitle>
         <CardDescription>
           {hosted
-            ? "Optional archive/export copies in one private, app-managed folder. GitHub remains your memory source."
+            ? "Optional imports and archive copies in a private app-managed folder. This is separate from the authoritative Google Drive or GitHub vault selected above."
             : "Pick one Zenod Drive folder. Drop voice notes or documents there, or in its Inbox/ subfolder, and ask Zeno to transcribe them — Zeno creates archive subfolders inside that same folder."}
         </CardDescription>
       </CardHeader>
@@ -311,7 +302,8 @@ export function GoogleDriveConnect({
             </FieldDescription>
             {status?.archiveConfigured === false && (
               <FieldDescription className="text-destructive">
-                WhatsApp media receipts will not include Drive links yet: {status.archiveReason}
+                WhatsApp media receipts will not include Drive links yet:{" "}
+                {status.archiveReason}
               </FieldDescription>
             )}
             {!hosted && model && (
@@ -355,8 +347,9 @@ export function GoogleDriveConnect({
                 access only to files it creates there.
               </p>
               <p>
-                Hosted beta does not use Google Drive as an inbox or memory
-                source. GitHub remains the source integration.
+                This optional imports/archive folder is separate from the
+                authoritative Google Drive or GitHub memory vault selected
+                above.
               </p>
               <p>
                 Disconnecting removes Zenod access and never deletes files
@@ -392,8 +385,9 @@ export function GoogleDriveConnect({
                 </span>
               </Step>
               <Step n={2}>
-                Paste this tenant&apos;s client ID and client secret, then connect
-                the Google account whose Drive should hold its Zenod archive.
+                Paste this tenant&apos;s client ID and client secret, then
+                connect the Google account whose Drive should hold its Zenod
+                archive.
               </Step>
             </div>
             <FieldDescription>
@@ -506,9 +500,7 @@ export function GoogleDriveConnect({
                     : "GOCSPX-..."
                 }
                 value={oauthClientSecret}
-                onChange={(event) =>
-                  setOauthClientSecret(event.target.value)
-                }
+                onChange={(event) => setOauthClientSecret(event.target.value)}
               />
               <FieldDescription>
                 Stored only on this server. Leave blank when reconnecting with
@@ -578,7 +570,8 @@ export function GoogleDriveConnect({
             <FieldDescription>
               Voice notes are transcribed locally with whisper.cpp
               (large-v3-turbo), built into this server — no API key, no
-              per-minute cost. The model downloads once on the first transcription.
+              per-minute cost. The model downloads once on the first
+              transcription.
             </FieldDescription>
 
             {testResult !== null && (
@@ -608,7 +601,11 @@ export function GoogleDriveConnect({
               }
               onClick={handleOAuthConnect}
             >
-              {connecting ? <Spinner /> : <LogInIcon data-icon="inline-start" />}
+              {connecting ? (
+                <Spinner />
+              ) : (
+                <LogInIcon data-icon="inline-start" />
+              )}
               Connect with Google
             </Button>
             {!hosted && (
@@ -619,7 +616,11 @@ export function GoogleDriveConnect({
                   disabled={testing}
                   onClick={handleTest}
                 >
-                  {testing ? <Spinner /> : <PlugZapIcon data-icon="inline-start" />}
+                  {testing ? (
+                    <Spinner />
+                  ) : (
+                    <PlugZapIcon data-icon="inline-start" />
+                  )}
                   Test
                 </Button>
                 <Button type="button" disabled={saving} onClick={handleSave}>
@@ -644,7 +645,9 @@ export function GoogleDriveConnect({
             variant="outline"
             onClick={() => setSetupOpen(true)}
           >
-            Edit connection
+            {hosted && !connected
+              ? "Set up optional imports & archive"
+              : "Edit connection"}
           </Button>
         )}
         {connected && (

@@ -343,7 +343,13 @@ describe("DriveVaultRepository", () => {
       async extractBacklog() { return { candidates: [] }; },
     };
     try {
-      const engine = createEngine({ repo, llm, state, readSyncTtlMs: 0 });
+      const engine = createEngine({
+        repo,
+        llm,
+        state,
+        readSyncTtlMs: 0,
+        now: () => new Date("2026-08-29T12:00:00.000Z"),
+      });
       const stored = await engine.store({ content: "My insurance renews in March 2027.", source: "cli" });
       expect(stored.revision).toMatchObject({
         provider: "google_drive",

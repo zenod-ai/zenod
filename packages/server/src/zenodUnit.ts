@@ -1072,7 +1072,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     await next();
     c.header("X-Content-Type-Options", "nosniff");
     c.header("X-Frame-Options", "DENY");
-    c.header("Referrer-Policy", "same-origin");
+    c.header(
+      "Referrer-Policy",
+      c.req.path === "/api/vault/drive/oauth/callback" ? "no-referrer" : "same-origin",
+    );
     c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(self)");
     const contentSecurityPolicy =
       "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'";
