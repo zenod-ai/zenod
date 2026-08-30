@@ -98,7 +98,8 @@ export type AuthStatus = {
   configured: boolean
   hostedMode: "ring" | null
   customerAuth?: boolean
-  authMethod?: "github" | "admin"
+  authMethod?: "github" | "google" | "admin"
+  signInMethods?: Array<"github" | "google">
 }
 
 export type TenantInfo = {
@@ -339,9 +340,22 @@ export type BacklogDigestResult = {
     summary: string
     open_questions: string[]
   }>
-  written: Array<{ path: string; url: string; provider: VaultProvider; revisionId?: string; githubUrl?: string; title: string }>
+  written: Array<{
+    path: string
+    url: string
+    provider: VaultProvider
+    revisionId?: string
+    githubUrl?: string
+    title: string
+  }>
   skipped: Array<{ title?: string; reason: string }>
-  source_refs: Array<{ path: string; url: string; provider: VaultProvider; revisionId?: string; githubUrl?: string }>
+  source_refs: Array<{
+    path: string
+    url: string
+    provider: VaultProvider
+    revisionId?: string
+    githubUrl?: string
+  }>
 }
 
 export type IngestJobsResponse = {
@@ -574,6 +588,20 @@ export type ChatSource = {
 }
 
 export type VaultProvider = "github" | "google_drive"
+
+export type VaultCapabilityProjection = {
+  provider: VaultProvider | null
+  ready: boolean
+  memory: Record<"store" | "search" | "get" | "ask" | "attachments", boolean>
+  githubTasking: boolean
+  blocker:
+    | "vault_not_selected"
+    | "vault_authorization_required"
+    | "vault_recovering"
+    | "vault_conflict"
+    | "vault_error"
+    | null
+}
 
 export type VaultRevision = {
   provider: VaultProvider

@@ -33,7 +33,7 @@ type View =
   | { kind: "loading" }
   | { kind: "setup" }
   | { kind: "login" }
-  | { kind: "hosted-login" }
+  | { kind: "hosted-login"; methods: Array<"github" | "google"> }
   | { kind: "hosted-account" }
   | { kind: "settings"; settings: SettingsValues; edition: ZenodEdition }
   | { kind: "error"; message: string }
@@ -53,11 +53,16 @@ function consumeGithubReturn(): boolean {
   return true
 }
 
-function initialTabFromHash(): "channels" | undefined {
-  return window.location.hash === "#ring-router-products" ||
+function initialTabFromHash(): "channels" | "vault" | "account" | undefined {
+  if (
+    window.location.hash === "#ring-router-products" ||
     window.location.hash === "#phylax-channels"
-    ? "channels"
-    : undefined
+  ) {
+    return "channels"
+  }
+  if (window.location.hash === "#vault") return "vault"
+  if (window.location.hash === "#account") return "account"
+  return undefined
 }
 
 function CustomerApp() {
@@ -70,8 +75,13 @@ function CustomerApp() {
     }
   }, [githubReturn])
 
+  const [hostedInitialTab, setHostedInitialTab] = React.useState<
+    "vault" | undefined
+  >()
+
   const loadSettings = React.useCallback(
-    (edition: ZenodEdition = "self-hosted") => {
+    (edition: ZenodEdition = "self-hosted", initialTab?: "vault") => {
+      setHostedInitialTab(initialTab)
       api<SettingsResponse>("/api/settings")
         .then((result) => {
           setView({ kind: "settings", settings: result.settings, edition })
@@ -93,7 +103,12 @@ function CustomerApp() {
         if (status.customerAuth) {
           const me = await fetch("/api/me")
           if (me.status === 401) {
-            setView({ kind: "hosted-login" })
+            setView({
+              kind: "hosted-login",
+              methods:
+                status.signInMethods ??
+                (status.authMethod === "google" ? ["google"] : ["github"]),
+            })
             return
           }
           const account = await fetch("/api/console/account")
@@ -104,7 +119,18 @@ function CustomerApp() {
             setView({ kind: "hosted-account" })
             return
           }
-          loadSettings("hosted")
+          const accountProjection = account.ok
+            ? ((await account.json()) as { vault_repo?: string | null })
+            : null
+          const vault = await fetch("/api/vault/provider")
+          const vaultProjection = vault.ok
+            ? ((await vault.json()) as { ready?: boolean })
+            : null
+          const legacyGithubVault = Boolean(accountProjection?.vault_repo)
+          loadSettings(
+            "hosted",
+            vaultProjection?.ready || legacyGithubVault ? undefined : "vault"
+          )
           return
         }
         if (status.needsSetup) {
@@ -155,7 +181,7 @@ function CustomerApp() {
       {view.kind === "login" && (
         <Login onSuccess={() => loadSettings("self-hosted")} />
       )}
-      {view.kind === "hosted-login" && <HostedLogin />}
+      {view.kind === "hosted-login" && <HostedLogin methods={view.methods} />}
       {view.kind === "hosted-account" && <HostedAccount />}
       {view.kind === "settings" && (
         <Settings
@@ -163,6 +189,7 @@ function CustomerApp() {
           edition={view.edition}
           initialTab={
             initialTabFromHash() ??
+            hostedInitialTab ??
             (githubReturn &&
             (view.settings.provider === "openai"
               ? view.settings.openai_api_key

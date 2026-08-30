@@ -1,6 +1,12 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ api: vi.fn() }))
@@ -36,7 +42,8 @@ const hostedDriveStatus = {
   accountEmail: null,
   folderId: null,
   archiveConfigured: false,
-  archiveReason: "Add this tenant's Google OAuth client ID and client secret to connect Google Drive.",
+  archiveReason:
+    "Add this tenant's Google OAuth client ID and client secret to connect Google Drive.",
 }
 
 afterEach(() => {
@@ -53,6 +60,11 @@ describe("GoogleDriveConnect edition projection", () => {
 
     render(<GoogleDriveConnect edition="hosted" />)
 
+    const optionalSetup = await screen.findByRole("button", {
+      name: "Set up optional imports & archive",
+    })
+    expect(screen.queryByLabelText("OAuth client ID")).toBeNull()
+    fireEvent.click(optionalSetup)
     await screen.findByRole("button", { name: "Connect with Google" })
     expect(
       screen.getByRole("button", { name: "Connect with Google" })
@@ -64,12 +76,15 @@ describe("GoogleDriveConnect edition projection", () => {
     ).not.toBeNull()
     expect(screen.queryByLabelText("Zenod Drive folder ID")).toBeNull()
     expect(document.body.textContent).toMatch(
-      /does not use Google Drive as an inbox or memory source/i
+      /separate from the authoritative Google Drive or GitHub memory vault/i
     )
+    expect(document.body.textContent).not.toMatch(/GitHub remains the source/i)
     expect(document.body.textContent).toMatch(/There is no folder to select/i)
     expect(screen.getByLabelText("OAuth client ID")).not.toBeNull()
     expect(screen.getByLabelText("OAuth client secret")).not.toBeNull()
-    expect(document.body.textContent).toMatch(/Stored only for this Zenod tenant/i)
+    expect(document.body.textContent).toMatch(
+      /Stored only for this Zenod tenant/i
+    )
 
     const copy = document.body.textContent ?? ""
     expect(copy).not.toMatch(
@@ -95,6 +110,11 @@ describe("GoogleDriveConnect edition projection", () => {
 
     render(<GoogleDriveConnect edition="hosted" />)
 
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Set up optional imports & archive",
+      })
+    )
     const connect = await screen.findByRole("button", {
       name: "Connect with Google",
     })
@@ -102,7 +122,9 @@ describe("GoogleDriveConnect edition projection", () => {
     expect(screen.getByLabelText("OAuth client ID")).not.toBeNull()
     expect(screen.getByLabelText("OAuth client secret")).not.toBeNull()
     expect(document.body.textContent).not.toMatch(/operator/i)
-    expect(document.body.textContent).toMatch(/Google Drive connection is unavailable for this tenant/i)
+    expect(document.body.textContent).toMatch(
+      /Google Drive connection is unavailable for this tenant/i
+    )
     expect(document.body.textContent).not.toMatch(
       /must-never-render|internal-service-account|private\/provider-model/i
     )
@@ -124,8 +146,15 @@ describe("GoogleDriveConnect edition projection", () => {
 
     render(<GoogleDriveConnect edition="hosted" />)
 
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Set up optional imports & archive",
+      })
+    )
     const secret = await screen.findByLabelText("OAuth client secret")
-    expect(secret.getAttribute("placeholder")).toBe("saved; leave blank to keep it")
+    expect(secret.getAttribute("placeholder")).toBe(
+      "saved; leave blank to keep it"
+    )
     expect((secret as HTMLInputElement).value).toBe("")
     expect(document.body.textContent).not.toMatch(/must-never-render/i)
   })

@@ -1,5 +1,10 @@
 import * as React from "react"
-import { CopyIcon, ExternalLinkIcon, LogOutIcon } from "lucide-react"
+import {
+  CopyIcon,
+  ExternalLinkIcon,
+  LogOutIcon,
+  TriangleAlertIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -9,16 +14,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { HostedUsageCard, type HostedCustomerUsage } from "@/components/hosted-usage-card"
+import {
+  HostedUsageCard,
+  type HostedCustomerUsage,
+} from "@/components/hosted-usage-card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import type { VaultCapabilityProjection } from "@/lib/api"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
 
-type Me = { login: string; avatar_url: string }
+type Me = {
+  login: string
+  display_name: string
+  avatar_url: string | null
+  provider: "github" | "google"
+  providers: Array<"github" | "google">
+}
 
 type Account = {
   account_id: string
   tier: string | null
-  subscription_status: "checkout_pending" | "active" | "past_due" | "paused" | "canceled" | null
+  subscription_status:
+    | "checkout_pending"
+    | "active"
+    | "past_due"
+    | "paused"
+    | "canceled"
+    | null
   cancel_at_period_end: boolean
   current_period_end: string | null
   mcp_url: string | null
@@ -26,6 +49,7 @@ type Account = {
   token_hint: string | null
   vault_repo: string | null
   vault_repo_url: string | null
+  vault: VaultCapabilityProjection
   usage: HostedCustomerUsage
 }
 
@@ -68,18 +92,23 @@ export function HostedAccount() {
   const [me, setMe] = React.useState<Me | null>(null)
   const [account, setAccount] = React.useState<Account | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [billingBusy, setBillingBusy] = React.useState(false)
   const [billingError, setBillingError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    Promise.all([optionalJson<Me>("/api/me"), optionalJson<Account>("/api/console/account")])
+    Promise.all([
+      optionalJson<Me>("/api/me"),
+      optionalJson<Account>("/api/console/account"),
+    ])
       .then(([nextMe, nextAccount]) => {
         setMe(nextMe)
         setAccount(nextAccount)
       })
       .catch(() => {
-        setMe(null)
-        setAccount(null)
+        setLoadError(
+          "Could not load your Zenod account. Check your connection and try again."
+        )
       })
       .finally(() => setLoading(false))
   }, [])
@@ -89,31 +118,67 @@ export function HostedAccount() {
   }, [loading, me])
 
   if (loading) {
-    return <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">Loading...</div>
+    return (
+      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
+        Loading your Zenod account…
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <main className="mx-auto flex min-h-svh w-full max-w-xl items-center p-6">
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Could not load your account</AlertTitle>
+          <AlertDescription className="flex flex-col items-start gap-3">
+            <span>{loadError}</span>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </main>
+    )
   }
 
   if (!me) {
-    return <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">Redirecting...</div>
+    return (
+      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
+        Redirecting...
+      </div>
+    )
   }
 
   const endpoint = account?.mcp_url ?? ""
   const token = account?.token ?? "<your token>"
-  const codex = endpoint ? `codex mcp add zenod --url ${endpoint} --bearer ${token}` : ""
+  const codex = endpoint
+    ? `codex mcp add zenod --url ${endpoint} --bearer ${token}`
+    : ""
   const claude = endpoint
     ? `claude mcp add --transport http zenod ${endpoint} --header "Authorization: Bearer ${token}"`
     : ""
+  const legacyGithubVault = Boolean(
+    account?.vault.provider === null && account.vault_repo
+  )
 
   async function openBillingPortal() {
     setBillingBusy(true)
     setBillingError(null)
     try {
       const response = await fetch("/api/billing/portal", { method: "POST" })
-      if (!response.ok) throw new Error("Billing management is temporarily unavailable")
+      if (!response.ok)
+        throw new Error("Billing management is temporarily unavailable")
       const payload = (await response.json()) as { url?: unknown }
-      if (typeof payload.url !== "string") throw new Error("Billing management returned an invalid destination")
+      if (typeof payload.url !== "string")
+        throw new Error("Billing management returned an invalid destination")
       window.location.assign(payload.url)
     } catch (error) {
-      setBillingError(error instanceof Error ? error.message : "Could not open billing management")
+      setBillingError(
+        error instanceof Error
+          ? error.message
+          : "Could not open billing management"
+      )
       setBillingBusy(false)
     }
   }
@@ -122,16 +187,25 @@ export function HostedAccount() {
     <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-5 p-6">
       <header className="flex items-center justify-between gap-4 border-b border-border pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <img src="/plates/zenod-plate-charcoal.jpg" alt="" className="size-10 border border-border object-cover" />
+          <img
+            src="/plates/zenod-plate-charcoal.jpg"
+            alt=""
+            className="size-10 border border-border object-cover"
+          />
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">Zenod account</h1>
-            <p className="truncate text-sm text-muted-foreground">@{me.login}</p>
+            <p className="truncate text-sm text-muted-foreground">
+              {me.display_name || me.login} · signed in with{" "}
+              {me.provider === "google" ? "Google" : "GitHub"}
+            </p>
           </div>
         </div>
         <Button
           variant="ghost"
           onClick={() => {
-            void fetch("/auth/signout", { method: "POST" }).then(() => window.location.assign("/"))
+            void fetch("/auth/signout", { method: "POST" }).then(() =>
+              window.location.assign("/")
+            )
           }}
         >
           <LogOutIcon data-icon="inline-start" />
@@ -143,7 +217,9 @@ export function HostedAccount() {
         <section className="border border-border p-8 text-center">
           <h2 className="text-lg font-semibold">Choose your Zenod plan</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Zenod Hosted is €9/month plus VAT, with managed AI usage and WhatsApp included. Checkout stays bound to this GitHub account.
+            Zenod Hosted is €9/month plus VAT, with managed AI usage and
+            WhatsApp included. Checkout stays bound to this Zenod account;
+            GitHub is not required.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button asChild className="rounded-none">
@@ -157,17 +233,25 @@ export function HostedAccount() {
             <Card className="rounded-none">
               <CardHeader>
                 <CardTitle>Subscription</CardTitle>
-                <CardDescription>{subscriptionLabel(account.tier)}</CardDescription>
+                <CardDescription>
+                  {subscriptionLabel(account.tier)}
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm font-medium capitalize">{account.subscription_status?.replace("_", " ") ?? "Pending"}</p>
+                <p className="text-sm font-medium capitalize">
+                  {account.subscription_status?.replace("_", " ") ?? "Pending"}
+                </p>
                 {account.cancel_at_period_end && account.current_period_end ? (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Access remains active until {new Date(account.current_period_end).toLocaleDateString()}.
+                    Access remains active until{" "}
+                    {new Date(account.current_period_end).toLocaleDateString()}.
                   </p>
                 ) : null}
                 {account.subscription_status === "past_due" ? (
-                  <p className="mt-2 text-sm text-destructive">Payment needs attention. Update your payment method to avoid interruption.</p>
+                  <p className="mt-2 text-sm text-destructive">
+                    Payment needs attention. Update your payment method to avoid
+                    interruption.
+                  </p>
                 ) : null}
                 <Button
                   type="button"
@@ -179,7 +263,11 @@ export function HostedAccount() {
                   {billingBusy ? "Opening…" : "Manage billing"}
                   <ExternalLinkIcon data-icon="inline-end" />
                 </Button>
-                {billingError ? <p className="mt-2 text-sm text-destructive">{billingError}</p> : null}
+                {billingError ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {billingError}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
             <HostedUsageCard usage={account.usage} productName="Zenod" />
@@ -193,16 +281,23 @@ export function HostedAccount() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 overflow-x-auto border border-border bg-muted p-3 text-xs">{endpoint}</code>
+                  <code className="min-w-0 flex-1 overflow-x-auto border border-border bg-muted p-3 text-xs">
+                    {endpoint}
+                  </code>
                   <CopyButton value={endpoint} />
                 </div>
-                {[{ label: "Claude", value: claude }, { label: "Codex", value: codex }].map((snippet) => (
+                {[
+                  { label: "Claude", value: claude },
+                  { label: "Codex", value: codex },
+                ].map((snippet) => (
                   <div key={snippet.label}>
                     <div className="mb-1 flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                       <span>{snippet.label}</span>
                       <CopyButton value={snippet.value} />
                     </div>
-                    <code className="block overflow-x-auto border border-border bg-muted p-3 text-xs">{snippet.value}</code>
+                    <code className="block overflow-x-auto border border-border bg-muted p-3 text-xs">
+                      {snippet.value}
+                    </code>
                   </div>
                 ))}
               </CardContent>
@@ -211,20 +306,60 @@ export function HostedAccount() {
 
           <Card className="rounded-none">
             <CardHeader>
-              <CardTitle>Your memory repo</CardTitle>
-              <CardDescription>Repository access uses the existing Zenod GitHub App flow.</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                Your memory vault
+                {account.vault.ready || legacyGithubVault ? (
+                  <Badge variant="secondary">Ready</Badge>
+                ) : (
+                  <Badge variant="outline">Setup needed</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                {account.vault.provider === "google_drive"
+                  ? "Google Drive is the durable authority for your Markdown files and bundled Git history."
+                  : account.vault.provider === "github" || legacyGithubVault
+                    ? "GitHub is the durable authority for your repository and commit history."
+                    : "Choose Google Drive or GitHub as the one durable authority for this vault."}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              {account.vault_repo ? (
-                <a className="inline-flex items-center gap-2 text-sm underline" href={account.vault_repo_url ?? undefined}>
+            <CardContent className="flex flex-wrap items-center gap-3">
+              {(account.vault.provider === "github" || legacyGithubVault) &&
+              account.vault_repo ? (
+                <a
+                  className="inline-flex items-center gap-2 text-sm underline"
+                  href={account.vault_repo_url ?? undefined}
+                >
                   {account.vault_repo}
                   <ExternalLinkIcon className="size-3.5" />
                 </a>
-              ) : (
-                <Button asChild variant="outline" className="rounded-none">
-                  <a href="/app">Connect a repository</a>
+              ) : null}
+              {account.vault.provider === "google_drive" ? (
+                <Button asChild variant="link" className="rounded-none">
+                  <a
+                    href="https://drive.google.com/drive/my-drive"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open Google Drive
+                    <ExternalLinkIcon data-icon="inline-end" />
+                  </a>
                 </Button>
-              )}
+              ) : null}
+              <Button
+                asChild
+                variant={
+                  account.vault.ready || legacyGithubVault
+                    ? "outline"
+                    : "default"
+                }
+                className="rounded-none"
+              >
+                <a href="/app#vault">
+                  {account.vault.ready || legacyGithubVault
+                    ? "Manage vault"
+                    : "Finish vault setup"}
+                </a>
+              </Button>
             </CardContent>
           </Card>
         </>
