@@ -57,6 +57,24 @@ async function driveConsentStart(unit: ReturnType<typeof createZenodUnit>, cooki
   };
 }
 
+async function expectScrubbedDriveRedirect(
+  response: Response,
+  error: string,
+  sensitive: string[] = [],
+): Promise<void> {
+  expect(response.status).toBe(303);
+  expect(response.headers.get("location")).toBe(`https://cloud.zenod.test/app?vault=${error}#vault`);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  expect(response.headers.get("set-cookie")).toContain("zenod_google_drive_vault_flow=");
+  expect(response.headers.get("content-type") ?? "").not.toContain("text/html");
+  const body = await response.text();
+  for (const value of sensitive.filter(Boolean)) {
+    expect(response.headers.get("location")).not.toContain(value);
+    expect(body).not.toContain(value);
+  }
+}
+
 function fakeDriveRepository(input: DriveVaultRepositoryOptions): VaultRepository & { authorityBinding(): { folderId: string; manifestFileId: string } } {
   const suffix = input.tenantId.replace(/[^a-z0-9_-]/gi, "-");
   return {
@@ -119,9 +137,17 @@ describe("GDV-7 Drive tenant runtime", () => {
       },
     });
     const opened: DriveVaultRepositoryOptions[] = [];
+    let failNextBootstrap = false;
     vi.spyOn(DriveVaultRepository, "open").mockImplementation(async (input) => {
       opened.push(input);
-      return fakeDriveRepository(input) as DriveVaultRepository;
+      const repository = fakeDriveRepository(input);
+      if (failNextBootstrap) {
+        failNextBootstrap = false;
+        repository.currentRevision = async () => {
+          throw new Error("Drive vault bootstrap failed");
+        };
+      }
+      return repository as DriveVaultRepository;
     });
     const providerCalls: string[] = [];
     let deferNextDriveResponse = false;
@@ -216,26 +242,26 @@ describe("GDV-7 Drive tenant runtime", () => {
       const expiredSession = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=expired-session&state=${encodeURIComponent(alphaState)}`,
       );
-      expect(expiredSession.status).toBe(401);
-      expect(await expiredSession.text()).toContain("Return to Zenod vault setup and retry");
+      await expectScrubbedDriveRedirect(expiredSession, "drive_session", [alphaState, "expired-session"]);
 
       const missingFlow = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=missing-flow&state=${encodeURIComponent(alphaState)}`,
         { headers: { cookie: alpha.cookie } },
       );
-      expect(missingFlow.status).toBe(400);
-      expect(missingFlow.headers.get("cache-control")).toBe("no-store");
-      const missingFlowPage = await missingFlow.text();
-      expect(missingFlowPage).toContain("Return to Zenod vault setup and retry");
-      expect(missingFlowPage).not.toContain(alphaState);
-      expect(missingFlowPage).not.toContain("missing-flow");
+      await expectScrubbedDriveRedirect(missingFlow, "drive_expired", [
+        alphaState,
+        "missing-flow",
+        "account-alpha",
+        "checkout-alpha-retry",
+        "tenant-alpha",
+      ]);
       expect(providerCalls).toHaveLength(0);
 
       const crossTenant = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=cross-tenant&state=${encodeURIComponent(alphaState)}`,
         { headers: { cookie: `${beta.cookie}; ${alphaStart.flowCookie}` } },
       );
-      expect(crossTenant.status).toBe(400);
+      await expectScrubbedDriveRedirect(crossTenant, "drive_expired", [alphaState, "cross-tenant"]);
       expect(providerCalls).toHaveLength(0);
 
       const alphaCallback = await unit.app.request(
@@ -243,6 +269,8 @@ describe("GDV-7 Drive tenant runtime", () => {
         { headers: { cookie: `${alpha.cookie}; ${alphaStart.flowCookie}` } },
       );
       expect(alphaCallback.status).toBe(303);
+      expect(alphaCallback.headers.get("cache-control")).toBe("no-store");
+      expect(alphaCallback.headers.get("referrer-policy")).toBe("no-referrer");
       expect(opened).toHaveLength(1);
       expect(opened[0]).toMatchObject({ tenantId: "tenant-alpha" });
       const alphaAccount = unit.customerAccounts.resolveForTenantId("tenant-alpha")!;
@@ -334,9 +362,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?error=access_denied&state=${encodeURIComponent(deniedStart.state)}`,
         { headers: { cookie: `${alpha.cookie}; ${deniedStart.flowCookie}` } },
       );
-      expect(denied.status).toBe(303);
-      expect(denied.headers.get("location")).toBe("https://cloud.zenod.test/app?vault=authorization-denied#vault");
-      expect(denied.headers.get("location")).not.toContain(deniedStart.state);
+      await expectScrubbedDriveRedirect(denied, "drive_denied", [deniedStart.state, "access_denied"]);
       expect(unit.customerAccounts.resolveVaultAuthorityForTenantId("tenant-alpha")?.account).toMatchObject({
         vault_provider: "google_drive",
         vault_binding_status: "revoked",
@@ -372,21 +398,53 @@ describe("GDV-7 Drive tenant runtime", () => {
 
       const suspendedStart = await driveConsentStart(unit, beta.cookie);
       await tenants.setTenantStatus("tenant-beta", "suspended");
+      const callsBeforeSuspendedCallback = providerCalls.length;
       const suspendedCallback = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=suspended&state=${encodeURIComponent(suspendedStart.state)}`,
         { headers: { cookie: `${beta.cookie}; ${suspendedStart.flowCookie}` } },
       );
-      expect(suspendedCallback.status).toBe(409);
+      await expectScrubbedDriveRedirect(suspendedCallback, "drive_tenant", [suspendedStart.state, "suspended"]);
+      expect(providerCalls).toHaveLength(callsBeforeSuspendedCallback);
       await tenants.setTenantStatus("tenant-beta", "active");
       const suspendedReplay = await unit.app.request(
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=after-suspension&state=${encodeURIComponent(suspendedStart.state)}`,
         { headers: { cookie: `${beta.cookie}; ${suspendedStart.flowCookie}` } },
       );
-      expect(suspendedReplay.status).toBe(400);
+      await expectScrubbedDriveRedirect(suspendedReplay, "drive_expired", [suspendedStart.state, "after-suspension"]);
       expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
         vault_provider: null,
         vault_binding_id: null,
       });
+
+      const missingCodeStart = await driveConsentStart(unit, beta.cookie);
+      const callsBeforeMissingCode = providerCalls.length;
+      const missingCode = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?state=${encodeURIComponent(missingCodeStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${missingCodeStart.flowCookie}` } },
+      );
+      await expectScrubbedDriveRedirect(missingCode, "drive_config", [missingCodeStart.state]);
+      expect(providerCalls).toHaveLength(callsBeforeMissingCode);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+
+      const missingConfigStart = await driveConsentStart(unit, beta.cookie);
+      betaRuntime.settings.setRaw("google_oauth_client_id", "");
+      betaRuntime.settings.setRaw("google_oauth_client_secret", "");
+      const callsBeforeMissingConfig = providerCalls.length;
+      const missingConfig = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=config-missing&state=${encodeURIComponent(missingConfigStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${missingConfigStart.flowCookie}` } },
+      );
+      await expectScrubbedDriveRedirect(missingConfig, "drive_config", [missingConfigStart.state, "config-missing"]);
+      expect(providerCalls).toHaveLength(callsBeforeMissingConfig);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_provider: null,
+        vault_binding_id: null,
+      });
+      betaRuntime.settings.set("google_oauth_client_id", "tenant-beta-drive-client");
+      betaRuntime.settings.set("google_oauth_client_secret", "tenant-beta-drive-secret");
 
       const betaStart = await driveConsentStart(unit, beta.cookie);
       const betaState = betaStart.state;
@@ -394,7 +452,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=exchange-fail&state=${encodeURIComponent(betaState)}`,
         { headers: { cookie: `${beta.cookie}; ${betaStart.flowCookie}` } },
       );
-      expect(exchangeFailure.status).toBe(502);
+      await expectScrubbedDriveRedirect(exchangeFailure, "drive_exchange", [betaState, "exchange-fail"]);
       const failedBinding = unit.customerAccounts.resolveForTenantId("tenant-beta")!;
       expect(failedBinding).toMatchObject({
         vault_provider: "google_drive",
@@ -408,7 +466,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=fresh-after-failure&state=${encodeURIComponent(betaState)}`,
         { headers: { cookie: `${beta.cookie}; ${betaStart.flowCookie}` } },
       );
-      expect(failedReplay.status).toBe(400);
+      await expectScrubbedDriveRedirect(failedReplay, "drive_expired", [betaState, "fresh-after-failure"]);
       expect(providerCalls).toHaveLength(callsBeforeFailedReplay);
 
       const credentialRetryStart = await driveConsentStart(unit, beta.cookie);
@@ -424,7 +482,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=credential-fail&state=${encodeURIComponent(credentialRetryState)}`,
         { headers: { cookie: `${beta.cookie}; ${credentialRetryStart.flowCookie}` } },
       );
-      expect(credentialFailure.status).toBe(502);
+      await expectScrubbedDriveRedirect(credentialFailure, "drive_exchange", [credentialRetryState, "credential-fail"]);
       expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
         vault_binding_id: failedBinding.vault_binding_id,
         vault_binding_status: "error",
@@ -433,6 +491,18 @@ describe("GDV-7 Drive tenant runtime", () => {
       });
       expect(opened).toHaveLength(3);
       setRaw.mockRestore();
+
+      const bootstrapRetryStart = await driveConsentStart(unit, beta.cookie);
+      failNextBootstrap = true;
+      const bootstrapFailure = await unit.app.request(
+        `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=bootstrap-fail&state=${encodeURIComponent(bootstrapRetryStart.state)}`,
+        { headers: { cookie: `${beta.cookie}; ${bootstrapRetryStart.flowCookie}` } },
+      );
+      await expectScrubbedDriveRedirect(bootstrapFailure, "drive_bootstrap", [bootstrapRetryStart.state, "bootstrap-fail"]);
+      expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
+        vault_binding_id: failedBinding.vault_binding_id,
+        vault_binding_status: "error",
+      });
 
       const successfulRetryStart = await driveConsentStart(unit, beta.cookie);
       const successfulRetryState = successfulRetryStart.state;
@@ -454,7 +524,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=replay&state=${encodeURIComponent(successfulRetryState)}`,
         { headers: { cookie: `${beta.cookie}; ${successfulRetryStart.flowCookie}` } },
       );
-      expect(replay.status).toBe(400);
+      await expectScrubbedDriveRedirect(replay, "drive_expired", [successfulRetryState, "replay"]);
       expect(providerCalls).toHaveLength(callsBeforeReplay);
       expect(unit.customerAccounts.resolveForTenantId("tenant-beta")).toMatchObject({
         vault_binding_id: failedBinding.vault_binding_id,
@@ -518,7 +588,7 @@ describe("GDV-7 Drive tenant runtime", () => {
         `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=swap&state=${encodeURIComponent(start.state)}`,
         { headers: { cookie: `${session.cookie}; ${start.flowCookie}` } },
       );
-      expect(callback.status).toBe(400);
+      await expectScrubbedDriveRedirect(callback, "drive_expired", [start.state, "swap"]);
       expect(providerCalls).toHaveLength(0);
       expect(unit.customerAccounts.get("checkout-a")).toMatchObject({ vault_provider: null, vault_binding_id: null });
       expect(unit.customerAccounts.get("checkout-b")).toMatchObject({ vault_provider: null, vault_binding_id: null });
@@ -579,7 +649,7 @@ describe("GDV-7 Drive tenant runtime", () => {
           `https://cloud.zenod.test/api/vault/drive/oauth/callback?code=stale&state=${encodeURIComponent(staleStart.state)}`,
           { headers: { cookie: `${session.cookie}; ${staleStart.flowCookie}` } },
         );
-        expect(staleCallback.status).toBe(400);
+        await expectScrubbedDriveRedirect(staleCallback, "drive_expired", [staleStart.state, "stale"]);
         expect(providerCalls).toHaveLength(0);
         expect(unit.customerAccounts.get("checkout-original")).toMatchObject({ vault_provider: null, vault_binding_id: null });
         expect(unit.customerAccounts.get("checkout-new")).toMatchObject({ vault_provider: null, vault_binding_id: null });

@@ -136,23 +136,40 @@ function CustomerApp() {
             ? ((await account.json()) as { vault_repo?: string | null })
             : null
           const [vault, vaultStatusResponse] = await Promise.all([
-            fetch("/api/vault/provider"),
-            fetch("/api/vault"),
+            fetch("/api/vault/provider").catch(() => null),
+            fetch("/api/vault").catch(() => null),
           ])
-          if (vault.status === 401 || vaultStatusResponse.status === 401) {
+          if (vault?.status === 401 || vaultStatusResponse?.status === 401) {
             setView({ kind: "hosted-login", methods: signInMethods })
             return
           }
-          const vaultProjection = vault.ok
-            ? ((await vault.json()) as { ready?: boolean })
+          const vaultProjection = vault?.ok
+            ? await vault
+                .json()
+                .then(
+                  (payload) =>
+                    payload as {
+                      ready?: boolean
+                      provider?: "github" | "google_drive" | null
+                    }
+                )
+                .catch(() => null)
             : null
-          const vaultStatus = vaultStatusResponse.ok
-            ? ((await vaultStatusResponse.json()) as {
-                cloned?: boolean
-                cloneError?: string | null
-              })
+          const vaultStatus = vaultStatusResponse?.ok
+            ? await vaultStatusResponse
+                .json()
+                .then(
+                  (payload) =>
+                    payload as {
+                      cloned?: boolean
+                      cloneError?: string | null
+                    }
+                )
+                .catch(() => null)
             : null
-          const legacyGithubVault = Boolean(accountProjection?.vault_repo)
+          const legacyGithubVault = Boolean(
+            vaultProjection?.provider === null && accountProjection?.vault_repo
+          )
           const repositoryVerified = Boolean(
             vaultStatus?.cloned && !vaultStatus.cloneError
           )

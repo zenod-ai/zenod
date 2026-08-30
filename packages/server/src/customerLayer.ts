@@ -144,20 +144,23 @@ function customerDestination(env: NodeJS.ProcessEnv, defaultDomain = "https://cl
   return (env.CUSTOMER_APP_URL || env.DOMAIN || defaultDomain).replace(/\/$/, "");
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character]!);
-}
+type DriveVaultCallbackError =
+  | "drive_denied"
+  | "drive_expired"
+  | "drive_session"
+  | "drive_tenant"
+  | "drive_config"
+  | "drive_exchange"
+  | "drive_bootstrap";
 
-function driveVaultCallbackFailure(c: Context, env: NodeJS.ProcessEnv, product: CustomerProductConfig, message: string, status: 400 | 401) {
+function driveVaultCallbackFailure(c: Context, env: NodeJS.ProcessEnv, product: CustomerProductConfig, error: DriveVaultCallbackError) {
   const destination = new URL("/app", `${customerDestination(env, product.defaultDomain)}/`);
-  destination.searchParams.set("vault", "authorization-error");
+  destination.searchParams.set("vault", error);
   destination.hash = "vault";
+  clearGoogleDriveVaultFlowCookie(c, env);
   c.header("Cache-Control", "no-store");
-  return c.html(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google Drive setup</title></head>
-<body><main><h1>Google Drive setup needs attention</h1><p>${escapeHtml(message)}</p><p><a href="${escapeHtml(destination.toString())}">Return to Zenod vault setup and retry</a></p></main></body></html>`, status);
+  c.header("Referrer-Policy", "no-referrer");
+  return c.redirect(destination.toString(), 303);
 }
 
 function customerMutationOriginAllowed(
@@ -812,8 +815,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     });
 
     app.get("/api/vault/drive/oauth/callback", async (c) => {
+      c.header("Cache-Control", "no-store");
+      c.header("Referrer-Policy", "no-referrer");
       const session = readCustomerSession(c, env);
-      if (!session) return driveVaultCallbackFailure(c, env, product, "Your session expired before Google Drive setup completed. Sign in again, then retry from Vault & sources.", 401);
+      if (!session) return driveVaultCallbackFailure(c, env, product, "drive_session");
       principalForSession(session);
       const state = verifyState(c.req.query("state") ?? "", customerStateSecret(env));
       const proof = verifyState(getCookie(c, GOOGLE_DRIVE_VAULT_FLOW_COOKIE) ?? "", customerStateSecret(env));
@@ -825,7 +830,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         const vaultAuthority = state?.tid ? accounts.resolveVaultAuthorityForTenantId(state.tid) : null;
         if (vaultAuthority?.binding) account = vaultAuthority.account;
       } catch {
-        return driveVaultCallbackFailure(c, env, product, "This Google Drive setup link is invalid or expired. Return to Vault & sources and start again.", 400);
+        return driveVaultCallbackFailure(c, env, product, "drive_expired");
       }
       if (
         !state ||
@@ -871,12 +876,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           account.vault_binding_status !== "revoked" &&
           account.vault_binding_status !== "error")
       ) {
-        return driveVaultCallbackFailure(c, env, product, "This Google Drive setup link is invalid or expired. Return to Vault & sources and start again.", 400);
+        return driveVaultCallbackFailure(c, env, product, "drive_expired");
       }
       const runtime = host.runtimeForAccount?.(account) ?? null;
       const expectedFlow = createHash("sha256").update(c.req.query("state") ?? "").digest("hex");
       if (!runtime || runtime.settings.getRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING) !== expectedFlow) {
-        return driveVaultCallbackFailure(c, env, product, "This Google Drive setup link is invalid or expired. Return to Vault & sources and start again.", 400);
+        return driveVaultCallbackFailure(c, env, product, "drive_expired");
       }
       // Consume before any error handling or exchange so every accepted callback is one-shot.
       runtime.settings.setRaw(GOOGLE_DRIVE_VAULT_FLOW_SETTING, "");
@@ -885,7 +890,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         ? await options.tenantStore.resolveTokenHash(hashToken(token))
         : null;
       if (!tenantRecord || tenantRecord.tenant.id !== account.tenant_id || (tenantRecord.status ?? "active") !== "active") {
-        return c.text("Google Drive vault connection failed: tenant unavailable.", 409);
+        return driveVaultCallbackFailure(c, env, product, "drive_tenant");
       }
       if (c.req.query("error")) {
         if (account.vault_provider === "google_drive") {
@@ -894,13 +899,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
             vault_binding_updated_at: new Date().toISOString(),
           });
         }
-        return c.redirect(`${customerDestination(env, product.defaultDomain)}/app?vault=authorization-denied#vault`, 303);
+        return driveVaultCallbackFailure(c, env, product, "drive_denied");
       }
       const code = c.req.query("code") ?? "";
       const authority = runtime.settings.googleDriveOAuthAuthority();
       if (!code || authority.mode !== "hosted-managed" || !authority.credentials) {
-        return c.text("Google Drive vault connection failed: authorization is unavailable.", 503);
+        return driveVaultCallbackFailure(c, env, product, "drive_config");
       }
+      let callbackStage: "exchange" | "bootstrap" = "exchange";
       try {
         const now = new Date().toISOString();
         accounts.upsert(account.session_id, {
@@ -946,6 +952,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           vault_authorization_epoch: authorizationEpoch,
           vault_binding_updated_at: new Date().toISOString(),
         });
+        callbackStage = "bootstrap";
         runtime.invalidate();
         const repo = await runtime.getRepo({ allowRecovering: true });
         const revision = await repo.currentRevision();
@@ -959,7 +966,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           });
         }
         console.error("Google Drive vault callback failed:", error instanceof Error ? error.message : "unknown error");
-        return c.text("Google Drive vault connection failed. Please retry.", 502);
+        return driveVaultCallbackFailure(
+          c,
+          env,
+          product,
+          callbackStage === "exchange" ? "drive_exchange" : "drive_bootstrap",
+        );
       }
     });
 

@@ -237,11 +237,7 @@ describe("Hosted authoritative vault onboarding", () => {
   })
 
   it("turns a denied Drive callback into an actionable vault retry journey", async () => {
-    window.history.replaceState(
-      null,
-      "",
-      "/app?vault=authorization-denied#vault"
-    )
+    window.history.replaceState(null, "", "/app?vault=drive_denied#vault")
     mockHostedVault(projection(null, "vault_not_selected"))
 
     render(<VaultTab edition="hosted" allowReclone={false} />)
@@ -256,11 +252,7 @@ describe("Hosted authoritative vault onboarding", () => {
   })
 
   it("turns an expired Drive callback into a fresh setup journey", async () => {
-    window.history.replaceState(
-      null,
-      "",
-      "/app?vault=authorization-error#vault"
-    )
+    window.history.replaceState(null, "", "/app?vault=drive_expired#vault")
     mockHostedVault(projection(null, "vault_not_selected"))
 
     render(<VaultTab edition="hosted" allowReclone={false} />)
@@ -271,6 +263,28 @@ describe("Hosted authoritative vault onboarding", () => {
     expect(document.body.textContent).toMatch(/fresh, secure setup/i)
     expect(
       screen.getByRole("button", { name: "Use Google Drive" })
+    ).not.toBeNull()
+  })
+
+  it.each([
+    "drive_tenant",
+    "drive_config",
+    "drive_exchange",
+    "drive_bootstrap",
+  ])("turns %s into an actionable recovery journey", async (callbackError) => {
+    window.history.replaceState(null, "", `/app?vault=${callbackError}#vault`)
+    mockHostedVault(projection("google_drive", "vault_error"))
+
+    render(<VaultTab edition="hosted" allowReclone={false} />)
+
+    expect(
+      await screen.findByText("Google Drive setup needs attention")
+    ).not.toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Reconnect Drive" })
+    ).not.toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Retry recovery" })
     ).not.toBeNull()
   })
 })

@@ -324,8 +324,14 @@ export function VaultTab({
     const callbackStatus = new URLSearchParams(window.location.search).get(
       "vault"
     )
-    const driveAuthorizationDenied = callbackStatus === "authorization-denied"
-    const driveAuthorizationExpired = callbackStatus === "authorization-error"
+    const driveAuthorizationDenied = callbackStatus === "drive_denied"
+    const driveAuthorizationExpired =
+      callbackStatus === "drive_expired" || callbackStatus === "drive_session"
+    const driveAuthorizationFailed =
+      callbackStatus === "drive_tenant" ||
+      callbackStatus === "drive_config" ||
+      callbackStatus === "drive_exchange" ||
+      callbackStatus === "drive_bootstrap"
 
     return (
       <div className="flex flex-col gap-4">
@@ -346,6 +352,16 @@ export function VaultTab({
             <AlertDescription>
               Return here after signing in, then use Google Drive or reconnect
               Drive below to start a fresh, secure setup.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {driveAuthorizationFailed ? (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>Google Drive setup needs attention</AlertTitle>
+            <AlertDescription>
+              Your secure setup did not finish. Use the recovery or reconnect
+              action below; your existing Drive files remain unchanged.
             </AlertDescription>
           </Alert>
         ) : null}

@@ -177,18 +177,36 @@ describe("Hosted vault onboarding boot", () => {
         cloned: false,
         cloneError: "Drive bundle is corrupt",
       }),
+      commercialVaultRepo: null,
     },
     {
-      name: "missing authoritative provider projection",
+      name: "500 authoritative projection with a stale commercial repository",
       providerResponse: Response.json(
         { error: "authority missing" },
         { status: 500 }
       ),
       vaultResponse: Response.json({ cloned: true, cloneError: null }),
+      commercialVaultRepo: "stale/github-repo",
+    },
+    {
+      name: "failed authoritative projection with a stale commercial repository",
+      providerResponse: "reject" as const,
+      vaultResponse: Response.json({ cloned: true, cloneError: null }),
+      commercialVaultRepo: "stale/github-repo",
+    },
+    {
+      name: "non-ready Drive authority with a stale commercial repository",
+      providerResponse: Response.json({
+        ready: false,
+        provider: "google_drive",
+        blocker: "vault_authorization_required",
+      }),
+      vaultResponse: Response.json({ cloned: true, cloneError: null }),
+      commercialVaultRepo: "stale/github-repo",
     },
   ])(
     "keeps $name in Vault instead of showing a false-ready overview",
-    async ({ providerResponse, vaultResponse }) => {
+    async ({ providerResponse, vaultResponse, commercialVaultRepo }) => {
       mocks.api.mockImplementation((path: string) => {
         if (path === "/api/auth/status")
           return Promise.resolve({
@@ -216,8 +234,15 @@ describe("Hosted vault onboarding boot", () => {
           if (path === "/api/me")
             return Response.json({ provider: "google", providers: ["google"] })
           if (path === "/api/console/account")
-            return Response.json({ account_id: "account-1", vault_repo: null })
-          if (path === "/api/vault/provider") return providerResponse.clone()
+            return Response.json({
+              account_id: "account-1",
+              vault_repo: commercialVaultRepo,
+            })
+          if (path === "/api/vault/provider") {
+            if (providerResponse === "reject")
+              throw new Error("provider projection unavailable")
+            return providerResponse.clone()
+          }
           if (path === "/api/vault") return vaultResponse.clone()
           throw new Error(`Unexpected fetch: ${path}`)
         })
@@ -232,4 +257,60 @@ describe("Hosted vault onboarding boot", () => {
       expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
     }
   )
+
+  it("keeps verified legacy GitHub fallback only after an explicit null authority projection", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status")
+        return Promise.resolve({
+          needsSetup: false,
+          configured: true,
+          hostedMode: null,
+          customerAuth: true,
+          authMethod: "github",
+          signInMethods: ["github"],
+        })
+      if (path === "/api/settings")
+        return Promise.resolve({ settings: { provider: "openrouter" } })
+      if (path === "/api/overview")
+        return Promise.resolve({
+          unit: { name: "zenod" },
+          tenant: { id: "tenant-legacy" },
+          usage: null,
+        })
+      if (path === "/api/vault/provider")
+        return Promise.resolve({ provider: null, ready: false })
+      if (path === "/api/vault")
+        return Promise.resolve({ vaultConfigured: true, repo: "octocat/brain" })
+      if (path === "/api/customer-usage")
+        return Promise.resolve({
+          percentageUsed: 0,
+          state: "normal",
+          resetsAt: null,
+        })
+      return Promise.reject(new Error(`Unexpected API call: ${path}`))
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me")
+          return Response.json({ provider: "github", providers: ["github"] })
+        if (path === "/api/console/account")
+          return Response.json({
+            account_id: "account-legacy",
+            vault_repo: "octocat/brain",
+          })
+        if (path === "/api/vault/provider")
+          return Response.json({ provider: null, ready: false })
+        if (path === "/api/vault")
+          return Response.json({ cloned: true, cloneError: null })
+        throw new Error(`Unexpected fetch: ${path}`)
+      })
+    )
+
+    render(<App />)
+
+    const overviewTab = await screen.findByRole("tab", { name: "Overview" })
+    expect(overviewTab.getAttribute("data-state")).toBe("active")
+  })
 })
