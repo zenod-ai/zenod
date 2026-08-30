@@ -2,6 +2,12 @@
 
 Public paid signup is fail-closed. `ZENOD_PUBLIC_PAID_SIGNUP=1` makes the public server refuse to boot unless every check returned by `GET /api/public/production-readiness` is green. Keep signup and tester checkout closed while deploying or proving any gate.
 
+Public Google signup has an independent gate. `ZENOD_PUBLIC_GOOGLE_SIGNUP=1` also requires explicit
+public Google OIDC configuration, a recent Drive-vault OAuth project/branding/callback/`drive.file`
+review, the current legal version, and recent GDV-10 acceptance against one exact commit. GitHub signup
+does not depend on Google evidence while the Google flag is closed. Operational handling is documented
+in [`GOOGLE-DRIVE-VAULT-OPERATIONS.md`](./GOOGLE-DRIVE-VAULT-OPERATIONS.md).
+
 The current approved Hosted shape is **two services from one immutable image**:
 
 1. public Zenod (`AGENT=zenod`) owns the website/app, account, API, MCP, vault, managed usage and customer Channels facade; and
@@ -79,7 +85,8 @@ ZENOD_PUBLIC_SITE_HOST
 
 `ZENOD_PUBLIC_SITE_HOST` is currently present and non-empty. It is optional for boot: `isPublicSiteHost` defaults to `zenod.dev` when neither a route option nor this environment key is supplied. Retain the explicit key in a future exact delta so host routing does not rely on the fallback.
 
-Hosted Drive adds no operator environment keys. Its credentials are tenant-owned and stored through that tenant's existing Vault & sources UI and encrypted settings custody (setting names shown for authority clarity, not as environment configuration):
+Hosted Drive vault credentials are tenant-owned and stored through encrypted tenant-scoped settings
+custody (setting names shown for authority clarity, not secret values to expose):
 
 ```text
 google_oauth_client_id
@@ -87,7 +94,11 @@ google_oauth_client_secret
 google_oauth_refresh_token
 ```
 
-Operator `GOOGLE_OAUTH_*` environment values must not override a tenant's credentials. Each tenant connects its own Google account; the refresh token, account and app-managed folder remain tenant-scoped. The Hosted public beta connection is archive/export-only: Zenod creates one private tenant-specific folder automatically, GitHub remains the source integration, and customers do not select a Drive folder. Self-hosted BYO Drive source/inbox behavior is unchanged.
+Each tenant connects its own Google account; refresh token, account and app-created folder remain
+tenant-scoped. A Drive-selected tenant uses that folder as the sole remote vault authority, with ordinary
+Markdown plus `.zenod/.git/repository.bundle`; GitHub is optional tasking, not a memory prerequisite.
+The legacy archive/source Drive connection remains separate. Self-hosted BYO Drive source/inbox behavior
+is unchanged.
 
 Do not add the superseded managed child-key environment block:
 
@@ -123,10 +134,21 @@ STRIPE_AUTOMATIC_TAX
 ZENOD_SUPPORT_EMAIL
 ZENOD_LEGAL_VERSION
 ZENOD_PUBLIC_PAID_SIGNUP
+ZENOD_PUBLIC_GOOGLE_SIGNUP
+GOOGLE_OIDC_CLIENT_ID
+GOOGLE_OIDC_CLIENT_SECRET
+GOOGLE_OIDC_CALLBACK_URL
+ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT
+ZENOD_GDV_ACCEPTANCE_SHA
+ZENOD_GDV_ACCEPTANCE_VERIFIED_AT
 ZENOD_LIVE_CHECKOUT_TESTER_GITHUB_IDS
 ```
 
 `PRICE_MONTHLY` is the sole price reference required for new Zenod checkout and now points to the approved €9 live price. Any existing `PRICE_YEARLY` value is legacy configuration: preserve it in snapshots and do not delete or reinterpret it, but Zenod readiness and new checkout do not depend on it. Keep `ZENOD_PUBLIC_PAID_SIGNUP=0` until the remaining gates pass.
+
+Keep `ZENOD_PUBLIC_GOOGLE_SIGNUP=0` until GDV-10, OAuth configuration/verification, legal review, and
+Jordi's separate public-Google-signup approval are complete. Never set verification timestamps before
+the named evidence exists.
 
 ### Private existing Phylax / Channels
 

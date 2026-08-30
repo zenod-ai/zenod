@@ -69,6 +69,8 @@ describe("customer route contracts", () => {
     await expect(readProductionReadiness(ready)).resolves.toEqual({
       ready: true,
       publicPaidSignup: true,
+      publicGoogleSignup: false,
+      googleSignupReady: false,
     })
 
     const blocked = vi.fn<typeof fetch>().mockResolvedValue(
@@ -77,6 +79,8 @@ describe("customer route contracts", () => {
     await expect(readProductionReadiness(blocked)).resolves.toEqual({
       ready: false,
       publicPaidSignup: true,
+      publicGoogleSignup: false,
+      googleSignupReady: false,
     })
   })
 

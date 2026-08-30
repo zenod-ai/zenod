@@ -28,4 +28,13 @@ describe("public Zenod offer", () => {
     expect(copy).toMatch(/Hosted manages the service for you/i)
     expect(copy).not.toMatch(/your GitHub account, on your server, with your API keys/i)
   })
+
+  it("describes customer-owned GitHub or Drive storage in public copy and metadata", () => {
+    for (const surface of [metadata, page]) {
+      const copy = surface.replace(/\s+/g, " ")
+      expect(copy).toMatch(/GitHub/i)
+      expect(copy).toMatch(/Google Drive|Drive vault/i)
+      expect(copy).toMatch(/(?:plain|ordinary) Markdown/i)
+    }
+  })
 })

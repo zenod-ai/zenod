@@ -16,13 +16,14 @@
 </head>
 <body>
 <h1>Privacy Policy</h1>
-<p><strong>Effective 13 August 2026 · Version 2026-08-13.</strong> This policy explains how Alpha
+<p><strong>Effective 29 August 2026 · Version 2026-08-29.</strong> This policy explains how Alpha
 Analytics SL, trading as Zenod, processes personal data as the controller for hosted Zenod. Our
 business address is Aribau 168, 1º 1ª, 08036 Barcelona, Spain. Contact:
 <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p>
 
 <h2>1. The short version</h2>
-<p>Your knowledge vault lives in a Git repository you control. Hosted Zenod also processes the minimum
+<p>Your knowledge vault lives in a GitHub repository or app-created Google Drive folder you control.
+Hosted Zenod also processes the minimum
 account, tenant, credential, usage, and operational data needed to provide and secure the Service.</p>
 
 <h2>2. What we collect</h2>
@@ -32,7 +33,7 @@ account, tenant, credential, usage, and operational data needed to provide and s
   <li><strong>Connected-account credentials:</strong> scoped OAuth tokens or app installations for
   services you connect, stored in encrypted tenant-scoped custody and never written into the vault.</li>
   <li><strong>Vault content:</strong> the notes, memory, transcripts, and extracted records your Zenod instance creates - stored in
-  <em>your</em> repository. We access it only to operate your tenant.</li>
+  <em>your</em> selected GitHub repository or Drive vault. We access it only to operate your tenant.</li>
   <li><strong>Usage metering:</strong> per-call model, token, operation, and cost records used for limits,
   reliability, and the account dashboard.</li>
   <li><strong>Operational logs:</strong> limited technical logs for reliability and support.</li>
@@ -46,14 +47,16 @@ or marketing only with consent where consent is required. We do not sell persona
 content to train our models.</p>
 
 <h2>4. Sub-processors and model providers</h2>
-<p>GitHub provides identity and repository access; Stripe processes checkout, subscriptions, tax data,
+<p>Google and GitHub provide optional identity and customer-owned storage access; Stripe processes checkout, subscriptions, tax data,
 and invoices; Hetzner hosts the service; and configured model providers, including providers reached
 through OpenRouter, process prompts needed to generate responses. Providers may process data outside
 the EEA under their published transfer safeguards. Ask us for the current sub-processor list.</p>
 
 <h2>5. Where data lives</h2>
 <p>The hosted service runs in the EU. Customer data is logically isolated by tenant inside the shared
-runtime and tenant-prefixed storage. Your vault repository lives in the GitHub account you designate.</p>
+runtime and tenant-prefixed storage. Your vault lives in the GitHub account or Google Drive account you designate.
+Drive OAuth tokens are kept in encrypted tenant-scoped custody, not in the Drive vault itself. Rebuildable
+local cache and transaction journals may temporarily mirror vault data on Zenod infrastructure.</p>
 
 <h2>6. Retention and deletion</h2>
 <p>We keep active account data while the Service is provided. Following a verified deletion request, we
@@ -64,7 +67,7 @@ operational logs are normally kept for up to 30 days unless needed to investigat
 <h2>7. Your rights</h2>
 <p>Depending on applicable law, you may request access, correction, deletion, restriction, portability,
 or object to processing, and may withdraw consent without affecting earlier processing. Because your
-vault is a Git repository you control, most content is already portable. Email us to exercise a right.
+vault consists of ordinary Markdown in storage you control, most content is already portable. Email us to exercise a right.
 You may also complain to the Spanish Data Protection Agency (AEPD) or your local supervisory authority.</p>
 
 <h2>8. Security, cookies, and children</h2>

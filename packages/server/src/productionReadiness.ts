@@ -1,4 +1,4 @@
-export const ZENOD_LEGAL_VERSION = "2026-08-26";
+export const ZENOD_LEGAL_VERSION = "2026-08-29";
 
 export interface ReadinessCheck {
   id: string;
@@ -9,7 +9,19 @@ export interface ReadinessCheck {
 export interface ProductionReadinessReport {
   ready: boolean;
   publicPaidSignup: boolean;
+  publicGoogleSignup: boolean;
+  googleSignupReady: boolean;
   checks: ReadinessCheck[];
+}
+
+function publicHttpsUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function isRecentIsoDate(value: string | undefined, now: Date, maxAgeDays: number): boolean {
@@ -27,6 +39,34 @@ export function productionReadinessReport(
   const taxMode = env.STRIPE_TAX_MODE;
   const accountStateSecret = env.ACCOUNT_STATE_SECRET ?? "";
   const customerAppUrl = env.CUSTOMER_APP_URL ?? "";
+  const publicGoogleSignup = env.ZENOD_PUBLIC_GOOGLE_SIGNUP === "1";
+  const googleChecks: ReadinessCheck[] = [
+    {
+      id: "google_identity_oauth",
+      ok: Boolean(env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET && publicHttpsUrl(env.GOOGLE_OIDC_CALLBACK_URL)),
+      detail: env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET && publicHttpsUrl(env.GOOGLE_OIDC_CALLBACK_URL)
+        ? "Google OIDC credentials and an explicit public HTTPS callback are configured"
+        : "Google OIDC client ID, secret, and explicit public HTTPS callback are required",
+    },
+    {
+      id: "google_drive_vault_oauth",
+      ok: isRecentIsoDate(env.ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT, now, 90),
+      detail: isRecentIsoDate(env.ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT, now, 90)
+        ? "The Drive vault OAuth project, branding, callback, and drive.file scopes were verified within 90 days"
+        : "Drive vault OAuth project/configuration verification is missing or stale",
+    },
+    {
+      id: "google_drive_vault_acceptance",
+      ok:
+        /^[0-9a-f]{40}$/.test(env.ZENOD_GDV_ACCEPTANCE_SHA ?? "") &&
+        isRecentIsoDate(env.ZENOD_GDV_ACCEPTANCE_VERIFIED_AT, now, 31),
+      detail:
+        /^[0-9a-f]{40}$/.test(env.ZENOD_GDV_ACCEPTANCE_SHA ?? "") &&
+        isRecentIsoDate(env.ZENOD_GDV_ACCEPTANCE_VERIFIED_AT, now, 31)
+          ? "Google-only acceptance is recorded against an exact commit within 31 days"
+          : "Exact-commit Google-only acceptance evidence is missing or stale",
+    },
+  ];
   const checks: ReadinessCheck[] = [
     {
       id: "customer_origin",
@@ -121,10 +161,15 @@ export function productionReadinessReport(
         ? "A backup restore was verified within 31 days"
         : "No recent backup restore verification is recorded",
     },
+    ...(publicGoogleSignup ? googleChecks : []),
   ];
+  const googleSignupReady = googleChecks.every((check) => check.ok) &&
+    env.ZENOD_LEGAL_VERSION === ZENOD_LEGAL_VERSION;
   return {
     ready: checks.every((check) => check.ok),
     publicPaidSignup: env.ZENOD_PUBLIC_PAID_SIGNUP === "1",
+    publicGoogleSignup,
+    googleSignupReady,
     checks,
   };
 }
@@ -157,9 +202,13 @@ export function checkoutEnabledForOwner(
 }
 
 export function assertPublicSignupIsReady(env: NodeJS.ProcessEnv = process.env): void {
-  if (env.ZENOD_PUBLIC_PAID_SIGNUP !== "1") return;
   const report = productionReadinessReport(env);
-  if (report.ready) return;
-  const failed = report.checks.filter((check) => !check.ok).map((check) => check.id).join(", ");
-  throw new Error(`ZENOD_PUBLIC_PAID_SIGNUP=1 but production readiness checks failed: ${failed}`);
+  if (env.ZENOD_PUBLIC_GOOGLE_SIGNUP === "1" && env.ZENOD_PUBLIC_PAID_SIGNUP !== "1") {
+    throw new Error("ZENOD_PUBLIC_GOOGLE_SIGNUP=1 requires ZENOD_PUBLIC_PAID_SIGNUP=1");
+  }
+  if (env.ZENOD_PUBLIC_PAID_SIGNUP !== "1") return;
+  if (!report.ready) {
+    const failed = report.checks.filter((check) => !check.ok).map((check) => check.id).join(", ");
+    throw new Error(`ZENOD_PUBLIC_PAID_SIGNUP=1 but production readiness checks failed: ${failed}`);
+  }
 }

@@ -264,6 +264,8 @@ export interface BacklogExtractResult {
  * a plan the user explicitly approved in the conversation.
  */
 export interface VaultTaskTools {
+  /** Project GitHub issue/backlog/execution tools are projected only when explicitly connected. */
+  githubAvailable: boolean;
   captureNote(content: string, hints?: string[]): Promise<StoreResult>;
   proposeTask(objective: string): Promise<string>;
   executeTask(objective: string, plan: string): Promise<string>;

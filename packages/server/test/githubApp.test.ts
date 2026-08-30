@@ -63,12 +63,14 @@ describe("GitHub App flow", () => {
   it("reports app status and counts a connected app as configured", async () => {
     const settings = runtime.settings;
     expect(appStatus(settings)).toEqual({ created: false, installed: false, slug: null, installationId: null });
+    expect(settings.githubConnectionConfigured()).toBe(false);
 
     settings.setRaw("github_app_id", "99");
     settings.setRaw("github_app_private_key", "pem");
     settings.setRaw("github_app_slug", "zenod-abcd");
     settings.setRaw("github_app_installation_id", "777");
     expect(appStatus(settings)).toEqual({ created: true, installed: true, slug: "zenod-abcd", installationId: "777" });
+    expect(settings.githubConnectionConfigured()).toBe(true);
 
     settings.set("vault_repo", "owner/vault");
     settings.set("anthropic_api_key", "sk-ant-x");

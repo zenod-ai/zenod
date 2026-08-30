@@ -28,16 +28,71 @@ const readyEnv: NodeJS.ProcessEnv = {
   ZENOD_PUBLIC_PAID_SIGNUP: "1",
 };
 
+const googleReadyEnv: NodeJS.ProcessEnv = {
+  ...readyEnv,
+  ZENOD_PUBLIC_GOOGLE_SIGNUP: "1",
+  GOOGLE_OIDC_CLIENT_ID: "google-oidc-client",
+  GOOGLE_OIDC_CLIENT_SECRET: "google-oidc-secret",
+  GOOGLE_OIDC_CALLBACK_URL: "https://cloud.zenod.dev/auth/google/callback",
+  ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT: "2026-08-12T00:00:00.000Z",
+  ZENOD_GDV_ACCEPTANCE_SHA: "a".repeat(40),
+  ZENOD_GDV_ACCEPTANCE_VERIFIED_AT: "2026-08-12T00:00:00.000Z",
+};
+
 describe("production readiness gate", () => {
   it("pins the current one-plan Terms and legal version", async () => {
     const terms = await readFile(
       new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
       "utf8",
     );
-    expect(terms).toContain("Version 2026-08-26");
+    expect(terms).toContain("Version 2026-08-29");
     expect(terms).toContain("€9 per month plus applicable VAT");
     expect(terms).toContain("managed AI usage and WhatsApp access");
     expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i);
+
+    const privacy = await readFile(
+      new URL("../../../apps/site/public/legal/privacy.html", import.meta.url),
+      "utf8",
+    );
+    const handling = await readFile(
+      new URL("../../../apps/site/public/legal/data-handling.html", import.meta.url),
+      "utf8",
+    );
+    for (const document of [terms, privacy, handling]) {
+      expect(document).toContain("Version 2026-08-29");
+      expect(document).toMatch(/GitHub/);
+      expect(document).toMatch(/Google Drive|Drive vault/);
+      expect(document).toMatch(/Markdown/);
+    }
+  });
+
+  it("keeps GitHub signup readiness independent of Google-only acceptance", () => {
+    const now = new Date("2026-08-13T00:00:00.000Z");
+    const report = productionReadinessReport(readyEnv, now);
+    expect(report).toMatchObject({ ready: true, publicGoogleSignup: false, googleSignupReady: false });
+    expect(report.checks.map((check) => check.id)).not.toContain("google_drive_vault_acceptance");
+  });
+
+  it("opens Google signup only with OAuth/config/legal and exact-commit acceptance evidence", () => {
+    const now = new Date("2026-08-13T00:00:00.000Z");
+    expect(productionReadinessReport(googleReadyEnv, now)).toMatchObject({
+      ready: true,
+      publicGoogleSignup: true,
+      googleSignupReady: true,
+    });
+    expect(() => assertPublicSignupIsReady(googleReadyEnv)).not.toThrow();
+
+    const missingEvidence = {
+      ...googleReadyEnv,
+      ZENOD_GDV_ACCEPTANCE_SHA: undefined,
+      ZENOD_GOOGLE_DRIVE_VAULT_OAUTH_VERIFIED_AT: undefined,
+    };
+    const report = productionReadinessReport(missingEvidence, now);
+    expect(report.ready).toBe(false);
+    expect(report.checks.filter((check) => !check.ok).map((check) => check.id)).toEqual(
+      expect.arrayContaining(["google_drive_vault_oauth", "google_drive_vault_acceptance"]),
+    );
+    expect(() => assertPublicSignupIsReady(missingEvidence)).toThrow(/google_drive_vault/);
   });
 
   it("opens paid signup only when every live requirement is evidenced", () => {

@@ -44,6 +44,8 @@ export interface CustomerSession {
 export interface PublicProductionReadiness {
   ready: boolean
   publicPaidSignup: boolean
+  publicGoogleSignup: boolean
+  googleSignupReady: boolean
 }
 
 export async function readProductionReadiness(
@@ -56,10 +58,14 @@ export async function readProductionReadiness(
   const payload = (await response.json().catch(() => ({}))) as {
     ready?: unknown
     publicPaidSignup?: unknown
+    publicGoogleSignup?: unknown
+    googleSignupReady?: unknown
   }
   return {
     ready: payload.ready === true,
     publicPaidSignup: payload.publicPaidSignup === true,
+    publicGoogleSignup: payload.publicGoogleSignup === true,
+    googleSignupReady: payload.googleSignupReady === true,
   }
 }
 

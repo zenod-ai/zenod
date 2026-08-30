@@ -640,6 +640,15 @@ function formatWorkResult(result: WorkResult): string {
   return lines.join("\n");
 }
 
+function githubConnectionRequired(tool: string) {
+  const message = `Connect GitHub before using ${tool}. Memory and local Markdown backlog tools remain available.`;
+  return {
+    content: [{ type: "text" as const, text: message }],
+    structuredContent: { error: { code: "github_connection_required", message } },
+    isError: true,
+  };
+}
+
 /**
  * The Zenod MCP tool surface (docs/M0-SPEC.md): no raw file CRUD. Drive tools
  * appear only while a Google Drive connection is configured. Built fresh per
@@ -667,6 +676,7 @@ export function buildMcpServer(
   mediaIngest?: MediaIngestJobs,
   existingServer?: McpServer,
   chatInterceptor?: ChatTurnInterceptor,
+  githubCapability?: () => boolean,
 ): McpServer {
   const server =
     existingServer ??
@@ -1581,6 +1591,7 @@ export function buildMcpServer(
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       },
       async (input) => {
+        if (githubCapability && !githubCapability()) return githubConnectionRequired("edit_github_issue");
         const result = await editGithubIssue(input);
         const lines = [
           `Edited ${result.repo}#${result.issueNumber}: ${result.issueUrl}`,
@@ -1603,6 +1614,7 @@ export function buildMcpServer(
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       },
       async (input) => {
+        if (githubCapability && !githubCapability()) return githubConnectionRequired("create_issue");
         const result = await createGithubIssue(input);
         return {
           content: [{ type: "text", text: `Created ${result.repo}#${result.issueNumber}: ${result.issueUrl}` }],

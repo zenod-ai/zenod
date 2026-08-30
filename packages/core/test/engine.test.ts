@@ -487,6 +487,23 @@ describe("BrainEngine", () => {
     return createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" } });
   }
 
+  it("returns typed GitHub connection-required denial without an external mutation", async () => {
+    const reply = await engine().handleTasking({
+      text: "CREATEISSUE: This must not leave the vault",
+      surface: "web",
+      conversationKey: "drive-only-github-denial",
+    });
+
+    expect(reply.actions).toHaveLength(1);
+    expect(reply.actions[0]).toMatchObject({ tool: "createIssue", mutationAttempt: true });
+    expect(JSON.parse(reply.actions[0]!.result)).toEqual({
+      error: {
+        code: "github_connection_required",
+        message: "Connect GitHub before using createIssue. Memory and local Markdown backlog tools remain available.",
+      },
+    });
+  });
+
   it("runs the complete core memory loop through a non-git VaultRepository without GitHub leakage", async () => {
     const vaultPath = join(dir, "drive-vault");
     await cp(FIXTURE, vaultPath, { recursive: true });

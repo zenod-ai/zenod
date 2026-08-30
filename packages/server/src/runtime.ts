@@ -653,7 +653,9 @@ export class Runtime {
       ...(driveTools ? { driveTools } : {}),
       // GitHub tasking tools for vault agents and backlog agents (Archus) — NOT the
       // bare Console, NOT the executor (Epaminon writes no backlog), NOT Callistheness.
-      ...(vaultless && !githubBacked ? {} : { taskingTools: this.buildTaskingTools() }),
+      ...(githubBacked || this.settings.githubConnectionConfigured()
+        ? { taskingTools: this.buildTaskingTools() }
+        : {}),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
       // M-5 — a background filing that lands gets a real completion receipt through

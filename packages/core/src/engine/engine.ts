@@ -966,7 +966,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   function noExternalTool(name: string): string {
-    return `${name} is not configured for this engine instance.`;
+    return JSON.stringify({
+      error: {
+        code: "github_connection_required",
+        message: `Connect GitHub before using ${name}. Memory and local Markdown backlog tools remain available.`,
+      },
+    });
   }
 
   function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void, rawEvidence?: TaskingInput["rawEvidence"]): VaultTaskTools {
@@ -1007,6 +1012,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       return pending;
     };
     return {
+      githubAvailable: Boolean(options.taskingTools),
       captureNote: async (content: string, hints?: string[]) => {
         if (!repo) {
           return {

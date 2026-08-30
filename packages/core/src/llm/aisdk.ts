@@ -931,8 +931,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       { role: "user", content: input.question },
     ];
 
+    const githubTaskToolNames = new Set([
+      "create_issue", "label_issue", "edit_issue", "close_issue",
+      "queue_execution", "approve_execution", "approve_queue", "approve_merge",
+      "query_backlog", "service_backlog",
+    ]);
     const taskToolSet = taskTools
-      ? {
+      ? Object.fromEntries(Object.entries({
           capture_note: tool({
             description:
               "Capture/file an inbound note through the librarian store pipeline. Use when the user asks to file, capture, save, remember, or log a note/message. Returns evidence, touched pages, commit, and URLs.",
@@ -1197,7 +1202,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
             }),
             execute: ({ query }) => caught(() => taskTools.serviceBacklog(query ?? undefined)),
           }),
-        }
+        }).filter(([name]) => taskTools.githubAvailable || !githubTaskToolNames.has(name)))
       : {};
 
     const driveToolSet = driveTools
@@ -1454,8 +1459,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     );
 
     const briefingExtras = [
-      taskTools
+      taskTools?.githubAvailable
         ? "You CAN act on explicit tasking instructions using tools: capture_note files notes, digest_backlog/run digest mines structured backlog candidates, create_issue and label_issue manage GitHub issues, edit_issue revises an existing ticket in place (body, title, labels, comment, or non-gated status) so you never close-and-recreate just to change a ticket, query_backlog reports open backlog/status, queue_execution mints and queues a runnable execution ticket for Epaminon, and service_backlog selects eligible work without launching a runner. propose_vault_task plans vault work (read-only); after the user approves the plan, execute_vault_task carries it out and commits. Never execute vault writes without explicit approval; creating a GitHub issue is allowed when the user explicitly asks to create/open/file one. Tickets you create are worked by autonomous agents, so they must be runnable: every issue needs an objective, explicit scope, and a done-condition/acceptance criteria (plus the files for code work, or the exact action + execute-vs-draft for action tasks like posting). If the user's request lacks any of that, ask ONE short clarifying question and do not file the issue until it is runnable — never create a ticket that would just bounce back as needs-clarification. Creating an issue does NOT run it: a ticket only executes once queue_execution mints a linked type:execution ticket and dispatches it to Epaminon. The work issue stays in its own repo; queue_execution creates the execution ticket in the configured central backlog, so leave queue_execution.repo null unless the human explicitly names a different central execution backlog. Never invent an execution backlog repo from the target owner. So when the user asks to create AND queue/run a ticket, create_issue then queue_execution with the newly created qualified issue id in the same turn. If the user asks to run a planning ticket and the runnable context is clear, queue a runnable execution ticket; if the context is not clear, ask ONE exact clarifying question. Never ask for a magic phrase. Never tell the user something is 'queued', 'running', 'picked up', or 'did not run' unless queue_execution just succeeded or a live execution_status result confirms it this turn. For status questions like 'did it run?', 'was it picked up?', 'did issue 108 run?', or 'what is #N doing?', call execution_status when that tool is available; pass the user's exact issue/execution reference even if it is unqualified. query_backlog alone is not enough to confirm runner pickup. Never say you searched, checked, verified, or looked up execution state unless the same reply has a successful execution_status tool action. If execution_status says there is no execution ticket for the issue the user named, lead with that fact; do not infer execution, completion, PRs, or changed files for that issue from GitHub issue body text, comments, child-ticket notes, or narrative history. You may mention related child tickets or PRs only as related issue narrative, clearly separated from whether the original issue itself ran. Whenever you report an issue or execution ticket, render it as a clickable markdown link using the GitHub URL."
+        : "",
+      taskTools && !taskTools.githubAvailable
+        ? "Memory does not require GitHub. You can capture notes, digest transcripts into provider-neutral candidates, write those candidates under Backlog/, and perform approved vault maintenance. GitHub issue, repository, backlog-status, and execution tools are unavailable until the user connects GitHub."
         : "",
       taskTools
         ? "VOICE NOTES: channel adapters transcribe voice notes before they reach you. Treat transcribed speech EXACTLY as if the user typed those words. Your visible reply MUST be your substantive response to what they actually said — a question gets an answer, a request gets acted on, a remark gets a real reply. NEVER reply with only a filing/queue acknowledgment such as 'Queued for filing', 'Queued', 'Queued (voice note transcript)', or 'Filed' — for a voice note that is a failure, not a reply. Separately and silently, ONLY if the note carries substantive content worth remembering later (a decision, idea, plan, commitment, or fact), you MAY also call capture_note to keep it — but capturing is a background side-effect and must NEVER replace or become your reply. Ephemeral notes (quick questions, chit-chat, one-off instructions you've handled) are not filed. The transcript stays in the conversation either way."

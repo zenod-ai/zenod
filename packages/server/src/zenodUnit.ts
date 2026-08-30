@@ -249,6 +249,7 @@ function registerZenodTools(
     },
     server,
     chatInterceptor,
+    () => settings.githubConnectionConfigured(),
   );
 }
 
