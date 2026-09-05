@@ -13,7 +13,7 @@ Additional root rationale: n/a
 GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
-Steward since: 2026-09-06 Europe/Paris
+Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
 Last reconciled commit: fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 (control-plane base; product baseline pending ZMR-1)
 Planner: Jordi + ZMR-release-planner
 Worker: unassigned
@@ -187,7 +187,6 @@ No active assignments. The manager reassigns workers silent past budget after in
 | 2026-09-06 | Prior review | ca39aa9 local | local checkout | npm run test -w zenod -- test/memoryEntries.test.ts test/aisdk-retrieval-retry.test.ts test/engine.test.ts | 60 tests passed; not release acceptance | [Review](planning/zenod-memory-reliability-review.md) |
 | 2026-09-06 | Release planning | working tree | local documents / GitHub | validate_spine.py --strict on ZMR; issue-body/link reconciliation | ZMR passes strict validation; #1188 tracker and #1189–#1198 created and linked | This task |
 | 2026-09-06 | Parent graph | working tree | Foundation + ZMR | validate_spine.py --graph | ZMR has no errors/warnings and reciprocal registration resolves; whole-family validation fails on Foundation's pre-existing missing Execution Cursor and legacy Decisions columns | Parent migration deferred to Foundation steward |
-
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
@@ -206,7 +205,7 @@ Branch / latest commit: current checkout ca39aa9 plus scoped planning documents;
 
 ### 2026-09-06 — Delivery stewardship authorized
 
-Outgoing steward: ZMR-release-planner. Incoming steward: ZMR-delivery-manager (parent task /root). Transfer recorded: 2026-09-06 Europe/Paris. Control-plane base: fb8b07c5910b3424c4a15da4e1cfaa920cee4e22.
+Outgoing steward: ZMR-release-planner. Incoming steward: ZMR-delivery-manager (parent task /root). Transfer recorded: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC). Control-plane base: fb8b07c5910b3424c4a15da4e1cfaa920cee4e22.
 User authorized the parent to lead and discuss work with ticket subagents while remaining primarily available for coordination and reporting. The control-plane worker has narrow document integration authority only; it launches no ticket workers and does not merge its PR.
 Next: manager reviews and merges control-plane changes, records the merged SHA, then dispatches ZMR-1. No ticket assignment exists yet. Dependencies, deferred ZMR-9/10 scope, deployment approval and human SHIP gates remain unchanged.
 
@@ -224,6 +223,72 @@ Human inputs and absence rule: semantic version/date follow existing release pra
 
 ### Worker Dispatch Prompts
 
-At dispatch the manager prepends the current `skills/epic-spine/assets/dispatch-prompt-preamble.md`, substitutes the bound issue, branch, absolute worktree and pinned SHA, and records the completed prompt in the issue:
+The self-contained dispatch preamble below is committed with this spine. At dispatch the manager fills every placeholder with the bound ticket's exact values and records the completed prompt in its issue. No separate preamble asset is required.
 
-“Use EpicSpine. Identity: ticket worker. Bound spine: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md. Assignment: ZMR-N. Steward: current recorded ZMR manager. Mission and acceptance: bound GitHub issue. First action: create the dedicated worktree from the recorded base; never switch the shared clone. Write detailed evidence to the issue, not sibling/parent spines. Respect all Human Gates. Terminal state: review with PR/evidence or a precisely named blocker. Go.”
+```text
+Use EpicSpine.
+Identity: <ticket worker or tester; never a second delivery manager>.
+Assignment identity: <ZMR-N and stable agent/task name>.
+Bound issue: <exact GitHub issue URL from the Issue Ledger>.
+Bound spine: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md.
+Spine steward: ZMR-delivery-manager (parent task /root).
+Branch: <dedicated codex/zmr-N branch>.
+Pinned base: <exact merged main SHA; dependencies integrated and verified>.
+Absolute worktree: <dedicated absolute path>.
+Integration target: main.
+Budget: 90-minute checkpoint; report state, blocker and options at expiry.
+Book binding: inactive.
+
+FIRST ACTION: git worktree add <absolute-worktree> -b <branch> <pinned-base>.
+Work only there. Record the absolute path, base, branch and assignment in the
+issue. Never git checkout or git switch in the shared clone; it is read-only
+for workers. Pin the base; do not rebase until the wave's journey passes and
+the manager explicitly re-pins.
+
+Read AGENTS.md, Foundation, this spine, the bound issue, the review, the
+existing entry-retrieval evidence and repository skills/epic-spine/SKILL.md.
+Use the Bootstrap Map for additional role-specific reads. Foundation and
+sibling spines are read-only. Follow this explicitly bound ZMR scope; do not
+select unrelated tickets from the global issue list.
+
+Mission and acceptance: <copy the bound issue's concrete mission, required
+reads, acceptance cases, reuse sources and expected evidence>.
+Inspect current provider-neutral primitives before authoring. PORT means
+move proven code and adapt only imports/config; DUPLICATE means copy the
+proven unit. BUILD here is a bounded extension of existing primitives after
+verifying the capability gap against current code and the ZMR-1 inventory.
+Scratch duplication fails review. Preserve source revisions, URLs, Drive
+provenance, immutable evidence and exact-entry identity/isolation.
+
+Write product changes only for the bound issue and detailed work to that
+issue. Do not edit any spine unless the manager explicitly delegates a narrow
+section. Send cross-spine needs to the manager. Do not spawn duplicate ticket
+workers or take over manager reviews/integration. Heartbeat every 30 minutes:
+lap/state | blocker | ETA. Two consecutive ETA slips require stopping and
+reporting options; workers silent past budget may be reassigned.
+
+Respect all Human Gates in this spine. No production deployment, live vault
+mutation, credentials/provider change, real billing/sends or public signup
+without the exact applicable approval. For a human gate, the entire next
+status is BLOCKED ON Jordi: <exact missing decision, options and recommendation>.
+Stop the affected work and notify the manager. No adjacent polishing while
+parked at that gate. ZMR-9/10 remain deferred until human SHIP acceptance.
+
+Use synthetic fixtures first. Live customer data changes require approved
+snapshot, checksum and one restore drill per mechanism; isolated test assets
+use snapshot-and-go; docs need no backup ceremony. Run meaningful focused
+checks. Full suites run at most once per pinned commit, never for docs-only
+movement. Report exact commands, SHA, environment, pass/fail and limitations.
+
+The parent delivery manager owns final SHIP: after exact deployment approval,
+walk the complete journey in a real browser, stop at the first breakage,
+coordinate the bounded repair, obtain any required deployment approval and
+restart at step 1. Human handoff requires a clean same-build pass and one
+screenshot per step. Never claim live proof from merged code or local tests,
+or ask Jordi to click anything not exercised on that same candidate.
+
+Terminal handoff: ready for review with PR URL, branch, base/latest SHA,
+absolute worktree, acceptance evidence, residual risks and next action; or a
+precisely named blocker. Update the bound issue and notify the sole steward.
+Do not merge your own PR. Go.
+```
