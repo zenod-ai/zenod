@@ -1179,7 +1179,7 @@ describe("BrainEngine", () => {
       ].join("\n"),
     );
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(logPath);
+      await tools.readNote!(logPath, { query: "Aurora Kestrel" });
       return {
         text: [
           "Aurora Kestrel uses Amber-902. [[2026-07-11#^e-06dada]]",
@@ -1197,7 +1197,7 @@ describe("BrainEngine", () => {
     expect(answer.text).not.toContain("^e-06cada");
     expect(answer.text).not.toContain("It also uses");
     expect(answer.sources).toEqual([
-      expect.objectContaining({ path: logPath, githubUrl: expect.stringContaining(logPath) }),
+      expect.objectContaining({ path: `${logPath}#^e-06dada`, githubUrl: expect.stringContaining(logPath) }),
     ]);
   });
 
@@ -1215,7 +1215,7 @@ describe("BrainEngine", () => {
       ].join("\n"),
     );
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(logPath);
+      await tools.readNote!(logPath, { query: "Aurora Kestrel" });
       return {
         text: "Aurora Kestrel uses Amber-902 ([evidence](https://github.com/zenod-ai/fixture/blob/main/Log/2026-07-11.md#^e-06dada)).",
         readPaths: [logPath],

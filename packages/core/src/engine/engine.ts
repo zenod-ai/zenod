@@ -36,6 +36,7 @@ import { lintVault } from "../vault/lint.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
+import { readNotePassage, type NoteReadOptions, type NotePassage } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
@@ -663,7 +664,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       ].join("\n"),
       "The vault has two tiers. Meaning pages (Projects/, Areas/, Notes/) hold distilled knowledge. The evidence tier holds the originals: Log/ daily files contain immutable receipts — verbatim transcripts, quotes, and source links (e.g. Google Drive URLs) — and _attachments/ holds raw artifacts (images, documents).",
       "For provenance questions (where is the original / audio / transcript / source?), read the Log file bodies and the '## Sources' section of meaning pages — that is where artifact locations live.",
-      "Summaries are lossy. Before concluding something is not in the vault, read the full bodies of the top search hits, and search again with different terms.",
+      "Summaries are lossy. read_note returns bounded sections with extent, version, omittedBefore and nextCursor. Use query to locate a literal passage, or follow nextCursor with the same path to read onward. A partial read or unmatched query is not proof of absence. If the turn budget prevents full coverage, explicitly say coverage is partial rather than claiming the information does not exist.",
       "Cite sources inline as vault paths. Be direct and concise.",
       "Beyond the vault, you can call search_chats to search your own past conversations with the user across every channel (WhatsApp, web, CLI, MCP) — not just this thread. Use it when the user refers to something discussed earlier ('the issue we talked about', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel than the one you're replying on. The current thread's recent turns are already in context; search_chats reaches older turns and other channels. The vault holds durable knowledge; chats are the running conversation — check both when a question could be answered by either.",
       agents ? `Vault doctrine:\n${agents}` : "",
@@ -703,10 +704,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (hits.length === 0) return "no results";
         return hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n");
       },
-      readNote: async (path: string) => {
-        const note = await getNote(vaultPath, path, sourceResolver);
-        const body = note.body.length > 8000 ? `${note.body.slice(0, 8000)}\n[truncated]` : note.body;
-        return `--- frontmatter: ${JSON.stringify(note.frontmatter)}\n${body}`;
+      readNote: async (path: string, readOptions?: NoteReadOptions) => {
+        const revision = await repo.currentRevision();
+        return JSON.stringify(await readNotePassage(vaultPath, path, readOptions,
+          (sourcePath, anchor) => repositorySourceRef(sourcePath, anchor, revision)));
       },
       listPages: async () => {
         const snapshot = await scanVault(vaultPath);
@@ -1974,12 +1975,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
     const tools = readTools();
     const readSpans = new Map<string, string>();
+    const readPassages: NotePassage[] = [];
+    const passageSources = new Map<string, VaultSourceRef>();
     const groundedTools: VaultReadTools = {
       ...tools,
       ...(tools.readNote
         ? {
-            readNote: async (path: string) => {
-              const normalizedPath = normalizeMarkdownNotePath(path);
+            readNote: async (path: string, readOptions?: NoteReadOptions) => {
+              const normalizedPath = normalizeMarkdownNotePath(path.split("#")[0]!);
               const pinnedForPath = pinnedSpans.filter(
                 (span) => normalizeMarkdownNotePath(span.path) === normalizedPath,
               );
@@ -1988,8 +1991,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 readSpans.set(normalizedPath, text);
                 return text;
               }
-              const text = await tools.readNote!(path);
-              readSpans.set(normalizedPath, text);
+              const text = await tools.readNote!(path, readOptions);
+              const passage = JSON.parse(text) as NotePassage;
+              readPassages.push(passage);
+              passageSources.set(passage.identity, { ...passage.source, path: passage.identity.includes("#^") ? passage.identity : passage.source.path });
               return text;
             },
           }
@@ -2011,13 +2016,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
     );
     const sources = [
       ...pinnedSources,
-      ...result.readPaths.map((path) => repositorySourceRef(path)),
+      ...passageSources.values(),
+      ...result.readPaths.filter((path) => ![...passageSources.values()].some((source) => source.path.split("#")[0] === normalizeMarkdownNotePath(path.split("#")[0]!))).map((path) => repositorySourceRef(path)),
     ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
     return {
       text: sanitizeGroundedAnswer({
         question,
         text: result.text,
-        readSpans: [...readSpans].map(([path, text]) => ({ path, text })),
+        readSpans: [
+          ...[...readSpans].map(([path, text]) => ({ path, text })),
+          ...readPassages.map((passage) => ({ path: passage.source.path, text: passage.body,
+            ...(passage.identity.includes("#^") ? { verifiedAnchor: passage.identity.split("#^")[1]! } : {}),
+          })),
+        ],
         pinnedSpans,
       }),
       sources,

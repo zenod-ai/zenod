@@ -1,3 +1,4 @@
+import type { NoteReadOptions } from "../ops/passage.js";
 import type { PageIndexEntry } from "../vault/pages.js";
 import type { BacklogCandidate, BacklogDigestInput, BacklogDigestResult, BacklogSourceRef, LintError, StoreResult } from "../types.js";
 import type { TrustedConnectionProfile } from "../taskingPolicy.js";
@@ -169,7 +170,7 @@ export interface AnswerInput {
  */
 export interface VaultReadTools {
   searchVault?(query: string): Promise<string>;
-  readNote?(path: string): Promise<string>;
+  readNote?(path: string, options?: NoteReadOptions): Promise<string>;
   listPages?(): Promise<string>;
   /** Search the user's past conversations across every channel (WhatsApp, web, …). */
   searchChats(query: string): Promise<string>;

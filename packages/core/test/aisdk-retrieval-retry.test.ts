@@ -15,6 +15,20 @@ vi.mock("ai", async (importActual) => {
 import { createBrainLlm } from "../src/llm/aisdk.js";
 
 describe("ask_brain deterministic retrieval retry", () => {
+  it("exposes and forwards bounded read options to the real answer tool seam", async () => {
+    const readNote = vi.fn(async () => '{"body":"late fact","nextCursor":"next","truncated":true}');
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    await llm.answer({ question: "late fact?", vaultBriefing: "brief", conversation: [] }, {
+      searchVault: async () => "hits", readNote, listPages: async () => "pages", searchChats: async () => "none",
+    });
+    const args = { path: "Log/2026-01-01.md#^e-000001", query: "late fact", maxChars: 512 };
+    await captured.config.tools.read_note.execute(args);
+    expect(readNote).toHaveBeenCalledWith(args.path, { query: "late fact", maxChars: 512 });
+    await captured.config.tools.read_note.execute({ path: args.path, cursor: "next" });
+    expect(readNote).toHaveBeenLastCalledWith(args.path, { cursor: "next" });
+    expect(captured.config.tools.read_note.description).toContain("not proof of absence");
+  });
+
   it("retries a missed human narrow search with the extracted project name", async () => {
     const queries: string[] = [];
     const reads: Array<{ query: string; result: string }> = [];

@@ -1,6 +1,8 @@
 interface ReadSpan {
   path: string;
   text: string;
+  /** Host-verified identity of a bounded evidence passage, never model supplied. */
+  verifiedAnchor?: string;
 }
 
 interface EvidenceBlock {
@@ -95,7 +97,11 @@ function relevantLogText(question: string, text: string): string {
 function scopedSources(question: string, spans: ReadSpan[]): Map<string, string> {
   const scoped = new Map<string, string>();
   for (const span of spans) {
-    scoped.set(span.path, LOG_PATH_RE.test(span.path) ? relevantLogText(question, span.text) : span.text);
+    const text = span.verifiedAnchor
+      ? `^${span.verifiedAnchor}\n${span.text}`
+      : LOG_PATH_RE.test(span.path) ? relevantLogText(question, span.text) : span.text;
+    const existing = scoped.get(span.path);
+    scoped.set(span.path, existing ? `${existing}\n\n${text}` : text);
   }
   return scoped;
 }
