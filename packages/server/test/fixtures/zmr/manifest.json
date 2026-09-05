@@ -1,0 +1,28 @@
+{
+  "id": "ZMR-BASELINE-V1",
+  "marker": "[SYNTHETIC ACCEPTANCE TEST - NOT A USER FACT] ZMR-BASELINE-V1",
+  "productBase": "b9dd9f0ef739a23e8438d550794b1e8400df8782",
+  "model": "deterministic-observer-v1 (no provider, no model API)",
+  "temperature": null,
+  "repeatedRunPolicy": "One deterministic characterization run per provider per frozen commit; future real-model evaluation requires three independent conversations per case, identical fixture bytes, no tuning on held-out prompts.",
+  "realModelLatencyMs": null,
+  "realModelCostUsd": null,
+  "externalApiCalls": 0,
+  "fixture": { "fillerCount": 651, "fillerDate": "2026-09-01", "oldDate": "2026-01-01", "totalSeedEntries": 656 },
+  "refs": {
+    "late": "Log/2026-01-01.md#^e-000001",
+    "historical": "Log/2026-01-01.md#^e-000002",
+    "correction": "Log/2026-01-01.md#^e-000003",
+    "distractor": "Log/2026-01-01.md#^e-000004",
+    "multiTopic": "Log/2026-01-01.md#^e-000005"
+  },
+  "cases": [
+    { "id": "late", "prompt": "What is ZMR ORCHID's access word?", "query": "ZMR ORCHID", "expected": "cobalt-seventeen", "refs": ["late"] },
+    { "id": "history", "prompt": "What was ZMR ORCHID's original launch color?", "query": "ZMR ORCHID", "expected": "amber", "refs": ["historical"] },
+    { "id": "current", "prompt": "What is ZMR ORCHID's launch color now?", "query": "ZMR ORCHID", "expected": "violet", "refs": ["correction"] },
+    { "id": "unknown", "prompt": "What is ZMR ORCHID's payroll provider?", "query": "payroll", "expected": "unknown", "refs": [] },
+    { "id": "paraphrase", "prompt": "Which hue replaced the earlier shade for the flower launch?", "query": "hue replaced shade flower", "expected": "violet", "refs": ["correction"], "heldOut": true }
+  ],
+  "filingExpected": { "clearPages": ["Areas/Insurance.md", "Projects/Sample Project.md"], "uncertainOnly": "ambiguous third topic", "evidence": "unaltered full input" },
+  "summaryExpected": "Bounded concise summaries; fixture uses a 14000-character summary to observe current input bounds, not to define the eventual limit."
+}

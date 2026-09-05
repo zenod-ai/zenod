@@ -1,0 +1,111 @@
+{
+  "manifest": "ZMR-BASELINE-V1",
+  "provider": "google_drive",
+  "answerCases": [
+    {
+      "id": "late",
+      "prompt": "What is ZMR ORCHID's access word?",
+      "expected": "cobalt-seventeen",
+      "actual": "unavailable in supplied note body",
+      "refs": [
+        "Log/2026-01-01.md#^e-000001"
+      ]
+    },
+    {
+      "id": "history",
+      "prompt": "What was ZMR ORCHID's original launch color?",
+      "expected": "amber",
+      "actual": "unavailable in supplied note body",
+      "refs": [
+        "Log/2026-01-01.md#^e-000002"
+      ]
+    },
+    {
+      "id": "current",
+      "prompt": "What is ZMR ORCHID's launch color now?",
+      "expected": "violet",
+      "actual": "unavailable in supplied note body",
+      "refs": [
+        "Log/2026-01-01.md#^e-000003"
+      ]
+    },
+    {
+      "id": "unknown",
+      "prompt": "What is ZMR ORCHID's payroll provider?",
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "refs": []
+    },
+    {
+      "id": "paraphrase",
+      "prompt": "Which hue replaced the earlier shade for the flower launch?",
+      "expected": "violet",
+      "actual": "unavailable in supplied note body",
+      "refs": [
+        "Log/2026-01-01.md#^e-000003"
+      ]
+    }
+  ],
+  "fixtureHashes": {
+    "AGENTS.md": "47b991668dda814ce253b01210700e0910a7ce0e0778932d3bb86abe51bbe282",
+    "Areas/Insurance.md": "5b7c3c34620283ea07b6a6ce0d9c23f4cd1b297471894c7e715c881dd75d8f23",
+    "Index.md": "c12bd8af717dd419f45dcc7243fdc41d21978e0378f1f5aa6e26b03edc0e0f7c",
+    "Log/2026-01-01.md": "600b5e77eb06580429e361df422eeb6fa942dc3d0f99bb1191996fccf49a4933",
+    "Log/2026-06-10.md": "f8e856d28dc7124638ec1d884ebbadd3473efc7d58bca1d860dd3474745e0040",
+    "Log/2026-09-01.md": "71c032865c34782d2b1d08d124813e32f26d25de50cc73c8557f33750d54639c",
+    "Notes/Axa.md": "c872b568805e60b7e7a162c265115736ba236a8e7a9246fdabe5e38eb4f99158",
+    "Notes/Oversized.md": "966261c51586d0ca3a393a3817e20d0eaebbf80332d23430b71003a25ba2ffde",
+    "Projects/Sample Project.md": "e4e3617466868aa10bbe7e04a46a631798f7f0521308dd9cfc3de806c3d3d6b0",
+    "_templates/Area.md": "deb77b63205e2213faf7feb5cb0cd784d7561bc51e827ace15d5cfaa8bbf5364"
+  },
+  "durationsMs": {
+    "lexicalSearch": 11.848708999999872,
+    "unpinnedAsk": 15.5671669999997,
+    "exactGet": 0.2644170000003214,
+    "pinnedAsk": 11.979584000000159,
+    "historicalSearch": 2.62900000000036,
+    "correctionGet": 0.24350000000004002,
+    "originalGet": 0.172458000000006,
+    "distractorGet": 0.16533399999980247,
+    "unknownSearch": 10.357208999999784,
+    "paraphraseSearch": 9.999959000000217,
+    "ask-late": 13.469916000000012,
+    "ask-history": 12.98370900000009,
+    "ask-current": 12.291541000000052,
+    "ask-unknown": 11.108999999999924,
+    "ask-paraphrase": 13.094249999999647,
+    "multiTopicStore": 8.300750000000335
+  },
+  "observed": {
+    "seedEntryCount": 657,
+    "sourceRevisionId": null,
+    "unpinnedAnswer": "unavailable in supplied note body",
+    "pinnedAnswer": "cobalt-seventeen",
+    "coreOldRefs": [
+      "Log/2026-01-01.md#^e-000001",
+      "Log/2026-01-01.md#^e-000002",
+      "Log/2026-01-01.md#^e-000003",
+      "Log/2026-01-01.md#^e-000004",
+      "Log/2026-01-01.md#^e-000005"
+    ],
+    "mcpOldRefs": [],
+    "filing": "uncertain",
+    "pagesTouched": [
+      "Areas/Insurance.md"
+    ],
+    "classifySegments": 4,
+    "summaryInputChars": 14000,
+    "typedReadTools": [
+      "searchVault",
+      "readNote",
+      "listPages",
+      "searchChats"
+    ],
+    "unknownSearchHits": 0,
+    "paraphraseSearchHits": 0
+  },
+  "externalApiCalls": 0,
+  "realModelQuality": "unmeasured",
+  "realModelLatencyMs": null,
+  "realModelCostUsd": null
+}
