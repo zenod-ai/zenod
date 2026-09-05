@@ -87,7 +87,7 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: implementation — ZMR-1 baseline active
+Phase: review — ZMR-1 PR #1201; independent review and CI running
 Last verified: 2026-09-06 00:40 CEST
 Integration target: main
 Fresh base commit: b9dd9f0ef739a23e8438d550794b1e8400df8782; exact merged control-plane base pinned for ZMR-1
@@ -99,9 +99,9 @@ Blockers: none for ZMR-1; current-main behavior and deployment remain unverified
 ## Execution Cursor
 
 Last attempted: independently re-review corrected #1199, verify exact-head CI, merge, and dispatch ZMR-1.
-Result: #1199 merged as b9dd9f0; /root/zmr_1_baseline confirmed dedicated worktree and began the baseline.
+Result: ZMR-1 returned PR #1201 at 34319e3, 102 focused tests and frozen evidence; independent reviewer assigned. Manager docs PR #1200 CI failed and a separate agent is diagnosing it.
 Execution status: active
-Waiting on: ZMR-1 baseline worker evidence and PR
+Waiting on: independent review and required CI for ZMR-1 head 34319e3; separate #1200 CI failure under diagnosis
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-1 baseline handoff and PR; integrate verified evidence before dispatching ZMR-2/3.
 
@@ -149,7 +149,7 @@ ZMR-1 is active on the merged control-plane base; ZMR-2–8 remain dependency-ga
 
 | Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | active | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | Worker confirmed startup; #1199 CI/review passed | 2026-09-06 00:40 CEST | Complete baseline and return PR/evidence |
+| [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | review | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | [PR #1201](https://github.com/zenod-ai/zenod/pull/1201) / codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | 34319e3; 102 focused tests; frozen baseline evidence | 2026-09-06 00:40 CEST | Resolve independent review and CI before merge |
 | [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Retrieve answer-bearing passages beyond the note prefix | proposed | ZMR-1 | ../wt-zmr-2 at dispatch | codex/zmr-2 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Make historical entry search complete and paginated | proposed | ZMR-1 | ../wt-zmr-3 at dispatch | codex/zmr-3 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Give ask_brain typed retrieval and explicit coverage | proposed | ZMR-2, ZMR-3 | ../wt-zmr-4 at dispatch | codex/zmr-4 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
