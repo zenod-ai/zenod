@@ -120,13 +120,13 @@ Next action: merge the reviewed control-plane PR, then dispatch ZMR-1 from that 
 
 Reuse inventory from the review: core engine store/ask/readTools; evidence entry parser and exact reads; deterministic search; classifier/composer; vault frontmatter/linter; MCP structural search and receipt enrichment; existing tasking proposal/approval seam. No new service is needed for SHIP. ZMR-1 rechecks current main and relevant existing units/services before marking absent capabilities BUILD; no claim that every unrelated repository or live service was audited.
 
-Current-main trap for ZMR-1: open #1160 is superseded by completed [#1171](https://github.com/zenod-ai/zenod/issues/1171), merged at d77ea431. Provider-neutral engine/search/get/evidence capabilities already exist on this base; preserve source revisions, source URLs and Drive provenance when extending retrieval. Reconcile this against current code before proposing replacement primitives.
+Current-main trap for ZMR-1: open #1160 is superseded by completed [#1171](https://github.com/zenod-ai/zenod/issues/1171), merged at d77ea431. Provider-neutral engine/search/get/evidence capabilities already exist on this base; preserve source revisions, source URLs and Drive provenance when extending retrieval. Reconcile this against current code before proposing replacement primitives. ZMR-8 must reconcile the deployment runbook’s public/private ordering inconsistency before any deployment preflight; this control-plane change does not resolve or mutate live topology.
 
 Known traps: whole-file search versus prefix reads; limit-before-filter; one confidence across topics; unbounded summaries; citation existence mistaken for entailment; old reports mistaken for current verification. See the review and individual tickets.
 
 Wave 1: ZMR-1 runnable baseline. Wave 2: ZMR-2 and ZMR-3 have related core evidence surfaces and therefore run sequentially unless the manager proves disjoint ownership. Wave 3: ZMR-4; wave 4: ZMR-5; wave 5: ZMR-6; wave 6: ZMR-7; wave 7: ZMR-8 then manager journey. No automatic parallel dispatch.
 
-During active execution, heartbeat every 30 min: `lap/state | blocker | ETA`; two consecutive ETA slips trigger a scope/status review. This document creates no automation.
+During active execution, heartbeat every 30 min: `lap/state | blocker | ETA`; two consecutive ETA slips trigger a scope/status review. The manager enabled the quiet 15-minute same-task coordination heartbeat `coordinate-zenod-memory-reliability`; it reconciles existing assignments without duplicating workers and reports only meaningful changes. The parent owns reviews and integration.
 Live customer data changes require snapshot + checksum + one restore drill per mechanism; isolated synthetic fixtures use snapshot-and-go; docs require no backup ceremony.
 
 ## Decisions

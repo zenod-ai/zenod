@@ -39,4 +39,3 @@ Remote main observed during planning: fb8b07c5910b3424c4a15da4e1cfaa920cee4e22; 
 
 Baseline → passage access + historical pagination → internal typed Q&A/coverage → per-topic filing → focused meaning updates → current/historical facts → release acceptance.
 After human SHIP acceptance: hybrid search evaluation and an approved-plan filing maintenance queue.
-
