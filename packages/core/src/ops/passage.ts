@@ -30,6 +30,7 @@ export interface NotePassage {
   omittedBefore: boolean;
   nextCursor: string | null;
   queryMatched?: boolean;
+  scopeEvidenceRefs?: string[];
 }
 
 interface Section { start: number; end: number; anchor?: string }
@@ -64,6 +65,7 @@ export async function readNotePassage(
   requested: string,
   options: NoteReadOptions = {},
   location: VaultSourceContext = {},
+  allowedAnchors?: readonly string[],
 ): Promise<NotePassage> {
   const maxChars = options.maxChars ?? 8000;
   const part = options.part ?? "body";
@@ -79,13 +81,16 @@ export async function readNotePassage(
   const note = await getNote(vaultPath, path, location);
   const frontmatterText = JSON.stringify(note.frontmatter, null, 2);
   const content = part === "frontmatter" ? frontmatterText : note.body;
-  const all = sections(content, part === "body" && note.path.startsWith("Log/"));
+  if (allowedAnchors && part === "frontmatter") throw new Error("Pinned evidence reads cannot access file frontmatter; use an exact evidence ref");
+  const all = sections(content, part === "body" && note.path.startsWith("Log/"))
+    .filter((section) => !allowedAnchors || (section.anchor && allowedAnchors.includes(section.anchor)));
+  if (allowedAnchors && all.length !== new Set(allowedAnchors).size) throw new Error("Pinned evidence is unavailable; restart the read");
   const exact = anchor ? all.find((section) => section.anchor === anchor.slice(1)) : undefined;
   if (anchor && !exact) throw new Error(`evidence entry not found: ${requested}`);
-  const lower = exact?.start ?? 0;
-  const upper = exact?.end ?? content.length;
+  const lower = exact?.start ?? (allowedAnchors ? all[0]!.start : 0);
+  const upper = exact?.end ?? (allowedAnchors ? all.at(-1)!.end : content.length);
   const version = `sha256:${hash(JSON.stringify([note.frontmatter, note.body]))}`;
-  const scope = hash(JSON.stringify([await realpath(vaultPath), note.provider, note.path, anchor ?? "", note.revisionId ?? "", part]));
+  const scope = hash(JSON.stringify([await realpath(vaultPath), note.provider, note.path, anchor ?? "", note.revisionId ?? "", part, allowedAnchors ? [...allowedAnchors].sort() : null]));
   let start = lower;
   let queryMatched: boolean | undefined;
   if (options.cursor) {
@@ -98,22 +103,28 @@ export async function readNotePassage(
     if (cursor.v !== 1 || cursor.scope !== scope) throw new Error("Read cursor belongs to another source or revision; restart the read");
     if (cursor.version !== version) throw new Error("Stale read cursor: note changed; restart the read");
     if (!Number.isInteger(cursor.offset) || cursor.offset < lower || cursor.offset >= upper || boundary(content, cursor.offset) !== cursor.offset) throw new Error("Invalid read cursor offset");
+    if (allowedAnchors && !all.some((section) => cursor.offset >= section.start && cursor.offset < section.end)) throw new Error("Invalid read cursor offset");
     start = cursor.offset;
   } else if (options.query?.trim()) {
     // A case-insensitive regex preserves original Unicode offsets; lowercasing
     // the body instead can change its string length.
     const literal = options.query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const match = new RegExp(literal, "iu").exec(content.slice(lower, upper));
-    queryMatched = match !== null;
+    const candidates = exact ? [exact] : all;
+    const match = candidates.map((section) => {
+      const found = new RegExp(literal, "iu").exec(content.slice(section.start, section.end));
+      return found ? { at: section.start + found.index } : null;
+    }).find((found) => found !== null);
+    queryMatched = match !== undefined;
     if (match) {
-      const at = lower + match.index;
+      const at = match.at;
       const section = exact ?? all.find((candidate) => candidate.start <= at && candidate.end > at)!;
       start = boundary(content, Math.max(section.start, at - Math.floor(maxChars / 4)));
     }
   }
   const section = exact ?? all.find((candidate) => candidate.start <= start && candidate.end > start) ?? all[all.length - 1]!;
   const end = boundary(content, Math.min(start + maxChars, section.end, upper));
-  const nextCursor = end < upper ? Buffer.from(JSON.stringify({ v: 1, scope, version, offset: end } satisfies Cursor)).toString("base64url") : null;
+  const nextOffset = end === section.end && allowedAnchors ? all.find((candidate) => candidate.start >= end)?.start ?? upper : end;
+  const nextCursor = nextOffset < upper ? Buffer.from(JSON.stringify({ v: 1, scope, version, offset: nextOffset } satisfies Cursor)).toString("base64url") : null;
   const source = { ...note } as VaultSourceRef & { body?: string; frontmatter?: unknown };
   delete source.body;
   delete source.frontmatter;
@@ -127,6 +138,7 @@ export async function readNotePassage(
     truncated: start > lower || end < upper,
     omittedBefore: start > lower,
     nextCursor,
+    ...(allowedAnchors ? { scopeEvidenceRefs: all.map((section) => `${note.path}#^${section.anchor}`) } : {}),
     ...(queryMatched === undefined ? {} : { queryMatched }),
   };
 }

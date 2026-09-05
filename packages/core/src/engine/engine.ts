@@ -677,7 +677,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = []): VaultReadTools {
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
     const searchChats = async (query: string) => {
@@ -706,8 +706,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       },
       readNote: async (path: string, readOptions?: NoteReadOptions) => {
         const revision = await repo.currentRevision();
+        const anchors = path.includes("#") ? [] : pinnedRefs
+          .filter((ref) => normalizeMarkdownNotePath(ref.split("#")[0]!) === normalizeMarkdownNotePath(path))
+          .map((ref) => ref.split("#^")[1]!);
         return JSON.stringify(await readNotePassage(vaultPath, path, readOptions,
-          (sourcePath, anchor) => repositorySourceRef(sourcePath, anchor, revision)));
+          (sourcePath, anchor) => repositorySourceRef(sourcePath, anchor, revision),
+          anchors.length > 0 ? anchors : undefined));
       },
       listPages: async () => {
         const snapshot = await scanVault(vaultPath);
@@ -1973,7 +1977,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       estimatedTokens: estimateTokens(scopedBriefingText),
     };
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
-    const tools = readTools();
+    const tools = readTools(contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
     const passageSources = new Map<string, VaultSourceRef>();
@@ -1986,7 +1990,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
               const pinnedForPath = pinnedSpans.filter(
                 (span) => normalizeMarkdownNotePath(span.path) === normalizedPath,
               );
-              if (pinnedForPath.length > 0) {
+              if (pinnedForPath.length > 0 && !path.includes("#") && !Object.values(readOptions ?? {}).some((value) => value !== undefined)) {
                 const text = pinnedForPath.map((span) => span.text).join("\n\n");
                 readSpans.set(normalizedPath, text);
                 return text;
@@ -2025,7 +2029,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         text: result.text,
         readSpans: [
           ...[...readSpans].map(([path, text]) => ({ path, text })),
-          ...readPassages.map((passage) => ({ path: passage.source.path, text: passage.body,
+          ...readPassages.map((passage) => ({ path: passage.source.path, text: passage.body, version: passage.version, start: passage.extent.start,
             ...(passage.identity.includes("#^") ? { verifiedAnchor: passage.identity.split("#^")[1]! } : {}),
           })),
         ],

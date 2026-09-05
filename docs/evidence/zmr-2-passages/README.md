@@ -18,7 +18,7 @@ The internal `read_note(path, {part?, query?, cursor?, maxChars?})` callback now
 - Source revisions and URLs come from the existing repository/source resolver. GitHub URLs are pinned when the engine has its configured GitHub location; otherwise the adapter's existing canonical URL is retained alongside `revisionId`. Drive URLs remain Drive URLs. Content `version` separately identifies the read material.
 - Evidence splitting reuses the existing heading parser, extended to recognize legacy single-space anchor separators. Exact anchored traversal cannot include a neighboring entry. General sections work for legacy extensionless notes as well.
 - The shared note fetch now rejects machine-directory paths and cross-vault symlinks, and normalizes backslashes before validating traversal.
-- Q&A grounding accumulates actual passage bodies across reads and uses host-verified evidence identity for citations when a late chunk does not contain its heading. Envelope metadata and search snippets are not treated as factual body evidence. Ordinary note citations retain their existing file path; evidence citations carry exact anchors.
+- Q&A grounding accumulates actual passage bodies across reads and reconstructs each entry by host-verified anchor, source version and offsets before applying question relevance. This preserves heading-free continuation citations without allowing an unrelated traversed entry to validate a narrow answer. Envelope metadata and search snippets are not treated as factual body evidence. Ordinary note citations retain their existing file path; evidence citations carry exact anchors.
 
 This is a BUILD extension of inspected existing primitives: `getNote`, the shared evidence heading parser, `VaultRepository.currentRevision`, source resolution, internal read callbacks, and AI SDK tool registration. No provider-specific replacement subsystem or ZMR-3 structural pagination change is introduced.
 
@@ -47,3 +47,15 @@ During development, focused tests identified and corrected ordinary-note citatio
 The disk reader still loads a whole local note to locate sections; this bounds model input, not disk I/O or repository sync cost. Frontmatter is separately traversable with `part=frontmatter`; public full-note reads retain their original representation. Query location is literal and is not semantic search. Tool rounds remain governed by the existing answer-loop budget, with explicit partial-coverage instructions. Real-model completeness/abstention, latency, cost, remote provider operation and the final live journey remain ZMR-8 measurements/gates. No deployment or human SHIP acceptance is claimed.
 
 Ready for independent review and manager integration after exact-head checks. ZMR-3 remains a separate sequential ticket; no spine changes were made here.
+
+
+## Independent review corrections — 2026-09-06
+
+Review of `ecc330c4ba39e39b8089c9f31cccc1784cc1f947` identified two P2 regressions; that candidate was not integrated.
+
+1. Exact anchored rereads inside a multi-entry pinned context previously returned all pinned entries, and a missing anchor could return data. Explicit anchors now always use the exact bounded reader and fail for missing anchors. A plain file reread without options retains the legacy concatenated pinned response. File rereads with bounded options traverse only the pinned entries, including across gaps containing unpinned neighbors; query location and cursor scope cannot cross those gaps. File frontmatter remains unavailable through a restricted pinned read.
+2. Verified passage identity previously bypassed question relevance. Grounding now groups actual returned chunks by path, anchor and content version, sorts/merges their offsets without filling unread gaps, then applies the existing question-scope filter to each reconstructed evidence entry. Only explicit host-pinned context bypasses that filter. Anchor metadata establishes identity, not factual relevance.
+
+The engine regression now actually traverses the entire target-plus-distractor log with 512-unit cursors, with the target marker and answer separated across chunks. It proves the supported literal/citation survive while the unrelated neighbor's literal and its real valid citation are removed. The pinned regression exercises two selected entries separated by an unpinned neighbor, exact query/continuation budgets, legacy whole-file behavior and a nonexistent anchor. Public MCP checks exercise the multi-pinned exact/missing-anchor behavior on both providers.
+
+Correction validation: engine + passage tests **73/73**; other focused retrieval/entries/operations/model-budget suites **109/109**; public MCP passage/baseline/existing tests **35/35**. Core build passes. Exact corrected head and remaining CI/review status are recorded in #1190. No live changes or deployment.

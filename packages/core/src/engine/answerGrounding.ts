@@ -3,6 +3,8 @@ interface ReadSpan {
   text: string;
   /** Host-verified identity of a bounded evidence passage, never model supplied. */
   verifiedAnchor?: string;
+  version?: string;
+  start?: number;
 }
 
 interface EvidenceBlock {
@@ -96,12 +98,34 @@ function relevantLogText(question: string, text: string): string {
 
 function scopedSources(question: string, spans: ReadSpan[]): Map<string, string> {
   const scoped = new Map<string, string>();
+  const entries = new Map<string, ReadSpan[]>();
+  const append = (path: string, text: string) => {
+    const existing = scoped.get(path);
+    scoped.set(path, existing ? `${existing}\n\n${text}` : text);
+  };
   for (const span of spans) {
-    const text = span.verifiedAnchor
-      ? `^${span.verifiedAnchor}\n${span.text}`
-      : LOG_PATH_RE.test(span.path) ? relevantLogText(question, span.text) : span.text;
-    const existing = scoped.get(span.path);
-    scoped.set(span.path, existing ? `${existing}\n\n${text}` : text);
+    if (span.verifiedAnchor) {
+      // Identity joins heading-free continuations; it is NOT a relevance bypass.
+      // Keep versions separate and reconstruct only text actually returned.
+      const key = JSON.stringify([span.path, span.verifiedAnchor, span.version]);
+      const group = entries.get(key) ?? [];
+      group.push(span);
+      entries.set(key, group);
+    } else append(span.path, LOG_PATH_RE.test(span.path) ? relevantLogText(question, span.text) : span.text);
+  }
+  for (const group of entries.values()) {
+    group.sort((left, right) => (left.start ?? 0) - (right.start ?? 0));
+    let text = "";
+    let end = -1;
+    for (const span of group) {
+      const start = span.start ?? Math.max(0, end);
+      if (end >= 0 && start > end) text += "\n[unread gap]\n";
+      text += span.text.slice(Math.max(0, end - start));
+      end = Math.max(end, start + span.text.length);
+    }
+    const first = group[0]!;
+    const identified = `##  ^${first.verifiedAnchor}\n${text}`;
+    append(first.path, relevantLogText(question, identified));
   }
   return scoped;
 }

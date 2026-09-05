@@ -36,6 +36,20 @@ describe.each(["github", "google_drive"] as const)("ZMR-2 public passage recall:
       const pages: NotePassage[] = [];
       const llm = {
         async answer(input: AnswerInput, tools: VaultReadTools) {
+          if (input.question === "pinned-multiple") {
+            const page = JSON.parse(await tools.readNote!(manifest.refs.late, { query: "access word", maxChars: 512 }));
+            expect(page.body).toContain("cobalt-seventeen");
+            expect(page.body).not.toContain("original launch color");
+            expect(page.body.length).toBeLessThanOrEqual(512);
+            expect(page.identity).toBe(manifest.refs.late);
+            pages.push(page);
+            await expect(tools.readNote!("Log/2026-01-01.md#^e-ffffff")).rejects.toThrow("not found");
+            const restricted = JSON.parse(await tools.readNote!("Log/2026-01-01.md", { query: "violet", maxChars: 512 }));
+            expect(restricted.queryMatched).toBe(false);
+            expect(restricted.scopeEvidenceRefs).toEqual([manifest.refs.late, manifest.refs.historical]);
+            expect(restricted.body).not.toContain("violet");
+            return { text: `cobalt-seventeen (${manifest.refs.late})`, readPaths: [] };
+          }
           if (input.question === "pinned") {
             // A reread of the pinned file must still return only that evidence.
             const body = await tools.readNote!("Log/2026-01-01.md");
@@ -44,7 +58,7 @@ describe.each(["github", "google_drive"] as const)("ZMR-2 public passage recall:
             return { text: `cobalt-seventeen (${manifest.refs.late})`, readPaths: [] };
           }
           await tools.searchVault!("ZMR ORCHID");
-          if (input.question === "seek") {
+          if (input.question.startsWith("seek:")) {
             const page = JSON.parse(await tools.readNote!("Log/2026-01-01.md", { query: "access word", maxChars: 512 })) as NotePassage;
             pages.push(page);
             expect(page.extent.start).toBeGreaterThan(8000);
@@ -70,8 +84,8 @@ describe.each(["github", "google_drive"] as const)("ZMR-2 public passage recall:
       const engine = createEngine({ repo, llm, state, ...(provider === "github" ? { location: { repo: "synthetic/zmr-passage" } } : {}) });
       server = buildMcpServer(async () => engine); client = new Client({ name: "zmr-2", version: "1" });
       const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st); await client.connect(ct);
-      for (const question of ["seek", "traverse", "pinned"]) {
-        const result = await client.callTool({ name: "ask_brain", arguments: { question, ...(question === "pinned" ? { contextRefs: [manifest.refs.late] } : {}) } });
+      for (const question of ["seek: What is ZMR ORCHID’s access word?", "traverse: What is ZMR ORCHID’s access word?", "pinned", "pinned-multiple"]) {
+        const result = await client.callTool({ name: "ask_brain", arguments: { question, ...(question === "pinned" ? { contextRefs: [manifest.refs.late] } : question === "pinned-multiple" ? { contextRefs: [manifest.refs.late, manifest.refs.historical] } : {}) } });
         expect(result.isError).not.toBe(true);
         expect(result.structuredContent?.text).toBe(`cobalt-seventeen (${manifest.refs.late})`);
         expect(result.structuredContent?.sources).toEqual(expect.arrayContaining([expect.objectContaining({ provider, path: manifest.refs.late })]));
