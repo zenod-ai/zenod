@@ -1,6 +1,6 @@
 # EPIC: Zenod Memory Reliability
 
-Status: pending — DISPATCH ONLY AFTER control-plane integration into main
+Status: active
 Created: 2026-09-06
 Updated: 2026-09-06
 Repository: zenod-ai/zenod
@@ -14,9 +14,9 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 (control-plane base; product baseline pending ZMR-1)
+Last reconciled commit: c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175 (merged ZMR-1 baseline PR #1201)
 Planner: Jordi + ZMR-release-planner
-Worker: unassigned
+Worker: ZMR-2-passage-worker (/root/zmr_2_passage)
 Tester: unassigned
 
 ## Role Bindings
@@ -87,23 +87,23 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: implementation authorized; control-plane integration pending
-Last verified: 2026-09-06 Europe/Paris
+Phase: implementation — ZMR-2 passage retrieval active
+Last verified: 2026-09-06 01:11 CEST
 Integration target: main
-Fresh base commit: review ca39aa968cc8560925d027c74c28b742a3aa8805; remote main observed fb8b07c5910b3424c4a15da4e1cfaa920cee4e22
+Fresh base commit: c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175; integrated wave 1, pinned for ZMR-2
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
-Dispatch condition: user implementation/subagent authorization received 2026-09-06; integrate control-plane files into main before dispatching ZMR-1. Later tickets retain ledger dependencies.
-Next action: merge the reviewed control-plane PR, then dispatch ZMR-1 from that exact merged main base.
-Blockers: control-plane PR must merge before ticket dispatch; historical review checkout is older than current main and deployment has not been reverified.
+Dispatch condition: ZMR-1 baseline integrated as #1201; ZMR-2 dispatched. ZMR-3 runs after ZMR-2 integration to avoid shared read/evidence/type/test edits. Later dependencies unchanged.
+Next action: review ZMR-2 passage retrieval PR and evidence, then integrate and dispatch ZMR-3.
+Blockers: none for local ZMR-2 implementation; real-model quality/cost/latency still unmeasured and explicitly required by ZMR-8.
 
 ## Execution Cursor
 
-Last attempted: reconcile planning documents with current main and transfer delivery stewardship after the user authorized implementation and subagents on 2026-09-06.
-Result: scoped control-plane integration prepared from fb8b07c5910b3424c4a15da4e1cfaa920cee4e22; original dependencies and human SHIP/production gates retained.
-Execution status: ready for control-plane review and integration
-Waiting on: merged control-plane base; no ticket worker active
+Last attempted: verify ZMR-1 exact-head CI and independent review, merge #1201, and dispatch ZMR-2.
+Result: #1201 merged as c823d06; /root/zmr_2_passage assigned on the merged base. #1200 prior head a558d07 CI passed; current status-update head requires its own CI. Earlier failure was an isolated test-cleanup ENOTEMPTY.
+Execution status: active
+Waiting on: ZMR-2 worker PR/evidence
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
-Next action: merge the reviewed control-plane PR, then dispatch ZMR-1 from that exact merged main base.
+Next action: review ZMR-2 passage retrieval PR and evidence, then integrate and dispatch ZMR-3.
 
 ## Bootstrap Map
 
@@ -145,12 +145,12 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 
 ## Issue Ledger
 
-ZMR-1 is ready after control-plane integration; ZMR-2–8 remain dependency-gated. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
+ZMR-1 deterministic baseline is integrated; ZMR-2 is active; ZMR-3 follows sequentially for shared-file isolation and ZMR-4–8 retain dependencies. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
 
 | Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Establish the runnable memory-recall baseline demo | ready after control-plane merge | none | ../wt-zmr-1 at dispatch | codex/zmr-1 | pin at dispatch | Review only | 2026-09-06 | Run baseline when bound |
-| [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Retrieve answer-bearing passages beyond the note prefix | proposed | ZMR-1 | ../wt-zmr-2 at dispatch | codex/zmr-2 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
+| [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | done — deterministic baseline | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | [PR #1201](https://github.com/zenod-ai/zenod/pull/1201) / codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | c823d06 merged; 102 focused tests; independent review + CI pass | 2026-09-06 01:11 CEST | Integrated c823d06; real-model metrics carried to ZMR-8 |
+| [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-2-passage-worker /root/zmr_2_passage | Retrieve answer-bearing passages beyond the note prefix | active | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-2 | codex/zmr-2 | c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175 | #1201 integrated; exact-base dispatch | 2026-09-06 01:11 CEST | Implement passage traversal and return PR/evidence |
 | [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Make historical entry search complete and paginated | proposed | ZMR-1 | ../wt-zmr-3 at dispatch | codex/zmr-3 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Give ask_brain typed retrieval and explicit coverage | proposed | ZMR-2, ZMR-3 | ../wt-zmr-4 at dispatch | codex/zmr-4 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | File multi-topic memories with per-topic confidence | proposed | ZMR-1, ZMR-4 | ../wt-zmr-5 at dispatch | codex/zmr-5 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
@@ -190,6 +190,20 @@ No active assignments. The manager reassigns workers silent past budget after in
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 01:11 CEST — Manager — Baseline integrated; passage worker dispatched
+
+PR #1201 head 34319e3 passed independent review and required CI, then merged as c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175. It reproduces all four deterministic gaps and verifies existing exact/pinned reads and provider identities. 102 focused checks passed; independent reviewer reran the two-provider MCP demo. Model responses and Drive persistence are test doubles: real-model quality/latency/cost were not measured. ZMR-8 owns that outstanding release proof; no release-quality claim follows from baseline acceptance.
+
+Dispatched /root/zmr_2_passage for #1190 in /Users/jordi/Documents/GitHub/wt-zmr-2, branch codex/zmr-2, exact c823d06 base. ZMR-3 remains sequential to prevent simultaneous edits of shared types/evidence/baseline surfaces. Manager status PR #1200 prior failure was ENOTEMPTY in existing test cleanup; a558d07 CI passed without product fixes. No deployment performed.
+
+### 2026-09-06 00:40 CEST — Manager — Control plane integrated; baseline dispatched
+
+Reviewed corrected PR #1199 head 6901ec87f4edac2986ff296edcf675f17f257a29 independently; required ci passed. Squash merge is b9dd9f0ef739a23e8438d550794b1e8400df8782. Merged source inspected and ZMR strict document validation passes. No production deployment performed or inferred from image publication.
+
+Dispatched /root/zmr_1_baseline as ZMR-1-baseline-worker for #1189, branch codex/zmr-1, absolute worktree /Users/jordi/Documents/GitHub/wt-zmr-1, pinned base b9dd9f0. Worker confirmed startup. Scope is synthetic baseline/demo and evidence, no product fixes or live data. Next: review its exact-head PR, resolve findings and integrate before dependent workers.
+
+Manager worktree: /Users/jordi/Documents/GitHub/wt-zmr-manager on codex/zmr-manager; current source of unmerged coordination updates. Shared original checkout remains untouched. Quiet heartbeat remains active; no other ticket worker is running.
 
 ### 2026-09-06 — Planner — Memory Reliability release authored
 
