@@ -5,6 +5,11 @@ Created: 2026-07-09
 Updated: 2026-08-27
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
+Spine ID: Foundation
+Spine Type: root
+Root spine: self
+Parent spine: none
+Additional root rationale: n/a
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
@@ -91,6 +96,14 @@ Fresh base commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; the sig
 Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
 Next action: Jordi approves or replaces the recommended allowance/tariff values in the exact #1112 release packet; then request Gate A fresh backups only. Closed deploy, real sends, billing and signup remain separate later gates.
 Blockers: no architecture or source blocker is open. Exact production allowance/tariff values are the single current human input. Production backup/deploy, real channel sends, live billing and public signup remain named later gates. Public signup stays closed.
+
+## Spine Map
+
+New release registration (2026-09-06); existing child relationships remain recorded in the Bootstrap Map and child-spine routing table. ZMR has separate user-authorized delivery scope; this registration does not replace the Phylax delivery cursor above.
+
+| Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
+|---|---|---|---|---|---|---|---|---|
+| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete passage/date-range recall, focused topic filing, and current-versus-historical answers. | implementation authorized; integration pending | ZMR-delivery-manager coordinates; control-plane merge required before ticket dispatch. | [September review](planning/zenod-memory-reliability-review.md); user delivery/subagent authorization 2026-09-06 | 2026-09-06 Europe/Paris | Merge reviewed control-plane changes, then dispatch ZMR-1 from merged main. |
 
 ## Bootstrap Map
 
