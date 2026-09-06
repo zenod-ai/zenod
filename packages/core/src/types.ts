@@ -102,11 +102,14 @@ export interface TokenCostMeasurement {
 export interface Answer {
   text: string;
   sources: SourceRef[];
+  coverage?: import("./engine/retrievalCoverage.js").AnswerCoverage;
 }
 
 export interface AskOptions {
   /** Exact tenant-local evidence blocks to ground before general vault research. */
   contextRefs?: string[];
+  /** Host-only adapter: the same tenant-scoped, enriched catalog used by public search_memory. */
+  entrySearch?: (input: import("./engine/entryPagination.js").EntrySearchInput) => Promise<import("./engine/entryPagination.js").EntrySearchResult>;
 }
 
 export class ContextRefError extends Error {

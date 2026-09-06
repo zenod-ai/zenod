@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// Z-9 · a synthesized answer must never come back source-less. When the model
-// answers from search hits without opening a note, sources fall back to the hits
-// it saw; when it reads notes in full, those precise paths are the sources.
+// ZMR-4: search hits are discovery metadata. Only successful reads become sources.
 const behavior: { readNote: boolean } = { readNote: false };
 const captured: { system?: string } = {};
 
@@ -28,23 +26,21 @@ const readTools = {
     "Projects/Marigold.md (score 12.5) — codename Marigold\nLog/2026-07-07-note.md (score 8.0) — raw evidence",
   readNote: async () => "--- frontmatter: {}\nThe codename is Marigold, owner Jordi.",
   listPages: async () => "pages",
+  searchChats: async () => "no results",
 };
 
-describe("Z-9 · ask/answer always cites structured sources", () => {
-  it("returns non-empty sources from the search hits when no note was opened", async () => {
+describe("ZMR-4 · ask/answer cites only successful source reads", () => {
+  it("does not promote search hits to source reads when no note was opened", async () => {
     behavior.readNote = false;
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const res = await llm.answer(
       { question: "what is the launch codename?", vaultBriefing: "brief", conversation: [] },
       readTools,
     );
-    expect(res.readPaths.length).toBeGreaterThan(0);
-    expect(res.readPaths).toContain("Projects/Marigold.md");
-    // the Log/ evidence hit is carried too, so a compose-dropped fact stays citable
-    expect(res.readPaths).toContain("Log/2026-07-07-note.md");
+    expect(res.readPaths).toEqual([]);
   });
 
-  it("prefers the notes actually read in full over the search fallback", async () => {
+  it("returns only the notes actually read", async () => {
     behavior.readNote = true;
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
     const res = await llm.answer(

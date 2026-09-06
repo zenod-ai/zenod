@@ -170,6 +170,7 @@ export interface AnswerInput {
  */
 export interface VaultReadTools {
   searchVault?(query: string): Promise<string>;
+  searchEntries?(input: import("../engine/entryPagination.js").EntrySearchInput): Promise<string>;
   readNote?(path: string, options?: NoteReadOptions): Promise<string>;
   listPages?(): Promise<string>;
   /** Search the user's past conversations across every channel (WhatsApp, web, …). */

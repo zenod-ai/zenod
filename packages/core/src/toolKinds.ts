@@ -26,6 +26,7 @@ export type ToolKind = "read" | "mutate";
 const READ_TOOLS: readonly string[] = [
   // vault / conversation reads (engine readTools + aisdk read tool set)
   "searchvault",
+  "searchentries",
   "readnote",
   "listpages",
   "searchchats",

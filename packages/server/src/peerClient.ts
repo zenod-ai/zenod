@@ -562,6 +562,7 @@ export async function callPeerWithArgs(
       type: "answer_content",
       text: structured.text,
       ...(Array.isArray(structured.sources) ? { sources: structured.sources } : {}),
+      ...(objectRecord(structured.coverage) ? { coverage: structured.coverage } : {}),
     });
   }
   if (options.preserveFullResult) return JSON.stringify(result);

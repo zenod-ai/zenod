@@ -35,7 +35,7 @@ test("every emitted per-tool schema is self-contained (no dangling $defs refs)",
   for (const [tool, schema] of Object.entries(bundles)) {
     assert.doesNotThrow(() => assertSelfContained(schema, tool));
     assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
-    if (!["zenod.get_task_result", "zenod.search_memory"].includes(tool)) assert.deepEqual(schema.required, ["evidence"]);
+    if (!["zenod.get_task_result", "zenod.search_memory", "zenod.ask_brain"].includes(tool)) assert.deepEqual(schema.required, ["evidence"]);
     assert.equal(schema.additionalProperties, false);
   }
 });

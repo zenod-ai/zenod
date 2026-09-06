@@ -43,6 +43,8 @@ import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type 
 import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
+import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
+import { RetrievalCoverage } from "./retrievalCoverage.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
@@ -656,7 +658,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       // contract so search_vault/read_note actually fire on every vault question.
       [
         "TOOL CONTRACT — applies to every question about the vault's contents, no exceptions:",
-        "1. You MUST call search_vault BEFORE you write any answer. Do not narrate 'let me search' and then answer — actually call the tool first, then answer from its results.",
+        "1. You MUST call search_vault (or search_entries when available) BEFORE you write any answer. Do not narrate 'let me search' and then answer — actually call the tool first, then answer from its results.",
         "2. You MUST call read_note on the notes/logs you rely on before quoting, summarizing, or citing them. Never describe a note's contents from its title or summary alone.",
         "3. The page/log/attachment lists in this briefing are ONLY a table of contents so you know what to search for and read. They are NOT a source you may quote, count, rank, or answer from. Anything you state about vault content must come from a tool result in THIS turn.",
         "4. To conclude something is absent, you must have run search_vault (and retried with different terms) this turn — never infer absence from this index.",
@@ -677,7 +679,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(pinnedRefs: readonly string[] = []): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false): VaultReadTools {
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
     const searchChats = async (query: string) => {
@@ -704,6 +706,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (hits.length === 0) return "no results";
         return hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n");
       },
+      ...(typedEntries ? { searchEntries: async (input: EntrySearchInput) => {
+        if (entrySearch) return JSON.stringify(await entrySearch(input));
+        const entries = await searchEvidenceEntries(vaultPath, { limit: null }, sourceResolver);
+        const page = paginateMemoryEntries(entries, { ...input, limit: input.limit ?? 20 }, vaultPath, input.cursor);
+        return JSON.stringify({ entries: memoryEntrySummaries(page.entries), pagination: {
+          hasMore: page.hasMore, nextCursor: page.nextCursor, snapshot: page.snapshot,
+          matchedEntries: page.matchedEntries, scannedEntries: page.scannedEntries, scannedVaultEntries: entries.length,
+          scannedReceiptJobs: 0, receiptEnrichmentAvailable: false, scope: "all-local-vault-evidence",
+        } } satisfies EntrySearchResult);
+      } } : {}),
       readNote: async (path: string, readOptions?: NoteReadOptions) => {
         const revision = await repo.currentRevision();
         const anchors = path.includes("#") ? [] : pinnedRefs
@@ -1977,12 +1989,44 @@ export function createEngine(options: EngineOptions): BrainEngine {
       estimatedTokens: estimateTokens(scopedBriefingText),
     };
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
-    const tools = readTools(contextRefs);
+    const tools = readTools(contextRefs, askOptions.entrySearch, true);
+    const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
     const passageSources = new Map<string, VaultSourceRef>();
+    const conversationReadSpans: Array<{ path: string; text: string }> = [];
     const groundedTools: VaultReadTools = {
       ...tools,
+      searchChats: async (query: string) => {
+        const result = await tools.searchChats(query); coverageTracker.chats = true;
+        if (result.trim() && result.trim() !== "no results") conversationReadSpans.push({ path: "conversation-history", text: result });
+        return result;
+      },
+      ...(tools.searchEntries ? { searchEntries: async (input: EntrySearchInput) => {
+        coverageTracker.exhaustive ||= input.exhaustive === true;
+        const entries: EntrySearchResult["entries"] = [];
+        let nextInput = { ...input, limit: Math.min(input.limit ?? 20, 20) };
+        let page: EntrySearchResult | undefined;
+        const exhaustive = input.exhaustive === true || coverageTracker.exhaustive;
+        do {
+          if (!coverageTracker.reserveEntryPage()) {
+            if (!page) {
+              coverageTracker.failSearch(nextInput, "search_entries: page budget exhausted");
+              throw new Error("Entry page budget exhausted; coverage is partial. Continue in another ask using the reported search query and cursor.");
+            }
+            break;
+          }
+          try { page = JSON.parse(await tools.searchEntries!(nextInput)) as EntrySearchResult; }
+          catch (error) { coverageTracker.failSearch(nextInput, "search_entries: " + String(error)); throw error; }
+          coverageTracker.recordSearch(nextInput, page);
+          entries.push(...page.entries);
+          if (!exhaustive || !page.pagination.nextCursor) break;
+          nextInput = { ...nextInput, cursor: page.pagination.nextCursor };
+        } while (true);
+        return JSON.stringify({ entries, pagination: page!.pagination,
+          coverage: coverageTracker.result(),
+          instruction: "Discovery catalog only. Read exact evidenceRefs before synthesis; snippets/citations are not support. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
+      } } : {}),
       ...(tools.readNote
         ? {
             readNote: async (path: string, readOptions?: NoteReadOptions) => {
@@ -1995,8 +2039,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 readSpans.set(normalizedPath, text);
                 return text;
               }
-              const text = await tools.readNote!(path, readOptions);
+              let text: string;
+              try {
+                if (!coverageTracker.reserveRead()) throw new Error("Passage read budget exhausted; coverage is partial. Continue with the reported unread refs/cursors.");
+                text = await tools.readNote!(path, readOptions);
+                coverageTracker.failedReads.delete(path);
+              } catch (error) { coverageTracker.failedReads.add(path); throw error; }
               const passage = JSON.parse(text) as NotePassage;
+              coverageTracker.recordRead(passage);
               readPassages.push(passage);
               passageSources.set(passage.identity, { ...passage.source, path: passage.identity.includes("#^") ? passage.identity : passage.source.path });
               return text;
@@ -2018,25 +2068,56 @@ export function createEngine(options: EngineOptions): BrainEngine {
       },
       groundedTools,
     );
+    // Sources must come from successful host reads, never model-supplied readPaths or search hits.
     const sources = [
       ...pinnedSources,
       ...passageSources.values(),
-      ...result.readPaths.filter((path) => ![...passageSources.values()].some((source) => source.path.split("#")[0] === normalizeMarkdownNotePath(path.split("#")[0]!))).map((path) => repositorySourceRef(path)),
     ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
-    return {
-      text: sanitizeGroundedAnswer({
-        question,
+    // Enumeration and subsequent reads must still describe the same local snapshot.
+    for (const scope of coverageTracker.scopes()) {
+      try {
+        const current = JSON.parse(await tools.searchEntries!({ ...scope.query, limit: 1 })) as EntrySearchResult;
+        if (current.pagination.snapshot !== scope.snapshot) coverageTracker.invalidate(scope.query);
+      } catch { coverageTracker.invalidate(scope.query); }
+    }
+    const coverage = coverageTracker.result();
+    const exhaustiveRefs = coverageTracker.enumeratedRefs();
+    const boundedAudit = coverage.status === "complete-bounded-scope" && exhaustiveRefs.size > 0;
+    let text: string;
+    if (coverage.status === "partial") {
+      const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
+      const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
+      const unread = coverage.searches.reduce((n, search) => n + search.unreadEvidenceRefs.length, 0);
+      const progress = coverage.searches.length > 0
+        ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
+        : "No bounded entry scope was enumerated.";
+      text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
+    } else if (sources.length === 0 && conversationReadSpans.length === 0) {
+      text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
+    } else {
+      text = sanitizeGroundedAnswer({
+        // A complete typed audit has an explicit host-filtered evidence scope;
+        // generic date/audit words must not discard its successfully read entries.
+        question: boundedAudit ? "" : question,
         text: result.text,
         readSpans: [
+          ...conversationReadSpans,
           ...[...readSpans].map(([path, text]) => ({ path, text })),
-          ...readPassages.map((passage) => ({ path: passage.source.path, text: passage.body, version: passage.version, start: passage.extent.start,
+          ...readPassages.filter(passage => !boundedAudit || exhaustiveRefs.has(passage.identity)).map((passage) => ({
+            path: passage.source.path, text: passage.body, version: passage.version, start: passage.extent.start,
             ...(passage.identity.includes("#^") ? { verifiedAnchor: passage.identity.split("#^")[1]! } : {}),
           })),
         ],
         pinnedSpans,
-      }),
-      sources,
-    };
+      });
+    }
+    if (coverage.status === "complete-bounded-scope") {
+      const scope = coverage.searches.length > 0
+        ? coverage.searches.map(search => `${search.enumeratedEntries}/${search.matchedEntries} entries matching ${JSON.stringify(search.query)}`).join("; ") + " in the local memory snapshot only. Unsynced/deleted history is outside this scope."
+        : "the explicitly pinned evidence refs only.";
+      text += `\n\nCoverage: complete for ${scope}`;
+    }
+    return { text, sources, coverage };
   }
 
   // Iteration-6 — the reply gate. On an ACTION turn (this turn invoked a side-effect
