@@ -47,7 +47,7 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
-import { sanitizeGroundedAnswer, suppressIncompleteAbsence } from "./answerGrounding.js";
+import { sanitizeGroundedAnswer, suppressIncompleteAbsence, evidenceTextMatchesQuestion } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
 import {
@@ -2142,14 +2142,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const passageSources = new Map<string, VaultSourceRef>();
     const conversationReadSpans: Array<{ path: string; text: string }> = [];
     let factReadAttempts = 0;
+    let explicitFactReadAttempts = 0;
     const factViews: FactView[] = [];
     const factReadWarnings: string[] = [];
     const factSources: Answer["sources"] = [];
     const factReads: Array<{ input: import("./temporalFacts.js").FactReadInput; result: string }> = [];
+    const automaticFacts = new Map<string, { input: import("./temporalFacts.js").FactReadInput; result: string; view: FactView }>();
     let attempted = false;
     const groundedTools: VaultReadTools = {
       ...tools,
       ...(tools.readFacts ? { readFacts: async (input: import("./temporalFacts.js").FactReadInput) => {
+        explicitFactReadAttempts++;
         let text: string;
         try {
           if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted; narrow the selected notes/keys.");
@@ -2216,6 +2219,29 @@ export function createEngine(options: EngineOptions): BrainEngine {
               coverageTracker.recordRead(passage);
               readPassages.push(passage);
               passageSources.set(passage.identity, { ...passage.source, path: passage.identity.includes("#^") ? passage.identity : passage.source.path });
+              // Ordinary meaning-page body reads must not hide source-qualified
+              // facts behind a stale prefix. Reuse the bounded verified projection.
+              // Exact/pinned evidence and explicit metadata inspection keep their scope.
+              if (contextRefs.length === 0 && !path.includes("#") && !normalizedPath.startsWith("Log/") && passage.part === "body" && tools.readFacts) {
+                const explicit = factReads.some(read => normalizeMarkdownNotePath(read.input.path) === normalizedPath);
+                if (!explicit && !automaticFacts.has(normalizedPath)) {
+                  const note = await getNote(vaultPath, normalizedPath, sourceResolver);
+                  if (Array.isArray(note.frontmatter.memoryFacts) && note.frontmatter.memoryFacts.length > 0) {
+                    try {
+                      if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted");
+                      const input = { path: normalizedPath };
+                      const result = await tools.readFacts(input);
+                      automaticFacts.set(normalizedPath, { input, result, view: JSON.parse(result) as FactView });
+                    } catch (error) {
+                      factReadWarnings.push("A page fact projection failed or exceeded the four-note budget; current state is not established for that page.");
+                      throw error;
+                    }
+                  }
+                }
+                const facts = automaticFacts.get(normalizedPath);
+                if (facts && !explicit) return JSON.stringify({ ...passage, factView: facts.view,
+                  instruction: "Verified current structured facts for this selected page accompany its bounded prose. For current questions they take precedence over older prose for the same fact; conflicts and unknown dates stay explicit. They do not establish past state. For a historical date or narrower key, call read_facts with that exact scope." });
+              }
               return text;
             },
           }
@@ -2233,8 +2259,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: { text: string }): Promise<Answer> => {
         // Projection and source evidence must still describe the same local snapshot.
+        // An explicit key/date read supersedes the automatic page projection,
+        // regardless of tool order. Never mix current auto facts into historical scope.
+        // Current projections cannot resolve a requested historical scope. Let the
+        // model select read_facts(asOf) or retain its grounded historical prose.
+        const historicalQuestion = /\b(?:was|were|previously|formerly|histor(?:y|ical)|before|as\s+of|used\s+to|back\s+then)\b|\b(?:19|20)\d{2}\b/i.test(question);
+        const automatic = [...automaticFacts.values()].filter(auto => !historicalQuestion && !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === auto.input.path)
+          && auto.view.facts.some(fact => evidenceTextMatchesQuestion(question, fact.statement)));
+        const useFactAnswer = explicitFactReadAttempts > 0 || automatic.length > 0 || factReadWarnings.length > 0;
+        const finalFactViews = [...factViews, ...automatic.map(read => read.view)];
         let factSnapshotChanged = false;
-        for (const read of factReads) {
+        for (const read of [...factReads, ...automatic]) {
           try { if (await tools.readFacts!(read.input) !== read.result) factSnapshotChanged = true; }
           catch { factSnapshotChanged = true; }
         }
@@ -2243,6 +2278,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const sources = [
           ...pinnedSources,
           ...factSources,
+          ...(factSnapshotChanged ? [] : automatic.flatMap(read => read.view.facts.flatMap(fact => fact.source ? [fact.source] : []))),
           ...passageSources.values(),
         ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
         // Enumeration and subsequent reads must still describe the same local snapshot.
@@ -2266,9 +2302,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
             ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
             : "No bounded entry scope was enumerated.";
           text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
-        } else if (factReadAttempts > 0) {
+        } else if (useFactAnswer) {
           text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
-            : [factViews.length ? renderFactViews(factViews) : "I could not verify temporal facts from the requested scope.", ...new Set(factReadWarnings)].filter(Boolean).join("\n\n");
+            : [finalFactViews.length ? renderFactViews(finalFactViews) : "I could not verify temporal facts from the requested scope.", ...new Set(factReadWarnings)].filter(Boolean).join("\n\n");
         } else if (sources.length === 0 && conversationReadSpans.length === 0) {
           text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
         } else {
@@ -2288,7 +2324,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             pinnedSpans,
           });
         }
-        if (absence.suppressed && factReadAttempts === 0) {
+        if (absence.suppressed && !useFactAnswer) {
           coverage.status = "partial";
           text += "\n\nCoverage is partial: some evidence remains unread. Absence is not established; continue with the exact refs/cursors in coverage.continuation.";
         }

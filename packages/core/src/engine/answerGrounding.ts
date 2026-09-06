@@ -64,6 +64,16 @@ function scopeTerms(question: string): string[] {
   ];
 }
 
+/** Shared conservative lexical relevance selector for evidence and automatic fact context. */
+export function evidenceTextMatchesQuestion(question: string, text: string): boolean {
+  const markers = exactLiterals(question);
+  if (markers.length > 0) return markers.some(marker => text.includes(marker));
+  const terms = scopeTerms(question);
+  if (terms.length === 0) return true;
+  const lower = text.toLowerCase();
+  return terms.filter(term => lower.includes(term)).length >= Math.min(2, terms.length);
+}
+
 function evidenceBlocks(text: string): EvidenceBlock[] {
   const headings = [...text.matchAll(/^## .*?\s+\^(e-[0-9a-f]{6})\s*$/gim)];
   return headings.map((heading, index) => ({
@@ -76,24 +86,7 @@ function relevantLogText(question: string, text: string): string {
   const blocks = evidenceBlocks(text);
   if (blocks.length === 0) return "";
 
-  const markers = exactLiterals(question);
-  if (markers.length > 0) {
-    return blocks
-      .filter((block) => markers.some((marker) => block.text.includes(marker)))
-      .map((block) => block.text)
-      .join("\n");
-  }
-
-  const terms = scopeTerms(question);
-  if (terms.length === 0) return blocks.map((block) => block.text).join("\n");
-  const requiredMatches = Math.min(2, terms.length);
-  return blocks
-    .filter((block) => {
-      const lower = block.text.toLowerCase();
-      return terms.filter((term) => lower.includes(term)).length >= requiredMatches;
-    })
-    .map((block) => block.text)
-    .join("\n");
+  return blocks.filter(block => evidenceTextMatchesQuestion(question, block.text)).map(block => block.text).join("\n");
 }
 
 function scopedSources(question: string, spans: ReadSpan[]): Map<string, string> {
