@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   ContextRefError,
+  paginateMemoryEntries,
   isGithubAuthorizationRevoked,
   VERSION,
   type BrainEngine,
@@ -62,6 +64,14 @@ import {
   STORE_MEMORY_SHAPE,
 } from "./mcpToolSchemas.js";
 import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
+
+const fallbackMemoryScopes = new WeakMap<BrainEngine, string>();
+function memoryScope(engine: BrainEngine): string {
+  if (engine.memoryScope) return engine.memoryScope;
+  let scope = fallbackMemoryScopes.get(engine);
+  if (!scope) { scope = randomUUID(); fallbackMemoryScopes.set(engine, scope); }
+  return scope;
+}
 
 /**
  * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
@@ -574,7 +584,7 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
   if (marker < 0) return null;
   const source = sourceFromJob(job);
   const identity = captureIdentity(job.idempotencyKey);
-  const content = job.input.content ?? base?.content ?? job.input.contentHint ?? "";
+  const content = base?.content ?? job.input.content ?? job.input.contentHint ?? "";
   const revision = resultRevision(job);
   const url = resultEvidenceUrl(job) || base?.url || "";
   return {
@@ -599,7 +609,7 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
 
 function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[]): MemoryEntry[] {
   const byRef = new Map(entries.map((entry) => [entry.evidenceRef, entry]));
-  for (const job of jobs) {
+  for (const job of [...jobs].sort((a, b) => a.updatedAt - b.updatedAt || a.id.localeCompare(b.id))) {
     const evidenceRef = resultEvidenceRef(job);
     const derived = entryFromJob(job, evidenceRef ? byRef.get(evidenceRef) : undefined);
     if (derived) byRef.set(derived.evidenceRef, derived);
@@ -1059,32 +1069,34 @@ export function buildMcpServer(
     {
       title: "Search memory",
       description:
-        "Deterministic search over the user's memory vault. Text queries return ranked notes. Structural filters return immutable memory entries with exact evidence refs, source, content type, capture time, source id, and snippets; use source/contentType/order/limit for requests such as newest captures from any integration. Then pass a note path or exact evidenceRef to get_memory. Fast and model-free.",
+        "Deterministic model-free memory search. hits are independent ranked lexical note paths, NOT constrained by entry filters. Structural filters/order or a cursor enable paginated entries: query terms are ANDed case-insensitive whitespace substrings in entry title/content, with all metadata filters applied before the page limit. Repeat query/filters/order with nextCursor until hasMore=false. A changed snapshot or process requires restarting and discarding prior pages. Coverage describes the complete local vault plus available retained receipts, not remote unsynced/deleted history. Pass exact evidenceRef to get_memory.",
       inputSchema: SEARCH_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ query, source, contentType, capturedAfter, capturedBefore, order, limit }) => {
+    async ({ query, source, sourceId, contentType, capturedAfter, capturedBefore, order, limit, cursor }) => {
       const engine = await getEngine();
       const hits = query ? await engine.search(query) : [];
-      const structuralQuery = Boolean(source || contentType || capturedAfter || capturedBefore || order === "newest" || order === "oldest" || !query);
+      const structuralQuery = Boolean(source || sourceId || contentType || capturedAfter || capturedBefore || cursor || order === "newest" || order === "oldest" || !query);
       let entries: ReturnType<typeof memoryEntrySummaries> = [];
+      let pagination: Record<string, unknown> | null = null;
       if (structuralQuery) {
-        const vaultEntries = await engine.searchEntries({ limit: 500, order: "newest" });
-        const merged = mergeMemoryEntries(vaultEntries, taskJobs?.recent?.(500) ?? []);
-        const requestedOrder = order === "oldest" ? "oldest" : "newest";
-        const selected = merged
-          .filter((entry) => !source || entry.source === source)
-          .filter((entry) => !contentType || entry.contentType === contentType)
-          .filter((entry) => !capturedAfter || entry.capturedAt >= capturedAfter)
-          .filter((entry) => !capturedBefore || entry.capturedAt <= capturedBefore)
-          .sort((left, right) => {
-            const comparison = left.capturedAt.localeCompare(right.capturedAt) || left.evidenceRef.localeCompare(right.evidenceRef);
-            return requestedOrder === "newest" ? -comparison : comparison;
-          })
-          .slice(0, limit ?? 20);
-        entries = memoryEntrySummaries(selected);
+        // Enumerate all retained candidates before metadata enrichment and filtering.
+        const vaultEntries = await engine.searchEntries({ limit: null });
+        const jobs = taskJobs?.recent?.(Number.MAX_SAFE_INTEGER) ?? [];
+        const merged = mergeMemoryEntries(vaultEntries, jobs);
+        const page = paginateMemoryEntries(merged, {
+          ...(query ? { query } : {}), ...(source ? { source } : {}), ...(sourceId ? { sourceId } : {}),
+          ...(contentType ? { contentType } : {}), ...(capturedAfter ? { capturedAfter } : {}),
+          ...(capturedBefore ? { capturedBefore } : {}), order: order === "oldest" ? "oldest" : "newest", limit: limit ?? 20,
+        }, memoryScope(engine), cursor);
+        entries = memoryEntrySummaries(page.entries);
+        pagination = { contract: "entries-v1", hasMore: page.hasMore, nextCursor: page.nextCursor, snapshot: page.snapshot,
+          matchedEntries: page.matchedEntries, scannedEntries: page.scannedEntries, scannedVaultEntries: vaultEntries.length,
+          scannedReceiptJobs: jobs.length, receiptEnrichmentAvailable: Boolean(taskJobs?.recent),
+          scope: "all-local-vault-evidence-and-retained-tenant-receipts", snapshotPolicy: "restart-on-change-or-process-restart",
+          querySemantics: "all-whitespace-terms-as-case-insensitive-substrings-in-title-or-content", noteHitsScope: "independent-lexical-top-20" };
       }
-      const output = { hits, entries };
+      const output = { hits, entries, pagination };
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
         : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}`).join("\n");
@@ -1099,7 +1111,7 @@ export function buildMcpServer(
         content: [
           {
             type: "text",
-            text: [noteText, entryText].filter(Boolean).join("\n\n"),
+            text: [noteText, entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
           },
         ],
         structuredContent: output,
@@ -1120,7 +1132,7 @@ export function buildMcpServer(
       const engine = await getEngine();
       if (path.includes("#^")) {
         const storedEntry = await engine.getEntry(path);
-        const entry = mergeMemoryEntries([storedEntry], taskJobs?.recent?.(500) ?? [])
+        const entry = mergeMemoryEntries([storedEntry], taskJobs?.recent?.(Number.MAX_SAFE_INTEGER) ?? [])
           .find((candidate) => candidate.evidenceRef === storedEntry.evidenceRef) ?? storedEntry;
         return {
           content: [{ type: "text", text: `${entry.evidenceRef}\nsource: ${entry.source}\ncontentType: ${entry.contentType ?? "unknown"}\ncapturedAt: ${entry.capturedAt}\n${entry.url ? `source URL: ${entry.url}\n` : ""}${entry.content}` }],

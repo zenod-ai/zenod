@@ -189,3 +189,6 @@ export type {
   VaultReadTools,
 } from "./llm/types.js";
 export * from "./connections/github.js";
+
+export { selectMemoryEntries, memoryTimestamp } from "./engine/evidence.js";
+export { paginateMemoryEntries, type MemoryEntryPage } from "./engine/entryPagination.js";

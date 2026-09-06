@@ -35,7 +35,7 @@ test("every emitted per-tool schema is self-contained (no dangling $defs refs)",
   for (const [tool, schema] of Object.entries(bundles)) {
     assert.doesNotThrow(() => assertSelfContained(schema, tool));
     assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
-    if (tool !== "zenod.get_task_result") assert.deepEqual(schema.required, ["evidence"]);
+    if (!["zenod.get_task_result", "zenod.search_memory"].includes(tool)) assert.deepEqual(schema.required, ["evidence"]);
     assert.equal(schema.additionalProperties, false);
   }
 });
@@ -92,4 +92,15 @@ test("console passthrough keeps the full evidence union", () => {
   for (const k of ["issue_created", "execution_queued", "notification_sent", "memory_stored"]) {
     assert.ok(kinds.has(k), `passthrough includes ${k}`);
   }
+});
+
+
+test("search_memory describes its additive direct entries pagination contract", () => {
+  const schema = bundleTool("zenod.search_memory", registry);
+  assert.deepEqual(schema.required, ["hits", "entries", "pagination"]);
+  assert.deepEqual(schema.properties.pagination.type, ["object", "null"]);
+  for (const field of ["hasMore", "nextCursor", "snapshot", "scannedEntries", "matchedEntries", "scannedReceiptJobs", "noteHitsScope"]) {
+    assert.ok(schema.properties.pagination.properties[field]);
+  }
+  assert.ok(schema.properties.entries.items.properties.evidenceRef);
 });

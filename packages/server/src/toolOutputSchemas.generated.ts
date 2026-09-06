@@ -1360,160 +1360,157 @@ export const TOOL_OUTPUT_SCHEMAS = (
     "title": "zenod.search_memory output",
     "type": "object",
     "required": [
-      "evidence"
+      "hits",
+      "entries",
+      "pagination"
     ],
-    "additionalProperties": false,
     "properties": {
-      "text": {
-        "type": "string"
-      },
-      "operations": {
+      "hits": {
         "type": "array",
         "items": {
-          "$ref": "#/$defs/Operation"
+          "type": "object"
         }
       },
-      "evidence": {
+      "entries": {
         "type": "array",
         "items": {
-          "$ref": "#/$defs/Ev_memory_hits"
+          "type": "object",
+          "required": [
+            "evidenceRef",
+            "path",
+            "anchor",
+            "title",
+            "source",
+            "contentType",
+            "capturedAt",
+            "sourceId",
+            "chars",
+            "snippet",
+            "url",
+            "provider"
+          ],
+          "properties": {
+            "evidenceRef": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "anchor": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "capturedAt": {
+              "type": "string"
+            },
+            "snippet": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "provider": {
+              "type": "string"
+            },
+            "revisionId": {
+              "type": "string"
+            },
+            "githubUrl": {
+              "type": "string"
+            },
+            "contentType": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sourceId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chars": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
         }
       },
-      "questions": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Question"
-        }
-      },
-      "candidates": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Candidate"
-        }
-      },
-      "errors": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/ToolError"
-        }
-      },
-      "meta": {
-        "type": "object",
-        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
+      "pagination": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "contract": {
+            "type": "string"
+          },
+          "snapshot": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "snapshotPolicy": {
+            "type": "string"
+          },
+          "querySemantics": {
+            "type": "string"
+          },
+          "noteHitsScope": {
+            "type": "string"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "matchedEntries": {
+            "type": "integer"
+          },
+          "scannedEntries": {
+            "type": "integer"
+          },
+          "scannedVaultEntries": {
+            "type": "integer"
+          },
+          "scannedReceiptJobs": {
+            "type": "integer"
+          },
+          "receiptEnrichmentAvailable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "contract",
+          "hasMore",
+          "nextCursor",
+          "snapshot",
+          "matchedEntries",
+          "scannedEntries",
+          "scannedVaultEntries",
+          "scannedReceiptJobs",
+          "receiptEnrichmentAvailable",
+          "scope",
+          "snapshotPolicy",
+          "querySemantics",
+          "noteHitsScope"
+        ],
+        "additionalProperties": false
       }
     },
-    "$defs": {
-      "ToolError": {
-        "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "currentState": {
-            "type": "object"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Candidate": {
-        "type": "object",
-        "required": [
-          "target"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "matchReason": {
-            "type": "string"
-          },
-          "confidence": {
-            "type": "number"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Question": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Ev_memory_hits": {
-        "type": "object",
-        "required": [
-          "kind",
-          "hits",
-          "query"
-        ],
-        "properties": {
-          "kind": {
-            "const": "memory_hits"
-          },
-          "operationId": {
-            "type": "string"
-          },
-          "hits": {
-            "type": "array"
-          },
-          "query": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Operation": {
-        "type": "object",
-        "required": [
-          "operationId",
-          "status"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "interpretedAs": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "completed",
-              "blocked",
-              "needs_input"
-            ]
-          }
-        },
-        "additionalProperties": false
-      }
-    }
+    "additionalProperties": false,
+    "$defs": {}
   },
   "zenod.get_memory": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
