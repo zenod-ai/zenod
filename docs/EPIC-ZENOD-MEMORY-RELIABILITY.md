@@ -87,21 +87,21 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: implementation — ZMR-3 integrated; ZMR-4 dispatched
-Last verified: 2026-09-06 14:24 CEST
+Phase: implementation — ZMR-4 in independent review and CI failure diagnosis
+Last verified: 2026-09-06 15:05 CEST
 Integration target: main
 Fresh base commit: dadd88350b2bca896fc8f605bcf4c0f2c2ff261c; integrated ZMR-3, pinned for ZMR-4
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–3 integrated; ZMR-4 dispatched on dadd883. Later dependencies unchanged.
 Next action: review ZMR-4 typed retrieval and coverage handoff, integrate after independent review and CI, then dispatch ZMR-5.
-Blockers: none for local ZMR-4 implementation. Real-model quality/cost/latency remains ZMR-8 acceptance.
+Blockers: ZMR-4 required CI failed on 2617e027; worker diagnosing while independent review runs. Real-model quality/cost/latency remains ZMR-8 acceptance.
 
 ## Execution Cursor
 
 Last attempted: resume ZMR-3 correction, verify focused tests and independently re-review corrected head.
 Result: corrected PR #1204 head 8712fc3b668b1e03fea1440eb19f827e3c685c17 fixes receipt-only winner selection. Worker passed 36 focused tests and typecheck; independent reviewer passed 5 tests and reports no blockers. Both agents completed; exact-head CI passed and PR merged as dadd883. ZMR-4 dispatched.
 Execution status: active
-Waiting on: ZMR-4 worker implementation and PR handoff
+Waiting on: ZMR-4 CI diagnosis/correction and independent review of PR #1206 head 2617e0273439861eb2ee34d581253c340407b120
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-4 typed retrieval and coverage handoff, integrate after independent review and CI, then dispatch ZMR-5.
 
@@ -151,8 +151,8 @@ ZMR-1–3 are integrated; ZMR-4 is active and ZMR-5–8 retain dependencies. ZMR
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | done — deterministic baseline | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | [PR #1201](https://github.com/zenod-ai/zenod/pull/1201) / codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | c823d06 merged; 102 focused tests; independent review + CI pass | 2026-09-06 01:11 CEST | Integrated c823d06; real-model metrics carried to ZMR-8 |
 | [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-2-passage-worker /root/zmr_2_passage | Retrieve answer-bearing passages beyond the note prefix | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-2 | [PR #1202](https://github.com/zenod-ai/zenod/pull/1202) / codex/zmr-2 | c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175 | e8458a8 merged; 182 core +35 MCP; corrected review and CI pass | 2026-09-06 02:05 CEST | Integrated; preserve pinned/distractor regressions |
-| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | dadd883 merged; corrected 8712fc3 review and CI pass; 36 focused +5 independent tests | 2026-09-06 14:16 CEST | Integrated; ZMR-4 dispatched |
-| [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-4-typed-retrieval-worker /root/zmr_4_typed_retrieval | Give ask_brain typed retrieval and explicit coverage | active | ZMR-2, ZMR-3 | /Users/jordi/Documents/GitHub/wt-zmr-4 | codex/zmr-4 | dadd88350b2bca896fc8f605bcf4c0f2c2ff261c | Dependencies integrated; worker dispatched | 2026-09-06 | Implement typed retrieval and explicit coverage |
+| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | dadd883 merged; corrected 8712fc3 review and CI pass; 36 focused +5 independent tests | 2026-09-06 14:24 CEST | Integrated; ZMR-4 dispatched |
+| [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-4-typed-retrieval-worker /root/zmr_4_typed_retrieval | Give ask_brain typed retrieval and explicit coverage | review / CI diagnosis | ZMR-2, ZMR-3 | /Users/jordi/Documents/GitHub/wt-zmr-4 | [PR #1206](https://github.com/zenod-ai/zenod/pull/1206) / codex/zmr-4 | dadd88350b2bca896fc8f605bcf4c0f2c2ff261c | 2617e027; 279 focused +9 schema tests pass locally; CI failed | 2026-09-06 | Diagnose CI and resolve independent review |
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | File multi-topic memories with per-topic confidence | proposed | ZMR-1, ZMR-4 | ../wt-zmr-5 at dispatch | codex/zmr-5 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Keep meaning notes focused and summaries bounded | proposed | ZMR-5 | ../wt-zmr-6 at dispatch | codex/zmr-6 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-7 #1195](https://github.com/zenod-ai/zenod/issues/1195) | 6 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Distinguish current facts, corrections and historical evidence | proposed | ZMR-4, ZMR-6 | ../wt-zmr-7 at dispatch | codex/zmr-7 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
@@ -190,6 +190,10 @@ ZMR-4 is assigned to /root/zmr_4_typed_retrieval on dadd883. The manager reassig
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 15:05 CEST — Manager — Typed retrieval review and CI diagnosis
+
+Worker completed PR #1206 at 2617e0273439861eb2ee34d581253c340407b120 with 279 focused and 9 schema tests passing locally. Required CI run 34034214736 failed; resumed the same worker to diagnose, with no blind retry. Independent reviewer /root/zmr_release_preflight confirmed running on submitted head; agents instructed to coordinate before edits. ZMR-5 waits for reviewed CI-green integration. Status PR #1205 merged as 54050a3 after review and CI. No deployment.
 
 ### 2026-09-06 14:24 CEST — Manager — History integrated; typed retrieval dispatched
 
