@@ -103,7 +103,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete passage/date-range recall, focused topic filing, and current-versus-historical answers. | active — focused notes | ZMR-delivery-manager coordinates; ZMR-6 focused notes on 06085df; ZMR-1–5 integrated. | [September review](planning/zenod-memory-reliability-review.md); [#1199 merged](https://github.com/zenod-ai/zenod/pull/1199) | 2026-09-06 17:40 CEST | Review ZMR-6 focused notes, then dispatch current-facts worker. |
+| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete passage/date-range recall, focused topic filing, and current-versus-historical answers. | active — current facts | ZMR-delivery-manager coordinates; ZMR-7 current facts on fd6063b; ZMR-1–6 integrated. | [September review](planning/zenod-memory-reliability-review.md); [#1199 merged](https://github.com/zenod-ai/zenod/pull/1199) | 2026-09-06 18:15 CEST | Review ZMR-7 current facts, then dispatch release validation. |
 
 ## Bootstrap Map
 
