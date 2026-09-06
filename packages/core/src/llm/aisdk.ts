@@ -371,6 +371,8 @@ function extractErrorMessage(err: unknown): string {
 function toolLabel(toolName: string, input: unknown): string {
   const args = (input ?? {}) as Record<string, unknown>;
   switch (toolName) {
+    case "search_entries":
+      return "Searching memory entries and coverage";
     case "search_vault":
       return typeof args.query === "string" ? `Searching the vault for “${args.query}”` : "Searching the vault";
     case "read_note":
@@ -909,17 +911,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     peerTools?: PeerTools,
   ): Promise<AnswerResult> {
     const readPaths = new Set<string>();
-    // Z-9: paths the model SAW via search_vault (ordered, deduped). If the model
-    // answered without opening a note (readPaths empty), these are the honest
-    // citation trail — a synthesized answer must never come back source-less.
-    const searchedPaths: string[] = [];
+    // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
     // the tool execution. This does not consume another model/tool round.
     let deterministicRetrievalRetryUsed = false;
-    // Sources for the answer: the notes actually read in full, else a fallback to
-    // the top search hits the model consulted. Never empty when the vault had hits.
-    const sourcePaths = (): string[] =>
-      readPaths.size > 0 ? [...readPaths] : searchedPaths.slice(0, 3);
+    const sourcePaths = (): string[] => [...readPaths];
     const authoritativeCatalog = Object.entries(peerTools ?? {}).find(([, peer]) => peer.requiresMcpCatalogIntent);
     if (authoritativeCatalog && isMcpCatalogInspectionQuestion(input.question)) {
       const [toolName, peer] = authoritativeCatalog;
@@ -1508,6 +1504,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // (read_note) — including the Log/ receipt when a fact seems missing from the
     // composed page — before answering, and ground the answer in what you read.
     const citationNote = [
+      ...(tools.searchEntries ? ["TYPED RETRIEVAL: for dates, sources, content types or exhaustive memory audits, use search_entries. Set exhaustive=true for complete inventories; the host enumerates within its declared budget. Read exact evidenceRefs and follow passage cursors before synthesizing. Echo the actual scope; complete lexical enumeration is not complete semantic recall. Pinned evidence is primary. Never treat conversation-history results as durable memory. If coverage is partial, say so and retain continuation; never claim an exhaustive answer or absence."] : []),
       "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.",
       "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
       "SYNTHETIC EVIDENCE: 'synthetic test data' or quarantine in Inbox means it is not a real user fact; it does NOT mean the evidence is absent or forbidden to recall. When the user explicitly asks about a synthetic fixture, answer from its evidence and clearly label the answer synthetic. Do not promote it to a real user fact. Attributes not present in that evidence remain unknown.",
@@ -1577,12 +1574,6 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 execute: async ({ query }) => {
                   const recordSearch = (searchQuery: string, result: string): void => {
                     input.onReadAction?.("search_vault", { query: searchQuery }, result);
-                    // Result lines are "<path> (score N) — <snippet>".
-                    for (const line of result.split("\n")) {
-                      if (!line.includes(" (score ")) continue;
-                      const path = line.split(" (score ")[0]?.trim();
-                      if (path && !searchedPaths.includes(path)) searchedPaths.push(path);
-                    }
                   };
                   const result = await tools.searchVault!(query);
                   recordSearch(query, result);
@@ -1606,8 +1597,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   noteReadDescription,
                 inputSchema: noteReadSchema,
                 execute: async ({ path, ...options }) => {
-                  readPaths.add(path);
                   const result = await tools.readNote!(path, options);
+                  readPaths.add(path);
                   input.onReadAction?.("read_note", { path, ...options }, result);
                   return result;
                 },
@@ -1623,6 +1614,23 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
             }
           : {}),
+        ...(tools.searchEntries ? {
+          search_entries: tool({
+            description: "Search complete local immutable memory entries with typed date/source/content filters before limits. For bounded exhaustive audits set exhaustive=true: the host enumerates up to 8 pages per ask (20 entries per page) before synthesis. Follow the returned cursor with identical filters/order. Read each exact evidenceRef via read_note, including its passage continuations, before claiming complete coverage. A budget stop is partial, never absence. Filters are lexical AND substrings in title/content; dates inclusive ISO instants (date-only is midnight UTC). Conversation history is separate; pinned contextRefs remain primary.",
+            inputSchema: z.object({
+              query: z.string().optional(), source: z.enum(["cli", "mcp", "whatsapp", "telegram", "web", "drive", "selftest"]).optional(),
+              sourceId: z.string().optional(), contentType: z.enum(["text", "voice_note", "audio", "image", "screenshot", "pdf", "document", "link"]).optional(),
+              capturedAfter: z.string().optional(), capturedBefore: z.string().optional(),
+              order: z.enum(["newest", "oldest"]).optional(), limit: z.number().int().min(1).max(20).optional(),
+              cursor: z.string().max(2048).optional(), exhaustive: z.boolean().optional(),
+            }),
+            execute: async (query) => {
+              const result = await tools.searchEntries!(Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined)) as import("../engine/entryPagination.js").EntrySearchInput);
+              input.onReadAction?.("search_entries", query, result);
+              return result;
+            },
+          }),
+        } : {}),
         search_chats: tool({
           description:
             "Search your past conversations with the user across ALL channels (WhatsApp, web, CLI, MCP) — not just the current thread. Returns matching messages grouped by conversation, with channel and timestamp. Use this when the user refers to something said earlier ('the issue we discussed', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel. This is conversation history, distinct from search_vault (durable notes); reach for both when either could hold the answer.",

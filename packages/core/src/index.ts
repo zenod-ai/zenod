@@ -191,4 +191,5 @@ export type {
 export * from "./connections/github.js";
 
 export { selectMemoryEntries, memoryTimestamp } from "./engine/evidence.js";
-export { paginateMemoryEntries, type MemoryEntryPage } from "./engine/entryPagination.js";
+export { paginateMemoryEntries, memoryEntrySummaries, type MemoryEntryPage, type EntrySearchInput, type EntrySearchResult } from "./engine/entryPagination.js";
+export type { AnswerCoverage } from "./engine/retrievalCoverage.js";

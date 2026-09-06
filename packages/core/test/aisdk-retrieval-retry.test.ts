@@ -153,3 +153,29 @@ describe("ask_brain deterministic retrieval retry", () => {
     expect(queries).toEqual(["Aurora Kestrel"]);
   });
 });
+
+it("registers the typed read-only catalog with all filters and records successful actions", async () => {
+  const searchEntries = vi.fn(async () => '{"entries":[],"pagination":{"hasMore":false}}');
+  const onReadAction = vi.fn();
+  const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+  await llm.answer({ question: "Audit all my voice notes in January", vaultBriefing: "brief", conversation: [], onReadAction }, {
+    searchVault: async () => "none", readNote: async () => "none", listPages: async () => "none", searchChats: async () => "none", searchEntries,
+  });
+  const args = { query: "ORCHID amber", source: "whatsapp", sourceId: "original-1", contentType: "voice_note",
+    capturedAfter: "2026-01-01", capturedBefore: "2026-01-31T23:59:59.999Z", order: "oldest", limit: 2, cursor: "signed", exhaustive: true };
+  expect(captured.config.tools.search_entries.inputSchema.parse(args)).toEqual(args);
+  await captured.config.tools.search_entries.execute(args);
+  expect(searchEntries).toHaveBeenCalledWith(args);
+  expect(onReadAction).toHaveBeenCalledWith("search_entries", args, expect.stringContaining("pagination"));
+  expect(captured.config.messages[0].content).toContain("Set exhaustive=true");
+});
+
+it("does not record failed note reads as successful source actions", async () => {
+  const onReadAction = vi.fn();
+  const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+  await llm.answer({ question: "q", vaultBriefing: "brief", conversation: [], onReadAction }, {
+    searchVault: async () => "none", readNote: async () => { throw new Error("unavailable"); }, listPages: async () => "none", searchChats: async () => "none",
+  });
+  await expect(captured.config.tools.read_note.execute({ path: "Log/missing.md" })).rejects.toThrow("unavailable");
+  expect(onReadAction).not.toHaveBeenCalled();
+});

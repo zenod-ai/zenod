@@ -18,6 +18,34 @@ export interface MemoryEntryPage {
   scannedEntries: number;
 }
 
+/** Shared public/internal catalog. Snippets are discovery metadata, never read evidence. */
+export function memoryEntrySummaries(entries: MemoryEntry[]) {
+  return entries.map(entry => ({
+    evidenceRef: entry.evidenceRef, path: entry.path, anchor: entry.anchor, title: entry.title,
+    source: entry.source, contentType: entry.contentType ?? null, capturedAt: entry.capturedAt,
+    sourceId: entry.sourceId ?? null, chars: entry.content.length, snippet: entry.content.slice(0, 280),
+    url: entry.url, provider: entry.provider,
+    ...(entry.revisionId ? { revisionId: entry.revisionId } : {}),
+    ...(entry.githubUrl !== undefined ? { githubUrl: entry.githubUrl } : {}),
+  }));
+}
+
+export interface EntrySearchInput extends Omit<MemoryEntryQuery, "limit"> {
+  limit?: number;
+  cursor?: string;
+  /** Ask the host to enumerate before synthesis, within its declared page budget. */
+  exhaustive?: boolean;
+}
+export interface EntrySearchResult {
+  entries: ReturnType<typeof memoryEntrySummaries>;
+  pagination: {
+    hasMore: boolean; nextCursor: string | null; snapshot: string;
+    matchedEntries: number; scannedEntries: number; scannedVaultEntries: number;
+    scannedReceiptJobs: number; receiptEnrichmentAvailable: boolean;
+    scope: string;
+  };
+}
+
 /** Full captured entry set in, filtered stable page out. Never paginate before enrichment. */
 export function paginateMemoryEntries(
   entries: MemoryEntry[],
