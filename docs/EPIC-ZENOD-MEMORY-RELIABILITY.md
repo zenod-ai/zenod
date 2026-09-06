@@ -14,10 +14,10 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 (merged corrected ZMR-7 PR #1212)
+Last reconciled commit: 392d058a599bdf5fc69d17157282b8f9154dcf28 deployed public Zenod at 20:06:05 UTC; evidence-only main updates separate
 Planner: Jordi + ZMR-release-planner
-Worker: unassigned; implementation ZMR-1–7 integrated
-Tester: ZMR-8-release-validation /root/zmr_8_release_validation
+Worker: unassigned; repair completed
+Tester: ZMR-8-candidate-retest /root/zmr_8_candidate_retest
 
 ## Role Bindings
 
@@ -87,23 +87,25 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — ZMR-7 integrated; ZMR-8 dispatched
-Last verified: 2026-09-06 19:35 CEST
+Phase: production deployed — bounded filing/recall fixes active
+Last verified: 2026-09-06 22:11 CEST
 Integration target: main
-Fresh base commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3; integrated ZMR-7, pinned for ZMR-8
+Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
-Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
-Blockers: none for local validation; real-model configuration and deployment readiness must be evidenced, not assumed.
+Next action: fix observed live classification and incomplete-log recall failures; review, incrementally deploy, and rerun direct MCP tests.
+Blockers: live classification_unavailable fallback and false absence after header-only log read; raw evidence intact, exact recall passes.
 
 ## Execution Cursor
 
-Last attempted: verify corrected ZMR-7 review/CI, merge #1212 and dispatch ZMR-8.
-Result: Corrected b9636d5 passed independent review (10 checks) and exact CI, merged 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3. ZMR-8 dispatched on that base.
+Last attempted: deploy tested public candidate with preserved config and verified recovery, then test real MCP capture and recall.
+Result: 392d058 is live with actual running image verified, 52 non-SHA env entries/mount/private unchanged. Unknown abstention and exact-reference recall pass; durable learning6910ca17 saved to Inbox but classification failed; natural recall falsely said absent.
 Execution status: active
-Waiting on: ZMR-8 integrated local evidence, real-model validation availability and concrete release gate package
+Waiting on: /root/zmr_8_chat_review bounded source fix and /root/zmr_deploy_audit classification diagnostics; parent direct MCP retest
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
-Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
+Next action: fix observed live classification and incomplete-log recall failures; review, incrementally deploy, and rerun direct MCP tests.
+
+
 
 
 
@@ -158,7 +160,7 @@ ZMR-1–7 are integrated; ZMR-8 validation is active. ZMR-9/10 remain deferred u
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-5-topic-filing-worker /root/zmr_5_topic_filing | File multi-topic memories with per-topic confidence | done | ZMR-1, ZMR-4 | /Users/jordi/Documents/GitHub/wt-zmr-5 | [PR #1208](https://github.com/zenod-ai/zenod/pull/1208) / codex/zmr-5 | 1be97bb8815446fb9d40443f60bac9c5b1dabc71 | 06085df merged; e458 review/CI pass; 15 independent checks | 2026-09-06 | Integrated; minor receipt wording delegated to ZMR-6 |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-6-focused-notes-worker /root/zmr_6_focused_notes | Keep meaning notes focused and summaries bounded | done | ZMR-5 | /Users/jordi/Documents/GitHub/wt-zmr-6 | [PR #1210](https://github.com/zenod-ai/zenod/pull/1210) / codex/zmr-6 | 06085df10bb380ef615c6a2ee7e007fd57d6548b | fd6063b merged; 030a41 review/CI pass; 8 independent checks | 2026-09-06 | Integrated; ZMR-7 dispatched |
 | [ZMR-7 #1195](https://github.com/zenod-ai/zenod/issues/1195) | 6 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-7-current-facts-worker /root/zmr_7_current_facts | Distinguish current facts, corrections and historical evidence | done | ZMR-4, ZMR-6 | /Users/jordi/Documents/GitHub/wt-zmr-7 | [PR #1212](https://github.com/zenod-ai/zenod/pull/1212) / codex/zmr-7 | fd6063bf39cc0973d04c4420bfdffbdaa52b88d5 | 3f5ba09 merged; b963 re-review and CI pass; 10 independent checks | 2026-09-06 | Integrated; conservative phrasing limits carried to ZMR-8 |
-| [ZMR-8 #1196](https://github.com/zenod-ai/zenod/issues/1196) | 7 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Tester | ZMR-8-release-validation /root/zmr_8_release_validation | Prove the Memory Reliability release journey | active — local validation | ZMR-2, ZMR-3, ZMR-4, ZMR-5, ZMR-6, ZMR-7 | /Users/jordi/Documents/GitHub/wt-zmr-8 | codex/zmr-8 | 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 | Dependencies integrated; tester dispatched | 2026-09-06 | Validate integrated journey; prepare concrete gate package |
+| [ZMR-8 #1196](https://github.com/zenod-ai/zenod/issues/1196) | 7 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Tester | ZMR live repair /root/zmr_8_chat_review; deploy /root/zmr_deploy_audit | Prove the Memory Reliability release journey | active — live repair | ZMR-2, ZMR-3, ZMR-4, ZMR-5, ZMR-6, ZMR-7 | /Users/jordi/Documents/GitHub/wt-zmr-8 | codex/zmr-8 | 392d058a599bdf5fc69d17157282b8f9154dcf28 | 392d058 live; exact recall+abstention pass; filing/natural recall fail | 2026-09-06 | Fix live failures, incremental deploy and direct MCP retest |
 | [ZMR-9 #1197](https://github.com/zenod-ai/zenod/issues/1197) | follow-up | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Evaluate a rebuildable hybrid retrieval index | proposed / deferred | ZMR-8 | ../wt-zmr-9 at dispatch | codex/zmr-9 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-10 #1198](https://github.com/zenod-ai/zenod/issues/1198) | follow-up | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Add an evidence-backed filing maintenance queue | proposed / deferred | ZMR-8 | ../wt-zmr-10 at dispatch | codex/zmr-10 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 
@@ -180,7 +182,7 @@ If blocked by a gate, the affected worker's entire next status is “BLOCKED ON 
 
 ## Recovery And Takeover
 
-ZMR-8 is assigned to /root/zmr_8_release_validation on 3f5ba09. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
+At 2026-09-06 21:08 CEST, repair completed and sole ownership transferred to /root/zmr_8_candidate_retest, same wt-zmr-8/codex/zmr-8, explicitly repinned to 392d058a599bdf5fc69d17157282b8f9154dcf28. Prior tester and repair history remain preserved. Tester has now completed local evidence PR #1216 and released write ownership. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
 
 ## Validation Evidence
 
@@ -192,6 +194,20 @@ ZMR-8 is assigned to /root/zmr_8_release_validation on 3f5ba09. The manager reas
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### User-authorized production rollout and reversibility
+
+Jordi explicitly requested deployment to existing single-user production, live testing and fixes, plus registered learnings; then requested easy undo. This supersedes waiting for separate local provider/staging setup. /root/zmr_deploy_audit is sole production mutation owner; parent tests the browser and records learning. Plan minimal public Zenod-only392d058 rollout, preserving private Phylax, signup/config/credentials/volumes and raw memory. Fresh verified backup, off-host recovery copy, previous image/config and runnable rollback are required implementation work within this authorization, not a repeated permission question.
+
+### 2026-09-06 21:08 CEST — Manager — Chat repair integrated; candidate retest dispatched
+
+Corrected #1214 head d336698da39eb37b8ed7dbbc9d84c4a33cf955f6 passed re-review and exact CI; merged392d058a599bdf5fc69d17157282b8f9154dcf28. Independent HTTP replay confirms explicit-memory no-tool answers do not leak into streaming, nonstreaming or persisted history. Tester takeover /root/zmr_8_candidate_retest now solely owns wt-zmr-8/codex/zmr-8 and explicitly repins to392d058, preserving prior tester and repair commits. Previous validation does not prove this new candidate. English intent heuristic, semantic grounding and real-model/live acceptance limitations remain. No deployment.
+
+### 2026-09-06 19:52 CEST — Manager — Release failures and repair takeover
+
+Tester reproduced authenticated customer chat gaps on 3f5ba09: searchEntries absent and unsupported fabricated-read answer bypasses ask_brain safeguards. Full suite has only these two new failures; MCP scripted frozen trials pass, which does not establish real-model quality. Tester committed f850aa0/2f42748 and then errored on model capacity. Assigned /root/zmr_8_chat_repair sole write ownership of same wt-zmr-8/codex/zmr-8; tester stays paused. No duplicate writers or deployment.
+
+Tester read-only evidence reconciles #1112 commercial approval already completed and existing private Phylax; stale Foundation pending-commercial text must not cause re-requesting old approval. Current exact rollback images and backup-proof gaps live in docs/evidence/zmr-8-release-validation/README.md on tester branch. This does not authorize a new deployment or credentials.
 
 ### 2026-09-06 19:35 CEST — Manager — Current facts integrated; release validation dispatched
 

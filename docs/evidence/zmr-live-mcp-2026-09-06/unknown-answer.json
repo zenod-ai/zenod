@@ -1,0 +1,83 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence."
+    }
+  ],
+  "structuredContent": {
+    "correlationId": "test_a200dac575e44474baae80e5914e9c1c",
+    "testRunId": "zmr-production-20260906",
+    "surface": "web",
+    "conversationKey": "zmr-production-20260906-unknown",
+    "conversationId": "web:zmr-production-20260906-unknown",
+    "status": "ok",
+    "text": "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.",
+    "sources": [],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “ZMR-NONEXISTENT-20260906-XQ73”"
+      },
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “canary identifier ZMR”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “canary identifier ZMR”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “ZMR-NONEXISTENT-20260906-XQ73”"
+      }
+    ],
+    "audit": {
+      "correlationId": "test_a200dac575e44474baae80e5914e9c1c",
+      "testRunId": "zmr-production-20260906",
+      "surface": "web",
+      "conversationKey": "zmr-production-20260906-unknown",
+      "conversationId": "web:zmr-production-20260906-unknown",
+      "prompt": "Read-only production smoke test. What exact canary identifier did I save for the entirely fictional project ZMR-NONEXISTENT-20260906-XQ73? Search my saved memories. If no supported identifier is found, say you do not know; do not invent one. Do not save or modify anything.",
+      "reply": "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.",
+      "sources": [],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “ZMR-NONEXISTENT-20260906-XQ73”"
+        },
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “canary identifier ZMR”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “canary identifier ZMR”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “ZMR-NONEXISTENT-20260906-XQ73”"
+        }
+      ],
+      "status": "ok",
+      "at": "2026-09-06T20:06:54.672Z"
+    },
+    "evidence": [
+      {
+        "kind": "chat_audit",
+        "id": "test_a200dac575e44474baae80e5914e9c1c",
+        "correlationId": "test_a200dac575e44474baae80e5914e9c1c",
+        "conversationId": "web:zmr-production-20260906-unknown"
+      }
+    ]
+  },
+  "isError": false
+}
