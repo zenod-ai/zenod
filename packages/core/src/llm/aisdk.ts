@@ -471,6 +471,15 @@ function toolLabel(toolName: string, input: unknown): string {
  * OpenAI and Anthropic. (Regression-tested in test/schema-llm.test.ts.)
  */
 const classificationSchema = z.object({
+  topics: z.array(z.object({
+    topic: z.string(),
+    evidenceQuotes: z.array(z.string()).min(1).describe("Exact verbatim quotes from Memory to classify only, covering this topic; do not quote neighboring context"),
+    confidence: z.number().min(0).max(1),
+    disposition: z.enum(["evidence_only", "append_compact_note", "integrate_page", "needs_clarification"]),
+    pages: z.array(z.object({ path: z.string(), action: z.enum(["create", "update"]), title: z.string() })),
+    summary: z.string(),
+    question: z.string().nullable(),
+  })).min(1).describe("Every distinct topic with its own confidence, evidence and filing decision; include uncertain topics too"),
   disposition: z.enum(["evidence_only", "append_compact_note", "integrate_page", "needs_clarification"])
     .describe("spend gate: preserve evidence only, append one compact cited note, run full semantic page integration, or request clarification"),
   confidence: z.number().min(0).max(1).describe("how sure you are about where this memory belongs"),
@@ -780,7 +789,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       system: [
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
         "decide which meaning page(s) it belongs to — update existing pages when one fits, create a new one only when nothing does.",
-        "Choose exactly one spend disposition before selecting pages:",
+        "Return every topic independently in topics, each with its own confidence, disposition and exact evidenceQuotes. An ambiguous name must not lower confidence for other clear topics. Cover all source content, including unresolved topics. Preserve uncertain source spellings. Top-level fields are compatibility summaries only.",
+        "Choose a spend disposition for each topic before selecting pages:",
         "- evidence_only: the immutable Log entry is sufficient (default for short check-ins, test phrases, receipts, transient observations, and low-value captures).",
         "- append_compact_note: one durable fact belongs on an existing page and can be represented by one short cited update without rewriting the page.",
         "- integrate_page: use only when the user explicitly asks to integrate/synthesize/organize, or the material substantially changes durable project/domain knowledge.",
@@ -794,6 +804,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       ].join("\n"),
       prompt: [
         input.hints.length > 0 ? `Caller hints: ${input.hints.join("; ")}` : "",
+        input.context ? `Neighboring context (reference resolution only, not assignable evidence):\n${input.context}` : "",
         "Memory to classify:",
         input.content,
       ]
@@ -811,6 +822,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
 
     return {
+      topics: object.topics.map(({ question, ...topic }) => ({ ...topic, ...(question ? { question } : {}) })),
       disposition: object.disposition,
       confidence: typeof object.confidence === "number" ? object.confidence : 0,
       summary: object.summary || "stored a memory",

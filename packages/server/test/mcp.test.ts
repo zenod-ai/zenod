@@ -652,6 +652,27 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
+  it("store_memory publishes partial topic outcomes in its typed terminal evidence", async () => {
+    const originalStore = fakeEngine.store;
+    fakeEngine.store = async (input) => {
+      const result = await originalStore(input);
+      return { ...result, filing: "uncertain", topics: [
+        { topic: "Insurance", evidenceRef: result.evidenceRef, sourceSpans: [{ start: 0, end: 9 }], confidence: 0.95,
+          disposition: "integrate_page", pages: ["Areas/Insurance.md"], filedPages: ["Areas/Insurance.md"], status: "filed" },
+        { topic: "Znot", evidenceRef: result.evidenceRef, sourceSpans: [{ start: 10, end: 14 }], confidence: 0.2,
+          disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "Which name?" },
+      ] };
+    };
+    const client = await connect();
+    try {
+      const terminal = await runAsyncToolTerminal(client, "store_memory", { content: "Insurance Znot" });
+      expect(terminal.evidence[0]).toMatchObject({ filing: "uncertain", topics: [
+        { topic: "Insurance", status: "filed", filedPages: ["Areas/Insurance.md"] }, { topic: "Znot", status: "uncertain" },
+      ] });
+      expect(validateToolResponse("zenod.get_task_result", terminal)).toBe(terminal);
+    } finally { fakeEngine.store = originalStore; await client.close(); }
+  });
+
   it("store_memory terminal evidence is typed, deep-linked, and compatibility-preserving", async () => {
     const client = await connect();
     const terminal = await runAsyncToolTerminal(client, "store_memory", {
@@ -669,6 +690,7 @@ describe("MCP endpoint", () => {
     expect(terminal.evidence).toEqual([
       {
         kind: "memory_stored",
+        filing: "filed",
         id: expect.any(String),
         ticket_id: expect.any(String),
         jobId: expect.any(String),

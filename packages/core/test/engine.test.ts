@@ -826,6 +826,126 @@ describe("BrainEngine", () => {
     expect(llm.composeCalls).toBe(1);
   });
 
+  function topicLlm(content: string, failingPath?: string) {
+    const parts = content.split("\n\n");
+    llm.classify = vi.fn(async () => ({ confidence: 0.2, summary: "mixed capture", tags: [], pages: [], topics: [
+      { topic: "Insurance", summary: "renewal", evidenceQuotes: [parts[0]!], confidence: 0.95, disposition: "integrate_page" as const,
+        pages: [{ path: "Areas/Insurance", title: "Insurance", action: "update" as const }, { path: "Areas/Insurance.md", title: "Insurance", action: "update" as const }] },
+      { topic: "Axa", summary: "Axa update", evidenceQuotes: [parts[1]!], confidence: 0.9, disposition: "integrate_page" as const,
+        pages: [{ path: "Notes/Axa.md", title: "Axa", action: "update" as const }] },
+      { topic: "Znot or Zenod?", summary: "uncertain spelling", evidenceQuotes: [parts[2]!], confidence: 0.2, disposition: "needs_clarification" as const,
+        pages: [{ path: "Projects/Sample Project.md", title: "Project", action: "update" as const }], question: "Which name was intended?" },
+    ] }));
+    llm.composePage = vi.fn(async (input: ComposePageInput) => {
+      if (input.path === failingPath) throw new Error("synthetic provider failure");
+      return `${input.currentContent}\n\n> ${input.evidenceEntry.replaceAll("\n", "\n> ")}\n\n${input.citation}\n`;
+    });
+  }
+
+  it("files clear topics independently, preserves mangled names and exact spans, and composes duplicate paths once", async () => {
+    const content = "Insurance renews in April.\n\nAxa telephone is unchanged.\n\nZnot or Zenod should handle the unnamed thing.";
+    topicLlm(content);
+    const e = engine();
+    const originalAmbiguousPage = await readFile(join(repo.path, "Projects/Sample Project.md"), "utf8");
+    const result = await e.store({ content, source: "mcp", verbatim: true });
+    expect(result.filing).toBe("uncertain");
+    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "filed", "uncertain"]);
+    expect(new URL(result.evidenceUrl!).hash).toMatch(/^#L\d+$/);
+    expect(llm.composePage).toHaveBeenCalledTimes(2);
+    const calls = vi.mocked(llm.composePage).mock.calls.map(([input]) => input);
+    expect(calls.find((input) => input.path === "Areas/Insurance.md")!.evidenceEntry).toBe(content.split("\n\n")[0]);
+    expect(calls.find((input) => input.path === "Notes/Axa.md")!.evidenceEntry).toBe(content.split("\n\n")[1]);
+    expect((await e.getEntry(result.evidenceRef)).content).toBe(content);
+    for (const [index, topic] of result.topics!.entries()) {
+      expect(topic.evidenceRef).toBe(result.evidenceRef);
+      expect(topic.sourceSpans.map((span) => content.slice(span.start, span.end)).join("")).toBe(content.split("\n\n")[index]);
+    }
+    expect(await readFile(join(repo.path, "Projects/Sample Project.md"), "utf8")).toBe(originalAmbiguousPage);
+    const record = result.pagesTouched.find((path) => path.startsWith("Inbox/"))!;
+    expect(await readFile(join(repo.path, record), "utf8")).toContain("Znot or Zenod");
+    expect((await e.lint()).errors).toEqual([]);
+  });
+
+  it("keeps successful topic filing and immutable evidence when another composer fails", async () => {
+    const content = "Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content, "Notes/Axa.md");
+    const original = await readFile(join(repo.path, "Notes/Axa.md"), "utf8");
+    const e = engine();
+    const result = await e.store({ content, source: "mcp" });
+    expect(result.filing).toBe("pending");
+    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "pending", "uncertain"]);
+    expect(result.pagesTouched).toContain("Areas/Insurance.md");
+    expect(result.pagesTouched).not.toContain("Notes/Axa.md");
+    expect(await readFile(join(repo.path, "Notes/Axa.md"), "utf8")).toBe(original);
+    expect((await e.getEntry(result.evidenceRef)).content).toBe(content);
+    expect((await e.searchEntries({ source: "mcp", limit: 100 })).filter((entry) => entry.content === content)).toHaveLength(1);
+  });
+
+  it("enriches captured evidence using the same topic assignments without changing its identity", async () => {
+    const content = "Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);
+    const e = engine();
+    const captured = await e.captureEvidence!({ content, source: "whatsapp", sourceId: "topic-capture" });
+    const before = await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8");
+    const result = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef });
+    expect(result.evidenceRef).toBe(captured.evidenceRef);
+    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "filed", "uncertain"]);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+  });
+
+  it("records invalid and omitted source assignments without handing invented text to the composer", async () => {
+    llm.classify = vi.fn(async () => ({ confidence: 0.99, summary: "bad quote", tags: [], pages: [], topics: [
+      { topic: "invented", summary: "invented", confidence: 0.99, disposition: "integrate_page", evidenceQuotes: ["not in the capture"],
+        pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" }] },
+    ] }));
+    const result = await engine().store({ content: "Actual source spelling is Znot.", source: "mcp" });
+    expect(llm.composeCalls).toBe(0);
+    expect(result.topics!.map((topic) => topic.reason)).toEqual(["source_assignment_invalid", "source_not_assigned"]);
+  });
+
+  it("joins a topic across exact segment boundaries and provides neighboring context without unrelated evidence", async () => {
+    const content = `Insurance context ${"A".repeat(LONG_MEMORY_SEGMENT_CHARS - 100)}. Continuation refers to that policy. ${"B".repeat(150)}.`;
+    llm.classify = vi.fn(async (input: ClassifyInput) => ({ confidence: 0.95, summary: "Insurance", tags: [], pages: [], topics: [
+      { topic: "Insurance", summary: "Insurance", confidence: 0.95, disposition: "integrate_page", evidenceQuotes: [input.content],
+        pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" }] },
+    ] }));
+    llm.composePage = vi.fn(async (input: ComposePageInput) => `${input.currentContent}\n\n${input.citation}\n`);
+    const result = await engine().store({ content, source: "mcp" });
+    expect(result.filing).toBe("filed");
+    expect(llm.composePage).toHaveBeenCalledTimes(1);
+    const classificationInputs = vi.mocked(llm.classify).mock.calls.map(([input]) => input);
+    expect(classificationInputs.length).toBeGreaterThan(1);
+    expect(classificationInputs[1]!.context).toContain("Continuation");
+    expect(result.topics!.flatMap((topic) => topic.sourceSpans).map((span) => content.slice(span.start, span.end)).join("")).toBe(content);
+  });
+
+  it("keeps evidence-only topic enrichment at the captured revision without a composer or Inbox write", async () => {
+    const content = "Microphone check.";
+    const e = engine();
+    const captured = await e.captureEvidence!({ content, source: "whatsapp" });
+    llm.classify = vi.fn(async () => ({ confidence: 0.9, summary: "check", tags: [], pages: [], topics: [
+      { topic: "check", summary: "check", confidence: 0.9, disposition: "evidence_only", evidenceQuotes: [content], pages: [] },
+    ] }));
+    const result = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef });
+    expect(result).toMatchObject({ filing: "filed", pagesTouched: [], commitSha: captured.commitSha });
+    expect(result.topics![0]!.status).toBe("filed");
+    expect(llm.composeCalls).toBe(0);
+  });
+
+  it("preserves classified topics when a later segment classifier is unavailable", async () => {
+    const content = `${"Insurance ".repeat(1300)}FAILED classification segment.`;
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      if (input.content.includes("FAILED")) throw new Error("synthetic classifier outage");
+      return { confidence: 0.9, summary: "Insurance", tags: [], pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" }] };
+    });
+    const result = await engine().store({ content, source: "mcp" });
+    expect(result.filing).toBe("pending");
+    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "pending"]);
+    expect(result.topics![1]!.reason).toBe("classification_unavailable");
+    expect(result.pagesTouched).toContain("Areas/Insurance.md");
+    expect(llm.composeCalls).toBe(1);
+  });
+
   it("normalizes classifier meaning-page paths to .md before writing", async () => {
     llm.classifyPath = "Areas/Insurance";
     const result = await engine().store({

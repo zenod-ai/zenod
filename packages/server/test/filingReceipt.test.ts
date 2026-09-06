@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { formatFilingReceipt } from "../src/filingReceipt.js";
 
 describe("formatFilingReceipt (M-5)", () => {
+  it("reports partial topic filing instead of claiming everything filed to the first page", () => {
+    const evidenceRef = "Log/2026-09-06.md#^e-abc123";
+    const text = formatFilingReceipt({ evidenceRef, filing: "pending", pagesTouched: ["Areas/Insurance.md"], topics: [
+      { topic: "Insurance", evidenceRef, sourceSpans: [{ start: 0, end: 3 }], confidence: 0.95, disposition: "integrate_page", pages: ["Areas/Insurance.md"], filedPages: ["Areas/Insurance.md"], status: "filed" },
+      { topic: "Axa", evidenceRef, sourceSpans: [{ start: 4, end: 7 }], confidence: 0.9, disposition: "integrate_page", pages: ["Notes/Axa.md"], filedPages: [], status: "pending" },
+    ] });
+    expect(text).toContain("1 filed, 0 uncertain, 1 pending");
+    expect(text).toContain("Axa: pending");
+    expect(text).not.toContain("Filed →");
+  });
   it("formats a page + anchor + short sha", () => {
     const text = formatFilingReceipt({
       evidenceRef: "Log/2026-06-11.md#^e-7f3a2c",
