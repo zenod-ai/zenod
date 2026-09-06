@@ -24,23 +24,23 @@ Make a routine Zenod upgrade a small, repeatable operation: name the reviewed ca
 
 ## Current State
 
-Phase: recording the minimal supported path during the authorized Memory Reliability production rollout
-Last verified: 2026-09-06 Europe/Paris
+Phase: production upgrade verified; live MCP acceptance and final operator documentation
+Last verified: 2026-09-06 20:06:05 UTC
 Integration target: main
 Fresh base commit: 500c28d; production candidate 392d058a599bdf5fc69d17157282b8f9154dcf28
 Pinned-base rule: pinned; no rebases until the journey passes. Documentation movement does not replace the tested product candidate.
 Dispatch condition: Jordi has authorized production deployment, testing, fixes, easy undo and durable simplification in the current task.
-Next action: finish the current rollout and document its verified upgrade/rollback commands; parameterize only if a small, safe follow-up.
-Blockers: no new user approval needed for this authorized rollout; final live evidence is pending; a generic wrapper is optional, not a release blocker.
+Next action: finish the live MCP capture/retrieval check and attach final operator commands; parameterize only if a small, safe follow-up.
+Blockers: none for the deployed image; full encrypted archive cloud synchronization remains pending background work, not an upgrade gate. A generic wrapper is optional.
 
 ## Execution Cursor
 
-Last attempted: inventoried the current image-switch operator, backup script, historical release packet and target service with the sole production operator.
-Result: a reusable base exists; current script is release-pinned; narrow parameterization is useful only if convenient now. A live rollout is in progress, not yet claimed successful here.
-Execution status: active
-Waiting on: sole deployment operator's final convergence, backup and rollback receipt evidence.
-Approved work: complete the requested production upgrade and tests; review a small operator simplification if convenient; keep this leaf current.
-Next action: reconcile the final operator handoff and replace the proposed command contract with actual tested commands.
+Last attempted: sole operator deployed the approved immutable public Zenod image and verified actual task/container convergence at 20:06:05 UTC.
+Result: source 392d058 and image d21468d are running with completed Swarm update, matching OCI revision and health; 52 non-SHA environment entries, mounts and private Phylax unchanged. Live MCP unknown-fact abstention passed; capture/retrieval test remains in progress.
+Execution status: testing
+Waiting on: manager's final live MCP capture/retrieval result and optional small operator parameterization.
+Approved work: complete live tests and any bounded fixes; integrate documentation/operator evidence; finish background cloud archive synchronization.
+Next action: record the final MCP learning-memory retrieval and hand the tested version and rollback instructions to Jordi.
 
 ## Role Bindings
 
@@ -100,7 +100,18 @@ HARDEN — deferred until Jordi approves SHIP:
 
 ## Supported workflow
 
-**Current implementation:** the operator worktree contains `scripts/zmr-production-image.py deploy|rollback`, pinned to the September 6 release. Its code and live evidence remain in the operator's companion change until reviewed and integrated. It is not a general upgrade command. Do not copy it and substitute SHAs for each future release.
+**Current implementation:** the operator worktree contains `scripts/zmr-production-image.py deploy|rollback`, pinned to the September 6 release. Its code and live evidence are committed at [dca96ad](https://github.com/zenod-ai/zenod/commit/dca96ad) on `codex/zmr-production-rollout`, pending reviewed integration. It is not a general upgrade command. Do not copy it and substitute SHAs for each future release.
+
+The implemented commands from `/Users/jordi/Documents/GitHub/wt-zmr-production` are:
+
+```sh
+eval "$(dokploy-env)"
+python3 scripts/zmr-production-image.py deploy
+# To undo this release, retaining the current data volume:
+python3 scripts/zmr-production-image.py rollback
+```
+
+The default secure receipt directory is `/Users/jordi/.local/state/zenod-zmr-production-20260906`; override it only with the matching receipt through `ZMR_DEPLOY_STATE`. Current rollback targets previous source `fb8b07c5910b3424c4a15da4e1cfaa920cee4e22`, immutable image `sha256:c4d5fbf98818ca407ef445159965143cffc519a38f6c63e4e8c4f04230ba286d`. Do not run deploy merely to check state. No live rollback has been performed as part of this successful rollout.
 
 **Optional narrow improvement:** accept a candidate and secure receipt instead of hardcoded release values, retaining the existing deploy/rollback checks. Do this now only if convenient and safely tested; a broader CLI redesign is not required for deployment. The four stages below are process requirements, not commands advertised as implemented.
 
@@ -109,13 +120,13 @@ HARDEN — deferred until Jordi approves SHIP:
 3. **Verify:** wait for desired service and actual running task to converge to the immutable image, inspect actual container OCI source, require completed update and correct health SHA, then run the product's live smoke journey. Return a nonzero result and the receipt location on timeout or mismatch. Never silently force a Swarm image update around failed Dokploy reconciliation.
 4. **Undo:** use the receipt to restore the previous immutable image and previous SHA/configuration through Dokploy, refuse unexpected drift, and run the same convergence checks. Keep the live data volume. Data restore is a different, explicitly scoped operation because it can erase writes made after the snapshot.
 
-Use the existing macOS Keychain-backed `dokploy-env` credential loader and SSH alias `hetzner_vps_1`; do not ask Jordi to paste working credentials or print secrets. Receipts belong in a mode-0700 directory with mode-0600 files. Commit only sanitized evidence and recovery instructions. A receipt must remain recoverable through the existing encrypted backup mechanism (`zenod-prod-crypt:` → `s31:vps-archives/zenod-production-encrypted`).
+Use the existing macOS Keychain-backed `dokploy-env` credential loader and SSH alias `hetzner_vps_1`; do not ask Jordi to paste working credentials or print secrets. Receipts belong in a mode-0700 directory with mode-0600 files. Commit only sanitized evidence and recovery instructions. Current configuration receipts are uploaded and download-checked through the existing encrypted backup mechanism (`zenod-prod-crypt:` → `s31:vps-archives/zenod-production-encrypted`). The large data archive also has a verified independent Mac copy; its cloud synchronization is background work.
 
 ## Backup policy
 
-The existing backup is a consistent **cold/quiesced full archive**, not incremental. It resumes the service before disposable-volume integrity verification. The September 6 archive pause was approximately three minutes (19:56–19:59 UTC); the source was 1.6 GB and the compressed archive 1.4 GB. The disposable restore passed at 20:01:48 UTC with 1,127 files, 10 JSON files and 69 SQLite checks. Encrypted upload/download verification was still pending at this leaf’s inspection. Do not describe this as zero downtime.
+The existing backup is a consistent **cold/quiesced full archive**, not incremental. It resumes the service before disposable-volume integrity verification. The September 6 archive pause was approximately three minutes (19:56–19:59 UTC); the source was 1.6 GB and the compressed archive 1.4 GB. The disposable restore passed at 20:01:48 UTC with 1,127 files, 10 JSON files and 69 SQLite checks. The independently transferred Mac archive has the exact same SHA256 as the restored VPS archive, stored mode 0600 inside a mode-0700 directory. This is the accepted recovery baseline for this rollout. Slow encrypted cloud synchronization remains pending and is no longer a deployment gate; do not claim its upload/download verification passed. Do not describe this as zero downtime.
 
-Every upgrade records an exact configuration snapshot and recovery baseline. The full archive, encryption and off-host upload/download dominate this rollout’s preparation cost, rather than the image switch. For future routine code-only upgrades, prefer a fresh recoverable scheduled backup and an already validated restore mechanism instead of re-proving the same mechanism on each patch. This is a proposed policy simplification, not evidence that a qualifying scheduled backup currently exists or permission to skip the active backup. A previously verified backup may be reused only when its age/recovery point and subsequent writes are explicitly recorded and accepted for that rollout; the receipt must identify it. If that evidence or accepted recovery point is absent, use the existing fresh backup mechanism. Do not silently invent a freshness threshold or imply a prior backup contains new writes. Storage migrations or destructive changes require a fresh snapshot, checksum, mechanism restore proof, and a separate rollback/restore plan. Repeated code fixes within one authorized rollout should reuse a suitable verified backup instead of repeatedly pausing the service, while clearly retaining the same recovery point.
+Every upgrade records an exact configuration snapshot and recovery baseline. The full archive, encryption and off-host upload/download dominate this rollout’s preparation cost, rather than the image switch. For future routine code-only upgrades, prefer a fresh recoverable scheduled backup and an already validated restore mechanism instead of re-proving the same mechanism on each patch. This is a proposed policy simplification, not evidence that a qualifying scheduled backup currently exists. Today’s recovery proof uses the fresh verified VPS archive plus independent checksum-matched Mac copy; the manager accepted that recoverable baseline without waiting for slow cloud synchronization. A previously verified backup may be reused only when its age/recovery point and subsequent writes are explicitly recorded and accepted for that rollout; the receipt must identify it. If that evidence or accepted recovery point is absent, use the existing fresh backup mechanism. Do not silently invent a freshness threshold or imply a prior backup contains new writes. Storage migrations or destructive changes require a fresh snapshot, checksum, mechanism restore proof, and a separate rollback/restore plan. Repeated code fixes within one authorized rollout should reuse a suitable verified backup instead of repeatedly pausing the service, while clearly retaining the same recovery point.
 
 ## Architecture And Context
 
@@ -137,6 +148,7 @@ The current release is a substantial behavior change delivered through reviewed 
 | D6 | 2026-09-06 | accepted | Reuse working mechanisms | Existing Dokploy, encrypted backup remote and verifier already solve most of the operation. | Parameterize and test them; avoid per-release replacement scripts. | Bootstrap inventory | Proven limitation |
 | D7 | 2026-09-06 | accepted | Backup pause is real | Full compression while quiesced caused an approximately three-minute pause. | Show expected interruption; use verified reuse policy for repeat code fixes; defer incremental redesign. | Operator observation; final receipt pending | Proven new backup mechanism |
 | D8 | 2026-09-06 | accepted | Existing credentials | Keychain loader and configured encrypted remote already exist. | Read them securely; ask only if unavailable, never recreate by default. | `dokploy-env`; historical packet | Access failure |
+| D10 | 2026-09-06 | accepted | Independent recovery copy before slow cloud sync | Fresh VPS restore proof plus a checksum-matched Mac archive provides the accepted recovery baseline for this rollout. | Keep cloud sync background and report it pending; do not claim cloud download verification. | Operator receipt and manager reconciliation | Recovery location changes |
 | D9 | 2026-09-06 | accepted | Anything unanswered | Keep routine upgrades simple. | Simplest compatible option, journal it, keep moving; destructive changes remain scoped separately. | User simplification request | Material risk or scope change |
 
 ## Issue Ledger
@@ -145,7 +157,7 @@ No new issue is needed for the current bounded continuation. Optional parameteri
 
 | Issue | Role | Owner / Assignment | Title | Status | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|
-| draft — current-task continuation | Ticket worker | /root/zmr_deploy_audit | Finish rollout; retain tested upgrade/rollback and optional small parameterization | draft | `codex/zmr-production` | candidate 392d058 | Companion rollout evidence | 2026-09-06 | Finish verified backup and deployment |
+| draft — current-task continuation | Ticket worker | /root/zmr_deploy_audit | Retain tested upgrade/rollback and optional small parameterization | draft | `codex/zmr-production-rollout` | deployed 392d058 | Companion rollout evidence: deployment passed | 2026-09-06 20:06 UTC | Integrate verified operator and documentation |
 
 ## Branch And Integration
 
@@ -168,13 +180,15 @@ Only one production operator may act. On interruption, read the secure receipt a
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
 | 2026-09-06 | Process inventory | 500c28d plus operator working tree | Read-only local docs/code | Inspect backup script, current operator and release packets | Existing mechanisms identified; optional parameterization pending | Bootstrap links |
-| 2026-09-06 | Production rollout | 392d058a599bdf5fc69d17157282b8f9154dcf28 candidate | Public Zenod | Sole operator backup/deploy/verify | In progress; no pass claimed here | Companion rollout evidence |
+| 2026-09-06 20:06:05 UTC | Production rollout | 392d058a599bdf5fc69d17157282b8f9154dcf28 | Public Zenod | Sole operator task/container image, OCI, update and health verification | PASS: one actual running task, completed update; image d21468d, actual container image ID f0b913fb3cfc6de695a04262e1d53af3e1eafc973ed1f9d742665d2c37ec5405; 52 non-SHA env entries and mounts unchanged; private Phylax untouched | Companion rollout evidence |
+| 2026-09-06 | Recovery baseline | Pre-upgrade data | VPS archive + independent Mac copy | Disposable restore: 69 SQLite, 10 JSON, 1127 files; matching transfer SHA256 | PASS; cloud archive upload/download verification remains pending | Companion rollout evidence |
+| 2026-09-06 | Live MCP unknown-fact query | Deployed 392d058 | Public Zenod | Manager authenticated MCP abstention probe | PASS; learning-memory capture/retrieval still in progress | Manager ZMR handoff |
 
 ## Handoff Journal
 
 ### 2026-09-06 — deployment_spine_leaf — reusable deployment ownership
 
-Jordi requested durable deployment learnings and a simple supported upgrade path during the authorized live ZMR rollout. This leaf is registered atomically under Foundation; unrelated Phylax and ZMR states remain owned by their stewards. The existing operator and backup are the implementation base. Final live proof remains pending. Next: manager integrates the operator handoff and updates this leaf with actual commands and outcome; parameterize only if convenient, otherwise retain the minimal working operator.
+Jordi requested durable deployment learnings and a simple supported upgrade path during the authorized live ZMR rollout. This leaf is registered atomically under Foundation; unrelated Phylax and ZMR states remain owned by their stewards. The existing operator and backup are the implementation base. Production convergence is verified at 20:06:05 UTC; the manager has also passed an authenticated live MCP abstention probe. Final capture/retrieval proof is still in progress. Next: integrate the operator handoff and exact tested commands; parameterize only if convenient, otherwise retain the minimal working operator.
 
 ## Open Questions
 
