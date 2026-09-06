@@ -55,6 +55,16 @@ import type { TurnPlanCompiler } from "./types.js";
 
 export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
 
+const noteReadSchema = z.object({
+  path: z.string(),
+  part: z.enum(["body", "frontmatter"]).optional(),
+  query: z.string().max(1000).optional().describe("Literal text to locate inside the note; omit when continuing"),
+  cursor: z.string().max(2048).optional().describe("nextCursor from a prior read of the same path and version"),
+  maxChars: z.number().int().min(256).max(8000).optional(),
+});
+const noteReadDescription = "Read a bounded section of a note or exact Log/path.md#^e-xxxxxx evidence block. Returns source/version/identity, body, extent and nextCursor. Use query to jump to literal text anywhere in a long note; follow nextCursor with the same path and part (omit query) to continue. Use part=frontmatter for paginated note metadata; frontmatterChars reports its size. omittedBefore means earlier text is outside this response; restart without query/cursor to read from the beginning. Exact anchored reads never include neighboring entries. Partial coverage, budget exhaustion or an unmatched query is not proof of absence: disclose incomplete coverage.";
+
+
 /**
  * OpenAI-compatible third-party gateways. They speak the Chat Completions API,
  * so we reach them through `@ai-sdk/openai` with a custom baseURL and the
@@ -1593,12 +1603,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
               read_note: tool({
                 description:
-                  "Read the full content of one note by its vault-relative path. Works on meaning pages and Log/ evidence files. Always read the top search hits in full before concluding the vault lacks an answer — bodies hold details (transcripts, source links, '## Sources' sections) that summaries omit.",
-                inputSchema: z.object({ path: z.string() }),
-                execute: async ({ path }) => {
+                  noteReadDescription,
+                inputSchema: noteReadSchema,
+                execute: async ({ path, ...options }) => {
                   readPaths.add(path);
-                  const result = await tools.readNote!(path);
-                  input.onReadAction?.("read_note", { path }, result);
+                  const result = await tools.readNote!(path, options);
+                  input.onReadAction?.("read_note", { path, ...options }, result);
                   return result;
                 },
               }),
@@ -1756,9 +1766,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         execute: ({ query }) => caught(() => tools.searchVault!(query)),
       }),
       read_note: tool({
-        description: "Read the full content of one note by its vault-relative path.",
-        inputSchema: z.object({ path: z.string() }),
-        execute: ({ path }) => caught(() => tools.readNote!(path)),
+        description: noteReadDescription,
+        inputSchema: noteReadSchema,
+        execute: ({ path, ...options }) => caught(() => tools.readNote!(path, options)),
       }),
       list_pages: tool({
         description: "List all meaning pages with titles, tags, and summaries.",

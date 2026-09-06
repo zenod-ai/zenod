@@ -1088,6 +1088,43 @@ describe("BrainEngine", () => {
     expect(answer.sources.map((source) => source.path)).toEqual([firstRef, secondRef]);
   });
 
+  it("honors exact pinned anchors and bounded options without leaking other pinned or neighboring entries", async () => {
+    const logPath = "Log/2026-07-29.md";
+    const firstRef = `${logPath}#^e-a1b2c3`;
+    const lastRef = `${logPath}#^e-abcdef`;
+    await writeFile(join(repo.path, logPath), [
+      "# Log", "", "## 10:00 First capture ^e-a1b2c3", "",
+      `> ${"padding ".repeat(300)} The first code is Quartz-417.`, "",
+      "## 10:05 Unpinned neighbor ^e-d4e5f6", "", "> Unpinned code Onyx-999.", "",
+      "## 10:10 Last pinned capture ^e-abcdef", "", "> Last code Cobalt-318.", "",
+    ].join("\n"));
+    llm.answerOverride = async (_input, tools) => {
+      const legacy = await tools.readNote!(logPath);
+      expect(legacy).toContain("Quartz-417"); expect(legacy).toContain("Cobalt-318");
+      expect(legacy).not.toContain("Onyx-999");
+      await expect(tools.readNote!(`${logPath}#^e-ffffff`)).rejects.toThrow("not found");
+      const query = JSON.parse(await tools.readNote!(firstRef, { query: "Quartz-417", maxChars: 256 }));
+      expect(query.body).toContain("Quartz-417"); expect(query.body.length).toBeLessThanOrEqual(256);
+      expect(query.body).not.toContain("Cobalt-318");
+      for (const readPath of [firstRef, logPath]) {
+        let cursor: string | undefined; let body = ""; let rounds = 0;
+        do {
+          const page = JSON.parse(await tools.readNote!(readPath, { maxChars: 256, cursor }));
+          expect(page.body.length).toBeLessThanOrEqual(256);
+          expect(page.body).not.toContain("Onyx-999");
+          if (readPath === firstRef) expect(page.body).not.toContain("Cobalt-318");
+          body += page.body; cursor = page.nextCursor ?? undefined;
+          expect(++rounds).toBeLessThan(20);
+        } while (cursor);
+        expect(body).toContain("Quartz-417");
+        if (readPath === logPath) expect(body).toContain("Cobalt-318");
+      }
+      return { text: "Quartz-417 and Cobalt-318.", readPaths: [] };
+    };
+    const answer = await engine().ask("Compare these pinned captures.", { contextRefs: [firstRef, lastRef] });
+    expect(answer.text).toContain("Quartz-417"); expect(answer.text).toContain("Cobalt-318");
+  });
+
   it("fails honestly when a context ref is invalid, missing, or absent from this vault", async () => {
     const e = engine();
 
@@ -1169,7 +1206,9 @@ describe("BrainEngine", () => {
         "## 01:10 Aurora Kestrel fixture ^e-06dada",
         "- source: mcp",
         "",
-        "> ZNMT-I1-20260711-A-L2 says Aurora Kestrel uses Amber-902.",
+        "> ZNMT-I1-20260711-A-L2 says Aurora Kestrel has the following code:",
+        `> ${"neutral padding ".repeat(200)}`,
+        "> Amber-902.",
         "",
         "## 01:20 Later distractor ^e-c0ba17",
         "- source: mcp",
@@ -1179,11 +1218,17 @@ describe("BrainEngine", () => {
       ].join("\n"),
     );
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(logPath);
+      let cursor: string | undefined; let read = ""; let rounds = 0;
+      do {
+        const page = JSON.parse(await tools.readNote!(logPath, { cursor, maxChars: 512 }));
+        read += page.body; cursor = page.nextCursor ?? undefined;
+        expect(++rounds).toBeLessThan(20);
+      } while (cursor);
+      expect(read).toContain("Amber-902"); expect(read).toContain("Cobalt-471");
       return {
         text: [
           "Aurora Kestrel uses Amber-902. [[2026-07-11#^e-06dada]]",
-          "It also uses Cobalt-471. [[2026-07-11#^e-06cada]]",
+          "It also uses Cobalt-471. [[2026-07-11#^e-c0ba17]]",
         ].join("\n"),
         readPaths: [logPath],
       };
@@ -1194,11 +1239,11 @@ describe("BrainEngine", () => {
     expect(answer.text).toContain("Amber-902");
     expect(answer.text).toContain("^e-06dada");
     expect(answer.text).not.toContain("Cobalt-471");
-    expect(answer.text).not.toContain("^e-06cada");
+    expect(answer.text).not.toContain("^e-c0ba17");
     expect(answer.text).not.toContain("It also uses");
-    expect(answer.sources).toEqual([
-      expect.objectContaining({ path: logPath, githubUrl: expect.stringContaining(logPath) }),
-    ]);
+    expect(answer.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: `${logPath}#^e-06dada`, githubUrl: expect.stringContaining(logPath) }),
+    ]));
   });
 
   it("retains supported exact literals and valid evidence links from the scoped entry", async () => {
@@ -1215,7 +1260,7 @@ describe("BrainEngine", () => {
       ].join("\n"),
     );
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(logPath);
+      await tools.readNote!(logPath, { query: "Aurora Kestrel" });
       return {
         text: "Aurora Kestrel uses Amber-902 ([evidence](https://github.com/zenod-ai/fixture/blob/main/Log/2026-07-11.md#^e-06dada)).",
         readPaths: [logPath],
