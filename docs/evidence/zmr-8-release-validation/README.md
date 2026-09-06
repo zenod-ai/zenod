@@ -1,8 +1,49 @@
-# ZMR-8 release validation — rejected first candidate
+# ZMR-8 release validation — repaired candidate retest
 
 Issue [#1196](https://github.com/zenod-ai/zenod/issues/1196). Tester `/root/zmr_8_release_validation`; parent `/root` owns integration, the final browser journey and the ZMR spine. Prepared 2026-09-06, local macOS / Node 22.22.3 / Vitest 4.1.10.
 
-**NOT SHIP and NOT deploy-ready.** Product candidate `3f5ba097a8d287cdb9ae4468251bc42563e7e7a3` passes existing MCP safeguards but fails three customer streaming-chat acceptance checks. The tester reported them immediately for a bounded repair. Real-model and live-browser acceptance are unmeasured. No deployment, live vault mutation, backup operation, real send, billing, signup or provider change was performed.
+## Current candidate: local acceptance passed; real-model and live gates remain
+
+Tester takeover `/root/zmr_8_candidate_retest` on 2026-09-06. Parent remains sole spine steward. Repaired integrated product is **`392d058a599bdf5fc69d17157282b8f9154dcf28`** (PR #1214, corrected worker head `d336698`). Independent re-review reported 48 checks and no remaining blocker; corrected-head CI passed before the manager merged. The preserved branch merged that candidate without reset into `6f11e8e032b2d27483ce50bfb23ecc6874f0b62c`; its tree initially matched the candidate exactly. This follow-up adds only tests, harness metadata and evidence. No production source changes.
+
+**Local deterministic acceptance PASS; NOT SHIP and no deployment approval.** All original customer failure assertions are preserved and pass on the repaired candidate. Host safeguards now also pass against both local provider implementations: late anchored passages, typed enumeration, temporal unknown, rejection of unread sources, bounded partial coverage with continuation, explicit memory requests without any tool/citation, no streamed or persisted unsupported claims, and ordinary conversation preservation. Nonstreaming `/api/chat` and authenticated `/api/chat/stream` are both exercised. These are in-process HTTP tests, not a real browser or external model.
+
+[Exact candidate suite summary](results/candidate-392d058/suite-summary.json): one complete `npm test` run PASS — core **637 pass / 6 skip**, chassis **92 pass**, server **1264 pass**, other workspaces **159 pass**, scripts **195 pass**, schemas **27 valid**. All-workspace typecheck passed; server typecheck also passed after the test-only provider extension. Full-run original HTTP assertions all pass. No deterministic completeness/identity/isolation failure remains in this run. The six existing core skips are retained, not counted as passes.
+
+[Repaired-candidate ledger](results/candidate-392d058/ledger.json) records three fresh scripted MCP trials for each provider: **30/30 literal answers**, **24/24 required citation identities**. All six fixture hash maps match the original rejected-candidate evidence and all old bounded catalogs contain exactly five refs. The held-out manifest/generator/prompts remain unchanged; raw held-out lexical search is still zero, recorded as a limitation. Customer boundary results are **72/72 PASS** (12 cases × three fresh trials × two providers), retained in the paired `*-customer.log` files; each starts a new Vitest process and each case a new isolated runtime. This checks repeatability and source boundaries, not independent model reasoning.
+
+Reproduce the complete repaired matrix with:
+
+```sh
+ZMR_RELEASE_OUTPUT_DIR=docs/evidence/zmr-8-release-validation/results/candidate-392d058 node scripts/zmr-release-validation.mjs
+```
+
+The test-only `ZMR_CHAT_PROVIDER=github` selector uses a local bare Git repository and normal `VaultRepo`; default remains the existing Drive persistence double. No remote Git/Drive tenant is involved. The evidence below is retained as historical failure/repair provenance and is superseded by this exact candidate for current local pass/fail.
+
+### Repaired image freeze (published, not deployed)
+
+Successful [candidate publish run 34053932047](https://github.com/zenod-ai/zenod/actions/runs/34053932047) built and smoked both artifacts and pushed these exact OCI indexes for source `392d058a599bdf5fc69d17157282b8f9154dcf28`. [Machine proof](results/candidate-392d058/publish-proof.json) records the build/push outputs. These supersede the rejected `3f5ba09` image references below for a future gate; they are not deployment permission.
+
+| Artifact | Candidate tag | Immutable OCI index |
+|---|---|---|
+| Zenod | `ghcr.io/zenod-ai/zenod:sha-392d058` | `sha256:d21468dbf09f33550c52eb53bed32adea616842b4a144cd5cda428861f151a93` |
+| Phylax | `ghcr.io/zenod-ai/phylax:sha-392d058` | `sha256:651bafaf8129b19c5871cefb018791f81001ab3a8c95b65f50fb46d92740d4fb` |
+
+Existing target/rollback/backup metadata below remains dated read-only evidence and must be rechecked before a future live gate. Recommended dual-artifact order remains private Phylax first, public Zenod second, with signup/config preserved and the public stale `GIT_SHA` override corrected to the exact approved source. No live environment changed in this retest.
+
+### Next gate: existing test-provider configuration and bounded synthetic model run
+
+Presence-only recheck confirms `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GROQ_API_KEY` are absent, and neither documented local worktree/shared root `.env` exists. Supported existing configuration is `SettingsStore` environment seeding in `packages/server/src/settings.ts`: `ZENOD_PROVIDER`, its matching existing API-key variable, `ZENOD_MODEL_ASK`, `ZENOD_MODEL_CLASSIFY`, `ZENOD_MODEL_MAX_STEPS`. No secret value or production credential was fetched. Missing keys cannot establish that no authorized environment exists elsewhere.
+
+**Concrete recommendation for Jordi:** use the already approved intended tenant's provider/account and exact current ask/classify/step settings, supplied by a secure existing local configuration path, with a proposed **$5 maximum** for the first synthetic acceptance run. This is a recommendation, not spending authorization. Freeze those settings before execution; use isolated copies of the unchanged synthetic fixture, no personal data, no model changes after viewing held-out outcomes. Cover five frozen questions × three independent conversations × two provider fixtures × MCP/customer transport (60 answer journeys), plus six synthetic capture/correction setups. Stop before the approved ceiling using conservative per-call token bounds, and stop after any missing metering/rate basis rather than assume zero cost. If the budget cannot cover all cases, report incomplete measurements and request a revised explicit bound; do not silently reduce three-trial acceptance.
+
+The executable production integration remains `AiSdkLlm` plus `onUsage` (operation/provider/model, uncached/cache-read/cache-write/output tokens and success/failure). Record actual per-attempt output/read traces, abstention and semantic support, held-out results separately, p50/p95 timings and cost from the approved provider's current tariff. Zero-token failed rows without provider usage remain unknown. None of these real-model metrics has been measured by this retest.
+
+Only after that real-model lane passes should the parent finalize fresh backup/restore and exact deployment approval, then personally perform the uninterrupted seven-step browser journey below. **Do not re-request #1112 commercial approvals** already recorded complete. Source integration, image publication and a green scripted test suite grant no live action. ZMR-9/10 remain deferred.
+
+## Historical first-candidate rejection
+
+**Historical NOT SHIP and NOT deploy-ready finding.** Product candidate `3f5ba097a8d287cdb9ae4468251bc42563e7e7a3` passes existing MCP safeguards but fails three customer streaming-chat acceptance checks. The tester reported them immediately for a bounded repair. Real-model and live-browser acceptance are unmeasured. No deployment, live vault mutation, backup operation, real send, billing, signup or provider change was performed.
 
 ## Exact source and reproducibility
 
@@ -108,7 +149,7 @@ On the approved live candidate, parent personally opens the existing customer su
 Only after that clean same-build pass may parent write “I manually walked the full journey and it works” and hand Jordi the same URL/journey: “Now you test.” Human SHIP acceptance remains unchecked. No clickable live action has been represented as already exercised.
 
 
-## Customer parity repair — local evidence, independent review pending
+## Customer parity repair — historical worker evidence
 
 Repair owner `/root/zmr_8_chat_repair` took sole write ownership from the stopped tester at clean `2f4274813d02345f6a25d18e31c55684549f2529`, preserving its failing acceptance tests and frozen evidence. Product base remains `3f5ba09`; the repair is on `codex/zmr-8` / PR #1214. Parent remains the sole spine steward. This source change requires a new exact candidate and tester re-pin; none of the older digests or real-model/live gates above become passing proof.
 

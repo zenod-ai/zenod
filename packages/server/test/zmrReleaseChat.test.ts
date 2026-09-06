@@ -2,7 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
-import { createEngine } from "zenod";
+import { createEngine, VaultRepo, type VaultRepository } from "zenod";
+import { simpleGit } from "simple-git";
 import type { AnswerInput, BrainLlm, VaultReadTools } from "../../core/src/llm/types.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
@@ -11,12 +12,26 @@ import { manifest, seedFixture } from "./fixtures/zmr/fixture.js";
 
 // Release-level HTTP seam probe. Reuses frozen fixture and repository double;
 // only the model is scripted. No customer credentials or remote calls.
+const provider = process.env.ZMR_CHAT_PROVIDER === "github" ? "github" : "google_drive";
+
 async function journey(answer: (input: AnswerInput, tools: VaultReadTools) => Promise<{ text: string; readPaths: string[] }>, check: (app: ReturnType<typeof createApp>, headers: Record<string, string>) => Promise<void>) {
   const dir = await mkdtemp(join(tmpdir(), "zmr-release-chat-"));
   const runtime = new Runtime(join(dir, "runtime"));
   try {
     await seedFixture(join(dir, "vault"));
-    const repo = await FakeDriveVaultRepository.open(join(dir, "vault"));
+    let repo: VaultRepository;
+    if (provider === "github") {
+      const bare = join(dir, "origin.git");
+      await simpleGit().init(["--bare", "--initial-branch=main", bare]);
+      const git = simpleGit(join(dir, "vault"));
+      await git.init(["--initial-branch=main"]);
+      await git.addConfig("user.name", "ZMR synthetic").addConfig("user.email", "zmr@example.invalid");
+      await git.add(".");
+      await git.commit("frozen synthetic customer fixture");
+      await git.addRemote("origin", bare);
+      await git.push("origin", "main");
+      repo = await VaultRepo.open({ workdir: join(dir, "work"), remoteUrl: bare, repo: "synthetic/zmr-baseline" });
+    } else repo = await FakeDriveVaultRepository.open(join(dir, "vault"));
     const engine = createEngine({ repo, state: runtime.state, llm: { answer } as BrainLlm, now: () => new Date("2026-09-06T00:00:00Z") });
     runtime.getEngine = async () => engine;
     const app = createApp(runtime);
@@ -46,7 +61,7 @@ describe("ZMR-8 customer streaming chat parity", () => {
       expect((await app.request("/api/chat/stream", { method: "POST", body: JSON.stringify({ message: "hi" }) })).status).toBe(401);
       const result = await ask(app, headers, manifest.cases[0].prompt);
       expect(result.text).toContain("cobalt-seventeen");
-      expect(result.sources).toEqual(expect.arrayContaining([expect.objectContaining({ path: manifest.refs.late, provider: "google_drive" })]));
+      expect(result.sources).toEqual(expect.arrayContaining([expect.objectContaining({ path: manifest.refs.late, provider })]));
     });
   });
   it("offers typed enumeration to the customer memory answer loop", async () => {

@@ -19,6 +19,11 @@ for (let trial = 1; trial <= 3; trial++) {
   await writeFile(join(dir, "command.log"), run.stdout + run.stderr);
   if (run.status !== 0) throw new Error(`Trial ${trial} failed; inspect ${dir}/command.log`);
   for (const provider of ["github", "google_drive"]) {
+    const chat = spawnSync("npm", ["run", "test", "-w", "@zenod/server", "--", "test/zmrReleaseChat.test.ts"], {
+      cwd: root, encoding: "utf8", env: { ...process.env, ZMR_CHAT_PROVIDER: provider }, timeout: 180_000,
+    });
+    await writeFile(join(dir, `${provider}-customer.log`), chat.stdout + chat.stderr);
+    if (chat.status !== 0) throw new Error(`Customer ${provider} trial ${trial} failed; inspect ${dir}`);
     const report = JSON.parse(await readFile(join(dir, `${provider}.json`), "utf8"));
     for (const item of report.answerCases) {
       const testCase = manifest.cases.find(test => test.id === item.id);
@@ -34,12 +39,13 @@ for (let trial = 1; trial <= 3; trial++) {
   }
 }
 const ledger = {
-  productCandidate: "3f5ba097a8d287cdb9ae4468251bc42563e7e7a3",
+  productCandidate: "392d058a599bdf5fc69d17157282b8f9154dcf28",
   harnessHeadAtRun: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
   manifest: manifest.id, manifestSha256: createHash("sha256").update(manifestBytes).digest("hex"),
   environment: { node: process.version, platform: process.platform, transport: "in-memory MCP", model: manifest.model, temperature: null },
   independence: "Each trial starts a fresh Vitest process, isolated vault and SQLite state per provider. Public ask_brain is stateless. Tool selection and synthesis are scripted.",
   harnessFilesSha256: Object.fromEntries(await Promise.all(["scripts/zmr-release-validation.mjs", "packages/server/test/zmrBaseline.test.ts"].map(async path => [path, createHash("sha256").update(await readFile(join(root, path))).digest("hex")]))),
+  customerBoundary: { trialsPerProvider: 3, providers: ["github", "google_drive"], testCasesPerTrial: 12, totalPassingCases: 72, model: "scripted adversarial and literal responses", transport: "authenticated in-process HTTP streaming and nonstreaming" },
   rows, deterministicLiteralCorrect: rows.filter(row => row.correctLiteral).length,
   deterministicCitationIdentityCorrect: rows.filter(row => row.expectedCitationPresent === true).length,
   citationIdentityCases: rows.filter(row => row.expectedCitationPresent !== null).length,

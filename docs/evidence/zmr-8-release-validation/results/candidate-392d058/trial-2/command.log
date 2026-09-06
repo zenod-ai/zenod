@@ -1,0 +1,15 @@
+
+> @zenod/server@0.0.1 test
+> vitest run test/zmrBaseline.test.ts
+
+
+ RUN  v4.1.10 /Users/jordi/Documents/GitHub/wt-zmr-8/packages/server
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:12:16
+   Duration  5.34s (transform 477ms, setup 0ms, import 854ms, tests 4.42s, environment 0ms)
+
+(node:20703) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
