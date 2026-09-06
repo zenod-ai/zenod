@@ -1,0 +1,20 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "# Inbox/needs-filing-2026-09-06T22-17-03.md\nfrontmatter: {\"status\":\"needs-filing\",\"question\":\"Saved, but automatic filing is pending (classification_unavailable) after 2 attempts.\",\"evidence\":\"Log/2026-09-06.md#^e-8c74f6\"}\nsource: https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md\n\n\nZenod deployment learning, 7 September 2026: the long deployment queue was caused by our main-branch merges automatically rebuilding Epaminon, Outbound, Callisthenes and x-mcp, including documentation-only changes. Jordi authorized clearing the backlog and focusing on Zenod. We backed up the four configurations, paused only their automatic deployment switches, removed their pending builds, and preserved the running services and data. Future Zenod upgrades should use one explicit deployment of a reviewed immutable image, verify the actual running version, and run direct MCP tests. Keep unrelated legacy services on manual deployment unless deliberately re-enabled.\n"
+    }
+  ],
+  "structuredContent": {
+    "path": "Inbox/needs-filing-2026-09-06T22-17-03.md",
+    "url": "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md",
+    "provider": "github",
+    "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md",
+    "frontmatter": {
+      "status": "needs-filing",
+      "question": "Saved, but automatic filing is pending (classification_unavailable) after 2 attempts.",
+      "evidence": "Log/2026-09-06.md#^e-8c74f6"
+    },
+    "body": "\nZenod deployment learning, 7 September 2026: the long deployment queue was caused by our main-branch merges automatically rebuilding Epaminon, Outbound, Callisthenes and x-mcp, including documentation-only changes. Jordi authorized clearing the backlog and focusing on Zenod. We backed up the four configurations, paused only their automatic deployment switches, removed their pending builds, and preserved the running services and data. Future Zenod upgrades should use one explicit deployment of a reviewed immutable image, verify the actual running version, and run direct MCP tests. Keep unrelated legacy services on manual deployment unless deliberately re-enabled.\n"
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Coverage is partial. I cannot give a complete audit from this turn. No bounded entry scope was enumerated. Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed."
+    }
+  ],
+  "structuredContent": {
+    "correlationId": "test_47ee05569fe44dfeac6cf123827a2d85",
+    "testRunId": "zmr-production-56c815f-20260906",
+    "surface": "web",
+    "conversationKey": "zmr-production-56c815f-logread-20260906",
+    "conversationId": "web:zmr-production-56c815f-logread-20260906",
+    "status": "ok",
+    "text": "Coverage is partial. I cannot give a complete audit from this turn. No bounded entry scope was enumerated. Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed.",
+    "sources": [
+      {
+        "path": "Log/2026-09-06.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md",
+        "provider": "github",
+        "revisionId": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md"
+      },
+      {
+        "path": "Log/2026-09-06.md#^e-95a3e7",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md",
+        "provider": "github",
+        "revisionId": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md"
+      }
+    ],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      },
+      {
+        "phase": "error",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      }
+    ],
+    "audit": {
+      "correlationId": "test_47ee05569fe44dfeac6cf123827a2d85",
+      "testRunId": "zmr-production-56c815f-20260906",
+      "surface": "web",
+      "conversationKey": "zmr-production-56c815f-logread-20260906",
+      "conversationId": "web:zmr-production-56c815f-logread-20260906",
+      "prompt": "Read-only: Read Log/2026-09-06.md and tell me what Jordi recorded about making Zenod upgrades easy to undo. Read the actual entry content, cite the evidence, and avoid guessing the input channel or claiming this is exhaustive. Do not save or modify anything.",
+      "reply": "Coverage is partial. I cannot give a complete audit from this turn. No bounded entry scope was enumerated. Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed.",
+      "sources": [
+        {
+          "path": "Log/2026-09-06.md",
+          "url": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md",
+          "provider": "github",
+          "revisionId": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+          "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md"
+        },
+        {
+          "path": "Log/2026-09-06.md#^e-95a3e7",
+          "url": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md",
+          "provider": "github",
+          "revisionId": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+          "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md"
+        }
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md"
+        },
+        {
+          "phase": "error",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md"
+        }
+      ],
+      "status": "ok",
+      "at": "2026-09-06T22:17:04.478Z"
+    },
+    "evidence": [
+      {
+        "kind": "chat_audit",
+        "id": "test_47ee05569fe44dfeac6cf123827a2d85",
+        "correlationId": "test_47ee05569fe44dfeac6cf123827a2d85",
+        "conversationId": "web:zmr-production-56c815f-logread-20260906"
+      }
+    ]
+  },
+  "isError": false
+}
