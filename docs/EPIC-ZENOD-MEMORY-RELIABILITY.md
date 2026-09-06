@@ -87,21 +87,21 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — local acceptance passed; evidence review active
+Phase: release validation — local acceptance passed; existing provider configuration gate
 Last verified: 2026-09-06 21:32 CEST
 Integration target: main
 Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
-Blockers: real-model credentials absent locally; renewed deterministic candidate proof and live approval still required.
+Blockers: real-model credentials absent locally; bounded real-model validation and exact live approval remain required.
 
 ## Execution Cursor
 
 Last attempted: verify corrected chat re-review and CI, merge #1214, assign candidate retest.
 Result: d336698 passed independent re-review and exact CI, merged392d058. /root/zmr_8_candidate_retest assigned sole write ownership in wt-zmr-8; prior tester capacity failure and repair handoffs preserved.
-Execution status: active
-Waiting on: evidence PR #1216 independent review; exact CI passed. Secure existing provider/model config and bounded real-model run remain the next gate.
+Execution status: blocked
+Waiting on: Jordi identifies secure existing approved provider/model configuration and authorizes up to $5 for synthetic real-model acceptance. Evidence #1216 passed review and CI and is merged.
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
 
