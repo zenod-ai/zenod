@@ -23,7 +23,8 @@ OLD_SHA='fb8b07c5910b3424c4a15da4e1cfaa920cee4e22'
 OLD_IMAGE='ghcr.io/zenod-ai/zenod@sha256:c4d5fbf98818ca407ef445159965143cffc519a38f6c63e4e8c4f04230ba286d'
 prior_candidate=json.loads((STATE/'last-candidate.json').read_text()) if (STATE/'last-candidate.json').exists() else {}
 known_images={IMAGE,INITIAL_IMAGE,OLD_IMAGE}
-if re.fullmatch(r'ghcr.io/zenod-ai/zenod@sha256:[0-9a-f]{64}',prior_candidate.get('image','')):known_images.add(prior_candidate['image'])
+for recorded in [prior_candidate.get('image',''),*prior_candidate.get('images',[])]:
+ if re.fullmatch(r'ghcr.io/zenod-ai/zenod@sha256:[0-9a-f]{64}',recorded):known_images.add(recorded)
 a=json.loads((STATE/'public-app.before.json').read_text())
 known_images.add(a['dockerImage'])
 service=json.loads((STATE/'public-service.before.json').read_text())[0]
@@ -56,7 +57,9 @@ if MODE=='deploy':
  if n!=1:raise SystemExit('Expected exactly one GIT_SHA override')
 if MODE=='deploy':
  receipt=STATE/'last-candidate.json'
- with os.fdopen(os.open(receipt,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w') as f:json.dump({'image':IMAGE,'sha':SHA},f)
+ with tempfile.NamedTemporaryFile(mode='w',prefix='candidate-',dir=STATE,delete=False) as f:
+  json.dump({'image':IMAGE,'sha':SHA,'images':sorted(known_images)},f);f.flush();os.fsync(f.fileno())
+ os.replace(f.name,receipt)
 api('/application.update',{'applicationId':APP,'sourceType':'docker','dockerImage':image,'env':env})
 print('Dokploy desired image/environment updated; requesting redeploy',flush=True)
 api('/application.redeploy',{'applicationId':APP,'title':'ZMR '+MODE+' '+sha[:7]})
