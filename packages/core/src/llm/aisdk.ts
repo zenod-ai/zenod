@@ -1627,10 +1627,32 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   noteReadDescription,
                 inputSchema: noteReadSchema,
                 execute: async ({ path, ...options }) => {
-                  const result = await tools.readNote!(path, options);
-                  readPaths.add(path);
-                  input.onReadAction?.("read_note", { path, ...options }, result);
-                  return result;
+                  const read = async (readOptions: typeof options) => {
+                    const result = await tools.readNote!(path, readOptions);
+                    readPaths.add(path);
+                    input.onReadAction?.("read_note", { path, ...readOptions }, result);
+                    return result;
+                  };
+                  const result = await read(options);
+                  // Daily logs start with a heading-only section. A model must not
+                  // mistake that first passage for the file. Deliver a bounded batch
+                  // of actual passages; the host tracks each read independently.
+                  if (!/^Log\/[^#]+\.md$/.test(path) || options.cursor || options.query || options.part === "frontmatter") return result;
+                  let first: import("../ops/passage.js").NotePassage;
+                  try { first = JSON.parse(result); } catch { return result; }
+                  if (!first.extent || typeof first.body !== "string") return result;
+                  const passages = [first];
+                  const budget = options.maxChars ?? 8000;
+                  let chars = first.body.length;
+                  while (passages.at(-1)!.nextCursor && passages.length < 8 && budget - chars >= 256) {
+                    try {
+                      const next = JSON.parse(await read({ ...options, cursor: passages.at(-1)!.nextCursor!, maxChars: budget - chars })) as import("../ops/passage.js").NotePassage;
+                      passages.push(next); chars += next.body.length;
+                    } catch { break; } // Successful reads remain usable; failed reads remain host-tracked.
+                  }
+                  if (passages.length === 1) return result;
+                  return JSON.stringify({ passages, nextCursor: passages.at(-1)!.nextCursor,
+                    instruction: "Bounded daily-log passages, not a whole-file absence check. Read each body. If nextCursor remains, continue with the same path/cursor or seek with query; unread entries may contain the answer." });
                 },
               }),
               list_pages: tool({

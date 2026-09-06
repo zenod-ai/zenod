@@ -47,7 +47,7 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
-import { sanitizeGroundedAnswer } from "./answerGrounding.js";
+import { sanitizeGroundedAnswer, suppressIncompleteAbsence } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
 import {
@@ -2256,6 +2256,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const exhaustiveRefs = coverageTracker.enumeratedRefs();
         const boundedAudit = coverage.status === "complete-bounded-scope" && exhaustiveRefs.size > 0;
         let text: string;
+        const absence = coverage.status !== "partial" && (coverage.continuation.length > 0 || coverage.failedReads.length > 0)
+          ? suppressIncompleteAbsence(result.text) : { text: result.text, suppressed: false };
         if (coverage.status === "partial") {
           const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
           const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
@@ -2274,7 +2276,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             // A complete typed audit has an explicit host-filtered evidence scope;
             // generic date/audit words must not discard its successfully read entries.
             question: boundedAudit ? "" : question,
-            text: result.text,
+            text: absence.text,
             readSpans: [
               ...conversationReadSpans,
               ...[...readSpans].map(([path, text]) => ({ path, text })),
@@ -2285,6 +2287,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
             ],
             pinnedSpans,
           });
+        }
+        if (absence.suppressed && factReadAttempts === 0) {
+          coverage.status = "partial";
+          text += "\n\nCoverage is partial: some evidence remains unread. Absence is not established; continue with the exact refs/cursors in coverage.continuation.";
         }
         if (coverage.status === "complete-bounded-scope") {
           const scope = coverage.searches.length > 0

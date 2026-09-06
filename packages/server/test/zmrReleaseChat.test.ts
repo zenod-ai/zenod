@@ -64,6 +64,31 @@ describe("ZMR-8 customer streaming chat parity", () => {
       expect(result.sources).toEqual(expect.arrayContaining([expect.objectContaining({ path: manifest.refs.late, provider })]));
     });
   });
+  it("does not turn a complete heading section into a whole-log absence claim", async () => {
+    await journey(async (_input, tools) => {
+      const first = JSON.parse(await tools.readNote!("Log/2026-01-01.md"));
+      expect(first.nextCursor).toBeTruthy();
+      expect(first.body).not.toContain("cobalt-seventeen");
+      return { text: "No matching source exists; I read only a header.", readPaths: ["Log/2026-01-01.md"] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, "What access word did I save in my memories?");
+      expect(result.text).not.toContain("No matching source exists");
+      expect(result.text).toContain("Coverage is partial");
+      expect(result.coverage.continuation).toContainEqual({ tool: "read_note", input: { path: "Log/2026-01-01.md", cursor: expect.any(String) } });
+    });
+  });
+  it("keeps a grounded positive when a separate incomplete-read absence clause is suppressed", async () => {
+    await journey(async (_input, tools) => {
+      await tools.readNote!("Log/2026-01-01.md");
+      await tools.readNote!(manifest.refs.late, { query: "cobalt-seventeen" });
+      return { text: "I couldn't find the deployment receipt; the access word is cobalt-seventeen.", readPaths: [manifest.refs.late] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, manifest.cases[0].prompt);
+      expect(result.text).toContain("cobalt-seventeen");
+      expect(result.text).not.toContain("couldn't find the deployment receipt");
+      expect(result.text).toContain("Coverage is partial");
+    });
+  });
   it("offers typed enumeration to the customer memory answer loop", async () => {
     let available = false;
     await journey(async (_input, tools) => { available = typeof tools.searchEntries === "function"; return { text: "No enumeration performed.", readPaths: [] }; },

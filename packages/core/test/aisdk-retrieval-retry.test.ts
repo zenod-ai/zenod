@@ -15,6 +15,43 @@ vi.mock("ai", async (importActual) => {
 import { createBrainLlm } from "../src/llm/aisdk.js";
 
 describe("ask_brain deterministic retrieval retry", () => {
+  it("reads past a daily-log heading into saved entries within a bounded answer-tool batch", async () => {
+    const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { readNotePassage } = await import("../src/ops/passage.js");
+    const root = await mkdtemp(join(tmpdir(), "zmr-live-log-"));
+    try {
+      await mkdir(join(root, "Log"));
+      const path = "Log/2026-09-06.md";
+      await writeFile(join(root, path), "# Daily log\n\n## 10:00 Earlier ^e-000001\n> Earlier unrelated capture.\n\n## 11:00 Preferences ^e-000002\n> Keep upgrades minimal and undo easy.\n");
+      const readNote = vi.fn(async (path, options) => JSON.stringify(await readNotePassage(root, path, options)));
+      const onReadAction = vi.fn();
+      const llm = createBrainLlm({ provider: "anthropic", apiKey: "synthetic", maxSteps: 5 });
+      await llm.answer({ question: "What deployment preferences did I save?", vaultBriefing: "brief", conversation: [], onReadAction }, {
+        searchVault: async () => path, readNote, listPages: async () => "", searchChats: async () => "no results",
+      });
+      const result = JSON.parse(await captured.config.tools.read_note.execute({ path }));
+      expect(result.passages).toHaveLength(3);
+      expect(result.passages[2].body).toContain("undo easy");
+      expect(result.passages[2].identity).toBe(path + "#^e-000002");
+      expect(result.nextCursor).toBeNull();
+      expect(onReadAction).toHaveBeenCalledTimes(3);
+      expect(result.passages.reduce((n: number, p: {body: string}) => n + p.body.length, 0)).toBeLessThanOrEqual(8000);
+      readNote.mockClear();
+      const exact = JSON.parse(await captured.config.tools.read_note.execute({ path: path + "#^e-000002" }));
+      expect(exact.body).toContain("undo easy");
+      expect(exact.body).not.toContain("Earlier unrelated");
+      expect(readNote).toHaveBeenCalledTimes(1);
+      await writeFile(join(root, path), "# Daily log\n\n" + Array.from({ length: 12 }, (_, i) => `## 11:00 Entry ^e-${i.toString(16).padStart(6, "0")}\n> ${"x".repeat(1200)}\n`).join(""));
+      readNote.mockClear();
+      const bounded = JSON.parse(await captured.config.tools.read_note.execute({ path }));
+      expect(bounded.passages.length).toBeLessThanOrEqual(8);
+      expect(bounded.passages.reduce((n: number, p: {body: string}) => n + p.body.length, 0)).toBeLessThanOrEqual(8000);
+      expect(bounded.nextCursor).toBeTruthy();
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it("routes temporal read-only questions through the typed fact projection with requested date and read telemetry", async () => {
     const readFacts = vi.fn(async () => '{"facts":[],"legacy":true}');
     const onReadAction = vi.fn();
