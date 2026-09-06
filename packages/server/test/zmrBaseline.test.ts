@@ -34,7 +34,19 @@ class Observer {
     const query = input.question.includes("payroll") ? "payroll" : input.question.includes("hue") ? "hue replaced shade flower" : "ZMR ORCHID";
     const search = await tools.searchVault!(query);
     const pinned = input.vaultBriefing.includes("PINNED EVIDENCE CONTEXT");
-    const body = pinned ? input.vaultBriefing : await tools.readNote!("Log/2026-01-01.md");
+    // ZMR-2: follow the bounded read contract over the unchanged frozen fixture.
+    // This is still a scripted access observer, not autonomous model proof.
+    let body = pinned ? input.vaultBriefing : "";
+    if (!pinned) {
+      let cursor: string | undefined;
+      let calls = 0;
+      do {
+        const page = JSON.parse(await tools.readNote!("Log/2026-01-01.md", { cursor }));
+        body += page.body;
+        cursor = page.nextCursor ?? undefined;
+        if (++calls > 32) throw new Error("Synthetic traversal exceeded explicit 32-read budget");
+      } while (cursor);
+    }
     this.reads.push({ query, search, body, tools: Object.keys(tools) });
     const match = input.question.includes("original") ? body.match(/original launch color: ([a-z]+)/)
       : input.question.includes("now") || input.question.includes("hue") ? body.match(/launch color is now ([a-z]+)/)
@@ -96,8 +108,9 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
       const search = await call("search_memory", { query: "ZMR ORCHID" }, "lexicalSearch");
       expect(search.hits.some((hit: any) => hit.path === "Log/2026-01-01.md")).toBe(true);
       const answer = await call("ask_brain", { question: manifest.cases[0].prompt }, "unpinnedAsk");
-      expect(answer.text).toBe("unavailable in supplied note body");
-      expect(observer.reads.at(-1)!.body).toContain("[truncated]");
+      expect(answer.text).toBe("cobalt-seventeen");
+      expect(observer.reads.at(-1)!.body).toBe(note.body);
+      expect(answer.sources).toEqual(expect.arrayContaining([expect.objectContaining({ path: manifest.refs.late, provider, revisionId: before.id })]));
       const exact = await call("get_memory", { path: manifest.refs.late }, "exactGet");
       expect(exact.entry.content).toContain("cobalt-seventeen");
       expect(exact.entry.content).not.toContain("original launch color");

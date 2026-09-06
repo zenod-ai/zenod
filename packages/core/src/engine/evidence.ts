@@ -102,11 +102,11 @@ function validAnchor(value: string): boolean {
   return [...value.slice(2).toLowerCase()].every((character) => hex.includes(character));
 }
 
-function entryHeading(line: string): { anchor: string; title: string; time: string } | null {
+export function entryHeading(line: string): { anchor: string; title: string; time: string } | null {
   if (!line.startsWith("## ")) return null;
-  const marker = line.lastIndexOf("  ^");
+  const marker = line.lastIndexOf(" ^");
   if (marker < 0) return null;
-  const anchor = line.slice(marker + 3).trim();
+  const anchor = line.slice(marker + 2).trim();
   if (!validAnchor(anchor)) return null;
   const heading = line.slice(3, marker).trim();
   const separator = heading.indexOf(" ");
