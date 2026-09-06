@@ -27,6 +27,7 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
       const initial = serializeNote({ title: "Orchid", type: "note", tags: ["work"], created: "2026-01-01", updated: "2026-01-01", summary: "Orchid decisions and incident history." }, "# Orchid\n\nProduct vision is a personal library for durable knowledge.\nOrchid color is amber.\n" + "Old deployment prose. ".repeat(550) + "\n\n## Unrelated historical knowledge\n\nKeep the old budget and its citation [[2026-06-10#^e-7f3a2c]].\n\n[[Index]]\n");
       await writeFile(join(seed, "Notes/Orchid.md"), initial);
       await writeFile(join(seed, "Notes/Legacy.md"), serializeNote({ title: "Legacy", type: "note", tags: ["work"], created: "2026-01-01", updated: "2026-01-01", summary: "Old incident" }, "Production is broken. [[2026-06-10#^e-7f3a2c]]\n[[Index]]\n"));
+      await writeFile(join(seed, "Notes/OldPlan.md"), serializeNote({ title: "Old plan", type: "note", tags: [], created: "2026-01-01", updated: "2026-01-01", summary: "Old prose" }, "# Old plan\n\nOrchid color is amber. Product vision is a personal library for durable knowledge.\n"));
       let repo: VaultRepository;
       if (provider === "github") {
         const bare = join(dir,"origin.git"); await simpleGit().init(["--bare", "--initial-branch=main", bare]);
@@ -47,10 +48,30 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
           return { confidence: 1, summary: "Orchid fact", tags: ["work"], pages: [page], topics: [{ topic: "Orchid", confidence: 1, disposition: "append_compact_note" as const, summary: "Orchid fact", pages: [page], evidenceQuotes: [quote], facts: proposals }, ...(input.content.startsWith("Synthetic test data.") ? [{ topic: "Fixture marker", confidence: 1, disposition: "evidence_only" as const, summary: "Fixture", pages: [], evidenceQuotes: ["Synthetic test data."], facts: [] }] : [])] };
         },
         async answer(input: AnswerInput, tools: VaultReadTools) {
+          if (input.question.startsWith("Search:")) {
+            if (input.question.includes("facts-first")) await tools.readFacts!({ path: "Notes/Orchid.md", key: "orchid.color", asOf: "2026-01-15" });
+            failFactProjection = input.question.includes("failure");
+            let results: string[];
+            try { results = await Promise.all(Array.from({ length: 5 }, () => tools.searchVault!("Orchid"))); }
+            finally { failFactProjection = false; }
+            expect(results[0]).toContain("Notes/Orchid.md");
+            if (input.question.includes("vision") || input.question.includes("was") || input.question.includes("pinned") || input.question.includes("failure") || input.question.includes("facts-first")) {
+              expect(results[0]).not.toContain("Verified fact context");
+            } else expect(results[0]).toContain("Verified fact context");
+            if (input.question.includes("search-first")) await tools.readFacts!({ path: "Notes/Orchid.md", key: "orchid.color", asOf: "2026-01-15" });
+            if (input.question.includes("changed")) {
+              const path = join(repo.path, "Log/2026-09-06.md");
+              await writeFile(path, (await readFile(path, "utf8")).replaceAll("Orchid color is blue.", "Orchid color is altered."));
+            }
+            // Deliberately skip the fact-bearing hit and read only a stale secondary page.
+            if (!input.question.includes("pinned")) await tools.readNote!("Notes/OldPlan.md", { query: "Orchid color" });
+            return { text: input.question.includes("vision") ? "Product vision is a personal library for durable knowledge." : "Orchid color is amber.", readPaths: ["Notes/OldPlan.md"] };
+          }
           if (input.question.startsWith("Projection failure:") || input.question.startsWith("Five pages:")) {
             failFactProjection = input.question.startsWith("Projection failure:");
             const readPaths: string[] = [];
             try {
+              if (input.question.startsWith("Five pages:")) await tools.searchVault!("Orchid");
               for (let i = 0; i < (input.question.startsWith("Five pages:") ? 5 : 1); i++) {
                 const path = i === 0 ? "Notes/Orchid.md" : `Notes/Orchid${i}.md`;
                 const page = JSON.parse(await tools.readNote!(path, { query: "Product vision" }));
@@ -145,6 +166,29 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
         expect(answer.text).not.toContain("Orchid color is amber.");
         expect(answer.sources?.some(source => source.provider === provider && source.path.startsWith("Log/"))).toBe(true);
       }
+      expect((await engine.search("Orchid")).slice(0, 4).some(hit => hit.path === "Notes/Orchid.md")).toBe(true);
+      for (const answer of [await engine.ask("Search: What is current Orchid color?"), await engine.chat("Search: What is current Orchid color?", "web"),
+        await engine.handleTasking({ text: "Search: What is current Orchid color?", surface: "web", conversationKey: "search-facts" })]) {
+        expect(answer.text).toContain("Orchid color is blue.");
+        expect(answer.text).not.toContain("Orchid color is amber.");
+        expect(answer.sources?.some(source => source.provider === provider && source.path === originals[2]!.ref)).toBe(true);
+      }
+      expect((await engine.ask("Search: What is the product vision?")).text).toBe("Product vision is a personal library for durable knowledge.");
+      expect((await engine.ask("Search: What was Orchid color as of January 2026?")).text).toBe("Orchid color is amber.");
+      for (const order of ["facts-first", "search-first"]) {
+        const answer = await engine.ask(`Search: What is Orchid color? ${order}`);
+        expect(answer.text).toContain("Orchid color is amber."); expect(answer.text).not.toContain("Orchid color is blue.");
+      }
+      const pinnedSearch = await engine.ask("Search: Orchid color pinned", { contextRefs: [originals[0]!.ref] });
+      expect(pinnedSearch.text).not.toContain("Orchid color is blue.");
+      const failure = await engine.ask("Search: What is current Orchid color? failure");
+      expect(failure.text).toContain("current state is not established"); expect(failure.text).not.toContain("Orchid color is amber.");
+      const beforeSearchMutation = await readFile(join(repo.path, "Log/2026-09-06.md"), "utf8");
+      const changedSearch = await engine.ask("Search: What is current Orchid color? changed");
+      expect(changedSearch.text).toContain("snapshot changed"); expect(changedSearch.text).not.toContain("Orchid color is blue.");
+      const unsupportedSearch = await engine.ask("Search: What is current Orchid color?");
+      expect(unsupportedSearch.text).toContain("unsupported record"); expect(unsupportedSearch.text).not.toContain("Orchid color is blue.");
+      await writeFile(join(repo.path, "Log/2026-09-06.md"), beforeSearchMutation);
       for (let i = 1; i < 5; i++) await cp(join(repo.path, "Notes/Orchid.md"), join(repo.path, `Notes/Orchid${i}.md`));
       for (const prefix of ["Projection failure:", "Five pages:"]) {
         const unrelated = await engine.ask(`${prefix} What is the product vision?`);

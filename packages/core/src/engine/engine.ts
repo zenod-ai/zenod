@@ -661,7 +661,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>): VaultReadTools {
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
     const searchChats = async (query: string) => {
@@ -696,7 +696,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       searchVault: async (query: string) => {
         const hits = await searchVault(vaultPath, query, sourceResolver);
         if (hits.length === 0) return "no results";
-        return hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n");
+        const context = onSearchHits ? await onSearchHits(hits) : "";
+        return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n"), context].filter(Boolean).join("\n\n");
       },
       ...(typedEntries ? { searchEntries: async (input: EntrySearchInput) => {
         if (entrySearch) return JSON.stringify(await entrySearch(input));
@@ -2135,7 +2136,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
     pinnedSources: Answer["sources"] = [],
     entrySearch?: AskOptions["entrySearch"],
   ) {
-    const tools = readTools(contextRefs, entrySearch, true);
+    const tools = readTools(contextRefs, entrySearch, true, async hits => {
+      const views: FactView[] = [];
+      // Bounded host reads prevent model selection from skipping applicable facts.
+      // Search snippets remain discovery hints; only readFacts verifies evidence.
+      for (const hit of hits.slice(0, 4).filter(hit => hit.path.endsWith(".md"))) {
+        const facts = await automaticFactProjection(hit.path);
+        if (facts) views.push(facts.view);
+      }
+      return views.length ? `Verified fact context from bounded search-hit reads: ${JSON.stringify(views)}` : "";
+    });
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
@@ -2151,6 +2161,31 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const historicalQuestion = /\b(?:was|were|previously|formerly|histor(?:y|ical)|before|as\s+of|used\s+to|back\s+then)\b/i.test(question)
       || (!/\b(?:current|now|today)\b/i.test(question) && /\b(?:19|20)\d{2}\b/.test(question));
     const automaticFacts = new Map<string, { input: import("./temporalFacts.js").FactReadInput; result: string; view: FactView }>();
+    const automaticFactReads = new Map<string, Promise<void>>();
+    async function automaticFactProjection(path: string) {
+      const normalizedPath = normalizeMarkdownNotePath(path);
+      const explicit = () => factReads.some(read => normalizeMarkdownNotePath(read.input.path) === normalizedPath);
+      if (contextRefs.length > 0 || historicalQuestion || path.includes("#") || normalizedPath.startsWith("Log/") || !tools.readFacts || explicit()) return;
+      if (!automaticFactReads.has(normalizedPath)) {
+        automaticFactReads.set(normalizedPath, (async () => {
+          const note = await getNote(vaultPath, normalizedPath, sourceResolver);
+          // Unverified metadata is only an applicability signal, never evidence.
+          if (!Array.isArray(note.frontmatter.memoryFacts) || !note.frontmatter.memoryFacts.some(fact => fact && typeof fact === "object"
+            && typeof fact.statement === "string" && evidenceTextMatchesQuestion(question, fact.statement))) return;
+          try {
+            if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted");
+            const input = { path: normalizedPath };
+            const result = await tools.readFacts!(input);
+            automaticFacts.set(normalizedPath, { input, result, view: JSON.parse(result) as FactView });
+          } catch {
+            // Optional enrichment cannot invalidate a successful prose/search read.
+            automaticFactFailures.add(normalizedPath);
+          }
+        })());
+      }
+      await automaticFactReads.get(normalizedPath);
+      return explicit() ? undefined : automaticFacts.get(normalizedPath);
+    }
     let attempted = false;
     const groundedTools: VaultReadTools = {
       ...tools,
@@ -2225,28 +2260,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
               // Ordinary meaning-page body reads must not hide source-qualified
               // facts behind a stale prefix. Reuse the bounded verified projection.
               // Exact/pinned evidence and explicit metadata inspection keep their scope.
-              if (contextRefs.length === 0 && !path.includes("#") && !normalizedPath.startsWith("Log/") && passage.part === "body" && tools.readFacts) {
-                const explicit = factReads.some(read => normalizeMarkdownNotePath(read.input.path) === normalizedPath);
-                if (!explicit && !automaticFacts.has(normalizedPath) && !automaticFactFailures.has(normalizedPath)) {
-                  const note = await getNote(vaultPath, normalizedPath, sourceResolver);
-                  // Unverified metadata only selects whether to attempt verification.
-                  // Irrelevant and historical questions need no current projection.
-                  if (!historicalQuestion && Array.isArray(note.frontmatter.memoryFacts)
-                    && note.frontmatter.memoryFacts.some(fact => fact && typeof fact === "object"
-                      && typeof fact.statement === "string" && evidenceTextMatchesQuestion(question, fact.statement))) {
-                    try {
-                      if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted");
-                      const input = { path: normalizedPath };
-                      const result = await tools.readFacts(input);
-                      automaticFacts.set(normalizedPath, { input, result, view: JSON.parse(result) as FactView });
-                    } catch {
-                      // Optional enrichment cannot invalidate a successful prose read.
-                      automaticFactFailures.add(normalizedPath);
-                    }
-                  }
-                }
-                const facts = automaticFacts.get(normalizedPath);
-                if (facts && !explicit) return JSON.stringify({ ...passage, factView: facts.view,
+              if (passage.part === "body") {
+                const facts = await automaticFactProjection(path);
+                if (facts) return JSON.stringify({ ...passage, factView: facts.view,
                   instruction: "Verified current structured facts for this selected page accompany its bounded prose. For current questions they take precedence over older prose for the same fact; conflicts and unknown dates stay explicit. They do not establish past state. For a historical date or narrower key, call read_facts with that exact scope." });
               }
               return text;
