@@ -135,6 +135,19 @@ it("enriches old retained receipts before filtering and isolates tenant stores",
     expect(exact.structuredContent).toMatchObject({ entry: { sourceId: "legacy-old", revisionId: "receipt-revision" } });
     expect(JSON.stringify(exact)).toContain("original launch color: amber");
     expect(JSON.stringify(exact)).not.toContain("receipt cannot overwrite");
+    // Receipt-only duplicates must select content/title and provenance from the
+    // same winning receipt, never retain the oldest text with newest metadata.
+    const receiptOnlyRef = "Log/2026-01-01.md#^e-fffffe";
+    const oldOnly = jobs.enqueue("store", { content: "Stale receipt heading\nobsolete-copper", source: "whatsapp", sourceId: "receipt-only", capturedAt: "2026-01-01T09:00:00Z" }, undefined, 700);
+    jobs.update(oldOnly.id, { status: "done", result: { ...result, evidenceRef: receiptOnlyRef } }, 701);
+    const newOnly = jobs.enqueue("store", { content: "Current receipt heading\nreplacement-silver", source: "whatsapp", sourceId: "receipt-only", capturedAt: "2026-01-01T10:00:00Z" }, undefined, 702);
+    jobs.update(newOnly.id, { status: "done", result: { ...result, evidenceRef: receiptOnlyRef, revision: { ...result.revision!, id: "current-receipt" } } }, 703);
+    const receiptOnly = await search(connection.client, { sourceId: "receipt-only", query: "current replacement-silver" });
+    expect(receiptOnly.entries).toHaveLength(1);
+    expect(receiptOnly.entries[0]).toMatchObject({ evidenceRef: receiptOnlyRef, title: "Current receipt heading", snippet: "Current receipt heading\nreplacement-silver", revisionId: "current-receipt", capturedAt: "2026-01-01T10:00:00Z" });
+    expect((await search(connection.client, { sourceId: "receipt-only", query: "stale" })).entries).toEqual([]);
+    expect((await search(connection.client, { sourceId: "receipt-only", query: "obsolete-copper" })).entries).toEqual([]);
+    expect((await search(connection.client, { sourceId: "receipt-only" })).entries).toHaveLength(1);
     const first = await search(connection.client, { order: "oldest", limit: 1 });
     jobs.update(job.id, { status: "done", result: { ...result, revision: { ...result.revision!, id: "new-receipt" } } }, 9999);
     const stale = await connection.client.callTool({ name: "search_memory", arguments: { order: "oldest", cursor: first.pagination.nextCursor } });

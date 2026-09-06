@@ -54,3 +54,11 @@ Development checks caught two outdated expectations: receipts previously replace
 Each entry page currently scans/materializes the full local evidence/receipt set and hashes it. This repairs completeness using existing primitives, but does not reduce disk I/O, database memory use or remote sync cost. Very large vault indexing/caching belongs to later measured work. Concurrent changes can require traversal restart. Expired receipts cannot enrich legacy metadata; coverage discloses the available scope. Real-model correctness, abstention, latency/cost, authenticated live-provider behavior and SHIP acceptance remain ZMR-8 work and human gates.
 
 Ready for independent review and manager integration after exact-head CI. Do not infer deployed behavior from these local proofs.
+
+## Independent review correction — receipt-only duplicates
+
+Review of `bec3c6ec93e7f2aa421b65d77ad66993194e629d` found a P2: processing receipts oldest-first and passing each derived entry as the next base retained the oldest receipt-only content/title alongside the newest metadata. Combined text filtering could therefore miss the winning receipt's content.
+
+The merger now selects one eligible terminal receipt per ref by updatedAt/ID **before** deriving entries, and only the original vault-entry map supplies immutable bases. With no vault entry, the winning receipt supplies its own content/title and metadata together. The public regression adds two receipt-only records with different headings/body terms and revisions; current terms match one current entry, stale heading/body terms return none, and unfiltered lookup deduplicates to one. Existing assertions still verify that real vault text wins over receipt text and that legacy enrichment retains provider provenance.
+
+Correction validation: public historical, ZMR-2 passage and existing MCP suites **36/36 pass**; server typecheck and `git diff --check` pass. These are focused checks of the correction, not additional distinct test totals or live acceptance. Exact corrected head is recorded in issue #1191 and PR #1204; no merge or deployment performed by the worker.

@@ -608,11 +608,19 @@ function entryFromJob(job: TaskJob, base?: MemoryEntry): MemoryEntry | null {
 }
 
 function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[]): MemoryEntry[] {
-  const byRef = new Map(entries.map((entry) => [entry.evidenceRef, entry]));
+  const vaultByRef = new Map(entries.map((entry) => [entry.evidenceRef, entry]));
+  const winningReceipts = new Map<string, TaskJob>();
   for (const job of [...jobs].sort((a, b) => a.updatedAt - b.updatedAt || a.id.localeCompare(b.id))) {
+    if (job.status !== "done" || (job.kind !== "store" && job.kind !== "media_ingest")) continue;
     const evidenceRef = resultEvidenceRef(job);
-    const derived = entryFromJob(job, evidenceRef ? byRef.get(evidenceRef) : undefined);
-    if (derived) byRef.set(derived.evidenceRef, derived);
+    if (evidenceRef) winningReceipts.set(evidenceRef, job);
+  }
+  const byRef = new Map(vaultByRef);
+  for (const [evidenceRef, job] of winningReceipts) {
+    // Only immutable vault evidence is an authoritative base. An older derived
+    // receipt must not make its content/title sticky under newer metadata.
+    const derived = entryFromJob(job, vaultByRef.get(evidenceRef));
+    if (derived) byRef.set(evidenceRef, derived);
   }
   return [...byRef.values()];
 }
