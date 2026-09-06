@@ -229,5 +229,6 @@ export function suppressIncompleteAbsence(text: string): { text: string; suppres
     if (absence) suppressed = true;
     return !absence;
   }).join("\n");
+  if (!suppressed) return { text, suppressed: false }; // Preserve normal answer bytes and streaming chunks.
   return { text: filtered.replace(/QUOTEPLACEHOLDER(\d+)END/g, (_, index: string) => quotes[Number(index)]!), suppressed };
 }

@@ -3,6 +3,8 @@ import { suppressIncompleteAbsence, sanitizeGroundedAnswer } from "../src/engine
 
 describe("incomplete evidence absence clauses", () => {
   it("preserves quoted historical wording and positive clauses", () => {
+    const unchanged = 'Done. I saved it and posted the update.\n\nQuoted: "Earlier report."';
+    expect(suppressIncompleteAbsence(unchanged)).toEqual({ text: unchanged, suppressed: false });
     const quoted = 'The saved report says "I couldn’t find deployment receipt".';
     expect(suppressIncompleteAbsence(quoted)).toEqual({ text: quoted, suppressed: false });
     expect(sanitizeGroundedAnswer({ question: "What did the receipt report say?", text: suppressIncompleteAbsence(quoted).text,
