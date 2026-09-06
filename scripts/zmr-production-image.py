@@ -27,6 +27,10 @@ if current['Spec']['TaskTemplate']['ContainerSpec']['Mounts'] != old_mounts:rais
 old_env=service['Spec']['TaskTemplate']['ContainerSpec']['Env']
 current_env=current['Spec']['TaskTemplate']['ContainerSpec']['Env']
 if sorted(x for x in current_env if not x.startswith('GIT_SHA='))!=sorted(x for x in old_env if not x.startswith('GIT_SHA=')):raise SystemExit('Environment drift; stop')
+pending=api('/application.one?applicationId='+APP)
+def stable_env(value):return sorted(line for line in value.splitlines() if not line.startswith('GIT_SHA='))
+if stable_env(pending.get('env',''))!=stable_env(a['env']):raise SystemExit('Pending Dokploy environment drift; stop')
+if pending.get('dockerImage') not in (IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Pending Dokploy image drift; stop')
 image=IMAGE if MODE=='deploy' else OLD_IMAGE
 sha=SHA if MODE=='deploy' else OLD_SHA
 env=a['env']
