@@ -1,0 +1,44 @@
+# ZMR-7 — Current facts, corrections and historical evidence
+
+Issue: [#1195](https://github.com/zenod-ai/zenod/issues/1195). Release: [#1188](https://github.com/zenod-ai/zenod/issues/1188).
+
+Pinned base: `fd6063bf39cc0973d04c4420bfdffbdaa52b88d5` (ZMR-6 integrated). Tested implementation: `0b00c5664fed8f6c7c6928212434c785af34a8d6`. A subsequent evidence-only commit adds this report. Environment: isolated local macOS worktree `/Users/jordi/Documents/GitHub/wt-zmr-7`, branch `codex/zmr-7`, Node 22.22.3, Vitest 4.1.10. No external models, credentials, production deployment or personal-vault writes.
+
+## Representation and behavior
+
+The existing topic classifier gains optional internal `facts` proposals. Existing `BrainLlm` implementations and notes without these records remain valid. New model output uses the existing strict structured-output schema with required arrays and nullable unknown fields; there is no additional model call.
+
+The host appends `memoryFacts` frontmatter records to successfully filed meaning notes. Each record contains a stable ID, entity/attribute key, exact statement quote, immutable evidence ref, evidence capture date, optional explicit effective date and its quote, optional reported verification quote, synthetic/user-report origin, explicit superseded IDs/old quotes and an unresolved-correction flag. Unknown dates and verification scope are null. Non-array legacy custom fields are retained. Invalid records are retained as data but excluded from supported projection. The composer cannot invent this metadata. Existing body lines, citations and records are preserved; new cited annotations explain recorded corrections without erasing history.
+
+Effective dates require a real YYYY-MM-DD and an exact source quote in which the new statement is immediately followed by an effective/as-of/valid-from/since/from marker and that date. A date elsewhere in the source, capture time, malformed date or negated date does not establish an effective date. Verification quotes must describe a performed, dated check with an explicit environment/version/build scope; negated, planned and future checks stay unknown. Even accepted verification quotes are **user-reported evidence**, never a host assertion that a live check occurred.
+
+A correction requires explicit replacement language, the new statement and the exact old statement in the same source quote, and a unique prior record for the same key and origin. Uncertain/negated replacement language, ambiguous targets, cross-synthetic/user-report replacements and impossible backdated replacements cannot silently suppress old facts. Ordinary disagreements remain conflicts; newest capture does not automatically win. Candidate metadata supplies existing keys (at most eight / 320 characters per candidate) so the classifier can reuse identities without loading historical bodies.
+
+The existing answer loop exposes read-only `read_facts` for a selected meaning note, optional exact key and optional explicit `asOf` date. It re-reads immutable evidence through existing tenant-contained/provider-neutral primitives and returns active, superseded, conflict, undated, future or unsupported records. Evidence URLs and current provider revision IDs are host-derived. Synthetic origin is derived from the full immutable capture, including when its marker belongs to a separate evidence-only topic. Synthetic and ordinary user reports cannot silently replace each other.
+
+Current reads select supported active reports. Historical reads reconstruct **stated effective time using evidence available now**, not what the system knew at that earlier time. Undated facts cannot establish historical state. Complete projection is limited to the selected note/key, never all memory or live deployment status. The projection rechecks its snapshot before answering. Mixed snapshots suppress the answer. The host renders cited exact claims and uncertainty directly after a temporal read, so an unrelated model conclusion such as “production is definitely still broken” does not replace the evidence report. Legacy notes explicitly disclose unknown temporal structure; absence of a recorded fix is never proof a bug remains unfixed.
+
+Limits are four attempted fact reads per ask and 32 records / 24,000 serialized metadata characters per projection. Budget exhaustion, malformed metadata and missing source text are disclosed. Repeated identical views are rendered once. Narrowing to a key can recover an omitted record; a single key exceeding the budget requires original metadata/evidence reads and cannot receive a complete current-state claim from this projection. Existing typed exhaustive audit/coverage gates retain priority and are not bypassed by a fact read.
+
+## Reproducible fixtures and checks
+
+Release manifest: [`packages/server/test/fixtures/zmr/manifest.json`](../../../packages/server/test/fixtures/zmr/manifest.json). Existing two-provider baseline/typed retrieval journeys remain in the compatibility batch.
+
+New local fixture specification: `packages/server/test/zmrFacts.test.ts`. Both GitHub local-bare-repository and the existing Drive persistence double run real public MCP `store_memory`, `ask_brain` and exact `get_memory` calls. The scripted classifier files three successive color changes effective January/February/March, all captured in September; a separately backdated owner statement; an ambiguous correction; and an ordinary-user-report-shaped old incident with a narrow local verification quote. All data is test-only, including the ordinary-report lane.
+
+Assertions cover current and two earlier effective states, exact key reuse, unresolved conflicting values, undated historical uncertainty, synthetic labeling despite a separately assigned marker, reported verification scope, legacy notes, cited provider revisions/URLs, unchanged raw evidence and unrelated meaning text, stale source content, mutation during synthesis and concurrent read-budget exhaustion. The scripted answer deliberately invents a fresh production failure; the temporal host report excludes it. `ask_brain` is checked against its bundled output schema; exact `get_memory` is checked against its existing public `{entry}` contract.
+
+`packages/core/test/temporalFacts.test.ts` covers the same state boundaries directly, plus invalid/absent effective dates, unrelated/negated date quotes, missing evidence, forged metadata, cross-origin replacements, negated corrections, future/planned/undated verification claims, non-array legacy metadata, bounded projections and narrowing. `aisdk-retrieval-retry.test.ts` checks actual SDK tool registration, argument forwarding, temporal instructions and read-action telemetry. Tool-kind tests classify the new operation as read-only.
+
+Commands on implementation SHA:
+
+- `npm run build -w zenod` and `npm run build -w @zenod/mcp-chassis`: pass.
+- `npm run test -w zenod -- test/temporalFacts.test.ts test/meaningNotes.test.ts test/engine.test.ts test/schema.test.ts test/schema-llm.test.ts test/aisdk-retrieval-retry.test.ts test/toolKinds.test.ts`: 124 tests pass.
+- `npm run test -w @zenod/server -- test/zmrFacts.test.ts test/zmrAsk.test.ts test/zmrBaseline.test.ts test/mcp.test.ts`: 41 tests pass.
+- `npm run typecheck -w @zenod/server`, `node scripts/build-tool-output-schemas.mjs --check`, `git diff --check`: pass; 27 bundled schemas remain self-contained and unchanged.
+
+## Release limits
+
+Extraction, stable key selection, topic assignment and choosing the temporal tool are still model-dependent. Source quotes and conservative syntax checks do not prove universal semantic entailment. Explicit replacement currently requires an identifiable exact old statement; paraphrased, implied or unsupported-language corrections remain unresolved instead of being guessed. Effective-date/check parsing is deliberately conservative and does not convert relative dates. Existing unstructured notes are not migrated and ordinary unstructured answers remain governed by the existing grounding path. Cross-note contradictions are visible through separate selected views but are not merged into a new global truth subsystem.
+
+Real-model quality (including ordinary natural-language correction phrasing and old-bug questions), false-positive/false-negative rates, tokens, dollars, p50/p95 latency, large-vault performance, real Drive publication and the exact-candidate browser journey remain **unmeasured**. They belong to ZMR-8. Local source/test success does not establish deployment, live correctness or human SHIP acceptance.
