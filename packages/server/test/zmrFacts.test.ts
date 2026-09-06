@@ -99,7 +99,7 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
       await store("orchid.color", "Orchid color is silver.", null, "an ambiguous old color");
       const conflict = await ask("orchid.color"); expect(conflict.text).toContain("Unresolved conflict"); expect(conflict.text).toContain("Orchid color is blue."); expect(conflict.text).toContain("Orchid color is silver.");
       expect((await ask("orchid.color", "2026-01-15")).text).toContain("Effective date unknown");
-      await store("orchid.bug", "The old login check failed.", "2026-01-04", undefined, false, "Verified on 2026-01-04 in local fixture version old-build only.");
+      await store("orchid.bug", "The old login check failed.", "2026-01-04", undefined, false, 'Verified "The old login check failed." on 2026-01-04 in local fixture version old-build only.');
       const bug = await ask("orchid.bug"); expect(bug.text).toContain("User report"); expect(bug.text).toContain("local fixture version old-build only");
       expect(bug.text).toContain("An absent fix record never proves"); expect(bug.text).not.toContain("definitely still broken");
       const legacy = await ask(undefined, undefined, "Notes/Legacy.md"); expect(legacy.text).toContain("Legacy or unstructured"); expect(legacy.text).not.toContain("Production is broken");
@@ -108,6 +108,34 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
       expect((budget.structuredContent as { text: string }).text).not.toContain("Everything everywhere");
       const note = await engine.get("Notes/Orchid.md"); expect(note.body).toContain(parseNote(initial).body);
       expect((note.frontmatter.memoryFacts as unknown[]).length).toBe(6);
+      // Reversed model relation must not turn the source's removed value into current truth.
+      await store("orchid.direction", "Orchid direction is amber.", null, undefined, false);
+      const reversedContent = 'Correction: replace "Orchid direction is blue." with "Orchid direction is amber.".';
+      proposals = [{ key: "orchid.direction", statement: "Orchid direction is blue.", effectiveDate: null, effectiveDateQuote: null,
+        correctionQuote: reversedContent, supersedesQuotes: ["Orchid direction is amber."], verificationQuote: null }];
+      const reversedSave = await client.callTool({ name: "store_memory", arguments: { content: reversedContent, source: "mcp", capturedAt: "2026-09-06T11:00:00Z" } });
+      expect(reversedSave.isError).not.toBe(true);
+      originals.push({ ref: (reversedSave.structuredContent as unknown as StoreResult).evidenceRef, content: reversedContent });
+      const direction = await ask("orchid.direction");
+      expect(direction.text).toContain("Unresolved conflict");
+      expect(latestView!.facts.map(f => f.status)).toEqual(["conflict", "conflict"]);
+      expect(latestView!.facts[1]!.unresolvedCorrection).toBe(true);
+      // A different subsystem's successful check cannot verify the claimed billing failure.
+      const unrelatedCheck = 'Verified "Orchid login succeeds." on 2026-01-04 in production version v1.';
+      await store("orchid.billing", "Orchid billing retries fail.", null, undefined, false, unrelatedCheck);
+      const billing = await ask("orchid.billing");
+      expect(billing.text).toContain("Verification scope: unknown"); expect(billing.text).not.toContain("production version v1");
+      const notePath = join(repo.path, "Notes/Orchid.md");
+      const beforeForgery = await readFile(notePath, "utf8");
+      const parsed = parseNote(beforeForgery);
+      const records = parsed.frontmatter!.memoryFacts as Array<{ key: string; id: string; supersedes: string[]; unresolvedCorrection: boolean; verificationQuote: string | null }>;
+      const directionRecords = records.filter(f => f.key === "orchid.direction");
+      directionRecords[1]!.supersedes = [directionRecords[0]!.id]; directionRecords[1]!.unresolvedCorrection = false;
+      records.find(f => f.key === "orchid.billing")!.verificationQuote = unrelatedCheck;
+      await writeFile(notePath, serializeNote(parsed.frontmatter!, parsed.body));
+      await ask("orchid.direction"); expect(latestView!.facts.map(f => f.status)).toEqual(["conflict", "conflict"]);
+      expect((await ask("orchid.billing")).text).toContain("Verification scope: unknown");
+      await writeFile(notePath, beforeForgery);
       for (const original of originals) {
         const result = await client.callTool({ name: "get_memory", arguments: { path: original.ref } });
         expect(result.isError, JSON.stringify(result)).not.toBe(true);

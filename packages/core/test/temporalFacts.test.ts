@@ -94,4 +94,36 @@ describe("source-qualified temporal facts", () => {
     expect(facts(raw)[1]).toMatchObject({ supersedes: [], unresolvedCorrection: true });
   });
 
+  it("rejects reversed correction edges both when filing and when reading forged stored relations", async () => {
+    const old = entry(1,"Orchid color is amber.");
+    const original = appendMemoryFacts(seed(),seed(),[proposal(old.content)],old);
+    const statement = "Orchid color is blue.";
+    const correctionQuote = `Correction: replace "${statement}" with "${old.content}".`;
+    const reversed = entry(2,correctionQuote);
+    const raw = appendMemoryFacts(original,original,[proposal(statement,{ correctionQuote, supersedesQuotes: [old.content] })],reversed);
+    const records = facts(raw);
+    expect(records[1]).toMatchObject({ supersedes: [], unresolvedCorrection: true });
+    records[1]!.supersedes = [records[0]!.id]; records[1]!.unresolvedCorrection = false;
+    const view = await projectFacts({ path: "Notes/Orchid.md" }, records, now, async ref => ref === old.evidenceRef ? old : reversed);
+    expect(view.facts.map(f => f.status)).toEqual(["conflict","conflict"]);
+    expect(view.facts[1]!.unresolvedCorrection).toBe(true);
+    const bothDirections = `${correctionQuote} Correction: replace "${old.content}" with "${statement}".`;
+    const ambiguous = appendMemoryFacts(original, original, [proposal(statement, { correctionQuote: bothDirections, supersedesQuotes: [old.content] })], entry(3,bothDirections));
+    expect(facts(ambiguous)[1]).toMatchObject({ supersedes: [], unresolvedCorrection: true });
+  });
+  it("binds performed verification to the exact statement, retaining unrelated check evidence only as unknown scope", async () => {
+    const statement = "Orchid billing retries fail.";
+    const unrelated = 'Verified "Orchid login succeeds." on 2026-01-01 in production version v1.';
+    const sameCapture = entry(1,`${statement} ${unrelated}`);
+    const raw = appendMemoryFacts(seed(),seed(),[proposal(statement,{ verificationQuote: unrelated })],sameCapture);
+    const records = facts(raw); expect(records[0]!.verificationQuote).toBeNull();
+    records[0]!.verificationQuote = unrelated; // Persisted/model-authored metadata must pass the read gate again.
+    const view = await projectFacts({ path: "Notes/Orchid.md" },records,now,async () => sameCapture);
+    expect(view.facts[0]).toMatchObject({ status: "active", verificationQuote: null });
+    expect(renderFactViews([view])).toContain("Verification scope: unknown");
+    const bound = `Verified "${statement}" on 2026-01-01 in production version v1.`;
+    const positive = appendMemoryFacts(seed(),seed(),[proposal(statement,{ verificationQuote: bound })],entry(2,`${statement} ${bound}`));
+    expect(facts(positive)[0]!.verificationQuote).toBe(bound);
+  });
+
 });

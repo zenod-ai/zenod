@@ -40,18 +40,33 @@ const UNCERTAIN_CORRECTION = /\b(do not|don't|not (?:a )?correction|should not|n
 function explicitCorrection(quote: string, statement: string): boolean {
   return quote.includes(statement) && CORRECTION.test(quote) && !UNCERTAIN_CORRECTION.test(quote);
 }
+function quotedStatement(statement: string): string {
+  const literal = statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return `(?:"${literal}"|“${literal}”|'${literal}')`;
+}
+/** Direction is part of the evidence, never supplied by the classifier's IDs. */
+function directionalCorrection(quote: string, oldStatement: string, newStatement: string): boolean {
+  if (oldStatement === newStatement || !quote.includes(oldStatement) || !explicitCorrection(quote, newStatement)) return false;
+  const old = quotedStatement(oldStatement), next = quotedStatement(newStatement);
+  const supports = (from: string, to: string) => new RegExp(`\\b(?:replace|replaces|replaced|replacing)\\s+${from}\\s+with\\s+${to}`, "i").test(quote)
+    || new RegExp(`${to}\\s+(?:replaces|supersedes)\\s+${from}`, "i").test(quote);
+  return supports(old, next) && !supports(next, old);
+}
 function explicitEffectiveDate(quote: string | null, statement: string, date: string): boolean {
   if (!quote || !quote.includes(statement)) return false;
   // The effective marker must bind directly to THIS statement, not another date elsewhere in the capture.
   const suffix = quote.slice(quote.lastIndexOf(statement) + statement.length);
   return new RegExp(`^[\\s"'.,;:()—-]*(?:effective(?: date)?|as of|valid from|since|from)\\s*:?\\s*${date}\\b`, "i").test(suffix);
 }
-function verificationScope(quote: string | null, evidence: MemoryEntry): string | null {
+function verificationScope(quote: string | null, statement: string, evidence: MemoryEntry): string | null {
   if (!quote || quote.length > 1600 || !evidence.content.includes(quote)
     || !/\b(verified|tested|checked|reproduced)\b/i.test(quote)
-    || /\b(not|never|unverified|untested|will|plan|might|could|if)\b|(?:didn't|haven't|hasn't)/i.test(quote)
-    || !/\b(local|staging|production|environment|version|build|commit|sha)\b/i.test(quote)) return null;
-  const date = quote.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
+    || /\b(not|never|unverified|untested|will|plan|might|could|if)\b|(?:didn't|haven't|hasn't)/i.test(quote)) return null;
+  const claim = quotedStatement(statement);
+  const check = "(?:verified|tested|checked|reproduced)";
+  const binding = new RegExp(`^(?:${check}\\s+${claim}|${claim}\\s+${check})\\s+on\\s+(\\d{4}-\\d{2}-\\d{2})\\s+(?:in|against|using|on)\\s+([^.!\\n]{1,160})`, "i").exec(quote.trim());
+  const date = binding?.[1];
+  if (!binding?.[2] || !/\b(local|staging|production|environment|version|build|commit|sha)\b/i.test(binding[2])) return null;
   return validFactDate(date) && validFactDate(evidence.capturedAt.slice(0, 10)) && date <= evidence.capturedAt.slice(0, 10) ? quote : null;
 }
 const SYNTHETIC = /\bsynthetic(?: test)?(?: data| fixture)?\b|\btest fixture\b/i;
@@ -116,7 +131,7 @@ export function appendMemoryFacts(raw: string, original: string | null, proposal
       for (const quote of requested) {
         // Both replacement intent and its exact old statement must occur in new evidence.
         const matches = prior.filter(fact => fact.key === key && fact.statement === quote && fact.origin === origin);
-        if (!correctionQuote.includes(quote) || matches.length !== 1
+        if (!directionalCorrection(correctionQuote, quote, proposal.statement) || matches.length !== 1
           || (effectiveDate && matches[0]!.effectiveDate && effectiveDate < matches[0]!.effectiveDate!)) {
           unresolvedCorrection = true;
         } else supersedes.push(matches[0]!.id);
@@ -127,7 +142,7 @@ export function appendMemoryFacts(raw: string, original: string | null, proposal
     additions.push({ id, key, statement: proposal.statement, evidenceRef: evidence.evidenceRef,
       evidenceDate: Number.isNaN(Date.parse(evidence.capturedAt)) ? null : evidence.capturedAt,
       effectiveDate, effectiveDateQuote: effectiveDate ? effectiveDateQuote : null, correctionQuote, supersedesQuotes: requested, supersedes, unresolvedCorrection, origin,
-      verificationQuote: verificationScope(proposal.verificationQuote, { ...evidence, content: assignedEvidence }) });
+      verificationQuote: verificationScope(proposal.verificationQuote, proposal.statement, { ...evidence, content: assignedEvidence }) });
   }
   // Preserve even legacy/unknown metadata records verbatim; only validated records enter projection.
   const retained = Array.isArray(priorValue) ? priorValue : [];
@@ -165,21 +180,25 @@ export async function projectFacts(
     const entry = entries.get(fact.evidenceRef);
     const supported = entry && entry.content.includes(fact.statement)
       && (!fact.effectiveDate || (fact.effectiveDateQuote && entry.content.includes(fact.effectiveDateQuote) && explicitEffectiveDate(fact.effectiveDateQuote, fact.statement, fact.effectiveDate)))
-      && (!fact.correctionQuote || entry.content.includes(fact.correctionQuote))
-      && (!fact.verificationQuote || verificationScope(fact.verificationQuote, entry));
+      && (!fact.correctionQuote || entry.content.includes(fact.correctionQuote));
     const origin = entry && (SYNTHETIC.test(entry.content) || entry.source === "selftest") ? "synthetic" : "user_report";
-    view.facts.push({ ...fact, origin, evidenceDate: entry && !Number.isNaN(Date.parse(entry.capturedAt)) ? entry.capturedAt : null,
+    view.facts.push({ ...fact, origin, verificationQuote: entry ? verificationScope(fact.verificationQuote, fact.statement, entry) : null, evidenceDate: entry && !Number.isNaN(Date.parse(entry.capturedAt)) ? entry.capturedAt : null,
       status: !supported ? "unsupported" : fact.effectiveDate && fact.effectiveDate > view.asOf ? "future" : view.mode === "historical" && !fact.effectiveDate ? "undated" : "active",
       ...(supported ? { source: { path: entry.evidenceRef, url: entry.url, provider: entry.provider,
         ...(entry.revisionId ? { revisionId: entry.revisionId } : {}), ...(entry.githubUrl ? { githubUrl: entry.githubUrl } : {}) } } : {}) });
   }
   const eligible = view.facts.filter(fact => fact.status === "active");
   for (const fact of eligible) {
+    // Revalidate every persisted edge before applying any of a multi-target correction.
+    if (fact.supersedes.some(id => {
+      const target = view.facts.find(candidate => candidate.id === id);
+      return !target || !fact.correctionQuote || !directionalCorrection(fact.correctionQuote, target.statement, fact.statement);
+    })) fact.unresolvedCorrection = true;
     // Revalidate relation semantics, not just a model-authored ID in frontmatter.
     for (const target of eligible) {
       if (fact.unresolvedCorrection || !fact.supersedes.includes(target.id) || fact.id === target.id
         || fact.key !== target.key || fact.origin !== target.origin || !fact.correctionQuote || !explicitCorrection(fact.correctionQuote, fact.statement)
-        || !fact.correctionQuote.includes(fact.statement) || !fact.correctionQuote.includes(target.statement) || !fact.supersedesQuotes.includes(target.statement)
+        || !directionalCorrection(fact.correctionQuote, target.statement, fact.statement) || !fact.supersedesQuotes.includes(target.statement)
         || (fact.effectiveDate && target.effectiveDate && fact.effectiveDate < target.effectiveDate)) continue;
       target.status = "superseded";
     }
