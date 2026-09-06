@@ -15,6 +15,20 @@ vi.mock("ai", async (importActual) => {
 import { createBrainLlm } from "../src/llm/aisdk.js";
 
 describe("ask_brain deterministic retrieval retry", () => {
+  it("routes temporal read-only questions through the typed fact projection with requested date and read telemetry", async () => {
+    const readFacts = vi.fn(async () => '{"facts":[],"legacy":true}');
+    const onReadAction = vi.fn();
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    await llm.answer({ question: "What was Orchid's color as of 2026-02-01?", vaultBriefing: "brief", conversation: [], onReadAction }, {
+      readFacts, searchChats: async () => "none",
+    });
+    const args = { path: "Notes/Orchid.md", key: "orchid.color", asOf: "2026-02-01" };
+    expect(await captured.config.tools.read_facts.execute(args)).toContain('"legacy":true');
+    expect(readFacts).toHaveBeenCalledWith(args);
+    expect(onReadAction).toHaveBeenCalledWith("read_facts", args, '{"facts":[],"legacy":true}');
+    expect(captured.config.messages[0].content).toContain("absence of a fix record is not proof no fix exists");
+  });
+
   it("exposes and forwards bounded read options to the real answer tool seam", async () => {
     const readNote = vi.fn(async () => '{"body":"late fact","nextCursor":"next","truncated":true}');
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });

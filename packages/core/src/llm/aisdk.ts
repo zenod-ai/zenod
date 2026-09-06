@@ -375,6 +375,8 @@ function toolLabel(toolName: string, input: unknown): string {
       return "Searching memory entries and coverage";
     case "search_vault":
       return typeof args.query === "string" ? `Searching the vault for “${args.query}”` : "Searching the vault";
+    case "read_facts":
+      return "Reading current and historical facts";
     case "read_note":
       return typeof args.path === "string" ? `Reading ${args.path}` : "Reading a note";
     case "list_pages":
@@ -473,6 +475,15 @@ function toolLabel(toolName: string, input: unknown): string {
 const classificationSchema = z.object({
   topics: z.array(z.object({
     topic: z.string(),
+    facts: z.array(z.object({
+      key: z.string().max(160).describe("Stable entity/attribute key, e.g. orchid.launch-color; reuse the same key across updates"),
+      statement: z.string().max(1600).describe("Exact nonempty source quote of one factual statement, never a paraphrase"),
+      effectiveDate: z.string().nullable().describe("Explicit YYYY-MM-DD effective date present in this evidence; otherwise null, never infer from capture time"),
+      effectiveDateQuote: z.string().max(2400).nullable().describe("Exact source quote containing statement immediately followed by effective/as of/valid from/since/from and effectiveDate; null without this explicit binding. An unrelated date is not an effective date"),
+      correctionQuote: z.string().max(2400).nullable().describe("Exact source quote with directional replace \"old statement\" with \"new statement\" or \"new statement\" supersedes \"old statement\"; null if not explicit"),
+      supersedesQuotes: z.array(z.string().max(1600)).max(24).describe("Exact old statements quoted inside correctionQuote; empty if target is ambiguous. Contradiction alone is not supersession"),
+      verificationQuote: z.string().max(1600).nullable().describe("Exact source quote in the form Verified \"statement\" on YYYY-MM-DD in environment/version/build scope; must bind this exact statement, not another subsystem; no planned, negated or future check; null when unverified. A report is never a host-verified live test"),
+    })).max(24).describe("Durable source-qualified facts only; empty for transient or ambiguous content"),
     evidenceQuotes: z.array(z.string()).min(1).describe("Exact verbatim quotes from Memory to classify only, covering this topic; do not quote neighboring context"),
     confidence: z.number().min(0).max(1),
     disposition: z.enum(["evidence_only", "append_compact_note", "integrate_page", "needs_clarification"]),
@@ -778,7 +789,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
 
   async classify(input: ClassifyInput): Promise<Classification> {
     const index = input.pageIndex
-      .map((p) => `${p.path} | ${p.title} | aliases: ${(p.aliases ?? []).join(",")} | tags: ${p.tags.join(",")} | ${p.summary}`)
+      .map((p) => `${p.path} | ${p.title} | aliases: ${(p.aliases ?? []).join(",")} | fact keys: ${(p.factKeys ?? []).join(",")} | tags: ${p.tags.join(",")} | ${p.summary}`)
       .join("\n");
 
     let result;
@@ -791,6 +802,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
         "decide which meaning page(s) it belongs to — update existing pages when one fits, create a new one only when nothing does.",
         "Return every topic independently in topics, each with its own confidence, disposition and exact evidenceQuotes. An ambiguous name must not lower confidence for other clear topics. Cover all source content, including unresolved topics. Preserve uncertain source spellings. Top-level fields are compatibility summaries only.",
+        "For durable current-state facts, add exact-quoted facts with stable entity/attribute keys, reusing the existing candidate fact keys when they describe the same attribute. Distinguish evidence capture from supplied effective dates; unknown dates stay null. A changed value without explicit correction of an identifiable old statement is a conflict, not supersession. Explicit corrections must quote the replaced statement verbatim; if no unique target is given retain the ambiguity. Test/synthetic content is not a real user fact. Verification must quote the performed check, environment and date; an old bug report is not current deployed behavior. Never infer that a missing fix record proves no fix exists.",
         "Choose a spend disposition for each topic before selecting pages:",
         "- evidence_only: the immutable Log entry is sufficient (default for short check-ins, test phrases, receipts, transient observations, and low-value captures).",
         "- append_compact_note: one durable fact belongs on an existing page and can be represented by one short cited update without rewriting the page.",
@@ -851,6 +863,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         "- YAML frontmatter with exactly these keys: title, type, tags, created, updated (YYYY-MM-DD), summary (one dense line written for a cold LLM reader), description (same value as summary, for OKF consumers), timestamp (ISO 8601 datetime for updated at 00:00:00Z unless a better source time is known).",
         `- The 'type' field MUST be exactly: ${input.requiredType}`,
         `- 'tags' may only use this vocabulary: ${input.tagVocabulary.join(", ")}`,
+        "- Keep previous claims and citations as historical evidence. Annotate explicit corrections rather than erasing old lines. Conflicting reports are not resolved facts. Never author host-owned memoryFacts metadata. Keep test fixtures and old incidents labeled; absence of a fix record is not proof of a current bug.",
         `- Every claim derived from the evidence must cite it inline: (${input.citation})`,
         "- The page MUST wikilink at least one existing page (no orphans). Include at least one of these exact links, e.g. on a final 'Related:' line:",
         input.linkHints.length > 0 ? `  ${input.linkHints.join("  ")}` : "  (link to the most relevant folder index)",
@@ -1523,6 +1536,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       ...(tools.searchEntries ? ["TYPED RETRIEVAL: for dates, sources, content types or exhaustive memory audits, use search_entries. Set exhaustive=true for complete inventories; the host enumerates within its declared budget. Read exact evidenceRefs and follow passage cursors before synthesizing. Echo the actual scope; complete lexical enumeration is not complete semantic recall. Pinned evidence is primary. Never treat conversation-history results as durable memory. If coverage is partial, say so and retain continuation; never claim an exhaustive answer or absence."] : []),
       "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.",
       "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
+      ...(tools.readFacts ? ["TEMPORAL FACTS: for current state, corrections, conflicting facts or a requested historical date, find the relevant meaning page then use read_facts (exact key when known). Set asOf to the explicitly requested YYYY-MM-DD for historical effective state; omit for latest reports. Do not substitute read_note prose for this projection. Its source-backed active/conflict/undated/unsupported states are authoritative only for the selected note/key. Explicit supersession differs from contradiction; unknown dates stay unknown. Use original evidence for legacy notes. Historical bug reports are reports at their evidence date, never fresh validation; absence of a fix record is not proof no fix exists. Synthetic facts stay labeled. Cite each material claim and state verification scope. The host renders this temporal report directly, so select all relevant keys before finishing."] : []),
       "SYNTHETIC EVIDENCE: 'synthetic test data' or quarantine in Inbox means it is not a real user fact; it does NOT mean the evidence is absent or forbidden to recall. When the user explicitly asks about a synthetic fixture, answer from its evidence and clearly label the answer synthetic. Do not promote it to a real user fact. Attributes not present in that evidence remain unknown.",
     ].join(" ");
     const captureRecord = (capture: NonNullable<AnswerInput["captureContext"]>[number]) => ({
@@ -1630,6 +1644,17 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
             }
           : {}),
+        ...(tools.readFacts ? {
+          read_facts: tool({
+            description: "Read a bounded source-verified current/historical fact projection for one meaning note. Exact key optional; asOf is an explicit YYYY-MM-DD effective date. Returns conflicts, supersession, unknown dates, synthetic/report labels, verification quotes and provider citations. At most 32 records / 24,000 metadata characters; narrow by key if partial. Legacy notes are unstructured, not proof of current truth. This does not execute live verification.",
+            inputSchema: z.object({ path: z.string(), key: z.string().max(160).optional(), asOf: z.string().optional() }),
+            execute: async (args) => {
+              const result = await tools.readFacts!(args);
+              input.onReadAction?.("read_facts", args, result);
+              return result;
+            },
+          }),
+        } : {}),
         ...(tools.searchEntries ? {
           search_entries: tool({
             description: "Search complete local immutable memory entries with typed date/source/content filters before limits. For bounded exhaustive audits set exhaustive=true: the host enumerates up to 8 pages per ask (20 entries per page) before synthesis. Follow the returned cursor with identical filters/order. Read each exact evidenceRef via read_note, including its passage continuations, before claiming complete coverage. A budget stop is partial, never absence. Filters are lexical AND substrings in title/content; dates inclusive ISO instants (date-only is midnight UTC). Conversation history is separate; pinned contextRefs remain primary.",
