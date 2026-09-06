@@ -64,6 +64,8 @@ For every upgrade:
 3. Update the image and necessary source-SHA override through Dokploy. Refuse unexpected runtime or pending Dokploy configuration drift. Preserve volumes, sessions and unrelated settings.
 4. Require completed Swarm update, the actual running task's exact image, actual container OCI revision, correct health SHA and the product's live smoke checks. Desired state or a healthy endpoint alone is insufficient. On failure, inspect the receipt before retrying; use code rollback when appropriate.
 
+While job 10083 remains queued, first cancel that exact pending candidate request through the supported queue operation after rechecking its application and waiting state, then invoke rollback. Otherwise an already queued upgrade could run after the undo. Do not cancel unrelated jobs.
+
 Rollback changes code, not data. It retains captures written after deployment. Restoring an older data archive can erase later writes and needs a separately scoped recovery decision; never silently restore over the live volume.
 
 ## Backup policy
