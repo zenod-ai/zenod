@@ -14,9 +14,9 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: 56c815f38aab6790b8afc165a8001e8fc0b5732b deployed public Zenod at 22:15:07 UTC; evidence-only main updates separate
+Last reconciled commit: c5da66f00ec6125e7e6f268d0d49291ac6ee8502 deployed public Zenod at 22:36:24 UTC; evidence-only main updates separate
 Planner: Jordi + ZMR-release-planner
-Worker: /root/zmr_8_chat_review — optional classification fallback repair; /root/zmr_deploy_audit — sole production operator
+Worker: /root/zmr_8_chat_review — verified facts on ordinary reads; /root/zmr_deploy_audit — sole production operator
 Tester: parent direct live MCP acceptance; independent agent review
 
 ## Role Bindings
@@ -87,28 +87,30 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: repair 56c815f live; deployment queue cleared; bounded filing repair active
+Phase: c5da66f live; filing retest passed; ordinary-page fact recall repair active
 Last verified: 2026-09-07 00:17 CEST
 Integration target: main
 Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
-Next action: preserve successful initial classification when optional catalog fallback fails; review, deploy the bounded fix through the now-cleared path, and repeat filing.
-Blockers: optional classification fallback discards a valid initial result; live log-read/answer precision limitations remain. Raw evidence is intact.
+Next action: expose existing verified facts during ordinary meaning-page reads; review and test the bounded change, then repeat the deployment-boundary recall on its actual deployed version.
+Blockers: open-ended boundary recall selected obsolete body text despite correct new memoryFacts; verified facts require separate read_facts today. Raw evidence and successful filing are verified.
 
 ## Execution Cursor
 
-Current live receipt: `56c815f38aab6790b8afc165a8001e8fc0b5732b` verified by actual task/OCI/health, immutable image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`; queue empty after job 10083. Jordi authorized clearing the backlog: our main merges had triggered legacy sibling autoDeploy builds with no path filters. Four triggers paused with private backups; ten unrelated pending jobs removed, running services/data preserved. See the deployments leaf. MCP recall `test_867984e3691a49ae932909e3cf4488aa` recovered the saved preferences but mislabelled input channel and made an unqualified absence claim; stress log read `test_47ee05569fe44dfeac6cf123827a2d85` returned partial coverage. Filing job `02ee721e-8c9c-4be7-9e07-ca00e440f114` saved intact at revision `415b42a92d16b846ad5175c065e2e3260391d8ab` with classification_unavailable. Metered calls show an initial success followed by optional fallback failures; worker confirmed this discards the valid first result. No provider/schema change is needed for the assigned correction.
+Latest receipt: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502` live at 22:36:24.878 UTC, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`, actual OCI/task/health and preservation checks pass. Job `31c1d895-d5bb-4b06-9129-65bf9b109796` filed the exact repository boundary to Projects/Zenod.md (revision c906053f), one topic and zero uncertainty/pending. Natural recall audit `test_86c1f595cebc4d9ea46822a0bb9031b0` nevertheless returned obsolete Herald scope from old body text. Five correct new frontmatter memoryFacts verified; worker is reusing verified-fact projection on ordinary unpinned page reads. See `docs/evidence/zmr-live-c5da66f/`.
+
+Prior repair receipt: `56c815f38aab6790b8afc165a8001e8fc0b5732b` verified by actual task/OCI/health, immutable image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`; queue empty after job 10083. Jordi authorized clearing the backlog: our main merges had triggered legacy sibling autoDeploy builds with no path filters. Four triggers paused with private backups; ten unrelated pending jobs removed, running services/data preserved. See the deployments leaf. MCP recall `test_867984e3691a49ae932909e3cf4488aa` recovered the saved preferences but mislabelled input channel and made an unqualified absence claim; stress log read `test_47ee05569fe44dfeac6cf123827a2d85` returned partial coverage. Filing job `02ee721e-8c9c-4be7-9e07-ca00e440f114` saved intact at revision `415b42a92d16b846ad5175c065e2e3260391d8ab` with classification_unavailable. Metered calls show an initial success followed by optional fallback failures; worker confirmed this discards the valid first result. No provider/schema change is needed for the assigned correction.
 
 Historical queued repair receipt (completed at 22:15:07.905 UTC): reviewed/CI-green PRs #1219 and #1220 merged; candidate `56c815f38aab6790b8afc165a8001e8fc0b5732b`, published image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Dokploy desired configuration is updated, but actual production remains `392d058`. HTTP 200 acknowledged enqueue; deployment history shows worker-started records only. Read-only BullMQ inspection confirmed the requests waiting. Only duplicate jobs 10084/10085/10086 were removed through Job.remove after exact app/state checks; 10083 retained. No forced Swarm update, shared service restart or speculative endpoint correction. If undoing before execution, first cancel exact pending candidate job 10083 after checking app/state, otherwise it may execute after rollback.
 
 
 Last attempted: deploy tested public candidate with preserved config and verified recovery, then test real MCP capture and recall.
-Result: 56c815f is live with actual image/OCI verified, queue empty and runtime/data preserved. Natural recall recovered the earlier learning; new raw learning415b42a9 saved safely to Inbox. Optional classification fallback still fails and is assigned for correction.
+Result: c5da66f is live, queue empty, runtime/data preserved. New boundary filed successfully at c906053f; ordinary recall selected obsolete body text instead of correct saved facts. Retrieval correction assigned.
 Execution status: active
-Waiting on: /root/zmr_8_chat_review bounded filing fix; sole operator /root/zmr_deploy_audit owns subsequent image switch; parent runs MCP
+Waiting on: /root/zmr_8_chat_review bounded ordinary-page retrieval fix; sole operator /root/zmr_deploy_audit owns subsequent image switch; parent runs MCP
 Approved work: this production upgrade, bounded live memory tests and fixes, and reusable undo procedure are explicitly authorized. Preserve data/configuration; no provider overhaul, billing/signup change or destructive restore. Human SHIP acceptance remains separate.
-Next action: preserve successful initial classification when optional catalog fallback fails; review, deploy the bounded fix through the now-cleared path, and repeat filing.
+Next action: expose existing verified facts during ordinary meaning-page reads; review and test the bounded change, then repeat the deployment-boundary recall on its actual deployed version.
 
 
 

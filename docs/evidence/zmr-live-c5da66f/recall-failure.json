@@ -1,0 +1,213 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "**Jordi's deployment scope for the Zenod repository (from `Projects/Zenod.md`):**\n\nZenod is positioned as the open-source memory layer/framework/harness. It should be deployed as the core self-host instance (one Jordi self-host instance) together with Herald as the product built on top (separate Herald instance). Both launch together with multi-tenant support.\n\nThe other agents in the suite (Archus/Nearchus, Epaminon, Nectary, Phylax/Callisthenes, etc.) are distinct OWNERS/WORKERS units with their own bounded MCP surfaces and are not deployed from the Zenod repo; they remain separate while sharing the central vault substrate.\n\n**Source citation:** `Projects/Zenod.md` (section on strategic direction and EPIC 2/3 packaging, referencing the 2026-07-05 Fable snapshot and 2026-07-31 direction; also cross-referenced in `Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md`)."
+    }
+  ],
+  "structuredContent": {
+    "correlationId": "test_86c1f595cebc4d9ea46822a0bb9031b0",
+    "testRunId": "zmr-production-c5da66f-20260907",
+    "surface": "web",
+    "conversationKey": "zmr-production-c5da66f-boundary-recall",
+    "conversationId": "web:zmr-production-c5da66f-boundary-recall",
+    "status": "ok",
+    "text": "**Jordi's deployment scope for the Zenod repository (from `Projects/Zenod.md`):**\n\nZenod is positioned as the open-source memory layer/framework/harness. It should be deployed as the core self-host instance (one Jordi self-host instance) together with Herald as the product built on top (separate Herald instance). Both launch together with multi-tenant support.\n\nThe other agents in the suite (Archus/Nearchus, Epaminon, Nectary, Phylax/Callisthenes, etc.) are distinct OWNERS/WORKERS units with their own bounded MCP surfaces and are not deployed from the Zenod repo; they remain separate while sharing the central vault substrate.\n\n**Source citation:** `Projects/Zenod.md` (section on strategic direction and EPIC 2/3 packaging, referencing the 2026-07-05 Fable snapshot and 2026-07-31 direction; also cross-referenced in `Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md`).",
+    "sources": [
+      {
+        "path": "Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md"
+      },
+      {
+        "path": "Projects/Zenod.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+      }
+    ],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      }
+    ],
+    "audit": {
+      "correlationId": "test_86c1f595cebc4d9ea46822a0bb9031b0",
+      "testRunId": "zmr-production-c5da66f-20260907",
+      "surface": "web",
+      "conversationKey": "zmr-production-c5da66f-boundary-recall",
+      "conversationId": "web:zmr-production-c5da66f-boundary-recall",
+      "prompt": "Read-only: What is Jordi's deployment scope for the Zenod repository? Which services should be deployed from it, and what should happen to the other agents? Read the saved source and cite it.",
+      "reply": "**Jordi's deployment scope for the Zenod repository (from `Projects/Zenod.md`):**\n\nZenod is positioned as the open-source memory layer/framework/harness. It should be deployed as the core self-host instance (one Jordi self-host instance) together with Herald as the product built on top (separate Herald instance). Both launch together with multi-tenant support.\n\nThe other agents in the suite (Archus/Nearchus, Epaminon, Nectary, Phylax/Callisthenes, etc.) are distinct OWNERS/WORKERS units with their own bounded MCP surfaces and are not deployed from the Zenod repo; they remain separate while sharing the central vault substrate.\n\n**Source citation:** `Projects/Zenod.md` (section on strategic direction and EPIC 2/3 packaging, referencing the 2026-07-05 Fable snapshot and 2026-07-31 direction; also cross-referenced in `Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md`).",
+      "sources": [
+        {
+          "path": "Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md",
+          "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md",
+          "provider": "github",
+          "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+          "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md"
+        },
+        {
+          "path": "Projects/Zenod.md",
+          "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md",
+          "provider": "github",
+          "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+          "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+        }
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Projects/Zenod.md"
+        }
+      ],
+      "status": "ok",
+      "at": "2026-09-06T22:38:04.295Z"
+    },
+    "evidence": [
+      {
+        "kind": "chat_audit",
+        "id": "test_86c1f595cebc4d9ea46822a0bb9031b0",
+        "correlationId": "test_86c1f595cebc4d9ea46822a0bb9031b0",
+        "conversationId": "web:zmr-production-c5da66f-boundary-recall"
+      }
+    ]
+  },
+  "isError": false
+}
