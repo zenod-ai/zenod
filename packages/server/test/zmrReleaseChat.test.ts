@@ -125,4 +125,50 @@ describe("ZMR-8 customer streaming chat parity", () => {
     });
   });
 
+  it.each([
+    "What payroll provider did I save in my memories?",
+    "Search my notes for the payroll provider.",
+    "What did I previously save about payroll?",
+  ])("requires host grounding without model tool calls or citations: %s", async prompt => {
+    let calls = 0;
+    await journey(async input => {
+      if (calls++ > 0) {
+        expect(input.conversation.filter(message => message.role === "assistant").length).toBeGreaterThan(0);
+        expect(input.conversation.some(message => message.role === "assistant" && message.text.includes("imaginary-payroll"))).toBe(false);
+      }
+      input.onTextDelta?.("Your payroll provider is imaginary-payroll.");
+      return { text: "Your payroll provider is imaginary-payroll.", readPaths: [] };
+    }, async (app, headers) => {
+      // Two streamed turns check both delivery and the assistant history received next turn.
+      for (let n = 0; n < 2; n++) {
+        const result = await ask(app, headers, prompt);
+        expect(result.text).not.toContain("imaginary-payroll");
+        expect(result.text).toContain("couldn't verify");
+        expect(result.sources).toEqual([]);
+        expect(result.coverage.contract).toBe("ask-coverage-v1");
+      }
+      // Repeat the same host-selected policy through nonstreaming handleTasking.
+      for (let n = 0; n < 2; n++) {
+        const response = await app.request("/api/chat", { method: "POST", headers, body: JSON.stringify({ message: prompt }) });
+        expect(response.status).toBe(200);
+        const result = await response.json();
+        expect(result.text).not.toContain("imaginary-payroll");
+        expect(result.text).toContain("couldn't verify");
+        expect(result.sources).toEqual([]);
+        expect(result.coverage.contract).toBe("ask-coverage-v1");
+      }
+      expect(calls).toBe(4);
+    });
+  });
+  it("preserves general explanations about memory without selecting personal recall", async () => {
+    await journey(async input => {
+      input.onTextDelta?.("RAM holds working data for a computer.");
+      return { text: "RAM holds working data for a computer.", readPaths: [] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, "Explain how computer memory works.");
+      expect(result.text).toBe("RAM holds working data for a computer.");
+      expect(result.coverage).toBeUndefined();
+    });
+  });
+
 });

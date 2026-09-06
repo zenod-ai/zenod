@@ -32,6 +32,17 @@ export function exhaustiveMemoryQuestion(question: string): boolean {
   return /\b(exhaustive|complete (?:list|audit|history|inventory)|audit|every (?:memory|entry|capture|note)|all (?:my |the )?(?:memories|entries|captures|notes|voice notes))\b/i.test(question);
 }
 
+/** Host routing for explicit personal-memory requests, independent of model tool choice.
+ * This is deliberately narrower than generic discussion of memory (for example RAM).
+ * Other memory turns are selected by their actual read attempts or citation claims.
+ */
+export function explicitMemoryRequest(question: string): boolean {
+  return /\b(?:my|our|your)\s+(?:(?:stored|saved|past|previous|personal)\s+)?(?:memor(?:y|ies)|notes?|vault|brain|captures?|voice notes?)\b/i.test(question)
+    || /\b(?:in|from|across|through|search|check|read)\s+(?:(?:the|my|our|your)\s+)?(?:(?:stored|saved|personal)\s+)?(?:memor(?:y|ies)|vault|brain|notes?|captures?)\b/i.test(question)
+    || /\b(?:what|which|when|where|who|how)\b[\s\S]*\b(?:did|have|had)\s+(?:I|we)\b[\s\S]*\b(?:save|saved|store|stored|capture|captured|tell|told|say|said|decide|decided)\b/i.test(question)
+    || /\b(?:do you remember|can you recall|recall what|remember when)\b/i.test(question);
+}
+
 export class RetrievalCoverage {
   pages = 0;
   private pageAttempts = 0;

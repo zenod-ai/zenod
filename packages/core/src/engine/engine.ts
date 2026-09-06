@@ -46,7 +46,7 @@ import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEv
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
-import { RetrievalCoverage } from "./retrievalCoverage.js";
+import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
@@ -2229,7 +2229,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     ])) as unknown as VaultReadTools;
     return {
       tools: trackedTools,
-      required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive,
+      required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive
+        || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: { text: string }): Promise<Answer> => {
         // Projection and source evidence must still describe the same local snapshot.
         let factSnapshotChanged = false;
