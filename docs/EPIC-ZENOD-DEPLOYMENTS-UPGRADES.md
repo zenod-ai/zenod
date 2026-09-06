@@ -38,7 +38,7 @@ Waiting on: bounded ordinary-page fact retrieval correction; deployment queue is
 Approved work: bounded production testing/fixes and easy code rollback. Optional small operator parameterization only if convenient; a generic CLI is not a release blocker.
 Next action: review the verified-fact read correction, deploy only the affected Zenod image and repeat the boundary recall.
 
-Repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` is live on `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Retained job 10083 completed; the queue was empty (zero active/waiting) at verification. Actual container `0ba7100e3ec6` OCI revision matched, with one running task, completed Swarm update, health OK, unchanged mount and 52 non-SHA environment entries. Private Phylax stayed on `sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e`. See the correction below for the cause and permanent trigger pause.
+Prior repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` was verified live on `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Retained job 10083 completed; the queue was empty (zero active/waiting) at verification. Actual container `0ba7100e3ec6` OCI revision matched, with one running task, completed Swarm update, health OK, unchanged mount and 52 non-SHA environment entries. Private Phylax stayed on `sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e`. See the correction below for the cause and permanent trigger pause.
 
 ## Upgrade and undo
 
