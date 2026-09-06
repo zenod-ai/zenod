@@ -42,3 +42,7 @@ The user's existing tenant is available for parent-run authenticated MCP tests. 
 - Python urllib default fingerprint was rejected by Cloudflare1010 before mutation. Existing curl admin transport works; API headers now live in a temporary mode0600 file so neither process args nor exception tracebacks expose credentials.
 - Verify actual running task image, completed Swarm update, exact health SHA and preserved configuration, not desired-image configuration alone.
 - Current helper is a pinned operator for this release; further upgrades should parameterize the same reviewed flow and freeze a receipt, not copy/edit its constants ad hoc.
+
+## Small incremental repair command
+
+The same helper accepts `deploy --candidate-sha FULL_SHA --candidate-image ghcr.io/zenod-ai/zenod@sha256:FULL_DIGEST --state-dir SECURE_RECEIPT_DIR`. Both candidate arguments are required together and validated; it refuses missing backup/config/restore receipts, unknown current images, or pending Dokploy configuration drift. Omitting overrides retains this exact release's defaults. Rollback always uses the frozen original image/config and preserves current data. This deliberately reuses the current release recovery receipt for the authorized code-only repair; it is not an automated generic backup framework.

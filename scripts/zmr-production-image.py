@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Pinned ZMR image switch. Secure snapshot stays outside Git; never restores data."""
-import json, os, pathlib, subprocess, sys, tempfile, time, urllib.request
-MODE=sys.argv[1] if len(sys.argv)>1 else ''
-if MODE not in ('deploy','rollback'): raise SystemExit('Usage: zmr-production-image.py deploy|rollback')
-STATE=pathlib.Path(os.environ.get('ZMR_DEPLOY_STATE','/Users/jordi/.local/state/zenod-zmr-production-20260906'))
+import argparse, json, os, pathlib, re, subprocess, sys, tempfile, time, urllib.request
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('mode',choices=['deploy','rollback'])
+parser.add_argument('--state-dir',default=os.environ.get('ZMR_DEPLOY_STATE','/Users/jordi/.local/state/zenod-zmr-production-20260906'))
+parser.add_argument('--candidate-sha')
+parser.add_argument('--candidate-image')
+args=parser.parse_args();MODE=args.mode;STATE=pathlib.Path(args.state_dir)
+if bool(args.candidate_sha)!=bool(args.candidate_image):parser.error('Supply both candidate SHA and immutable image')
+if MODE=='rollback' and args.candidate_sha:parser.error('Rollback uses frozen receipt, not candidate overrides')
+for required in ['public-app.before.json','public-service.before.json','backup.log','zenod-data-20260906T195603Z.tar.gz']:
+ if not (STATE/required).is_file():raise SystemExit('Missing recovery file: '+required)
+if 'restore_verified_at=' not in (STATE/'backup.log').read_text():raise SystemExit('Missing restore verification receipt')
 APP='2dkayH_eAur427leH64MT'; SERVICE='zenod-mt-fxpzoo'
 SHA='392d058a599bdf5fc69d17157282b8f9154dcf28'
 IMAGE='ghcr.io/zenod-ai/zenod@sha256:d21468dbf09f33550c52eb53bed32adea616842b4a144cd5cda428861f151a93'
+INITIAL_IMAGE=IMAGE
+if args.candidate_sha:
+ if not re.fullmatch(r'[0-9a-f]{40}',args.candidate_sha) or not re.fullmatch(r'ghcr.io/zenod-ai/zenod@sha256:[0-9a-f]{64}',args.candidate_image):parser.error('Require full source SHA and immutable Zenod digest')
+ SHA=args.candidate_sha;IMAGE=args.candidate_image
 OLD_SHA='fb8b07c5910b3424c4a15da4e1cfaa920cee4e22'
 OLD_IMAGE='ghcr.io/zenod-ai/zenod@sha256:c4d5fbf98818ca407ef445159965143cffc519a38f6c63e4e8c4f04230ba286d'
 a=json.loads((STATE/'public-app.before.json').read_text())
@@ -21,7 +33,7 @@ def api(path,body=None):
   return json.loads(raw) if raw else None
 def ssh(*args):return subprocess.check_output(['ssh','-o','ClearAllForwardings=yes','hetzner_vps_1',*args],text=True)
 current=json.loads(ssh('docker service inspect '+SERVICE))[0]
-if current['Spec']['TaskTemplate']['ContainerSpec']['Image'] not in (IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Image drift; stop')
+if current['Spec']['TaskTemplate']['ContainerSpec']['Image'] not in (IMAGE,INITIAL_IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Image drift; stop')
 old_mounts=service['Spec']['TaskTemplate']['ContainerSpec']['Mounts']
 if current['Spec']['TaskTemplate']['ContainerSpec']['Mounts'] != old_mounts:raise SystemExit('Mount drift; stop')
 old_env=service['Spec']['TaskTemplate']['ContainerSpec']['Env']
@@ -30,7 +42,7 @@ if sorted(x for x in current_env if not x.startswith('GIT_SHA='))!=sorted(x for 
 pending=api('/application.one?applicationId='+APP)
 def stable_env(value):return sorted(line for line in value.splitlines() if not line.startswith('GIT_SHA='))
 if stable_env(pending.get('env',''))!=stable_env(a['env']):raise SystemExit('Pending Dokploy environment drift; stop')
-if pending.get('dockerImage') not in (IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Pending Dokploy image drift; stop')
+if pending.get('dockerImage') not in (IMAGE,INITIAL_IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Pending Dokploy image drift; stop')
 image=IMAGE if MODE=='deploy' else OLD_IMAGE
 sha=SHA if MODE=='deploy' else OLD_SHA
 env=a['env']
