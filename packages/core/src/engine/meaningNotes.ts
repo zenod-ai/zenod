@@ -36,9 +36,16 @@ export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultP
   const decisions = result.topics ?? [result];
   if (snapshot.pages.length > initial.length && decisions.some((topic) => topic.confidence < 0.7 || topic.pages.some((page) => page.action === "create"))) {
     const probes = decisions.flatMap((topic) => [topic.summary, ...topic.pages.map((page) => page.title)]);
-    const fallback = await candidatePages(vaultPath, snapshot, probes.join(" "), input.hints, initial.map((page) => page.path));
-    // Keep explicit hints and strongest initial candidates while examining previously omitted candidates.
-    result = await run([...initial.slice(0, 8), ...fallback.slice(0, CANDIDATE_LIMIT - 8)], true);
+    try {
+      const fallback = await candidatePages(vaultPath, snapshot, probes.join(" "), input.hints, initial.map((page) => page.path));
+      // Keep explicit hints and strongest initial candidates while examining previously omitted candidates.
+      result = await run([...initial.slice(0, 8), ...fallback.slice(0, CANDIDATE_LIMIT - 8)], true);
+    } catch {
+      // Catalog expansion is optional. A failed refinement must not discard a
+      // validated first result or trigger a complete classification retry.
+      // Preserve its uncertainty and still run the full-snapshot reconciliation below.
+      console.warn("[classify] optional catalog refinement unavailable; retaining initial classification");
+    }
   }
   const reconcile = (pages: Classification["pages"]) => pages.map((page) => {
     const exact = snapshot.pages.find((candidate) => candidate.path.replace(/\.md$/, "").toLowerCase() === page.path.replace(/\.md$/, "").toLowerCase());

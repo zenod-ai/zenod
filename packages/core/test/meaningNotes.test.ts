@@ -60,6 +60,29 @@ describe("focused meaning notes", () => {
     const forged = await composeFocusedPage(llm(async () => serializeNote({ ...fm, aliasEvidence: [{ name: "Unproven" }] }, `Fact ${citation}`)), input(null));
     expect(parseNote(forged).frontmatter).not.toHaveProperty("aliasEvidence");
   });
+  it("retains a successful initial classification when optional wider-catalog generation fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zmr-fallback-")); dirs.push(dir);
+    await cp(new URL("./fixtures/vault", import.meta.url), dir, { recursive: true });
+    for (let n = 0; n < 26; n++) await writeFile(join(dir, `Notes/Extra${n}.md`), serializeNote({ ...fm, title: `Extra${n}`, type: "note" }, "other topic"));
+    const snapshot = await scanVault(dir);
+    const request = { content: "Insurance preference", hints: [], pageIndex: snapshot.pages, tagVocabulary: [] };
+    const first = { confidence: 0.6, summary: "Insurance preference", tags: [], question: "Which policy?", pages: [{ path: "Notes/insurance.md", title: "Insurance", action: "create" as const }] };
+    const classify = vi.fn().mockResolvedValueOnce(first).mockRejectedValueOnce(new Error("private provider failure"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await classifyCandidates({ classify }, dir, snapshot, request);
+      expect(classify).toHaveBeenCalledTimes(2);
+      expect(result).toMatchObject({ confidence: 0.6, question: "Which policy?", summary: first.summary, pages: [{ path: "Areas/Insurance.md", action: "update" }] });
+      expect(first.pages[0]!.action).toBe("create");
+      expect(JSON.stringify(warning.mock.calls)).not.toContain("private provider failure");
+      const failedInitial = vi.fn().mockRejectedValue(new Error("initial unavailable"));
+      await expect(classifyCandidates({ classify: failedInitial }, dir, snapshot, request)).rejects.toThrow("initial unavailable");
+      expect(failedInitial).toHaveBeenCalledTimes(1);
+      const recovered = { ...first, confidence: 0.9, summary: "Refined successful result" };
+      const successfulFallback = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(recovered);
+      expect(await classifyCandidates({ classify: successfulFallback }, dir, snapshot, request)).toMatchObject({ confidence: 0.9, summary: recovered.summary });
+    } finally { warning.mockRestore(); }
+  });
   it("retrieves explicit hints and body matches from a large catalog with bounded metadata and a fallback", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zmr6-candidates-")); dirs.push(dir);
     await cp(new URL("./fixtures/vault", import.meta.url), dir, { recursive: true });

@@ -1037,6 +1037,22 @@ describe("BrainEngine", () => {
     expect((await engine().lint()).errors).toEqual([]);
   });
 
+  it("files a valid first result when optional catalog refinement fails without restarting classification", async () => {
+    const note = parseNote(await readFile(join(repo.path, "Areas/Insurance.md"), "utf8"));
+    for (let n = 0; n < 26; n++) await writeFile(join(repo.path, `Notes/Extra${n}.md`), serializeNote({ ...note.frontmatter, title: `Extra${n}`, type: "note" }, "Other topic."));
+    await repo.commitAndPublish("test: seed wider candidate catalog");
+    llm.classify = vi.fn().mockResolvedValueOnce({ confidence: 0.95, summary: "Insurance preference", tags: ["insurance"], disposition: "append_compact_note",
+      pages: [{ path: "Notes/insurance.md", title: "Insurance", action: "create" }] }).mockRejectedValue(new Error("classify: structured_output_invalid"));
+    const content = "Travel insurance renews in April.";
+    const result = await engine().store({ content, source: "mcp" });
+    expect(llm.classify).toHaveBeenCalledTimes(2);
+    expect(result.filing).toBe("filed");
+    expect(result.pagesTouched).toEqual(["Areas/Insurance.md"]);
+    expect(await readFile(join(repo.path, "Areas/Insurance.md"), "utf8")).toContain(result.evidenceRef.split("#^")[1]!);
+    expect(await readFile(join(repo.path, result.evidenceRef.split("#")[0]!), "utf8")).toContain(content);
+    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(false);
+  });
+
   it("retries an unparsable classification, then saves the raw capture to Inbox", async () => {
     llm.failClassifyAttempts = 99;
     llm.classifyFailureMessage = "MCP bearer secret-internal-token; Ring schema dump: {prompt: hostile}";
