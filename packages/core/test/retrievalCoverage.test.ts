@@ -37,6 +37,15 @@ describe("host-owned audit coverage", () => {
     tracker.recordRead(passage(0, 50, "v2"));
     expect(tracker.result().status).toBe("complete-bounded-scope");
   });
+  it("does not use an unversioned bootstrap pin to certify a later enumerated snapshot", () => {
+    const tracker = new RetrievalCoverage("audit", [ref]);
+    expect(tracker.result().status).toBe("complete-bounded-scope"); // Pinned-only scope.
+    tracker.recordSearch({}, catalog("changed-after-pin"));
+    expect(tracker.result().status).toBe("partial");
+    expect(tracker.result().searches[0]!.unreadEvidenceRefs).toEqual([ref]);
+    tracker.recordRead(passage(0, 100, "current"));
+    expect(tracker.result().status).toBe("complete-bounded-scope");
+  });
   it("discards enumeration on snapshot changes and exposes a fresh restart", () => {
     const tracker = new RetrievalCoverage("audit", []);
     tracker.recordSearch({ capturedBefore: "2026-01-02" }, catalog()); tracker.recordRead(passage());

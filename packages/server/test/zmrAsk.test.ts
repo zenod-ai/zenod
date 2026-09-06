@@ -51,6 +51,18 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
       };
       const llm = {
         async answer(input: AnswerInput, tools: VaultReadTools) {
+          if (input.question === "audit stale pin" || input.question === "audit refreshed pin") {
+            expect(input.vaultBriefing).toContain("original launch color: amber");
+            await writeFile(join(repo.path, "Log/2026-01-01.md"), before.replace("original launch color: amber", "original launch color: silver"));
+            const catalog = JSON.parse(await tools.searchEntries!({ sourceId: "old-voice", exhaustive: true }));
+            expect(catalog.entries).toHaveLength(1); expect(catalog.entries[0].snippet).toContain("silver");
+            if (input.question === "audit refreshed pin") {
+              const fresh = await readExact(tools, manifest.refs.historical);
+              expect(fresh).toContain("silver");
+              return { text: `Refreshed original color silver (${manifest.refs.historical})`, readPaths: [] };
+            }
+            return { text: `Original color amber (${manifest.refs.historical})`, readPaths: [] };
+          }
           if (input.question.startsWith("pinned")) {
             expect(input.vaultBriefing).toContain("PINNED EVIDENCE CONTEXT");
             expect(input.conversation).toEqual([]);
@@ -184,6 +196,15 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
       expect(conversation.text).toContain("conversation history");
       expect(await readFile(join(repo.path, "Log/2026-01-01.md"), "utf8")).toBe(before);
       expect((await repo.currentRevision()).id).toBe(revision.id);
+      const stalePin = await ask("audit stale pin", [manifest.refs.historical]);
+      expect(stalePin.coverage.searches[0]).toMatchObject({ enumerationComplete: true, unreadEvidenceRefs: [manifest.refs.historical] });
+      expect(stalePin.coverage.status).toBe("partial"); expect(stalePin.text).not.toContain("color amber");
+      expect(stalePin.coverage.successfulReads).toEqual([]);
+      await writeFile(join(repo.path, "Log/2026-01-01.md"), before);
+      const refreshedPin = await ask("audit refreshed pin", [manifest.refs.historical]);
+      expect(refreshedPin.coverage.status).toBe("complete-bounded-scope"); expect(refreshedPin.text).toContain("silver");
+      expect(refreshedPin.coverage.searches[0]!.unreadEvidenceRefs).toEqual([]);
+      await writeFile(join(repo.path, "Log/2026-01-01.md"), before);
       const changed = await ask("audit changed");
       expect(changed.coverage.status).toBe("partial"); expect(changed.coverage.failedReads.join(" ")).toContain("snapshot changed");
       expect(changed.text).not.toContain("cobalt-seventeen");

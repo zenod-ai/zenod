@@ -86,7 +86,8 @@ export class RetrievalCoverage {
   }
   recordRead(passage: NotePassage): void { this.passages.push({ passage, at: ++this.sequence }); }
   private entryComplete(ref: string, since: number): boolean {
-    if (this.pinned.includes(ref)) return true;
+    // Bootstrap pins remain primary for pinned-only answers, but are not tied
+    // to a later catalog snapshot. Audits require a fresh read after enumeration.
     const reads = this.passages.filter(p => p.at > since && p.passage.identity === ref && p.passage.part === "body").map(p => p.passage);
     const version = reads.at(-1)?.version;
     const current = reads.filter(p => p.version === version).sort((a, b) => a.extent.start - b.extent.start);
