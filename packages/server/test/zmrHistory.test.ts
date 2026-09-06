@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -73,6 +74,17 @@ describe.each(["github", "google_drive"] as const)("ZMR historical MCP: %s", pro
       expect(lexical.entries).toEqual([]); expect(lexical.pagination).toBeNull(); expect(lexical.hits.length).toBeGreaterThan(0);
       const beginning = await search(first.client, { order: "oldest", limit: 2 });
       const cursor = beginning.pagination.nextCursor!;
+      // A true process restart rotates the signing key; unlike transport rebuild,
+      // it must reject the old cursor instead of silently starting a new page.
+      const restarted = spawnSync(process.execPath, ["--input-type=module", "-e", `
+        import { readFileSync } from "node:fs";
+        import { paginateMemoryEntries } from "zenod";
+        const input = JSON.parse(readFileSync(0, "utf8"));
+        try { paginateMemoryEntries(input.entries, {order: "oldest", limit: 2}, input.scope, input.cursor); process.exit(2); }
+        catch (error) { process.stdout.write(error.message); }
+      `], { input: JSON.stringify({ entries: all, scope: engine.memoryScope, cursor }), encoding: "utf8", timeout: 10000 });
+      expect(restarted.status).toBe(0);
+      expect(restarted.stdout).toContain("changed query/vault/process; restart without cursor");
       // New stateless MCP instance and new engine object, same actual vault.
       const reconnect = await connect(createEngine({ repo, llm: {} as BrainLlm, state })); connections.push(reconnect);
       const next = await search(reconnect.client, { order: "oldest", limit: 2, cursor });
