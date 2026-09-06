@@ -21,7 +21,11 @@ if args.candidate_sha:
  SHA=args.candidate_sha;IMAGE=args.candidate_image
 OLD_SHA='fb8b07c5910b3424c4a15da4e1cfaa920cee4e22'
 OLD_IMAGE='ghcr.io/zenod-ai/zenod@sha256:c4d5fbf98818ca407ef445159965143cffc519a38f6c63e4e8c4f04230ba286d'
+prior_candidate=json.loads((STATE/'last-candidate.json').read_text()) if (STATE/'last-candidate.json').exists() else {}
+known_images={IMAGE,INITIAL_IMAGE,OLD_IMAGE}
+if re.fullmatch(r'ghcr.io/zenod-ai/zenod@sha256:[0-9a-f]{64}',prior_candidate.get('image','')):known_images.add(prior_candidate['image'])
 a=json.loads((STATE/'public-app.before.json').read_text())
+known_images.add(a['dockerImage'])
 service=json.loads((STATE/'public-service.before.json').read_text())[0]
 def api(path,body=None):
  # Cloudflare rejects Python urllib's default fingerprint on this admin host.
@@ -33,7 +37,7 @@ def api(path,body=None):
   return json.loads(raw) if raw else None
 def ssh(*args):return subprocess.check_output(['ssh','-o','ClearAllForwardings=yes','hetzner_vps_1',*args],text=True)
 current=json.loads(ssh('docker service inspect '+SERVICE))[0]
-if current['Spec']['TaskTemplate']['ContainerSpec']['Image'] not in (IMAGE,INITIAL_IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Image drift; stop')
+if current['Spec']['TaskTemplate']['ContainerSpec']['Image'] not in known_images:raise SystemExit('Image drift; stop')
 old_mounts=service['Spec']['TaskTemplate']['ContainerSpec']['Mounts']
 if current['Spec']['TaskTemplate']['ContainerSpec']['Mounts'] != old_mounts:raise SystemExit('Mount drift; stop')
 old_env=service['Spec']['TaskTemplate']['ContainerSpec']['Env']
@@ -42,7 +46,7 @@ if sorted(x for x in current_env if not x.startswith('GIT_SHA='))!=sorted(x for 
 pending=api('/application.one?applicationId='+APP)
 def stable_env(value):return sorted(line for line in value.splitlines() if not line.startswith('GIT_SHA='))
 if stable_env(pending.get('env',''))!=stable_env(a['env']):raise SystemExit('Pending Dokploy environment drift; stop')
-if pending.get('dockerImage') not in (IMAGE,INITIAL_IMAGE,OLD_IMAGE,a['dockerImage']):raise SystemExit('Pending Dokploy image drift; stop')
+if pending.get('dockerImage') not in known_images:raise SystemExit('Pending Dokploy image drift; stop')
 image=IMAGE if MODE=='deploy' else OLD_IMAGE
 sha=SHA if MODE=='deploy' else OLD_SHA
 env=a['env']
@@ -50,6 +54,9 @@ if MODE=='deploy':
  import re
  env,n=re.subn(r'^GIT_SHA=.*$', 'GIT_SHA='+SHA,env,flags=re.M)
  if n!=1:raise SystemExit('Expected exactly one GIT_SHA override')
+if MODE=='deploy':
+ receipt=STATE/'last-candidate.json'
+ with os.fdopen(os.open(receipt,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w') as f:json.dump({'image':IMAGE,'sha':SHA},f)
 api('/application.update',{'applicationId':APP,'sourceType':'docker','dockerImage':image,'env':env})
 print('Dokploy desired image/environment updated; requesting redeploy',flush=True)
 api('/application.redeploy',{'applicationId':APP,'title':'ZMR '+MODE+' '+sha[:7]})
