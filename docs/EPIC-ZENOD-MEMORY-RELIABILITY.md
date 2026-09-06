@@ -87,21 +87,21 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: review — ZMR-3 PR #1204; CI passed, independent review active
-Last verified: 2026-09-06 02:41 CEST
+Phase: implementation — ZMR-3 review correction resumed after usage interruption
+Last verified: 2026-09-06 14:16 CEST
 Integration target: main
 Fresh base commit: e8458a8a5176fb68376b0f9b599c480015a49941; integrated ZMR-2, pinned for ZMR-3
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1 and corrected ZMR-2 integrated; ZMR-3 dispatched on e8458a8. ZMR-4 waits for ZMR-3 integration; later dependencies unchanged.
 Next action: review ZMR-3 complete historical search/pagination PR, integrate after gates, then dispatch ZMR-4.
-Blockers: none for local ZMR-3 implementation; real-model quality/cost/latency still unmeasured and explicitly required by ZMR-8.
+Blockers: no current execution blocker; receipt-only deduplication finding must be fixed and re-reviewed before merge. Real-model quality/cost/latency remains ZMR-8 acceptance.
 
 ## Execution Cursor
 
 Last attempted: verify corrected ZMR-2 exact-head CI/re-review, merge #1202, then dispatch ZMR-3.
-Result: ZMR-3 returned PR #1204 at bec3c6e with 79 core, 94 server and 9 schema checks; final process-restart regression passed. Required CI succeeded; independent reviewer assigned.
+Result: review found stale receipt-only deduplication; correction was interrupted by usage limit. User requested continue; existing mcp.ts and zmrHistory.test.ts edits survived, and the same worker confirmed resumed verification.
 Execution status: active
-Waiting on: independent ZMR-3 review of bec3c6e (CI passed)
+Waiting on: resumed ZMR-3 worker verification and corrected head; re-review and fresh CI then required
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-3 complete historical search/pagination PR, integrate after gates, then dispatch ZMR-4.
 
@@ -151,7 +151,7 @@ ZMR-1 and ZMR-2 are integrated; ZMR-3 is active and ZMR-4–8 retain dependencie
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | done — deterministic baseline | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | [PR #1201](https://github.com/zenod-ai/zenod/pull/1201) / codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | c823d06 merged; 102 focused tests; independent review + CI pass | 2026-09-06 01:11 CEST | Integrated c823d06; real-model metrics carried to ZMR-8 |
 | [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-2-passage-worker /root/zmr_2_passage | Retrieve answer-bearing passages beyond the note prefix | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-2 | [PR #1202](https://github.com/zenod-ai/zenod/pull/1202) / codex/zmr-2 | c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175 | e8458a8 merged; 182 core +35 MCP; corrected review and CI pass | 2026-09-06 02:05 CEST | Integrated; preserve pinned/distractor regressions |
-| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | review | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | bec3c6e CI passed; 657-entry provider tests; independent review active | 2026-09-06 02:41 CEST | Complete review before integration |
+| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | active — review correction | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | bec3c6e review P2; two local correction files recovered | 2026-09-06 14:16 CEST | Finish correction, re-review exact head and rerun required CI |
 | [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Give ask_brain typed retrieval and explicit coverage | proposed | ZMR-2, ZMR-3 | ../wt-zmr-4 at dispatch | codex/zmr-4 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | File multi-topic memories with per-topic confidence | proposed | ZMR-1, ZMR-4 | ../wt-zmr-5 at dispatch | codex/zmr-5 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Keep meaning notes focused and summaries bounded | proposed | ZMR-5 | ../wt-zmr-6 at dispatch | codex/zmr-6 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
@@ -190,6 +190,10 @@ No active assignments. The manager reassigns workers silent past budget after in
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 14:16 CEST — Manager — Resume interrupted ZMR-3 correction
+
+Usage limit interrupted /root/zmr_3_history before its correction was committed. On user “continue”, verified PR #1204 remains bec3c6e and only mcp.ts/zmrHistory.test.ts carry uncommitted correction work in wt-zmr-3. Reused the same agent/worktree; it confirmed the winning-receipt selection and different-content regression survived and resumed verification. No duplicate worker, reset, merge or deployment. The prior CI pass does not validate the uncommitted fix. Next: corrected exact-head review and CI, then ZMR-4.
 
 ### 2026-09-06 02:05 CEST — Manager — Passage fix integrated; history worker dispatched
 
