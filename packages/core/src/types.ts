@@ -44,6 +44,20 @@ export interface AttachmentInput {
   data: Uint8Array;
 }
 
+export interface TopicFilingResult {
+  topic: string;
+  evidenceRef: string;
+  /** UTF-16 offsets in the original raw capture, end exclusive. */
+  sourceSpans: Array<{ start: number; end: number }>;
+  confidence: number;
+  disposition: "evidence_only" | "append_compact_note" | "integrate_page" | "needs_clarification";
+  pages: string[];
+  /** Successful destinations, separate from proposed pages when filing is partial. */
+  filedPages: string[];
+  status: "filed" | "uncertain" | "pending";
+  reason?: string;
+}
+
 export interface StoreResult {
   /** Citation anchor of the evidence entry, e.g. "Log/2026-06-11.md#^e-7f3a2c". */
   evidenceRef: string;
@@ -61,6 +75,8 @@ export interface StoreResult {
   commitSha?: string;
   /** Compatibility collection retained for existing consumers. */
   githubUrls?: string[];
+  /** Independent topic outcomes; partial success is never collapsed into a filed claim. */
+  topics?: TopicFilingResult[];
   /** Durable filing disposition for this store operation. */
   filing: "filed" | "uncertain" | "inbox" | "pending";
   /**
