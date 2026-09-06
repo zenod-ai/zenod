@@ -54,6 +54,17 @@ describe("ZMR-8 customer streaming chat parity", () => {
   });
   it("rejects unverified sources and unsupported model claims on customer chat", async () => {
     await journey(async () => ({ text: "The payroll provider is imaginary-payroll.", readPaths: [manifest.refs.late] }),
-      async (app, headers) => { const result = await ask(app, headers, manifest.cases.find(test => test.id === "unknown")!.prompt); expect(result.text).not.toContain("imaginary-payroll"); expect(result.sources).toEqual([]); });
+      async (app, headers) => { const result = await ask(app, headers, manifest.cases.find(test => test.id === "unknown")!.prompt); expect.soft(result.text).not.toContain("imaginary-payroll"); expect.soft(result.sources).toEqual([]); });
+  });
+  it("does not turn unknown legacy fact status into current live verification", async () => {
+    await journey(async (_input, tools) => {
+      const view = JSON.parse(await tools.readFacts!({ path: "Areas/Insurance.md" }));
+      expect(view.legacy).toBe(true);
+      expect(view.facts).toEqual([]);
+      return { text: "Production is definitely broken and live verified.", readPaths: ["Areas/Insurance.md"] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, "Is the old insurance incident still broken in production now?");
+      expect(result.text).not.toContain("definitely broken and live verified");
+    });
   });
 });

@@ -1,0 +1,103 @@
+
+> @zenod/server@0.0.1 test
+> vitest run test/zmrReleaseChat.test.ts
+
+
+ RUN  v4.1.10 /Users/jordi/Documents/GitHub/wt-zmr-8/packages/server
+
+(node:45585) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ test/zmrReleaseChat.test.ts (4 tests | 3 failed) 136ms
+     × offers typed enumeration to the customer memory answer loop 30ms
+     × rejects unverified sources and unsupported model claims on customer chat 30ms
+     × does not turn unknown legacy fact status into current live verification 27ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/zmrReleaseChat.test.ts > ZMR-8 customer streaming chat parity > offers typed enumeration to the customer memory answer loop
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ test/zmrReleaseChat.test.ts:53:117
+     51|     let available = false;
+     52|     await journey(async (_input, tools) => { available = typeof tools.…
+     53|       async (app, headers) => { await ask(app, headers, "List all capt…
+       |                                                                                                                     ^
+     54|   });
+     55|   it("rejects unverified sources and unsupported model claims on custo…
+ ❯ journey test/zmrReleaseChat.test.ts:23:5
+ ❯ test/zmrReleaseChat.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/zmrReleaseChat.test.ts > ZMR-8 customer streaming chat parity > rejects unverified sources and unsupported model claims on customer chat
+AssertionError: expected 'The payroll provider is imaginary-pay…' not to contain 'imaginary-payroll'
+
+Expected: "imaginary-payroll"
+Received: "The payroll provider is imaginary-payroll."
+
+ ❯ test/zmrReleaseChat.test.ts:57:162
+
+ ❯ journey test/zmrReleaseChat.test.ts:23:5
+ ❯ test/zmrReleaseChat.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/zmrReleaseChat.test.ts > ZMR-8 customer streaming chat parity > rejects unverified sources and unsupported model claims on customer chat
+AssertionError: expected [ { …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "path": "Log/2026-01-01.md#^e-000001",
++     "provider": "google_drive",
++     "url": "https://drive.google.com/drive/zenod-vault/Log/2026-01-01.md%23%5Ee-000001",
++   },
++ ]
+
+ ❯ test/zmrReleaseChat.test.ts:57:222
+
+ ❯ journey test/zmrReleaseChat.test.ts:23:5
+ ❯ test/zmrReleaseChat.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/zmrReleaseChat.test.ts > ZMR-8 customer streaming chat parity > does not turn unknown legacy fact status into current live verification
+AssertionError: expected 'Production is definitely broken and l…' not to contain 'definitely broken and live verified'
+
+Expected: "definitely broken and live verified"
+Received: "Production is definitely broken and live verified."
+
+ ❯ test/zmrReleaseChat.test.ts:67:31
+     65|     }, async (app, headers) => {
+     66|       const result = await ask(app, headers, "Is the old insurance inc…
+     67|       expect(result.text).not.toContain("definitely broken and live ve…
+       |                               ^
+     68|     });
+     69|   });
+ ❯ journey test/zmrReleaseChat.test.ts:23:5
+ ❯ test/zmrReleaseChat.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  19:46:44
+   Duration  1.04s (transform 517ms, setup 0ms, import 843ms, tests 136ms, environment 0ms)
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/jordi/Documents/GitHub/wt-zmr-8/packages/server
+npm error workspace @zenod/server@0.0.1
+npm error location /Users/jordi/Documents/GitHub/wt-zmr-8/packages/server
+npm error command failed
+npm error command sh -c vitest run test/zmrReleaseChat.test.ts
