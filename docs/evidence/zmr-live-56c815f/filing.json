@@ -1,0 +1,92 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Saved — filed to Inbox; the filing question is logged in the note.\nevidence: Log/2026-09-06.md#^e-8c74f6\nevidence URL: https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30\npages: Inbox/needs-filing-2026-09-06T22-17-03.md\nsaved revision: github:415b42a92d16b846ad5175c065e2e3260391d8ab\ncommit: 415b42a92d16b846ad5175c065e2e3260391d8ab\nhttps://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30\nhttps://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+    }
+  ],
+  "structuredContent": {
+    "found": true,
+    "ticket_id": "02ee721e-8c9c-4be7-9e07-ca00e440f114",
+    "jobId": "02ee721e-8c9c-4be7-9e07-ca00e440f114",
+    "kind": "store",
+    "status": "done",
+    "state": "done",
+    "result": {
+      "evidenceRef": "Log/2026-09-06.md#^e-8c74f6",
+      "pagesTouched": [
+        "Inbox/needs-filing-2026-09-06T22-17-03.md"
+      ],
+      "evidenceUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30",
+      "pageUrls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+      ],
+      "revision": {
+        "provider": "github",
+        "id": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+        "committedAt": "2026-09-06T22:17:03Z",
+        "urls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+        ],
+        "commitSha": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+        "githubUrls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md"
+        ]
+      },
+      "urls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30",
+        "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+      ],
+      "commitSha": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+      "githubUrls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+        "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md"
+      ],
+      "filing": "inbox"
+    },
+    "evidence": [
+      {
+        "kind": "memory_stored",
+        "id": "02ee721e-8c9c-4be7-9e07-ca00e440f114",
+        "ticket_id": "02ee721e-8c9c-4be7-9e07-ca00e440f114",
+        "jobId": "02ee721e-8c9c-4be7-9e07-ca00e440f114",
+        "status": "done",
+        "evidenceRef": "Log/2026-09-06.md#^e-8c74f6",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30",
+        "revision": {
+          "provider": "github",
+          "id": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+          "committedAt": "2026-09-06T22:17:03Z",
+          "urls": [
+            "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30",
+            "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+          ],
+          "commitSha": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+          "githubUrls": [
+            "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+            "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md"
+          ]
+        },
+        "urls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Log/2026-09-06.md#L30",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+        ],
+        "commitSha": "415b42a92d16b846ad5175c065e2e3260391d8ab",
+        "pagesTouched": [
+          "Inbox/needs-filing-2026-09-06T22-17-03.md"
+        ],
+        "filing": "inbox",
+        "githubUrls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Inbox/needs-filing-2026-09-06T22-17-03.md"
+        ],
+        "pageUrls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/415b42a92d16b846ad5175c065e2e3260391d8ab/Inbox/needs-filing-2026-09-06T22-17-03.md"
+        ]
+      }
+    ]
+  },
+  "isError": false
+}

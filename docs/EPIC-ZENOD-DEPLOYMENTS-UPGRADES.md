@@ -1,6 +1,6 @@
 # Zenod deployments and upgrades
 
-Status: active — first production upgrade live; follow-up queued
+Status: active — repair live, deployment queue cleared; filing fix active
 Updated: 2026-09-06
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
@@ -19,24 +19,24 @@ Keep one simple, supported upgrade and undo process. Reuse Dokploy and the exist
 
 ## Current State
 
-Phase: public production upgrade verified at 2026-09-06 20:06:05 UTC; live memory fixes active.
-Running source: `392d058a599bdf5fc69d17157282b8f9154dcf28`.
-Running image: `ghcr.io/zenod-ai/zenod@sha256:d21468dbf09f33550c52eb53bed32adea616842b4a144cd5cda428861f151a93`.
+Phase: public repair verified at 2026-09-06 22:15:07.905 UTC; deployment queue empty.
+Running source: `56c815f38aab6790b8afc165a8001e8fc0b5732b`.
+Running image: `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`.
 Scope: public Zenod only; 52 non-SHA environment entries, mounts and private Phylax unchanged. No storage migration.
 Recovery: fresh VPS archive restored and verified; independent Mac copy checksum matches. Encrypted cloud upload and full decrypted download comparison have also completed successfully.
-Live tests: immutable learning `6910ca17` saved; exact read and chat passed. Automatic filing returned `classification_unavailable`; natural-language retrieval falsely reported absence. These remain unresolved; overall acceptance has not passed.
-Next action: follow existing queued job 10083; verify the actual repair version before repeating live MCP checks. Do not enqueue another request.
+Live tests: natural recall now recovered learning `6910ca17`, with inaccurate channel wording/unqualified absence remaining. New deployment learning `415b42a9` saved intact but automatic filing still returned `classification_unavailable`. Job usage proved a successful initial classification followed by failed optional fallback; bounded repair is assigned. A log-read stress case returned partial coverage rather than an answer. Overall memory acceptance has not passed.
+Next action: review the bounded optional-classification fallback fix, then use the cleared explicit deployment path and repeat filing.
 
 ## Execution Cursor
 
 Last attempted: deploy approved image, verify actual running version and exercise authenticated live MCP capture/retrieval.
 Result: deployment succeeded; raw learning survived, but filing and natural-query recall need repair.
 Execution status: active
-Waiting on: Dokploy global deployment queue, then actual version verification and MCP revalidation. No new user decision for this authorized work.
+Waiting on: bounded filing repair and validation; deployment queue is empty, no new user decision is required.
 Approved work: bounded production testing/fixes and easy code rollback. Optional small operator parameterization only if convenient; a generic CLI is not a release blocker.
 Next action: reconcile the repair handoff and repeat the same live checks before claiming acceptance.
 
-Reviewed repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` is published as `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342` and saved as desired configuration, but is **not yet live**. The earliest request is BullMQ job 10083. Only our duplicate pending requests 10084/10085/10086 were cancelled with supported Job.remove after checking exact application and waiting state. One unrelated job was active with fifteen waiting and no useful ETA.
+Repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` is live on `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Retained job 10083 completed; the queue was empty (zero active/waiting) at verification. Actual container `0ba7100e3ec6` OCI revision matched, with one running task, completed Swarm update, health OK, unchanged mount and 52 non-SHA environment entries. Private Phylax stayed on `sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e`. See the correction below for the cause and permanent trigger pause.
 
 ## Upgrade and undo
 
@@ -64,7 +64,7 @@ For every upgrade:
 3. Update the image and necessary source-SHA override through Dokploy. Refuse unexpected runtime or pending Dokploy configuration drift. Preserve volumes, sessions and unrelated settings.
 4. Require completed Swarm update, the actual running task's exact image, actual container OCI revision, correct health SHA and the product's live smoke checks. Desired state or a healthy endpoint alone is insufficient. On failure, inspect the receipt before retrying; use code rollback when appropriate.
 
-While job 10083 remains queued, first cancel that exact pending candidate request through the supported queue operation after rechecking its application and waiting state, then invoke rollback. Otherwise an already queued upgrade could run after the undo. Do not cancel unrelated jobs.
+If a future candidate remains queued, first cancel that exact pending candidate request through the supported queue operation after rechecking its application and waiting state, then invoke rollback. Otherwise an already queued upgrade could run after the undo. Do not cancel unrelated jobs.
 
 Rollback changes code, not data. It retains captures written after deployment. Restoring an older data archive can erase later writes and needs a separately scoped recovery decision; never silently restore over the live volume.
 
@@ -96,3 +96,13 @@ For future code-only upgrades with unchanged storage contracts, prefer a fresh r
 One operator mutates production at a time: `/root/zmr_deploy_audit` performed this rollout; the manager coordinates later assignments and remains sole leaf steward. On takeover, record incoming owner, time, receipt and actual runtime before retrying an interrupted operation. Source changes use isolated worktrees and reviewed CI-green PRs; never patch generated VPS code or the dirty shared clone. Console-specific [C1 instructions](C1-DEPLOYMENT.md) are not this public Zenod contract.
 
 This is a direct Foundation leaf with no children. Its creation and one reciprocal Foundation row were delegated to `/root/deployment_spine_leaf`; stewardship returns to ZMR-delivery-manager at handoff. No sibling spine write authority follows from this leaf. Generic sprint templates are intentionally shortened per Jordi's request for a lightweight routine; direct live MCP tests are the approved current acceptance surface. No new ticket ceremony, generic CLI, or browser screenshot checklist blocks this upgrade.
+
+## 2026-09-07 — clear deployment path correction
+
+The queue was not old development work legitimately blocking Zenod. Deployment descriptions proved our own `main` merges triggered source builds for Epaminon, Outbound, Callisthenes and x-mcp. All four compose services had `autoDeploy=true`, branch `main`, and no watch-path filter. Even documentation-only merges queued their builds. The manager should have inspected triggers before repeatedly merging and waiting.
+
+Jordi explicitly authorized clearing this backlog and making future Zenod upgrades straightforward. The sole operator privately backed up all four complete compose configurations, changed only `autoDeploy` to false, verified the values, and removed ten unrelated pending jobs using supported BullMQ `Job.remove`. One Zenod job 10083 was preserved. Runtime settings, services and data were not changed. One already active local Outbound build was allowed to finish: the installed cancellation handler supports cloud/remote builds, not this local build; no shared worker or running service was killed.
+
+Future path: legacy sibling services remain manually deployed until deliberately re-enabled; do not re-enable broad main-push deployment as part of a Zenod upgrade. A Zenod release reviews/merges code, publishes an immutable image, submits one public-service deployment, checks its actual queued/active/completed state and live version, and runs direct MCP smoke checks. Documentation changes do not need a production redeployment. Configuration backups make the trigger pause reversible, but restoring it recreates broad automatic builds unless path filters are designed first.
+
+Verification: job 10083 subsequently completed at 22:15:07.905 UTC; zero active/waiting jobs remained. Configuration snapshots are privately stored under `/Users/jordi/.local/state/zenod-zmr-production-20260906/queue-cleanup/` and encrypted-copy/download verified under `zenod-prod-crypt:zmr-20260906/queue-cleanup`. The four IDs are epaminon `x9WtBYq_vcUFPW2WADcQP`, outbound `m9lceZf789T5ML8jznm79`, callisthenes `3_7gC5XUpAvFV4NSTWEZf`, and x-mcp `NYUUcRopSdjmfRGoEWzHL`. Deliberate re-enable uses authenticated `POST /compose.update` with only `{composeId: ID, autoDeploy: true}`; no redeploy is required. Do not expose full configuration backups.

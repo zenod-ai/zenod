@@ -14,9 +14,9 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: 392d058a599bdf5fc69d17157282b8f9154dcf28 deployed public Zenod at 20:06:05 UTC; evidence-only main updates separate
+Last reconciled commit: 56c815f38aab6790b8afc165a8001e8fc0b5732b deployed public Zenod at 22:15:07 UTC; evidence-only main updates separate
 Planner: Jordi + ZMR-release-planner
-Worker: source repairs complete and merged; /root/zmr_deploy_audit owns queued deployment verification
+Worker: /root/zmr_8_chat_review — optional classification fallback repair; /root/zmr_deploy_audit — sole production operator
 Tester: parent direct live MCP acceptance; independent agent review
 
 ## Role Bindings
@@ -87,26 +87,28 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: first production upgrade live; reviewed follow-up queued in Dokploy
-Last verified: 2026-09-06 22:11 CEST
+Phase: repair 56c815f live; deployment queue cleared; bounded filing repair active
+Last verified: 2026-09-07 00:17 CEST
 Integration target: main
 Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
-Next action: follow existing Dokploy job 10083 for candidate 56c815f; verify actual task/OCI/health after it runs, then repeat live natural recall and a small filing capture through MCP. Do not enqueue another deployment.
-Blockers: live classification_unavailable fallback and false absence after header-only log read; raw evidence intact, exact recall passes.
+Next action: preserve successful initial classification when optional catalog fallback fails; review, deploy the bounded fix through the now-cleared path, and repeat filing.
+Blockers: optional classification fallback discards a valid initial result; live log-read/answer precision limitations remain. Raw evidence is intact.
 
 ## Execution Cursor
 
-Queued repair receipt: reviewed/CI-green PRs #1219 and #1220 merged; candidate `56c815f38aab6790b8afc165a8001e8fc0b5732b`, published image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Dokploy desired configuration is updated, but actual production remains `392d058`. HTTP 200 acknowledged enqueue; deployment history shows worker-started records only. Read-only BullMQ inspection confirmed the requests waiting. Only duplicate jobs 10084/10085/10086 were removed through Job.remove after exact app/state checks; 10083 retained. No forced Swarm update, shared service restart or speculative endpoint correction. If undoing before execution, first cancel exact pending candidate job 10083 after checking app/state, otherwise it may execute after rollback.
+Current live receipt: `56c815f38aab6790b8afc165a8001e8fc0b5732b` verified by actual task/OCI/health, immutable image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`; queue empty after job 10083. Jordi authorized clearing the backlog: our main merges had triggered legacy sibling autoDeploy builds with no path filters. Four triggers paused with private backups; ten unrelated pending jobs removed, running services/data preserved. See the deployments leaf. MCP recall `test_867984e3691a49ae932909e3cf4488aa` recovered the saved preferences but mislabelled input channel and made an unqualified absence claim; stress log read `test_47ee05569fe44dfeac6cf123827a2d85` returned partial coverage. Filing job `02ee721e-8c9c-4be7-9e07-ca00e440f114` saved intact at revision `415b42a92d16b846ad5175c065e2e3260391d8ab` with classification_unavailable. Metered calls show an initial success followed by optional fallback failures; worker confirmed this discards the valid first result. No provider/schema change is needed for the assigned correction.
+
+Historical queued repair receipt (completed at 22:15:07.905 UTC): reviewed/CI-green PRs #1219 and #1220 merged; candidate `56c815f38aab6790b8afc165a8001e8fc0b5732b`, published image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Dokploy desired configuration is updated, but actual production remains `392d058`. HTTP 200 acknowledged enqueue; deployment history shows worker-started records only. Read-only BullMQ inspection confirmed the requests waiting. Only duplicate jobs 10084/10085/10086 were removed through Job.remove after exact app/state checks; 10083 retained. No forced Swarm update, shared service restart or speculative endpoint correction. If undoing before execution, first cancel exact pending candidate job 10083 after checking app/state, otherwise it may execute after rollback.
 
 
 Last attempted: deploy tested public candidate with preserved config and verified recovery, then test real MCP capture and recall.
-Result: 392d058 is live with actual running image verified, 52 non-SHA env entries/mount/private unchanged. Unknown abstention and exact-reference recall pass; durable learning6910ca17 saved to Inbox but classification failed; natural recall falsely said absent.
+Result: 56c815f is live with actual image/OCI verified, queue empty and runtime/data preserved. Natural recall recovered the earlier learning; new raw learning415b42a9 saved safely to Inbox. Optional classification fallback still fails and is assigned for correction.
 Execution status: active
-Waiting on: global Dokploy queue (one active, fifteen waiting at inspection); retained job 10083 is the sole pending Zenod repair request. Sole operator /root/zmr_deploy_audit; parent runs MCP after exact live verification
+Waiting on: /root/zmr_8_chat_review bounded filing fix; sole operator /root/zmr_deploy_audit owns subsequent image switch; parent runs MCP
 Approved work: this production upgrade, bounded live memory tests and fixes, and reusable undo procedure are explicitly authorized. Preserve data/configuration; no provider overhaul, billing/signup change or destructive restore. Human SHIP acceptance remains separate.
-Next action: follow existing Dokploy job 10083 for candidate 56c815f; verify actual task/OCI/health after it runs, then repeat live natural recall and a small filing capture through MCP. Do not enqueue another deployment.
+Next action: preserve successful initial classification when optional catalog fallback fails; review, deploy the bounded fix through the now-cleared path, and repeat filing.
 
 
 

@@ -1,0 +1,119 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "**Source read:** `Inbox/needs-filing-2026-09-06T20-07-29.md` (2026-09-06 voice-note capture; GitHub revision 6910ca17).\n\n**Main practical instructions (verbatim summary):**\n- Single-user live service: deploy reviewed incremental changes to the existing production environment; test through the direct Zenod MCP connection and fix only bounded problems.\n- Make undo easy: retain the previous immutable image + exact configuration, preserve data volumes/sessions, and keep a ready rollback command.\n- Keep the change small; defer non-essential complexity removal.\n- Maintain a durable deployments/upgrades spine leaf so supported procedures and learnings are reused.\n- Do not introduce a new staging/provider setup when the authorized live environment is available.\n- Verify the actual running container image and source revision (not merely desired config).\n- Distinguish code rollback from data restore; use risk-based recurring backup policy instead of ad-hoc full backups.\n\nNo other 2026-09-06 deployment/rollback notes were found."
+    }
+  ],
+  "structuredContent": {
+    "correlationId": "test_867984e3691a49ae932909e3cf4488aa",
+    "testRunId": "zmr-production-56c815f-20260906",
+    "surface": "web",
+    "conversationKey": "zmr-production-56c815f-recall-20260906",
+    "conversationId": "web:zmr-production-56c815f-recall-20260906",
+    "status": "ok",
+    "text": "**Source read:** `Inbox/needs-filing-2026-09-06T20-07-29.md` (2026-09-06 voice-note capture; GitHub revision 6910ca17).\n\n**Main practical instructions (verbatim summary):**\n- Single-user live service: deploy reviewed incremental changes to the existing production environment; test through the direct Zenod MCP connection and fix only bounded problems.\n- Make undo easy: retain the previous immutable image + exact configuration, preserve data volumes/sessions, and keep a ready rollback command.\n- Keep the change small; defer non-essential complexity removal.\n- Maintain a durable deployments/upgrades spine leaf so supported procedures and learnings are reused.\n- Do not introduce a new staging/provider setup when the authorized live environment is available.\n- Verify the actual running container image and source revision (not merely desired config).\n- Distinguish code rollback from data restore; use risk-based recurring backup policy instead of ad-hoc full backups.\n\nNo other 2026-09-06 deployment/rollback notes were found.",
+    "sources": [
+      {
+        "path": "Inbox/needs-filing-2026-09-06T20-07-29.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Inbox/needs-filing-2026-09-06T20-07-29.md",
+        "provider": "github",
+        "revisionId": "6910ca171f12766c7808da9eeb995e4433ab2d24",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Inbox/needs-filing-2026-09-06T20-07-29.md"
+      }
+    ],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “deployment rollback Zenod Jordi”"
+      },
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Zenod deployment preferences OR rollback today OR Jordi”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Zenod deployment preferences OR rollback today OR Jordi”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “deployment rollback Zenod Jordi”"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Inbox/needs-filing-2026-09-06T20-07-29.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Inbox/needs-filing-2026-09-06T20-07-29.md"
+      }
+    ],
+    "audit": {
+      "correlationId": "test_867984e3691a49ae932909e3cf4488aa",
+      "testRunId": "zmr-production-56c815f-20260906",
+      "surface": "web",
+      "conversationKey": "zmr-production-56c815f-recall-20260906",
+      "conversationId": "web:zmr-production-56c815f-recall-20260906",
+      "prompt": "Read-only: What deployment and rollback preferences did Jordi save today for Zenod? Search and read the saved source, summarize the main practical instructions, and cite it. Do not modify or save anything.",
+      "reply": "**Source read:** `Inbox/needs-filing-2026-09-06T20-07-29.md` (2026-09-06 voice-note capture; GitHub revision 6910ca17).\n\n**Main practical instructions (verbatim summary):**\n- Single-user live service: deploy reviewed incremental changes to the existing production environment; test through the direct Zenod MCP connection and fix only bounded problems.\n- Make undo easy: retain the previous immutable image + exact configuration, preserve data volumes/sessions, and keep a ready rollback command.\n- Keep the change small; defer non-essential complexity removal.\n- Maintain a durable deployments/upgrades spine leaf so supported procedures and learnings are reused.\n- Do not introduce a new staging/provider setup when the authorized live environment is available.\n- Verify the actual running container image and source revision (not merely desired config).\n- Distinguish code rollback from data restore; use risk-based recurring backup policy instead of ad-hoc full backups.\n\nNo other 2026-09-06 deployment/rollback notes were found.",
+      "sources": [
+        {
+          "path": "Inbox/needs-filing-2026-09-06T20-07-29.md",
+          "url": "https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Inbox/needs-filing-2026-09-06T20-07-29.md",
+          "provider": "github",
+          "revisionId": "6910ca171f12766c7808da9eeb995e4433ab2d24",
+          "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Inbox/needs-filing-2026-09-06T20-07-29.md"
+        }
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “deployment rollback Zenod Jordi”"
+        },
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “Zenod deployment preferences OR rollback today OR Jordi”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “Zenod deployment preferences OR rollback today OR Jordi”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “deployment rollback Zenod Jordi”"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Inbox/needs-filing-2026-09-06T20-07-29.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Inbox/needs-filing-2026-09-06T20-07-29.md"
+        }
+      ],
+      "status": "ok",
+      "at": "2026-09-06T22:16:03.433Z"
+    },
+    "evidence": [
+      {
+        "kind": "chat_audit",
+        "id": "test_867984e3691a49ae932909e3cf4488aa",
+        "correlationId": "test_867984e3691a49ae932909e3cf4488aa",
+        "conversationId": "web:zmr-production-56c815f-recall-20260906"
+      }
+    ]
+  },
+  "isError": false
+}
