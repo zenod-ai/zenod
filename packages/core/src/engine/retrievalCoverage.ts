@@ -134,6 +134,25 @@ export class RetrievalCoverage {
           ...(!gap && last.nextCursor ? { path: last.readPath, cursor: last.nextCursor } : {}) } });
       }
     }
+    // A fully read section is not a fully read file. Retain a next-file
+    // continuation even when a short daily-log preamble/entry is complete.
+    const fileReads = new Map<string, NotePassage[]>();
+    for (const { passage } of this.passages) {
+      if (passage.part !== "body" || passage.readPath.includes("#")) continue;
+      const group = fileReads.get(passage.readPath) ?? [];
+      group.push(passage); fileReads.set(passage.readPath, group);
+    }
+    for (const [path, allReads] of fileReads) {
+      const latest = allReads.at(-1)!;
+      const reads = allReads.filter(p => p.version === latest.version).sort((a, b) => a.extent.start - b.extent.start);
+      let end = latest.extent.scopeStart; let gap = false;
+      for (const p of reads) { if (p.extent.start > end) gap = true; end = Math.max(end, p.extent.end); }
+      if (gap || end < latest.extent.scopeEnd) {
+        const last = reads.at(-1)!;
+        const input = { path, ...(!gap && last.nextCursor ? { cursor: last.nextCursor } : {}) };
+        if (!continuation.some(c => c.tool === "read_note" && JSON.stringify(c.input) === JSON.stringify(input))) continuation.push({ tool: "read_note", input });
+      }
+    }
     const searches = [...this.searches.values()].map(({ query, last, refs, startedAt }) => {
       const p = last.pagination;
       const enumerationComplete = !p.hasMore && refs.size === p.matchedEntries;

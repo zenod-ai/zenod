@@ -2256,6 +2256,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const exhaustiveRefs = coverageTracker.enumeratedRefs();
         const boundedAudit = coverage.status === "complete-bounded-scope" && exhaustiveRefs.size > 0;
         let text: string;
+        const incompleteAbsence = (coverage.continuation.length > 0 || coverage.failedReads.length > 0)
+          && /\b(?:no (?:matching|relevant|saved|supporting)|(?:could not|couldn't|cannot|can't|did not|didn't) find|found (?:no|nothing)|near[- ]empty|only (?:a |the )?(?:header|heading))\b/i.test(result.text);
+        if (incompleteAbsence) coverage.status = "partial";
         if (coverage.status === "partial") {
           const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
           const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
