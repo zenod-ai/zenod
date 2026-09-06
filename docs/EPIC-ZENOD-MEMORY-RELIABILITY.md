@@ -14,10 +14,10 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 (merged corrected ZMR-7 PR #1212)
+Last reconciled commit: 392d058a599bdf5fc69d17157282b8f9154dcf28 (merged corrected customer chat repair #1214)
 Planner: Jordi + ZMR-release-planner
-Worker: ZMR-8-chat-repair /root/zmr_8_chat_repair
-Tester: ZMR-8-release-validation /root/zmr_8_release_validation (capacity error; paused during repair)
+Worker: unassigned; repair completed
+Tester: ZMR-8-candidate-retest /root/zmr_8_candidate_retest
 
 ## Role Bindings
 
@@ -87,23 +87,24 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — corrected chat CI passed; re-review active
-Last verified: 2026-09-06 20:52 CEST
+Phase: release validation — chat repair integrated; candidate retest active
+Last verified: 2026-09-06 21:08 CEST
 Integration target: main
-Fresh base commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3; integrated ZMR-7, pinned for ZMR-8
+Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
-Blockers: review reproduced explicit-memory question bypass with no tool calls/readPaths, including stream, persistence and nonstreaming. Correction d336698 awaiting re-review; real-model credentials absent. Candidate not deployable.
+Blockers: real-model credentials absent locally; renewed deterministic candidate proof and live approval still required.
 
 ## Execution Cursor
 
-Last attempted: reconcile completed customer chat parity repair and dispatch independent reviewer.
-Result: repair PR #1214 head 624a2b2 passes 101 core +17 public tests and exact CI. Independent review found explicit-memory no-tool bypass; Worker corrected at d336698 with 101 core +21 public tests and exact CI passing; independent reviewer explicitly resumed. Prior release evidence is not proof for this new candidate.
+Last attempted: verify corrected chat re-review and CI, merge #1214, assign candidate retest.
+Result: d336698 passed independent re-review and exact CI, merged392d058. /root/zmr_8_candidate_retest assigned sole write ownership in wt-zmr-8; prior tester capacity failure and repair handoffs preserved.
 Execution status: active
-Waiting on: independent re-review of d336698da39eb37b8ed7dbbc9d84c4a33cf955f6; exact CI passed; then renewed integrated validation
+Waiting on: renewed integrated candidate evidence and concrete real-model/live gate package
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
+
 
 
 
@@ -158,7 +159,7 @@ ZMR-1–7 are integrated; ZMR-8 validation is active. ZMR-9/10 remain deferred u
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-5-topic-filing-worker /root/zmr_5_topic_filing | File multi-topic memories with per-topic confidence | done | ZMR-1, ZMR-4 | /Users/jordi/Documents/GitHub/wt-zmr-5 | [PR #1208](https://github.com/zenod-ai/zenod/pull/1208) / codex/zmr-5 | 1be97bb8815446fb9d40443f60bac9c5b1dabc71 | 06085df merged; e458 review/CI pass; 15 independent checks | 2026-09-06 | Integrated; minor receipt wording delegated to ZMR-6 |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-6-focused-notes-worker /root/zmr_6_focused_notes | Keep meaning notes focused and summaries bounded | done | ZMR-5 | /Users/jordi/Documents/GitHub/wt-zmr-6 | [PR #1210](https://github.com/zenod-ai/zenod/pull/1210) / codex/zmr-6 | 06085df10bb380ef615c6a2ee7e007fd57d6548b | fd6063b merged; 030a41 review/CI pass; 8 independent checks | 2026-09-06 | Integrated; ZMR-7 dispatched |
 | [ZMR-7 #1195](https://github.com/zenod-ai/zenod/issues/1195) | 6 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-7-current-facts-worker /root/zmr_7_current_facts | Distinguish current facts, corrections and historical evidence | done | ZMR-4, ZMR-6 | /Users/jordi/Documents/GitHub/wt-zmr-7 | [PR #1212](https://github.com/zenod-ai/zenod/pull/1212) / codex/zmr-7 | fd6063bf39cc0973d04c4420bfdffbdaa52b88d5 | 3f5ba09 merged; b963 re-review and CI pass; 10 independent checks | 2026-09-06 | Integrated; conservative phrasing limits carried to ZMR-8 |
-| [ZMR-8 #1196](https://github.com/zenod-ai/zenod/issues/1196) | 7 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Tester | ZMR-8-release-validation /root/zmr_8_release_validation | Prove the Memory Reliability release journey | active — local validation | ZMR-2, ZMR-3, ZMR-4, ZMR-5, ZMR-6, ZMR-7 | /Users/jordi/Documents/GitHub/wt-zmr-8 | codex/zmr-8 | 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 | Dependencies integrated; tester dispatched | 2026-09-06 | Validate integrated journey; prepare concrete gate package |
+| [ZMR-8 #1196](https://github.com/zenod-ai/zenod/issues/1196) | 7 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Tester | ZMR-8-candidate-retest /root/zmr_8_candidate_retest | Prove the Memory Reliability release journey | active — local validation | ZMR-2, ZMR-3, ZMR-4, ZMR-5, ZMR-6, ZMR-7 | /Users/jordi/Documents/GitHub/wt-zmr-8 | codex/zmr-8 | 392d058a599bdf5fc69d17157282b8f9154dcf28 | Chat repair #1214 merged392d058; renewed validation active | 2026-09-06 | Validate integrated journey; prepare concrete gate package |
 | [ZMR-9 #1197](https://github.com/zenod-ai/zenod/issues/1197) | follow-up | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Evaluate a rebuildable hybrid retrieval index | proposed / deferred | ZMR-8 | ../wt-zmr-9 at dispatch | codex/zmr-9 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-10 #1198](https://github.com/zenod-ai/zenod/issues/1198) | follow-up | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Add an evidence-backed filing maintenance queue | proposed / deferred | ZMR-8 | ../wt-zmr-10 at dispatch | codex/zmr-10 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 
@@ -192,6 +193,10 @@ ZMR-8 write ownership transferred from capacity-stopped tester to /root/zmr_8_ch
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 21:08 CEST — Manager — Chat repair integrated; candidate retest dispatched
+
+Corrected #1214 head d336698da39eb37b8ed7dbbc9d84c4a33cf955f6 passed re-review and exact CI; merged392d058a599bdf5fc69d17157282b8f9154dcf28. Independent HTTP replay confirms explicit-memory no-tool answers do not leak into streaming, nonstreaming or persisted history. Tester takeover /root/zmr_8_candidate_retest now solely owns wt-zmr-8/codex/zmr-8 and explicitly repins to392d058, preserving prior tester and repair commits. Previous validation does not prove this new candidate. English intent heuristic, semantic grounding and real-model/live acceptance limitations remain. No deployment.
 
 ### 2026-09-06 19:52 CEST — Manager — Release failures and repair takeover
 

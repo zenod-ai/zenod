@@ -46,7 +46,7 @@ import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEv
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
-import { RetrievalCoverage } from "./retrievalCoverage.js";
+import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
 import { sanitizeGroundedAnswer } from "./answerGrounding.js";
 import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
@@ -2108,7 +2108,34 @@ export function createEngine(options: EngineOptions): BrainEngine {
       estimatedTokens: estimateTokens(scopedBriefingText),
     };
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
-    const tools = readTools(contextRefs, askOptions.entrySearch, true);
+    const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch);
+    const result = await llm.answer(
+      {
+        question,
+        vaultBriefing: scopedBriefing.text,
+        conversation: [],
+        ...(pinnedBriefing
+          ? {
+              hostInstruction:
+                "The host already resolved and read the exact tenant-local contextRefs shown in PINNED EVIDENCE CONTEXT. Treat those blocks as the primary read result and answer directly from the pinned evidence. Search or read broader vault material only if the pinned evidence explicitly leaves the question unresolved.",
+            }
+          : {}),
+      },
+      session.tools,
+    );
+    return session.finalize(result);
+  }
+
+  // A single retrieval/finalization session is shared by ask and customer chat.
+  // The model never owns citation identity, coverage, or temporal-state rendering.
+  function memoryAnswerSession(
+    question: string,
+    contextRefs: string[] = [],
+    pinnedSpans: Array<{ path: string; text: string }> = [],
+    pinnedSources: Answer["sources"] = [],
+    entrySearch?: AskOptions["entrySearch"],
+  ) {
+    const tools = readTools(contextRefs, entrySearch, true);
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
@@ -2119,6 +2146,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const factReadWarnings: string[] = [];
     const factSources: Answer["sources"] = [];
     const factReads: Array<{ input: import("./temporalFacts.js").FactReadInput; result: string }> = [];
+    let attempted = false;
     const groundedTools: VaultReadTools = {
       ...tools,
       ...(tools.readFacts ? { readFacts: async (input: import("./temporalFacts.js").FactReadInput) => {
@@ -2193,82 +2221,82 @@ export function createEngine(options: EngineOptions): BrainEngine {
           }
         : {}),
     };
-    const result = await llm.answer(
-      {
-        question,
-        vaultBriefing: scopedBriefing.text,
-        conversation: [],
-        ...(pinnedBriefing
-          ? {
-              hostInstruction:
-                "The host already resolved and read the exact tenant-local contextRefs shown in PINNED EVIDENCE CONTEXT. Treat those blocks as the primary read result and answer directly from the pinned evidence. Search or read broader vault material only if the pinned evidence explicitly leaves the question unresolved.",
-            }
-          : {}),
+    const trackedTools = Object.fromEntries(Object.entries(groundedTools).map(([name, tool]) => [name,
+      (...args: unknown[]) => {
+        attempted = true;
+        return (tool as (...args: unknown[]) => unknown)(...args);
       },
-      groundedTools,
-    );
-    // Projection and source evidence must still describe the same local snapshot.
-    let factSnapshotChanged = false;
-    for (const read of factReads) {
-      try { if (await tools.readFacts!(read.input) !== read.result) factSnapshotChanged = true; }
-      catch { factSnapshotChanged = true; }
-    }
-    if (factSnapshotChanged) factSources.length = 0;
-    // Sources must come from successful host reads, never model-supplied readPaths or search hits.
-    const sources = [
-      ...pinnedSources,
-      ...factSources,
-      ...passageSources.values(),
-    ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
-    // Enumeration and subsequent reads must still describe the same local snapshot.
-    for (const scope of coverageTracker.scopes()) {
-      try {
-        const current = JSON.parse(await tools.searchEntries!({ ...scope.query, limit: 1 })) as EntrySearchResult;
-        if (current.pagination.snapshot !== scope.snapshot) coverageTracker.invalidate(scope.query);
-      } catch { coverageTracker.invalidate(scope.query); }
-    }
-    const coverage = coverageTracker.result();
-    const exhaustiveRefs = coverageTracker.enumeratedRefs();
-    const boundedAudit = coverage.status === "complete-bounded-scope" && exhaustiveRefs.size > 0;
-    let text: string;
-    if (coverage.status === "partial") {
-      const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
-      const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
-      const unread = coverage.searches.reduce((n, search) => n + search.unreadEvidenceRefs.length, 0);
-      const progress = coverage.searches.length > 0
-        ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
-        : "No bounded entry scope was enumerated.";
-      text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
-    } else if (factReadAttempts > 0) {
-      text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
-        : [factViews.length ? renderFactViews(factViews) : "I could not verify temporal facts from the requested scope.", ...new Set(factReadWarnings)].filter(Boolean).join("\n\n");
-    } else if (sources.length === 0 && conversationReadSpans.length === 0) {
-      text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
-    } else {
-      text = sanitizeGroundedAnswer({
-        // A complete typed audit has an explicit host-filtered evidence scope;
-        // generic date/audit words must not discard its successfully read entries.
-        question: boundedAudit ? "" : question,
-        text: result.text,
-        readSpans: [
-          ...conversationReadSpans,
-          ...[...readSpans].map(([path, text]) => ({ path, text })),
-          ...readPassages.filter(passage => !boundedAudit || exhaustiveRefs.has(passage.identity)).map((passage) => ({
-            path: passage.source.path, text: passage.body, version: passage.version, start: passage.extent.start,
-            ...(passage.identity.includes("#^") ? { verifiedAnchor: passage.identity.split("#^")[1]! } : {}),
-          })),
-        ],
-        pinnedSpans,
-      });
-    }
-    if (coverage.status === "complete-bounded-scope") {
-      const scope = coverage.searches.length > 0
-        ? coverage.searches.map(search => `${search.enumeratedEntries}/${search.matchedEntries} entries matching ${JSON.stringify(search.query)}`).join("; ") + " in the local memory snapshot only. Unsynced/deleted history is outside this scope."
-        : "the explicitly pinned evidence refs only.";
-      text += `\n\nCoverage: complete for ${scope}`;
-    }
-    return { text, sources, coverage };
+    ])) as unknown as VaultReadTools;
+    return {
+      tools: trackedTools,
+      required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive
+        || (Boolean(repo) && explicitMemoryRequest(question)),
+      finalize: async (result: { text: string }): Promise<Answer> => {
+        // Projection and source evidence must still describe the same local snapshot.
+        let factSnapshotChanged = false;
+        for (const read of factReads) {
+          try { if (await tools.readFacts!(read.input) !== read.result) factSnapshotChanged = true; }
+          catch { factSnapshotChanged = true; }
+        }
+        if (factSnapshotChanged) factSources.length = 0;
+        // Sources must come from successful host reads, never model-supplied readPaths or search hits.
+        const sources = [
+          ...pinnedSources,
+          ...factSources,
+          ...passageSources.values(),
+        ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
+        // Enumeration and subsequent reads must still describe the same local snapshot.
+        for (const scope of coverageTracker.scopes()) {
+          try {
+            const current = JSON.parse(await tools.searchEntries!({ ...scope.query, limit: 1 })) as EntrySearchResult;
+            if (current.pagination.snapshot !== scope.snapshot) coverageTracker.invalidate(scope.query);
+          } catch { coverageTracker.invalidate(scope.query); }
+        }
+        const coverage = coverageTracker.result();
+        const exhaustiveRefs = coverageTracker.enumeratedRefs();
+        const boundedAudit = coverage.status === "complete-bounded-scope" && exhaustiveRefs.size > 0;
+        let text: string;
+        if (coverage.status === "partial") {
+          const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
+          const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
+          const unread = coverage.searches.reduce((n, search) => n + search.unreadEvidenceRefs.length, 0);
+          const progress = coverage.searches.length > 0
+            ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
+            : "No bounded entry scope was enumerated.";
+          text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
+        } else if (factReadAttempts > 0) {
+          text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
+            : [factViews.length ? renderFactViews(factViews) : "I could not verify temporal facts from the requested scope.", ...new Set(factReadWarnings)].filter(Boolean).join("\n\n");
+        } else if (sources.length === 0 && conversationReadSpans.length === 0) {
+          text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
+        } else {
+          text = sanitizeGroundedAnswer({
+            // A complete typed audit has an explicit host-filtered evidence scope;
+            // generic date/audit words must not discard its successfully read entries.
+            question: boundedAudit ? "" : question,
+            text: result.text,
+            readSpans: [
+              ...conversationReadSpans,
+              ...[...readSpans].map(([path, text]) => ({ path, text })),
+              ...readPassages.filter(passage => !boundedAudit || exhaustiveRefs.has(passage.identity)).map((passage) => ({
+                path: passage.source.path, text: passage.body, version: passage.version, start: passage.extent.start,
+                ...(passage.identity.includes("#^") ? { verifiedAnchor: passage.identity.split("#^")[1]! } : {}),
+              })),
+            ],
+            pinnedSpans,
+          });
+        }
+        if (coverage.status === "complete-bounded-scope") {
+          const scope = coverage.searches.length > 0
+            ? coverage.searches.map(search => `${search.enumeratedEntries}/${search.matchedEntries} entries matching ${JSON.stringify(search.query)}`).join("; ") + " in the local memory snapshot only. Unsynced/deleted history is outside this scope."
+            : "the explicitly pinned evidence refs only.";
+          text += `\n\nCoverage: complete for ${scope}`;
+        }
+        return { text, sources, coverage };
+      },
+    };
   }
+
 
   // Iteration-6 — the reply gate. On an ACTION turn (this turn invoked a side-effect
   // tool — a send, an issue write, an execution dispatch/approval, or a resolved standing
@@ -2397,7 +2425,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }),
       onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
     };
-    const readToolSet = readTools();
+    const memorySession = memoryAnswerSession(question);
+    const readToolSet = memorySession.tools;
     let result = await llm.answer(
       answerInput,
       readToolSet,
@@ -2414,6 +2443,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
+    const memoryAnswer = memorySession.required(result.readPaths)
+      ? await memorySession.finalize(result)
+      : undefined;
+    // Mutation receipts and approval guards retain priority over memory synthesis.
+    // Feed grounded text into the existing gate; it still selects tool-owned receipts.
+    if (memoryAnswer) result = { ...result, text: memoryAnswer.text };
     const answerContent = { type: "answer_content" as const, text: result.text };
     const readOnlyStatus = {
       type: "read_only_status" as const,
@@ -2447,7 +2482,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
     return {
       text,
-      sources: result.readPaths.map((path) => repositorySourceRef(path)),
+      sources: memoryAnswer?.sources ?? [],
+      ...(memoryAnswer ? { coverage: memoryAnswer.coverage } : {}),
       ...(stored ? { stored } : {}),
     };
   }
@@ -2499,7 +2535,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }),
       onReadAction: (tool, inp, res) => actions.push({ tool, input: inp, result: res }),
     };
-    const readToolSet = readTools();
+    const memorySession = memoryAnswerSession(question);
+    const readToolSet = memorySession.tools;
     const answerTaskTools = repo || options.taskingTools
       ? buildTaskTools(input.surface, (action) => actions.push(action), input.rawEvidence)
       : undefined;
@@ -2519,6 +2556,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
+    const memoryAnswer = memorySession.required(result.readPaths)
+      ? await memorySession.finalize(result)
+      : undefined;
+    // Mutation receipts and approval guards retain priority over memory synthesis.
+    // Feed grounded text into the existing gate; it still selects tool-owned receipts.
+    if (memoryAnswer) result = { ...result, text: memoryAnswer.text };
     const answerContent = { type: "answer_content" as const, text: result.text };
     const readOnlyStatus = {
       type: "read_only_status" as const,
@@ -2532,7 +2575,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       ? answerContent.text
       : typedAnswerContentForConversation(actions, text) ?? text;
     await state.appendMessage(cid, "assistant", conversationText, input.surface);
-    return { text, actions };
+    return { text, actions, ...(memoryAnswer ? { sources: memoryAnswer.sources, coverage: memoryAnswer.coverage } : {}) };
   }
 
   return {

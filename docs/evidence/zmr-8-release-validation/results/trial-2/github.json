@@ -1,0 +1,1006 @@
+{
+  "manifest": "ZMR-BASELINE-V1",
+  "provider": "github",
+  "answerCases": [
+    {
+      "id": "late",
+      "prompt": "What is ZMR ORCHID's access word?",
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "actualSources": [
+        {
+          "path": "Log/2026-01-01.md",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000001",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000002",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000003",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000004",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000005",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        }
+      ],
+      "coverage": {
+        "contract": "ask-coverage-v1",
+        "exhaustiveRequested": false,
+        "status": "focused",
+        "scope": "queried-local-memory",
+        "entryPageBudget": 8,
+        "entryPagesRead": 0,
+        "entryPageAttempts": 0,
+        "passageReadBudget": 64,
+        "passageReadAttempts": 10,
+        "searches": [],
+        "successfulReads": [
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#section-0",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 0,
+            "end": 14,
+            "sectionStart": 0,
+            "sectionEnd": 14,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 14,
+            "end": 8014,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 8014,
+            "end": 9882,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000002",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 9882,
+            "end": 10146,
+            "sectionStart": 9882,
+            "sectionEnd": 10146,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000003",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10146,
+            "end": 10441,
+            "sectionStart": 10146,
+            "sectionEnd": 10441,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000004",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10441,
+            "end": 10726,
+            "sectionStart": 10441,
+            "sectionEnd": 10726,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10726,
+            "end": 18726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 18726,
+            "end": 26726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 26726,
+            "end": 34726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 34726,
+            "end": 36571,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          }
+        ],
+        "pinnedEvidenceRefs": [],
+        "failedReads": [],
+        "continuation": [],
+        "conversationHistorySearched": false,
+        "supportPolicy": "only-successfully-read-spans; citations-and-search-snippets-are-not-claim-support"
+      },
+      "refs": [
+        "Log/2026-01-01.md#^e-000001"
+      ]
+    },
+    {
+      "id": "history",
+      "prompt": "What was ZMR ORCHID's original launch color?",
+      "expected": "amber",
+      "actual": "amber",
+      "actualSources": [
+        {
+          "path": "Log/2026-01-01.md",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000001",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000002",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000003",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000004",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000005",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        }
+      ],
+      "coverage": {
+        "contract": "ask-coverage-v1",
+        "exhaustiveRequested": false,
+        "status": "focused",
+        "scope": "queried-local-memory",
+        "entryPageBudget": 8,
+        "entryPagesRead": 0,
+        "entryPageAttempts": 0,
+        "passageReadBudget": 64,
+        "passageReadAttempts": 10,
+        "searches": [],
+        "successfulReads": [
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#section-0",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 0,
+            "end": 14,
+            "sectionStart": 0,
+            "sectionEnd": 14,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 14,
+            "end": 8014,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 8014,
+            "end": 9882,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000002",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 9882,
+            "end": 10146,
+            "sectionStart": 9882,
+            "sectionEnd": 10146,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000003",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10146,
+            "end": 10441,
+            "sectionStart": 10146,
+            "sectionEnd": 10441,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000004",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10441,
+            "end": 10726,
+            "sectionStart": 10441,
+            "sectionEnd": 10726,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10726,
+            "end": 18726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 18726,
+            "end": 26726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 26726,
+            "end": 34726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 34726,
+            "end": 36571,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          }
+        ],
+        "pinnedEvidenceRefs": [],
+        "failedReads": [],
+        "continuation": [],
+        "conversationHistorySearched": false,
+        "supportPolicy": "only-successfully-read-spans; citations-and-search-snippets-are-not-claim-support"
+      },
+      "refs": [
+        "Log/2026-01-01.md#^e-000002"
+      ]
+    },
+    {
+      "id": "current",
+      "prompt": "What is ZMR ORCHID's launch color now?",
+      "expected": "violet",
+      "actual": "violet",
+      "actualSources": [
+        {
+          "path": "Log/2026-01-01.md",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000001",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000002",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000003",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000004",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000005",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        }
+      ],
+      "coverage": {
+        "contract": "ask-coverage-v1",
+        "exhaustiveRequested": false,
+        "status": "focused",
+        "scope": "queried-local-memory",
+        "entryPageBudget": 8,
+        "entryPagesRead": 0,
+        "entryPageAttempts": 0,
+        "passageReadBudget": 64,
+        "passageReadAttempts": 10,
+        "searches": [],
+        "successfulReads": [
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#section-0",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 0,
+            "end": 14,
+            "sectionStart": 0,
+            "sectionEnd": 14,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 14,
+            "end": 8014,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 8014,
+            "end": 9882,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000002",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 9882,
+            "end": 10146,
+            "sectionStart": 9882,
+            "sectionEnd": 10146,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000003",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10146,
+            "end": 10441,
+            "sectionStart": 10146,
+            "sectionEnd": 10441,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000004",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10441,
+            "end": 10726,
+            "sectionStart": 10441,
+            "sectionEnd": 10726,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10726,
+            "end": 18726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 18726,
+            "end": 26726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 26726,
+            "end": 34726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 34726,
+            "end": 36571,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          }
+        ],
+        "pinnedEvidenceRefs": [],
+        "failedReads": [],
+        "continuation": [],
+        "conversationHistorySearched": false,
+        "supportPolicy": "only-successfully-read-spans; citations-and-search-snippets-are-not-claim-support"
+      },
+      "refs": [
+        "Log/2026-01-01.md#^e-000003"
+      ]
+    },
+    {
+      "id": "unknown",
+      "prompt": "What is ZMR ORCHID's payroll provider?",
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "actualSources": [
+        {
+          "path": "Log/2026-01-01.md",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000001",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000002",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000003",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000004",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000005",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        }
+      ],
+      "coverage": {
+        "contract": "ask-coverage-v1",
+        "exhaustiveRequested": false,
+        "status": "focused",
+        "scope": "queried-local-memory",
+        "entryPageBudget": 8,
+        "entryPagesRead": 0,
+        "entryPageAttempts": 0,
+        "passageReadBudget": 64,
+        "passageReadAttempts": 10,
+        "searches": [],
+        "successfulReads": [
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#section-0",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 0,
+            "end": 14,
+            "sectionStart": 0,
+            "sectionEnd": 14,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 14,
+            "end": 8014,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 8014,
+            "end": 9882,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000002",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 9882,
+            "end": 10146,
+            "sectionStart": 9882,
+            "sectionEnd": 10146,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000003",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10146,
+            "end": 10441,
+            "sectionStart": 10146,
+            "sectionEnd": 10441,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000004",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10441,
+            "end": 10726,
+            "sectionStart": 10441,
+            "sectionEnd": 10726,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10726,
+            "end": 18726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 18726,
+            "end": 26726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 26726,
+            "end": 34726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 34726,
+            "end": 36571,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          }
+        ],
+        "pinnedEvidenceRefs": [],
+        "failedReads": [],
+        "continuation": [],
+        "conversationHistorySearched": false,
+        "supportPolicy": "only-successfully-read-spans; citations-and-search-snippets-are-not-claim-support"
+      },
+      "refs": []
+    },
+    {
+      "id": "paraphrase",
+      "prompt": "Which hue replaced the earlier shade for the flower launch?",
+      "expected": "violet",
+      "actual": "violet",
+      "actualSources": [
+        {
+          "path": "Log/2026-01-01.md",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000001",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000002",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000003",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000004",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        },
+        {
+          "path": "Log/2026-01-01.md#^e-000005",
+          "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+          "provider": "github",
+          "revisionId": "2b0503aa9a5e7a3630370155b1197ae041db8da9",
+          "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+        }
+      ],
+      "coverage": {
+        "contract": "ask-coverage-v1",
+        "exhaustiveRequested": false,
+        "status": "focused",
+        "scope": "queried-local-memory",
+        "entryPageBudget": 8,
+        "entryPagesRead": 0,
+        "entryPageAttempts": 0,
+        "passageReadBudget": 64,
+        "passageReadAttempts": 10,
+        "searches": [],
+        "successfulReads": [
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#section-0",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 0,
+            "end": 14,
+            "sectionStart": 0,
+            "sectionEnd": 14,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 14,
+            "end": 8014,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000001",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 8014,
+            "end": 9882,
+            "sectionStart": 14,
+            "sectionEnd": 9882,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000002",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 9882,
+            "end": 10146,
+            "sectionStart": 9882,
+            "sectionEnd": 10146,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000003",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10146,
+            "end": 10441,
+            "sectionStart": 10146,
+            "sectionEnd": 10441,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000004",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10441,
+            "end": 10726,
+            "sectionStart": 10441,
+            "sectionEnd": 10726,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 10726,
+            "end": 18726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 18726,
+            "end": 26726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 26726,
+            "end": 34726,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          },
+          {
+            "path": "Log/2026-01-01.md",
+            "identity": "Log/2026-01-01.md#^e-000005",
+            "version": "sha256:8844eac6a331e63d129869e965d2250d4ce4f517f5e8b7512b2ed8dd51d6f48e",
+            "start": 34726,
+            "end": 36571,
+            "sectionStart": 10726,
+            "sectionEnd": 36571,
+            "complete": true
+          }
+        ],
+        "pinnedEvidenceRefs": [],
+        "failedReads": [],
+        "continuation": [],
+        "conversationHistorySearched": false,
+        "supportPolicy": "only-successfully-read-spans; citations-and-search-snippets-are-not-claim-support"
+      },
+      "refs": [
+        "Log/2026-01-01.md#^e-000003"
+      ]
+    }
+  ],
+  "fixtureHashes": {
+    "AGENTS.md": "47b991668dda814ce253b01210700e0910a7ce0e0778932d3bb86abe51bbe282",
+    "Areas/Insurance.md": "5b7c3c34620283ea07b6a6ce0d9c23f4cd1b297471894c7e715c881dd75d8f23",
+    "Index.md": "c12bd8af717dd419f45dcc7243fdc41d21978e0378f1f5aa6e26b03edc0e0f7c",
+    "Log/2026-01-01.md": "600b5e77eb06580429e361df422eeb6fa942dc3d0f99bb1191996fccf49a4933",
+    "Log/2026-06-10.md": "f8e856d28dc7124638ec1d884ebbadd3473efc7d58bca1d860dd3474745e0040",
+    "Log/2026-09-01.md": "71c032865c34782d2b1d08d124813e32f26d25de50cc73c8557f33750d54639c",
+    "Notes/Axa.md": "c872b568805e60b7e7a162c265115736ba236a8e7a9246fdabe5e38eb4f99158",
+    "Notes/Oversized.md": "966261c51586d0ca3a393a3817e20d0eaebbf80332d23430b71003a25ba2ffde",
+    "Projects/Sample Project.md": "e4e3617466868aa10bbe7e04a46a631798f7f0521308dd9cfc3de806c3d3d6b0",
+    "_templates/Area.md": "deb77b63205e2213faf7feb5cb0cd784d7561bc51e827ace15d5cfaa8bbf5364"
+  },
+  "durationsMs": {
+    "lexicalSearch": 64.39695800000004,
+    "unpinnedAsk": 340.565333,
+    "exactGet": 47.077749999999924,
+    "pinnedAsk": 60.46404099999995,
+    "historicalSearch": 51.82345800000007,
+    "correctionGet": 47.45100000000002,
+    "originalGet": 48.032875000000104,
+    "distractorGet": 46.810833,
+    "unknownSearch": 51.652833999999984,
+    "paraphraseSearch": 57.05304100000012,
+    "ask-late": 339.94950000000017,
+    "ask-history": 333.9245000000001,
+    "ask-current": 340.327667,
+    "ask-unknown": 340.1738330000003,
+    "ask-paraphrase": 332.11625000000004,
+    "multiTopicStore": 642.4292920000003
+  },
+  "observed": {
+    "seedEntryCount": 657,
+    "sourceRevisionId": null,
+    "unpinnedAnswer": "cobalt-seventeen",
+    "pinnedAnswer": "cobalt-seventeen",
+    "coreOldRefs": [
+      "Log/2026-01-01.md#^e-000001",
+      "Log/2026-01-01.md#^e-000002",
+      "Log/2026-01-01.md#^e-000003",
+      "Log/2026-01-01.md#^e-000004",
+      "Log/2026-01-01.md#^e-000005"
+    ],
+    "mcpOldRefs": [
+      {
+        "evidenceRef": "Log/2026-01-01.md#^e-000001",
+        "path": "Log/2026-01-01.md",
+        "anchor": "e-000001",
+        "title": "Synthetic capture",
+        "source": "mcp",
+        "contentType": "text",
+        "capturedAt": "2026-01-01T00:00:00.000Z",
+        "sourceId": "ZMR-e-000001",
+        "chars": 9704,
+        "snippet": "[SYNTHETIC ACCEPTANCE TEST - NOT A USER FACT] ZMR-BASELINE-V1\nneutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral padding neutral pa",
+        "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+        "provider": "github",
+        "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+      },
+      {
+        "evidenceRef": "Log/2026-01-01.md#^e-000002",
+        "path": "Log/2026-01-01.md",
+        "anchor": "e-000002",
+        "title": "Synthetic capture",
+        "source": "mcp",
+        "contentType": "text",
+        "capturedAt": "2026-01-01T01:00:00.000Z",
+        "sourceId": "ZMR-e-000002",
+        "chars": 102,
+        "snippet": "[SYNTHETIC ACCEPTANCE TEST - NOT A USER FACT] ZMR-BASELINE-V1\nZMR ORCHID original launch color: amber.",
+        "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+        "provider": "github",
+        "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+      },
+      {
+        "evidenceRef": "Log/2026-01-01.md#^e-000003",
+        "path": "Log/2026-01-01.md",
+        "anchor": "e-000003",
+        "title": "Synthetic capture",
+        "source": "mcp",
+        "contentType": "text",
+        "capturedAt": "2026-01-01T02:00:00.000Z",
+        "sourceId": "ZMR-e-000003",
+        "chars": 133,
+        "snippet": "[SYNTHETIC ACCEPTANCE TEST - NOT A USER FACT] ZMR-BASELINE-V1\nCorrection: ZMR ORCHID launch color is now violet; amber is superseded.",
+        "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+        "provider": "github",
+        "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+      },
+      {
+        "evidenceRef": "Log/2026-01-01.md#^e-000004",
+        "path": "Log/2026-01-01.md",
+        "anchor": "e-000004",
+        "title": "Synthetic capture",
+        "source": "mcp",
+        "contentType": "text",
+        "capturedAt": "2026-01-01T03:00:00.000Z",
+        "sourceId": "ZMR-e-000004",
+        "chars": 123,
+        "snippet": "[SYNTHETIC ACCEPTANCE TEST - NOT A USER FACT] ZMR-BASELINE-V1\nZMR ORCHARD launch color: green. This is a different project.",
+        "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+        "provider": "github",
+        "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+      },
+      {
+        "evidenceRef": "Log/2026-01-01.md#^e-000005",
+        "path": "Log/2026-01-01.md",
+        "anchor": "e-000005",
+        "title": "Synthetic capture",
+        "source": "mcp",
+        "contentType": "text",
+        "capturedAt": "2026-01-01T04:00:00.000Z",
+        "sourceId": "ZMR-e-000005",
+        "chars": 25675,
+        "snippet": "[SYNTHETIC ACCEPTANCE TEST - NOT A USER FACT] ZMR-BASELINE-V1\nInsurance renewal confirmed. Clear insurance detail. Clear insurance detail. Clear insurance detail. Clear insurance detail. Clear insurance detail. Clear insurance detail. Clear insurance detail. Clear insurance detai",
+        "url": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md",
+        "provider": "github",
+        "githubUrl": "https://github.com/synthetic/zmr-baseline/blob/main/Log/2026-01-01.md"
+      }
+    ],
+    "filing": "uncertain",
+    "pagesTouched": [
+      "Areas/Insurance.md",
+      "Projects/Sample Project.md",
+      "Inbox/filing-2026-09-06-e-f65d2f.md"
+    ],
+    "classifySegments": 3,
+    "summaryInputChars": 480,
+    "typedReadTools": [
+      "readFacts",
+      "searchVault",
+      "searchEntries",
+      "readNote",
+      "listPages",
+      "searchChats"
+    ],
+    "unknownSearchHits": 0,
+    "paraphraseSearchHits": 0
+  },
+  "externalApiCalls": 0,
+  "realModelQuality": "unmeasured",
+  "realModelLatencyMs": null,
+  "realModelCostUsd": null
+}
