@@ -4,7 +4,7 @@ import type { LintError, LintReport } from "../types.js";
 import { ConfigError, loadBrainConfig, type BrainConfig } from "./config.js";
 import { parseNote } from "./frontmatter.js";
 import { basenameOf, isIndexFile, MEANING_FOLDERS, tierOf } from "./files.js";
-import { extractCitations, extractPageLinks, scanVault, type VaultSnapshot } from "./pages.js";
+import { extractCitations, extractPageLinks, scanVault, SUMMARY_MAX_CHARS, type VaultSnapshot } from "./pages.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -80,6 +80,9 @@ function lintMeaningPage(
   }
   if ("summary" in frontmatter && (typeof frontmatter.summary !== "string" || frontmatter.summary.trim() === "")) {
     errors.push({ path: file, rule: "frontmatter/field", message: "summary must be a non-empty one-line string" });
+  }
+  if (typeof frontmatter.summary === "string" && (Array.from(frontmatter.summary).length > SUMMARY_MAX_CHARS || /[\r\n]/.test(frontmatter.summary))) {
+    errors.push({ path: file, rule: "summary/budget", message: `summary must be one line of at most ${SUMMARY_MAX_CHARS} Unicode characters; retain history in the body` });
   }
   if ("description" in frontmatter && (typeof frontmatter.description !== "string" || frontmatter.description.trim() === "")) {
     errors.push({ path: file, rule: "frontmatter/field", message: "description must be a non-empty one-line string" });

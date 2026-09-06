@@ -673,6 +673,24 @@ describe("MCP endpoint", () => {
     } finally { fakeEngine.store = originalStore; await client.close(); }
   });
 
+  it.each(["resolved", "evidence_only", "unresolved"] as const)("store_memory receipt mentions Inbox only for an existing filing record: %s", async (scenario) => {
+    const originalStore = fakeEngine.store;
+    fakeEngine.store = async (input) => {
+      const result = await originalStore(input);
+      return { ...result, pagesTouched: scenario === "unresolved" ? ["Inbox/filing-2026-06-11-e-abc123.md"] : scenario === "evidence_only" ? [] : result.pagesTouched,
+        topics: [{ topic: "Insurance", evidenceRef: result.evidenceRef, sourceSpans: [{ start: 0, end: 9 }], confidence: 0.95,
+          disposition: scenario === "evidence_only" ? "evidence_only" : "integrate_page", pages: [], filedPages: [], status: scenario === "unresolved" ? "uncertain" : "filed" }] };
+    };
+    const client = await connect();
+    try {
+      const terminal = await runAsyncToolTerminal(client, "store_memory", { content: "Insurance" });
+      const response = await client.callTool({ name: "get_task_result", arguments: { ticket_id: terminal.ticket_id } });
+      const text = (response.content as Array<{ text: string }>).map((part) => part.text).join("\n");
+      expect(text.includes("Unresolved assignments are recorded in Inbox.")).toBe(scenario === "unresolved");
+      expect(text).toContain("evidence: Log/2026-06-11.md#^e-abc123");
+    } finally { fakeEngine.store = originalStore; await client.close(); }
+  });
+
   it("store_memory terminal evidence is typed, deep-linked, and compatibility-preserving", async () => {
     const client = await connect();
     const terminal = await runAsyncToolTerminal(client, "store_memory", {

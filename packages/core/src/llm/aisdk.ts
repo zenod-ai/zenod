@@ -476,7 +476,8 @@ const classificationSchema = z.object({
     evidenceQuotes: z.array(z.string()).min(1).describe("Exact verbatim quotes from Memory to classify only, covering this topic; do not quote neighboring context"),
     confidence: z.number().min(0).max(1),
     disposition: z.enum(["evidence_only", "append_compact_note", "integrate_page", "needs_clarification"]),
-    pages: z.array(z.object({ path: z.string(), action: z.enum(["create", "update"]), title: z.string() })),
+    pages: z.array(z.object({ path: z.string(), action: z.enum(["create", "update"]), title: z.string(),
+      aliases: z.array(z.object({ name: z.string(), evidenceQuote: z.string() })).describe("Only explicitly stated equivalent names. Quote must contain both this page title and alias exactly. Empty when uncertain; never normalize raw spelling.") })),
     summary: z.string(),
     question: z.string().nullable(),
   })).min(1).describe("Every distinct topic with its own confidence, evidence and filing decision; include uncertain topics too"),
@@ -777,7 +778,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
 
   async classify(input: ClassifyInput): Promise<Classification> {
     const index = input.pageIndex
-      .map((p) => `${p.path} | ${p.title} | tags: ${p.tags.join(",")} | ${p.summary}`)
+      .map((p) => `${p.path} | ${p.title} | aliases: ${(p.aliases ?? []).join(",")} | tags: ${p.tags.join(",")} | ${p.summary}`)
       .join("\n");
 
     let result;
@@ -842,7 +843,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const { text, usage, providerMetadata } = await generateText({
       model: this.model(this.askModelId),
       system: [
-        "You are the librarian of a personal knowledge vault. Produce the COMPLETE new content of one meaning page, integrating a new piece of evidence.",
+        input.focusedUpdate
+          ? "Produce a frontmatter plus focused section update. The supplied current content is ONE section, not the whole note. Preserve every existing line in order; add only the new cited knowledge. If empty, emit one descriptive ## topic section. Never reconstruct unseen sections."
+          : "Produce the complete content of a new meaning page, integrating the assigned evidence.",
+        `- Summary must be one line, at most ${input.summaryMaxChars ?? 480} Unicode characters. Summarize the topic, not its accumulating history.`,
         "Hard rules (validated by code, not negotiable):",
         "- YAML frontmatter with exactly these keys: title, type, tags, created, updated (YYYY-MM-DD), summary (one dense line written for a cold LLM reader), description (same value as summary, for OKF consumers), timestamp (ISO 8601 datetime for updated at 00:00:00Z unless a better source time is known).",
         `- The 'type' field MUST be exactly: ${input.requiredType}`,

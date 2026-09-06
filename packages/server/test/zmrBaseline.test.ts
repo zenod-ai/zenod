@@ -28,7 +28,7 @@ class Observer {
   }
   async composePage(input: ComposePageInput) {
     this.composeInputs.push(input);
-    return input.currentContent!;
+    return `${input.currentContent!}\n\n## Captured topic\n\n${input.evidenceEntry}\n\n${input.citation}\n`;
   }
   async answer(input: AnswerInput, tools: VaultReadTools) {
     const query = input.question.includes("payroll") ? "payroll" : input.question.includes("hue") ? "hue replaced shade flower" : "ZMR ORCHID";
@@ -162,7 +162,7 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
       expect((await repo.currentRevision()).id).toBe(before.id);
       const store = await call("store_memory", { content: multiTopic, verbatim: true }, "multiTopicStore");
       expect(observer.classifyInputs.length).toBeGreaterThanOrEqual(3);
-      expect(observer.classifyInputs[0].pageIndex.find(page => page.path === "Notes/Oversized.md")!.summary).toBe(oversizedSummary);
+      expect(observer.classifyInputs[0].pageIndex.find(page => page.path === "Notes/Oversized.md")!.summary.length).toBeLessThanOrEqual(480);
       expect(observer.composeInputs).toHaveLength(2);
       expect(observer.composeInputs.every((input) => !input.evidenceEntry.includes("UNCERTAIN:"))).toBe(true);
       expect(store.topics.some((topic: { status: string }) => topic.status === "filed")).toBe(true);
@@ -181,7 +181,7 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
       expect((await repo.currentRevision()).provider).toBe(provider);
       const report = {
         manifest: manifest.id, provider, answerCases, fixtureHashes: initialHashes, durationsMs: durations,
-        observed: { seedEntryCount: fixtureEntries, sourceRevisionId: exact.entry.revisionId ?? null, unpinnedAnswer: answer.text, pinnedAnswer: pinned.text, coreOldRefs: coreOld.map(e => e.evidenceRef), mcpOldRefs: historical.entries, filing: store.filing, pagesTouched: store.pagesTouched, classifySegments: observer.classifyInputs.length, summaryInputChars: oversizedSummary.length, typedReadTools: observer.reads[0].tools, unknownSearchHits: unknown.hits.length, paraphraseSearchHits: paraphrase.hits.length },
+        observed: { seedEntryCount: fixtureEntries, sourceRevisionId: exact.entry.revisionId ?? null, unpinnedAnswer: answer.text, pinnedAnswer: pinned.text, coreOldRefs: coreOld.map(e => e.evidenceRef), mcpOldRefs: historical.entries, filing: store.filing, pagesTouched: store.pagesTouched, classifySegments: observer.classifyInputs.length, summaryInputChars: Math.max(...observer.classifyInputs.flatMap(input => input.pageIndex.map(page => page.summary.length))), typedReadTools: observer.reads[0].tools, unknownSearchHits: unknown.hits.length, paraphraseSearchHits: paraphrase.hits.length },
         externalApiCalls: 0, realModelQuality: "unmeasured", realModelLatencyMs: null, realModelCostUsd: null,
       };
       console.log(`ZMR_BASELINE ${JSON.stringify(report)}`);
