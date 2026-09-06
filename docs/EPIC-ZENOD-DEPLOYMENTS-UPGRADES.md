@@ -23,7 +23,7 @@ Phase: public production upgrade verified at 2026-09-06 20:06:05 UTC; live memor
 Running source: `392d058a599bdf5fc69d17157282b8f9154dcf28`.
 Running image: `ghcr.io/zenod-ai/zenod@sha256:d21468dbf09f33550c52eb53bed32adea616842b4a144cd5cda428861f151a93`.
 Scope: public Zenod only; 52 non-SHA environment entries, mounts and private Phylax unchanged. No storage migration.
-Recovery: fresh VPS archive restored and verified; independent Mac copy checksum matches. Large encrypted cloud archive synchronization remains pending background work, not a rollout gate.
+Recovery: fresh VPS archive restored and verified; independent Mac copy checksum matches. Encrypted cloud upload and full decrypted download comparison have also completed successfully.
 Live tests: immutable learning `6910ca17` saved; exact read and chat passed. Automatic filing returned `classification_unavailable`; natural-language retrieval falsely reported absence. These remain unresolved; overall acceptance has not passed.
 Next action: finish the bounded memory repair, repeat the failing live checks and record the actual deployed repair version.
 
@@ -38,16 +38,20 @@ Next action: reconcile the repair handoff and repeat the same live checks before
 
 ## Upgrade and undo
 
-The existing helper is pinned to this September 6 release. Its reviewed correction is [3743bba](https://github.com/zenod-ai/zenod/commit/3743bba) in [PR #1218](https://github.com/zenod-ai/zenod/pull/1218). Do not describe it as a generic upgrade CLI or copy/edit its constants for later releases. If convenient, parameterize this same flow in a reviewed follow-up.
+The existing helper supports this September 6 release and reviewed code-only repairs using its frozen recovery receipt. Its reviewed head is [4916c24](https://github.com/zenod-ai/zenod/commit/4916c24) in [PR #1218](https://github.com/zenod-ai/zenod/pull/1218). It is not a generic backup/deployment framework. Reuse the flags below rather than copying or editing release constants.
 
 From `/Users/jordi/Documents/GitHub/wt-zmr-production` (or the repository after integration):
 
 ```sh
 eval "$(dokploy-env)"
 python3 scripts/zmr-production-image.py deploy
+# A reviewed code-only repair using this same approved recovery receipt:
+python3 scripts/zmr-production-image.py deploy --candidate-sha FULL_SHA --candidate-image ghcr.io/zenod-ai/zenod@sha256:FULL_DIGEST --state-dir SECURE_RECEIPT_DIR
 # Undo this release while retaining the current data volume:
 python3 scripts/zmr-production-image.py rollback
 ```
+
+Replace the uppercase repair placeholders with the reviewed full source SHA, matching immutable image digest and existing secure receipt path; both candidate flags are required together. The helper atomically records approved attempted/prior images, so rollback still works after an interrupted repair. Three offline simulations cover override→rollback, sequential overrides→rollback, and a failed second override→rollback.
 
 The matching secure receipt defaults to `/Users/jordi/.local/state/zenod-zmr-production-20260906`; `ZMR_DEPLOY_STATE` may point to that receipt's recovered location. Rollback targets prior source `fb8b07c5910b3424c4a15da4e1cfaa920cee4e22`, image `sha256:c4d5fbf98818ca407ef445159965143cffc519a38f6c63e4e8c4f04230ba286d`. No live rollback was performed during this successful image switch. Do not invoke `deploy` merely to check status.
 
@@ -64,7 +68,7 @@ Rollback changes code, not data. It retains captures written after deployment. R
 
 The current mechanism is `scripts/zenod-volume-backup.sh`: quiesce, archive, resume, checksum, then restore into a disposable volume and verify JSON/SQLite. This rollout paused public Zenod approximately three minutes (19:56–19:59 UTC): 1.6 GB source produced a 1.4 GB archive. Restore passed at 20:01:48 UTC with 1,127 files, 10 JSON files and 69 SQLite databases. Full backup and encrypted transfer dominated preparation time; the image update itself completed in seconds.
 
-Today's accepted recovery proof is the fresh verified VPS archive plus independent checksum-matched Mac copy, mode 0600 inside a mode-0700 directory. Configuration receipts are already encrypted-uploaded and download-checked. The large archive's cloud synchronization is still pending; do not claim cloud verification. The established remote is `zenod-prod-crypt:` backed by `s31:vps-archives/zenod-production-encrypted`.
+Today's accepted recovery proof is the fresh verified VPS archive plus independent checksum-matched Mac copy, mode 0600 inside a mode-0700 directory. Configuration receipts are already encrypted-uploaded and download-checked. The full 1,498,818,408-byte encrypted object upload and decrypted download comparison subsequently passed; the rollout did not wait for that redundant transfer. The established remote is `zenod-prod-crypt:` backed by `s31:vps-archives/zenod-production-encrypted`.
 
 For future code-only upgrades with unchanged storage contracts, prefer a fresh recoverable scheduled backup and an already validated restore mechanism. Reuse within one repair rollout only when its recovery point and subsequent writes are recorded and accepted; do not repeatedly pause for identical proof. If a qualifying backup is absent, take a fresh one. A new destructive/storage migration needs fresh backup and a separate restoration plan. This is the reuse rule, not a claim that a qualifying scheduled backup currently exists. Incremental backup redesign is deferred.
 
