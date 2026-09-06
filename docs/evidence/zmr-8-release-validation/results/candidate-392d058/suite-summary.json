@@ -69,5 +69,6 @@
     "OK: 27 per-tool schemas bundled and self-contained (no files written)."
   ],
   "liveBrowser": "not run",
-  "realModel": "not run: no supported local key"
+  "realModel": "not run: no supported local key",
+  "customerHarnessSha256": "b1446be85652336f2015958b8882b90872c2f1c1e854373cf8c588762b6c6062"
 }
