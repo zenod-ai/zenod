@@ -4,6 +4,9 @@ import { z } from "zod";
 import {
   ContextRefError,
   paginateMemoryEntries,
+  memoryEntrySummaries,
+  type EntrySearchInput,
+  type EntrySearchResult,
   isGithubAuthorizationRevoked,
   VERSION,
   type BrainEngine,
@@ -625,25 +628,6 @@ function mergeMemoryEntries(entries: MemoryEntry[], jobs: TaskJob[]): MemoryEntr
   return [...byRef.values()];
 }
 
-function memoryEntrySummaries(entries: MemoryEntry[]) {
-  return entries.map((entry) => ({
-    evidenceRef: entry.evidenceRef,
-    path: entry.path,
-    anchor: entry.anchor,
-    title: entry.title,
-    source: entry.source,
-    contentType: entry.contentType ?? null,
-    capturedAt: entry.capturedAt,
-    sourceId: entry.sourceId ?? null,
-    chars: entry.content.length,
-    snippet: entry.content.slice(0, 280),
-    url: entry.url,
-    provider: entry.provider,
-    ...(entry.revisionId ? { revisionId: entry.revisionId } : {}),
-    ...(entry.githubUrl !== undefined ? { githubUrl: entry.githubUrl } : {}),
-  }));
-}
-
 /** Human-facing text for a finished run_task job — mirrors the old reply. */
 function formatWorkResult(result: WorkResult): string {
   const lines =
@@ -1072,6 +1056,20 @@ export function buildMcpServer(
     );
   }
 
+  async function searchEntryPage(engine: BrainEngine, input: EntrySearchInput): Promise<EntrySearchResult> {
+    const vaultEntries = await engine.searchEntries({ limit: null });
+    const jobs = taskJobs?.recent?.(Number.MAX_SAFE_INTEGER) ?? [];
+    const page = paginateMemoryEntries(mergeMemoryEntries(vaultEntries, jobs), {
+      ...input, order: input.order ?? "newest", limit: input.limit ?? 20,
+    }, memoryScope(engine), input.cursor);
+    return { entries: memoryEntrySummaries(page.entries), pagination: {
+      hasMore: page.hasMore, nextCursor: page.nextCursor, snapshot: page.snapshot,
+      matchedEntries: page.matchedEntries, scannedEntries: page.scannedEntries, scannedVaultEntries: vaultEntries.length,
+      scannedReceiptJobs: jobs.length, receiptEnrichmentAvailable: Boolean(taskJobs?.recent),
+      scope: "all-local-vault-evidence-and-retained-tenant-receipts",
+    } };
+  }
+
   server.registerTool(
     "search_memory",
     {
@@ -1088,20 +1086,14 @@ export function buildMcpServer(
       let entries: ReturnType<typeof memoryEntrySummaries> = [];
       let pagination: Record<string, unknown> | null = null;
       if (structuralQuery) {
-        // Enumerate all retained candidates before metadata enrichment and filtering.
-        const vaultEntries = await engine.searchEntries({ limit: null });
-        const jobs = taskJobs?.recent?.(Number.MAX_SAFE_INTEGER) ?? [];
-        const merged = mergeMemoryEntries(vaultEntries, jobs);
-        const page = paginateMemoryEntries(merged, {
+        const page = await searchEntryPage(engine, {
           ...(query ? { query } : {}), ...(source ? { source } : {}), ...(sourceId ? { sourceId } : {}),
           ...(contentType ? { contentType } : {}), ...(capturedAfter ? { capturedAfter } : {}),
           ...(capturedBefore ? { capturedBefore } : {}), order: order === "oldest" ? "oldest" : "newest", limit: limit ?? 20,
-        }, memoryScope(engine), cursor);
-        entries = memoryEntrySummaries(page.entries);
-        pagination = { contract: "entries-v1", hasMore: page.hasMore, nextCursor: page.nextCursor, snapshot: page.snapshot,
-          matchedEntries: page.matchedEntries, scannedEntries: page.scannedEntries, scannedVaultEntries: vaultEntries.length,
-          scannedReceiptJobs: jobs.length, receiptEnrichmentAvailable: Boolean(taskJobs?.recent),
-          scope: "all-local-vault-evidence-and-retained-tenant-receipts", snapshotPolicy: "restart-on-change-or-process-restart",
+          ...(cursor ? { cursor } : {}),
+        });
+        entries = page.entries;
+        pagination = { ...page.pagination, contract: "entries-v1", snapshotPolicy: "restart-on-change-or-process-restart",
           querySemantics: "all-whitespace-terms-as-case-insensitive-substrings-in-title-or-content", noteHitsScope: "independent-lexical-top-20" };
       }
       const output = { hits, entries, pagination };
@@ -1343,7 +1335,7 @@ export function buildMcpServer(
       const engine = await getEngine();
       let answer;
       try {
-        answer = await engine.ask(question, contextRefs ? { contextRefs } : undefined);
+        answer = await engine.ask(question, { ...(contextRefs ? { contextRefs } : {}), entrySearch: input => searchEntryPage(engine, input) });
       } catch (error) {
         if (!(error instanceof ContextRefError)) throw error;
         return {
@@ -1359,6 +1351,7 @@ export function buildMcpServer(
         type: "answer_content" as const,
         text: answer.text,
         sources: answer.sources,
+        ...(answer.coverage ? { coverage: answer.coverage } : {}),
       };
       const sources = answerContent.sources.map((s) => `- ${s.path}${s.url ? ` (${s.url})` : ""}`).join("\n");
       const status = {

@@ -338,7 +338,12 @@ describe("DriveVaultRepository", () => {
         ].join("\n");
       },
       async describeImage() { return "image"; },
-      async answer() { return { text: "The policy renewal is recorded.", readPaths: ["Areas/Insurance.md"] }; },
+      async answer(_input, tools) {
+        const passage = JSON.parse(await tools.readNote!("Areas/Insurance.md", { query: "renewal" }));
+        expect(passage.body).toContain("Policy renewal recorded");
+        expect(passage.source).toMatchObject({ path: "Areas/Insurance.md", provider: "google_drive" });
+        return { text: "The policy renewal is recorded.", readPaths: [] };
+      },
       async work() { return { text: "No work" }; },
       async extractBacklog() { return { candidates: [] }; },
     };
@@ -397,7 +402,12 @@ describe("DriveVaultRepository", () => {
       async classify() { throw new Error("cold-start read proof must not classify"); },
       async composePage() { throw new Error("cold-start read proof must not compose"); },
       async describeImage() { return "image"; },
-      async answer() { return { text: "The reconstructed Home note is available.", readPaths: ["Areas/Home.md"] }; },
+      async answer(_input, tools) {
+        const passage = JSON.parse(await tools.readNote!("Areas/Home.md", { query: "Home" }));
+        expect(passage.body).toContain("# Home");
+        expect(passage.source).toMatchObject({ path: "Areas/Home.md", provider: "google_drive" });
+        return { text: "The reconstructed Home note is available.", readPaths: [] };
+      },
       async work() { return { text: "No work" }; },
       async extractBacklog() { return { candidates: [] }; },
     };

@@ -198,6 +198,7 @@ describe("generic wallet MCP discovery", () => {
         type: "answer_content",
         text: "The note says saved verbatim.",
         sources: [{ path: "Log/2026-07-29.md#^e-a7f53e" }],
+        coverage: { status: "partial", continuation: [{ tool: "read_note", input: { path: "Log/2026-07-29.md#^e-a7f53e", cursor: "opaque" } }] },
         status: {
           type: "read_only_status",
           text: "Read-only answer — no action was performed.",
@@ -216,6 +217,7 @@ describe("generic wallet MCP discovery", () => {
       type: "answer_content",
       text: "The note says saved verbatim.",
       sources: [{ path: "Log/2026-07-29.md#^e-a7f53e" }],
+      coverage: { status: "partial", continuation: [{ tool: "read_note", input: { path: "Log/2026-07-29.md#^e-a7f53e", cursor: "opaque" } }] },
     });
   });
 

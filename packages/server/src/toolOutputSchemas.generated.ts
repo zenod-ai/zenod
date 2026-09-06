@@ -1698,181 +1698,430 @@ export const TOOL_OUTPUT_SCHEMAS = (
     "$id": "https://zenod.dev/schemas/tool-output/zenod.ask_brain.json",
     "title": "zenod.ask_brain output",
     "type": "object",
-    "required": [
-      "evidence"
-    ],
-    "additionalProperties": false,
     "properties": {
+      "type": {
+        "const": "answer_content"
+      },
       "text": {
         "type": "string"
       },
-      "operations": {
+      "sources": {
         "type": "array",
         "items": {
-          "$ref": "#/$defs/Operation"
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "provider": {
+              "enum": [
+                "github",
+                "google_drive"
+              ]
+            },
+            "revisionId": {
+              "type": "string"
+            },
+            "githubUrl": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "url",
+            "provider"
+          ]
         }
       },
-      "evidence": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Ev_memory_note"
-        }
-      },
-      "questions": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Question"
-        }
-      },
-      "candidates": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/Candidate"
-        }
-      },
-      "errors": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/ToolError"
-        }
-      },
-      "meta": {
+      "status": {
         "type": "object",
-        "description": "Advisory, non-authoritative annotations only (e.g. proposedActions, policyRefs, gaps). Never carries a state claim; the trace-invariant checker ignores it."
-      }
-    },
-    "$defs": {
-      "ToolError": {
-        "type": "object",
-        "required": [
-          "code",
-          "message"
-        ],
         "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "currentState": {
-            "type": "object"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Candidate": {
-        "type": "object",
-        "required": [
-          "target"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "matchReason": {
-            "type": "string"
-          },
-          "confidence": {
-            "type": "number"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Question": {
-        "type": "object",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "operationId": {
-            "type": "string"
+          "type": {
+            "const": "read_only_status"
           },
           "text": {
             "type": "string"
           }
         },
-        "additionalProperties": false
-      },
-      "Ev_memory_note": {
-        "type": "object",
+        "additionalProperties": false,
         "required": [
-          "kind",
-          "path",
-          "content",
-          "url",
-          "provider"
-        ],
-        "properties": {
-          "kind": {
-            "const": "memory_note"
-          },
-          "operationId": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "frontmatter": {
-            "type": "object"
-          },
-          "content": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "provider": {
-            "enum": [
-              "github",
-              "google_drive"
-            ]
-          },
-          "revisionId": {
-            "type": "string"
-          },
-          "githubUrl": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
+          "type",
+          "text"
+        ]
       },
-      "Operation": {
+      "coverage": {
         "type": "object",
-        "required": [
-          "operationId",
-          "status"
-        ],
         "properties": {
-          "operationId": {
-            "type": "string"
+          "contract": {
+            "const": "ask-coverage-v1"
           },
-          "interpretedAs": {
-            "type": "string"
+          "exhaustiveRequested": {
+            "type": "boolean"
           },
           "status": {
             "enum": [
-              "completed",
-              "blocked",
-              "needs_input"
+              "complete-bounded-scope",
+              "partial",
+              "focused"
             ]
+          },
+          "scope": {
+            "enum": [
+              "pinned-evidence",
+              "queried-local-memory"
+            ]
+          },
+          "entryPageBudget": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entryPagesRead": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entryPageAttempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "passageReadBudget": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "passageReadAttempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "searches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string"
+                    },
+                    "sourceId": {
+                      "type": "string"
+                    },
+                    "capturedAfter": {
+                      "type": "string"
+                    },
+                    "capturedBefore": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "enum": [
+                        "cli",
+                        "mcp",
+                        "whatsapp",
+                        "telegram",
+                        "web",
+                        "drive",
+                        "selftest"
+                      ]
+                    },
+                    "contentType": {
+                      "enum": [
+                        "text",
+                        "voice_note",
+                        "audio",
+                        "image",
+                        "screenshot",
+                        "pdf",
+                        "document",
+                        "link"
+                      ]
+                    },
+                    "order": {
+                      "enum": [
+                        "newest",
+                        "oldest"
+                      ]
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    },
+                    "cursor": {
+                      "type": "string"
+                    },
+                    "exhaustive": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "snapshot": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                },
+                "matchedEntries": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "enumeratedEntries": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "enumerationComplete": {
+                  "type": "boolean"
+                },
+                "unreadEvidenceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "nextCursor": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "receiptEnrichmentAvailable": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "query",
+                "snapshot",
+                "scope",
+                "matchedEntries",
+                "enumeratedEntries",
+                "enumerationComplete",
+                "unreadEvidenceRefs",
+                "nextCursor",
+                "receiptEnrichmentAvailable"
+              ]
+            }
+          },
+          "successfulReads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "sectionStart": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "sectionEnd": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "complete": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "identity",
+                "version",
+                "start",
+                "end",
+                "sectionStart",
+                "sectionEnd",
+                "complete"
+              ]
+            }
+          },
+          "pinnedEvidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failedReads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "continuation": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "tool": {
+                      "const": "search_entries"
+                    },
+                    "input": {
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        },
+                        "sourceId": {
+                          "type": "string"
+                        },
+                        "capturedAfter": {
+                          "type": "string"
+                        },
+                        "capturedBefore": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "enum": [
+                            "cli",
+                            "mcp",
+                            "whatsapp",
+                            "telegram",
+                            "web",
+                            "drive",
+                            "selftest"
+                          ]
+                        },
+                        "contentType": {
+                          "enum": [
+                            "text",
+                            "voice_note",
+                            "audio",
+                            "image",
+                            "screenshot",
+                            "pdf",
+                            "document",
+                            "link"
+                          ]
+                        },
+                        "order": {
+                          "enum": [
+                            "newest",
+                            "oldest"
+                          ]
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
+                        },
+                        "cursor": {
+                          "type": "string"
+                        },
+                        "exhaustive": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "tool",
+                    "input"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "tool": {
+                      "const": "read_note"
+                    },
+                    "input": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "path"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "tool",
+                    "input"
+                  ]
+                }
+              ]
+            }
+          },
+          "conversationHistorySearched": {
+            "type": "boolean"
+          },
+          "supportPolicy": {
+            "const": "only-successfully-read-spans; citations-and-search-snippets-are-not-claim-support"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "required": [
+          "contract",
+          "exhaustiveRequested",
+          "status",
+          "scope",
+          "entryPageBudget",
+          "entryPagesRead",
+          "entryPageAttempts",
+          "passageReadBudget",
+          "passageReadAttempts",
+          "searches",
+          "successfulReads",
+          "pinnedEvidenceRefs",
+          "failedReads",
+          "continuation",
+          "conversationHistorySearched",
+          "supportPolicy"
+        ]
+      },
+      "code": {
+        "const": "context_ref_unavailable"
+      },
+      "message": {
+        "type": "string"
       }
-    }
+    },
+    "additionalProperties": false,
+    "anyOf": [
+      {
+        "required": [
+          "type",
+          "text",
+          "sources",
+          "status"
+        ]
+      },
+      {
+        "required": [
+          "code",
+          "message"
+        ]
+      }
+    ],
+    "$defs": {}
   },
   "zenod.store_memory": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

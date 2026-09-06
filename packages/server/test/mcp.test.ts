@@ -773,7 +773,7 @@ describe("MCP endpoint", () => {
     expect(result.isError).not.toBe(true);
     expect(askSpy).toHaveBeenCalledWith(
       "what does that captured note say?",
-      { contextRefs: [contextRef] },
+      expect.objectContaining({ contextRefs: [contextRef], entrySearch: expect.any(Function) }),
     );
     expect(askTool?.inputSchema.properties).toHaveProperty("contextRefs");
     expect(askTool?.annotations).toMatchObject({
