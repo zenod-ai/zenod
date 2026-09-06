@@ -12,6 +12,7 @@ const key = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{
 const STOP_WORDS = new Set("the and for with this that from into have has was are will can should about also its our their your".split(" "));
 const words = (s: string) => [...new Set(s.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])].filter((word) => !STOP_WORDS.has(word));
 export const compactPage = (page: PageIndexEntry): PageIndexEntry => ({ ...page,
+  factKeys: (page.factKeys ?? []).slice(0, 8).filter((key, index, keys) => keys.slice(0, index + 1).join(",").length <= 320),
   title: compact(page.title, 120), aliases: (page.aliases ?? []).slice(0, 8).map((alias) => compact(alias, 120)), tags: page.tags.slice(0, 12).map((tag) => compact(tag, 40)), summary: compact(page.summary, SUMMARY_MAX_CHARS) });
 
 /** Reuse body search, then rank compact metadata; explicit path/title hints win. */
@@ -86,7 +87,7 @@ export async function composeFocusedPage(llm: Pick<BrainLlm, "composePage">, inp
     classification: { ...input.classification, pages: input.classification.pages.map((page) => page.path === input.path ? { ...page, action: original ? "update" : "create" } : page) } });
   const next = parseNote(raw);
   // Model-authored frontmatter may not bypass the explicit quote validation below.
-  if (next.frontmatter) { delete next.frontmatter.aliasEvidence; delete next.frontmatter.aliases; }
+  if (next.frontmatter) { delete next.frontmatter.memoryFacts; delete next.frontmatter.aliasEvidence; delete next.frontmatter.aliases; }
   const title = String(original?.frontmatter?.title ?? next.frontmatter?.title ?? "");
   const aliasEvidence = validatedAliases(input.classification.pages.find((page) => page.path === input.path), title, input.evidenceEntry, input.citation);
   const existingAliases = Array.isArray(original?.frontmatter?.aliasEvidence) ? original.frontmatter.aliasEvidence : [];

@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { appendMemoryFacts, projectFacts, renderFactViews, type FactProposal, type FactView } from "./temporalFacts.js";
 import type {
   Answer,
   AskOptions,
@@ -682,6 +683,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // advertises a tool it can't run. The LLM layer registers only what's present.
     if (!repo) return { searchChats };
     return {
+      readFacts: async (input) => {
+        const note = await getNote(vaultPath, input.path, sourceResolver);
+        const revision = await repo.currentRevision();
+        return JSON.stringify(await projectFacts({ ...input, path: note.path }, note.frontmatter.memoryFacts, now(), async ref => {
+          const [path, anchor] = ref.split("#^") as [string, string];
+          await getNote(vaultPath, path, sourceResolver); // containment/symlink guard shared with ordinary reads
+          const entry = await getEvidenceEntry(vaultPath, ref, sourceResolver);
+          return { ...entry, ...repositorySourceRef(path, `^${anchor}`, revision), path };
+        }));
+      },
       searchVault: async (query: string) => {
         const hits = await searchVault(vaultPath, query, sourceResolver);
         if (hits.length === 0) return "no results";
@@ -1440,7 +1451,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     type Outcome = NonNullable<StoreResult["topics"]>[number];
     const outcomes: Outcome[] = [];
     const covered: Array<{ start: number; end: number }> = [];
-    const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[] }>();
+    const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] }>();
     for (const topic of classification.topics ?? []) {
       const spans: Outcome["sourceSpans"] = [];
       let invalid = !topic.evidenceQuotes.length;
@@ -1469,9 +1480,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       covered.push(...spans);
       if (uncertain || topic.disposition === "evidence_only") continue;
       for (const page of pages) {
-        const group = groups.get(page.path) ?? { page, outcomes: [] };
+        const group = groups.get(page.path) ?? { page, outcomes: [], facts: [] };
         if (groups.has(page.path) && page.aliases?.length) group.page = { ...group.page, aliases: [...(group.page.aliases ?? []), ...page.aliases] };
         group.outcomes.push(outcome);
+        group.facts.push(...(topic.facts ?? []).filter(fact => topic.evidenceQuotes.some(quote => quote.includes(fact.statement))));
         groups.set(page.path, group);
       }
     }
@@ -1484,6 +1496,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
     if (uncovered.length) outcomes.push({ topic: "Unassigned source content", evidenceRef, sourceSpans: uncovered,
       confidence: 0, disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "source_not_assigned" });
+    const factEvidence = await getEvidenceEntry(vaultPath, evidenceRef, sourceResolver);
     const touched: string[] = [];
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
     const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
@@ -1516,7 +1529,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
               classification: pageClassification, tagVocabulary: config.tags, today: todayString(now()), requiredType, linkHints,
               ...(previousErrors ? { previousErrors } : {}) });
           await mkdir(dirname(absolute), { recursive: true });
-          await writeFile(absolute, compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next);
+          await writeFile(absolute, appendMemoryFacts(compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next, currentContent, group.facts, factEvidence, assignedEvidence));
           const report = await lintVault(vaultPath, [path]);
           previousErrors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
           if (!previousErrors.length) { valid = true; break; }
@@ -2101,8 +2114,28 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const readPassages: NotePassage[] = [];
     const passageSources = new Map<string, VaultSourceRef>();
     const conversationReadSpans: Array<{ path: string; text: string }> = [];
+    let factReadAttempts = 0;
+    const factViews: FactView[] = [];
+    const factReadWarnings: string[] = [];
+    const factSources: Answer["sources"] = [];
+    const factReads: Array<{ input: import("./temporalFacts.js").FactReadInput; result: string }> = [];
     const groundedTools: VaultReadTools = {
       ...tools,
+      ...(tools.readFacts ? { readFacts: async (input: import("./temporalFacts.js").FactReadInput) => {
+        let text: string;
+        try {
+          if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted; narrow the selected notes/keys.");
+          text = await tools.readFacts!(input);
+        } catch (error) {
+          factReadWarnings.push("A requested fact read failed or exceeded the four-note read budget. The answer is partial; repeat with a narrower note/key/date scope.");
+          throw error;
+        }
+        const view = JSON.parse(text) as FactView;
+        factViews.push(view);
+        factReads.push({ input, result: text });
+        factSources.push(...view.facts.flatMap(fact => fact.source ? [fact.source] : []));
+        return text;
+      } } : {}),
       searchChats: async (query: string) => {
         const result = await tools.searchChats(query); coverageTracker.chats = true;
         if (result.trim() && result.trim() !== "no results") conversationReadSpans.push({ path: "conversation-history", text: result });
@@ -2174,9 +2207,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
       },
       groundedTools,
     );
+    // Projection and source evidence must still describe the same local snapshot.
+    let factSnapshotChanged = false;
+    for (const read of factReads) {
+      try { if (await tools.readFacts!(read.input) !== read.result) factSnapshotChanged = true; }
+      catch { factSnapshotChanged = true; }
+    }
+    if (factSnapshotChanged) factSources.length = 0;
     // Sources must come from successful host reads, never model-supplied readPaths or search hits.
     const sources = [
       ...pinnedSources,
+      ...factSources,
       ...passageSources.values(),
     ].filter((source, index, all) => all.findIndex((candidate) => candidate.path === source.path) === index);
     // Enumeration and subsequent reads must still describe the same local snapshot.
@@ -2198,6 +2239,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
         : "No bounded entry scope was enumerated.";
       text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
+    } else if (factReadAttempts > 0) {
+      text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
+        : [factViews.length ? renderFactViews(factViews) : "I could not verify temporal facts from the requested scope.", ...new Set(factReadWarnings)].filter(Boolean).join("\n\n");
     } else if (sources.length === 0 && conversationReadSpans.length === 0) {
       text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
     } else {
