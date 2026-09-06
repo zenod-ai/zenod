@@ -104,6 +104,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
 | ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete passage/date-range recall, focused topic filing, and current-versus-historical answers. | active — release validation | ZMR-delivery-manager coordinates; Public392d058 live; ZMR-8 bounded filing/recall fixes active. | [September review](planning/zenod-memory-reliability-review.md); [#1199 merged](https://github.com/zenod-ai/zenod/pull/1199) | 2026-09-06 21:08 CEST | Fix live filing/recall failures and rerun direct MCP acceptance. |
+| ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | active — supported workflow | Sole operator executing authorized ZMR rollout; optional small simplification only. | [Deployment leaf](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | 2026-09-06 Europe/Paris | Finish rollout and record verified commands and recovery evidence. |
 
 ## Bootstrap Map
 
