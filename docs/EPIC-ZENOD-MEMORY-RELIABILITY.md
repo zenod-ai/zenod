@@ -14,10 +14,10 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: fd6063bf39cc0973d04c4420bfdffbdaa52b88d5 (merged ZMR-6 PR #1210)
+Last reconciled commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 (merged corrected ZMR-7 PR #1212)
 Planner: Jordi + ZMR-release-planner
-Worker: ZMR-7-current-facts-worker (/root/zmr_7_current_facts)
-Tester: unassigned
+Worker: unassigned; implementation ZMR-1–7 integrated
+Tester: ZMR-8-release-validation /root/zmr_8_release_validation
 
 ## Role Bindings
 
@@ -87,23 +87,24 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: implementation — ZMR-6 integrated; ZMR-7 dispatched
-Last verified: 2026-09-06 18:15 CEST
+Phase: release validation — ZMR-7 integrated; ZMR-8 dispatched
+Last verified: 2026-09-06 19:35 CEST
 Integration target: main
-Fresh base commit: fd6063bf39cc0973d04c4420bfdffbdaa52b88d5; integrated ZMR-6, pinned for ZMR-7
+Fresh base commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3; integrated ZMR-7, pinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
-Dispatch condition: ZMR-1–6 integrated; ZMR-7 dispatched on fd6063b. Later dependencies unchanged.
-Next action: review ZMR-7 current-facts handoff, integrate after independent review and CI, then dispatch ZMR-8.
-Blockers: none for local ZMR-7 implementation; real-model quality/cost/latency remains ZMR-8 acceptance.
+Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
+Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
+Blockers: none for local validation; real-model configuration and deployment readiness must be evidenced, not assumed.
 
 ## Execution Cursor
 
-Last attempted: verify ZMR-6 exact-head review and CI, merge #1210, dispatch ZMR-7.
-Result: ZMR-6 head 030a41f passed independent review (8 checks) and CI; merged fd6063bf39cc0973d04c4420bfdffbdaa52b88d5. ZMR-7 dispatched on that base.
+Last attempted: verify corrected ZMR-7 review/CI, merge #1212 and dispatch ZMR-8.
+Result: Corrected b9636d5 passed independent review (10 checks) and exact CI, merged 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3. ZMR-8 dispatched on that base.
 Execution status: active
-Waiting on: ZMR-7 implementation and PR handoff
+Waiting on: ZMR-8 integrated local evidence, real-model validation availability and concrete release gate package
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
-Next action: review ZMR-7 current-facts handoff, integrate after independent review and CI, then dispatch ZMR-8.
+Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
+
 
 
 ## Bootstrap Map
@@ -146,7 +147,7 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 
 ## Issue Ledger
 
-ZMR-1–6 are integrated; ZMR-7 is active and ZMR-8 retains dependencies. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
+ZMR-1–7 are integrated; ZMR-8 validation is active. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
 
 | Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -156,8 +157,8 @@ ZMR-1–6 are integrated; ZMR-7 is active and ZMR-8 retains dependencies. ZMR-9/
 | [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-4-typed-retrieval-worker /root/zmr_4_typed_retrieval | Give ask_brain typed retrieval and explicit coverage | done | ZMR-2, ZMR-3 | /Users/jordi/Documents/GitHub/wt-zmr-4 | [PR #1206](https://github.com/zenod-ai/zenod/pull/1206) / codex/zmr-4 | dadd88350b2bca896fc8f605bcf4c0f2c2ff261c | 1be97bb merged; corrected3bb8 re-review and CI pass; 88 focused+6 independent checks | 2026-09-06 | Integrated; ZMR-5 dispatched |
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-5-topic-filing-worker /root/zmr_5_topic_filing | File multi-topic memories with per-topic confidence | done | ZMR-1, ZMR-4 | /Users/jordi/Documents/GitHub/wt-zmr-5 | [PR #1208](https://github.com/zenod-ai/zenod/pull/1208) / codex/zmr-5 | 1be97bb8815446fb9d40443f60bac9c5b1dabc71 | 06085df merged; e458 review/CI pass; 15 independent checks | 2026-09-06 | Integrated; minor receipt wording delegated to ZMR-6 |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-6-focused-notes-worker /root/zmr_6_focused_notes | Keep meaning notes focused and summaries bounded | done | ZMR-5 | /Users/jordi/Documents/GitHub/wt-zmr-6 | [PR #1210](https://github.com/zenod-ai/zenod/pull/1210) / codex/zmr-6 | 06085df10bb380ef615c6a2ee7e007fd57d6548b | fd6063b merged; 030a41 review/CI pass; 8 independent checks | 2026-09-06 | Integrated; ZMR-7 dispatched |
-| [ZMR-7 #1195](https://github.com/zenod-ai/zenod/issues/1195) | 6 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-7-current-facts-worker /root/zmr_7_current_facts | Distinguish current facts, corrections and historical evidence | active | ZMR-4, ZMR-6 | /Users/jordi/Documents/GitHub/wt-zmr-7 | codex/zmr-7 | fd6063bf39cc0973d04c4420bfdffbdaa52b88d5 | Dependencies integrated; worker dispatched | 2026-09-06 | Implement current facts, corrections and history |
-| [ZMR-8 #1196](https://github.com/zenod-ai/zenod/issues/1196) | 7 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Tester | unassigned | Prove the Memory Reliability release journey | proposed | ZMR-2, ZMR-3, ZMR-4, ZMR-5, ZMR-6, ZMR-7 | ../wt-zmr-8 at dispatch | codex/zmr-8 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
+| [ZMR-7 #1195](https://github.com/zenod-ai/zenod/issues/1195) | 6 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-7-current-facts-worker /root/zmr_7_current_facts | Distinguish current facts, corrections and historical evidence | done | ZMR-4, ZMR-6 | /Users/jordi/Documents/GitHub/wt-zmr-7 | [PR #1212](https://github.com/zenod-ai/zenod/pull/1212) / codex/zmr-7 | fd6063bf39cc0973d04c4420bfdffbdaa52b88d5 | 3f5ba09 merged; b963 re-review and CI pass; 10 independent checks | 2026-09-06 | Integrated; conservative phrasing limits carried to ZMR-8 |
+| [ZMR-8 #1196](https://github.com/zenod-ai/zenod/issues/1196) | 7 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Tester | ZMR-8-release-validation /root/zmr_8_release_validation | Prove the Memory Reliability release journey | active — local validation | ZMR-2, ZMR-3, ZMR-4, ZMR-5, ZMR-6, ZMR-7 | /Users/jordi/Documents/GitHub/wt-zmr-8 | codex/zmr-8 | 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 | Dependencies integrated; tester dispatched | 2026-09-06 | Validate integrated journey; prepare concrete gate package |
 | [ZMR-9 #1197](https://github.com/zenod-ai/zenod/issues/1197) | follow-up | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Evaluate a rebuildable hybrid retrieval index | proposed / deferred | ZMR-8 | ../wt-zmr-9 at dispatch | codex/zmr-9 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-10 #1198](https://github.com/zenod-ai/zenod/issues/1198) | follow-up | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Add an evidence-backed filing maintenance queue | proposed / deferred | ZMR-8 | ../wt-zmr-10 at dispatch | codex/zmr-10 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 
@@ -179,7 +180,7 @@ If blocked by a gate, the affected worker's entire next status is “BLOCKED ON 
 
 ## Recovery And Takeover
 
-ZMR-7 is assigned to /root/zmr_7_current_facts on fd6063b. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
+ZMR-8 is assigned to /root/zmr_8_release_validation on 3f5ba09. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
 
 ## Validation Evidence
 
@@ -191,6 +192,10 @@ ZMR-7 is assigned to /root/zmr_7_current_facts on fd6063b. The manager reassigns
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 19:35 CEST — Manager — Current facts integrated; release validation dispatched
+
+Corrected #1212 head b9636d5b5f9250c409d6416a28e35b7f1a74dbe4 passed re-review and CI, merged 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3. Directional correction and statement-bound verification fixes independently passed 10 tests. Dispatched /root/zmr_8_release_validation for #1196 in wt-zmr-8 on codex/zmr-8 pinned to that merge. Tester owns local integrated proof and concrete gate package; parent owns approved live browser journey. Real-model quality/cost, conservative language support and live acceptance remain unproven. No deployment.
 
 ### 2026-09-06 18:15 CEST — Manager — Focused notes integrated; current facts dispatched
 
