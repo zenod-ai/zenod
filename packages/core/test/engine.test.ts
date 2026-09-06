@@ -8,6 +8,7 @@ import { createEngine, LONG_MEMORY_SEGMENT_CHARS } from "../src/engine/engine.js
 import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
+import { parseNote, serializeNote } from "../src/vault/frontmatter.js";
 import { listMarkdownFiles } from "../src/vault/files.js";
 import type { FileChange, VaultRepository, VaultRevision } from "../src/index.js";
 import type { TokenCostMeasurement } from "../src/types.js";
@@ -65,6 +66,10 @@ class FakeLlm implements BrainLlm {
     this.composeCalls++;
     if (this.composeCalls <= this.failComposeAttempts) {
       return "# Broken page without frontmatter\n"; // fails lint
+    }
+    if (input.focusedUpdate && input.currentContent) {
+      const { frontmatter, body } = parseNote(input.currentContent);
+      return serializeNote(frontmatter!, body + `\n- New fact recorded (${input.citation}).\n`);
     }
     const today = input.today;
     return [
@@ -864,6 +869,36 @@ describe("BrainEngine", () => {
     const record = result.pagesTouched.find((path) => path.startsWith("Inbox/"))!;
     expect(await readFile(join(repo.path, record), "utf8")).toContain("Znot or Zenod");
     expect((await e.lint()).errors).toEqual([]);
+  });
+
+  it("keeps long meaning history intact through repeated stores while sending only a bounded section", async () => {
+    const path = join(repo.path, "Areas/Insurance.md");
+    const original = parseNote(await readFile(path, "utf8"));
+    const mortgage = `## Mortgage\n\n${"Separate mortgage policy retained. ".repeat(1000)} [[2026-06-10#^e-7f3a2c]]\n`;
+    await writeFile(path, serializeNote(original.frontmatter!, original.body + "\n" + mortgage));
+    await repo.commitAndPublish("seed synthetic long meaning page");
+    llm.classify = vi.fn(async (value: ClassifyInput) => ({ confidence: 0.95, summary: "Travel", tags: [], pages: [], topics: [{
+      topic: "Travel", summary: "Travel", confidence: 0.95, disposition: "integrate_page", evidenceQuotes: [value.content],
+      pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" }],
+    }] }));
+    llm.composePage = vi.fn(async (value: ComposePageInput) => {
+      expect(value.currentContent!.length).toBeLessThan(6500);
+      expect(value.currentContent).not.toContain("Mortgage");
+      const projected = parseNote(value.currentContent!);
+      return serializeNote(projected.frontmatter!, projected.body + `\n- ${value.evidenceEntry} (${value.citation})\n`);
+    });
+    const e = engine();
+    for (let n = 1; n <= 3; n++) {
+      const content = `Travel insurance update number ${n}.`;
+      const result = await e.store({ content, source: "mcp", verbatim: true });
+      expect(result.filing).toBe("filed");
+      expect((await e.getEntry(result.evidenceRef)).content).toBe(content);
+      const changed = parseNote(await readFile(path, "utf8"));
+      expect(changed.body).toContain(mortgage);
+      expect(changed.body).toContain("policy ends March 2027");
+      expect(String(changed.frontmatter!.summary).length).toBeLessThanOrEqual(480);
+    }
+    expect(llm.composePage).toHaveBeenCalledTimes(3);
   });
 
   it("keeps successful topic filing and immutable evidence when another composer fails", async () => {

@@ -33,6 +33,7 @@ import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault } from "../vault/lint.js";
+import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
@@ -40,7 +41,7 @@ import { readNotePassage, type NoteReadOptions, type NotePassage } from "../ops/
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
-import type { AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
+import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
@@ -1414,6 +1415,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
+  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput) {
+    return classifyCandidates({ classify: async (bounded: ClassifyInput) => {
+      reportTokenCost("classify", [bounded.content, bounded.context ?? "", ...bounded.hints,
+        bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(",")], undefined, "bounded-candidates");
+      return llm.classify(bounded);
+    } }, vaultPath, snapshot, input);
+  }
+
+  async function composeMeaning(input: ComposePageInput) {
+    return composeFocusedPage({ composePage: async (bounded: ComposePageInput) => {
+      reportTokenCost("compose", [bounded.path, bounded.currentContent ?? bounded.template, bounded.evidenceEntry,
+        bounded.citation, bounded.linkHints.join(" ")], undefined, "focused-section");
+      return llm.composePage(bounded);
+    } }, input);
+  }
+
   /** File independently validated topic assignments; a failed page cannot erase another page or raw evidence. */
   async function fileTopicAssignments(
     content: string, evidenceRef: string, logPath: string, classification: Classification,
@@ -1453,6 +1470,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (uncertain || topic.disposition === "evidence_only") continue;
       for (const page of pages) {
         const group = groups.get(page.path) ?? { page, outcomes: [] };
+        if (groups.has(page.path) && page.aliases?.length) group.page = { ...group.page, aliases: [...(group.page.aliases ?? []), ...page.aliases] };
         group.outcomes.push(outcome);
         groups.set(page.path, group);
       }
@@ -1477,6 +1495,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const absolute = join(vaultPath, path);
       const currentContent = await readFile(absolute, "utf8").catch(() => null);
       try {
+        if (group.page.action === "update" && currentContent === null) throw new Error("update_target_missing");
         const folder = path.split("/")[0] ?? "";
         const requiredType = MEANING_FOLDERS[folder];
         if (!requiredType || isAbsolute(path) || path.split("/").includes("..")) throw new Error("invalid_meaning_path");
@@ -1485,22 +1504,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const pageClassification: Classification = { tags: classification.tags,
           summary: group.outcomes.map((outcome) => outcome.topic).join("; "), pages: [group.page],
           confidence: Math.min(...group.outcomes.map((outcome) => outcome.confidence)) };
-        const linkHints = snapshot.pages.filter((page) => page.path !== path).slice(0, 4).map((page) => `[[${page.path.replace(/\.md$/, "")}|${page.title}]]`);
-        const indexPath = `${folder}/${folder} Index.md`;
-        if (snapshot.files.includes(indexPath)) linkHints.unshift(`[[${folder}/${folder} Index|${folder}]]`);
+        const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
         let previousErrors: import("../types.js").LintError[] | undefined;
         let valid = false;
         for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt += 1) {
           const compact = group.outcomes.every((outcome) => outcome.disposition === "append_compact_note");
           if (compact && currentContent === null) throw new Error("compact_target_missing");
-          if (!compact) reportTokenCost("compose", [assignedEvidence, currentContent ?? template], undefined, "topic-filing");
           const next = compact
-            ? `${currentContent}\n\n## Captured update — ${todayString(now())}\n\n${assignedEvidence.split("\n").map((line) => `> ${line}`).join("\n")}\n\n${citation}\n`
-            : await llm.composePage({ path, currentContent, template, evidenceEntry: assignedEvidence, citation,
+            ? `${boundExistingSummary(currentContent!)}\n\n## Captured update — ${todayString(now())}\n\n${assignedEvidence.split("\n").map((line) => `> ${line}`).join("\n")}\n\n${citation}\n`
+            : await composeMeaning({ path, currentContent, template, evidenceEntry: assignedEvidence, citation,
               classification: pageClassification, tagVocabulary: config.tags, today: todayString(now()), requiredType, linkHints,
               ...(previousErrors ? { previousErrors } : {}) });
           await mkdir(dirname(absolute), { recursive: true });
-          await writeFile(absolute, next);
+          await writeFile(absolute, compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next);
           const report = await lintVault(vaultPath, [path]);
           previousErrors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
           if (!previousErrors.length) { valid = true; break; }
@@ -1614,14 +1630,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
                 : []),
             ];
-            reportTokenCost("classify", [
-              segment,
-              ...hints,
-              snapshot.pages.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"),
-              config.tags.join(", "),
-            ], undefined, attempt === 0 ? "enrichment-gate" : "retry");
             try {
-              classified = await llm.classify({
+              classified = await classifyMeaning(snapshot, {
                 content: segment,
                 context: [segments[segmentIndex - 1]?.slice(-400), segments[segmentIndex + 1]?.slice(0, 400)].filter(Boolean).join("\n"),
                 hints,
@@ -1695,7 +1705,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             .join(" ");
           await writeFile(
             absolute,
-            `${current}${separator}## Captured update — ${todayString(now())}\n\n- ${compactSummary} (${citation})\n`,
+            `${boundExistingSummary(current)}${separator}## Captured update — ${todayString(now())}\n\n- ${compactSummary} (${citation})\n`,
           );
           touched.push(page.path);
         } else {
@@ -1706,26 +1716,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
             if (!requiredType) throw new Error(`classifier proposed a non-meaning path: ${page.path}`);
             const absolute = join(vaultPath, page.path);
             const currentContent = await readFile(absolute, "utf8").catch(() => null);
-            const linkHints: string[] = [];
-            const indexPath = `${folder}/${folder} Index.md`;
-            if (snapshot.files.includes(indexPath)) linkHints.push(`[[${folder}/${folder} Index|${folder}]]`);
-            for (const candidate of snapshot.pages) {
-              if (candidate.path === page.path) continue;
-              linkHints.push(`[[${candidate.path.replace(/\.md$/, "")}|${candidate.title}]]`);
-              if (linkHints.length >= 4) break;
-            }
+            const linkHints = await relevantLinks(vaultPath, snapshot, page.path, evidence.content);
             let lastErrors: import("../types.js").LintError[] | undefined;
             let composed = false;
             for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt += 1) {
-              reportTokenCost("compose", [
-                page.path,
-                currentContent ?? template,
-                evidence.content,
-                citation,
-                config.tags.join(", "),
-                ...(lastErrors?.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`) ?? []),
-              ], undefined, attempt === 0 ? "background-enrichment" : "retry");
-              const next = await llm.composePage({
+              const next = await composeMeaning({
                 path: page.path,
                 currentContent,
                 template,
@@ -1822,14 +1817,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
                 : []),
             ];
-            reportTokenCost("classify", [
-              segment,
-              ...hints,
-              snapshot.pages.map((p) => `${p.path} | ${p.title} | ${p.tags.join(",")} | ${p.summary}`).join("\n"),
-              config.tags.join(", "),
-            ], undefined, attempt === 0 ? "store" : "retry");
             try {
-              classified = await llm.classify({
+              classified = await classifyMeaning(snapshot, {
                 content: segment,
                 context: [segments[segmentIndex - 1]?.slice(-400), segments[segmentIndex + 1]?.slice(0, 400)].filter(Boolean).join("\n"),
                 hints,
@@ -1965,37 +1954,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
           const absolute = join(vaultPath, page.path);
           const currentContent = await readFile(absolute, "utf8").catch(() => null);
 
-          // Give the composer valid wikilink targets (no orphans): the folder
-          // index first, then a few existing meaning pages.
-          const indexPath = `${folder}/${folder} Index.md`;
-          const linkHints: string[] = [];
-          if (snapshot.files.includes(indexPath)) {
-            linkHints.push(`[[${folder}/${folder} Index|${folder}]]`);
-          }
-          for (const p of snapshot.pages) {
-            if (p.path === page.path) continue;
-            linkHints.push(`[[${p.path.replace(/\.md$/, "")}|${p.title}]]`);
-            if (linkHints.length >= 4) break;
-          }
+          const linkHints = await relevantLinks(vaultPath, snapshot, page.path, input.content);
 
           let lastErrors = undefined as import("../types.js").LintError[] | undefined;
           let composed = false;
           for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt++) {
-            reportTokenCost(
-              "compose",
-              [
-                page.path,
-                currentContent ?? template,
-                evidence.entry,
-                citation,
-                config.tags.join(", "),
-                input.content,
-                ...(lastErrors?.map((e) => `${e.path} [${e.rule}] ${e.message}`) ?? []),
-              ],
-              undefined,
-              attempt === 0 ? "store" : "retry",
-            );
-            const next = await llm.composePage({
+            const next = await composeMeaning({
               path: page.path,
               currentContent,
               template,

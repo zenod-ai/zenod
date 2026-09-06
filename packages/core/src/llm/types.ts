@@ -61,6 +61,8 @@ export interface ClassifyInput {
 }
 
 export interface ClassificationPage {
+  /** Only explicit source-backed equivalent names, never guessed spelling corrections. */
+  aliases?: Array<{ name: string; evidenceQuote: string }>;
   /** Vault-relative path, e.g. "Areas/Insurance.md". */
   path: string;
   action: "create" | "update";
@@ -97,6 +99,9 @@ export interface Classification {
 }
 
 export interface ComposePageInput {
+  /** Existing-page composition is a bounded section, never the complete historical body. */
+  focusedUpdate?: boolean;
+  summaryMaxChars?: number;
   path: string;
   /** Current page content, or null when creating from template. */
   currentContent: string | null;

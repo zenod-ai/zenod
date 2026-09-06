@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { parseNote } from "./frontmatter.js";
 import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 
+export const SUMMARY_MAX_CHARS = 480;
+
 /** One row of the frontmatter index — the cheap first retrieval pass. */
 export interface PageIndexEntry {
   path: string;
@@ -10,6 +12,7 @@ export interface PageIndexEntry {
   type: string;
   tags: string[];
   summary: string;
+  aliases?: string[];
 }
 
 export interface VaultSnapshot {
@@ -53,6 +56,9 @@ export async function scanVault(vaultPath: string): Promise<VaultSnapshot> {
           type: typeof frontmatter.type === "string" ? frontmatter.type : "",
           tags: Array.isArray(frontmatter.tags) ? frontmatter.tags.filter((t): t is string => typeof t === "string") : [],
           summary: typeof frontmatter.summary === "string" ? frontmatter.summary : "",
+          aliases: Array.isArray(frontmatter.aliasEvidence) ? frontmatter.aliasEvidence
+            .filter((alias): alias is { name: string } => Boolean(alias && typeof alias === "object" && typeof alias.name === "string" && typeof alias.quote === "string" && typeof alias.citation === "string"))
+            .map((alias) => alias.name) : [],
         });
       }
     } else if (tier === "evidence" && /^Log\/\d{4}-\d{2}-\d{2}\.md$/.test(file)) {
