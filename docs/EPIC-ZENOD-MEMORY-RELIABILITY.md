@@ -87,21 +87,21 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — local acceptance passed; existing provider configuration gate
+Phase: production deployment authorized — backup and rollback preparation
 Last verified: 2026-09-06 21:32 CEST
 Integration target: main
 Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
-Blockers: real-model credentials absent locally; bounded real-model validation and exact live approval remain required.
+Blockers: none for authorized rollout preparation. User authorized production-first testing on the existing single-user environment; no staging/provider setup is required first.
 
 ## Execution Cursor
 
 Last attempted: verify corrected chat re-review and CI, merge #1214, assign candidate retest.
 Result: d336698 passed independent re-review and exact CI, merged392d058. /root/zmr_8_candidate_retest assigned sole write ownership in wt-zmr-8; prior tester capacity failure and repair handoffs preserved.
-Execution status: blocked
-Waiting on: Jordi identifies secure existing approved provider/model configuration and authorizes up to $5 for synthetic real-model acceptance. Evidence #1216 passed review and CI and is merged.
+Execution status: active
+Waiting on: sole deploy operator /root/zmr_deploy_audit fresh backup/restore, minimal public Zenod rollout and health; parent then tests live and records learnings.
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
 
@@ -193,6 +193,10 @@ At 2026-09-06 21:08 CEST, repair completed and sole ownership transferred to /ro
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### User-authorized production rollout and reversibility
+
+Jordi explicitly requested deployment to existing single-user production, live testing and fixes, plus registered learnings; then requested easy undo. This supersedes waiting for separate local provider/staging setup. /root/zmr_deploy_audit is sole production mutation owner; parent tests the browser and records learning. Plan minimal public Zenod-only392d058 rollout, preserving private Phylax, signup/config/credentials/volumes and raw memory. Fresh verified backup, off-host recovery copy, previous image/config and runnable rollback are required implementation work within this authorization, not a repeated permission question.
 
 ### 2026-09-06 21:08 CEST — Manager — Chat repair integrated; candidate retest dispatched
 
