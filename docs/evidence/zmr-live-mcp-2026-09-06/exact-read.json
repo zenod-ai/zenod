@@ -1,0 +1,26 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Log/2026-09-06.md#^e-0b7779\nsource: mcp\ncontentType: text\ncapturedAt: 2026-09-06T20:07:11.556Z\nsource URL: https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Log/2026-09-06.md#L23\nDeployment and upgrade preferences clarified by Jordi on 2026-09-06 for Zenod: this is currently a single-user live service. For this release, deploy reviewed incremental changes to the existing production environment, test through the direct Zenod MCP connection, and fix bounded problems. Make undo easy: retain previous immutable image and exact configuration, preserve data volumes/sessions, and have a ready rollback command. Keep the change small; remove complexity only when convenient within the work, otherwise defer it. Maintain a durable deployments/upgrades spine leaf so the supported upgrade procedure and learnings are reused instead of reinvented. Do not introduce a new staging/provider setup as a prerequisite when the authorized live environment is available. Scope future permissions to the user's actual request; this does not authorize unrelated future deployments, billing or public signup. Engineering learnings: MCP success did not prove customer chat behavior; use shared read/coverage/grounding finalization and test streaming plus persisted history. Verify actual running container image and source revision, not merely desired configuration. Distinguish code rollback from data restore. Full backup/off-host restore proofs are expensive; define a risk-based recurring backup policy rather than repeating ad hoc ceremony."
+    }
+  ],
+  "structuredContent": {
+    "entry": {
+      "evidenceRef": "Log/2026-09-06.md#^e-0b7779",
+      "path": "Log/2026-09-06.md",
+      "anchor": "e-0b7779",
+      "title": "Deployment and upgrade preferences clarified by Jordi on",
+      "content": "Deployment and upgrade preferences clarified by Jordi on 2026-09-06 for Zenod: this is currently a single-user live service. For this release, deploy reviewed incremental changes to the existing production environment, test through the direct Zenod MCP connection, and fix bounded problems. Make undo easy: retain previous immutable image and exact configuration, preserve data volumes/sessions, and have a ready rollback command. Keep the change small; remove complexity only when convenient within the work, otherwise defer it. Maintain a durable deployments/upgrades spine leaf so the supported upgrade procedure and learnings are reused instead of reinvented. Do not introduce a new staging/provider setup as a prerequisite when the authorized live environment is available. Scope future permissions to the user's actual request; this does not authorize unrelated future deployments, billing or public signup. Engineering learnings: MCP success did not prove customer chat behavior; use shared read/coverage/grounding finalization and test streaming plus persisted history. Verify actual running container image and source revision, not merely desired configuration. Distinguish code rollback from data restore. Full backup/off-host restore proofs are expensive; define a risk-based recurring backup policy rather than repeating ad hoc ceremony.",
+      "source": "mcp",
+      "verbatim": true,
+      "contentType": "text",
+      "capturedAt": "2026-09-06T20:07:11.556Z",
+      "sourceId": "zmr-deployment-learnings-20260906",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Log/2026-09-06.md#L23",
+      "provider": "github",
+      "revisionId": "6910ca171f12766c7808da9eeb995e4433ab2d24",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/6910ca171f12766c7808da9eeb995e4433ab2d24/Log/2026-09-06.md#L23"
+    }
+  }
+}
