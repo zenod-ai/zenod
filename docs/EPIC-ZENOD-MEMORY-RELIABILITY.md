@@ -87,8 +87,8 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: implementation — ZMR-3 historical pagination active
-Last verified: 2026-09-06 02:05 CEST
+Phase: review — ZMR-3 PR #1204; CI passed, independent review active
+Last verified: 2026-09-06 02:41 CEST
 Integration target: main
 Fresh base commit: e8458a8a5176fb68376b0f9b599c480015a49941; integrated ZMR-2, pinned for ZMR-3
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
@@ -99,9 +99,9 @@ Blockers: none for local ZMR-3 implementation; real-model quality/cost/latency s
 ## Execution Cursor
 
 Last attempted: verify corrected ZMR-2 exact-head CI/re-review, merge #1202, then dispatch ZMR-3.
-Result: corrected 1aea398 passed re-review and CI; #1202 merged as e8458a8. /root/zmr_3_history assigned to historical pagination on that base.
+Result: ZMR-3 returned PR #1204 at bec3c6e with 79 core, 94 server and 9 schema checks; final process-restart regression passed. Required CI succeeded; independent reviewer assigned.
 Execution status: active
-Waiting on: ZMR-3 worker PR/evidence
+Waiting on: independent ZMR-3 review of bec3c6e (CI passed)
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-3 complete historical search/pagination PR, integrate after gates, then dispatch ZMR-4.
 
@@ -151,7 +151,7 @@ ZMR-1 and ZMR-2 are integrated; ZMR-3 is active and ZMR-4–8 retain dependencie
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | done — deterministic baseline | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | [PR #1201](https://github.com/zenod-ai/zenod/pull/1201) / codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | c823d06 merged; 102 focused tests; independent review + CI pass | 2026-09-06 01:11 CEST | Integrated c823d06; real-model metrics carried to ZMR-8 |
 | [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-2-passage-worker /root/zmr_2_passage | Retrieve answer-bearing passages beyond the note prefix | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-2 | [PR #1202](https://github.com/zenod-ai/zenod/pull/1202) / codex/zmr-2 | c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175 | e8458a8 merged; 182 core +35 MCP; corrected review and CI pass | 2026-09-06 02:05 CEST | Integrated; preserve pinned/distractor regressions |
-| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | active | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | Corrected ZMR-2 integrated; pinned dispatch | 2026-09-06 02:05 CEST | Implement complete historical pagination |
+| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | review | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | bec3c6e CI passed; 657-entry provider tests; independent review active | 2026-09-06 02:41 CEST | Complete review before integration |
 | [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Give ask_brain typed retrieval and explicit coverage | proposed | ZMR-2, ZMR-3 | ../wt-zmr-4 at dispatch | codex/zmr-4 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | File multi-topic memories with per-topic confidence | proposed | ZMR-1, ZMR-4 | ../wt-zmr-5 at dispatch | codex/zmr-5 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Keep meaning notes focused and summaries bounded | proposed | ZMR-5 | ../wt-zmr-6 at dispatch | codex/zmr-6 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
