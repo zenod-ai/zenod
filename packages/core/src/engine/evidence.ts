@@ -174,10 +174,40 @@ function parseEvidenceFile(path: string, text: string, location: VaultSourceCont
   });
 }
 
-function within(value: string, lower?: string, upper?: string): boolean {
-  if (lower && value < lower) return false;
-  if (upper && value > upper) return false;
-  return true;
+/** Legacy zone-less timestamps are interpreted as UTC, never host-local time. */
+export function memoryTimestamp(value: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?$/.test(value)) {
+    throw new Error(`Invalid capture timestamp: ${value}`);
+  }
+  const day = value.slice(0, 10);
+  const dayTime = Date.parse(`${day}T00:00:00Z`);
+  if (!Number.isFinite(dayTime) || new Date(dayTime).toISOString().slice(0, 10) !== day) throw new Error(`Invalid capture timestamp: ${value}`);
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00Z`
+    : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value) ? `${value}Z` : value;
+  const time = Date.parse(normalized);
+  if (!Number.isFinite(time)) throw new Error(`Invalid capture timestamp: ${value}`);
+  return time;
+}
+
+/** Shared structural/text semantics, applied after receipt enrichment by callers. */
+export function selectMemoryEntries(entries: MemoryEntry[], query: MemoryEntryQuery = {}): MemoryEntry[] {
+  const after = query.capturedAfter ? memoryTimestamp(query.capturedAfter) : -Infinity;
+  const before = query.capturedBefore ? memoryTimestamp(query.capturedBefore) : Infinity;
+  if (after > before) throw new Error("capturedAfter must not exceed capturedBefore");
+  const terms = query.query?.normalize("NFKC").toLowerCase().split(/\s+/).filter(Boolean) ?? [];
+  const order = query.order ?? "newest";
+  return entries.filter(entry => {
+    const time = memoryTimestamp(entry.capturedAt);
+    const text = `${entry.title}\n${entry.content}`.normalize("NFKC").toLowerCase();
+    return (!query.source || entry.source === query.source)
+      && (!query.contentType || entry.contentType === query.contentType)
+      && (!query.sourceId || entry.sourceId === query.sourceId)
+      && time >= after && time <= before && terms.every(term => text.includes(term));
+  }).sort((left, right) => {
+    const comparison = memoryTimestamp(left.capturedAt) - memoryTimestamp(right.capturedAt)
+      || (left.evidenceRef < right.evidenceRef ? -1 : left.evidenceRef > right.evidenceRef ? 1 : 0);
+    return order === "newest" ? -comparison : comparison;
+  });
 }
 
 export async function searchEvidenceEntries(
@@ -191,18 +221,8 @@ export async function searchEvidenceEntries(
     const text = await readFile(join(vaultPath, path), "utf8");
     entries.push(...parseEvidenceFile(path, text, location));
   }
-  const order = query.order ?? "newest";
-  const limit = Math.max(1, Math.min(query.limit ?? 50, 500));
-  return entries
-    .filter((entry) => !query.source || entry.source === query.source)
-    .filter((entry) => !query.contentType || entry.contentType === query.contentType)
-    .filter((entry) => !query.sourceId || entry.sourceId === query.sourceId)
-    .filter((entry) => within(entry.capturedAt, query.capturedAfter, query.capturedBefore))
-    .sort((left, right) => {
-      const comparison = left.capturedAt.localeCompare(right.capturedAt) || left.evidenceRef.localeCompare(right.evidenceRef);
-      return order === "newest" ? -comparison : comparison;
-    })
-    .slice(0, limit);
+  const selected = selectMemoryEntries(entries, query);
+  return query.limit === null ? selected : selected.slice(0, Math.max(1, Math.min(query.limit ?? 50, 500)));
 }
 
 export async function getEvidenceEntry(

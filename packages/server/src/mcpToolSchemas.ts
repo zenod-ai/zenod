@@ -10,7 +10,9 @@ import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod/evidence-context";
  */
 
 export const SEARCH_MEMORY_SHAPE = {
-  query: z.string().min(1).optional().describe("Optional semantic search terms, e.g. 'travel insurance'."),
+  query: z.string().min(1).optional().describe("Optional lexical search terms, e.g. 'travel insurance'."),
+  sourceId: z.string().min(1).optional().describe("Exact stable source/provider identifier for entries."),
+  cursor: z.string().min(1).max(2048).optional().describe("Entry nextCursor; repeat the same query/filters/order. Snapshot change or server restart requires restarting and discarding prior pages."),
   source: z
     .enum(["cli", "mcp", "whatsapp", "telegram", "web", "drive", "selftest"])
     .optional()
@@ -22,7 +24,7 @@ export const SEARCH_MEMORY_SHAPE = {
   capturedAfter: z.string().min(1).optional().describe("Optional inclusive ISO-8601 lower bound for the source capture time."),
   capturedBefore: z.string().min(1).optional().describe("Optional inclusive ISO-8601 upper bound for the source capture time."),
   order: z.enum(["newest", "oldest", "relevance"]).optional().describe("Ordering. Defaults to relevance for text queries and newest for structural entry queries."),
-  limit: z.number().int().min(1).max(100).optional().describe("Maximum results. Defaults to 20."),
+  limit: z.number().int().min(1).max(100).optional().describe("Maximum entry page size. Defaults to 20. Note hits retain their independent ranked top-20 contract."),
 };
 
 export const GET_MEMORY_SHAPE = {

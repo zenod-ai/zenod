@@ -133,9 +133,9 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
       const coreOld = await engine.searchEntries(filters);
       expect(coreOld.map(entry => entry.evidenceRef)).toEqual(Object.values(manifest.refs));
       const historical = await call("search_memory", filters, "historicalSearch");
-      expect(historical.entries).toEqual([]);
+      expect(historical.entries.map((entry: { evidenceRef: string }) => entry.evidenceRef)).toEqual(Object.values(manifest.refs));
       const catalog = await client.listTools();
-      expect(catalog.tools.find(tool => tool.name === "search_memory")!.inputSchema.properties).not.toHaveProperty("cursor");
+      expect(catalog.tools.find(tool => tool.name === "search_memory")!.inputSchema.properties).toHaveProperty("cursor");
       const correction = await call("get_memory", { path: manifest.refs.correction }, "correctionGet");
       expect(correction.entry.content).toContain("now violet; amber is superseded");
       const original = await call("get_memory", { path: manifest.refs.historical }, "originalGet");
