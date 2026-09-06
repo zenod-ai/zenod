@@ -534,6 +534,95 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "type": "string",
             "pattern": "^[0-9a-fA-F]{40}$"
           },
+          "filing": {
+            "enum": [
+              "filed",
+              "uncertain",
+              "inbox",
+              "pending"
+            ]
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "topic",
+                "evidenceRef",
+                "sourceSpans",
+                "confidence",
+                "disposition",
+                "pages",
+                "filedPages",
+                "status"
+              ],
+              "properties": {
+                "topic": {
+                  "type": "string"
+                },
+                "evidenceRef": {
+                  "type": "string"
+                },
+                "sourceSpans": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "disposition": {
+                  "enum": [
+                    "evidence_only",
+                    "append_compact_note",
+                    "integrate_page",
+                    "needs_clarification"
+                  ]
+                },
+                "pages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "filedPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "enum": [
+                    "filed",
+                    "uncertain",
+                    "pending"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
           "pagesTouched": {
             "type": "array",
             "items": {
@@ -2465,6 +2554,95 @@ export const TOOL_OUTPUT_SCHEMAS = (
             "type": "string",
             "pattern": "^[0-9a-fA-F]{40}$"
           },
+          "filing": {
+            "enum": [
+              "filed",
+              "uncertain",
+              "inbox",
+              "pending"
+            ]
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "topic",
+                "evidenceRef",
+                "sourceSpans",
+                "confidence",
+                "disposition",
+                "pages",
+                "filedPages",
+                "status"
+              ],
+              "properties": {
+                "topic": {
+                  "type": "string"
+                },
+                "evidenceRef": {
+                  "type": "string"
+                },
+                "sourceSpans": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "disposition": {
+                  "enum": [
+                    "evidence_only",
+                    "append_compact_note",
+                    "integrate_page",
+                    "needs_clarification"
+                  ]
+                },
+                "pages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "filedPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "enum": [
+                    "filed",
+                    "uncertain",
+                    "pending"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
           "pagesTouched": {
             "type": "array",
             "items": {
@@ -2921,6 +3099,95 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "commitSha": {
             "type": "string",
             "pattern": "^[0-9a-fA-F]{40}$"
+          },
+          "filing": {
+            "enum": [
+              "filed",
+              "uncertain",
+              "inbox",
+              "pending"
+            ]
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "topic",
+                "evidenceRef",
+                "sourceSpans",
+                "confidence",
+                "disposition",
+                "pages",
+                "filedPages",
+                "status"
+              ],
+              "properties": {
+                "topic": {
+                  "type": "string"
+                },
+                "evidenceRef": {
+                  "type": "string"
+                },
+                "sourceSpans": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "disposition": {
+                  "enum": [
+                    "evidence_only",
+                    "append_compact_note",
+                    "integrate_page",
+                    "needs_clarification"
+                  ]
+                },
+                "pages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "filedPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "enum": [
+                    "filed",
+                    "uncertain",
+                    "pending"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
           },
           "pagesTouched": {
             "type": "array",
@@ -6665,6 +6932,95 @@ export const TOOL_OUTPUT_SCHEMAS = (
           "commitSha": {
             "type": "string",
             "pattern": "^[0-9a-fA-F]{40}$"
+          },
+          "filing": {
+            "enum": [
+              "filed",
+              "uncertain",
+              "inbox",
+              "pending"
+            ]
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "topic",
+                "evidenceRef",
+                "sourceSpans",
+                "confidence",
+                "disposition",
+                "pages",
+                "filedPages",
+                "status"
+              ],
+              "properties": {
+                "topic": {
+                  "type": "string"
+                },
+                "evidenceRef": {
+                  "type": "string"
+                },
+                "sourceSpans": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "properties": {
+                      "start": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "end": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "disposition": {
+                  "enum": [
+                    "evidence_only",
+                    "append_compact_note",
+                    "integrate_page",
+                    "needs_clarification"
+                  ]
+                },
+                "pages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "filedPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "status": {
+                  "enum": [
+                    "filed",
+                    "uncertain",
+                    "pending"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
           },
           "pagesTouched": {
             "type": "array",

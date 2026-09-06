@@ -53,6 +53,8 @@ export interface TurnPlanCompiler {
 
 export interface ClassifyInput {
   content: string;
+  /** Neighboring source text for resolving references only; never assign it as evidence. */
+  context?: string;
   hints: string[];
   pageIndex: PageIndexEntry[];
   tagVocabulary: string[];
@@ -65,7 +67,24 @@ export interface ClassificationPage {
   title: string;
 }
 
+export interface ClassificationTopic {
+  /** Engine-owned segment bounds, never supplied by a model. */
+  sourceRange?: { start: number; end: number };
+  /** Engine-owned classification failure, never supplied by a model. */
+  classificationFailed?: boolean;
+  topic: string;
+  /** Exact, nonempty quotes from ClassifyInput.content; engine resolves original offsets. */
+  evidenceQuotes: string[];
+  confidence: number;
+  disposition: NonNullable<Classification["disposition"]>;
+  pages: ClassificationPage[];
+  summary: string;
+  question?: string;
+}
+
 export interface Classification {
+  /** Independent assignments; absent only for legacy LLM implementations. */
+  topics?: ClassificationTopic[];
   /** Spend gate: only explicit semantic integration is allowed to invoke the full-page composer. */
   disposition?: "evidence_only" | "append_compact_note" | "integrate_page" | "needs_clarification";
   confidence: number;

@@ -18,5 +18,9 @@ export function formatFilingReceipt(result: StoreResult): string {
       : result.revision
         ? `${result.revision.provider}:${result.revision.id}`
         : "revision unavailable";
+  if (result.topics) {
+    const counts = ["filed", "uncertain", "pending"].map((status) => `${result.topics!.filter((topic) => topic.status === status).length} ${status}`).join(", ");
+    return `Saved — ${counts}${anchorMatch ? ` ${anchorMatch[1]}` : ""} (${durableId}). ${result.topics.map((topic) => `${topic.topic}: ${topic.status}`).join("; ")}`;
+  }
   return anchorMatch ? `Filed → ${page} ${anchorMatch[1]} (${durableId})` : `Filed → ${page} (${durableId})`;
 }

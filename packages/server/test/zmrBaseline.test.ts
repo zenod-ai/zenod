@@ -163,7 +163,10 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
       const store = await call("store_memory", { content: multiTopic, verbatim: true }, "multiTopicStore");
       expect(observer.classifyInputs.length).toBeGreaterThanOrEqual(3);
       expect(observer.classifyInputs[0].pageIndex.find(page => page.path === "Notes/Oversized.md")!.summary).toBe(oversizedSummary);
-      expect(observer.composeInputs).toHaveLength(0);
+      expect(observer.composeInputs).toHaveLength(2);
+      expect(observer.composeInputs.every((input) => !input.evidenceEntry.includes("UNCERTAIN:"))).toBe(true);
+      expect(store.topics.some((topic: { status: string }) => topic.status === "filed")).toBe(true);
+      expect(store.topics.some((topic: { status: string }) => topic.status === "uncertain")).toBe(true);
       expect(store.filing).toBe("uncertain");
       expect(store.revision.provider).toBe(provider);
       expect(store.urls.length).toBeGreaterThan(0);
@@ -171,7 +174,8 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
         expect(store.githubUrls).toBeUndefined();
         expect(store.urls.every((url: string) => url.startsWith("https://drive.google.com/"))).toBe(true);
       }
-      expect(store.pagesTouched).toEqual(["Areas/Insurance.md"]);
+      expect(store.pagesTouched).toEqual(expect.arrayContaining(["Areas/Insurance.md", "Projects/Sample Project.md"]));
+      expect(store.pagesTouched.some((path: string) => path.startsWith("Inbox/filing-"))).toBe(true);
       const storedEntry = await engine.getEntry(store.evidenceRef);
       expect(storedEntry.content).toBe(multiTopic);
       expect((await repo.currentRevision()).provider).toBe(provider);

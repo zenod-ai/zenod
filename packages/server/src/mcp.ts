@@ -226,6 +226,8 @@ function taskJobEvidence(job: TaskJob): Array<Record<string, unknown>> {
         urls,
         ...(commitSha ? { commitSha } : {}),
         pagesTouched,
+        ...(typeof result?.filing === "string" ? { filing: result.filing } : {}),
+        ...(Array.isArray(result?.topics) ? { topics: result.topics } : {}),
         ...(githubUrls.length ? { githubUrls } : {}),
         pageUrls,
       },
@@ -430,7 +432,9 @@ function publicExecutionResponse(toolName: string, ticket: ExecutionTicket) {
 
 /** Human-facing text for a finished store_memory job — mirrors the old reply. */
 function formatStoreResult(result: StoreResult): string {
-  const status = result.filing === "uncertain"
+  const status = result.topics
+    ? `Saved — ${result.topics.filter((topic) => topic.status === "filed").length} topics filed, ${result.topics.filter((topic) => topic.status === "uncertain").length} uncertain, ${result.topics.filter((topic) => topic.status === "pending").length} pending. Unresolved assignments are recorded in Inbox.`
+    : result.filing === "uncertain"
     ? `Saved — filed to ${result.pagesTouched[0] ?? "the selected page"} with an open filing question logged in the page (review anytime).`
     : result.filing === "inbox"
       ? "Saved — filed to Inbox; the filing question is logged in the note."
@@ -439,6 +443,7 @@ function formatStoreResult(result: StoreResult): string {
         : "Saved.";
   return [
     status,
+    ...(result.topics ?? []).map((topic) => `${topic.status}: ${topic.topic} (${topic.pages.join(", ") || "evidence only"})${topic.reason ? ` — ${topic.reason}` : ""}`),
     `evidence: ${result.evidenceRef}`,
     ...(result.evidenceUrl ? [`evidence URL: ${result.evidenceUrl}`] : []),
     `pages: ${result.pagesTouched.join(", ")}`,

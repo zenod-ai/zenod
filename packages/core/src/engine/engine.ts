@@ -374,46 +374,25 @@ const MAX_BRIEFING_SUMMARY_CHARS = 240;
 const MAX_ASK_CONTEXT_REFS = 10;
 const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
 
-function splitOversizeMemoryPart(part: string, maxChars: number): string[] {
-  const chunks: string[] = [];
-  let remaining = part.trim();
-  while (remaining.length > maxChars) {
-    const window = remaining.slice(0, maxChars + 1);
-    const sentence = Math.max(window.lastIndexOf(". "), window.lastIndexOf("? "), window.lastIndexOf("! "));
-    const newline = window.lastIndexOf("\n");
-    const space = window.lastIndexOf(" ");
-    const boundary = Math.max(sentence >= maxChars / 2 ? sentence + 1 : -1, newline, space);
-    const cut = boundary >= maxChars / 2 ? boundary : maxChars;
-    chunks.push(remaining.slice(0, cut).trim());
-    remaining = remaining.slice(cut).trim();
-  }
-  if (remaining) chunks.push(remaining);
-  return chunks;
-}
-
 /** Preserve one raw capture while classifying long voice notes topic-sized piece by piece. */
 export function segmentLongMemoryContent(
   content: string,
   maxChars = LONG_MEMORY_SEGMENT_CHARS,
 ): string[] {
-  const normalized = content.trim();
-  if (!normalized || normalized.length <= maxChars) return [normalized];
-  const parts = normalized
-    .split(/\n\s*\n/g)
-    .flatMap((part) => splitOversizeMemoryPart(part, maxChars))
-    .filter(Boolean);
+  if (!content || content.length <= maxChars) return [content];
   const segments: string[] = [];
-  let current = "";
-  for (const part of parts) {
-    const candidate = current ? `${current}\n\n${part}` : part;
-    if (candidate.length > maxChars && current) {
-      segments.push(current);
-      current = part;
-    } else {
-      current = candidate;
+  let offset = 0;
+  while (offset < content.length) {
+    let end = Math.min(content.length, offset + maxChars);
+    if (end < content.length) {
+      const window = content.slice(offset, end);
+      const boundary = Math.max(window.lastIndexOf("\n\n"), window.lastIndexOf(". "), window.lastIndexOf(" "));
+      if (boundary >= maxChars / 2) end = offset + boundary + 1;
+      if (/^[\uDC00-\uDFFF]$/.test(content[end] ?? "")) end -= 1;
     }
+    segments.push(content.slice(offset, end));
+    offset = end;
   }
-  if (current) segments.push(current);
   return segments;
 }
 
@@ -433,6 +412,7 @@ function mergeSegmentClassifications(classifications: Classification[]): Classif
   }
   const questions = [...new Set(classifications.map((item) => item.question).filter(Boolean))];
   return {
+    topics: classifications.flatMap((item) => item.topics ?? []),
     confidence: Math.min(...classifications.map((item) => item.confidence)),
     summary: classifications.map((item) => item.summary).join("; ").slice(0, 240),
     tags: [...new Set(classifications.flatMap((item) => item.tags))],
@@ -1434,6 +1414,125 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
+  /** File independently validated topic assignments; a failed page cannot erase another page or raw evidence. */
+  async function fileTopicAssignments(
+    content: string, evidenceRef: string, logPath: string, classification: Classification,
+    snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>, evidenceLine?: number,
+  ): Promise<StoreResult> {
+    assertVault(repo);
+    type Outcome = NonNullable<StoreResult["topics"]>[number];
+    const outcomes: Outcome[] = [];
+    const covered: Array<{ start: number; end: number }> = [];
+    const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[] }>();
+    for (const topic of classification.topics ?? []) {
+      const spans: Outcome["sourceSpans"] = [];
+      let invalid = !topic.evidenceQuotes.length;
+      for (const quote of topic.evidenceQuotes) {
+        const range = topic.sourceRange ?? { start: 0, end: content.length };
+        const segment = content.slice(range.start, range.end);
+        const localStart = quote.trim() ? segment.indexOf(quote) : -1;
+        const start = localStart < 0 ? -1 : range.start + localStart;
+        // Repeated quotes are ambiguous evidence identities, never silently choose the first.
+        if (start < 0 || segment.indexOf(quote, localStart + 1) >= 0) { invalid = true; continue; }
+        if (!spans.some((span) => span.start === start && span.end === start + quote.length)) spans.push({ start, end: start + quote.length });
+      }
+      const pages = [...new Map(topic.pages.map((page) => {
+        const path = normalizeMarkdownNotePath(page.path);
+        return [path, { ...page, path }];
+      })).values()];
+      const uncertain = invalid || !Number.isFinite(topic.confidence) || topic.confidence < config.confidenceThreshold
+        || topic.disposition === "needs_clarification" || (topic.disposition !== "evidence_only" && !pages.length);
+      const outcome: Outcome = {
+        topic: topic.topic, evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
+        confidence: Number.isFinite(topic.confidence) ? Math.max(0, Math.min(1, topic.confidence)) : 0, disposition: topic.disposition, pages: pages.map((page) => page.path), filedPages: [],
+        status: topic.classificationFailed ? "pending" : uncertain ? "uncertain" : "filed",
+        ...(topic.classificationFailed ? { reason: "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
+      };
+      outcomes.push(outcome);
+      covered.push(...spans);
+      if (uncertain || topic.disposition === "evidence_only") continue;
+      for (const page of pages) {
+        const group = groups.get(page.path) ?? { page, outcomes: [] };
+        group.outcomes.push(outcome);
+        groups.set(page.path, group);
+      }
+    }
+    // Classifier omissions remain visible, even when it confidently assigns other topics.
+    let cursor = 0;
+    const uncovered: Outcome["sourceSpans"] = [];
+    for (const span of [...covered, { start: content.length, end: content.length }].sort((a, b) => a.start - b.start)) {
+      if (span.start > cursor && content.slice(cursor, span.start).trim()) uncovered.push({ start: cursor, end: span.start });
+      cursor = Math.max(cursor, span.end);
+    }
+    if (uncovered.length) outcomes.push({ topic: "Unassigned source content", evidenceRef, sourceSpans: uncovered,
+      confidence: 0, disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "source_not_assigned" });
+    const touched: string[] = [];
+    const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
+    const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
+    for (const [path, group] of groups) {
+      if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) {
+        for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "invalid_meaning_path"; }
+        continue;
+      }
+      const absolute = join(vaultPath, path);
+      const currentContent = await readFile(absolute, "utf8").catch(() => null);
+      try {
+        const folder = path.split("/")[0] ?? "";
+        const requiredType = MEANING_FOLDERS[folder];
+        if (!requiredType || isAbsolute(path) || path.split("/").includes("..")) throw new Error("invalid_meaning_path");
+        const sourceSpans = [...new Map(group.outcomes.flatMap((outcome) => outcome.sourceSpans).map((span) => [`${span.start}:${span.end}`, span])).values()].sort((a, b) => a.start - b.start);
+        const assignedEvidence = sourceSpans.map((span) => content.slice(span.start, span.end)).join("\n\n");
+        const pageClassification: Classification = { tags: classification.tags,
+          summary: group.outcomes.map((outcome) => outcome.topic).join("; "), pages: [group.page],
+          confidence: Math.min(...group.outcomes.map((outcome) => outcome.confidence)) };
+        const linkHints = snapshot.pages.filter((page) => page.path !== path).slice(0, 4).map((page) => `[[${page.path.replace(/\.md$/, "")}|${page.title}]]`);
+        const indexPath = `${folder}/${folder} Index.md`;
+        if (snapshot.files.includes(indexPath)) linkHints.unshift(`[[${folder}/${folder} Index|${folder}]]`);
+        let previousErrors: import("../types.js").LintError[] | undefined;
+        let valid = false;
+        for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt += 1) {
+          const compact = group.outcomes.every((outcome) => outcome.disposition === "append_compact_note");
+          if (compact && currentContent === null) throw new Error("compact_target_missing");
+          if (!compact) reportTokenCost("compose", [assignedEvidence, currentContent ?? template], undefined, "topic-filing");
+          const next = compact
+            ? `${currentContent}\n\n## Captured update — ${todayString(now())}\n\n${assignedEvidence.split("\n").map((line) => `> ${line}`).join("\n")}\n\n${citation}\n`
+            : await llm.composePage({ path, currentContent, template, evidenceEntry: assignedEvidence, citation,
+              classification: pageClassification, tagVocabulary: config.tags, today: todayString(now()), requiredType, linkHints,
+              ...(previousErrors ? { previousErrors } : {}) });
+          await mkdir(dirname(absolute), { recursive: true });
+          await writeFile(absolute, next);
+          const report = await lintVault(vaultPath, [path]);
+          previousErrors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+          if (!previousErrors.length) { valid = true; break; }
+        }
+        if (!valid) throw new Error("composition_validation_failed");
+        touched.push(path);
+        for (const outcome of group.outcomes) outcome.filedPages.push(path);
+      } catch {
+        // Restore only this page. Evidence and independently successful pages remain intact.
+        if (currentContent === null) await rm(absolute, { force: true });
+        else await writeFile(absolute, currentContent);
+        for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "page_filing_failed"; }
+      }
+    }
+    const unresolved = outcomes.filter((outcome) => outcome.status !== "filed");
+    // Stable per-evidence record preserves assignments and unresolved names without polluting candidate pages.
+    if (unresolved.length) {
+      const recordPath = `Inbox/filing-${logPath.slice(4, -3)}-${evidenceRef.split("#^")[1]}.md`;
+      const record = ["---", "status: filing-record", `evidence: ${JSON.stringify(evidenceRef)}`, "---", "", "# Topic filing receipt", "",
+        "```json", JSON.stringify(outcomes, null, 2), "```", "",
+        ...unresolved.map((outcome) => `## ${outcome.topic} (${outcome.status})\n\n${outcome.sourceSpans.map((span) => content.slice(span.start, span.end)).join("\n\n")}\n`)].join("\n");
+      await mkdir(join(vaultPath, "Inbox"), { recursive: true });
+      await writeFile(join(vaultPath, recordPath), record);
+      touched.push(recordPath);
+    }
+    const revision = (await repo.pendingChanges()).length
+      ? await repo.commitAndPublish(`memory: topic filing ${classification.summary}`)
+      : await repo.currentRevision();
+    return { evidenceRef, pagesTouched: touched, ...storePublication(revision, logPath, evidenceLine ? `L${evidenceLine}` : undefined, touched), topics: outcomes,
+      filing: outcomes.some((outcome) => outcome.status === "pending") ? "pending" : unresolved.length ? "uncertain" : "filed" };
+  }
+
   /**
    * Capture is deliberately boring: one immutable Log append and one durable publication.
    * It performs no classification, composition, or semantic recognition, so a
@@ -1524,6 +1623,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             try {
               classified = await llm.classify({
                 content: segment,
+                context: [segments[segmentIndex - 1]?.slice(-400), segments[segmentIndex + 1]?.slice(0, 400)].filter(Boolean).join("\n"),
                 hints,
                 pageIndex: snapshot.pages,
                 tagVocabulary: config.tags,
@@ -1533,7 +1633,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
               lastError = error;
             }
           }
+          if (!classified && segments.length > 1) classified = {
+            confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
+              topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
+              confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
+            }],
+          };
           if (!classified) throw lastError ?? new Error("classification returned no result");
+          if (segments.length > 1 && !classified.topics) classified.topics = [{
+            topic: classified.summary, summary: classified.summary, evidenceQuotes: [segment],
+            confidence: classified.confidence, disposition: classified.disposition ?? "integrate_page",
+            pages: classified.pages, ...(classified.question ? { question: classified.question } : {}),
+          }];
+          if (classified.topics) {
+            const start = segments.slice(0, segmentIndex).reduce((length, part) => length + part.length, 0);
+            classified.topics = classified.topics.map((topic) => ({ ...topic, sourceRange: { start, end: start + segment.length } }));
+          }
           classifications.push(classified);
         }
       } catch (error) {
@@ -1542,6 +1657,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
 
       const classification = mergeSegmentClassifications(classifications);
+      if (classification.topics) {
+        // All assignment offsets and compositions must refer to the committed raw capture.
+        if (input.content.trimEnd() !== evidence.content) return evidenceResult(evidence, capturedRevision);
+        return fileTopicAssignments(input.content, input.evidenceRef, evidence.path, classification, snapshot, config);
+      }
       const disposition = classifications.some((item) => item.disposition === "integrate_page")
         ? "integrate_page"
         : classifications.some((item) => item.disposition === "append_compact_note")
@@ -1711,6 +1831,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             try {
               classified = await llm.classify({
                 content: segment,
+                context: [segments[segmentIndex - 1]?.slice(-400), segments[segmentIndex + 1]?.slice(0, 400)].filter(Boolean).join("\n"),
                 hints,
                 pageIndex: snapshot.pages,
                 tagVocabulary: config.tags,
@@ -1720,7 +1841,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
               lastError = error;
             }
           }
+          if (!classified && segments.length > 1) classified = {
+            confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
+              topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
+              confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
+            }],
+          };
           if (!classified) throw lastError ?? new Error("classification returned no result");
+          if (segments.length > 1 && !classified.topics) classified.topics = [{
+            topic: classified.summary, summary: classified.summary, evidenceQuotes: [segment],
+            confidence: classified.confidence, disposition: classified.disposition ?? "integrate_page",
+            pages: classified.pages, ...(classified.question ? { question: classified.question } : {}),
+          }];
+          if (classified.topics) {
+            const start = segments.slice(0, segmentIndex).reduce((length, part) => length + part.length, 0);
+            classified.topics = classified.topics.map((topic) => ({ ...topic, sourceRange: { start, end: start + segment.length } }));
+          }
           classifications.push(classified);
         }
         classification = mergeSegmentClassifications(classifications);
@@ -1748,6 +1884,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         ...classification,
         pages: classification.pages.map((page) => ({ ...page, path: normalizeMarkdownNotePath(page.path) })),
       };
+
+      if (classification.topics) {
+        return fileTopicAssignments(input.content, evidenceRef, evidence.logPath, classification, snapshot, config, evidence.line);
+      }
 
       // 4. With no candidate, preserve the evidence and question in an Inbox stub.
       if (classification.pages.length === 0) {
@@ -1913,19 +2053,23 @@ export function createEngine(options: EngineOptions): BrainEngine {
         ...storePublication(revision, evidence.logPath, `L${evidence.line}`, touched),
         filing: "filed",
       };
-      if (shouldDigestForBacklog(input)) {
-        const sourceRefs = [repositorySourceRef(evidence.logPath, `^${evidence.anchor}`, revision)];
+
+        return result;
+      })();
+      if (stored.filing === "filed" && shouldDigestForBacklog(input)) {
+        const [path, anchor] = stored.evidenceRef.split("#");
+        const sourceRefs = [repositorySourceRef(path!, anchor, stored.revision ?? await repo.currentRevision())];
         try {
           const extracted = await llm.extractBacklog({ content: input.content, sourceRefs });
           const candidates = ensureCandidateSources(extracted.candidates, sourceRefs);
-          result.backlog = {
+          stored.backlog = {
             candidates,
             written: [],
             skipped: [{ reason: "proactive digestion is proposal-only; write not requested" }],
             source_refs: sourceRefs,
           };
         } catch (err) {
-          result.backlog = {
+          stored.backlog = {
             candidates: [],
             written: [],
             skipped: [{ reason: `backlog digestion failed: ${(err as Error).message}` }],
@@ -1933,8 +2077,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
           };
         }
       }
-        return result;
-      })();
       return stored;
     }, priority);
   }
