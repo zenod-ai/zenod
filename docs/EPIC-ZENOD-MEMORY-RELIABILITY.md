@@ -14,9 +14,9 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: e8458a8a5176fb68376b0f9b599c480015a49941 (merged corrected ZMR-2 PR #1202)
+Last reconciled commit: dadd88350b2bca896fc8f605bcf4c0f2c2ff261c (merged corrected ZMR-3 PR #1204)
 Planner: Jordi + ZMR-release-planner
-Worker: ZMR-3-history-worker (/root/zmr_3_history)
+Worker: ZMR-4-typed-retrieval-worker (/root/zmr_4_typed_retrieval)
 Tester: unassigned
 
 ## Role Bindings
@@ -87,23 +87,23 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: implementation — corrected ZMR-3 reviewed; exact-head CI pending
-Last verified: 2026-09-06 14:16 CEST
+Phase: implementation — ZMR-3 integrated; ZMR-4 dispatched
+Last verified: 2026-09-06 14:24 CEST
 Integration target: main
-Fresh base commit: e8458a8a5176fb68376b0f9b599c480015a49941; integrated ZMR-2, pinned for ZMR-3
+Fresh base commit: dadd88350b2bca896fc8f605bcf4c0f2c2ff261c; integrated ZMR-3, pinned for ZMR-4
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
-Dispatch condition: ZMR-1 and corrected ZMR-2 integrated; ZMR-3 dispatched on e8458a8. ZMR-4 waits for ZMR-3 integration; later dependencies unchanged.
-Next action: review ZMR-3 complete historical search/pagination PR, integrate after gates, then dispatch ZMR-4.
-Blockers: no implementation or review blocker; exact-head CI must pass before merge. Real-model quality/cost/latency remains ZMR-8 acceptance.
+Dispatch condition: ZMR-1–3 integrated; ZMR-4 dispatched on dadd883. Later dependencies unchanged.
+Next action: review ZMR-4 typed retrieval and coverage handoff, integrate after independent review and CI, then dispatch ZMR-5.
+Blockers: none for local ZMR-4 implementation. Real-model quality/cost/latency remains ZMR-8 acceptance.
 
 ## Execution Cursor
 
 Last attempted: resume ZMR-3 correction, verify focused tests and independently re-review corrected head.
-Result: corrected PR #1204 head 8712fc3b668b1e03fea1440eb19f827e3c685c17 fixes receipt-only winner selection. Worker passed 36 focused tests and typecheck; independent reviewer passed 5 tests and reports no blockers. Both agents completed; CI remains running.
+Result: corrected PR #1204 head 8712fc3b668b1e03fea1440eb19f827e3c685c17 fixes receipt-only winner selection. Worker passed 36 focused tests and typecheck; independent reviewer passed 5 tests and reports no blockers. Both agents completed; exact-head CI passed and PR merged as dadd883. ZMR-4 dispatched.
 Execution status: active
-Waiting on: required CI for 8712fc3b668b1e03fea1440eb19f827e3c685c17; manager then merges and dispatches ZMR-4
+Waiting on: ZMR-4 worker implementation and PR handoff
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
-Next action: review ZMR-3 complete historical search/pagination PR, integrate after gates, then dispatch ZMR-4.
+Next action: review ZMR-4 typed retrieval and coverage handoff, integrate after independent review and CI, then dispatch ZMR-5.
 
 ## Bootstrap Map
 
@@ -145,14 +145,14 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 
 ## Issue Ledger
 
-ZMR-1 and ZMR-2 are integrated; ZMR-3 is active and ZMR-4–8 retain dependencies. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
+ZMR-1–3 are integrated; ZMR-4 is active and ZMR-5–8 retain dependencies. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
 
 | Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | [ZMR-1 #1189](https://github.com/zenod-ai/zenod/issues/1189) | 1 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-1-baseline-worker /root/zmr_1_baseline | Establish the runnable memory-recall baseline demo | done — deterministic baseline | none | /Users/jordi/Documents/GitHub/wt-zmr-1 | [PR #1201](https://github.com/zenod-ai/zenod/pull/1201) / codex/zmr-1 | b9dd9f0ef739a23e8438d550794b1e8400df8782 | c823d06 merged; 102 focused tests; independent review + CI pass | 2026-09-06 01:11 CEST | Integrated c823d06; real-model metrics carried to ZMR-8 |
 | [ZMR-2 #1190](https://github.com/zenod-ai/zenod/issues/1190) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-2-passage-worker /root/zmr_2_passage | Retrieve answer-bearing passages beyond the note prefix | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-2 | [PR #1202](https://github.com/zenod-ai/zenod/pull/1202) / codex/zmr-2 | c823d06e9cbe279a9a03ebf0e4d6d5e3ad6ba175 | e8458a8 merged; 182 core +35 MCP; corrected review and CI pass | 2026-09-06 02:05 CEST | Integrated; preserve pinned/distractor regressions |
-| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | reviewed — CI pending | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | 8712fc3 corrected; 36 focused + typecheck; independent 5 tests, no blockers | 2026-09-06 14:16 CEST | Merge after exact-head CI passes; dispatch ZMR-4 |
-| [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Give ask_brain typed retrieval and explicit coverage | proposed | ZMR-2, ZMR-3 | ../wt-zmr-4 at dispatch | codex/zmr-4 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
+| [ZMR-3 #1191](https://github.com/zenod-ai/zenod/issues/1191) | 2 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-3-history-worker /root/zmr_3_history | Make historical entry search complete and paginated | done | ZMR-1 | /Users/jordi/Documents/GitHub/wt-zmr-3 | [PR #1204](https://github.com/zenod-ai/zenod/pull/1204) / codex/zmr-3 | e8458a8a5176fb68376b0f9b599c480015a49941 | dadd883 merged; corrected 8712fc3 review and CI pass; 36 focused +5 independent tests | 2026-09-06 14:16 CEST | Integrated; ZMR-4 dispatched |
+| [ZMR-4 #1192](https://github.com/zenod-ai/zenod/issues/1192) | 3 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | ZMR-4-typed-retrieval-worker /root/zmr_4_typed_retrieval | Give ask_brain typed retrieval and explicit coverage | active | ZMR-2, ZMR-3 | /Users/jordi/Documents/GitHub/wt-zmr-4 | codex/zmr-4 | dadd88350b2bca896fc8f605bcf4c0f2c2ff261c | Dependencies integrated; worker dispatched | 2026-09-06 | Implement typed retrieval and explicit coverage |
 | [ZMR-5 #1193](https://github.com/zenod-ai/zenod/issues/1193) | 4 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | File multi-topic memories with per-topic confidence | proposed | ZMR-1, ZMR-4 | ../wt-zmr-5 at dispatch | codex/zmr-5 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-6 #1194](https://github.com/zenod-ai/zenod/issues/1194) | 5 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Keep meaning notes focused and summaries bounded | proposed | ZMR-5 | ../wt-zmr-6 at dispatch | codex/zmr-6 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
 | [ZMR-7 #1195](https://github.com/zenod-ai/zenod/issues/1195) | 6 | BUILD extension; reuse ticket inventory | 90 min checkpoint | Ticket worker | unassigned | Distinguish current facts, corrections and historical evidence | proposed | ZMR-4, ZMR-6 | ../wt-zmr-7 at dispatch | codex/zmr-7 | pin at dispatch | Review only | 2026-09-06 | Wait for dependencies |
@@ -178,7 +178,7 @@ If blocked by a gate, the affected worker's entire next status is “BLOCKED ON 
 
 ## Recovery And Takeover
 
-No active assignments. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
+ZMR-4 is assigned to /root/zmr_4_typed_retrieval on dadd883. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
 
 ## Validation Evidence
 
@@ -190,6 +190,10 @@ No active assignments. The manager reassigns workers silent past budget after in
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 14:24 CEST — Manager — History integrated; typed retrieval dispatched
+
+Corrected #1204 head 8712fc3 passed independent review and required CI. Merged as dadd88350b2bca896fc8f605bcf4c0f2c2ff261c. Dispatched /root/zmr_4_typed_retrieval for #1192 in /Users/jordi/Documents/GitHub/wt-zmr-4 on codex/zmr-4, pinned to that merge. ZMR-5–8 remain dependency ordered; ZMR-9/10 deferred until human acceptance. No deployment.
 
 ### 2026-09-06 14:16 CEST — Manager — Resume interrupted ZMR-3 correction
 

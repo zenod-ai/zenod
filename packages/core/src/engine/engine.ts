@@ -2320,6 +2320,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await syncForRead();
       return searchVault(vaultPath, query, sourceResolver);
     },
+    memoryScope: vaultPath,
     searchEntries: async (query: MemoryEntryQuery = {}): Promise<MemoryEntry[]> => {
       assertVault(repo);
       await syncForRead();

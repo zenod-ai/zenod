@@ -189,7 +189,7 @@ const GATEWAY_TOOLS: GatewayTool[] = [
     owner: "zenod",
     title: "Search memory",
     description:
-      "Deterministic keyword search over the user's memory vault (via Zenod). Returns ranked note paths with snippets, scores, and GitHub source URLs. Fast, no LLM — call this first to locate memories, then get_memory to read one in full.",
+      "Deterministic memory search via Zenod. hits are independently ranked lexical notes, unconstrained by entry filters. Structural filters/order return entries with exact evidence refs and pagination. Combined query terms are ANDed case-insensitive substrings in entry title/content. Repeat query/filters/order with nextCursor until hasMore=false; changed snapshots require restarting. Coverage is the local vault and retained tenant receipts. Use get_memory for an exact ref or note path.",
     inputSchema: SEARCH_MEMORY_SHAPE,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },

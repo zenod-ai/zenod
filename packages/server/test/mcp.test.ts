@@ -594,7 +594,7 @@ describe("MCP endpoint", () => {
       expect(exact.structuredContent).toMatchObject({
         entry: {
           evidenceRef: "Log/2026-08-01.md#^e-000003",
-          content: "Transcript wamid.three",
+          content: "Exact transcript only", // vault evidence remains authoritative over receipt payload
           source: "whatsapp",
           contentType: "voice_note",
           sourceId: "wamid.three",

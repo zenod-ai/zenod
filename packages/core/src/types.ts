@@ -290,6 +290,8 @@ export interface MemoryEntry {
 }
 
 export interface MemoryEntryQuery {
+  /** AND of case-insensitive whitespace-separated substrings in title/content. */
+  query?: string;
   source?: Surface;
   contentType?: MemoryContentType;
   /** Exact stable source/provider identifier. */
@@ -297,7 +299,8 @@ export interface MemoryEntryQuery {
   capturedAfter?: string;
   capturedBefore?: string;
   order?: "newest" | "oldest";
-  limit?: number;
+  /** null enumerates all entries for trusted in-process filtering/enrichment. */
+  limit?: number | null;
 }
 
 export interface Note {
@@ -464,6 +467,8 @@ export interface BrainEngine {
   search(query: string): Promise<Hit[]>;
   /** Deterministic retrieval of immutable memory entries by structural metadata. */
   searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
+  /** Internal tenant/vault boundary for entry pagination; never a client parameter. */
+  readonly memoryScope?: string;
   /** Deterministic exact evidence-entry fetch. */
   getEntry(evidenceRef: string): Promise<MemoryEntry>;
   /** Deterministic note fetch. No LLM. */

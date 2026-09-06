@@ -584,10 +584,158 @@
     },
 
     "zenod.search_memory": {
-      "allOf": [
-        { "$ref": "#/$defs/Envelope" },
-        { "properties": { "evidence": { "items": { "$ref": "#/$defs/Ev_memory_hits" } } } }
-      ]
+      "type": "object",
+      "required": [
+        "hits",
+        "entries",
+        "pagination"
+      ],
+      "properties": {
+        "hits": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "evidenceRef",
+              "path",
+              "anchor",
+              "title",
+              "source",
+              "contentType",
+              "capturedAt",
+              "sourceId",
+              "chars",
+              "snippet",
+              "url",
+              "provider"
+            ],
+            "properties": {
+              "evidenceRef": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "anchor": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "capturedAt": {
+                "type": "string"
+              },
+              "snippet": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "revisionId": {
+                "type": "string"
+              },
+              "githubUrl": {
+                "type": "string"
+              },
+              "contentType": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sourceId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "chars": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "pagination": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "contract": {
+              "type": "string"
+            },
+            "snapshot": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "snapshotPolicy": {
+              "type": "string"
+            },
+            "querySemantics": {
+              "type": "string"
+            },
+            "noteHitsScope": {
+              "type": "string"
+            },
+            "hasMore": {
+              "type": "boolean"
+            },
+            "nextCursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "matchedEntries": {
+              "type": "integer"
+            },
+            "scannedEntries": {
+              "type": "integer"
+            },
+            "scannedVaultEntries": {
+              "type": "integer"
+            },
+            "scannedReceiptJobs": {
+              "type": "integer"
+            },
+            "receiptEnrichmentAvailable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "contract",
+            "hasMore",
+            "nextCursor",
+            "snapshot",
+            "matchedEntries",
+            "scannedEntries",
+            "scannedVaultEntries",
+            "scannedReceiptJobs",
+            "receiptEnrichmentAvailable",
+            "scope",
+            "snapshotPolicy",
+            "querySemantics",
+            "noteHitsScope"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     },
     "zenod.get_memory": {
       "allOf": [
