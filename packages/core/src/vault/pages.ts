@@ -13,6 +13,8 @@ export interface PageIndexEntry {
   tags: string[];
   summary: string;
   aliases?: string[];
+  /** Discovery hints only; read_facts validates their source-backed records. */
+  factKeys?: string[];
 }
 
 export interface VaultSnapshot {
@@ -56,6 +58,9 @@ export async function scanVault(vaultPath: string): Promise<VaultSnapshot> {
           type: typeof frontmatter.type === "string" ? frontmatter.type : "",
           tags: Array.isArray(frontmatter.tags) ? frontmatter.tags.filter((t): t is string => typeof t === "string") : [],
           summary: typeof frontmatter.summary === "string" ? frontmatter.summary : "",
+          ...(Array.isArray(frontmatter.memoryFacts) ? { factKeys: [...new Set(frontmatter.memoryFacts
+            .filter((fact): fact is { key: string } => Boolean(fact && typeof fact === "object" && typeof fact.key === "string" && fact.key.length <= 160))
+            .map(fact => fact.key))] } : {}),
           aliases: Array.isArray(frontmatter.aliasEvidence) ? frontmatter.aliasEvidence
             .filter((alias): alias is { name: string } => Boolean(alias && typeof alias === "object" && typeof alias.name === "string" && typeof alias.quote === "string" && typeof alias.citation === "string"))
             .map((alias) => alias.name) : [],

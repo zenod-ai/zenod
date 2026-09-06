@@ -28,6 +28,7 @@ const READ_TOOLS: readonly string[] = [
   "searchvault",
   "searchentries",
   "readnote",
+  "readfacts",
   "listpages",
   "searchchats",
   // Ring host-owned authenticated MCP catalog inspection

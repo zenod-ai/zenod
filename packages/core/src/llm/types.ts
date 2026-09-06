@@ -74,6 +74,7 @@ export interface ClassificationTopic {
   sourceRange?: { start: number; end: number };
   /** Engine-owned classification failure, never supplied by a model. */
   classificationFailed?: boolean;
+  facts?: import("../engine/temporalFacts.js").FactProposal[];
   topic: string;
   /** Exact, nonempty quotes from ClassifyInput.content; engine resolves original offsets. */
   evidenceQuotes: string[];
@@ -193,6 +194,7 @@ export interface AnswerInput {
  * advertises a tool it can't run. searchChats is state-backed and always present.
  */
 export interface VaultReadTools {
+  readFacts?(input: import("../engine/temporalFacts.js").FactReadInput): Promise<string>;
   searchVault?(query: string): Promise<string>;
   searchEntries?(input: import("../engine/entryPagination.js").EntrySearchInput): Promise<string>;
   readNote?(path: string, options?: NoteReadOptions): Promise<string>;
