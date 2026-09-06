@@ -16,8 +16,8 @@ Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
 Last reconciled commit: 392d058a599bdf5fc69d17157282b8f9154dcf28 deployed public Zenod at 20:06:05 UTC; evidence-only main updates separate
 Planner: Jordi + ZMR-release-planner
-Worker: unassigned; repair completed
-Tester: ZMR-8-candidate-retest /root/zmr_8_candidate_retest
+Worker: source repairs complete and merged; /root/zmr_deploy_audit owns queued deployment verification
+Tester: parent direct live MCP acceptance; independent agent review
 
 ## Role Bindings
 
@@ -61,7 +61,7 @@ Release name: **Memory Reliability**. No semantic version or launch date is inve
 
 ## Definition Of Done
 
-SHIP — one end-to-end journey on an isolated test tenant of the exact approved LIVE candidate, in a real browser using existing customer chat and vault surfaces. Reuse existing components; BUILD means a bounded extension where the reviewed implementation lacks the behavior, subject to ZMR-1 current-main verification.
+SHIP — exercise the exact approved live candidate through direct Zenod MCP, as Jordi explicitly authorized on 2026-09-06. The existing customer portal has no chat composer; a new browser surface or test environment is not a prerequisite. Use isolated conversation keys and clearly named test captures. Reuse existing components; BUILD means a bounded extension where the reviewed implementation lacks the behavior, subject to ZMR-1 current-main verification.
 
 - [ ] 1. Open the existing customer surface and capture a synthetic long, multi-topic memory; wait for the terminal receipt and open its evidence. BUILD extension of existing store/chat surfaces.
 - [ ] 2. Inspect filing: clear subjects reach focused meaning pages; only the ambiguous topic is marked uncertain; raw content remains intact. BUILD extension of existing classifier/composer.
@@ -69,9 +69,9 @@ SHIP — one end-to-end journey on an isolated test tenant of the exact approved
 - [ ] 4. Ask for all captures in an older bounded date range within a seeded 650+ entry test vault; traverse coverage and reconcile exact expected refs/counts. BUILD extension of existing structural search.
 - [ ] 5. Supply an explicit correction, then ask what is true now and what was true before; both answers cite the appropriate evidence. BUILD extension of existing meaning/ask pipeline.
 - [ ] 6. Ask a paraphrase and an unsupported question; recover the supported fact and admit the unknown, with zero fabricated supporting evidence. BUILD extension of existing search/grounding.
-- [ ] 7. Test package: operator records “I manually walked the full journey and it works” only after a clean pass, with live URL, immutable SHA, one screenshot per step, source refs, rollback and remaining risks. “Now you test.” Jordi walks the same candidate.
+- [ ] 7. Test package: record actual deployed SHA, live MCP inputs/results, source refs, rollback and remaining risks. Claim full acceptance only after the relevant journey passes; screenshots are optional when the tested surface is MCP. Jordi retains final SHIP acceptance.
 
-The manager walks to the first breakage, repairs that failure, obtains required deploy approval, and restarts at step 1. Automated tests support this journey; they do not replace it. Production approval is never implied by this contract.
+The manager tests, repairs observed failures and repeats affected live checks. Jordi explicitly authorized this production rollout and bounded fixes, including direct MCP testing; do not re-request that approval or restart unrelated checks after each small repair. Local tests do not substitute for actual live evidence.
 
 Mandatory supporting gates: 100% deterministic pagination/identity/isolation cases pass; every fixed SHIP answer is correct and evidence-supported in three independent conversations; no false exhaustive claims or unsupported current-state claims in the fixed cases. Freeze ground truth before tuning. Report held-out retrieval recall, answer correctness, abstention, citation support, p50/p95 latency and costs separately, including any regressions. These are targets, not achieved results.
 
@@ -87,23 +87,26 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: production deployed — bounded filing/recall fixes active
+Phase: first production upgrade live; reviewed follow-up queued in Dokploy
 Last verified: 2026-09-06 22:11 CEST
 Integration target: main
 Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
-Next action: fix observed live classification and incomplete-log recall failures; review, incrementally deploy, and rerun direct MCP tests.
+Next action: follow existing Dokploy job 10083 for candidate 56c815f; verify actual task/OCI/health after it runs, then repeat live natural recall and a small filing capture through MCP. Do not enqueue another deployment.
 Blockers: live classification_unavailable fallback and false absence after header-only log read; raw evidence intact, exact recall passes.
 
 ## Execution Cursor
 
+Queued repair receipt: reviewed/CI-green PRs #1219 and #1220 merged; candidate `56c815f38aab6790b8afc165a8001e8fc0b5732b`, published image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Dokploy desired configuration is updated, but actual production remains `392d058`. HTTP 200 acknowledged enqueue; deployment history shows worker-started records only. Read-only BullMQ inspection confirmed the requests waiting. Only duplicate jobs 10084/10085/10086 were removed through Job.remove after exact app/state checks; 10083 retained. No forced Swarm update, shared service restart or speculative endpoint correction. If undoing before execution, first cancel exact pending candidate job 10083 after checking app/state, otherwise it may execute after rollback.
+
+
 Last attempted: deploy tested public candidate with preserved config and verified recovery, then test real MCP capture and recall.
 Result: 392d058 is live with actual running image verified, 52 non-SHA env entries/mount/private unchanged. Unknown abstention and exact-reference recall pass; durable learning6910ca17 saved to Inbox but classification failed; natural recall falsely said absent.
 Execution status: active
-Waiting on: /root/zmr_8_chat_review bounded source fix and /root/zmr_deploy_audit classification diagnostics; parent direct MCP retest
-Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
-Next action: fix observed live classification and incomplete-log recall failures; review, incrementally deploy, and rerun direct MCP tests.
+Waiting on: global Dokploy queue (one active, fifteen waiting at inspection); retained job 10083 is the sole pending Zenod repair request. Sole operator /root/zmr_deploy_audit; parent runs MCP after exact live verification
+Approved work: this production upgrade, bounded live memory tests and fixes, and reusable undo procedure are explicitly authorized. Preserve data/configuration; no provider overhaul, billing/signup change or destructive restore. Human SHIP acceptance remains separate.
+Next action: follow existing Dokploy job 10083 for candidate 56c815f; verify actual task/OCI/health after it runs, then repeat live natural recall and a small filing capture through MCP. Do not enqueue another deployment.
 
 
 
@@ -130,7 +133,7 @@ Known traps: whole-file search versus prefix reads; limit-before-filter; one con
 
 Wave 1: ZMR-1 runnable baseline. Wave 2: ZMR-2 and ZMR-3 have related core evidence surfaces and therefore run sequentially unless the manager proves disjoint ownership. Wave 3: ZMR-4; wave 4: ZMR-5; wave 5: ZMR-6; wave 6: ZMR-7; wave 7: ZMR-8 then manager journey. No automatic parallel dispatch.
 
-During active execution, heartbeat every 30 min: `lap/state | blocker | ETA`; two consecutive ETA slips trigger a scope/status review. The manager enabled the quiet 15-minute same-task coordination heartbeat `coordinate-zenod-memory-reliability`; it reconciles existing assignments without duplicating workers and reports only meaningful changes. The parent owns reviews and integration.
+During active execution, heartbeat every 30 min: `lap/state | blocker | ETA`; two consecutive ETA slips trigger a scope/status review. The manager resumed the quiet 15-minute same-task coordination heartbeat `coordinate-zenod-memory-reliability`; it reconciles existing assignments without duplicating workers and reports only meaningful changes. The parent owns reviews and integration.
 Live customer data changes require snapshot + checksum + one restore drill per mechanism; isolated synthetic fixtures use snapshot-and-go; docs require no backup ceremony.
 
 ## Decisions
@@ -350,11 +353,10 @@ use snapshot-and-go; docs need no backup ceremony. Run meaningful focused
 checks. Full suites run at most once per pinned commit, never for docs-only
 movement. Report exact commands, SHA, environment, pass/fail and limitations.
 
-The parent delivery manager owns final SHIP: after exact deployment approval,
-walk the complete journey in a real browser, stop at the first breakage,
-coordinate the bounded repair, obtain any required deployment approval and
-restart at step 1. Human handoff requires a clean same-build pass and one
-screenshot per step. Never claim live proof from merged code or local tests,
+The parent delivery manager owns live acceptance using the explicitly approved
+direct MCP surface. Coordinate bounded repairs within the existing production
+authorization and rerun affected checks on the actual deployed candidate.
+Do not require a new staging environment, chat UI or screenshot checklist. Never claim live proof from merged code or local tests,
 or ask Jordi to click anything not exercised on that same candidate.
 
 Terminal handoff: ready for review with PR URL, branch, base/latest SHA,

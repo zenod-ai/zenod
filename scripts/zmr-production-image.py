@@ -80,4 +80,4 @@ for attempt in range(60):
    print(json.dumps({'mode':MODE,'image':image,'source':sha,'health':'PASS','other_env':'unchanged','mounts':'unchanged'}));break
  except (OSError,ValueError):pass
  if attempt%6==0:print('Waiting for exact image/health convergence',flush=True)
-else:raise SystemExit('Deployment did not converge. Inspect; rollback command remains available.')
+else:raise SystemExit('Deployment has not converged and may still be queued. Inspect the existing Dokploy queue before retrying; do not enqueue duplicates. Rollback remains available after accounting for pending jobs.')

@@ -1,6 +1,6 @@
 # Zenod deployments and upgrades
 
-Status: active — production upgraded; memory acceptance fixes in progress
+Status: active — first production upgrade live; follow-up queued
 Updated: 2026-09-06
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
@@ -25,20 +25,22 @@ Running image: `ghcr.io/zenod-ai/zenod@sha256:d21468dbf09f33550c52eb53bed32adea6
 Scope: public Zenod only; 52 non-SHA environment entries, mounts and private Phylax unchanged. No storage migration.
 Recovery: fresh VPS archive restored and verified; independent Mac copy checksum matches. Encrypted cloud upload and full decrypted download comparison have also completed successfully.
 Live tests: immutable learning `6910ca17` saved; exact read and chat passed. Automatic filing returned `classification_unavailable`; natural-language retrieval falsely reported absence. These remain unresolved; overall acceptance has not passed.
-Next action: finish the bounded memory repair, repeat the failing live checks and record the actual deployed repair version.
+Next action: follow existing queued job 10083; verify the actual repair version before repeating live MCP checks. Do not enqueue another request.
 
 ## Execution Cursor
 
 Last attempted: deploy approved image, verify actual running version and exercise authenticated live MCP capture/retrieval.
 Result: deployment succeeded; raw learning survived, but filing and natural-query recall need repair.
 Execution status: active
-Waiting on: assigned memory repair and revalidation; no new user decision for this authorized work.
+Waiting on: Dokploy global deployment queue, then actual version verification and MCP revalidation. No new user decision for this authorized work.
 Approved work: bounded production testing/fixes and easy code rollback. Optional small operator parameterization only if convenient; a generic CLI is not a release blocker.
 Next action: reconcile the repair handoff and repeat the same live checks before claiming acceptance.
 
+Reviewed repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` is published as `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342` and saved as desired configuration, but is **not yet live**. The earliest request is BullMQ job 10083. Only our duplicate pending requests 10084/10085/10086 were cancelled with supported Job.remove after checking exact application and waiting state. One unrelated job was active with fifteen waiting and no useful ETA.
+
 ## Upgrade and undo
 
-The existing helper supports this September 6 release and reviewed code-only repairs using its frozen recovery receipt. Its reviewed head is [4916c24](https://github.com/zenod-ai/zenod/commit/4916c24) in [PR #1218](https://github.com/zenod-ai/zenod/pull/1218). It is not a generic backup/deployment framework. Reuse the flags below rather than copying or editing release constants.
+The existing helper supports this September 6 release and reviewed code-only repairs using its frozen recovery receipt. The reviewed helper is merged through [PR #1218](https://github.com/zenod-ai/zenod/pull/1218). It is not a generic backup/deployment framework. Reuse the flags below rather than copying or editing release constants.
 
 From `/Users/jordi/Documents/GitHub/wt-zmr-production` (or the repository after integration):
 
@@ -62,6 +64,8 @@ For every upgrade:
 3. Update the image and necessary source-SHA override through Dokploy. Refuse unexpected runtime or pending Dokploy configuration drift. Preserve volumes, sessions and unrelated settings.
 4. Require completed Swarm update, the actual running task's exact image, actual container OCI revision, correct health SHA and the product's live smoke checks. Desired state or a healthy endpoint alone is insufficient. On failure, inspect the receipt before retrying; use code rollback when appropriate.
 
+While job 10083 remains queued, first cancel that exact pending candidate request through the supported queue operation after rechecking its application and waiting state, then invoke rollback. Otherwise an already queued upgrade could run after the undo. Do not cancel unrelated jobs.
+
 Rollback changes code, not data. It retains captures written after deployment. Restoring an older data archive can erase later writes and needs a separately scoped recovery decision; never silently restore over the live volume.
 
 ## Backup policy
@@ -70,9 +74,9 @@ The current mechanism is `scripts/zenod-volume-backup.sh`: quiesce, archive, res
 
 Today's accepted recovery proof is the fresh verified VPS archive plus independent checksum-matched Mac copy, mode 0600 inside a mode-0700 directory. Configuration receipts are already encrypted-uploaded and download-checked. The full 1,498,818,408-byte encrypted object upload and decrypted download comparison subsequently passed; the rollout did not wait for that redundant transfer. The established remote is `zenod-prod-crypt:` backed by `s31:vps-archives/zenod-production-encrypted`.
 
-For future code-only upgrades with unchanged storage contracts, prefer a fresh recoverable scheduled backup and an already validated restore mechanism. Reuse within one repair rollout only when its recovery point and subsequent writes are recorded and accepted; do not repeatedly pause for identical proof. If a qualifying backup is absent, take a fresh one. A new destructive/storage migration needs fresh backup and a separate restoration plan. This is the reuse rule, not a claim that a qualifying scheduled backup currently exists. Incremental backup redesign is deferred.
+For future code-only upgrades with unchanged storage contracts, prefer a fresh recoverable scheduled backup and an already validated restore mechanism. Reuse within one repair rollout only when its recovery point and subsequent writes are recorded and accepted; do not repeatedly pause for identical proof. If a qualifying backup is absent, take a fresh one. A new destructive/storage migration needs fresh backup and a separate restoration plan. This is the reuse rule, not a claim that a qualifying scheduled backup currently exists. Incremental backup redesign is deferred. Another measured source of delay is CI/publishing: documentation-only PRs run the full product suite, and publication serially builds/checks both product images even when only public Zenod is being deployed. Path-aware documentation checks and affected-product publication are future simplifications; no pipeline redesign was mixed into this repair.
 
-## Decisions and eight durable lessons
+## Decisions and durable lessons
 
 1. **Production authorization persists within scope.** Jordi authorized this single-user deployment, tests and fixes. Do not re-ask for staging/provider setup already supplied by production. Future upgrades require their own applicable authorization.
 2. **Deploy the smallest service set.** Memory-only code needed public Zenod; restarting private Phylax added no benefit.
@@ -82,6 +86,8 @@ For future code-only upgrades with unchanged storage contracts, prefer a fresh r
 6. **Backup cost needs proportion.** A full cold archive caused the pause; cloud transfer took longer. Independent verified recovery allowed the slow redundant transfer to continue separately, explicitly disclosed.
 7. **Reuse safe working transport.** Cloudflare rejected Python urllib's admin request fingerprint; existing curl worked. Keep API headers in temporary mode-0600 files, out of process arguments and exception messages.
 8. **Test the real memory paths separately.** Exact reads/chat passed while natural-query recall and automatic filing failed. A saved raw record or healthy deployment does not prove customer acceptance; retain these live regressions.
+
+9. **Accepted is not started.** Dokploy can return HTTP 200 with an empty body while the request waits in its global BullMQ queue. The deployment-history endpoint only showed worker-started records. Both deploy and redeploy were working; changing endpoint names was not a demonstrated fix. A convergence timeout must trigger read-only queue inspection before any retry. Preserve the earliest request; cancel only verified duplicates with a supported operation. Never restart shared services or force Swarm merely to bypass the queue.
 
 ## Evidence and ownership
 
