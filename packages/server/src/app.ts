@@ -2702,7 +2702,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       conversationKey: "default",
       ...(intercepted?.contextNote ? { contextNote: intercepted.contextNote } : {}),
     });
-    return c.json({ text: reply.text, sources: [], actions: reply.actions });
+    return c.json({ text: reply.text, sources: reply.sources ?? [], actions: reply.actions, ...(reply.coverage ? { coverage: reply.coverage } : {}) });
   });
 
   // #35 ping primitive: the external backlog monitor POSTs here (bearer-authed
@@ -2870,6 +2870,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
             type: "done",
             text: reply.text,
             sources: reply.sources,
+            ...(reply.coverage ? { coverage: reply.coverage } : {}),
             ...(reply.stored ? { stored: reply.stored } : {}),
           });
         } catch (err) {

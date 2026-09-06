@@ -138,6 +138,7 @@ export class ContextRefError extends Error {
 export interface Reply {
   text: string;
   sources: SourceRef[];
+  coverage?: Answer["coverage"];
   /** Set when this turn also stored a memory. */
   stored?: StoreResult;
 }
@@ -214,6 +215,8 @@ export interface TaskingAction {
 
 export interface TaskingReply {
   text: string;
+  sources?: SourceRef[];
+  coverage?: Answer["coverage"];
   actions: TaskingAction[];
 }
 

@@ -150,7 +150,7 @@ describe.each(["github", "google_drive"] as const)("ZMR baseline: %s", provider 
       const answerCases = [];
       for (const testCase of manifest.cases) {
         const actual = await call("ask_brain", { question: testCase.prompt }, `ask-${testCase.id}`);
-        answerCases.push({ id: testCase.id, prompt: testCase.prompt, expected: testCase.expected, actual: actual.text, refs: testCase.refs.map(key => manifest.refs[key as keyof typeof manifest.refs]) });
+        answerCases.push({ id: testCase.id, prompt: testCase.prompt, expected: testCase.expected, actual: actual.text, actualSources: actual.sources, coverage: actual.coverage, refs: testCase.refs.map(key => manifest.refs[key as keyof typeof manifest.refs]) });
       }
       const allSeed = await engine.searchEntries({ limit: 1000 });
       // The inherited vault has one historical evidence entry to keep its citations valid.

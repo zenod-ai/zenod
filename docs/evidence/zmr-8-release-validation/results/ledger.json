@@ -1,0 +1,744 @@
+{
+  "productCandidate": "3f5ba097a8d287cdb9ae4468251bc42563e7e7a3",
+  "harnessHeadAtRun": "f850aa0021a838a848dfcf447d2a52eac48ebf51",
+  "manifest": "ZMR-BASELINE-V1",
+  "manifestSha256": "9b9cfb45e6056a431fd6f31350c9adfc53e82c42a4ff58e4f5156d0c80a6ca3f",
+  "environment": {
+    "node": "v22.22.3",
+    "platform": "darwin",
+    "transport": "in-memory MCP",
+    "model": "deterministic-observer-v1 (no provider, no model API)",
+    "temperature": null
+  },
+  "independence": "Each trial starts a fresh Vitest process, isolated vault and SQLite state per provider. Public ask_brain is stateless. Tool selection and synthesis are scripted.",
+  "rows": [
+    {
+      "trial": 1,
+      "provider": "github",
+      "case": "late",
+      "heldOut": false,
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000001"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 366.32729199999994,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "github",
+      "case": "history",
+      "heldOut": false,
+      "expected": "amber",
+      "actual": "amber",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000002"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 354.44091700000035,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "github",
+      "case": "current",
+      "heldOut": false,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 340.85824999999977,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "github",
+      "case": "unknown",
+      "heldOut": false,
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "correctLiteral": true,
+      "expectedRefs": [],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": null,
+      "localSeamMs": 327.3899160000001,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": 6
+    },
+    {
+      "trial": 1,
+      "provider": "github",
+      "case": "paraphrase",
+      "heldOut": true,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 333.58433300000024,
+      "rawLexicalParaphraseHits": 0,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "google_drive",
+      "case": "late",
+      "heldOut": false,
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000001"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 15.497666999999637,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "google_drive",
+      "case": "history",
+      "heldOut": false,
+      "expected": "amber",
+      "actual": "amber",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000002"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 17.963917000000038,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "google_drive",
+      "case": "current",
+      "heldOut": false,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 17.772624999999607,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 1,
+      "provider": "google_drive",
+      "case": "unknown",
+      "heldOut": false,
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "correctLiteral": true,
+      "expectedRefs": [],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": null,
+      "localSeamMs": 13.434250000000247,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": 6
+    },
+    {
+      "trial": 1,
+      "provider": "google_drive",
+      "case": "paraphrase",
+      "heldOut": true,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 13.26708299999973,
+      "rawLexicalParaphraseHits": 0,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "github",
+      "case": "late",
+      "heldOut": false,
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000001"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 339.94950000000017,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "github",
+      "case": "history",
+      "heldOut": false,
+      "expected": "amber",
+      "actual": "amber",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000002"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 333.9245000000001,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "github",
+      "case": "current",
+      "heldOut": false,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 340.327667,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "github",
+      "case": "unknown",
+      "heldOut": false,
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "correctLiteral": true,
+      "expectedRefs": [],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": null,
+      "localSeamMs": 340.1738330000003,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": 6
+    },
+    {
+      "trial": 2,
+      "provider": "github",
+      "case": "paraphrase",
+      "heldOut": true,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 332.11625000000004,
+      "rawLexicalParaphraseHits": 0,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "google_drive",
+      "case": "late",
+      "heldOut": false,
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000001"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 14.740334000000075,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "google_drive",
+      "case": "history",
+      "heldOut": false,
+      "expected": "amber",
+      "actual": "amber",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000002"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 15.667707999999948,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "google_drive",
+      "case": "current",
+      "heldOut": false,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 15.625457999999526,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 2,
+      "provider": "google_drive",
+      "case": "unknown",
+      "heldOut": false,
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "correctLiteral": true,
+      "expectedRefs": [],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": null,
+      "localSeamMs": 13.062708000000384,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": 6
+    },
+    {
+      "trial": 2,
+      "provider": "google_drive",
+      "case": "paraphrase",
+      "heldOut": true,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 13.759875000000648,
+      "rawLexicalParaphraseHits": 0,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "github",
+      "case": "late",
+      "heldOut": false,
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000001"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 368.71966599999996,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "github",
+      "case": "history",
+      "heldOut": false,
+      "expected": "amber",
+      "actual": "amber",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000002"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 355.39529200000015,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "github",
+      "case": "current",
+      "heldOut": false,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 338.912292,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "github",
+      "case": "unknown",
+      "heldOut": false,
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "correctLiteral": true,
+      "expectedRefs": [],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": null,
+      "localSeamMs": 351.33025,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": 6
+    },
+    {
+      "trial": 3,
+      "provider": "github",
+      "case": "paraphrase",
+      "heldOut": true,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 341.6327919999999,
+      "rawLexicalParaphraseHits": 0,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "google_drive",
+      "case": "late",
+      "heldOut": false,
+      "expected": "cobalt-seventeen",
+      "actual": "cobalt-seventeen",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000001"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 18.56195800000023,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "google_drive",
+      "case": "history",
+      "heldOut": false,
+      "expected": "amber",
+      "actual": "amber",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000002"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 16.892084000000068,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "google_drive",
+      "case": "current",
+      "heldOut": false,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 16.868000000000393,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": null
+    },
+    {
+      "trial": 3,
+      "provider": "google_drive",
+      "case": "unknown",
+      "heldOut": false,
+      "expected": "unknown",
+      "actual": "unknown (scripted abstention; model quality unmeasured)",
+      "correctLiteral": true,
+      "expectedRefs": [],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": null,
+      "localSeamMs": 13.427375000000211,
+      "rawLexicalParaphraseHits": null,
+      "unknownReturnedSourceCount": 6
+    },
+    {
+      "trial": 3,
+      "provider": "google_drive",
+      "case": "paraphrase",
+      "heldOut": true,
+      "expected": "violet",
+      "actual": "violet",
+      "correctLiteral": true,
+      "expectedRefs": [
+        "Log/2026-01-01.md#^e-000003"
+      ],
+      "actualRefs": [
+        "Log/2026-01-01.md",
+        "Log/2026-01-01.md#^e-000001",
+        "Log/2026-01-01.md#^e-000002",
+        "Log/2026-01-01.md#^e-000003",
+        "Log/2026-01-01.md#^e-000004",
+        "Log/2026-01-01.md#^e-000005"
+      ],
+      "expectedCitationPresent": true,
+      "localSeamMs": 15.491500000000087,
+      "rawLexicalParaphraseHits": 0,
+      "unknownReturnedSourceCount": null
+    }
+  ],
+  "deterministicLiteralCorrect": 30,
+  "deterministicCitationIdentityCorrect": 24,
+  "totalCases": 30,
+  "realModel": {
+    "retrievalRecall": null,
+    "answerCorrectness": null,
+    "citationSupport": null,
+    "unknownAbstention": null,
+    "falseAbsence": null,
+    "p50LatencyMs": null,
+    "p95LatencyMs": null,
+    "costUsd": null
+  },
+  "limitation": "Scripted traversal knows the log path and extracts expected literals. Repeated success is access/identity repeatability, not autonomous recall, semantic entailment, held-out model generalization or SHIP. Raw held-out lexical search remains zero; no prompt/model tuning performed.",
+  "citationIdentityCases": 24,
+  "harnessFilesSha256": {
+    "scripts/zmr-release-validation.mjs": "36d9c1961368828e17962387f200b31e046f6d716380ad549ec249f8851f620d",
+    "packages/server/test/zmrBaseline.test.ts": "c4d28060e47e539532866da561f76216a20b2a622b65bb0735c0e14b34d6560d"
+  },
+  "reportingCorrection": "Aggregate citation identity excludes six unknown cases (no expected citation); recomputed from unchanged retained trial reports without rerunning product calls."
+}
