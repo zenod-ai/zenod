@@ -1,0 +1,166 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Saved — 1 topics filed, 0 uncertain, 0 pending.\nfiled: Zenod deployment boundary policy 2026-09-07 (Projects/Zenod.md)\nevidence: Log/2026-09-06.md#^e-7c5eb9\nevidence URL: https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37\npages: Projects/Zenod.md\nsaved revision: github:c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba\ncommit: c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba\nhttps://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37\nhttps://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+    }
+  ],
+  "structuredContent": {
+    "found": true,
+    "ticket_id": "31c1d895-d5bb-4b06-9129-65bf9b109796",
+    "jobId": "31c1d895-d5bb-4b06-9129-65bf9b109796",
+    "kind": "store",
+    "status": "done",
+    "state": "done",
+    "result": {
+      "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+      "pagesTouched": [
+        "Projects/Zenod.md"
+      ],
+      "evidenceUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37",
+      "pageUrls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+      ],
+      "revision": {
+        "provider": "github",
+        "id": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "committedAt": "2026-09-06T22:37:50Z",
+        "urls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+        ],
+        "commitSha": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod.md"
+        ]
+      },
+      "urls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37",
+        "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+      ],
+      "commitSha": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrls": [
+        "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+        "https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod.md"
+      ],
+      "topics": [
+        {
+          "topic": "Zenod deployment boundary policy 2026-09-07",
+          "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+          "sourceSpans": [
+            {
+              "start": 0,
+              "end": 207
+            },
+            {
+              "start": 208,
+              "end": 338
+            },
+            {
+              "start": 339,
+              "end": 433
+            },
+            {
+              "start": 434,
+              "end": 475
+            },
+            {
+              "start": 476,
+              "end": 529
+            }
+          ],
+          "confidence": 0.95,
+          "disposition": "integrate_page",
+          "pages": [
+            "Projects/Zenod.md"
+          ],
+          "filedPages": [
+            "Projects/Zenod.md"
+          ],
+          "status": "filed"
+        }
+      ],
+      "filing": "filed"
+    },
+    "evidence": [
+      {
+        "kind": "memory_stored",
+        "id": "31c1d895-d5bb-4b06-9129-65bf9b109796",
+        "ticket_id": "31c1d895-d5bb-4b06-9129-65bf9b109796",
+        "jobId": "31c1d895-d5bb-4b06-9129-65bf9b109796",
+        "status": "done",
+        "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37",
+        "revision": {
+          "provider": "github",
+          "id": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+          "committedAt": "2026-09-06T22:37:50Z",
+          "urls": [
+            "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37",
+            "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+          ],
+          "commitSha": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+          "githubUrls": [
+            "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+            "https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod.md"
+          ]
+        },
+        "urls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#L37",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+        ],
+        "commitSha": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "pagesTouched": [
+          "Projects/Zenod.md"
+        ],
+        "filing": "filed",
+        "topics": [
+          {
+            "topic": "Zenod deployment boundary policy 2026-09-07",
+            "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+            "sourceSpans": [
+              {
+                "start": 0,
+                "end": 207
+              },
+              {
+                "start": 208,
+                "end": 338
+              },
+              {
+                "start": 339,
+                "end": 433
+              },
+              {
+                "start": 434,
+                "end": 475
+              },
+              {
+                "start": 476,
+                "end": 529
+              }
+            ],
+            "confidence": 0.95,
+            "disposition": "integrate_page",
+            "pages": [
+              "Projects/Zenod.md"
+            ],
+            "filedPages": [
+              "Projects/Zenod.md"
+            ],
+            "status": "filed"
+          }
+        ],
+        "githubUrls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-09-06.md",
+          "https://github.com/AlfaBlok/obsidian-brain/blob/main/Projects/Zenod.md"
+        ],
+        "pageUrls": [
+          "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+        ]
+      }
+    ]
+  },
+  "isError": false
+}

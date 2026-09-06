@@ -1,0 +1,82 @@
+{
+  "path": "Projects/Zenod.md",
+  "revision": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+  "bodyLength": 10758,
+  "memoryFacts": [
+    {
+      "id": "af28227ac8b881acd380",
+      "key": "zenod_repo_purpose",
+      "statement": "Jordi's deployment boundary for the Zenod repository, 7 September 2026: this repository is for live Zenod production images, plus the default Phylax companion for WhatsApp when appropriate, and nothing else.",
+      "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+      "evidenceDate": "2026-09-06T22:37:00",
+      "effectiveDate": null,
+      "effectiveDateQuote": null,
+      "correctionQuote": null,
+      "supersedesQuotes": [],
+      "supersedes": [],
+      "unresolvedCorrection": false,
+      "origin": "user_report",
+      "verificationQuote": null
+    },
+    {
+      "id": "e7008d3a93d94550add0",
+      "key": "zenod_repo_separation_rule",
+      "statement": "Epaminon, Outbound, Callisthenes, x-mcp and other independent agents should have their own repositories and deployment lifecycles.",
+      "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+      "evidenceDate": "2026-09-06T22:37:00",
+      "effectiveDate": null,
+      "effectiveDateQuote": null,
+      "correctionQuote": null,
+      "supersedesQuotes": [],
+      "supersedes": [],
+      "unresolvedCorrection": false,
+      "origin": "user_report",
+      "verificationQuote": null
+    },
+    {
+      "id": "833325057881284977c5",
+      "key": "zenod_repo_separation_transition_rule",
+      "statement": "Until that separation is done, keep their automatic deployments from this repository disabled.",
+      "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+      "evidenceDate": "2026-09-06T22:37:00",
+      "effectiveDate": null,
+      "effectiveDateQuote": null,
+      "correctionQuote": null,
+      "supersedesQuotes": [],
+      "supersedes": [],
+      "unresolvedCorrection": false,
+      "origin": "user_report",
+      "verificationQuote": null
+    },
+    {
+      "id": "6529abf8a582d206ccbe",
+      "key": "zenod_repo_separation_preservation_rule",
+      "statement": "Preserve their running services and data.",
+      "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+      "evidenceDate": "2026-09-06T22:37:00",
+      "effectiveDate": null,
+      "effectiveDateQuote": null,
+      "correctionQuote": null,
+      "supersedesQuotes": [],
+      "supersedes": [],
+      "unresolvedCorrection": false,
+      "origin": "user_report",
+      "verificationQuote": null
+    },
+    {
+      "id": "c107b18de79547d94b43",
+      "key": "zenod_upgrade_discipline",
+      "statement": "Keep Zenod upgrades small, explicit and easy to undo.",
+      "evidenceRef": "Log/2026-09-06.md#^e-7c5eb9",
+      "evidenceDate": "2026-09-06T22:37:00",
+      "effectiveDate": null,
+      "effectiveDateQuote": null,
+      "correctionQuote": null,
+      "supersedesQuotes": [],
+      "supersedes": [],
+      "unresolvedCorrection": false,
+      "origin": "user_report",
+      "verificationQuote": null
+    }
+  ]
+}
