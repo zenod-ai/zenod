@@ -21,6 +21,8 @@ Keep one simple, supported upgrade and undo process. Reuse Dokploy and the exist
 
 ## Current State
 
+Latest verification (2026-09-06 23:33 UTC): **4c6ca14aaf2d83ef0330e894627d44cba320fec3 is live; upgrade acceptance is NOT finalized.** Actual task, OCI and health match immutable image sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885. Queue empty; unrelated triggers disabled; configuration, volume and private Phylax preserved. Three fresh boundary recalls passed 2/3: one skipped the current fact page and answered from older architecture notes. Worker /root/zmr_8_chat_review is investigating source selection; no further image switch requested. This receipt supersedes the historical c5da66f cursor below. See [exact evidence](evidence/zmr-live-4c6ca14/README.md).
+
 Phase: public filing repair verified at 2026-09-06 22:36:24.878 UTC; deployment queue empty and legacy triggers paused.
 Running source: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502`.
 Running image: `ghcr.io/zenod-ai/zenod@sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`.

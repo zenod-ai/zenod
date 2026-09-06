@@ -87,6 +87,8 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
+Latest verification (2026-09-06 23:33 UTC): **4c6ca14aaf2d83ef0330e894627d44cba320fec3 is live; upgrade acceptance is NOT finalized.** Actual task, OCI and health match immutable image sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885. Queue empty; unrelated triggers disabled; configuration, volume and private Phylax preserved. Three fresh boundary recalls passed 2/3: one skipped the current fact page and answered from older architecture notes. Worker /root/zmr_8_chat_review is investigating source selection; no further image switch requested. This receipt supersedes the historical c5da66f cursor below. See [exact evidence](evidence/zmr-live-4c6ca14/README.md).
+
 Phase: c5da66f live; filing retest passed; ordinary-page fact recall repair active
 Last verified: 2026-09-07 00:17 CEST
 Integration target: main
