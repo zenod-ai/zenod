@@ -213,3 +213,21 @@ export function sanitizeGroundedAnswer(input: {
   const sanitized = sanitizeExactLiterals(withoutInvalidAnchors, corpus).trim();
   return sanitized || "I couldn't verify that exact detail from the sources read for this question.";
 }
+
+/** Drop unquoted absence clauses when the host knows evidence remains unread.
+ * Quoted reports are still subject to ordinary grounding, not promoted to facts.
+ */
+export function suppressIncompleteAbsence(text: string): { text: string; suppressed: boolean } {
+  const quotes: string[] = [];
+  const masked = text.replace(/"[^"\n]*"|“[^”\n]*”|`[^`\n]*`/g, quote => {
+    quotes.push(quote); return `QUOTEPLACEHOLDER${quotes.length - 1}END`;
+  });
+  let suppressed = false;
+  const filtered = masked.split(/(?<=[.!?;])\s+|\n+/).filter(clause => {
+    const absence = /\b(?:no (?:matching|relevant|saved|supporting|note|log entry|meaning page|other vault path)|(?:could not|couldn't|couldn’t|cannot|can't|can’t|did not|didn't) find|found (?:no|nothing)|near[- ]empty|only (?:a |the )?(?:header|heading))\b/i.test(clause)
+      || /\bno [^.!?;\n]{0,160}\b(?:appear|exists?|matches|records?)\b/i.test(clause);
+    if (absence) suppressed = true;
+    return !absence;
+  }).join("\n");
+  return { text: filtered.replace(/QUOTEPLACEHOLDER(\d+)END/g, (_, index: string) => quotes[Number(index)]!), suppressed };
+}
