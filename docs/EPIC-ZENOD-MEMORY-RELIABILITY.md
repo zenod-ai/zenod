@@ -16,8 +16,8 @@ Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
 Last reconciled commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3 (merged corrected ZMR-7 PR #1212)
 Planner: Jordi + ZMR-release-planner
-Worker: unassigned; implementation ZMR-1–7 integrated
-Tester: ZMR-8-release-validation /root/zmr_8_release_validation
+Worker: ZMR-8-chat-repair /root/zmr_8_chat_repair
+Tester: ZMR-8-release-validation /root/zmr_8_release_validation (capacity error; paused during repair)
 
 ## Role Bindings
 
@@ -87,21 +87,21 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — ZMR-7 integrated; ZMR-8 dispatched
-Last verified: 2026-09-06 19:35 CEST
+Phase: release validation — customer chat parity repair active
+Last verified: 2026-09-06 19:52 CEST
 Integration target: main
 Fresh base commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3; integrated ZMR-7, pinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
-Blockers: none for local validation; real-model configuration and deployment readiness must be evidenced, not assumed.
+Blockers: two reproduced customer chat failures (missing typed search; unsupported answer bypass); local real-model credentials absent. Candidate is not deployable.
 
 ## Execution Cursor
 
 Last attempted: verify corrected ZMR-7 review/CI, merge #1212 and dispatch ZMR-8.
 Result: Corrected b9636d5 passed independent review (10 checks) and exact CI, merged 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3. ZMR-8 dispatched on that base.
 Execution status: active
-Waiting on: ZMR-8 integrated local evidence, real-model validation availability and concrete release gate package
+Waiting on: bounded chat parity repair preserving failing regressions; then independent review and renewed candidate validation
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
 
@@ -180,7 +180,7 @@ If blocked by a gate, the affected worker's entire next status is “BLOCKED ON 
 
 ## Recovery And Takeover
 
-ZMR-8 is assigned to /root/zmr_8_release_validation on 3f5ba09. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
+ZMR-8 write ownership transferred from capacity-stopped tester to /root/zmr_8_chat_repair at 2026-09-06 19:52 CEST, same wt-zmr-8/codex/zmr-8, tester commits f850aa0 and 2f42748 preserved. Tester resumes only after repair handoff. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
 
 ## Validation Evidence
 
@@ -192,6 +192,12 @@ ZMR-8 is assigned to /root/zmr_8_release_validation on 3f5ba09. The manager reas
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-06 19:52 CEST — Manager — Release failures and repair takeover
+
+Tester reproduced authenticated customer chat gaps on 3f5ba09: searchEntries absent and unsupported fabricated-read answer bypasses ask_brain safeguards. Full suite has only these two new failures; MCP scripted frozen trials pass, which does not establish real-model quality. Tester committed f850aa0/2f42748 and then errored on model capacity. Assigned /root/zmr_8_chat_repair sole write ownership of same wt-zmr-8/codex/zmr-8; tester stays paused. No duplicate writers or deployment.
+
+Tester read-only evidence reconciles #1112 commercial approval already completed and existing private Phylax; stale Foundation pending-commercial text must not cause re-requesting old approval. Current exact rollback images and backup-proof gaps live in docs/evidence/zmr-8-release-validation/README.md on tester branch. This does not authorize a new deployment or credentials.
 
 ### 2026-09-06 19:35 CEST — Manager — Current facts integrated; release validation dispatched
 
