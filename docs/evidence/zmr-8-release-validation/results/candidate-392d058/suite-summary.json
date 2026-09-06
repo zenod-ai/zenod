@@ -1,0 +1,73 @@
+{
+  "candidate": "392d058a599bdf5fc69d17157282b8f9154dcf28",
+  "harnessHeadAtStart": "6f11e8e032b2d27483ce50bfb23ecc6874f0b62c",
+  "verifiedAt": "2026-09-06T19:13:50.564465+00:00",
+  "sourceChangesDuringRun": false,
+  "testOnlyExtension": "customer Git provider selection added before server suite; original assertions retained",
+  "commands": [
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run typecheck -w @zenod/server",
+      "exitCode": 0
+    }
+  ],
+  "workspaces": {
+    "core": {
+      "pass": 637,
+      "skip": 6
+    },
+    "mcpChassis": {
+      "pass": 92
+    },
+    "server": {
+      "pass": 1264
+    },
+    "other": {
+      "pass": 159
+    }
+  },
+  "scripts": {
+    "pass": 195,
+    "fail": 0
+  },
+  "schemas": 27,
+  "rawFullLogSha256": "61451242f8f17ef51b76d08c43654c41d1a62ba024b9734cc5ddb91b8b736856",
+  "rawTypecheckLogSha256": "54554cad0adf457281fb8148de538aa116cce8b0f2d549e52ebedff7d6de0e0f",
+  "summaryLines": [
+    " Test Files  39 passed (39)",
+    "      Tests  637 passed | 6 skipped (643)",
+    " Test Files  10 passed (10)",
+    "      Tests  92 passed (92)",
+    " Test Files  121 passed (121)",
+    "      Tests  1264 passed (1264)",
+    " Test Files  1 passed (1)",
+    "      Tests  5 passed (5)",
+    " Test Files  1 passed (1)",
+    "      Tests  3 passed (3)",
+    " Test Files  1 passed (1)",
+    "      Tests  5 passed (5)",
+    " Test Files  1 passed (1)",
+    "      Tests  6 passed (6)",
+    " Test Files  1 passed (1)",
+    "      Tests  6 passed (6)",
+    " Test Files  1 passed (1)",
+    "      Tests  5 passed (5)",
+    " Test Files  2 passed (2)",
+    "      Tests  12 passed (12)",
+    " Test Files  20 passed (20)",
+    "      Tests  117 passed (117)",
+    "# tests 195",
+    "# pass 195",
+    "# fail 0",
+    "OK: 27 per-tool schemas bundled and self-contained (no files written)."
+  ],
+  "liveBrowser": "not run",
+  "realModel": "not run: no supported local key"
+}

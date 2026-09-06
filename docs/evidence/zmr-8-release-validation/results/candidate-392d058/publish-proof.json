@@ -1,0 +1,18 @@
+{
+  "candidate": "392d058a599bdf5fc69d17157282b8f9154dcf28",
+  "workflow": "https://github.com/zenod-ai/zenod/actions/runs/34053932047",
+  "conclusion": "success",
+  "published": true,
+  "deployed": false,
+  "images": {
+    "zenod": {
+      "tag": "ghcr.io/zenod-ai/zenod:sha-392d058",
+      "digest": "sha256:d21468dbf09f33550c52eb53bed32adea616842b4a144cd5cda428861f151a93"
+    },
+    "phylax": {
+      "tag": "ghcr.io/zenod-ai/phylax:sha-392d058",
+      "digest": "sha256:651bafaf8129b19c5871cefb018791f81001ab3a8c95b65f50fb46d92740d4fb"
+    }
+  },
+  "proof": "Successful exact-commit publish workflow build/push metadata and completed manifest pushes; both image smoke steps passed. Local suites validate source; browser behavior is not validated."
+}
