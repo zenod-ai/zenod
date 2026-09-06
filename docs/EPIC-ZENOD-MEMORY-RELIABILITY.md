@@ -87,21 +87,21 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — explicit-memory grounding correction active
-Last verified: 2026-09-06 20:32 CEST
+Phase: release validation — corrected chat CI passed; re-review active
+Last verified: 2026-09-06 20:52 CEST
 Integration target: main
 Fresh base commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3; integrated ZMR-7, pinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
 Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
-Blockers: review reproduced explicit-memory question bypass with no tool calls/readPaths, including stream, persistence and nonstreaming. Worker correcting; real-model credentials absent. Candidate not deployable.
+Blockers: review reproduced explicit-memory question bypass with no tool calls/readPaths, including stream, persistence and nonstreaming. Correction d336698 awaiting re-review; real-model credentials absent. Candidate not deployable.
 
 ## Execution Cursor
 
 Last attempted: reconcile completed customer chat parity repair and dispatch independent reviewer.
-Result: repair PR #1214 head 624a2b2 passes 101 core +17 public tests and exact CI. Independent review found explicit-memory no-tool bypass; /root/zmr_8_chat_repair resumed sole write ownership to correct it. Prior release evidence is not proof for this new candidate.
+Result: repair PR #1214 head 624a2b2 passes 101 core +17 public tests and exact CI. Independent review found explicit-memory no-tool bypass; Worker corrected at d336698 with 101 core +21 public tests and exact CI passing; independent reviewer explicitly resumed. Prior release evidence is not proof for this new candidate.
 Execution status: active
-Waiting on: corrected PR #1214 head and explicit-memory regressions, then fresh independent review and CI
+Waiting on: independent re-review of d336698da39eb37b8ed7dbbc9d84c4a33cf955f6; exact CI passed; then renewed integrated validation
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
 
