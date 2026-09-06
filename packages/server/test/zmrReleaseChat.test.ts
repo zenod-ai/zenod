@@ -28,7 +28,9 @@ async function ask(app: ReturnType<typeof createApp>, headers: Record<string,str
   expect(response.status).toBe(200);
   const events = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
   expect(events.some(event => event.type === "error"), JSON.stringify(events)).toBe(false);
-  return events.find(event => event.type === "done");
+  const done = events.find(event => event.type === "done");
+  expect(events.filter(event => event.type === "delta").map(event => event.text).join("")).toBe(done.text);
+  return done;
 }
 
 describe("ZMR-8 customer streaming chat parity", () => {
@@ -67,4 +69,60 @@ describe("ZMR-8 customer streaming chat parity", () => {
       expect(result.text).not.toContain("definitely broken and live verified");
     });
   });
+  it("withholds incomplete historical enumeration and exposes usable continuation on the streaming boundary", async () => {
+    await journey(async (input, tools) => {
+      const catalog = JSON.parse(await tools.searchEntries!({ exhaustive: true }));
+      expect(catalog.coverage.status).toBe("partial");
+      input.onTextDelta?.("This is the complete audit of every memory.");
+      return { text: "This is the complete audit of every memory.", readPaths: [] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, "Give a complete audit of all memories.");
+      expect(result.text).toContain("Coverage is partial");
+      expect(result.text).not.toContain("This is the complete audit");
+      expect(result.coverage.status).toBe("partial");
+      expect(result.coverage.entryPagesRead).toBe(8);
+      expect(result.coverage.continuation).toEqual(expect.arrayContaining([
+        expect.objectContaining({ tool: "search_entries", input: expect.objectContaining({ cursor: expect.any(String) }) }),
+      ]));
+    });
+  });
+  it("uses the same temporal finalizer on nonstreaming tasking chat", async () => {
+    await journey(async (_input, tools) => {
+      await tools.readFacts!({ path: "Areas/Insurance.md" });
+      return { text: "Production is definitely broken and live verified.", readPaths: ["Areas/Insurance.md"] };
+    }, async (app, headers) => {
+      const response = await app.request("/api/chat", { method: "POST", headers, body: JSON.stringify({ message: "Is the old insurance incident still broken in production now?" }) });
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.text).not.toContain("definitely broken and live verified");
+      expect(result.text).toMatch(/unknown|no structured|legacy/i);
+      expect(result.sources).toEqual([]);
+      expect(result.coverage.contract).toBe("ask-coverage-v1");
+    });
+  });
+  it("does not expose unsupported model deltas or preserve them in the conversation", async () => {
+    await journey(async (input) => {
+      expect(input.conversation.some(message => message.text.includes("imaginary-payroll"))).toBe(false);
+      input.onTextDelta?.("The payroll provider is imaginary-payroll.");
+      return { text: "The payroll provider is imaginary-payroll.", readPaths: [manifest.refs.late] };
+    }, async (app, headers) => {
+      const prompt = manifest.cases.find(test => test.id === "unknown")!.prompt;
+      for (let i = 0; i < 2; i++) {
+        const result = await ask(app, headers, prompt);
+        expect(result.text).not.toContain("imaginary-payroll");
+        expect(result.sources).toEqual([]);
+      }
+    });
+  });
+  it("preserves ordinary conversational streaming without invented citations", async () => {
+    await journey(async input => {
+      input.onTextDelta?.("Hello!");
+      return { text: "Hello!", readPaths: [] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, "Hello");
+      expect(result.text).toBe("Hello!");
+      expect(result.sources).toEqual([]);
+    });
+  });
+
 });

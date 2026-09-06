@@ -6,7 +6,7 @@ Issue [#1196](https://github.com/zenod-ai/zenod/issues/1196). Tester `/root/zmr_
 
 ## Exact source and reproducibility
 
-Worktree `/Users/jordi/Documents/GitHub/wt-zmr-8`, branch `codex/zmr-8`, pinned product above. The initial HTTP reproducer is test-only commit `f850aa0`; subsequent changes add reporting and evidence only. No `packages/*/src` file was edited. Do not use this rejected candidate's digests to deploy a later repaired candidate.
+Worktree `/Users/jordi/Documents/GitHub/wt-zmr-8`, branch `codex/zmr-8`, pinned product above. The initial HTTP reproducer is test-only commit `f850aa0`; tester handoff `2f42748` added reporting and evidence only, with no `packages/*/src` edits at that handoff. The repair below changes product source and invalidates reuse of the old candidate proof. Do not use this rejected candidate's digests to deploy a later repaired candidate.
 
 Frozen ground truth is the unchanged [ZMR-1 manifest](../../../packages/server/test/fixtures/zmr/manifest.json) and generator. All six repeated runs retain the exact original per-file fixture hashes. There are 656 seeded captures plus one inherited citation entry; the old bounded range contains exactly five refs. Provider lanes are a real local Git repository/bare origin and the existing in-memory Drive persistence double. Neither exercises a remote provider or production tenant.
 
@@ -106,3 +106,18 @@ On the approved live candidate, parent personally opens the existing customer su
 7. Record URL, immutable candidate SHA, timestamp, evidence refs, one screenshot per step and full pass/fail ledger. Stop at the first failure; route a bounded fix, obtain any new deployment approval and restart step 1.
 
 Only after that clean same-build pass may parent write “I manually walked the full journey and it works” and hand Jordi the same URL/journey: “Now you test.” Human SHIP acceptance remains unchecked. No clickable live action has been represented as already exercised.
+
+
+## Customer parity repair — local evidence, independent review pending
+
+Repair owner `/root/zmr_8_chat_repair` took sole write ownership from the stopped tester at clean `2f4274813d02345f6a25d18e31c55684549f2529`, preserving its failing acceptance tests and frozen evidence. Product base remains `3f5ba09`; the repair is on `codex/zmr-8` / PR #1214. Parent remains the sole spine steward. This source change requires a new exact candidate and tester re-pin; none of the older digests or real-model/live gates above become passing proof.
+
+Ask, customer streaming chat and nonstreaming tasking chat now share one per-turn memory read/finalization session. Typed historical enumeration is available in both chat loops. Actual host reads own citations, passage/entry budgets and snapshot checks; temporal fact projection owns current/historical/unknown rendering. Coverage and continuation are exposed in both HTTP response shapes. Existing task/approval receipt gates retain final authority; model deltas remain buffered until the final text is selected, and only finalized text reaches conversation storage.
+
+All four original HTTP assertions remain intact and pass. Four added cases cover exhausted historical enumeration with usable continuation, nonstreaming legacy temporal abstention, no unsupported streamed or persisted text across two turns, and ordinary conversational streaming. Local validation after the source repair:
+
+- `npm run typecheck`: all workspaces PASS.
+- `npm run test -w zenod -- test/engine.test.ts test/engine-replyGate.test.ts test/captureContextTicket.test.ts test/temporalFacts.test.ts test/entryPagination.test.ts`: **101/101 PASS**.
+- `npm run test -w @zenod/server -- test/zmrReleaseChat.test.ts test/zmrAsk.test.ts test/zmrFacts.test.ts test/zmrPassage.test.ts test/zmrHistory.test.ts`: **17/17 PASS**, including **8/8** customer HTTP journeys.
+
+Scope limits: ordinary conversation with no memory tool attempt, no model citation claim and no exhaustive-memory request retains its existing behavior; this change does not add a universal semantic intent classifier. Once a memory tool is attempted (including failed/discovery-only calls), a citation is claimed, or exhaustive coverage is requested, the shared host finalizer applies. The inherited source grounding heuristic is not a universal natural-language entailment proof. Remote models, live browser journeys and rollout gates remain unmeasured/unexecuted. Independent review and exact-head CI are required before integration.
