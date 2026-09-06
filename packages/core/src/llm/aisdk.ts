@@ -14,6 +14,7 @@ import {
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+import { classificationDiagnostic } from "./classificationDiagnostic.js";
 import {
   coerceEditIssueLabelsForUserRequest,
   HOST_APPROVAL_REQUIRED_GUARD_SENTINEL,
@@ -825,11 +826,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         .join("\n\n"),
       });
     } catch (err) {
-      this.reportUsage("classify", this.classifyModelId, undefined, undefined, {
+      const structured = NoObjectGeneratedError.isInstance(err);
+      this.reportUsage("classify", this.classifyModelId, structured ? err.usage : undefined, undefined, {
         status: "failed",
-        errorCode: NoObjectGeneratedError.isInstance(err) ? "structured_output_invalid" : "provider_error",
+        errorCode: structured ? "structured_output_invalid" : "provider_error",
       });
-      throw loudObjectError(err, "classify");
+      // The engine safely saves to Inbox after exhausted attempts. Preserve enough
+      // operator detail to diagnose why, without logging the model text or values.
+      console.warn("[classify] " + JSON.stringify(classificationDiagnostic(err)));
+      throw new Error(structured ? "classify: structured_output_invalid" : "classify: provider_error");
     }
     const { object, usage, providerMetadata } = result;
     this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
