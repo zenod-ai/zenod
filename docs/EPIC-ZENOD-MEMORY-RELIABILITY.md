@@ -87,8 +87,8 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — customer chat parity repair active
-Last verified: 2026-09-06 19:52 CEST
+Phase: release validation — chat parity repair CI passed; independent review active
+Last verified: 2026-09-06 20:14 CEST
 Integration target: main
 Fresh base commit: 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3; integrated ZMR-7, pinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
@@ -98,10 +98,10 @@ Blockers: two reproduced customer chat failures (missing typed search; unsupport
 
 ## Execution Cursor
 
-Last attempted: verify corrected ZMR-7 review/CI, merge #1212 and dispatch ZMR-8.
-Result: Corrected b9636d5 passed independent review (10 checks) and exact CI, merged 3f5ba097a8d287cdb9ae4468251bc42563e7e7a3. ZMR-8 dispatched on that base.
+Last attempted: reconcile completed customer chat parity repair and dispatch independent reviewer.
+Result: repair PR #1214 head 624a2b2 passes 101 core +17 public tests and exact CI. /root/zmr_8_chat_review confirmed independent review running; repair worker released write ownership. Prior release evidence is not proof for this new candidate.
 Execution status: active
-Waiting on: bounded chat parity repair preserving failing regressions; then independent review and renewed candidate validation
+Waiting on: independent review of PR #1214 exact 624a2b220a92ae4f4cd6a002867005d16ad37bf2; exact CI passed; renewed candidate validation next
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
 
