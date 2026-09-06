@@ -25,7 +25,7 @@ Backups use the repository's quiesced-volume archive script, disposable-volume J
 
 ## Fresh backup evidence
 
-Source1.6GB, compressed archive approximately1.4GB. Public process paused from19:56UTC until19:59UTC for consistency, then resumed before the disposable restore. Verified2026-09-06T20:01:48Z:1127 files,10 JSON,69 SQLite databases, all valid. Archive `/var/backups/zenod/zmr-20260906/zenod-data-20260906T195603Z.tar.gz`; SHA256 `a2f21b3850b4fa60e90acad7ab85bbc7601119766dafc5dd91c10090ec2a164c`. Local copy hash matches. Encrypted object `zenod-prod-crypt:zmr-20260906/public/zenod-data-20260906T195603Z.tar.gz`; upload/download verification pending. Full protected before-config JSON snapshots already uploaded and download-checked in `zenod-prod-crypt:zmr-20260906/config`.
+Source1.6GB, compressed archive approximately1.4GB. Public process paused from19:56UTC until19:59UTC for consistency, then resumed before the disposable restore. Verified2026-09-06T20:01:48Z:1127 files,10 JSON,69 SQLite databases, all valid. Archive `/var/backups/zenod/zmr-20260906/zenod-data-20260906T195603Z.tar.gz`; SHA256 `a2f21b3850b4fa60e90acad7ab85bbc7601119766dafc5dd91c10090ec2a164c`. Local copy hash matches. Encrypted object `zenod-prod-crypt:zmr-20260906/public/zenod-data-20260906T195603Z.tar.gz`; upload and full decrypted download comparison completed successfully (rclone exit0). Full protected before-config JSON snapshots already uploaded and download-checked in `zenod-prod-crypt:zmr-20260906/config`.
 
 ## Live deployment evidence
 
@@ -46,3 +46,10 @@ The user's existing tenant is available for parent-run authenticated MCP tests. 
 ## Small incremental repair command
 
 The same helper accepts `deploy --candidate-sha FULL_SHA --candidate-image ghcr.io/zenod-ai/zenod@sha256:FULL_DIGEST --state-dir SECURE_RECEIPT_DIR`. Both candidate arguments are required together and validated; it refuses missing backup/config/restore receipts, unknown current images, or pending Dokploy configuration drift. Omitting overrides retains this exact release's defaults. Rollback always uses the frozen original image/config and preserves current data. This deliberately reuses the current release recovery receipt for the authorized code-only repair; it is not an automated generic backup framework.
+
+
+Final off-host verification: complete1,498,818,408-byte encrypted object and full decrypted download comparison PASS. The original source archive and independent Mac copy both have SHA256 `a2f21b3850b4fa60e90acad7ab85bbc7601119766dafc5dd91c10090ec2a164c`.
+
+Operator parameterization validation: offline mocked API/Swarm tests prove overrideA→plainrollback, A→B→plainrollback, and A→failedB-before-mutation→plainrollback. Atomic protected candidate-history receipt keeps both previously running and newly attempted images available to rollback guards. Run `python3 scripts/zmr-production-image.test.py`;3tests PASS. Independent review found and drove these interruption safeguards before any override upgrade was attempted.
+
+Initial live memory checks found safe raw capture but automatic filing fell back to Inbox after2 `structured_output_invalid` classifier failures using existing OpenRouter `minimax/minimax-m3`; host health remains good. A natural unanchored question falsely reported absence while exact anchored retrieval succeeded. Parent assigned bounded product repair; this receipt does not label memory release acceptance complete. One synthetic schema-only classifier probe using the same in-process credentials was terminated after3minutes without a response; it modified no vault or configuration. Provider usage for this interrupted probe was unavailable and must not be counted as free.
