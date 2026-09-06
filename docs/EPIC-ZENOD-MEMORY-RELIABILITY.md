@@ -87,8 +87,8 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: release validation — chat repair integrated; candidate retest active
-Last verified: 2026-09-06 21:08 CEST
+Phase: release validation — local acceptance passed; evidence review active
+Last verified: 2026-09-06 21:32 CEST
 Integration target: main
 Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
 Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
@@ -101,7 +101,7 @@ Blockers: real-model credentials absent locally; renewed deterministic candidate
 Last attempted: verify corrected chat re-review and CI, merge #1214, assign candidate retest.
 Result: d336698 passed independent re-review and exact CI, merged392d058. /root/zmr_8_candidate_retest assigned sole write ownership in wt-zmr-8; prior tester capacity failure and repair handoffs preserved.
 Execution status: active
-Waiting on: renewed integrated candidate evidence and concrete real-model/live gate package
+Waiting on: evidence PR #1216 independent review; exact CI passed. Secure existing provider/model config and bounded real-model run remain the next gate.
 Approved work: delivery coordination, issue/PR handoffs, bounded ticket implementation and synthetic/local validation in dependency order after control-plane integration. Deployment, live mutations and human SHIP acceptance retain their named gates.
 Next action: review ZMR-8 integrated validation and concrete release gate package; resolve failures before requesting deployment.
 
@@ -181,7 +181,7 @@ If blocked by a gate, the affected worker's entire next status is “BLOCKED ON 
 
 ## Recovery And Takeover
 
-ZMR-8 write ownership transferred from capacity-stopped tester to /root/zmr_8_chat_repair at 2026-09-06 19:52 CEST, same wt-zmr-8/codex/zmr-8, tester commits f850aa0 and 2f42748 preserved. Tester resumes only after repair handoff. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
+At 2026-09-06 21:08 CEST, repair completed and sole ownership transferred to /root/zmr_8_candidate_retest, same wt-zmr-8/codex/zmr-8, explicitly repinned to 392d058a599bdf5fc69d17157282b8f9154dcf28. Prior tester and repair history remain preserved. Tester has now completed local evidence PR #1216 and released write ownership. The manager reassigns workers silent past budget after inspecting their issue/branch evidence. Preserve previous identity/history; record incoming owner, exact SHA, unverified work and next action before resuming. Ninety minutes is a checkpoint, not a completion claim.
 
 ## Validation Evidence
 
