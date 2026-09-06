@@ -2147,6 +2147,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const factReadWarnings: string[] = [];
     const factSources: Answer["sources"] = [];
     const factReads: Array<{ input: import("./temporalFacts.js").FactReadInput; result: string }> = [];
+    const automaticFactFailures = new Set<string>();
+    const historicalQuestion = /\b(?:was|were|previously|formerly|histor(?:y|ical)|before|as\s+of|used\s+to|back\s+then)\b/i.test(question)
+      || (!/\b(?:current|now|today)\b/i.test(question) && /\b(?:19|20)\d{2}\b/.test(question));
     const automaticFacts = new Map<string, { input: import("./temporalFacts.js").FactReadInput; result: string; view: FactView }>();
     let attempted = false;
     const groundedTools: VaultReadTools = {
@@ -2224,17 +2227,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
               // Exact/pinned evidence and explicit metadata inspection keep their scope.
               if (contextRefs.length === 0 && !path.includes("#") && !normalizedPath.startsWith("Log/") && passage.part === "body" && tools.readFacts) {
                 const explicit = factReads.some(read => normalizeMarkdownNotePath(read.input.path) === normalizedPath);
-                if (!explicit && !automaticFacts.has(normalizedPath)) {
+                if (!explicit && !automaticFacts.has(normalizedPath) && !automaticFactFailures.has(normalizedPath)) {
                   const note = await getNote(vaultPath, normalizedPath, sourceResolver);
-                  if (Array.isArray(note.frontmatter.memoryFacts) && note.frontmatter.memoryFacts.length > 0) {
+                  // Unverified metadata only selects whether to attempt verification.
+                  // Irrelevant and historical questions need no current projection.
+                  if (!historicalQuestion && Array.isArray(note.frontmatter.memoryFacts)
+                    && note.frontmatter.memoryFacts.some(fact => fact && typeof fact === "object"
+                      && typeof fact.statement === "string" && evidenceTextMatchesQuestion(question, fact.statement))) {
                     try {
                       if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted");
                       const input = { path: normalizedPath };
                       const result = await tools.readFacts(input);
                       automaticFacts.set(normalizedPath, { input, result, view: JSON.parse(result) as FactView });
-                    } catch (error) {
-                      factReadWarnings.push("A page fact projection failed or exceeded the four-note budget; current state is not established for that page.");
-                      throw error;
+                    } catch {
+                      // Optional enrichment cannot invalidate a successful prose read.
+                      automaticFactFailures.add(normalizedPath);
                     }
                   }
                 }
@@ -2263,10 +2270,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
         // regardless of tool order. Never mix current auto facts into historical scope.
         // Current projections cannot resolve a requested historical scope. Let the
         // model select read_facts(asOf) or retain its grounded historical prose.
-        const historicalQuestion = /\b(?:was|were|previously|formerly|histor(?:y|ical)|before|as\s+of|used\s+to|back\s+then)\b|\b(?:19|20)\d{2}\b/i.test(question);
         const automatic = [...automaticFacts.values()].filter(auto => !historicalQuestion && !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === auto.input.path)
           && auto.view.facts.some(fact => evidenceTextMatchesQuestion(question, fact.statement)));
-        const useFactAnswer = explicitFactReadAttempts > 0 || automatic.length > 0 || factReadWarnings.length > 0;
+        const relevantAutomaticFailure = [...automaticFactFailures].some(path => !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === path));
+        const useFactAnswer = explicitFactReadAttempts > 0 || automatic.length > 0 || relevantAutomaticFailure;
+        const finalFactWarnings = [...factReadWarnings, ...(relevantAutomaticFailure
+          ? ["A relevant page fact projection failed or exceeded the four-note budget; current state is not established for that page."] : [])];
         const finalFactViews = [...factViews, ...automatic.map(read => read.view)];
         let factSnapshotChanged = false;
         for (const read of [...factReads, ...automatic]) {
@@ -2304,7 +2313,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
         } else if (useFactAnswer) {
           text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
-            : [finalFactViews.length ? renderFactViews(finalFactViews) : "I could not verify temporal facts from the requested scope.", ...new Set(factReadWarnings)].filter(Boolean).join("\n\n");
+            : [finalFactViews.length ? renderFactViews(finalFactViews) : "I could not verify temporal facts from the requested scope.", ...new Set(finalFactWarnings)].filter(Boolean).join("\n\n");
         } else if (sources.length === 0 && conversationReadSpans.length === 0) {
           text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
         } else {
