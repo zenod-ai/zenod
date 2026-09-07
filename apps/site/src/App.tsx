@@ -1,5 +1,6 @@
 import * as React from "react";
 import { SlotText } from "slot-text/react";
+import { chromatic } from "slot-text";
 import "slot-text/style.css";
 import {
   ArrowUpRightIcon,
@@ -184,7 +185,7 @@ function StarLink() {
       onMouseEnter={() => setActive(true)} onMouseLeave={() => setActive(false)}
       onFocus={() => setActive(true)} onBlur={() => setActive(false)}>
       <GithubIcon />
-      <SlotText text={active ? "Give us a star" : "Star on GitHub"} options={{ direction: "up", duration: 320, stagger: 15, bounce: 0.08 }} />
+      <SlotText text={active ? "Give us a star" : "Star on GitHub"} options={{ rollBy: "word", color: chromatic(), direction: "up", duration: 320, stagger: 40, bounce: 0.08 }} />
     </a>
   );
 }
@@ -298,7 +299,7 @@ function MemoryRoll() {
     <div className="v5-verb-line" aria-label="Your memory, yours to contribute to, enrich, access, and cultivate.">
       <span aria-hidden="true">Your memory, yours to</span>
       <span className="v5-memory-roll" aria-hidden="true">
-        <SlotText text={verbs[index]} options={{ direction: "up", duration: 500, stagger: 22, bounce: 0.12, exitOffset: 0 }} />
+        <SlotText text={verbs[index]} options={{ rollBy: "word", color: chromatic(), colorFade: 650, direction: "up", duration: 500, stagger: 55, bounce: 0.12, exitOffset: 0 }} />
       </span>
     </div>
   );
