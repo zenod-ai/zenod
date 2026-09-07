@@ -1,0 +1,6 @@
+node_modules/
+*.log
+renders/*
+!renders/zenod-personal-alexandria.mp4
+!renders/zenod-house-remocn-v2.mp4
+!renders/house-capture-check.png

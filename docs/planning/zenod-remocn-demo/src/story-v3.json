@@ -1,0 +1,92 @@
+[
+  {
+    "key": "islands",
+    "seconds": 9,
+    "title": "Your thinking is scattered.",
+    "voice": "A useful conversation here. A decision there. Each agent gets a different piece of you.",
+    "audioSeconds": 5.093,
+    "start": 0,
+    "frames": 270
+  },
+  {
+    "key": "repeat",
+    "seconds": 8,
+    "title": "New conversation. Same explaining.",
+    "voice": "The context may still exist. But it stays inside that conversation, or provider.",
+    "audioSeconds": 5.085,
+    "start": 270,
+    "frames": 240
+  },
+  {
+    "key": "owned",
+    "seconds": 10,
+    "title": "The context is yours.",
+    "voice": "Zenod gives your thoughts, learnings, and facts a home that your agents can share. Under your control.",
+    "audioSeconds": 5.696,
+    "start": 510,
+    "frames": 300
+  },
+  {
+    "key": "capture",
+    "seconds": 15,
+    "title": "Start with a thought.",
+    "voice": "Here\u2019s why I think I should buy this house. I can see myself living there for years. But I want to understand how rates and prices have moved over time.",
+    "audioSeconds": 9.107,
+    "start": 810,
+    "frames": 450
+  },
+  {
+    "key": "digest",
+    "seconds": 12,
+    "title": "Give it a place to grow.",
+    "voice": "Zenod preserves the original and organizes the useful context into a linked personal wiki. Your thinking, with a reference back to its source.",
+    "audioSeconds": 7.995,
+    "start": 1260,
+    "frames": 360
+  },
+  {
+    "key": "retrieve",
+    "seconds": 16,
+    "title": "Pick up where you left off.",
+    "voice": "Later, bring that thinking into whichever agent you\u2019re working with. Ask Codex to use yesterday\u2019s house note, and analyse interest rates and house prices over the last fifty years.",
+    "audioSeconds": 9.977,
+    "start": 1620,
+    "frames": 480
+  },
+  {
+    "key": "write",
+    "seconds": 12,
+    "title": "What you learn becomes context, too.",
+    "voice": "Your agent can read the background, and write useful findings back for next time. The next conversation starts with more context.",
+    "audioSeconds": 7.794,
+    "start": 2100,
+    "frames": 360
+  },
+  {
+    "key": "grow",
+    "seconds": 16,
+    "title": "The context matters.",
+    "voice": "You curate the context. Agents understand more of what you mean. Useful answers become new learnings. Correct, connect, and refine. Over years, even decades, your memory becomes more useful.",
+    "audioSeconds": 12.531,
+    "frames": 480,
+    "start": 2460
+  },
+  {
+    "key": "house",
+    "seconds": 20,
+    "title": "Keep the raw. Hire a smart librarian.",
+    "voice": "You keep the library. You can fire the librarian. When a better librarian comes along, replace Zenod. Your library stays yours. Every original voice note, document, and source is preserved, ready for future discovery.",
+    "audioSeconds": 13.797,
+    "frames": 600,
+    "start": 2940
+  },
+  {
+    "key": "finish",
+    "seconds": 15,
+    "title": "Start your personal Alexandria.",
+    "voice": "Your agents change. Your context stays. Test Zenod free. Start curating your personal Alexandria of ideas. An Obsidian compatible wiki, inspired by Karpathy.",
+    "audioSeconds": 10.848,
+    "start": 3540,
+    "frames": 450
+  }
+]

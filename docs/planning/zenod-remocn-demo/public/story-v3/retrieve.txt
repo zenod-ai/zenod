@@ -1,0 +1,1 @@
+Later, bring that thinking into whichever agent you’re working with. Ask Codex to use yesterday’s house note, and analyse interest rates and house prices over the last fifty years.

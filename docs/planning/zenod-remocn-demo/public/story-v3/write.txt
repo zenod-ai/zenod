@@ -1,0 +1,1 @@
+Your agent can read the background, and write useful findings back for next time. The next conversation starts with more context.
