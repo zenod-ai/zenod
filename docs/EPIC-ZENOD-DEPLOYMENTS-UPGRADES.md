@@ -1,7 +1,7 @@
 # Zenod deployments and upgrades
 
 Status: current — bounded production upgrade verified; deployment scope enforced
-Updated: 2026-09-06
+Updated: 2026-09-07
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
 Spine ID: ZDU
@@ -11,7 +11,7 @@ Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Additional root rationale: n/a
 Integration branch: main
 Active spine steward: ZMR-delivery-manager
-Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 running
+Last reconciled commit: 006587b8d9ee53338625e5b1d9f71c9c9b6fdee2 running
 
 ## Mission
 
@@ -21,19 +21,19 @@ Keep one simple, supported upgrade and undo process. Reuse Dokploy and the exist
 
 ## Current State
 
-Phase: bounded production upgrade complete; final affected live checks passed.
-Running source: `29ddb62d349d9f3bd9c5b471848a4ef775155827`.
-Running image: `ghcr.io/zenod-ai/zenod@sha256:fab0414121a6912ace825f3cdf07fc5f508944afc3cafec7352660db32a83042`.
-Verified: Swarm update completed 2026-09-07 00:17:23 UTC; actual container 572e253d41a8, OCI revision and public health match.
+Phase: V5 public landing-page upgrade complete; live visual and runtime checks passed.
+Running source: `006587b8d9ee53338625e5b1d9f71c9c9b6fdee2`.
+Running image: `ghcr.io/zenod-ai/zenod@sha256:1c34f17a93e370e1379ec19251f3b3b423a2dda5ba22c596fb687da75df589cb`.
+Verified: Swarm update completed 2026-09-07 03:41:25 UTC; running task `xa80l38of9ey`, OCI revision and public health match.
 Scope: public Zenod only; private Phylax unchanged. No migration or data restoration.
 Recovery: verified VPS archive, independent checksum-matched Mac copy, encrypted cloud upload and decrypted download comparison complete; original rollback receipt retained.
-Live tests: filing repair passed; final boundary recall passed 3/3 fresh conversations with current evidence citations. [Exact final evidence](evidence/zmr-live-29ddb62/README.md). Broader memory-release benchmarks remain separate.
+Live tests: the V5 hero and optimized WebP render on `zenod.dev`; title, responsive width, pricing truth and fail-closed signup state pass. The prior filing repair and final boundary recall remain passed 3/3. [Landing rollout receipt](evidence/zenod-v5-landing-rollout-2026-09-07/README.md); [memory evidence](evidence/zmr-live-29ddb62/README.md).
 Next action: use this leaf for the next authorized upgrade; no further deployment requested.
 
 ## Execution Cursor
 
-Last attempted: deploy reviewed PR #1226 after CI/publication, verify runtime and repeat the affected live question.
-Result: actual29ddb62 verified; three fresh recalls passed. Bounded deployment work complete.
+Last attempted: deploy reviewed V5 landing-page PR #1228 after CI/publication, verify runtime and inspect the live desktop/mobile surface.
+Result: actual `006587b8` verified; public site, exact health SHA, fail-closed signup and responsive layout passed. Bounded deployment work complete.
 Execution status: complete for this upgrade
 Waiting on: no production action; durable receipt integration only.
 Approved work: current bounded upgrade completed; future upgrades follow applicable authorization and the procedure below.
