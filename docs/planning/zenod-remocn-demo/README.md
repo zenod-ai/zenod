@@ -63,3 +63,9 @@ npx remotion render ZenodContextStory renders/zenod-context-story-v3.mp4 --concu
 ## Personal Alexandria cut — current
 
 `renders/zenod-personal-alexandria.mp4`: 133 seconds. The context is yours / The context matters / Keep the raw / Hire a smart librarian / Test Zenod free. Ends with the user-requested personal Alexandria CTA and Obsidian-compatible, Karpathy-inspired wiki positioning. Preview: `review-story.html`. All narration tracks fit their scene durations; changed-source TypeScript and ESLint checks pass. No publishing or signup configuration changed.
+
+### Approved baseline and task-state follow-up
+
+Commit `836941b` preserves the approved film before the task-state addition. The current write-back scene adds two illustrative tasks to state memory: check local house-price data and compare mortgage scenarios. Timing and narration remain unchanged. Validation: changed-source TypeScript/ESLint and rendered write-back frame inspection.
+
+The follow-up also changes retrieval to “Please retrieve the tasks I laid out in yesterday’s keynote.” Result, original-recording reference, narration and script match that request. This deliberately broadens capture examples beyond the opening WhatsApp house voice note.

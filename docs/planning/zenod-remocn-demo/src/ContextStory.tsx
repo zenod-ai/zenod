@@ -467,8 +467,7 @@ function Digest() {
 }
 function Retrieve() {
   const f = useCurrentFrame();
-  const prompt =
-    "Use yesterday’s house note in Zenod. Analyse interest rates and house-price changes over the last 50 years.";
+  const prompt = "Please retrieve the tasks I laid out in yesterday’s keynote.";
   const count = Math.floor(
     interpolate(f, [85, 205], [0, prompt.length], clamp),
   );
@@ -476,7 +475,7 @@ function Retrieve() {
     <>
       <Flow active={2} />
       <Shell label="Codex">
-        <div style={{ fontSize: 30, lineHeight: 1.4, minHeight: 95 }}>
+        <div style={{ fontSize: 30, lineHeight: 1.4, minHeight: 55 }}>
           {prompt.slice(0, count)}
           {f < 207 && <span style={{ color: C.lime }}>▎</span>}
         </div>
@@ -497,12 +496,15 @@ function Retrieve() {
           </Appear>
         ) : (
           <Appear at={290}>
-            <Source />
+            <div style={{ fontSize: 23, color: C.lime }}>
+              ↗ Yesterday’s keynote · Original recording
+            </div>
             <div style={{ fontSize: 27, marginTop: 16, lineHeight: 1.35 }}>
-              “Here’s why I think I should buy this house…”
+              □ Check local house-price data
+              <br />□ Compare mortgage scenarios
             </div>
             <div style={{ fontSize: 22, color: "#b7c2ae", marginTop: 21 }}>
-              I’ll use your context to frame the comparison.
+              Found your tasks, with the context behind them.
             </div>
           </Appear>
         )}
@@ -525,7 +527,7 @@ function Write() {
         LATER · AFTER THE ANALYSIS
       </div>
       <div style={{ fontSize: 32 }}>
-        “Save the findings and sources to Zenod.”
+        “Save the findings, sources, and next steps to Zenod.”
       </div>
       <Appear at={160}>
         <div
@@ -555,7 +557,11 @@ function Write() {
           opacity: ramp(f, 210, 235),
         }}
       >
-        Ready for the next conversation.
+        <div>✓ 2 tasks added to state memory</div>
+        <div style={{ fontSize: 19, color: C.lime, marginTop: 12 }}>
+          □ Check local house-price data &nbsp; · &nbsp; □ Compare mortgage
+          scenarios
+        </div>
       </div>
     </Shell>
   );

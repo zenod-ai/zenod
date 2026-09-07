@@ -48,8 +48,8 @@
     "key": "retrieve",
     "seconds": 16,
     "title": "Pick up where you left off.",
-    "voice": "Later, bring that thinking into whichever agent you\u2019re working with. Ask Codex to use yesterday\u2019s house note, and analyse interest rates and house prices over the last fifty years.",
-    "audioSeconds": 9.977,
+    "voice": "Later, pick up the tasks you laid out in yesterday\u2019s keynote. Zenod retrieves the original context, so your agent knows what you meant, and what you planned to do next.",
+    "audioSeconds": 9.605,
     "start": 1620,
     "frames": 480
   },

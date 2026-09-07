@@ -24,7 +24,9 @@ Zenod preserves the original and organizes the useful context into a linked pers
 
 ## 54s — Pick up where you left off.
 
-Later, bring that thinking into whichever agent you’re working with. Ask Codex to use yesterday’s house note, and analyse interest rates and house prices over the last fifty years.
+Later, pick up the tasks you laid out in yesterday’s keynote. Zenod retrieves the original context, so your agent knows what you meant, and what you planned to do next.
+
+On screen: “Please retrieve the tasks I laid out in yesterday’s keynote.” Two tasks appear with a reference to the original keynote recording.
 
 ## 70s — What you learn becomes context, too.
 
@@ -41,3 +43,6 @@ You keep the library. You can fire the librarian. When a better librarian comes 
 ## 118s — Start your personal Alexandria.
 
 Your agents change. Your context stays. Test Zenod free. Start curating your personal Alexandria of ideas. An Obsidian compatible wiki, inspired by Karpathy.
+### State-memory wink (70–82s)
+
+The write-back prompt now says “Save the findings, sources, and next steps to Zenod.” The receipt adds “2 tasks added to state memory”, with “Check local house-price data” and “Compare mortgage scenarios”. These are illustrative follow-up tasks, not actual tasks created in a user's vault.
