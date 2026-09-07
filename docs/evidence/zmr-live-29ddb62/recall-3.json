@@ -1,0 +1,110 @@
+{
+  "correlationId": "test_bec9eb86f5c7468794baf7451d1d284b",
+  "testRunId": "zmr-production-29ddb62-20260907",
+  "surface": "web",
+  "conversationKey": "zmr-production-29ddb62-boundary-3",
+  "conversationId": "web:zmr-production-29ddb62-boundary-3",
+  "status": "ok",
+  "text": "Latest supported memory reports as of 2026-09-07 (Projects/Zenod.md):\n- User report: \"Jordi's deployment boundary for the Zenod repository, 7 September 2026: this repository is for live Zenod production images, plus the default Phylax companion for WhatsApp when appropriate, and nothing else.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Epaminon, Outbound, Callisthenes, x-mcp and other independent agents should have their own repositories and deployment lifecycles.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Until that separation is done, keep their automatic deployments from this repository disabled.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Preserve their running services and data.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Keep Zenod upgrades small, explicit and easy to undo.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\nMemory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.",
+  "sources": [
+    {
+      "path": "Log/2026-09-06.md#^e-7c5eb9",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9"
+    }
+  ],
+  "toolEvents": [
+    {
+      "phase": "start",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+    },
+    {
+      "phase": "start",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi Zenod deployment scope”"
+    },
+    {
+      "phase": "end",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi Zenod deployment scope”"
+    },
+    {
+      "phase": "end",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Log/2026-09-06.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Log/2026-09-06.md"
+    }
+  ],
+  "audit": {
+    "correlationId": "test_bec9eb86f5c7468794baf7451d1d284b",
+    "testRunId": "zmr-production-29ddb62-20260907",
+    "surface": "web",
+    "conversationKey": "zmr-production-29ddb62-boundary-3",
+    "conversationId": "web:zmr-production-29ddb62-boundary-3",
+    "prompt": "Read-only: What is Jordi's deployment scope for the Zenod repository? Which services should be deployed from it, and what should happen to the other agents? Read the saved source and cite it.",
+    "reply": "Latest supported memory reports as of 2026-09-07 (Projects/Zenod.md):\n- User report: \"Jordi's deployment boundary for the Zenod repository, 7 September 2026: this repository is for live Zenod production images, plus the default Phylax companion for WhatsApp when appropriate, and nothing else.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Epaminon, Outbound, Callisthenes, x-mcp and other independent agents should have their own repositories and deployment lifecycles.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Until that separation is done, keep their automatic deployments from this repository disabled.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Preserve their running services and data.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Keep Zenod upgrades small, explicit and easy to undo.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\nMemory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.",
+    "sources": [
+      {
+        "path": "Log/2026-09-06.md#^e-7c5eb9",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9"
+      }
+    ],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+      },
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi Zenod deployment scope”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi Zenod deployment scope”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Log/2026-09-06.md"
+      }
+    ],
+    "status": "ok",
+    "at": "2026-09-07T00:18:42.106Z"
+  },
+  "evidence": [
+    {
+      "kind": "chat_audit",
+      "id": "test_bec9eb86f5c7468794baf7451d1d284b",
+      "correlationId": "test_bec9eb86f5c7468794baf7451d1d284b",
+      "conversationId": "web:zmr-production-29ddb62-boundary-3"
+    }
+  ]
+}

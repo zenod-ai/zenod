@@ -14,7 +14,7 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 merged; production remains 4c6ca14 pending publication
+Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 deployed; final affected recall checks 3/3 pass
 Planner: Jordi + ZMR-release-planner
 Worker: /root/zmr_8_chat_review — verified facts on ordinary reads; /root/zmr_deploy_audit — sole production operator
 Tester: parent direct live MCP acceptance; independent agent review
@@ -87,16 +87,16 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: 4c6ca14 live; reviewed source-selection repair 29ddb62 publishing
-Last verified: 2026-09-07 00:09 UTC
+Phase: bounded production upgrade and observed repair loop complete; broader release acceptance remains open
+Last verified: 2026-09-07 00:19 UTC
 Integration target: main
-Fresh base commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 (PR #1226)
+Fresh base commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 (PR #1226), actual deployed source
 Pinned-base rule: pin reconciled main at dispatch; re-pin after integrated waves.
-Dispatch condition: ZMR-1–7 integrated; ZMR-8 bounded production repair authorized.
-Next action: sole operator waits for exact image publication, deploys once, verifies actual task/OCI/health; parent repeats three fresh live boundary recalls.
-Blockers: 4c6ca14 live recall passed 2/3; one answer skipped the highest-ranked current fact page. PR #1226 reuses verified fact projection on structured top search hits. Exact head c3b2612 independently approved; CI 34067932729, 95 core tests, 20 server tests and typecheck passed. Not yet deployed.
+Dispatch condition: ZMR-1–7 integrated; no further production repair dispatched after the passing affected checks.
+Next action: finish the durable handoff; retain broader ZMR-8 acceptance and ZMR-9/10 follow-ups without starting another deployment loop.
+Blockers: none for the bounded upgrade. Full original release benchmarks and human SHIP acceptance are not claimed complete.
 
-Live receipt: source 4c6ca14aaf2d83ef0330e894627d44cba320fec3, image sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885 verified 2026-09-06 23:31:49 UTC. Queue empty; sibling triggers disabled; volume, configuration and private Phylax preserved. [Exact live evidence](evidence/zmr-live-4c6ca14/README.md). Acceptance is not finalized.
+Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0414121a6912ace825f3cdf07fc5f508944afc3cafec7352660db32a83042, actual task/OCI/health verified after update completed 2026-09-07 00:17:23 UTC. All three fresh boundary recalls passed and cited the current saved evidence. Filing had passed on c5da66f and remains included. [Exact final evidence](evidence/zmr-live-29ddb62/README.md). Original rollback and verified backup retained; no storage migration.
 
 ## Execution Cursor
 
@@ -108,11 +108,11 @@ Historical queued repair receipt (completed at 22:15:07.905 UTC): reviewed/CI-gr
 
 
 Last attempted: deploy tested public candidate with preserved config and verified recovery, then test real MCP capture and recall.
-Result: 4c6ca14 deployed; filing preserved; boundary recall passed 2/3. Reviewed next repair 29ddb62 merged and awaiting publication.
-Execution status: active
-Waiting on: exact 29ddb62 publication; /root/zmr_deploy_audit is active sole operator; parent runs live MCP afterward.
+Result: 29ddb62 deployed and verified; all three fresh boundary recalls passed. Bounded repair loop complete; broader release acceptance remains open.
+Execution status: bounded upgrade complete; broader acceptance pending
+Waiting on: no production action or worker; final durable receipt integration only.
 Approved work: this production upgrade, bounded live memory tests and fixes, and reusable undo procedure are explicitly authorized. Preserve data/configuration; no provider overhaul, billing/signup change or destructive restore. Human SHIP acceptance remains separate.
-Next action: deploy published 29ddb62 through the sole operator, then repeat three fresh boundary recalls.
+Next action: integrate final evidence; retain named broader acceptance limitations and defer ZMR-9/10 until human SHIP.
 
 
 

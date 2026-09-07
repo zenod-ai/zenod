@@ -18,4 +18,13 @@ Zenod currently serves one user. For this release Jordi explicitly prefers deplo
 
 Candidate392d058 has no startup/storage migration. Raw capture evidence stays immutable; meaning changes are additive metadata and bounded section updates on subsequent captures. This is not a promise of zero risk: older code may not preserve new temporal semantics during future composition. Code rollback keeps existing volumes; data restore is a separate recovery operation into a new volume, never an overwrite of the live one.
 
-Deployment evidence and exact rollback command will be linked here after verified rollout. No production or live acceptance claim is made by this draft.
+Deployment, backup and undo are recorded in [Deployments and upgrades](../EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md). The final source-selection retest is recorded in [29ddb62 evidence](../evidence/zmr-live-29ddb62/README.md). This proves the bounded production repair, not every original release benchmark.
+
+## Production repair lessons — 2026-09-07
+
+- Our own main merges triggered four legacy sibling builds because their automatic deployment bindings had no path filters. The queue was real, not stale deployment history. Pause those unrelated triggers and remove verified waiting jobs through the supported queue API; retain live services and data. The permanent scope is Zenod plus appropriate default Phylax only.
+- A successful first classification must survive failure of optional wider-catalog refinement. Initial classification failure still uses the existing retry/Inbox path.
+- Search ranking, page selection and current-fact projection are separate failure points. A correct highest-ranked hit can still be skipped by the model; verified relevant facts now use the same bounded projection from structured search hits and ordinary page reads. Search snippets remain untrusted, and snapshot/source verification remains required.
+- Repeat an observed failing question in independent fresh conversations. The first retrieval fix passed two of three and was not called complete. The next repair passed all three; those observations do not prove universal recall or all-language temporal interpretation.
+- Completed workers require explicit follow-up dispatch for the next task. The manager must advance review, integration and deployment after handoffs, rather than waiting for another user status request.
+- Keep deployment upgrades simple: publish the reviewed image, use the existing helper once, verify actual runtime and affected live behavior, retain the recovery receipt. Reuse backup proof within the same code-only repair rollout; do not repeatedly pause production or mix in unrelated cleanup.
