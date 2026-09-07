@@ -1,4 +1,7 @@
 import * as React from "react";
+import { SlotText } from "slot-text/react";
+import { chromatic } from "slot-text";
+import "slot-text/style.css";
 import {
   ArrowUpRightIcon,
   BookOpenIcon,
@@ -174,6 +177,19 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
   );
 }
 
+function StarLink() {
+  const [active, setActive] = React.useState(false);
+  return (
+    <a className="v5-button v5-star-link" href={GITHUB_URL} target="_blank" rel="noreferrer"
+      aria-label="Star Zenod on GitHub"
+      onMouseEnter={() => setActive(true)} onMouseLeave={() => setActive(false)}
+      onFocus={() => setActive(true)} onBlur={() => setActive(false)}>
+      <GithubIcon />
+      <SlotText text={active ? "Give us a star" : "Star on GitHub"} options={{ rollBy: "word", color: chromatic(), direction: "up", duration: 320, stagger: 40, bounce: 0.08 }} />
+    </a>
+  );
+}
+
 function SectionTitle({
   no,
   kicker,
@@ -259,6 +275,36 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
 
 const verbs = ["contribute to.", "enrich.", "access.", "cultivate."];
 
+function MemoryRoll() {
+  const [index, setIndex] = React.useState(0);
+  React.useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const sync = () => {
+      clearInterval(timer);
+      if (!motion.matches && !document.hidden) {
+        timer = setInterval(() => setIndex((value) => (value + 1) % verbs.length), 3200);
+      }
+    };
+    sync();
+    motion.addEventListener("change", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      clearInterval(timer);
+      motion.removeEventListener("change", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
+  return (
+    <div className="v5-verb-line" aria-label="Your memory, yours to contribute to, enrich, access, and cultivate.">
+      <span aria-hidden="true">Your memory, yours to</span>
+      <span className="v5-memory-roll" aria-hidden="true">
+        <SlotText text={verbs[index]} options={{ rollBy: "word", color: chromatic(), colorFade: 650, direction: "up", duration: 500, stagger: 55, bounce: 0.12, exitOffset: 0 }} />
+      </span>
+    </div>
+  );
+}
+
 function LandingPage({ customer }: { customer: CustomerJourney }) {
   return (
     <div className="v5-site">
@@ -287,23 +333,9 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
                 <a className="v5-button v5-button-primary" href="#start">
                   Try Zenod free
                 </a>
-                <a
-                  className="v5-button"
-                  href={GITHUB_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <GithubIcon /> Star on GitHub
-                </a>
+                <StarLink />
               </div>
-              <div className="v5-verb-line">
-                <span>Your memory, yours to</span>
-                <span className="v5-verb-window" aria-label={verbs.join(" ")}>
-                  {verbs.map((verb) => (
-                    <span key={verb}>{verb}</span>
-                  ))}
-                </span>
-              </div>
+              <MemoryRoll />
             </div>
           </div>
           <div className="v5-identity">
