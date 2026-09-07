@@ -1,6 +1,6 @@
 # Zenod deployments and upgrades
 
-Status: active — filing repair live, deployment scope enforced; retrieval follow-up active
+Status: current — bounded production upgrade verified; deployment scope enforced
 Updated: 2026-09-06
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
@@ -11,7 +11,7 @@ Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Additional root rationale: n/a
 Integration branch: main
 Active spine steward: ZMR-delivery-manager
-Last reconciled commit: 500c28d documentation base; deployed product 392d058a599bdf5fc69d17157282b8f9154dcf28
+Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 running
 
 ## Mission
 
@@ -21,22 +21,23 @@ Keep one simple, supported upgrade and undo process. Reuse Dokploy and the exist
 
 ## Current State
 
-Phase: public filing repair verified at 2026-09-06 22:36:24.878 UTC; deployment queue empty and legacy triggers paused.
-Running source: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502`.
-Running image: `ghcr.io/zenod-ai/zenod@sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`.
-Scope: public Zenod only; 52 non-SHA environment entries, mounts and private Phylax unchanged. No storage migration.
-Recovery: fresh VPS archive restored and verified; independent Mac copy checksum matches. Encrypted cloud upload and full decrypted download comparison have also completed successfully.
-Live tests: deployment-boundary filing succeeded (one topic, zero uncertain/pending, revision c906053f). Ordinary recall still selected obsolete page-body scope despite correct new memoryFacts; a bounded retrieval fix is assigned. Overall memory acceptance has not passed.
-Next action: review the verified-fact read correction, deploy only the affected Zenod image and repeat the boundary recall.
+Phase: bounded production upgrade complete; final affected live checks passed.
+Running source: `29ddb62d349d9f3bd9c5b471848a4ef775155827`.
+Running image: `ghcr.io/zenod-ai/zenod@sha256:fab0414121a6912ace825f3cdf07fc5f508944afc3cafec7352660db32a83042`.
+Verified: Swarm update completed 2026-09-07 00:17:23 UTC; actual container 572e253d41a8, OCI revision and public health match.
+Scope: public Zenod only; private Phylax unchanged. No migration or data restoration.
+Recovery: verified VPS archive, independent checksum-matched Mac copy, encrypted cloud upload and decrypted download comparison complete; original rollback receipt retained.
+Live tests: filing repair passed; final boundary recall passed 3/3 fresh conversations with current evidence citations. [Exact final evidence](evidence/zmr-live-29ddb62/README.md). Broader memory-release benchmarks remain separate.
+Next action: use this leaf for the next authorized upgrade; no further deployment requested.
 
 ## Execution Cursor
 
-Last attempted: deploy approved image, verify actual running version and exercise authenticated live MCP capture/retrieval.
-Result: deployment succeeded; raw learning survived, but filing and natural-query recall need repair.
-Execution status: active
-Waiting on: bounded ordinary-page fact retrieval correction; deployment queue is empty and no new user decision is required.
-Approved work: bounded production testing/fixes and easy code rollback. Optional small operator parameterization only if convenient; a generic CLI is not a release blocker.
-Next action: review the verified-fact read correction, deploy only the affected Zenod image and repeat the boundary recall.
+Last attempted: deploy reviewed PR #1226 after CI/publication, verify runtime and repeat the affected live question.
+Result: actual29ddb62 verified; three fresh recalls passed. Bounded deployment work complete.
+Execution status: complete for this upgrade
+Waiting on: no production action; durable receipt integration only.
+Approved work: current bounded upgrade completed; future upgrades follow applicable authorization and the procedure below.
+Next action: retain recovery receipt and disabled unrelated automatic deployments; repository separation and broader acceptance remain follow-ups.
 
 Prior repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` was verified live on `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Retained job 10083 completed; the queue was empty (zero active/waiting) at verification. Actual container `0ba7100e3ec6` OCI revision matched, with one running task, completed Swarm update, health OK, unchanged mount and 52 non-SHA environment entries. Private Phylax stayed on `sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e`. See the correction below for the cause and permanent trigger pause.
 
@@ -115,8 +116,10 @@ Move Epaminon, Outbound, Callisthenes, x-mcp and other independent agents into t
 
 ## 2026-09-07 — live filing proof and remaining recall issue
 
-Optional-refinement fix #1223 is live as `c5da66f`, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`. Actual container `5c970815fc35` OCI, task and health verified; mount, 52 other environment entries and private image preserved. Inventory across six Dokploy projects found only the four known Zenod-source bindings, all with automatic deployment disabled.
+Historical filing verification: optional-refinement fix #1223 was deployed as `c5da66f`, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`. Actual container `5c970815fc35` OCI, task and health verified; mount, 52 other environment entries and private image preserved. Inventory across six Dokploy projects found only the four known Zenod-source bindings, all with automatic deployment disabled.
 
 Live filing job `31c1d895-d5bb-4b06-9129-65bf9b109796` succeeded: one topic, zero uncertain/pending, `Projects/Zenod.md`, revision `c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba`, evidence `Log/2026-09-06.md#^e-7c5eb9`. The one classification call succeeded; this live run did not exercise fallback failure, which is covered by deterministic regression tests.
 
 The subsequent open-ended recall still selected old page text and returned obsolete Herald scope. Direct read verified five correct new `memoryFacts` on the saved page; ordinary `read_note` omits frontmatter and the 10,758-character page places its fact updates late. A bounded reuse of verified-fact projection on ordinary meaning-page reads is assigned under #1196; exact/historical scope must remain intact. No full memory-acceptance claim follows from successful filing.
+
+Final operator preservation receipt: all 52 non-GIT_SHA environment entries and mounts match the baseline; private Phylax remains on sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e. Queue has zero active/waiting/delayed/prioritized jobs. Fresh API reads confirm epaminon, outbound, callisthenes and x-mcp automatic deployment disabled. No additional backup pause, cleanup or unrelated restart. Protected runtime receipt: `/Users/jordi/.local/state/zenod-zmr-production-20260906/public-service.29ddb62.json`.

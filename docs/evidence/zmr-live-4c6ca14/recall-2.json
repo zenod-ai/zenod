@@ -1,0 +1,164 @@
+{
+  "correlationId": "test_14da00f389194c739543df22a0821af9",
+  "testRunId": "zmr-production-4c6ca14-20260907",
+  "surface": "web",
+  "conversationKey": "zmr-production-4c6ca14-boundary-2",
+  "conversationId": "web:zmr-production-4c6ca14-boundary-2",
+  "status": "ok",
+  "text": "**Jordi's deployment scope for the Zenod repository (zenod-ai/zenod) is limited to Zenod itself as the core librarian/Pinax unit.** Other agents in the suite are deployed separately with their own surfaces and do not run from the Zenod repo.\n\n**Saved source (read directly):**\n- `Projects/Zenod/Agent Suite Architecture.md` (current revision c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba) states:\n\n  > \"Zenod serves as the pure Pinax and entry-retrieval unit that controls writes into the repo/brain, preserves evidence, maintains the semantic Pinax and retrieves context for any target repository… A Zenod instance builds a personal-brain or project knowledge base around that repo and answers questions through its semantic index.\"\n\n  The note then defines the separation:\n  - Nearchus/Archus (backlog miner/planner) — separate deploy target (`archus.zenod.dev`), MCP server, limited to the central backlog repo (AlfaBlok/obsidian-brain) only.\n  - Epaminon (execution commander) — separate unit for running approved work, code changes, and product-repo mutations.\n  - Nectary and Mail — likewise distinct functional units, each with their own MCP surfaces.\n\nThe post-#411/#412 C1 boundary invariant (also recorded in the same note and cross-referenced in `Log/2026-07-02.md`) reinforces that product-repo writes (zenod-ai/zenod and similar) route exclusively through Epaminon/Codex execution; Archus is barred from them.\n\nThus only the Zenod core (librarian/index) is in-scope for the Zenod repository; the remaining agents are deployed as independent services.",
+  "sources": [
+    {
+      "path": "Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md"
+    },
+    {
+      "path": "Projects/Zenod/Agent Suite Architecture.md",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md"
+    }
+  ],
+  "toolEvents": [
+    {
+      "phase": "start",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+    },
+    {
+      "phase": "end",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+    },
+    {
+      "phase": "error",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+    }
+  ],
+  "audit": {
+    "correlationId": "test_14da00f389194c739543df22a0821af9",
+    "testRunId": "zmr-production-4c6ca14-20260907",
+    "surface": "web",
+    "conversationKey": "zmr-production-4c6ca14-boundary-2",
+    "conversationId": "web:zmr-production-4c6ca14-boundary-2",
+    "prompt": "Read-only: What is Jordi's deployment scope for the Zenod repository? Which services should be deployed from it, and what should happen to the other agents? Read the saved source and cite it.",
+    "reply": "**Jordi's deployment scope for the Zenod repository (zenod-ai/zenod) is limited to Zenod itself as the core librarian/Pinax unit.** Other agents in the suite are deployed separately with their own surfaces and do not run from the Zenod repo.\n\n**Saved source (read directly):**\n- `Projects/Zenod/Agent Suite Architecture.md` (current revision c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba) states:\n\n  > \"Zenod serves as the pure Pinax and entry-retrieval unit that controls writes into the repo/brain, preserves evidence, maintains the semantic Pinax and retrieves context for any target repository… A Zenod instance builds a personal-brain or project knowledge base around that repo and answers questions through its semantic index.\"\n\n  The note then defines the separation:\n  - Nearchus/Archus (backlog miner/planner) — separate deploy target (`archus.zenod.dev`), MCP server, limited to the central backlog repo (AlfaBlok/obsidian-brain) only.\n  - Epaminon (execution commander) — separate unit for running approved work, code changes, and product-repo mutations.\n  - Nectary and Mail — likewise distinct functional units, each with their own MCP surfaces.\n\nThe post-#411/#412 C1 boundary invariant (also recorded in the same note and cross-referenced in `Log/2026-07-02.md`) reinforces that product-repo writes (zenod-ai/zenod and similar) route exclusively through Epaminon/Codex execution; Archus is barred from them.\n\nThus only the Zenod core (librarian/index) is in-scope for the Zenod repository; the remaining agents are deployed as independent services.",
+    "sources": [
+      {
+        "path": "Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Hosted%20Zenod%20(M3)%20Multi-Tenant%20Plan.md"
+      },
+      {
+        "path": "Projects/Zenod/Agent Suite Architecture.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md"
+      }
+    ],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository services agents”"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "error",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+      }
+    ],
+    "status": "ok",
+    "at": "2026-09-06T23:33:25.376Z"
+  },
+  "evidence": [
+    {
+      "kind": "chat_audit",
+      "id": "test_14da00f389194c739543df22a0821af9",
+      "correlationId": "test_14da00f389194c739543df22a0821af9",
+      "conversationId": "web:zmr-production-4c6ca14-boundary-2"
+    }
+  ]
+}

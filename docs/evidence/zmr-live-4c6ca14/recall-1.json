@@ -1,0 +1,192 @@
+{
+  "correlationId": "test_c5572b3cb76e4fc6916be33586aee889",
+  "testRunId": "zmr-production-4c6ca14-20260907",
+  "surface": "web",
+  "conversationKey": "zmr-production-4c6ca14-boundary-1",
+  "conversationId": "web:zmr-production-4c6ca14-boundary-1",
+  "status": "ok",
+  "text": "Latest supported memory reports as of 2026-09-06 (Projects/Zenod.md):\n- User report: \"Jordi's deployment boundary for the Zenod repository, 7 September 2026: this repository is for live Zenod production images, plus the default Phylax companion for WhatsApp when appropriate, and nothing else.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Epaminon, Outbound, Callisthenes, x-mcp and other independent agents should have their own repositories and deployment lifecycles.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Until that separation is done, keep their automatic deployments from this repository disabled.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Preserve their running services and data.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Keep Zenod upgrades small, explicit and easy to undo.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\nMemory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.",
+  "sources": [
+    {
+      "path": "Log/2026-09-06.md#^e-7c5eb9",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9"
+    },
+    {
+      "path": "Projects/Zenod.md",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+    },
+    {
+      "path": "Projects/Zenod/Zenod Scope.md",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Zenod%20Scope.md",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Zenod%20Scope.md"
+    },
+    {
+      "path": "Projects/Zenod/Agent Suite Architecture.md",
+      "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md",
+      "provider": "github",
+      "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+      "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md"
+    }
+  ],
+  "toolEvents": [
+    {
+      "phase": "start",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi deployment scope Zenod repository”"
+    },
+    {
+      "phase": "start",
+      "tool": "search_vault",
+      "label": "Searching the vault for “deployment scope Zenod services agents”"
+    },
+    {
+      "phase": "end",
+      "tool": "search_vault",
+      "label": "Searching the vault for “deployment scope Zenod services agents”"
+    },
+    {
+      "phase": "end",
+      "tool": "search_vault",
+      "label": "Searching the vault for “Jordi deployment scope Zenod repository”"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod.md"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Zenod Scope.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Zenod Scope.md"
+    },
+    {
+      "phase": "start",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+    },
+    {
+      "phase": "end",
+      "tool": "read_note",
+      "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+    }
+  ],
+  "audit": {
+    "correlationId": "test_c5572b3cb76e4fc6916be33586aee889",
+    "testRunId": "zmr-production-4c6ca14-20260907",
+    "surface": "web",
+    "conversationKey": "zmr-production-4c6ca14-boundary-1",
+    "conversationId": "web:zmr-production-4c6ca14-boundary-1",
+    "prompt": "Read-only: What is Jordi's deployment scope for the Zenod repository? Which services should be deployed from it, and what should happen to the other agents? Read the saved source and cite it.",
+    "reply": "Latest supported memory reports as of 2026-09-06 (Projects/Zenod.md):\n- User report: \"Jordi's deployment boundary for the Zenod repository, 7 September 2026: this repository is for live Zenod production images, plus the default Phylax companion for WhatsApp when appropriate, and nothing else.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Epaminon, Outbound, Callisthenes, x-mcp and other independent agents should have their own repositories and deployment lifecycles.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Until that separation is done, keep their automatic deployments from this repository disabled.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Preserve their running services and data.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\n- User report: \"Keep Zenod upgrades small, explicit and easy to undo.\" [Log/2026-09-06.md#^e-7c5eb9](https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9). Effective: unknown; evidence captured: 2026-09-06T22:37:00. Verification scope: unknown.\nMemory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.",
+    "sources": [
+      {
+        "path": "Log/2026-09-06.md#^e-7c5eb9",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Log/2026-09-06.md#%5Ee-7c5eb9"
+      },
+      {
+        "path": "Projects/Zenod.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod.md"
+      },
+      {
+        "path": "Projects/Zenod/Zenod Scope.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Zenod%20Scope.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Zenod%20Scope.md"
+      },
+      {
+        "path": "Projects/Zenod/Agent Suite Architecture.md",
+        "url": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md",
+        "provider": "github",
+        "revisionId": "c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba",
+        "githubUrl": "https://github.com/AlfaBlok/obsidian-brain/blob/c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba/Projects/Zenod/Agent%20Suite%20Architecture.md"
+      }
+    ],
+    "toolEvents": [
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository”"
+      },
+      {
+        "phase": "start",
+        "tool": "search_vault",
+        "label": "Searching the vault for “deployment scope Zenod services agents”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “deployment scope Zenod services agents”"
+      },
+      {
+        "phase": "end",
+        "tool": "search_vault",
+        "label": "Searching the vault for “Jordi deployment scope Zenod repository”"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Zenod Scope.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Zenod Scope.md"
+      },
+      {
+        "phase": "start",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+      },
+      {
+        "phase": "end",
+        "tool": "read_note",
+        "label": "Reading Projects/Zenod/Agent Suite Architecture.md"
+      }
+    ],
+    "status": "ok",
+    "at": "2026-09-06T23:32:57.611Z"
+  },
+  "evidence": [
+    {
+      "kind": "chat_audit",
+      "id": "test_c5572b3cb76e4fc6916be33586aee889",
+      "correlationId": "test_c5572b3cb76e4fc6916be33586aee889",
+      "conversationId": "web:zmr-production-4c6ca14-boundary-1"
+    }
+  ]
+}
