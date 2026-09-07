@@ -11,7 +11,7 @@ Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Additional root rationale: n/a
 Integration branch: main
 Active spine steward: ZMR-delivery-manager
-Last reconciled commit: 500c28d documentation base; deployed product 392d058a599bdf5fc69d17157282b8f9154dcf28
+Last reconciled commit: 29ddb62 source merged; 4c6ca14 running
 
 ## Mission
 
@@ -21,24 +21,23 @@ Keep one simple, supported upgrade and undo process. Reuse Dokploy and the exist
 
 ## Current State
 
-Latest verification (2026-09-06 23:33 UTC): **4c6ca14aaf2d83ef0330e894627d44cba320fec3 is live; upgrade acceptance is NOT finalized.** Actual task, OCI and health match immutable image sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885. Queue empty; unrelated triggers disabled; configuration, volume and private Phylax preserved. Three fresh boundary recalls passed 2/3: one skipped the current fact page and answered from older architecture notes. Worker /root/zmr_8_chat_review is investigating source selection; no further image switch requested. This receipt supersedes the historical c5da66f cursor below. See [exact evidence](evidence/zmr-live-4c6ca14/README.md).
-
-Phase: public filing repair verified at 2026-09-06 22:36:24.878 UTC; deployment queue empty and legacy triggers paused.
-Running source: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502`.
-Running image: `ghcr.io/zenod-ai/zenod@sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`.
-Scope: public Zenod only; 52 non-SHA environment entries, mounts and private Phylax unchanged. No storage migration.
-Recovery: fresh VPS archive restored and verified; independent Mac copy checksum matches. Encrypted cloud upload and full decrypted download comparison have also completed successfully.
-Live tests: deployment-boundary filing succeeded (one topic, zero uncertain/pending, revision c906053f). Ordinary recall still selected obsolete page-body scope despite correct new memoryFacts; a bounded retrieval fix is assigned. Overall memory acceptance has not passed.
-Next action: review the verified-fact read correction, deploy only the affected Zenod image and repeat the boundary recall.
+Phase: 4c6ca14 live; approved source-selection repair 29ddb62 awaiting publication.
+Running source: `4c6ca14aaf2d83ef0330e894627d44cba320fec3`.
+Running image: `ghcr.io/zenod-ai/zenod@sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885`.
+Verified: 2026-09-06 23:31:49 UTC, actual task/OCI/health match.
+Scope: public Zenod only; 52 other environment entries, mount and private Phylax unchanged. Queue empty; four sibling automatic deployment triggers disabled. No migration.
+Recovery: verified VPS archive, independent checksum-matched Mac copy, encrypted cloud upload and decrypted download comparison complete; original rollback receipt retained.
+Live tests: filing passed; boundary recall passed 2/3 fresh conversations. One skipped the current fact page despite search ranking it first. [Exact evidence](evidence/zmr-live-4c6ca14/README.md). Acceptance not finalized.
+Next action: sole operator publishes/deploys reviewed 29ddb62 once; parent repeats affected MCP tests.
 
 ## Execution Cursor
 
-Last attempted: deploy approved image, verify actual running version and exercise authenticated live MCP capture/retrieval.
-Result: deployment succeeded; raw learning survived, but filing and natural-query recall need repair.
+Last attempted: reviewed PR #1226 merged as 29ddb62 after independent approval and CI success.
+Result: source-selection fix ready; production remains 4c6ca14 until actual runtime proof.
 Execution status: active
-Waiting on: bounded ordinary-page fact retrieval correction; deployment queue is empty and no new user decision is required.
-Approved work: bounded production testing/fixes and easy code rollback. Optional small operator parameterization only if convenient; a generic CLI is not a release blocker.
-Next action: review the verified-fact read correction, deploy only the affected Zenod image and repeat the boundary recall.
+Waiting on: image publication, owned by /root/zmr_deploy_audit through deployment verification.
+Approved work: bounded production testing/fixes and easy code rollback; reuse current recovery receipt.
+Next action: exact immutable image, one deployment, actual task/OCI/health/configuration proof and three fresh recall tests.
 
 Prior repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` was verified live on `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Retained job 10083 completed; the queue was empty (zero active/waiting) at verification. Actual container `0ba7100e3ec6` OCI revision matched, with one running task, completed Swarm update, health OK, unchanged mount and 52 non-SHA environment entries. Private Phylax stayed on `sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e`. See the correction below for the cause and permanent trigger pause.
 
@@ -117,7 +116,7 @@ Move Epaminon, Outbound, Callisthenes, x-mcp and other independent agents into t
 
 ## 2026-09-07 — live filing proof and remaining recall issue
 
-Optional-refinement fix #1223 is live as `c5da66f`, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`. Actual container `5c970815fc35` OCI, task and health verified; mount, 52 other environment entries and private image preserved. Inventory across six Dokploy projects found only the four known Zenod-source bindings, all with automatic deployment disabled.
+Historical filing verification: optional-refinement fix #1223 was deployed as `c5da66f`, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`. Actual container `5c970815fc35` OCI, task and health verified; mount, 52 other environment entries and private image preserved. Inventory across six Dokploy projects found only the four known Zenod-source bindings, all with automatic deployment disabled.
 
 Live filing job `31c1d895-d5bb-4b06-9129-65bf9b109796` succeeded: one topic, zero uncertain/pending, `Projects/Zenod.md`, revision `c906053fe23f8fb34d2c7ef154cf3ce6c9cdb5ba`, evidence `Log/2026-09-06.md#^e-7c5eb9`. The one classification call succeeded; this live run did not exercise fallback failure, which is covered by deterministic regression tests.
 

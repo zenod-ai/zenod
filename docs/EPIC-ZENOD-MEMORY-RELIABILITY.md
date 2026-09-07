@@ -14,7 +14,7 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-delivery-manager (parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: c5da66f00ec6125e7e6f268d0d49291ac6ee8502 deployed public Zenod at 22:36:24 UTC; evidence-only main updates separate
+Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 merged; production remains 4c6ca14 pending publication
 Planner: Jordi + ZMR-release-planner
 Worker: /root/zmr_8_chat_review — verified facts on ordinary reads; /root/zmr_deploy_audit — sole production operator
 Tester: parent direct live MCP acceptance; independent agent review
@@ -87,20 +87,20 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Latest verification (2026-09-06 23:33 UTC): **4c6ca14aaf2d83ef0330e894627d44cba320fec3 is live; upgrade acceptance is NOT finalized.** Actual task, OCI and health match immutable image sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885. Queue empty; unrelated triggers disabled; configuration, volume and private Phylax preserved. Three fresh boundary recalls passed 2/3: one skipped the current fact page and answered from older architecture notes. Worker /root/zmr_8_chat_review is investigating source selection; no further image switch requested. This receipt supersedes the historical c5da66f cursor below. See [exact evidence](evidence/zmr-live-4c6ca14/README.md).
-
-Phase: c5da66f live; filing retest passed; ordinary-page fact recall repair active
-Last verified: 2026-09-07 00:17 CEST
+Phase: 4c6ca14 live; reviewed source-selection repair 29ddb62 publishing
+Last verified: 2026-09-07 00:09 UTC
 Integration target: main
-Fresh base commit: 392d058a599bdf5fc69d17157282b8f9154dcf28; repaired customer chat, explicitly repinned for ZMR-8
-Pinned-base rule: pin reconciled main at dispatch; pinned, no rebases until that wave's journey passes; re-pin after integrated waves.
-Dispatch condition: ZMR-1–7 integrated; ZMR-8 local validation authorized; live deployment retains exact human gates.
-Next action: expose existing verified facts during ordinary meaning-page reads; review and test the bounded change, then repeat the deployment-boundary recall on its actual deployed version.
-Blockers: open-ended boundary recall selected obsolete body text despite correct new memoryFacts; verified facts require separate read_facts today. Raw evidence and successful filing are verified.
+Fresh base commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 (PR #1226)
+Pinned-base rule: pin reconciled main at dispatch; re-pin after integrated waves.
+Dispatch condition: ZMR-1–7 integrated; ZMR-8 bounded production repair authorized.
+Next action: sole operator waits for exact image publication, deploys once, verifies actual task/OCI/health; parent repeats three fresh live boundary recalls.
+Blockers: 4c6ca14 live recall passed 2/3; one answer skipped the highest-ranked current fact page. PR #1226 reuses verified fact projection on structured top search hits. Exact head c3b2612 independently approved; CI 34067932729, 95 core tests, 20 server tests and typecheck passed. Not yet deployed.
+
+Live receipt: source 4c6ca14aaf2d83ef0330e894627d44cba320fec3, image sha256:589b51d86b9e3cc4cd1e23392d99fc493615dc18118198cd62045bd441d66885 verified 2026-09-06 23:31:49 UTC. Queue empty; sibling triggers disabled; volume, configuration and private Phylax preserved. [Exact live evidence](evidence/zmr-live-4c6ca14/README.md). Acceptance is not finalized.
 
 ## Execution Cursor
 
-Latest receipt: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502` live at 22:36:24.878 UTC, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`, actual OCI/task/health and preservation checks pass. Job `31c1d895-d5bb-4b06-9129-65bf9b109796` filed the exact repository boundary to Projects/Zenod.md (revision c906053f), one topic and zero uncertainty/pending. Natural recall audit `test_86c1f595cebc4d9ea46822a0bb9031b0` nevertheless returned obsolete Herald scope from old body text. Five correct new frontmatter memoryFacts verified; worker is reusing verified-fact projection on ordinary unpinned page reads. See `docs/evidence/zmr-live-c5da66f/`.
+Historical filing receipt: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502` live at 22:36:24.878 UTC, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`, actual OCI/task/health and preservation checks pass. Job `31c1d895-d5bb-4b06-9129-65bf9b109796` filed the exact repository boundary to Projects/Zenod.md (revision c906053f), one topic and zero uncertainty/pending. Natural recall audit `test_86c1f595cebc4d9ea46822a0bb9031b0` nevertheless returned obsolete Herald scope from old body text. Five correct new frontmatter memoryFacts verified; worker is reusing verified-fact projection on ordinary unpinned page reads. See `docs/evidence/zmr-live-c5da66f/`.
 
 Prior repair receipt: `56c815f38aab6790b8afc165a8001e8fc0b5732b` verified by actual task/OCI/health, immutable image `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`; queue empty after job 10083. Jordi authorized clearing the backlog: our main merges had triggered legacy sibling autoDeploy builds with no path filters. Four triggers paused with private backups; ten unrelated pending jobs removed, running services/data preserved. See the deployments leaf. MCP recall `test_867984e3691a49ae932909e3cf4488aa` recovered the saved preferences but mislabelled input channel and made an unqualified absence claim; stress log read `test_47ee05569fe44dfeac6cf123827a2d85` returned partial coverage. Filing job `02ee721e-8c9c-4be7-9e07-ca00e440f114` saved intact at revision `415b42a92d16b846ad5175c065e2e3260391d8ab` with classification_unavailable. Metered calls show an initial success followed by optional fallback failures; worker confirmed this discards the valid first result. No provider/schema change is needed for the assigned correction.
 
@@ -108,11 +108,11 @@ Historical queued repair receipt (completed at 22:15:07.905 UTC): reviewed/CI-gr
 
 
 Last attempted: deploy tested public candidate with preserved config and verified recovery, then test real MCP capture and recall.
-Result: c5da66f is live, queue empty, runtime/data preserved. New boundary filed successfully at c906053f; ordinary recall selected obsolete body text instead of correct saved facts. Retrieval correction assigned.
+Result: 4c6ca14 deployed; filing preserved; boundary recall passed 2/3. Reviewed next repair 29ddb62 merged and awaiting publication.
 Execution status: active
-Waiting on: /root/zmr_8_chat_review bounded ordinary-page retrieval fix; sole operator /root/zmr_deploy_audit owns subsequent image switch; parent runs MCP
+Waiting on: exact 29ddb62 publication; /root/zmr_deploy_audit is active sole operator; parent runs live MCP afterward.
 Approved work: this production upgrade, bounded live memory tests and fixes, and reusable undo procedure are explicitly authorized. Preserve data/configuration; no provider overhaul, billing/signup change or destructive restore. Human SHIP acceptance remains separate.
-Next action: expose existing verified facts during ordinary meaning-page reads; review and test the bounded change, then repeat the deployment-boundary recall on its actual deployed version.
+Next action: deploy published 29ddb62 through the sole operator, then repeat three fresh boundary recalls.
 
 
 
