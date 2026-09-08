@@ -65,6 +65,8 @@ export const STORE_MEMORY_SHAPE = {
 };
 
 export const INGEST_MEMORY_SHAPE = {
+  contentType: z.enum(["voice_note", "audio"]).optional()
+    .describe("For audio only: voice_note when the source identifies a recorded voice message; audio for ordinary audio attachments. Omit when unknown."),
   mediaType: z
     .enum(["audio", "screenshot", "image", "pdf", "document", "link"])
     .describe("Artifact class. Z-10 v0 requires audio and screenshot/image; pdf/document/link are reserved by the same contract."),

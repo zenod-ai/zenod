@@ -243,6 +243,13 @@ describe("WhatsApp helpers", () => {
     );
   });
 
+  it.each([true, false, undefined])("distinguishes voice notes using the provider PTT flag %s", (ptt) => {
+    const event = eventFromBaileysMessage(textMessage({
+      message: { audioMessage: { mimetype: "audio/ogg", ...(ptt === undefined ? {} : { ptt }) } },
+    }));
+    expect(event?.mediaType).toBe(ptt === true ? "ptt" : "audio");
+  });
+
   it("extracts quoted provider message IDs structurally from text and voice context", () => {
     const textReply = eventFromBaileysMessage(textMessage({
       message: {

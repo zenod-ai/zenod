@@ -306,6 +306,8 @@ function formatDigestedContextNote(rawDigest: string): string {
 }
 
 export interface EngineOptions {
+  /** Shared server catalog for ask/chat; per-ask overrides still take precedence. */
+  entrySearch?: AskOptions["entrySearch"];
   /**
    * The vault repo. Optional: when omitted the engine runs "vaultless" — no
    * sync, no vault briefing, no vault read/write tools — for the Console shell
@@ -700,7 +702,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n"), context].filter(Boolean).join("\n\n");
       },
       ...(typedEntries ? { searchEntries: async (input: EntrySearchInput) => {
-        if (entrySearch) return JSON.stringify(await entrySearch(input));
+        const search = entrySearch ?? options.entrySearch;
+        if (search) return JSON.stringify(await search(input));
         const entries = await searchEvidenceEntries(vaultPath, { limit: null }, sourceResolver);
         const page = paginateMemoryEntries(entries, { ...input, limit: input.limit ?? 20 }, vaultPath, input.cursor);
         return JSON.stringify({ entries: memoryEntrySummaries(page.entries), pagination: {

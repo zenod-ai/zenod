@@ -6,7 +6,7 @@ import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { ContextRefError, type BrainEngine } from "zenod";
+import { ContextRefError, appendEvidence, getEvidenceEntry, searchEvidenceEntries, type BrainEngine } from "zenod";
 import { ARCHUS_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
@@ -602,6 +602,57 @@ describe("MCP endpoint", () => {
       });
     } finally {
       fakeEngine.store = originalStore;
+      await client.close();
+    }
+  });
+
+  it("round-trips mixed voice formats through MCP with source-time pagination and exact reads", async () => {
+    const client = await connect();
+    const vault = join(dir, "voice-identity-vault");
+    const original = { store: fakeEngine.store, searchEntries: fakeEngine.searchEntries, getEntry: fakeEngine.getEntry };
+    fakeEngine.searchEntries = query => searchEvidenceEntries(vault, query);
+    fakeEngine.getEntry = ref => getEvidenceEntry(vault, ref);
+    fakeEngine.store = async input => {
+      const e = await appendEvidence(vault, input.content, input.source ?? "mcp", true, new Date(input.capturedAt!), input);
+      return { evidenceRef: `${e.logPath}#^${e.anchor}`, pagesTouched: [], commitSha: "a".repeat(40), githubUrls: [], filing: "filed" };
+    };
+    try {
+      await appendEvidence(vault, "identity-regression Old August voice", "whatsapp", true, new Date("2026-08-27T18:00:00Z"), { contentType: "voice_note", capturedAt: "2026-08-27T18:00:00Z", sourceId: "legacy-old" });
+      const legacy = await appendEvidence(vault, 'Voice note "legacy.ogg" ingested through Zenod media seam.\nRaw artifact: drive://file/raw\nSource: WhatsApp voice note\n\nidentity-regression September legacy transcript', "whatsapp", true, new Date("2026-09-03T18:00:00Z"), { contentType: "audio", capturedAt: "2026-09-03T18:00:00Z", sourceId: "legacy-audio" });
+      // A historical source-verified repair changes only existing durable metadata.
+      // The immutable log still says audio; exact reads and catalog use the receipt.
+      const repaired = runtime.taskJobStore.enqueue("media_ingest", {
+        mediaType: "audio", contentType: "voice_note", sourceHint: "WhatsApp voice note",
+        senderTimestamp: "2026-09-03T18:00:00Z",
+      }, "tenant-test:whatsapp:legacy-audio");
+      runtime.taskJobStore.update(repaired.id, { status: "done", result: { digest: { evidenceRef: `${legacy.logPath}#^${legacy.anchor}` } } });
+      for (const contentType of ["voice_note", "audio"] as const) {
+        await runAsyncTool(client, "ingest_memory", {
+          mediaType: "audio", contentType,
+          bytesRef: `data:audio/ogg;base64,${Buffer.from("audio fixture").toString("base64")}`,
+          filename: "same.ogg", sourceHint: contentType === "voice_note" ? "WhatsApp voice note" : "WhatsApp audio",
+          senderTimestamp: "2026-09-08T11:48:55Z", providedTranscript: `identity-regression Exact ${contentType} transcript`, transcriptionDisposition: "provided",
+          idempotencyKey: `tenant-test:whatsapp:mixed-${contentType}`,
+        });
+      }
+      const query = { query: "identity-regression", source: "whatsapp", contentType: "voice_note", capturedAfter: "2026-08-27", capturedBefore: "2026-09-09", order: "newest", limit: 1 };
+      const first = (await client.callTool({ name: "search_memory", arguments: query })).structuredContent as any;
+      expect(first.entries).toHaveLength(1);
+      expect(first.entries[0]).toMatchObject({ contentType: "voice_note", capturedAt: "2026-09-08T11:48:55Z" });
+      expect(first.pagination).toMatchObject({ hasMore: true, matchedEntries: 3 });
+      const second = (await client.callTool({ name: "search_memory", arguments: { ...query, cursor: first.pagination.nextCursor } })).structuredContent as any;
+      expect(second.entries[0].sourceId).toBe("legacy-audio");
+      const third = (await client.callTool({ name: "search_memory", arguments: { ...query, cursor: second.pagination.nextCursor } })).structuredContent as any;
+      expect(third.entries[0].sourceId).toBe("legacy-old");
+      expect(third.pagination.hasMore).toBe(false);
+      const exact = (await client.callTool({ name: "get_memory", arguments: { path: first.entries[0].evidenceRef } })).structuredContent as any;
+      expect(exact.entry.content).toContain("Exact voice_note transcript");
+      expect(exact.entry.content).not.toContain("Exact audio transcript");
+      expect(exact.entry.contentType).toBe("voice_note");
+      const invalid = await client.callTool({ name: "ingest_memory", arguments: { mediaType: "image", contentType: "voice_note", bytesRef: "unused" } });
+      expect(invalid.isError).toBe(true);
+    } finally {
+      Object.assign(fakeEngine, original);
       await client.close();
     }
   });
