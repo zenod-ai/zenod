@@ -1,0 +1,170 @@
+{
+  "sha": "d2183da0cb3565a82bc473a395f8526ab3808816",
+  "tests": [
+    {
+      "correlationId": "test_7944eb5bbc7d434fa7705c88089f7ef2",
+      "prompt": "look at recent voicenotes in zenod-mt",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-4a2a19",
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-09-07.md#^e-77c11c"
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-4a2a19"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-4a2a19"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-791b98"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-791b98"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-07.md#^e-77c11c"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-07.md#^e-77c11c"
+        }
+      ],
+      "outcome": "recent September recall passes; prose source-time accuracy remains inadequate"
+    },
+    {
+      "correlationId": "test_9b8a07238d0b48b4b2c774710ecfeba6",
+      "prompt": "Summarize my recent voice notes.",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-4a2a19",
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-09-07.md#^e-77c11c",
+        "Log/2026-09-06.md#^e-95a3e7",
+        "Log/2026-09-03.md#^e-cb79fa"
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-4a2a19"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-4a2a19"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-791b98"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-791b98"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-07.md#^e-77c11c"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-07.md#^e-77c11c"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md#^e-95a3e7"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md#^e-95a3e7"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-03.md#^e-cb79fa"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-03.md#^e-cb79fa"
+        }
+      ],
+      "outcome": "recent September recall passes; prose source-time accuracy remains inadequate"
+    },
+    {
+      "correlationId": "test_c8f6d92fbdb944078eec3f790a2a6873",
+      "prompt": "What are my latest VNs?",
+      "sourceRefs": [],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        }
+      ],
+      "outcome": "FAIL: exact typed lookup returned entries but model skipped reads"
+    }
+  ],
+  "diagnostic": {
+    "ticket": "d0181839-220d-4b9c-8f89-683aafcba102",
+    "actions": [
+      {
+        "tool": "search_entries",
+        "input": {
+          "contentType": "voice_note",
+          "order": "newest",
+          "limit": 5
+        },
+        "entryRefs": [
+          "Log/2026-09-08.md#^e-4a2a19",
+          "Log/2026-09-08.md#^e-791b98",
+          "Log/2026-09-07.md#^e-77c11c",
+          "Log/2026-09-06.md#^e-95a3e7",
+          "Log/2026-09-03.md#^e-cb79fa"
+        ]
+      }
+    ],
+    "successfulReads": []
+  }
+}
