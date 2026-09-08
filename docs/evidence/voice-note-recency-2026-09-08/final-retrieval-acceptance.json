@@ -1,0 +1,103 @@
+{
+  "sha": "631f85109dfa45fed95394a1e94d2d709c373fe6",
+  "acceptance": "Latest-entry recall passes; not a claim of perfect free-form prose or fresh phone ingestion",
+  "expectedRefs": [
+    "Log/2026-09-08.md#^e-4a2a19",
+    "Log/2026-09-08.md#^e-791b98",
+    "Log/2026-09-07.md#^e-77c11c",
+    "Log/2026-09-06.md#^e-95a3e7",
+    "Log/2026-09-03.md#^e-cb79fa"
+  ],
+  "tests": [
+    {
+      "correlationId": "test_7dc009135ce34355a97509081dc7f397",
+      "prompt": "look at recent voicenotes in zenod-mt",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-4a2a19",
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-09-07.md#^e-77c11c",
+        "Log/2026-09-06.md#^e-95a3e7",
+        "Log/2026-09-03.md#^e-cb79fa"
+      ],
+      "correctLatestFive": true,
+      "sourceTimeProse": "uses source capture times",
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        }
+      ]
+    },
+    {
+      "correlationId": "test_50777a7ac3304ca088d5616e2aa6949e",
+      "prompt": "Summarize my recent voice notes.",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-4a2a19",
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-09-07.md#^e-77c11c",
+        "Log/2026-09-06.md#^e-95a3e7",
+        "Log/2026-09-03.md#^e-cb79fa"
+      ],
+      "correctLatestFive": true,
+      "sourceTimeProse": "uses processing-header times; source metadata and order correct",
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        }
+      ]
+    },
+    {
+      "correlationId": "test_f6dc4d518b0547f3adde6b4eb338e08a",
+      "prompt": "What are my latest VNs?",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-4a2a19",
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-09-07.md#^e-77c11c",
+        "Log/2026-09-06.md#^e-95a3e7",
+        "Log/2026-09-03.md#^e-cb79fa"
+      ],
+      "correctLatestFive": true,
+      "sourceTimeProse": "uses source capture times",
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        }
+      ]
+    }
+  ],
+  "freshPhoneCapture": "Pending a genuinely new user voice note; final source audit at 2026-09-08T16:34:43Z found no inbound messages after 15:30Z. Latest source PTT remains 14:15:33Z, replied/completed.",
+  "limitations": [
+    "Bounded passages are partial for long transcripts; continuation is available.",
+    "One summary still copied processing-header times into prose despite correct source timestamps and sorting."
+  ]
+}
