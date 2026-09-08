@@ -139,4 +139,3 @@ export async function searchMemoryEntryPage(engine: BrainEngine, taskJobs: { rec
     scope: "all-local-vault-evidence-and-retained-tenant-receipts",
   } };
 }
-
