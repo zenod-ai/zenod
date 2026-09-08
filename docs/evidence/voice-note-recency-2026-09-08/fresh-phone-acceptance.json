@@ -1,0 +1,51 @@
+{
+  "checkedAt": "2026-09-08T19:28:22.103Z",
+  "publicSha": "631f85109dfa45fed95394a1e94d2d709c373fe6",
+  "phylaxSha": "d02493cc0a7cb658ee5eedeea57039dd6fc264cb",
+  "sourceId": "3BA2DA0E2434FB97C75A",
+  "sourceType": "ptt",
+  "capturedAt": "2026-09-08T19:25:42.000Z",
+  "receivedAtMs": 1788895550800,
+  "voiceJob": {
+    "state": "completed",
+    "attempts": 1,
+    "error": null
+  },
+  "mediaJob": {
+    "id": "93dc5239-05aa-4006-971b-b71a596cc215",
+    "state": "done",
+    "contentType": "voice_note",
+    "mediaType": "audio",
+    "senderTimestamp": "2026-09-08T19:25:42.000Z",
+    "error": null
+  },
+  "enrichmentJob": {
+    "id": "98b543f1-bca6-4875-888d-2953511258cb",
+    "state": "done",
+    "disposition": "evidence_only",
+    "pagesChanged": 0,
+    "error": null
+  },
+  "evidenceRef": "Log/2026-09-08.md#^e-cbdf8b",
+  "revision": "1c143ac3b7bb8d72e51ec357b377fc0fe1b60031",
+  "rawLogMetadata": {
+    "contentType": "voice_note",
+    "capturedAt": "2026-09-08T19:25:42.000Z"
+  },
+  "retrieval": {
+    "newest": true,
+    "sourceIdMatches": 1,
+    "audioCategoryMatches": 0,
+    "totalVoiceNotes": 77,
+    "exactReadPassed": true
+  },
+  "chat": {
+    "correlationId": "test_533767458c914de781c4ca372ad52af8",
+    "prompt": "What was my latest voice note?",
+    "correctTranscript": true,
+    "correctSourceTimestamp": true,
+    "correctEvidenceRef": true
+  },
+  "manualCorrections": false,
+  "health": "Both public health endpoints ok; WhatsApp connected/ready."
+}
