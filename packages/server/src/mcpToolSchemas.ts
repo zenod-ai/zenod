@@ -10,7 +10,7 @@ import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod/evidence-context";
  */
 
 export const SEARCH_MEMORY_SHAPE = {
-  query: z.string().min(1).optional().describe("Optional lexical search terms, e.g. 'travel insurance'."),
+  query: z.string().min(1).optional().describe("Optional literal subject/transcript terms, e.g. 'travel insurance'. Omit for category-only lists such as recent voice notes; use contentType and order instead."),
   sourceId: z.string().min(1).optional().describe("Exact stable source/provider identifier for entries."),
   cursor: z.string().min(1).max(2048).optional().describe("Entry nextCursor; repeat the same query/filters/order. Snapshot change or server restart requires restarting and discarding prior pages."),
   source: z

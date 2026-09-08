@@ -1,0 +1,82 @@
+{
+  "scope": [
+    "Zenod production",
+    "default Phylax companion"
+  ],
+  "sourceSha": "d02493cc0a7cb658ee5eedeea57039dd6fc264cb",
+  "publicationRun": "https://github.com/zenod-ai/zenod/actions/runs/34244664653",
+  "services": {
+    "public": {
+      "service": "zenod-mt-fxpzoo",
+      "image": "ghcr.io/zenod-ai/zenod@sha256:d612696cf63204eb396f7a5f4919457b4ebe632ece0b900cb37549f983909b61",
+      "ociRevision": "d02493cc0a7cb658ee5eedeea57039dd6fc264cb",
+      "task": "ka16sx2nyomi",
+      "container": "bf78e4056b552d7bb93f8fb1af2e45732b4926a01dee369b43cd19f0f3e3a575",
+      "verifiedAt": "2026-09-08T15:34:41.029478+00:00",
+      "healthStatus": "ok",
+      "whatsappReady": null,
+      "environmentAndMounts": "preserved",
+      "rollbackImage": "ghcr.io/zenod-ai/zenod@sha256:da5e71c7adf956ea1f351fa53e76ba7bab88f69e02ee186e11d7b80b6265b1c1",
+      "backup": {
+        "remoteArchive": "/var/backups/zenod/voice-note-20260908/public/zenod-data-20260908T151214Z.tar.gz",
+        "restoredAt": "2026-09-08T15:17:09Z",
+        "files": 1207,
+        "jsonFiles": 10,
+        "sqliteFiles": 69,
+        "localCopy": {
+          "archive": "/Users/jordi/.local/state/zenod-voice-note-20260908/public-zenod-data-20260908T151214Z.tar.gz",
+          "sha256": "55bf64ae94af8edb463da023150978f04cdd8746ff11e4b73add1b2791be0224",
+          "bytes": 1499278662,
+          "matched": true
+        }
+      },
+      "swarmUpdate": {
+        "State": "completed",
+        "StartedAt": "2026-09-08T15:34:22.898753096Z",
+        "CompletedAt": "2026-09-08T15:34:31.556911971Z",
+        "Message": "update completed"
+      }
+    },
+    "phylax": {
+      "service": "app-index-back-end-panel-6zm3qg",
+      "image": "ghcr.io/zenod-ai/phylax@sha256:97173b3362bbc0b77c3dd1ee2fb18ceeb11c42d70ad8e13335789748e703ae92",
+      "ociRevision": "d02493cc0a7cb658ee5eedeea57039dd6fc264cb",
+      "task": "3qb53qtv91cz",
+      "container": "baf584ba19e8b580826b5c4a807ca3ee5a319f2a51d073fb9ca7a2e3808429fd",
+      "verifiedAt": "2026-09-08T15:39:08.849160+00:00",
+      "healthStatus": "ok",
+      "whatsappReady": "ready",
+      "environmentAndMounts": "preserved",
+      "rollbackImage": "ghcr.io/zenod-ai/phylax@sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e",
+      "backup": {
+        "remoteArchive": "/var/backups/zenod/voice-note-20260908/phylax/zenod-data-20260908T151749Z.tar.gz",
+        "restoredAt": "2026-09-08T15:26:04Z",
+        "files": 4197,
+        "jsonFiles": 3952,
+        "sqliteFiles": 27,
+        "localCopy": {
+          "archive": "/Users/jordi/.local/state/zenod-voice-note-20260908/phylax-zenod-data-20260908T151749Z.tar.gz",
+          "sha256": "24ceec378c3f0a0dc3712f9b7105b0260a3e4814d10ab764859cfa0642c159b2",
+          "bytes": 2286645317,
+          "matched": true
+        }
+      },
+      "swarmUpdate": {
+        "State": "completed",
+        "StartedAt": "2026-09-08T15:36:27.42464324Z",
+        "CompletedAt": "2026-09-08T15:36:34.679835403Z",
+        "Message": "update completed"
+      }
+    }
+  },
+  "rollbackPreservesData": true,
+  "deploymentRequests": {
+    "public": 1,
+    "phylax": 1
+  },
+  "notes": [
+    "Phylax health verified using curl; urllib received Cloudflare403. No repeated deployment request.",
+    "Only public GIT_SHA override and the two immutable images changed.",
+    "Fresh archive restore verification and independent Mac checksums passed for both services."
+  ]
+}

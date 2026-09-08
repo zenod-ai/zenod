@@ -4,7 +4,7 @@
 
 Confirmed live retrieval compatibility defect: `search_memory(contentType="voice_note", order="newest")` returns August 27 as its newest entry. September WhatsApp voice notes exist, but are typed `audio` and therefore excluded. This reproduces the screenshot's precise cutoff without an LLM.
 
-Read-only diagnosis; no production, vault, or application code changes.
+Initial diagnosis below was read-only. The authorized repair and deployment follow-up are recorded at the end.
 
 ## Runtime and logs
 
@@ -60,3 +60,18 @@ Jordi authorized implementation and deployment on September 8, emphasizing simpl
 - Restore proof and rollback snapshots are required for the affected Zenod/default Phylax pair. Deploy the accepting Zenod schema before the Phylax emitter. No other services or settings are part of the release.
 
 The initial screenshot predates today's two captures. The earlier September 3/6/7 captures establish the original error; live acceptance also covers September 8.
+
+
+## Deployment and historical recovery
+
+PR #1232 merged as `d02493cc0a7cb658ee5eedeea57039dd6fc264cb`. CI run 34243883547 and image publication 34244664653 passed. Both public Zenod MT and its default Phylax companion are deployed at this exact revision; actual tasks, OCI image revisions, public health, preserved environment/mounts and WhatsApp connected/ready were checked. Fresh independent volume backups passed restore checks before deployment.
+
+The source-verified metadata correction checked and changed exactly 14 completed receipts: 11 PTT voice notes and three ordinary audio files. A second dry run changed zero. Raw September transcript reads remained identical. Protected rollback input receipts and volume archives remain outside the repository.
+
+Live deployed deterministic acceptance: all five September voice notes returned with original source timestamps; all 76 VNs paginated across four pages, complete, unique and newest-first; only the three ordinary attachments remained `audio`. See `historical-repair.json` and `initial-deployed-acceptance.json`.
+
+## Conversational acceptance follow-up
+
+The first ordinary-language live test stopped after catalog searches without reading evidence; the second fell back to lexical matching and read an older subset. These are failures, not passing acceptance. A diagnostic prompt explicitly using `voice_note`, newest order and no lexical query successfully read and summarized the correct latest five September refs. This isolates a model query-selection problem after catalog recovery; the recorded audit does not expose its exact filter arguments.
+
+The bounded follow-up clarifies existing internal and MCP tool instructions: category-only recency uses the content type and newest order; literal query terms are for an actual subject, and requested date/source constraints are preserved. Read exact returned refs, and use catalog `capturedAt` rather than processing timestamps in immutable Log headings. Filtering semantics and the capture pipeline remain unchanged. Unhinted live conversational replays must pass on the follow-up deployment before this incident is marked complete.
