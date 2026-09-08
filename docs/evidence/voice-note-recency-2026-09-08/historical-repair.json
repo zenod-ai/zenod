@@ -1,0 +1,40 @@
+{
+  "scope": "September voice-note exact reads after source-verified durable metadata correction, before code rollout",
+  "runtime": "779f74c8210b31de7c71fe406a3c2d992a5fb5bf",
+  "entries": [
+    {
+      "ref": "Log/2026-09-08.md#^e-4a2a19",
+      "contentType": "voice_note",
+      "capturedAt": "2026-09-08T14:15:33.000Z",
+      "transcriptUnchanged": true
+    },
+    {
+      "ref": "Log/2026-09-08.md#^e-791b98",
+      "contentType": "voice_note",
+      "capturedAt": "2026-09-08T11:47:18.000Z",
+      "transcriptUnchanged": true
+    },
+    {
+      "ref": "Log/2026-09-07.md#^e-77c11c",
+      "contentType": "voice_note",
+      "capturedAt": "2026-09-07T14:54:23.000Z",
+      "transcriptUnchanged": true
+    },
+    {
+      "ref": "Log/2026-09-06.md#^e-95a3e7",
+      "contentType": "voice_note",
+      "capturedAt": "2026-09-06T19:36:08.000Z",
+      "transcriptUnchanged": true
+    },
+    {
+      "ref": "Log/2026-09-03.md#^e-cb79fa",
+      "contentType": "voice_note",
+      "capturedAt": "2026-09-03T18:14:10.000Z",
+      "transcriptUnchanged": true
+    }
+  ],
+  "checkedHistoricalRecords": 14,
+  "correctedVoiceNotes": 11,
+  "ordinaryAudio": 3,
+  "repeatRepairChanges": 0
+}

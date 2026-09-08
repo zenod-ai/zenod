@@ -1,0 +1,240 @@
+{
+  "sha": "d02493cc0a7cb658ee5eedeea57039dd6fc264cb",
+  "pagination": {
+    "pages": 4,
+    "count": 76,
+    "unique": 76,
+    "complete": true,
+    "newestFirst": true,
+    "newest": {
+      "ref": "Log/2026-09-08.md#^e-4a2a19",
+      "time": "2026-09-08T14:15:33.000Z"
+    },
+    "oldest": {
+      "ref": "Log/2026-07-29.md#^e-7285f3",
+      "time": "2026-07-29T21:21:32.147Z"
+    }
+  },
+  "september": [
+    {
+      "evidenceRef": "Log/2026-09-08.md#^e-4a2a19",
+      "capturedAt": "2026-09-08T14:15:33.000Z",
+      "contentType": "voice_note"
+    },
+    {
+      "evidenceRef": "Log/2026-09-08.md#^e-791b98",
+      "capturedAt": "2026-09-08T11:47:18.000Z",
+      "contentType": "voice_note"
+    },
+    {
+      "evidenceRef": "Log/2026-09-07.md#^e-77c11c",
+      "capturedAt": "2026-09-07T14:54:23.000Z",
+      "contentType": "voice_note"
+    },
+    {
+      "evidenceRef": "Log/2026-09-06.md#^e-95a3e7",
+      "capturedAt": "2026-09-06T19:36:08.000Z",
+      "contentType": "voice_note"
+    },
+    {
+      "evidenceRef": "Log/2026-09-03.md#^e-cb79fa",
+      "capturedAt": "2026-09-03T18:14:10.000Z",
+      "contentType": "voice_note"
+    }
+  ],
+  "ordinaryAudio": [
+    {
+      "evidenceRef": "Log/2026-08-28.md#^e-d0d10c",
+      "sourceId": "3EB0F9441A10DE7D2D612C",
+      "contentType": "audio"
+    },
+    {
+      "evidenceRef": "Log/2026-08-28.md#^e-72574f",
+      "sourceId": "3EB08979166CBE365430F4",
+      "contentType": "audio"
+    },
+    {
+      "evidenceRef": "Log/2026-08-28.md#^e-4e733c",
+      "sourceId": "3EB004F2CAD6D83A6F68C4",
+      "contentType": "audio"
+    }
+  ],
+  "conversationalTests": [
+    {
+      "test": "liveChat1",
+      "correlationId": "test_6c4e2240af414876be77aa353f715242",
+      "prompt": "Look at recent voicenotes. What are the latest ones?",
+      "sourceRefs": [],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        }
+      ],
+      "outcome": "unprompted natural-language recall inadequate; followup required"
+    },
+    {
+      "test": "liveChat2",
+      "correlationId": "test_08de6d4f725e44eb81d8751548a390b9",
+      "prompt": "Summarize my recent voice notes.",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-08-28.md#^e-94a2cd"
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “voice note”"
+        },
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “voice_note”"
+        },
+        {
+          "phase": "start",
+          "tool": "search_vault",
+          "label": "Searching the vault for “voice notes”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “voice_note”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “voice note”"
+        },
+        {
+          "phase": "end",
+          "tool": "search_vault",
+          "label": "Searching the vault for “voice notes”"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-08-28.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-08-28.md"
+        }
+      ],
+      "outcome": "unprompted natural-language recall inadequate; followup required"
+    },
+    {
+      "test": "liveChatDiagnostic",
+      "correlationId": "test_8c1c4b9dbc7b41139e8897fc54c0b991",
+      "prompt": "List my latest five voice notes. Use the voice_note content type, newest order, and no text query. Read the exact returned evidence refs before briefly summarizing each.",
+      "sourceRefs": [
+        "Log/2026-09-08.md#^e-4a2a19",
+        "Log/2026-09-08.md#^e-791b98",
+        "Log/2026-09-07.md#^e-77c11c",
+        "Log/2026-09-06.md#^e-95a3e7",
+        "Log/2026-09-03.md#^e-cb79fa"
+      ],
+      "toolEvents": [
+        {
+          "phase": "start",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "end",
+          "tool": "search_entries",
+          "label": "Searching memory entries and coverage"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-4a2a19"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-4a2a19"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-791b98"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-08.md#^e-791b98"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-07.md#^e-77c11c"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-07.md#^e-77c11c"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md#^e-95a3e7"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-06.md#^e-95a3e7"
+        },
+        {
+          "phase": "start",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-03.md#^e-cb79fa"
+        },
+        {
+          "phase": "end",
+          "tool": "read_note",
+          "label": "Reading Log/2026-09-03.md#^e-cb79fa"
+        }
+      ],
+      "outcome": "controlled query passed latest five; heading time used instead of source time"
+    }
+  ]
+}
