@@ -2242,7 +2242,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
           catalogEntries.set(entry.evidenceRef, entry);
           // Reuse the ordinary tracked reader: exact anchors, budgets, failed reads,
           // source identity and continuation coverage obey the same contract.
-          if (!automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5) {
+          // Pinned follow-ups keep their explicit-read authority, as fact projection does.
+          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5) {
             automaticEntryReads.set(entry.evidenceRef, { snapshot: page!.pagination.snapshot, result: (async () => {
               try { return { passage: JSON.parse(await groundedTools.readNote!(entry.evidenceRef, { maxChars: 4000 })) as NotePassage }; }
               catch (error) { return { error: String(error) }; }

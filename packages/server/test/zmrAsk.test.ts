@@ -56,6 +56,8 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
             await writeFile(join(repo.path, "Log/2026-01-01.md"), before.replace("original launch color: amber", "original launch color: silver"));
             const catalog = JSON.parse(await tools.searchEntries!({ sourceId: "old-voice", exhaustive: true }));
             expect(catalog.entries).toHaveLength(1); expect(catalog.entries[0].snippet).toContain("silver");
+            expect(catalog.evidence).toEqual([]); // Pinned context requires an explicit fresh read.
+            expect(catalog.coverage.passageReadAttempts).toBe(0);
             if (input.question === "audit refreshed pin") {
               const fresh = await readExact(tools, manifest.refs.historical);
               expect(fresh).toContain("silver");
@@ -120,7 +122,9 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
           }
           expect(lastCatalog!.entries.map(e => e.evidenceRef)).toEqual(Object.values(manifest.refs));
           if (input.question === "audit passage budget") {
-            for (let i = 0; i < 64; i++) await tools.readNote!(manifest.refs.late, { maxChars: 256 });
+            const usedReads = (lastCatalog as EntrySearchResult & { coverage: AnswerCoverage }).coverage.passageReadAttempts;
+            expect(usedReads).toBe(5);
+            for (let i = usedReads; i < 64; i++) await tools.readNote!(manifest.refs.late, { maxChars: 256 });
             await expect(tools.readNote!(manifest.refs.late, { maxChars: 256 })).rejects.toThrow("Passage read budget exhausted");
             return { text: "The entire audit is complete.", readPaths: [] };
           }
@@ -155,7 +159,17 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
       expect(complete.status.type).toBe("read_only_status");
       const budget = await ask("audit budget");
       expect(budget.coverage.status).toBe("partial"); expect(budget.text).toContain("Coverage is partial");
-      expect(budget.text).not.toContain("read all 657"); expect(budget.sources).toEqual([]);
+      expect(budget.text).not.toContain("read all 657");
+      const prefetchedRefs = Object.values(manifest.refs);
+      expect(budget.sources.map(source => source.path)).toEqual(prefetchedRefs);
+      expect(budget.sources.every(source => source.provider === provider)).toBe(true);
+      expect(budget.coverage.passageReadAttempts).toBe(5);
+      expect(budget.coverage.successfulReads.map(read => read.identity)).toEqual(prefetchedRefs);
+      expect(budget.coverage.successfulReads.every(read => read.end - read.start <= 4000)).toBe(true);
+      expect(budget.coverage.searches[0]).toMatchObject({ matchedEntries: 657, enumeratedEntries: 160, enumerationComplete: false });
+      expect(budget.coverage.searches[0]!.unreadEvidenceRefs).toHaveLength(157);
+      expect(budget.coverage.searches[0]!.unreadEvidenceRefs).toContain(manifest.refs.late);
+      expect(budget.coverage.searches[0]!.unreadEvidenceRefs).toContain(manifest.refs.multiTopic);
       const next = budget.coverage.continuation.find(c => c.tool === "search_entries")!;
       const publicNext = await client.callTool({ name: "search_memory", arguments: { ...next.input, limit: 20 } });
       expect(publicNext.isError).not.toBe(true); // Same server-owned cursor contract.
@@ -176,7 +190,7 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
       const unread = await ask("audit unread");
       expect(unread.coverage.status).toBe("partial");
       expect(unread.coverage.searches[0]!.enumerationComplete).toBe(true);
-      expect(unread.coverage.searches[0]!.unreadEvidenceRefs).toHaveLength(5);
+      expect(unread.coverage.searches[0]!.unreadEvidenceRefs).toEqual([manifest.refs.late, manifest.refs.multiTopic]);
       expect(unread.coverage.continuation).toContainEqual({ tool: "read_note", input: { path: manifest.refs.late } });
       for (const question of ["citation-only", "failed-read"]) {
         const answer = await ask(question); expect(answer.sources).toEqual([]); expect(answer.text).toContain("couldn't verify");
