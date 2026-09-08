@@ -892,6 +892,19 @@ export class WhatsAppStore {
     return this.voiceJob(input.providerMessageId)!;
   }
 
+  /** Durable source metadata survives audio queue retries and process restarts. */
+  inboundMediaIdentity(providerMessageId: string): { mediaType: string | null; senderTimestamp: string | undefined } | null {
+    const row = this.db.prepare(
+      `SELECT media_type AS mediaType, message_timestamp AS timestamp
+       FROM whatsapp_messages WHERE message_id = ? AND direction = 'inbound'`,
+    ).get(providerMessageId) as { mediaType: string | null; timestamp: number | null } | undefined;
+    if (!row) return null;
+    return {
+      mediaType: row.mediaType,
+      senderTimestamp: row.timestamp === null ? undefined : new Date(row.timestamp).toISOString(),
+    };
+  }
+
   voiceJob(providerMessageId: string): WhatsAppVoiceJob | null {
     const row = this.db.prepare(
       `SELECT provider_message_id AS providerMessageId, tenant_id AS tenantId,

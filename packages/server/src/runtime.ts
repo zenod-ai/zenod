@@ -1,3 +1,4 @@
+import { searchMemoryEntryPage } from "./memoryEntryCatalog.js";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -650,7 +651,8 @@ export class Runtime {
       Object.assign(peerTools, buildOutboundTools(env));
     }
     if (this.agent.notifier === true) Object.assign(peerTools, buildNotifierTools());
-    const engine = createEngine({
+    const engine: BrainEngine = createEngine({
+      entrySearch: input => searchMemoryEntryPage(engine, this.taskJobStore, input),
       ...(repo ? { repo } : {}),
       llm,
       state: this.state,

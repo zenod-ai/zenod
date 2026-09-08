@@ -71,6 +71,8 @@ export interface PhylaxChannelInbound {
     artifactRef?: string;
     mimeType?: string | null;
     fileName?: string | null;
+    /** Explicit provider voice-note identity; absence means unknown, never inferred from MIME. */
+    isVoiceNote?: boolean;
     /** Provider-reported audio duration used only for local cost admission. */
     durationSeconds?: number | null;
   };
@@ -108,6 +110,8 @@ export function normalizePhylaxVoiceJobDeadlineMs(value: number | undefined): nu
 }
 
 export interface PhylaxStagedVoice {
+  senderTimestamp?: string;
+  isVoiceNote?: boolean;
   tenantId: string;
   sender: string;
   chatId: string;
@@ -169,6 +173,8 @@ export interface PhylaxTransportEnvelopeV1 {
   senderTimestamp: string;
   replyToProviderMessageId: string | null;
   content: {
+    /** Provider-derived identity, separate from the technical media format. */
+    contentType?: "audio" | "voice_note";
     text: string | null;
     mediaType: "audio" | "screenshot" | "image" | "pdf" | "document" | "link" | null;
     artifact: {
@@ -1463,6 +1469,8 @@ export class PhylaxChannelsOrgan {
       sender,
       chatId: input.chatId,
       messageId: input.messageId.trim(),
+      senderTimestamp: input.senderTimestamp,
+      isVoiceNote: input.media.isVoiceNote,
       replyToMessageId: input.replyToMessageId?.trim() || null,
       conversationKey: `whatsapp:${sender}`,
       artifactRef: artifact.ref,
@@ -1521,10 +1529,12 @@ export class PhylaxChannelsOrgan {
       sender: voice.sender,
       chatId: voice.chatId,
       messageId: voice.messageId,
+      senderTimestamp: voice.senderTimestamp,
       ...(voice.replyToMessageId ? { replyToMessageId: voice.replyToMessageId } : {}),
       text: voice.text,
       media: {
         artifactRef: voice.artifactRef,
+        isVoiceNote: voice.isVoiceNote,
         mimeType: voice.mimeType,
         fileName: voice.fileName,
       },
@@ -1738,6 +1748,9 @@ export class PhylaxChannelsOrgan {
       senderTimestamp,
       replyToProviderMessageId: input.replyToMessageId?.trim() || null,
       content: {
+        ...(typeof input.media?.isVoiceNote === "boolean"
+          ? { contentType: input.media.isVoiceNote ? "voice_note" as const : "audio" as const }
+          : {}),
         text: text || null,
         mediaType: ingestMediaType ?? null,
         artifact: handoff.artifact_ref
@@ -1844,6 +1857,14 @@ export class PhylaxChannelsOrgan {
     }
     if ((call.tool === "store_memory" || call.tool === "ingest_memory") && providerMessageId) {
       call.arguments.idempotencyKey = `${route.tenantId}:${input.channel}:${providerMessageId}`;
+    }
+    if (call.tool === "ingest_memory" && transportEnvelope.content.contentType) {
+      call.arguments.contentType = transportEnvelope.content.contentType;
+      if (transportEnvelope.content.contentType === "audio") {
+        for (const hint of ["sourceHint", "contentHint"] as const) {
+          if (call.arguments[hint] === "WhatsApp voice note") call.arguments[hint] = "WhatsApp audio";
+        }
+      }
     }
     if (call.tool === "ingest_memory" && text && call.arguments.contentHint === undefined) {
       call.arguments.contentHint = text;

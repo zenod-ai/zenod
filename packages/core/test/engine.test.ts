@@ -492,6 +492,34 @@ describe("BrainEngine", () => {
     return createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" } });
   }
 
+  it("uses the shared typed-entry catalog for ask, chat and tasking, with per-ask override", async () => {
+    const page = {
+      entries: [], pagination: { hasMore: false, nextCursor: null, snapshot: "receipt-catalog",
+        matchedEntries: 0, scannedEntries: 14, scannedVaultEntries: 14, scannedReceiptJobs: 14,
+        receiptEnrichmentAvailable: true, scope: "all-local-vault-evidence-and-retained-tenant-receipts" },
+    };
+    const entrySearch = vi.fn(async () => page);
+    const override = vi.fn(async () => ({ ...page, pagination: { ...page.pagination, snapshot: "override" } }));
+    let expectedSnapshot = "receipt-catalog";
+    llm.answerOverride = async (_input, tools) => {
+      const result = JSON.parse(await tools.searchEntries!({ contentType: "voice_note", order: "newest" }));
+      expect(result.pagination.snapshot).toBe(expectedSnapshot);
+      expect(result.pagination.receiptEnrichmentAvailable).toBe(true);
+      return { text: "Checked the requested catalog.", readPaths: [] };
+    };
+    const e = createEngine({ repo, llm, state, entrySearch });
+    await e.ask("List recent voice notes");
+    await e.chat("List recent voice notes", "whatsapp");
+    await e.handleTasking({ text: "List recent voice notes", surface: "web", conversationKey: "catalog" });
+    expect(entrySearch).toHaveBeenCalledWith(expect.objectContaining({ contentType: "voice_note", order: "newest" }));
+    expect(entrySearch.mock.calls.length).toBeGreaterThanOrEqual(3);
+    const priorCalls = entrySearch.mock.calls.length;
+    expectedSnapshot = "override";
+    await e.ask("List recent voice notes", { entrySearch: override });
+    expect(override).toHaveBeenCalled();
+    expect(entrySearch).toHaveBeenCalledTimes(priorCalls);
+  });
+
   it("returns typed GitHub connection-required denial without an external mutation", async () => {
     const reply = await engine().handleTasking({
       text: "CREATEISSUE: This must not leave the vault",

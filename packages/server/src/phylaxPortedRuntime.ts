@@ -312,7 +312,12 @@ export class PhylaxPortedRuntime {
           ...(senderTimestamp ? { senderTimestamp } : {}),
           ...(event.replyToMessageId ? { replyToMessageId: event.replyToMessageId } : {}),
           text,
-          ...(media ? { media } : {}),
+          ...(media ? { media: {
+            ...media,
+            ...(event.mediaType === "ptt" || event.mediaType === "audio"
+              ? { isVoiceNote: event.mediaType === "ptt" }
+              : {}),
+          } } : {}),
           ...(transcription
             ? {
                 transcription: {
@@ -691,7 +696,12 @@ export class PhylaxPortedRuntime {
           continue;
         }
         if (!this.whatsappStore.claimVoiceRingHandoff(job.providerMessageId)) continue;
+        const source = this.whatsappStore.inboundMediaIdentity(job.providerMessageId);
         const staged: PhylaxStagedVoice = {
+          senderTimestamp: source?.senderTimestamp,
+          ...(source?.mediaType === "ptt" || source?.mediaType === "audio"
+            ? { isVoiceNote: source.mediaType === "ptt" }
+            : {}),
           tenantId: job.tenantId,
           sender: job.senderId,
           chatId: job.chatId,

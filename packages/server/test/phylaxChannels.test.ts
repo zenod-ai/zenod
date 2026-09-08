@@ -397,6 +397,67 @@ describe("PhylaxChannelsOrgan", () => {
     await organ.close();
   });
 
+  it.each([true, false])("preserves provider voice identity %s and send time through durable staging", async (isVoiceNote) => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-source-identity-"));
+    dirs.push(dataDir);
+    const storePath = phylaxWhatsAppPaths(dataDir).store;
+    const store = new WhatsAppStore(storePath);
+    const timestamp = Date.parse("2026-09-08T08:10:00.000Z") / 1000;
+    store.recordInbound({
+      messageId: "source-identity", chatId: "alpha-chat", senderId: "34611111111",
+      senderName: "Alpha", chatName: "Alpha", isGroup: false, timestamp, body: "",
+      hasMedia: true, mediaType: isVoiceNote ? "ptt" : "audio", mimeType: "audio/ogg", fileName: null,
+    });
+    store.close();
+    const restarted = new WhatsAppStore(storePath);
+    const source = restarted.inboundMediaIdentity("source-identity")!;
+    expect(source).toEqual({ mediaType: isVoiceNote ? "ptt" : "audio", senderTimestamp: "2026-09-08T08:10:00.000Z" });
+    expect(restarted.inboundMediaIdentity("missing")).toBeNull();
+    const calls: PhylaxDownstreamCall[] = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      artifactUrl: (tenantId, file) => `https://phylax.test/artifacts/${tenantId}/${file}`,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://zenod.test/mcp/memory",
+        downstreamToken: "test", turnBindings: defaultPhylaxTurnBindings() }) },
+      discoverDownstream: async () => ({ transport: "connected", tools: "ready", specs: [{
+        as: "memory", mcp: "ingest_memory", arg: "input", description: "Ingest",
+        inputSchema: { type: "object", additionalProperties: true },
+      }] }),
+      callDownstream: async (call) => { calls.push(call); return { content: [{ type: "text", text: "saved" }] }; },
+    });
+    let runtime: PhylaxPortedRuntime | undefined;
+    try {
+      const staged = await organ.stageVoice({
+        channel: "whatsapp", sender: "34611111111", chatId: "alpha-chat", messageId: "source-identity",
+        senderTimestamp: source.senderTimestamp,
+        media: { bytes: Buffer.from("source-identity"), mimeType: "audio/ogg", isVoiceNote: source.mediaType === "ptt" },
+      });
+      expect(staged).toMatchObject({ senderTimestamp: source.senderTimestamp, isVoiceNote });
+      restarted.createVoiceJob({
+        providerMessageId: staged.messageId, tenantId: staged.tenantId, conversationKey: staged.conversationKey,
+        senderId: staged.sender, chatId: staged.chatId, artifactRef: staged.artifactRef,
+        artifactPath: staged.artifactPath, artifactSha256: staged.artifactSha256,
+        mimeType: staged.mimeType, fileName: staged.fileName, captionText: staged.text,
+        durationSeconds: 60, state: "queued",
+      });
+      restarted.claimNextVoiceJob(null);
+      restarted.persistVoiceTranscript(staged.messageId, { text_transcript: "Distinct capture", transcription_source: "test" });
+      restarted.close();
+      runtime = new PhylaxPortedRuntime(dataDir, organ, { ZENOD_API_TOKEN: "test-voice-identity" });
+      await vi.waitFor(() => expect(calls).toHaveLength(1));
+      expect(calls[0]).toMatchObject({
+        tool: "ingest_memory",
+        arguments: { mediaType: "audio", contentType: isVoiceNote ? "voice_note" : "audio",
+          sourceHint: isVoiceNote ? "WhatsApp voice note" : "WhatsApp audio",
+          contentHint: isVoiceNote ? "WhatsApp voice note" : "WhatsApp audio",
+          senderTimestamp: "2026-09-08T08:10:00.000Z" },
+        transportEnvelope: { senderTimestamp: "2026-09-08T08:10:00.000Z", content: {
+          mediaType: "audio", contentType: isVoiceNote ? "voice_note" : "audio",
+        } },
+      });
+    } finally { if (runtime) await runtime.close(); else { restarted.close(); await organ.close(); } }
+  });
+
   it("persists receipt refs across restart and routes only same-tenant WhatsApp text or voice replies to Ring", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "phylax-receipt-reply-"));
     dirs.push(dataDir);
@@ -4125,6 +4186,7 @@ describe("ported gateway integration", () => {
             properties: {
               artifactUrl: { type: "string" },
               mediaType: { type: "string" },
+              contentType: { type: "string", enum: ["voice_note", "audio"] },
               filename: { type: "string" },
               sourceHint: { type: "string" },
               contentHint: { type: "string" },
@@ -4145,6 +4207,8 @@ describe("ported gateway integration", () => {
           storeAttempts.set(key, (storeAttempts.get(key) ?? 0) + 1);
           expect(call.arguments).toMatchObject({
             mediaType: "audio",
+            contentType: "voice_note",
+            senderTimestamp: "1970-01-01T00:00:01.000Z",
             filename: `${key.slice("alpha:whatsapp:".length)}.ogg`,
             sourceHint: "WhatsApp voice note",
             contentHint: "WhatsApp voice note",

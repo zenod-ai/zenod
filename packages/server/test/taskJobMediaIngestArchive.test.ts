@@ -86,6 +86,31 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     store.close();
   });
 
+  it.each(["voice_note", "audio"] as const)("keeps source %s identity and timestamp through capture and enrichment", async (contentType) => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-voice-identity-"));
+    dirs.push(dir);
+    const settings = { get: (key: string) => ({ artifact_archive_provider: "local", artifact_archive_local_dir: join(dir, "archive") })[key] ?? null } as unknown as Settings;
+    const receipt = { evidenceRef: "Log/2026-09-08.md#^e-source", pagesTouched: [], commitSha: "a".repeat(40), githubUrls: [], filing: "filed" as const };
+    const captureEvidence = vi.fn(async () => receipt);
+    const enrichEvidence = vi.fn(async () => receipt);
+    const store = new TaskJobStore(join(dir, "tasks.sqlite"));
+    const queue = new TaskJobQueue(store, async () => ({ captureEvidence, enrichEvidence }) as unknown as BrainEngine, settings);
+    const input = {
+      mediaType: "audio" as const, contentType,
+      bytesRef: `data:audio/ogg;base64,${Buffer.from("same audio bytes").toString("base64")}`,
+      filename: "same.ogg", sourceHint: contentType === "voice_note" ? "WhatsApp voice note" : "WhatsApp audio",
+      senderTimestamp: "2026-09-08T11:48:55Z", providedTranscript: "Source identity regression transcript", transcriptionDisposition: "provided" as const,
+    };
+    const job = queue.enqueue("media_ingest", input, `tenant:whatsapp:${contentType}`);
+    expect(queue.enqueue("media_ingest", input, `tenant:whatsapp:${contentType}`).id).toBe(job.id);
+    for (let attempt = 0; attempt < 100 && store.get(job.id)?.status !== "done"; attempt += 1) await sleep(5);
+    await queue.close();
+    expect(store.get(job.id)?.status).toBe("done");
+    expect(captureEvidence).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ contentType, capturedAt: input.senderTimestamp, sourceId: `tenant:whatsapp:${contentType}`, source: "whatsapp" }));
+    expect(enrichEvidence).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ contentType, capturedAt: input.senderTimestamp, evidenceRef: receipt.evidenceRef }));
+    store.close();
+  });
+
   it("answers chat while a slow media archive is still being filed", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-media-chat-lane-"));
     dirs.push(dir);

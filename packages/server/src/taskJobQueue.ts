@@ -421,8 +421,10 @@ async function processMediaIngest(
     },
   });
 
+  const contentType = input.contentType ?? input.mediaType ?? extraction.kind;
+  const label = extraction.kind === "audio" && contentType !== "voice_note" ? "Audio" : extraction.label;
   const content = [
-    `${extraction.label} "${archived.filename}" ingested through Zenod media seam.`,
+    `${label} "${archived.filename}" ingested through Zenod media seam.`,
     `Raw artifact: ${archived.handle.uri}`,
     ...(archived.handle.url ? [`Raw artifact URL: ${archived.handle.url}`] : []),
     `Raw artifact sha256: ${archived.handle.sha256}`,
@@ -443,7 +445,7 @@ async function processMediaIngest(
     content,
     source: sourceFromHint(input.sourceHint),
     verbatim: true,
-    contentType: input.mediaType ?? extraction.kind,
+    contentType,
     ...(input.senderTimestamp ? { capturedAt: input.senderTimestamp } : {}),
     ...(input.mediaHints?.length ? { hints: input.mediaHints } : {}),
     sourceId: captureIdentity,

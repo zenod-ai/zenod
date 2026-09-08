@@ -12,7 +12,7 @@ Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Additional root rationale: n/a
 GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
-Active spine steward: ZMR-delivery-manager (parent task /root)
+Active spine steward: voice-note-identity delivery worker (current parent task /root)
 Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
 Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 deployed; final affected recall checks 3/3 pass
 Planner: Jordi + ZMR-release-planner
@@ -87,6 +87,8 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
+2026-09-08 bounded repair: [#1231](https://github.com/zenod-ai/zenod/issues/1231), owner current voice-note-identity worker, branch `codex/voice-note-identity`, worktree `/Users/jordi/Documents/GitHub/wt-voice-note-identity`, base `779f74c8210b31de7c71fe406a3c2d992a5fb5bf`. Jordi requested a simple source-labelled end-to-end VN repair and explicitly authorized deployment/testing. Stewardship transfers from the prior ZMR delivery manager to this task for this bounded repair. Reuse source PTT identity and stored sender timestamp, preserve immutable history, verify old/new typed retrieval and actual deployed pair. No new orchestration, storage migration, provider changes or unrelated deployment. Next action: focused regressions, independent review, CI, pair deployment and live acceptance. Prior release state below is historical.
+
 Phase: bounded production upgrade and observed repair loop complete; broader release acceptance remains open
 Last verified: 2026-09-07 00:19 UTC
 Integration target: main
@@ -157,6 +159,8 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 | D9 | 2026-09-06 | accepted | In-place work | BUILD rows mean extending inspected existing primitives; PORT/DUPLICATE only when actually moving/copying proven code. | Do not label an in-place algorithm fix a wholesale port. | Reuse inventory | ZMR-1 inventory |
 
 ## Issue Ledger
+
+Bound repair: [#1231](https://github.com/zenod-ai/zenod/issues/1231) — current worker; running; dedicated `codex/voice-note-identity` from `779f74c`; reuse existing transport/ingestion/evidence/receipt components. Acceptance: source PTT survives restart, timestamps/identity preserved, mixed-format newest-first retrieval and exact reads pass, arbitrary audio stays audio, deployment/live checks recorded. Existing release tickets below remain in their recorded state.
 
 ZMR-1–7 are integrated; ZMR-8 validation is active. ZMR-9/10 remain deferred until human SHIP acceptance. Dependencies refer to ZMR IDs resolved to GitHub links in each issue. Detailed acceptance lives in issues; this ledger owns scope and dependency rollup.
 
