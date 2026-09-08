@@ -8,7 +8,7 @@ All three fresh ordinary-language live queries returned the correct latest five 
 
 Historical correction: 11 actual PTT voice notes restored, three ordinary audio attachments kept separate, five September transcript bodies unchanged. All 76 VNs paginated completely without duplicates in chronological order.
 
-Remaining acceptance limits: a genuinely new post-deployment phone VN has been requested but has not yet arrived; one generated summary still displayed processing-header times rather than the correct source timestamps returned by the catalog. The original-query and shorthand answers used source times correctly. This is a recency-retrieval pass, not a claim of perfect free-form summaries or forever reliability. Long transcripts retain bounded-read continuation. See `final-retrieval-acceptance.json`.
+Fresh phone acceptance now passes: Jordi sent a real VN at 19:25:42 UTC. Source PTT, transcription, archive, raw log label/timestamp, enrichment, unique newest retrieval and natural-language exact recall all passed with no manual correction. See `fresh-phone-acceptance.json`. Remaining limitation: one earlier generated summary displayed processing-header times rather than the correct source timestamps returned by the catalog. The original-query and shorthand answers used source times correctly. This is a recency-retrieval pass, not a claim of perfect free-form summaries or forever reliability. Long transcripts retain bounded-read continuation. See `final-retrieval-acceptance.json`.
 
 ## Historical investigation and repair record
 
@@ -96,3 +96,12 @@ On `d2183da0cb3565a82bc473a395f8526ab3808816`, the original screenshot wording a
 Jordi explicitly rejected phrase-specific fixes and asked that retrieval simply read the log. The follow-up uses the same generic entry catalog and existing exact passage reader: return bounded source passages alongside selected entries, retaining source metadata, continuation, read failures and budgets. Typed selection supplies exact scope to the existing answer-grounding guard, which otherwise incorrectly expects category words such as “VNs” to occur in transcript content. Neighboring log entries remain outside that scope. No question matcher, hard-coded dates/IDs, separate VN index or new storage is introduced. The VN-specific guidance example is removed in favor of generic category/ordering/query instructions.
 
 Final production and fresh-phone acceptance are still pending for this follow-up. The most recent source audit at 15:56:59 UTC found no new inbound message after rollout; a genuine new phone VN has been requested from Jordi.
+
+
+## Fresh phone acceptance — 19:25:42 UTC
+
+The user confirmed a new phone VN was sent. Provider ID `3BA2DA0E2434FB97C75A` was source type `ptt`, processed/replied, with the durable voice job completed on its first attempt and no error. Media ingest `93dc5239-05aa-4006-971b-b71a596cc215` and enrichment `98b543f1-bca6-4875-888d-2953511258cb` both completed without error. The short test appropriately remained evidence-only, with no meaning-page edits.
+
+The immutable log entry `Log/2026-09-08.md#^e-cbdf8b` itself stores `content-type: voice_note` and `captured-at: 2026-09-08T19:25:42.000Z`; no receipt repair/backfill was performed. Original audio and transcript are archived to Drive; the log is committed at `1c143ac3b7bb8d72e51ec357b377fc0fe1b60031`. Exact retrieval returns the transcript; provider-ID search returns exactly one entry; the ordinary-audio category returns zero matches. It is the newest of 77 VNs.
+
+Fresh conversational test `test_533767458c914de781c4ca372ad52af8`, using only “What was my latest voice note?”, returned the exact test sentence, correct source timestamp and correct source ref. Both deployed revisions and public health were checked again; WhatsApp is connected/ready. This closes the previously pending fresh-phone test, while retaining the earlier free-form prose-time limitation.
