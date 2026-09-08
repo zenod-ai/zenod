@@ -221,7 +221,7 @@ it("registers the typed read-only catalog with all filters and records successfu
   expect(captured.config.messages[0].content).toContain("Set exhaustive=true");
 });
 
-it("teaches category-only recent VN retrieval without adding lexical or date filters", async () => {
+it("supports chronological category retrieval without adding lexical or date filters", async () => {
   const entry = { evidenceRef: "Log/2026-09-08.md#^e-latest", contentType: "voice_note", capturedAt: "2026-09-08T14:15:00Z" };
   const searchEntries = vi.fn(async () => JSON.stringify({ entries: [entry], pagination: { hasMore: false } }));
   const readNote = vi.fn(async () => "Exact latest transcript");
@@ -230,16 +230,16 @@ it("teaches category-only recent VN retrieval without adding lexical or date fil
     searchVault: async () => "none", readNote, listPages: async () => "none", searchChats: async () => "none", searchEntries,
   });
   const tool = captured.config.tools.search_entries;
-  // The model-visible example is executable and reaches the catalog unchanged.
-  const example = JSON.parse(tool.description.match(/\{"contentType":"voice_note"[^}]+\}/)[0]);
+  // Category/order inputs reach the catalog unchanged, without invented query terms.
+  const example = { contentType: "voice_note", order: "newest", limit: 5 };
   expect(tool.inputSchema.parse(example)).toEqual({ contentType: "voice_note", order: "newest", limit: 5 });
   const result = JSON.parse(await tool.execute(example));
   expect(searchEntries).toHaveBeenCalledExactlyOnceWith(example);
   expect(result.entries[0]).toEqual(entry);
-  expect(tool.description).toContain("omit query");
+  expect(tool.description).toContain("Omit query");
   expect(tool.inputSchema.shape.query.description).toContain("Omit for category-only lists");
-  expect(captured.config.messages[0].content).toContain("Omit query for a category-only list");
-  expect(captured.config.messages[0].content).toContain("Use catalog capturedAt");
+  expect(captured.config.messages[0].content).toContain("omit it for category-only lists");
+  expect(captured.config.messages[0].content).toContain("use catalog capturedAt");
   await captured.config.tools.read_note.execute({ path: result.entries[0].evidenceRef });
   expect(readNote).toHaveBeenCalledWith(entry.evidenceRef, expect.any(Object));
 });

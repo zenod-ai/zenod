@@ -643,7 +643,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       [
         "TOOL CONTRACT — applies to every question about the vault's contents, no exceptions:",
         "1. You MUST call search_vault (or search_entries when available) BEFORE you write any answer. Do not narrate 'let me search' and then answer — actually call the tool first, then answer from its results.",
-        "2. You MUST call read_note on the notes/logs you rely on before quoting, summarizing, or citing them. Never describe a note's contents from its title or summary alone.",
+        "2. Base quotes, summaries and citations on actual source passages. search_entries includes successful bounded host reads for some entries; those passage bodies count as source reads. Use read_note for unread notes/logs or passage continuations. Never describe contents from titles or discovery snippets alone.",
         "3. The page/log/attachment lists in this briefing are ONLY a table of contents so you know what to search for and read. They are NOT a source you may quote, count, rank, or answer from. Anything you state about vault content must come from a tool result in THIS turn.",
         "4. To conclude something is absent, you must have run search_vault (and retried with different terms) this turn — never infer absence from this index.",
         "The only questions exempt are pure chit-chat with no reference to the user's notes, projects, logs, or memory.",
@@ -2153,6 +2153,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
     const passageSources = new Map<string, VaultSourceRef>();
+    const catalogEntries = new Map<string, EntrySearchResult["entries"][number]>();
+    const automaticEntryReads = new Map<string, { snapshot: string; result: Promise<{ passage?: NotePassage; error?: string }> }>();
+    let catalogSnapshotValid = true;
     const conversationReadSpans: Array<{ path: string; text: string }> = [];
     let factReadAttempts = 0;
     let explicitFactReadAttempts = 0;
@@ -2234,9 +2237,31 @@ export function createEngine(options: EngineOptions): BrainEngine {
           if (!exhaustive || !page.pagination.nextCursor) break;
           nextInput = { ...nextInput, cursor: page.pagination.nextCursor };
         } while (true);
-        return JSON.stringify({ entries, pagination: page!.pagination,
+        const evidence = [];
+        for (const entry of entries) {
+          catalogEntries.set(entry.evidenceRef, entry);
+          // Reuse the ordinary tracked reader: exact anchors, budgets, failed reads,
+          // source identity and continuation coverage obey the same contract.
+          if (!automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5) {
+            automaticEntryReads.set(entry.evidenceRef, { snapshot: page!.pagination.snapshot, result: (async () => {
+              try { return { passage: JSON.parse(await groundedTools.readNote!(entry.evidenceRef, { maxChars: 4000 })) as NotePassage }; }
+              catch (error) { return { error: String(error) }; }
+            })() });
+          }
+          const read = automaticEntryReads.get(entry.evidenceRef);
+          if (read && read.snapshot !== page!.pagination.snapshot) {
+            catalogSnapshotValid = false;
+            coverageTracker.invalidate(input);
+          }
+          if (read) evidence.push({
+            evidenceRef: entry.evidenceRef,
+            capture: { capturedAt: entry.capturedAt, contentType: entry.contentType, source: entry.source },
+            ...(read.snapshot === page!.pagination.snapshot ? await read.result : { error: "Entry snapshot changed; restart retrieval before using the earlier passage." }),
+          });
+        }
+        return JSON.stringify({ entries, pagination: page!.pagination, evidence,
           coverage: coverageTracker.result(),
-          instruction: "Discovery catalog only. Read exact evidenceRefs before synthesis; snippets/citations are not support. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
+          instruction: "Evidence contains actual exact-entry passage reads (up to 5 per answer, 4000 characters each). Use capture.capturedAt as the source time; raw Log headings are processing time. Synthesize only from successful passage bodies, not discovery snippets. Follow passage nextCursor or read unread exact refs when needed. Partial passages do not establish absence or complete coverage. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
       } } : {}),
       ...(tools.readNote
         ? {
@@ -2313,8 +2338,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         for (const scope of coverageTracker.scopes()) {
           try {
             const current = JSON.parse(await tools.searchEntries!({ ...scope.query, limit: 1 })) as EntrySearchResult;
-            if (current.pagination.snapshot !== scope.snapshot) coverageTracker.invalidate(scope.query);
-          } catch { coverageTracker.invalidate(scope.query); }
+            if (current.pagination.snapshot !== scope.snapshot) { catalogSnapshotValid = false; coverageTracker.invalidate(scope.query); }
+          } catch { catalogSnapshotValid = false; coverageTracker.invalidate(scope.query); }
         }
         const coverage = coverageTracker.result();
         const exhaustiveRefs = coverageTracker.enumeratedRefs();
@@ -2322,7 +2347,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         let text: string;
         const absence = coverage.status !== "partial" && (coverage.continuation.length > 0 || coverage.failedReads.length > 0)
           ? suppressIncompleteAbsence(result.text) : { text: result.text, suppressed: false };
-        if (coverage.status === "partial") {
+        if (coverage.status === "partial" || !catalogSnapshotValid) {
+          coverage.status = "partial";
           const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
           const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
           const unread = coverage.searches.reduce((n, search) => n + search.unreadEvidenceRefs.length, 0);
@@ -2350,6 +2376,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
               })),
             ],
             pinnedSpans,
+            ...(catalogSnapshotValid ? { selectedEvidenceRefs: new Set(catalogEntries.keys()) } : {}),
           });
         }
         if (absence.suppressed && !useFactAnswer) {

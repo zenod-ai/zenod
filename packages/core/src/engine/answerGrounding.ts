@@ -89,7 +89,7 @@ function relevantLogText(question: string, text: string): string {
   return blocks.filter(block => evidenceTextMatchesQuestion(question, block.text)).map(block => block.text).join("\n");
 }
 
-function scopedSources(question: string, spans: ReadSpan[]): Map<string, string> {
+function scopedSources(question: string, spans: ReadSpan[], selectedEvidenceRefs?: ReadonlySet<string>): Map<string, string> {
   const scoped = new Map<string, string>();
   const entries = new Map<string, ReadSpan[]>();
   const append = (path: string, text: string) => {
@@ -98,7 +98,8 @@ function scopedSources(question: string, spans: ReadSpan[]): Map<string, string>
   };
   for (const span of spans) {
     if (span.verifiedAnchor) {
-      // Identity joins heading-free continuations; it is NOT a relevance bypass.
+      // Identity joins heading-free continuations. Only exact refs selected by
+      // the host catalog can bypass lexical relevance; ordinary reads cannot.
       // Keep versions separate and reconstruct only text actually returned.
       const key = JSON.stringify([span.path, span.verifiedAnchor, span.version]);
       const group = entries.get(key) ?? [];
@@ -118,7 +119,8 @@ function scopedSources(question: string, spans: ReadSpan[]): Map<string, string>
     }
     const first = group[0]!;
     const identified = `##  ^${first.verifiedAnchor}\n${text}`;
-    append(first.path, relevantLogText(question, identified));
+    append(first.path, selectedEvidenceRefs?.has(`${first.path}#^${first.verifiedAnchor}`)
+      ? identified : relevantLogText(question, identified));
   }
   return scoped;
 }
@@ -195,8 +197,10 @@ export function sanitizeGroundedAnswer(input: {
   readSpans: ReadSpan[];
   /** Exact host-resolved evidence blocks that bypass question-term narrowing. */
   pinnedSpans?: ReadSpan[];
+  /** Host catalog scope; applies only to successfully read exact anchored spans. */
+  selectedEvidenceRefs?: ReadonlySet<string>;
 }): string {
-  const scoped = scopedSources(input.question, input.readSpans);
+  const scoped = scopedSources(input.question, input.readSpans, input.selectedEvidenceRefs);
   for (const span of input.pinnedSpans ?? []) {
     const existing = scoped.get(span.path);
     scoped.set(span.path, existing ? `${existing}\n\n${span.text}` : span.text);

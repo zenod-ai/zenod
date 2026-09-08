@@ -520,6 +520,88 @@ describe("BrainEngine", () => {
     expect(entrySearch).toHaveBeenCalledTimes(priorCalls);
   });
 
+  it.each(["voice_note", "document"] as const)("reads catalog-selected %s text and grounds short category questions without neighboring evidence", async (contentType) => {
+    const path = "Log/2026-09-08.md";
+    const ref = `${path}#^e-123abc`;
+    await writeFile(join(repo.path, path), "# Log\n\n## 14:16 Capture ^e-123abc\n> Keep the ORCHID-8120 launch private.\n\n## 14:17 Other ^e-456def\n> DISTRACTOR-9120 is unrelated.\n");
+    const entry = { evidenceRef: ref, capturedAt: "2026-09-08T14:15:00Z", contentType, source: "whatsapp" };
+    const entrySearch = vi.fn(async () => ({ entries: [entry], pagination: { hasMore: false, nextCursor: null, snapshot: "stable", matchedEntries: 1, scannedEntries: 2, scannedVaultEntries: 2, scannedReceiptJobs: 1, receiptEnrichmentAvailable: true, scope: "test" } } as any));
+    llm.answerOverride = async (_input, tools) => {
+      const result = JSON.parse(await tools.searchEntries!({ contentType, order: "newest", limit: 5 }));
+      expect(result.evidence).toHaveLength(1);
+      expect(result.evidence[0].capture.capturedAt).toBe(entry.capturedAt);
+      expect(result.evidence[0].passage.body).toContain("14:16"); // Original evidence stays unchanged.
+      expect(result.evidence[0].passage.body).not.toContain("DISTRACTOR");
+      expect(result.coverage.passageReadAttempts).toBe(1);
+      return { text: `ORCHID-8120 (${ref}). DISTRACTOR-9120 (${path}#^e-456def).`, readPaths: [] };
+    };
+    const reply = await createEngine({ repo, llm, state, entrySearch }).chat(contentType === "voice_note" ? "What are my latest VNs?" : "What are my latest documents?", "whatsapp");
+    expect(reply.text).toContain("ORCHID-8120");
+    expect(reply.text).toContain(ref);
+    expect(reply.text).not.toContain("DISTRACTOR-9120");
+    expect(reply.text).not.toContain("e-456def");
+    expect(reply.sources).toHaveLength(1);
+    expect(reply.coverage?.successfulReads).toHaveLength(1);
+  });
+
+  it("keeps automatic catalog reads bounded across repeated searches and reports truncated passages", async () => {
+    const path = "Log/2026-09-08.md";
+    const refs = Array.from({ length: 6 }, (_, i) => `${path}#^e-${String(i + 1).padStart(6, "0")}`);
+    await writeFile(join(repo.path, path), "# Log\n\n" + refs.map((ref, i) => `## 14:16 Capture ^${ref.split("#^")[1]}\n> ${i === 0 ? "x".repeat(9000) : "Ordinary transcript."}\n\n`).join(""));
+    const entries = refs.map(evidenceRef => ({ evidenceRef, capturedAt: "2026-09-08T14:15:00Z", contentType: "voice_note", source: "whatsapp" }));
+    const entrySearch = vi.fn(async () => ({ entries, pagination: { hasMore: false, nextCursor: null, snapshot: "stable", matchedEntries: 6, scannedEntries: 6, scannedVaultEntries: 6, scannedReceiptJobs: 0, receiptEnrichmentAvailable: false, scope: "test" } } as any));
+    llm.answerOverride = async (_input, tools) => {
+      for (let i = 0; i < 2; i++) {
+        const result = JSON.parse(await tools.searchEntries!({ contentType: "voice_note", limit: 6 }));
+        expect(result.evidence).toHaveLength(5);
+        expect(result.coverage.passageReadAttempts).toBe(5);
+        expect(result.evidence[0].passage.body.length).toBeLessThanOrEqual(4000);
+        expect(result.evidence[0].passage.nextCursor).toBeTruthy();
+        expect(result.coverage.continuation).toContainEqual(expect.objectContaining({ tool: "read_note", input: expect.objectContaining({ path: refs[0] }) }));
+        expect(result.coverage.searches[0].unreadEvidenceRefs).toContain(refs[5]);
+      }
+      return { text: "Only the returned passage prefixes were read.", readPaths: [] };
+    };
+    await createEngine({ repo, llm, state, entrySearch }).ask("Recent recordings");
+  });
+
+  it("does not reuse automatic passages after the catalog snapshot changes", async () => {
+    const path = "Log/2026-09-08.md";
+    const ref = `${path}#^e-123abc`;
+    await writeFile(join(repo.path, path), "# Log\n\n## 14:16 Capture ^e-123abc\n> Earlier statement.\n");
+    let snapshot = "before";
+    const entrySearch = vi.fn(async () => ({ entries: [{ evidenceRef: ref, capturedAt: "2026-09-08T14:15:00Z", contentType: "text", source: "web" }], pagination: { hasMore: false, nextCursor: null, snapshot, matchedEntries: 1, scannedEntries: 1, scannedVaultEntries: 1, scannedReceiptJobs: 0, receiptEnrichmentAvailable: false, scope: "test" } } as any));
+    llm.answerOverride = async (_input, tools) => {
+      const first = JSON.parse(await tools.searchEntries!({ order: "newest" }));
+      expect(first.evidence[0].passage.body).toContain("Earlier statement");
+      snapshot = "after";
+      const changed = JSON.parse(await tools.searchEntries!({ order: "newest" }));
+      expect(changed.evidence[0].passage).toBeUndefined();
+      expect(changed.evidence[0].error).toContain("snapshot changed");
+      expect(changed.coverage.passageReadAttempts).toBe(1);
+      return { text: "Earlier statement is current.", readPaths: [] };
+    };
+    const reply = await createEngine({ repo, llm, state, entrySearch }).ask("Recent captures");
+    expect(reply.coverage?.status).toBe("partial");
+    expect(reply.text).not.toContain("Earlier statement is current");
+  });
+
+  it("keeps failed automatic source reads visible and does not promote catalog snippets to evidence", async () => {
+    const ref = "Log/2026-09-08.md#^e-000001";
+    const entrySearch = vi.fn(async () => ({ entries: [{ evidenceRef: ref, capturedAt: "2026-09-08T14:15:00Z", contentType: "voice_note", source: "whatsapp", snippet: "UNREAD-1234" }], pagination: { hasMore: false, nextCursor: null, snapshot: "stable", matchedEntries: 1, scannedEntries: 1, scannedVaultEntries: 0, scannedReceiptJobs: 1, receiptEnrichmentAvailable: true, scope: "test" } } as any));
+    llm.answerOverride = async (_input, tools) => {
+      const result = JSON.parse(await tools.searchEntries!({ contentType: "voice_note" }));
+      expect(result.evidence[0].error).toBeTruthy();
+      expect(result.evidence[0].passage).toBeUndefined();
+      expect(result.coverage.failedReads).toContain(ref);
+      return { text: `UNREAD-1234 ${ref}`, readPaths: [] };
+    };
+    const reply = await createEngine({ repo, llm, state, entrySearch }).ask("Latest captures");
+    expect(reply.sources).toHaveLength(0);
+    expect(reply.text).toContain("couldn't verify");
+    expect(reply.text).not.toContain("UNREAD-1234");
+  });
+
   it("returns typed GitHub connection-required denial without an external mutation", async () => {
     const reply = await engine().handleTasking({
       text: "CREATEISSUE: This must not leave the vault",
