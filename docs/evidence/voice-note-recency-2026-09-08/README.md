@@ -1,5 +1,17 @@
 # Voice-note recency incident — 2026-09-08
 
+## Current outcome
+
+Source identity and recent-entry recall are repaired and deployed. Public Zenod runs `631f85109dfa45fed95394a1e94d2d709c373fe6`; default Phylax runs `d02493cc0a7cb658ee5eedeea57039dd6fc264cb`. Exact running image revisions, health and WhatsApp readiness are recorded in `deployment-final.json`.
+
+All three fresh ordinary-language live queries returned the correct latest five September refs, including both September 8 notes. The previously failing “latest VNs” now works with one search call because that call supplies actual bounded source passages. No phrase routing, fixed dates or note IDs, separate VN index, or new storage was introduced. Daily logs plus existing ingestion metadata remain the source of the catalog. CI run 34250041697 and publication 34250774859 passed.
+
+Historical correction: 11 actual PTT voice notes restored, three ordinary audio attachments kept separate, five September transcript bodies unchanged. All 76 VNs paginated completely without duplicates in chronological order.
+
+Remaining acceptance limits: a genuinely new post-deployment phone VN has been requested but has not yet arrived; one generated summary still displayed processing-header times rather than the correct source timestamps returned by the catalog. The original-query and shorthand answers used source times correctly. This is a recency-retrieval pass, not a claim of perfect free-form summaries or forever reliability. Long transcripts retain bounded-read continuation. See `final-retrieval-acceptance.json`.
+
+## Historical investigation and repair record
+
 ## Finding
 
 Confirmed live retrieval compatibility defect: `search_memory(contentType="voice_note", order="newest")` returns August 27 as its newest entry. September WhatsApp voice notes exist, but are typed `audio` and therefore excluded. This reproduces the screenshot's precise cutoff without an LLM.
