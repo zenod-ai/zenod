@@ -120,3 +120,21 @@ it('allows a genuinely new project after successful bounded discovery in a large
   const blocked = await classifyCandidates({classify: failed}, dir, snapshot, {content: proposal.summary, hints: [], pageIndex: snapshot.pages, tagVocabulary: []});
   expect(blocked).toMatchObject({disposition: 'needs_clarification', pages: [], discovery: {partial: true, fallbackFailed: true}});
 });
+
+it('bounds and accounts for the entire serialized packet including omission metadata', async () => {
+  const dir = await vault();
+  const packet = await branchContext(dir, await scanVault(dir), [{topic: 'x', query: 'x', paths: Array.from({length: 1000}, (_,i) => `Projects/Missing${i}.md`)}]);
+  expect(JSON.stringify(packet).length).toBeLessThanOrEqual(12000);
+  expect(packet.contextChars).toBe(JSON.stringify(packet).length);
+  expect(packet.estimatedTokens).toBe(Math.ceil(JSON.stringify(packet).length / 4));
+  expect(packet.omittedCount).toBe(1000);
+  expect(packet.omitted.length).toBeLessThanOrEqual(8);
+});
+it('reserves section context for each topic sharing a branch before filling remaining slots', async () => {
+  const dir = await vault();
+  await writeFile(join(dir, 'Projects/A.md'), '# A\n## A1\nLogarithms network.\n## A2\nLogarithms network.\n## A3\nLogarithms network.\n## Travel\nPassport renewal.\n');
+  const packet = await branchContext(dir, await scanVault(dir), [{topic: 'video', query: 'logarithms network', paths: ['Projects/A.md']}, {topic: 'travel', query: 'passport', paths: ['Projects/A.md']}]);
+  expect(packet.branches[0]!.sections).toHaveLength(3);
+  expect(packet.branches[0]!.sections.some(section => section.text.includes('Passport'))).toBe(true);
+  expect(packet.branches[0]!.sections.some(section => section.text.includes('Logarithms'))).toBe(true);
+});

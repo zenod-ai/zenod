@@ -53,34 +53,69 @@ export interface BranchContextPacket {
     sections: Array<{ id: string; revision: string; start: number; end: number; excerptStart: number; text: string; truncated: boolean }> }>;
   partial: boolean;
   omitted: string[];
+  omittedCount: number;
   contextChars: number;
   /** Character-derived estimate, not provider-billed tokens. */
   estimatedTokens: number;
 }
 export const BRANCH_CONTEXT_MAX_CHARS = 12000;
+function omitContext(packet: BranchContextPacket, reason: string): void {
+  packet.omittedCount++;
+  if (packet.omitted.length < 8) packet.omitted.push(compact(reason, 256));
+  packet.partial = true;
+}
+/** Include envelope, bounded omission details and the accounting fields themselves. */
+function boundContextPacket(packet: BranchContextPacket): BranchContextPacket {
+  const account = () => {
+    // Serialized length can change when its own digit count changes; converge.
+    for (let i = 0; i < 8; i++) {
+      const chars = JSON.stringify(packet).length;
+      if (packet.contextChars === chars && packet.estimatedTokens === Math.ceil(chars / 4)) break;
+      packet.contextChars = chars; packet.estimatedTokens = Math.ceil(chars / 4);
+    }
+  };
+  account();
+  while (packet.contextChars > BRANCH_CONTEXT_MAX_CHARS && packet.branches.length) {
+    const removed = packet.branches.pop()!;
+    omitContext(packet, `${removed.path}:serialized_budget`);
+    account();
+  }
+  return packet;
+}
 /** Group by branch, read each current body once, and expose only selected revision-bound sections.
  * This packet is untrusted retrieval data. It does not authorize source assignments or writes.
  */
 export async function branchContext(vaultPath: string, snapshot: VaultSnapshot, queries: BranchQuery[]): Promise<BranchContextPacket> {
   const grouped = new Map<string, BranchQuery[]>();
   for (const query of queries) for (const path of new Set(query.paths)) grouped.set(path, [...(grouped.get(path) ?? []), query]);
-  const packet: BranchContextPacket = { branches: [], partial: Boolean(snapshot.catalogCoverage?.unreadable.length), omitted: [], contextChars: 0, estimatedTokens: 0 };
+  const packet: BranchContextPacket = { branches: [], partial: Boolean(snapshot.catalogCoverage?.unreadable.length), omitted: [], omittedCount: 0, contextChars: 0, estimatedTokens: 0 };
   let remaining = BRANCH_CONTEXT_MAX_CHARS;
   for (const [path, related] of grouped) {
     const page = snapshot.pages.find(page => page.path === path);
-    if (!page || packet.branches.length >= 4 || remaining < 200) { packet.omitted.push(`${path}:budget_or_missing`); packet.partial = true; continue; }
+    if (!page || packet.branches.length >= 4 || remaining < 200) { omitContext(packet, `${path}:budget_or_missing`); continue; }
     let raw: string;
     try { raw = await readFile(join(vaultPath, path), "utf8"); }
-    catch { packet.omitted.push(`${path}:unreadable`); packet.partial = true; continue; }
+    catch { omitContext(packet, `${path}:unreadable`); continue; }
     const revision = pageRevision(raw);
-    if (page.revision && page.revision !== revision) { packet.omitted.push(`${path}:revision_changed`); packet.partial = true; continue; }
+    if (page.revision && page.revision !== revision) { omitContext(packet, `${path}:revision_changed`); continue; }
     const {body} = parseNote(raw);
     const sections = catalogSections(path, body);
     const ranked = sections.map(section => {
       const text = body.slice(section.start, section.end).toLowerCase();
-      return { section, score: Math.max(...related.map(query => words(query.query).reduce((n, term) => n + (text.includes(term) ? 1 : 0) + (section.heading.toLowerCase().includes(term) ? 3 : 0), 0))) };
+      const topicScores = related.map(query => words(query.query).reduce((n, term) => n + (text.includes(term) ? 1 : 0) + (section.heading.toLowerCase().includes(term) ? 3 : 0), 0));
+      return { section, topicScores, score: Math.max(...topicScores) };
     }).sort((a,b) => b.score - a.score || a.section.start - b.section.start);
-    const selected = ranked.filter(row => row.score > 0).slice(0, 3);
+    const selected: typeof ranked = [];
+    // Cover each branch topic before a prolific topic occupies all section slots.
+    for (let topicIndex = 0; topicIndex < related.length; topicIndex++) {
+      if (selected.some(row => row.topicScores[topicIndex]! > 0)) continue;
+      const best = [...ranked].sort((a,b) => b.topicScores[topicIndex]! - a.topicScores[topicIndex]! || a.section.start - b.section.start)[0];
+      if (best && best.topicScores[topicIndex]! > 0) {
+        if (selected.length < 3) selected.push(best);
+        else omitContext(packet, `${path}:topic:${related[topicIndex]!.topic}:budget`);
+      }
+    }
+    for (const row of ranked) if (selected.length < 3 && row.score > 0 && !selected.includes(row)) selected.push(row);
     if (!selected.length && ranked[0]) selected.push(ranked[0]);
     const title = compact(page.title, 120), summary = compact(page.summary, SUMMARY_MAX_CHARS);
     remaining -= title.length + summary.length;
@@ -104,11 +139,7 @@ export async function branchContext(vaultPath: string, snapshot: VaultSnapshot, 
     if (selected.length < sections.length || excerpts.some(section => section.truncated)) packet.partial = true;
     packet.branches.push({ id: page.id ?? `p-${pageRevision(path).slice(0,20)}`, path, revision, topics: [...new Set(related.map(query => query.topic))], title, scope: summary, sections: excerpts });
   }
-  // Includes serialization overhead in the estimate; budget applies to the whole serialized packet.
-  while (JSON.stringify(packet.branches).length > BRANCH_CONTEXT_MAX_CHARS) { const removed = packet.branches.pop(); if (!removed) break; packet.omitted.push(`${removed.path}:serialized_budget`); packet.partial = true; }
-  packet.contextChars = JSON.stringify(packet.branches).length;
-  packet.estimatedTokens = Math.ceil(packet.contextChars / 4);
-  return packet;
+  return boundContextPacket(packet);
 }
 
 /** One bounded fallback search when a partial catalog gives uncertain or new-page decisions. */
@@ -145,11 +176,11 @@ export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultP
         const page = group.pages[rank]; if (page && combined.size < CANDIDATE_LIMIT) combined.set(page.path, page);
       }
       const context = await branchContext(vaultPath, snapshot, groups.map(group => ({topic: group.topic, query: group.query, paths: group.pages.slice(0, 2).map(page => page.path)})));
-      if (decisions.length > groups.length) { context.partial = true; context.omitted.push("topics:budget"); }
+      if (decisions.length > groups.length) { omitContext(context, "topics:budget"); boundContextPacket(context); }
       contextPartial ||= context.partial;
       // Truncated excerpts are the normal bounded context surface. Missing reads,
       // stale revisions or exhausted branch/topic budgets are discovery omissions.
-      discoveryOmitted = context.omitted.length > 0;
+      discoveryOmitted = context.omittedCount > 0;
       for (const path of combined.keys()) presented.add(path);
       result = await run([...combined.values()], true, context);
     } catch {
