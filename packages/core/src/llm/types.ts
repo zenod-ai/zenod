@@ -51,9 +51,20 @@ export interface TurnPlanCompiler {
   compileTurnPlan(input: TurnPlanCompileInput): Promise<TurnPlanCompilation>;
 }
 
+export interface SourcePassage {
+  id: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
 export interface ClassifyInput {
+  /** Code-generated evidence addresses; neighboring passages may complete an idea. */
+  sourcePassages?: SourcePassage[];
+  /** The owned source window; a topic must include evidence inside it. */
+  sourceRange?: { start: number; end: number };
   content: string;
-  /** Neighboring source text for resolving references only; never assign it as evidence. */
+  /** Legacy neighboring context; addressed callers instead use sourcePassages. */
   context?: string;
   hints: string[];
   pageIndex: PageIndexEntry[];
@@ -70,6 +81,10 @@ export interface ClassificationPage {
 }
 
 export interface ClassificationTopic {
+  /** Exact source assignments; occurrence is zero-based within the addressed passage. */
+  evidenceAssignments?: Array<{ passageId: string; quote: string; occurrence: number }>;
+  /** Engine-owned permitted passage table, overwritten after each model call. */
+  sourcePassages?: SourcePassage[];
   /** Engine-owned segment bounds, never supplied by a model. */
   sourceRange?: { start: number; end: number };
   /** Engine-owned classification failure, never supplied by a model. */
@@ -86,6 +101,11 @@ export interface ClassificationTopic {
 }
 
 export interface Classification {
+  /** Compact review ledger, separate from the short quotations supporting ideas. */
+  passageReviews?: Array<{ passageId: string; status: "assigned" | "evidence_only" | "unresolved" }>;
+  /** Engine-owned reviewed source coverage. Never accepted directly from a model. */
+  reviewedSourceSpans?: Array<{ start: number; end: number }>;
+
   /** Independent assignments; absent only for legacy LLM implementations. */
   topics?: ClassificationTopic[];
   /** Spend gate: only explicit semantic integration is allowed to invoke the full-page composer. */

@@ -14,14 +14,14 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
-Last reconciled commit: 4b90068c27d0b59705d4a6c9584d2f0ba947dcd7 (main); September 13 backlog only, no new deployment
+Last reconciled commit: 74e1414a28ef38994b6aedf3cfff70005c242a5e (main, PR1244); approved control plane integrated; implementation active, no new deployment
 Planner: Jordi + ZMR-release-planner
-Worker: unassigned for ZMR-11–17; earlier assignments are historical
+Worker: /root/zmr11_worker for ZMR-11; remaining tickets dependency waiting
 Tester: unassigned for ZMR-15/17
 
 ## Role Bindings
 
-Current delivery manager/steward: ZMR-reconciliation-delivery-manager (/root). Jordi explicitly requested implementation and ticket subagents. Planning integration is being repaired; ticket workers dispatch after the control-plane merge. The previous bindings below document the earlier delivery phase.
+Current delivery manager/steward: ZMR-reconciliation-delivery-manager (/root). Jordi explicitly requested implementation and ticket subagents. ZMR-11 is dispatched from reviewed planning head e3c6ed3 under the recorded sequencing exception; integration remains gated on planning merge and required checks. The previous bindings below document the earlier delivery phase.
 
 | Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
 |---|---|---|---|---|
@@ -106,13 +106,13 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: active delivery; planning CI repair before first ticket dispatch
+Phase: active ZMR-11 implementation, parallel ZMR-12 and deployment-tool preparation
 Last verified: 2026-09-13 Europe/Paris
 Integration target: main
 Fresh base commit: 4b90068c27d0b59705d4a6c9584d2f0ba947dcd7 (planning base; re-pin at worker dispatch)
-Next action: integrate the planning PR, then bind ZMR-11 #1237 to reproduce and repair source/idea mapping.
-Blockers: no backlog-creation blocker. Planning PR integration and fresh worker binding precede implementation; production requires tested immutable candidate and verified recovery packet.
-Acceptance boundary: ZMR-11–17 extend the existing pipeline. ZMR-1–7 are closed/integrated; ZMR-8 remains open for broader release acceptance; ZMR-9/10 remain deferred. No production SHA was reverified in this backlog turn.
+Next action: review and integrate ZMR-11 source/idea mapping after required checks; then rebase/integrate ZMR-12.
+Blockers: none for implementation. Production requires tested immutable candidate and verified recovery packet; real phone acceptance needs designated isolated route (asked asynchronously; other work continues).
+Acceptance boundary: ZMR-11–17 extend the existing pipeline. ZMR-1–7 are closed/integrated; ZMR-8 remains open for broader release acceptance; ZMR-9/10 remain deferred. Public runtime reverified at 631f85109dfa45fed95394a1e94d2d709c373fe6; no new rollout yet.
 
 ### Historical production and repair state
 
@@ -134,14 +134,22 @@ Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0
 
 Last attempted: create approved target-flow backlog including production deployment and live acceptance.
 Result: ZMR-11–17 #1237–#1243 created and dependency-linked; isolated planning branch contains research, editable slide and synthetic evaluation harness.
-Execution status: delivery active; control-plane CI repair
-Waiting on: PR #1244 required CI and integration; reviewer found only expired fixed-date readiness fixtures
+Execution status: ZMR-11 active; ZMR-12 catalog and ZMR-16 offline tooling parallel preparation
+Waiting on: ZMR-11 implementation/test handoff; PR1244 merged with CI green
 Approved work: execute ZMR-11–17 in dependency order with ticket subagents; bounded production deployment and testing after candidate/recovery checks. No paid model comparison or model switch.
-Next action: integrate planning PR, then begin ZMR-11 on fresh main.
+Next action: review ZMR-11, then integrate dependent work from fresh main.
 
 ### Delivery stewardship transfer — 2026-09-13T16:44:41.746725+00:00
 
 Outgoing ZMR-reconciliation-planner -> incoming ZMR-reconciliation-delivery-manager (/root), base 4b90068, planning PR #1244. Parent remains sole spine steward and integration manager. Independent reviewer approved planning; two pre-existing productionReadiness tests expired against the real clock. Reviewer is bound to a test-only clock repair; release preflight is read-only. Production baseline reverified at 631f85109dfa45fed95394a1e94d2d709c373fe6; fresh candidate recovery is required before rollout. Next: pass planning CI, merge, dispatch ZMR-11 from fresh main.
+
+### ZMR-11 dispatch sequencing exception — 2026-09-13T16:57Z
+
+Manager authorized isolated implementation from reviewed PR1244 head e3c6ed324a7255cef2ef2a49540eaab031afed54 while its CI reruns unrelated timeout flakes. All build/package checks passed. Four affected suites pass together locally (112 tests); date fixture tests pass and production behavior is unchanged. Planning must merge and implementation checks/review must pass before ZMR-11 integration. Owner /root/zmr11_worker, branch codex/zmr-11, dedicated worktree /Users/jordi/Documents/GitHub/wt-zmr-11. No production scope change. Dispatch recorded in #1237. This supersedes the earlier requirement to delay all local work until planning merge, without waiving integration checks.
+
+### Planning integrated and parallel local work — 2026-09-13T17:02Z
+
+PR1244 merged at 74e1414a28ef38994b6aedf3cfff70005c242a5e; required CI green. Local preparatory work in independent modules is permitted while integration dependencies remain: ZMR12 /root/zmr12_worker owns catalog/context in wt-zmr-12, avoids source-mapping edits; ZMR16 /root/zmr_acceptance_design is rebound to offline operator helper repair in wt-zmr-16, with no production action authority. Both started from reviewed e3c6ed3 and must rebase/revalidate completed dependencies. ZMR11 baseline regression ab5873c demonstrates wrapper contamination. Issue comments own details. Parent remains integration manager and sole spine steward.
 
 ### Historical execution receipts
 
@@ -218,12 +226,12 @@ Sequential default. #1237–#1243 are approved for delivery; dependencies still 
 
 | Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| [ZMR-11 #1237](https://github.com/zenod-ai/zenod/issues/1237) | 1 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Preserve source identity while extracting every voice-note idea | approved, dependency waiting | planning PR | ../wt-zmr-11 at dispatch | codex/zmr-11 | pin fresh main | approved target flow | 2026-09-13 | Bind after planning PR |
-| [ZMR-12 #1238](https://github.com/zenod-ai/zenod/issues/1238) | 2 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Find complete branch context with a bounded memory catalog | approved, dependency waiting | ZMR-11 | ../wt-zmr-12 at dispatch | codex/zmr-12 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-11 #1237](https://github.com/zenod-ai/zenod/issues/1237) | 1 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Preserve source identity while extracting every voice-note idea | active; integration gated | planning PR merge | /Users/jordi/Documents/GitHub/wt-zmr-11 | codex/zmr-11 | e3c6ed3 | reviewed planning head; baseline fixture next | 2026-09-13 | Worker handoff |
+| [ZMR-12 #1238](https://github.com/zenod-ai/zenod/issues/1238) | 2 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Find complete branch context with a bounded memory catalog | active local work; integration dependency | ZMR-11 | ../wt-zmr-12 at dispatch | codex/zmr-12 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
 | [ZMR-13 #1239](https://github.com/zenod-ai/zenod/issues/1239) | 3 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Apply minimal cited changes to existing knowledge | approved, dependency waiting | ZMR-11, ZMR-12 | ../wt-zmr-13 at dispatch | codex/zmr-13 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
 | [ZMR-14 #1240](https://github.com/zenod-ai/zenod/issues/1240) | 4 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Make enrichment receipts and retries truthful and idempotent | approved, dependency waiting | ZMR-13 | ../wt-zmr-14 at dispatch | codex/zmr-14 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
 | [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241) | 5 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Tester | unassigned | Prove multi-idea reconciliation and cost on an integrated candidate | approved, dependency waiting | ZMR-11, ZMR-12, ZMR-13, ZMR-14 | ../wt-zmr-15 at dispatch | codex/zmr-15 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
-| [ZMR-16 #1242](https://github.com/zenod-ai/zenod/issues/1242) | 6 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Operator | unassigned | Deploy the reviewed reconciliation candidate to production | approved, dependency waiting | ZMR-15 | ../wt-zmr-16 at dispatch | codex/zmr-16 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-16 #1242](https://github.com/zenod-ai/zenod/issues/1242) | 6 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Operator | /root/zmr_acceptance_design (tooling only) | Deploy the reviewed reconciliation candidate to production | offline tooling preparation; deployment dependency | ZMR-15 | ../wt-zmr-16 at dispatch | codex/zmr-16 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
 | [ZMR-17 #1243](https://github.com/zenod-ai/zenod/issues/1243) | 7 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Tester | unassigned | Run production voice-note acceptance and hand off human testing | approved, dependency waiting | ZMR-16 | ../wt-zmr-17 at dispatch | codex/zmr-17 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
 
 ### Earlier release ledger (historical assignments)
