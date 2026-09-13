@@ -123,3 +123,18 @@ it('keeps successive correction targets linked to the existing fact chain',async
   expect(reinforced.content.split('The launch moves to 20.')).toHaveLength(raw.split('The launch moves to 20.').length);
   expect(parseMemoryFacts(parseNote(reinforced.content).frontmatter!.memoryFacts)).toHaveLength(2);
 });
+
+it('keeps an idea pending when its later source associations or source text exceed the packet budget',async()=>{
+  for(const size of [30,1600]) {
+    const sources=Array.from({length:12},(_,i)=>({id:`s${i}`,start:i*size,end:(i+1)*size,text:(i===11?'Correction: latest decision differs.':'Early note.').padEnd(size,'x')}));
+    const prepared=input('# A\n[[Index]]\n',sources.map(source=>source.text).join(''));
+    prepared.input.sources=sources;
+    prepared.input.ideas=[{id:'recurring',topic:'One recurring idea',sourceIds:sources.map(source=>source.id)}];
+    const bounded=prepareReconciliation(prepared.input);
+    expect(bounded.request.ideas[0]).toMatchObject({sourcePartial:true});
+    expect(bounded.omittedSourcesByIdea.get('recurring')).toContain('s11');
+    const result=await applyReconciliation(bounded,[{...op('add','Early note.'),ideaIds:['recurring'],sourceIds:['s0'],statement:'Early note.'}]);
+    expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['recurring'],sourceIds:expect.arrayContaining(['s11']),reason:'reconciliation_source_context_incomplete'}));
+    expect(result.appliedOperationIds).toHaveLength(1);
+  }
+});

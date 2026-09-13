@@ -7,7 +7,7 @@ import { appendMemoryFacts, parseMemoryFacts, type FactProposal } from "./tempor
 
 export interface ReconciliationSource { id: string; start: number; end: number; text: string }
 export interface ReconciliationStatement { id: string; text: string; sectionId: string; factKey: string | null }
-export interface ReconciliationIdea {id:string;topic:string;sourceIds:string[]}
+export interface ReconciliationIdea {id:string;topic:string;sourceIds:string[];sourcePartial?:boolean;omittedSourceCount?:number}
 export interface ReconciliationInput {
   path: string; revision: string | null; contextPartial: boolean;
   statements: ReconciliationStatement[]; sources: ReconciliationSource[]; ideas:ReconciliationIdea[];
@@ -74,9 +74,17 @@ export function prepareReconciliation(input: PrepareInput) {
   const boundedSources: ReconciliationSource[] = [];
   for (const source of input.sources) if (boundedSources.length < 24 && JSON.stringify([...boundedSources,source]).length <= 16000) boundedSources.push(source);
   const ideas = input.ideas ?? input.sources.map(source=>({id:`idea-${source.id}`,topic:source.text.slice(0,160),sourceIds:[source.id]}));
-  const request: ReconciliationInput = {path: input.path, revision, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:ideas.slice(0,24).map(idea=>({...idea,topic:idea.topic.slice(0,160),sourceIds:idea.sourceIds.filter(id=>boundedSources.some(source=>source.id===id)).slice(0,8)}))};
+  const omittedSourcesByIdea = new Map<string,string[]>();
+  const boundedIdeas=ideas.slice(0,24).map(idea=>{
+    const sourceIds=idea.sourceIds.filter(id=>boundedSources.some(source=>source.id===id)).slice(0,8);
+    const omitted=idea.sourceIds.filter(id=>!sourceIds.includes(id));
+    if(omitted.length) omittedSourcesByIdea.set(idea.id,omitted);
+    return {...idea,topic:idea.topic.slice(0,160),sourceIds,sourcePartial:omitted.length>0,omittedSourceCount:omitted.length};
+  });
+  for(const idea of ideas.slice(24)) omittedSourcesByIdea.set(idea.id,[...idea.sourceIds]);
+  const request: ReconciliationInput = {path: input.path, revision, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:boundedIdeas};
   for (const id of targets.keys()) if (!boundedStatements.some(statement => statement.id === id)) targets.delete(id);
-  return {input, request, targets, ideas};
+  return {input, request, targets, ideas, omittedSourcesByIdea};
 }
 export type PreparedReconciliation = ReturnType<typeof prepareReconciliation>;
 
@@ -143,7 +151,11 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     }
     seen.add(id); result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds});
   }
-  for (const idea of prepared.ideas) if (!covered.has(idea.id)) result.pending.push({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:"reconciliation_idea_unassigned"});
+  for (const idea of prepared.ideas) {
+    const omitted=prepared.omittedSourcesByIdea.get(idea.id);
+    if (omitted?.length) result.pending.push({sourceIds:omitted,ideaIds:[idea.id],reason:"reconciliation_source_context_incomplete"});
+    else if (!covered.has(idea.id)) result.pending.push({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:"reconciliation_idea_unassigned"});
+  }
   if (!result.appliedOperationIds.length || (!edits.size && !additions.length)) return result;
   let body = parsed?.body ?? "";
   for (const edit of [...edits.values()].sort((a,b) => b.start - a.start)) body = body.slice(0, edit.start) + edit.text + body.slice(edit.end);
