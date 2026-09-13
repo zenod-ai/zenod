@@ -100,6 +100,17 @@ export async function branchContext(vaultPath: string, snapshot: VaultSnapshot, 
     if (page.revision && page.revision !== revision) { omitContext(packet, `${path}:revision_changed`); continue; }
     const {body} = parseNote(raw);
     const sections = catalogSections(path, body);
+    // Lexical ranking cannot establish absence across languages. When a small
+    // branch fits the existing section budget, expose every section (including
+    // nonmatching headings) so the semantic decision can see its actual claims.
+    const completeBranch = { id: page.id ?? `p-${pageRevision(path).slice(0,20)}`, path, revision,
+      topics: [...new Set(related.map(query => query.topic))], title: compact(page.title, 120), scope: compact(page.summary, SUMMARY_MAX_CHARS),
+      sections: sections.map(section => ({id: section.id, revision: section.revision, start: section.start, end: section.end,
+        excerptStart: section.start, text: body.slice(section.start, section.end), truncated: false})) };
+    const completeChars = JSON.stringify(completeBranch).length;
+    if (completeChars <= Math.min(SECTION_CONTEXT_MAX_CHARS, remaining - 256)) {
+      packet.branches.push(completeBranch); remaining -= completeChars; continue;
+    }
     const ranked = sections.map(section => {
       const text = body.slice(section.start, section.end).toLowerCase();
       const topicScores = related.map(query => words(query.query).reduce((n, term) => n + (text.includes(term) ? 1 : 0) + (section.heading.toLowerCase().includes(term) ? 3 : 0), 0));

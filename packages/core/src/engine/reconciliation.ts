@@ -3,7 +3,7 @@ import type { MemoryEntry } from "../types.js";
 import { parseNote, serializeNote } from "../vault/frontmatter.js";
 import { pageRevision } from "../vault/pages.js";
 import type { BranchContextPacket } from "./meaningNotes.js";
-import { appendMemoryFacts, parseMemoryFacts, type FactProposal } from "./temporalFacts.js";
+import { appendMemoryFacts, parseMemoryFacts, targetedCorrection, type FactProposal } from "./temporalFacts.js";
 
 export interface ReconciliationSource { id: string; start: number; end: number; text: string }
 export interface ReconciliationStatement { id: string; text: string; sectionId: string; factKey: string | null }
@@ -37,9 +37,38 @@ function compatibleLink(a: string, b: string): boolean {
     numbers: [...text.matchAll(/\d+(?:[-./]\d+)*/g)].map(match => match[0]).sort().join("|"),
     negative: /\b(not|never|no|nunca|without|sin)\b/i.test(text),
     uncertain: /\b(may|might|could|perhaps|maybe|plan|hope|podr[ií]a|quiz[aá]s|posiblemente|planeo|espero)\b/i.test(text),
-    actors: [...text.matchAll(/\b([A-Z][\p{L}]+)\s+(?:approved|owns|leads|aprob[oó]|posee|dirige)\b/gu)].map(match => match[1]).sort().join("|"),
+    actors: [...text.matchAll(/(?<![\p{L}\p{N}_])(\p{Lu}[\p{L}]+)\s+(?:approved|owns|leads|aprob[oó]|posee|dirige)(?![\p{L}\p{N}_])/gu)].map(match => match[1]).sort().join("|"),
   });
   return JSON.stringify(signature(a)) === JSON.stringify(signature(b));
+}
+/** Compact new claims must retain explicit intention as well as uncertainty.
+ * Existing imperative plan bullets can still be judged equivalent by LINK_SOURCE;
+ * this additional floor applies to newly authored prose, not branch prose style.
+ */
+function compatibleStatement(statement: string, source: string): boolean {
+  const intention = (text: string) => /\b(?:want(?:s|ed)?|wish(?:es|ed)?|intend(?:s|ed)?|planned|planning|aim(?:s|ed)?|quiero|quiere|queremos|queriendo|planeado|planeada|previsto|prevista|pretendo|pretende)\b/iu.test(text);
+  return compatibleLink(statement, source) && intention(statement) === intention(source);
+}
+/** A correction can quote both the rejected old value and its replacement.
+ * Compare compact new prose against the asserted replacement, while retaining
+ * every other number/negative/uncertainty guard. This is not an entailment proof:
+ * the model still chooses the exact target and the source-supported new claim.
+ */
+function compatibleCorrection(statement: string, source: string, target: string, intent: string | null): boolean {
+  if (compatibleStatement(statement, source)) return true;
+  if (!intent || !targetedCorrection(intent, source)) return false;
+  const numbers = (text: string) => text.match(/\d+(?:[-./]\d+)*/g) ?? [];
+  const oldNumbers = new Set(numbers(target));
+  // Remove only a single explicitly negated old numeric clause, bounded by a
+  // contrast/semicolon/comma. Negation in the replacement is never removed.
+  const retracted = /\b(?:ya\s+no|no\s+longer|not|no)\b[^;,.\n]*?(?=\s*\b(?:but|sino)\b|[;,])/giu;
+  const matches = [...source.matchAll(retracted)];
+  if (matches.length !== 1) return false;
+  const match = matches[0]!; const retired = numbers(match[0]);
+  if (!retired.length || retired.some(value => !oldNumbers.has(value))) return false;
+  const replacement = source.slice(0, match.index) + source.slice(match.index! + match[0].length);
+  if (!numbers(replacement).some(value => !oldNumbers.has(value))) return false;
+  return compatibleStatement(statement, replacement);
 }
 interface PrepareInput {
   path: string; raw: string | null; title: string; type: string; today: string;
@@ -122,8 +151,11 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
       continue;
     }
     const statement = operation.statement?.trim() || operation.sourceQuote;
-    if (operation.kind!=="link_source" && (statement.length>800 || !compatibleLink(statement,operation.sourceQuote))) {fail("statement_qualifiers_changed");continue;}
     const target = operation.targetId ? targets.get(operation.targetId) : undefined;
+    const compatible = operation.kind === "supersede" && target
+      ? compatibleCorrection(statement, operation.sourceQuote, target.text, operation.correctionQuote)
+      : compatibleStatement(statement, operation.sourceQuote);
+    if (operation.kind!=="link_source" && (statement.length>800 || !compatible)) {fail("statement_qualifiers_changed");continue;}
     if (operation.kind === "clarify") { fail("reconciliation_needs_clarification"); continue; }
     if (operation.kind !== "add" && !target) { fail("statement_target_invalid"); continue; }
     if (operation.kind === "link_source") {

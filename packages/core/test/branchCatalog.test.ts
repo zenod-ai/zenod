@@ -2,9 +2,10 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
+import { prepareReconciliation, applyReconciliation } from '../src/engine/reconciliation.js';
 import { scanVault } from '../src/vault/pages.js';
 import { candidatePages, classifyCandidates, branchContext } from '../src/engine/meaningNotes.js';
-import { serializeNote } from '../src/vault/frontmatter.js';
+import { parseNote, serializeNote } from '../src/vault/frontmatter.js';
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 async function vault() { const path = await mkdtemp(join(tmpdir(), 'zmr12-')); dirs.push(path); await mkdir(join(path, 'Projects')); return path; }
@@ -132,9 +133,31 @@ it('bounds and accounts for the entire serialized packet including omission meta
 });
 it('reserves section context for each topic sharing a branch before filling remaining slots', async () => {
   const dir = await vault();
-  await writeFile(join(dir, 'Projects/A.md'), '# A\n## A1\nLogarithms network.\n## A2\nLogarithms network.\n## A3\nLogarithms network.\n## Travel\nPassport renewal.\n');
+  await writeFile(join(dir, 'Projects/A.md'), '# A\n## A1\nLogarithms network.\n## A2\nLogarithms network.\n## A3\nLogarithms network.\n## Travel\nPassport renewal.\n## Archive\n' + 'Unrelated background. '.repeat(500));
   const packet = await branchContext(dir, await scanVault(dir), [{topic: 'video', query: 'logarithms network', paths: ['Projects/A.md']}, {topic: 'travel', query: 'passport', paths: ['Projects/A.md']}]);
   expect(packet.branches[0]!.sections).toHaveLength(3);
   expect(packet.branches[0]!.sections.some(section => section.text.includes('Passport'))).toBe(true);
   expect(packet.branches[0]!.sections.some(section => section.text.includes('Logarithms'))).toBe(true);
+});
+
+it.each([false, true])('includes every section of a small page despite cross-language lexical mismatch (metadata=%s)', async metadata => {
+  const dir = await vault();
+  const body = '# Observatory\n\nA community science course.\n\n## Learning objectives\n- Explain distances using familiar scale models.\n- The opening session is on September 8.\n\n## Equipment\n- A calibrated lens is required.\n\n## Capacity\n- Six attendees per session.\n';
+  await writeFile(join(dir, 'Projects/A.md'), metadata ? serializeNote(fm('Observatory'), body) : body);
+  const packet = await branchContext(dir, await scanVault(dir), [{topic:'Curso',query:'seguimos explicando distancias con objetos cotidianos; corrijo la fecha',paths:['Projects/A.md']}]);
+  expect(packet.branches[0]!.sections.map(section => section.text).join('')).toBe(parseNote(metadata ? serializeNote(fm('Observatory'), body) : body).body);
+  expect(packet.partial).toBe(false);
+  expect(packet.contextChars).toBeLessThanOrEqual(12000);
+  const source = 'Seguimos explicando distancias con modelos de escala cotidianos.';
+  const prepared = prepareReconciliation({path:'Projects/A.md', raw:await readFile(join(dir,'Projects/A.md'),'utf8'), title:'Observatory', type:'project', today:'2026-09-13',
+    evidence:{evidenceRef:'Log/2026-09-13.md#^e-123abc',path:'Log/2026-09-13.md',anchor:'e-123abc',title:'source',content:source,source:'mcp',verbatim:true,capturedAt:'2026-09-13T10:00:00Z',url:'',provider:'github'},
+    sources:[{id:'p1',start:0,end:source.length,text:source}], context:packet, links:['[[Index]]']});
+  expect(prepared.request.statements.map(statement=>statement.text)).toEqual([
+    'A community science course.', 'Explain distances using familiar scale models.',
+    'The opening session is on September 8.', 'A calibrated lens is required.', 'Six attendees per session.']);
+  const target = prepared.request.statements[1]!;
+  const result = await applyReconciliation(prepared,[{kind:'link_source',sourceIds:['p1'],sourceQuote:source,targetId:target.id,factKey:null,correctionQuote:null,reason:null}]);
+  expect(result.pending).toEqual([]);
+  expect(result.content).toContain('Explain distances using familiar scale models. [[2026-09-13#^e-123abc]]');
+  expect(result.content).not.toContain(source);
 });
