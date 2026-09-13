@@ -184,6 +184,7 @@ export class TaskJobQueue {
         }
         const result = await engine.enrichEvidence({
           evidenceRef: job.input.evidenceRef,
+          ...(job.input.semanticRange ? { semanticRange: job.input.semanticRange } : {}),
           content: job.input.content ?? "",
           source: job.input.source ?? "mcp",
           ...(job.input.hints ? { hints: job.input.hints } : {}),
@@ -441,13 +442,16 @@ async function processMediaIngest(
     "",
     extraction.body,
   ].join("\n");
+  const semanticRange = { start: content.length - extraction.body.length, end: content.length };
+  const filingHints = [...(input.mediaHints ?? []), ...(input.contentHint ? [`User context: ${input.contentHint.slice(0, 2000)}`] : [])];
   const storeInput = {
     content,
+    semanticRange,
     source: sourceFromHint(input.sourceHint),
     verbatim: true,
     contentType,
     ...(input.senderTimestamp ? { capturedAt: input.senderTimestamp } : {}),
-    ...(input.mediaHints?.length ? { hints: input.mediaHints } : {}),
+    hints: filingHints,
     sourceId: captureIdentity,
   } as const;
   const stored = engine.captureEvidence
@@ -458,6 +462,7 @@ async function processMediaIngest(
     ? enqueueEnrichment(
         {
           content,
+          semanticRange,
           source: storeInput.source,
           hints: storeInput.hints,
           verbatim: true,

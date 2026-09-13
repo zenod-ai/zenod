@@ -1038,6 +1038,86 @@ describe("BrainEngine", () => {
     expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
   });
 
+  it("classifies semantic transcript without media wrapper and addresses repeated occurrences independently", async () => {
+    // Synthetic, hand-reviewed ideas: educational video, network effects, uncertain name.
+    // The repeated sentence supports two distinct ideas, not a deduplication key.
+    const transcript = "PatronBTC explica Bitcoin.\r\nLa red crece. La red crece.\r\nQuizás Znot. 👩🏽‍💻 café";
+    const prefix = 'Voice note "demo.ogg" ingested through Zenod media seam.\nRaw artifact: drive://synthetic\n\n';
+    const content = prefix + transcript;
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      expect(input.content).toBe(transcript);
+      const passages = (input as ClassifyInput & { sourcePassages?: Array<{ id: string; text: string }> }).sourcePassages;
+      expect(passages?.length).toBeGreaterThan(0);
+      const passage = passages!.find((part) => part.text.includes("La red crece. La red crece."))!;
+      return { confidence: 0.9, summary: "three ideas", tags: [], pages: [], topics: [
+        ...["Network adoption", "Network feedback"].map((topic, occurrence) => ({
+          topic, summary: topic, confidence: 0.9, disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
+          evidenceAssignments: [{ passageId: passage.id, quote: "La red crece.", occurrence }],
+        })),
+        { topic: "Educational video", summary: "video", confidence: 0.9, disposition: "evidence_only" as const, pages: [], evidenceQuotes: ["PatronBTC explica Bitcoin."] },
+        { topic: "Uncertain name", summary: "Znot", confidence: 0.1, disposition: "needs_clarification" as const, pages: [], evidenceQuotes: ["Quizás Znot."] },
+      ] };
+    });
+    const e = engine();
+    const captured = await e.captureEvidence!({ content, source: "whatsapp", sourceId: "synthetic-multi-idea" });
+    const before = await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8");
+    const result = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef,
+      ...{ semanticRange: { start: prefix.length, end: content.length } } });
+    expect(result.topics?.slice(0, 4).map((topic) => [topic.topic, topic.status])).toEqual([
+      ["Network adoption", "filed"], ["Network feedback", "filed"], ["Educational video", "filed"], ["Uncertain name", "uncertain"],
+    ]);
+    const spans = result.topics!.slice(0, 2).flatMap((topic) => topic.sourceSpans);
+    expect(spans.map((span) => content.slice(span.start, span.end))).toEqual(["La red crece.", "La red crece."]);
+    expect(spans[0]!.start).not.toBe(spans[1]!.start);
+    expect(result.topics!.flatMap((topic) => topic.sourceSpans).every((span) => span.start >= prefix.length)).toBe(true);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+  });
+
+  it("keeps beginning and tail ideas when middle classification fails and source identity is retried", async () => {
+    // Ground truth is three independent ideas; the middle one must remain pending.
+    const beginning = "El vídeo explica efectos de red.";
+    const tail = "Final decision: release the English captions on Friday.";
+    const content = beginning + " a".repeat(6500) + " MIDDLE_OUTAGE: discutir presupuesto." + " b".repeat(6500) + tail;
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      if (input.content.includes("MIDDLE_OUTAGE")) throw new Error("synthetic middle outage");
+      const quote = input.content.includes(beginning) ? beginning : tail;
+      const passage = input.sourcePassages!.find(p => p.text.includes(quote))!;
+      return { confidence: 0.9, summary: "known idea", tags: [], pages: [], topics: [{
+        topic: quote === beginning ? "Network education" : "English caption release", summary: "known idea", confidence: 0.9,
+        disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
+        evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 0 }],
+      }] };
+    });
+    const e = engine();
+    const input = { content, source: "whatsapp" as const, sourceId: "synthetic-partial-voice-note", verbatim: true };
+    const captured = await e.captureEvidence!(input);
+    expect((await e.captureEvidence!(input)).evidenceRef).toBe(captured.evidenceRef);
+    const before = await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8");
+    const result = await e.enrichEvidence!({ ...input, evidenceRef: captured.evidenceRef });
+    expect(result.topics?.filter(t => t.status === "filed").map(t => t.topic)).toEqual(["Network education", "English caption release"]);
+    expect(result.topics?.filter(t => t.reason === "classification_unavailable")).toHaveLength(1);
+    expect(result.topics?.filter(t => t.status === "filed").flatMap(t => t.sourceSpans).map(s => content.slice(s.start, s.end))).toEqual([beginning, tail]);
+    expect(llm.classify).toHaveBeenCalledTimes(4); // Three bounded windows, one middle retry.
+    expect(llm.composeCalls).toBe(0);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+  });
+
+  it.each([true, false])("separates minimal support from passage review coverage (addressed review: %s)", async (reviewed) => {
+    const content = "Bueno, pensando en lo que hablamos, la decisión es: publish captions on Friday. Eso era todo, gracias.";
+    const quote = "publish captions on Friday";
+    llm.classify = vi.fn(async (input: ClassifyInput) => ({
+      confidence: 0.9, summary: "Caption schedule", tags: [], pages: [],
+      ...(reviewed ? { passageReviews: [{ passageId: input.sourcePassages![0]!.id, status: "assigned" as const }] } : {}),
+      topics: [{ topic: "Caption schedule", summary: "Caption schedule", confidence: 0.9, disposition: "evidence_only" as const,
+        pages: [], evidenceQuotes: [], evidenceAssignments: [{ passageId: input.sourcePassages![0]!.id, quote, occurrence: 0 }] }],
+    }));
+    const result = await engine().store({ content, source: "whatsapp", verbatim: true });
+    expect(result.topics![0]!.sourceSpans.map(span => content.slice(span.start, span.end))).toEqual([quote]);
+    expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(!reviewed);
+    expect(result.filing).toBe(reviewed ? "filed" : "uncertain");
+    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(!reviewed);
+  });
+
   it("records invalid and omitted source assignments without handing invented text to the composer", async () => {
     llm.classify = vi.fn(async () => ({ confidence: 0.99, summary: "bad quote", tags: [], pages: [], topics: [
       { topic: "invented", summary: "invented", confidence: 0.99, disposition: "integrate_page", evidenceQuotes: ["not in the capture"],
