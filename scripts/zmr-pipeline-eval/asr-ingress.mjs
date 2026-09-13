@@ -9,17 +9,21 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {budgetLedger,parseWireUsage,prepareAsrEnvironment,requireCompletedEnrichment} from './policy.mjs';
-const {values:a}=parseArgs({options:{runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'},'captured-at':{type:'string'}}});
+const {values:a}=parseArgs({options:{runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'},'captured-at':{type:'string'},'source-repo':{type:'string'}}});
 for(const k of ['candidate-sha','audio','audio-sha256','source','source-sha256','model-dir','model-sha256','out','prices','questions','seed-pages','captured-at'])if(!a[k])throw new Error('Missing --'+k);
-if(!/^[a-f0-9]{40}$/.test(a['candidate-sha'])||process.env.GIT_SHA!==a['candidate-sha'])throw new Error('Exact candidate container GIT_SHA required');
+const evaluationKey=prepareAsrEnvironment(process.env);
+const runtime=resolve(a['source-repo']??a.runtime);
+const sourceGit=(...args)=>execFileSync('git',args,{cwd:runtime,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+if(!/^[a-f0-9]{40}$/.test(a['candidate-sha']))throw new Error('Exact candidate SHA required');
+if(a['source-repo']){if(sourceGit('rev-parse','HEAD')!==a['candidate-sha']||sourceGit('status','--porcelain'))throw new Error('Native candidate must be exact and clean; operator must build before key injection');}
+else if(process.env.GIT_SHA!==a['candidate-sha'])throw new Error('Exact candidate container GIT_SHA required');
 if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(a['captured-at'])||!Number.isFinite(Date.parse(a['captured-at'])))throw new Error('Frozen canonical UTC captured-at required');
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const audio=await readFile(a.audio),source=await readFile(a.source);
 const modelHash=createHash('sha256');for await(const chunk of createReadStream(join(a['model-dir'],'ggml-large-v3-turbo.bin')))modelHash.update(chunk);
-if((await readFile(join(resolve(a.runtime),'.gitsha'),'utf8')).trim()!==a['candidate-sha'])throw new Error('Baked candidate source identity mismatch');
+if(!a['source-repo']&&(await readFile(join(runtime,'.gitsha'),'utf8')).trim()!==a['candidate-sha'])throw new Error('Baked candidate source identity mismatch');
 if(hash(audio)!==a['audio-sha256']||hash(source)!==a['source-sha256']||modelHash.digest('hex')!==a['model-sha256'])throw new Error('Frozen ASR input/model checksum mismatch');
 // Local ASR never receives cloud credentials; model asset must already exist.
-const evaluationKey=prepareAsrEnvironment(process.env);
 const pricesBytes=await readFile(a.prices),prices=JSON.parse(pricesBytes);
 if(prices.syntheticTransportOnly||!prices.reviewedAt||!prices.source)throw new Error('Reviewed actual prices required');
 const seedBytes=await readFile(a['seed-pages']),seedPages=JSON.parse(seedBytes);
@@ -40,7 +44,12 @@ globalThis.fetch=async(input,init)=>{
 };
 const out=resolve(a.out);await mkdir(out,{mode:0o700});
 const save=(name,value)=>writeFile(join(out,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
-const load=path=>import(pathToFileURL(join(resolve(a.runtime),path)).href);
+const runtimeHashes=async()=>{const result={};async function walk(path,relative){for(const e of await readdir(path,{withFileTypes:true})){const rel=relative+'/'+e.name;if(e.isSymbolicLink())throw new Error('Unexpected compiled module symlink');if(e.isDirectory())await walk(join(path,e.name),rel);else result[rel]=hash(await readFile(join(path,e.name)));}}
+ for(const path of ['packages/core/dist','packages/server/dist','packages/mcp-chassis/dist'])await walk(join(runtime,path),path);
+ if(a['source-repo'])for(const path of sourceGit('ls-files','packages/core/src','packages/server/src','packages/mcp-chassis/src','package-lock.json').split('\n').filter(Boolean))result[path]=hash(await readFile(join(runtime,path)));
+ return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b)));};
+const initialRuntimeHashes=await runtimeHashes();await save('runtime-hashes.json',initialRuntimeHashes);
+const load=path=>import(pathToFileURL(join(runtime,path)).href);
 const {createEngine,createBrainLlm,VaultRepo}=await load('packages/core/dist/index.js');
 const {SqliteStateStore}=await load('packages/core/dist/state/sqlite.js');
 const {TaskJobQueue}=await load('packages/server/dist/taskJobQueue.js');
@@ -61,7 +70,7 @@ const engine=createEngine({repo,llm,state,readSyncTtlMs:0});
 const store=new TaskJobStore(join(workspace,'jobs.sqlite'),'synthetic-asr');
 const settings={get:key=>({artifact_archive_provider:'local',artifact_archive_local_dir:join(workspace,'archive'),groq_api_key:'',openai_api_key:'',openrouter_api_key:''})[key]??null,whisperModel:()=> 'large-v3-turbo',openrouterTranscriptionModel:()=> 'openai/whisper-large-v3-turbo',longTranscriptionProvider:()=> 'local',useOpenAiForLongTranscription:()=>false};
 const queue=new TaskJobQueue(store,async()=>engine,settings);
-const report={mode:'ACTUAL_LOCAL_ASR_MEDIA_QUEUE_CAPTURE_ENRICH_RECALL',candidateSha:a['candidate-sha'],capturedAt:a['captured-at'],audioSha256:hash(audio),sourceSha256:hash(source),modelSha256:a['model-sha256'],workspace,startedAt:new Date().toISOString(),semanticEvaluation:'INDEPENDENT_REVIEW_REQUIRED',recalls:[],budgetUsd:0.5,seedSha256:hash(seedBytes),pricesSha256:hash(pricesBytes),questionsSha256:hash(questionsBytes),driverSha256:hash(await readFile(fileURLToPath(import.meta.url))),phoneIngress:false};
+const report={mode:a['source-repo']?'ACTUAL_NATIVE_CANDIDATE_ASR_MEDIA_QUEUE':'ACTUAL_IMAGE_CANDIDATE_ASR_MEDIA_QUEUE',candidateSha:a['candidate-sha'],capturedAt:a['captured-at'],audioSha256:hash(audio),sourceSha256:hash(source),modelSha256:a['model-sha256'],workspace,startedAt:new Date().toISOString(),semanticEvaluation:'INDEPENDENT_REVIEW_REQUIRED',recalls:[],budgetUsd:0.5,seedSha256:hash(seedBytes),pricesSha256:hash(pricesBytes),questionsSha256:hash(questionsBytes),driverSha256:hash(await readFile(fileURLToPath(import.meta.url))),phoneIngress:false};
 try {
  const job=queue.enqueue('media_ingest',{mediaType:'audio',contentType:'voice_note',bytesRef:'data:audio/wav;base64,'+audio.toString('base64'),filename:'synthetic-asr.wav',sourceHint:'ZMR synthetic local ASR evaluator',senderTimestamp:a['captured-at']},'synthetic-asr:'+hash(audio));
  const deadline=Date.now()+30*60*1000;let terminal;
@@ -85,6 +94,7 @@ try {
  report.invariants.completedReplayNoRevisionChange=enrichment.result?.filing!=='filed'||beforeReplay.id===report.afterReplayRevision.id;
  for(const q of questions)for(let trial=1;trial<=3;trial++){const fresh=new SqliteStateStore(':memory:');try{const answer=await createEngine({repo,llm,state:fresh,readSyncTtlMs:0}).ask(q.question);report.recalls.push({id:q.id,question:q.question,trial,answer});}catch(error){report.recalls.push({id:q.id,trial,error:String(error.message)});}finally{fresh.close();}}
  await save('pages-after-recall.json',await snapshots());
+ report.invariants.runtimeUnchanged=JSON.stringify(await runtimeHashes())===JSON.stringify(initialRuntimeHashes)&&(!a['source-repo']||(sourceGit('rev-parse','HEAD')===a['candidate-sha']&&!sourceGit('status','--porcelain')));
  report.invariants.recallsSucceeded=report.recalls.every(r=>!r.error);
  report.status=Object.values(report.invariants).every(Boolean)?'INDEPENDENT_SEMANTIC_REVIEW_REQUIRED':'INVARIANT_FAILURE';
  if(report.status==='INVARIANT_FAILURE')process.exitCode=1;
