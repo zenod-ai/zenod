@@ -266,3 +266,35 @@ it('requires a compact new correction statement, keeping historical claims host-
  expect(good.pending).toEqual([]);
  expect(parseMemoryFacts(parseNote(good.content).frontmatter!.memoryFacts)[0]!.legacySupersedes!.statement).toBe('Opening is on 8.');
 });
+
+it.each(['add','supersede'] as const)('accepts an exact %s proposition across contiguous source chunks',async kind=>{
+ const prefix='Background. '.repeat(131);
+ const clause='Each visitor must receive a durable chart printed on waterproof paper before leaving.';
+ const correction='Correction: '+clause;
+ const content=prefix+correction;
+ const seed=input('# A\nEach visitor receives a paper ticket.\n[[Index]]\n',content);
+ seed.input.sourceContent=content;
+ seed.input.sources=[{id:'left',start:0,end:1600,text:content.slice(0,1600)},{id:'right',start:1600,end:content.length,text:content.slice(1600)}];
+ seed.input.ideas=[{id:'chart',topic:'Visitor chart',sourceIds:['left','right']}];
+ const prepared=prepareReconciliation(seed.input);
+ const result=await applyReconciliation(prepared,[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:['left','right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
+ expect(result.pending).toEqual([]);expect(result.appliedOperationIds).toHaveLength(1);
+ for(const bad of ['gap','overlap','length','bytes','unknown'] as const) {
+  const changed=structuredClone(seed.input);
+  if(bad==='gap') {changed.sources[1]!.start++;changed.sources[1]!.end++;}
+  if(bad==='overlap') {changed.sources[1]!.start--;changed.sources[1]!.end--;}
+  if(bad==='length') changed.sources[1]!.end++;
+  if(bad==='bytes') changed.sources[1]!.text=changed.sources[1]!.text.replace('paper','metal');
+  const rejected=await applyReconciliation(prepareReconciliation(changed),[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:['left',bad==='unknown'?'missing':'right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
+  expect(rejected.content,bad).toBe(changed.raw);expect(rejected.pending.length,bad).toBeGreaterThan(0);
+ }
+});
+it('retains independently validated effective-date support around the compact claim',async()=>{
+ const claim='The policy requires helmets.';
+ const content=claim+' effective 2026-10-01';
+ const prepared=input('# A\n[[Index]]\n',content);
+ prepared.input.facts=[{key:'policy.helmets',statement:claim,effectiveDate:'2026-10-01',effectiveDateQuote:content,correctionQuote:null,supersedesQuotes:[],verificationQuote:null}];
+ const result=await applyReconciliation(prepared,[{...op('add',claim),factKey:'policy.helmets'}]);
+ expect(result.pending).toEqual([]);
+ expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.effectiveDate).toBe('2026-10-01');
+});

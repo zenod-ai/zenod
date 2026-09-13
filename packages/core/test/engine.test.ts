@@ -1020,6 +1020,21 @@ describe("BrainEngine", () => {
     expect(filed.topics![0]!.ideaId).toMatch(/^idea-/); expect(filed.topics![0]!.appliedOperationIds).toHaveLength(1);
   });
 
+  it("files a complete proposition crossing the host source chunk boundary",async()=>{
+    const quote="Each visitor must receive a durable chart printed on waterproof paper before leaving.";
+    const content="Background. ".repeat(131)+quote;
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.sources).toHaveLength(2);
+      expect(request.sources.some(source=>source.text.includes(quote))).toBe(false);
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,sourceQuote:quote,statement:quote,targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    });
+    Object.assign(llm,{reconcile});const e=engine();
+    const captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
+    expect(result.filing).toBe("filed");
+    expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toContain(quote);
+  });
+
   it("retries only unfinished atomic ideas after rejecting a mixed recorded-style plan", async () => {
     const path="Projects/Workshop.md";
     await writeFile(join(repo.path,path),"# Workshop\nCapacity is 6.\nOpening is on 12.\n[[Index]]\n");

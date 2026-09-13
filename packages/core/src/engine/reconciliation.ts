@@ -70,12 +70,40 @@ function compatibleCorrection(statement: string, source: string, target: string,
   if (!numbers(replacement).some(value => !oldNumbers.has(value))) return false;
   return compatibleStatement(statement, replacement);
 }
+/** Match only exact bounded quotes across adjacent host-addressed chunks.
+ * Never insert whitespace across gaps or concatenate unrelated source blocks.
+ */
+function supportsSourceQuote(sources: ReconciliationSource[], quote: string, limit: number, sourceContent?: string): boolean {
+  if (!quote.trim() || quote.length > limit || !sources.length) return false;
+  const ordered = [...sources].sort((a,b)=>a.start-b.start);
+  if (ordered.some((source,index)=>!Number.isSafeInteger(source.start) || !Number.isSafeInteger(source.end)
+    || source.start < 0 || source.end <= source.start || source.end-source.start !== source.text.length
+    || (index>0 && source.start<ordered[index-1]!.end)
+    || (sourceContent!==undefined && sourceContent.slice(source.start,source.end)!==source.text))) return false;
+  for (const [index,source] of ordered.entries()) {
+    for (let start=source.text.indexOf(quote[0]!);start>=0;start=source.text.indexOf(quote[0]!,start+1)) {
+      let matched=0;
+      for(let next=index;next<ordered.length && matched<quote.length;next++) {
+        if(next>index && ordered[next]!.start!==ordered[next-1]!.end) break;
+        const text=ordered[next]!.text;
+        const offset=next===index ? start : 0;
+        const count=Math.min(text.length-offset,quote.length-matched);
+        if(text.slice(offset,offset+count)!==quote.slice(matched,matched+count)) break;
+        matched+=count;
+      }
+      if(matched===quote.length) return true;
+    }
+  }
+  return false;
+}
 interface PrepareInput {
   path: string; raw: string | null; title: string; type: string; today: string;
   repositoryRevision?: import("../vault/repository.js").VaultRevision;
   ideas?:ReconciliationIdea[];
   /** Canonical receipt outcomes already published for this evidence and branch. */
   completedIdeaIds?: readonly string[];
+  /** Original host input, used only to verify chunk addresses; never sent to the model. */
+  sourceContent?: string;
   facts?:FactProposal[];
   evidence: MemoryEntry; sources: ReconciliationSource[]; context: BranchContextPacket; links: string[];
 }
@@ -131,6 +159,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
   const edits = new Map<string, { start: number; end: number; text: string }>();
   const additions: string[] = [];
   const proposals: FactProposal[] = [];
+  const validatedFactSupport = new Set<string>();
   const covered = new Set<string>();
   const seen = new Set<string>();
   const completed = new Set(input.completedIdeaIds ?? []);
@@ -163,8 +192,8 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     // Do not publish a provisional current claim from incomplete source support.
     if (ideaIds.some(id=>prepared.omittedSourcesByIdea.has(id))) continue;
     if (!ideaIds.length || ideaIds.some(id=>!prepared.request.ideas.some(idea=>idea.id===id && idea.sourceIds.some(sourceId=>sourceIds.includes(sourceId))))) { fail("idea_assignment_invalid"); continue; }
-    if (!sourceIds.length || sources.some(source => !source) || !operation.sourceQuote.trim() || operation.sourceQuote.length > 1600
-      || !sources.some(source => source!.text.includes(operation.sourceQuote))) { fail("source_support_invalid"); continue; }
+    if (!sourceIds.length || sources.some(source => !source)
+      || !supportsSourceQuote(sources as ReconciliationSource[],operation.sourceQuote,1600,input.sourceContent)) { fail("source_support_invalid"); continue; }
     for (const id of ideaIds) covered.add(id);
     const id = digest([input.evidence.evidenceRef, ideaIds.sort(), sourceIds.sort(), operation.kind, operation.targetId, operation.sourceQuote, operation.statement??null]);
     const marker = `<!-- zenod-op:${id} -->`;
@@ -197,7 +226,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
       const factKey = operation.kind === "supersede" || operation.kind === "conflict" ? knownKey ?? operation.factKey ?? `legacy.${digest([input.path,target!.text])}` : operation.factKey;
       const legacy = operation.kind === "supersede" && !knownKey && input.repositoryRevision && input.raw !== null
         ? {path:input.path,statement:target!.text,statementId:operation.targetId!,contentHash:pageRevision(input.raw),provider:input.repositoryRevision.provider,revision:input.repositoryRevision.id} : undefined;
-      if (operation.kind === "supersede" && ((!knownKey && !legacy) || !factKey || !operation.correctionQuote || !sources.some(source => source!.text.includes(operation.correctionQuote!)))) { fail("correction_target_or_intent_unverified"); continue; }
+      if (operation.kind === "supersede" && ((!knownKey && !legacy) || !factKey || !operation.correctionQuote || !supportsSourceQuote(sources as ReconciliationSource[],operation.correctionQuote,2400,input.sourceContent))) { fail("correction_target_or_intent_unverified"); continue; }
       const classifiedFact=input.facts?.find(fact=>fact.key===factKey && fact.statement===operation.sourceQuote);
       const proposal: FactProposal | null = factKey ? {key: factKey, statement:operation.sourceQuote, renderedStatement:statement, ...(operation.kind==="conflict" ? {reportedConflict:true} : {}), ...(legacy ? {legacySupersedes:legacy} : {}), effectiveDate: classifiedFact?.effectiveDate??null, effectiveDateQuote: classifiedFact?.effectiveDateQuote??null,
         correctionQuote: operation.kind === "supersede" ? operation.correctionQuote : null,
@@ -205,11 +234,21 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
         ...(operation.kind === "supersede" ? {supersedesIds: parseMemoryFacts(parsed?.frontmatter?.memoryFacts).filter(fact => fact.key === factKey && equivalent(fact.renderedStatement ?? fact.statement, target!.text)).map(fact => fact.id)} : {}), verificationQuote: classifiedFact?.verificationQuote??null} : null;
       if (operation.kind === "supersede") {
         const trialSeed = parsed?.frontmatter ? input.raw! : serializeNote({title:input.title,type:input.type,tags:[],summary:input.title,created:input.today,updated:input.today},parsed?.body??"");
-        const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, sources.map(source => source!.text).join("\n\n"));
+        const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, operation.correctionQuote!);
         const fact = parseMemoryFacts(parseNote(trial).frontmatter?.memoryFacts).find(fact => fact.evidenceRef === input.evidence.evidenceRef && fact.statement === operation.sourceQuote);
         if ((!fact?.supersedes.length && !fact?.legacySupersedes) || fact.unresolvedCorrection) { fail("correction_direction_unverified"); continue; }
       }
-      if (proposal) proposals.push(proposal);
+      if (proposal) {
+        proposals.push(proposal);
+        // Each exact quote was independently checked against selected chunks.
+        // Passing those validated quotes avoids inventing separators inside a
+        // crossing proposition when the temporal layer verifies source support.
+        validatedFactSupport.add(operation.sourceQuote);
+        if (operation.kind === "supersede") validatedFactSupport.add(operation.correctionQuote!);
+        for (const quote of [classifiedFact?.effectiveDateQuote,classifiedFact?.verificationQuote]) {
+          if (quote && supportsSourceQuote(sources as ReconciliationSource[],quote,2400,input.sourceContent)) validatedFactSupport.add(quote);
+        }
+      }
       const qualifier = operation.kind === "supersede" ? "**Correction:** " : operation.kind === "conflict" ? "**Unresolved conflict:** " : "";
       additions.push(`\n- ${qualifier}${statement.replace(/\n/g," ")} ${citation} ${marker}`);
       if (operation.kind === "conflict") fail("conflict_retained");
@@ -230,7 +269,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
   const metadata = parsed?.frontmatter ?? {title: input.title, type: input.type, tags: [], created: input.today, updated: input.today, summary: input.title.slice(0,480)};
   let next = parsed?.frontmatter ? input.raw!.slice(0,input.raw!.length-parsed.body.length)+body : serializeNote(metadata, "") + body;
   if (proposals.length) {
-    const withFacts = appendMemoryFacts(next, input.raw, proposals, input.evidence, input.sources.map(source => source.text).join("\n\n"));
+    const withFacts = appendMemoryFacts(next, input.raw, proposals, input.evidence, [...validatedFactSupport].join("\n\n"));
     next = serializeNote(parseNote(withFacts).frontmatter!, "").slice(0,parsed?.frontmatter ? -1 : undefined) + body;
   }
   if (input.links.length && !input.links.some(link => body.includes(link))) next += `\n\n${input.links.slice(0,3).join(" ")}\n`;
