@@ -29,3 +29,13 @@ The measured failure boundaries are:
 3. Host current-fact projection replaced a supported model answer about a hypothesis and restriction with less relevant facts, dropping part of the answer (#1256).
 
 Candidate raw bytes, archive pointers, identities, unrelated pages and replay protections passed. The baseline failed exact archived-transcript fidelity because it trimmed the final CRLF; the candidate preserved it. Private complete wire traces, before/after pages, frozen inputs and independent semantic row-by-row review are retained outside Git at `/Users/jordi/.local/state/zenod-zmr-20260913/`. They contain no original user voice-note transcript. The public runtime remains at the recorded production baseline; no deployment follows from these results.
+
+## Second candidate regression: still failed
+
+Candidate `b183806fd7a994eaaa8088ce600319042f2c815e` completed at 2026-09-13T19:20:39Z after the first three repairs passed independent review and CI. This is a development regression on the consumed fixture, not a new held-out result.
+
+All 11 expected idea rows now have valid source addresses. Initial meaning had seven of ten correct minimal outcomes; after direct partial replay, six of ten remained correct because a correction was duplicated. Capacity was added twice instead of linking its existing equivalent; the visitor-distribution requirement was shortened to an artifact description; the unconfirmed collaborator date stayed outside meaning. Complete recall was 5/18 (19/48 required subclaims); ten otherwise complete model answers lost requested content in host finalization.
+
+The 12 reported invariants pass, but they do not prove partial-replay semantic idempotence: the manual before/after review identified duplicated meaning writes. Exact archived WAV and transcript bytes, including final CRLF, remain preserved. The Log read API trims trailing whitespace as existing behavior; archive equality is evaluated independently. Total reported cost was $0.17521696 across 63 requests; ingestion/reconciliation including replay was $0.00991026. No ASR fixture, production deployment or provider/model switch occurred.
+
+[Second independent failure receipt](https://github.com/zenod-ai/zenod/issues/1241#issuecomment-5655538280) binds the private row-by-row report in `candidate-repaired-regression/independent-semantic-review.json`. Repairs #1261–#1263 tighten complete source propositions, atomic per-idea decisions and explicit answer support selection. Acceptance remains unchanged and deployment stays blocked.
