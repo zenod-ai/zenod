@@ -96,6 +96,7 @@ def load_recovery(manifest_path, mode, candidate_sha=None, candidate_image=None,
     rollback = {'image': old['Image'], 'sha': image['Config']['Labels']['org.opencontainers.image.revision']}
     require(re.fullmatch(IMAGE, rollback['image']) and re.fullmatch(SHA, rollback['sha']), 'Invalid recorded rollback identity')
     require(service['Spec']['Name'] == SERVICE and app['applicationId'] == APP and app['sourceType'] == 'docker', 'Snapshot target mismatch')
+    require(app.get('replicas') == 1 and service['Spec'].get('Mode', {}).get('Replicated', {}).get('Replicas') == 1, 'Expected one declared public replica')
     require(app['dockerImage'] == old['Image'] and container['Config']['Image'] == old['Image'], 'Baseline image mismatch')
     require(container['Image'] == image['Id'], 'Baseline actual image ID mismatch')
     require(git_sha(old['Env']) == rollback['sha'] == git_sha(app['env'].splitlines()), 'Baseline SHA mismatch')
@@ -123,6 +124,7 @@ def check_drift(recovery, live, pending, identities):
     require(stable_env(current['Env']) == stable_env(old['Env']), 'Runtime environment drift')
     require(stable_env(pending['env'].splitlines()) == stable_env(recovery['app']['env'].splitlines()), 'Pending environment drift')
     require(pending['sourceType'] == recovery['app']['sourceType'], 'Source type drift')
+    require(pending.get('replicas') == 1 and live['Spec'].get('Mode', {}).get('Replicated', {}).get('Replicas') in (0, 1), 'Replica configuration drift')
     require((current['Image'], git_sha(current['Env'])) in identities, 'Runtime image/SHA drift')
     require((pending['dockerImage'], git_sha(pending['env'].splitlines())) in identities, 'Pending image/SHA drift')
 
@@ -168,6 +170,31 @@ def inspect_revision(image):
     return ssh('docker image inspect --format ' + shlex.quote('{{index .Config.Labels "org.opencontainers.image.revision"}}') + ' ' + shlex.quote(image)).strip()
 
 
+def public_is_quiesced():
+    """Check all task states, including shutdown-desired tasks still stopping."""
+    live = inspect_service()
+    require(live['Spec']['Name'] == SERVICE, 'Quiescence target mismatch')
+    if live['Spec'].get('Mode', {}).get('Replicated', {}).get('Replicas') != 0:
+        return False
+    ids = ssh("docker service ps --format '{{.ID}}' " + SERVICE).split()
+    tasks = json.loads(ssh('docker inspect ' + ' '.join(shlex.quote(i) for i in ids))) if ids else []
+    # Orphaned/unknown tasks cannot prove their process has stopped.
+    if any(task['Status']['State'] not in ('complete', 'shutdown', 'failed', 'rejected', 'remove') for task in tasks):
+        return False
+    return not ssh("docker ps --filter label=com.docker.swarm.service.name=" + SERVICE + " --format '{{.ID}}'").split()
+
+
+def quiesce_public():
+    # Dokploy's recorded application retains replicas=1 and restores it on deploy.
+    # Never depend on start-first/stop-first ordering across incompatible binaries.
+    ssh('docker service scale --detach ' + SERVICE + '=0')
+    for _ in range(60):
+        if public_is_quiesced():
+            return
+        time.sleep(1)
+    raise ValueError('Public tasks did not quiesce; no image update or redeploy dispatched. Intent retained for reviewed rollback.')
+
+
 def execute(args):
     recovery = load_recovery(Path(args.manifest).absolute(), args.mode, args.candidate_sha, args.candidate_image)
     root = recovery['root']
@@ -194,6 +221,7 @@ def execute(args):
     check_drift(recovery, live, pending, identities)
     if args.mode == 'deploy':
         require(live.get('UpdateStatus', {}).get('State') in (None, 'completed'), 'Baseline update is not settled')
+        require(live['Spec']['Mode']['Replicated']['Replicas'] == 1, 'Expected running baseline replica')
         ids = ssh("docker service ps --filter desired-state=running --format '{{.ID}}' " + SERVICE).split()
         require(len(ids) == 1, 'Expected one baseline task')
         task = json.loads(ssh('docker inspect ' + shlex.quote(ids[0])))[0]
@@ -210,11 +238,17 @@ def execute(args):
     # Re-check after pull, immediately before writing intent and mutating desired state.
     check_drift(recovery, inspect_service(), api(root, '/application.one?applicationId=' + APP), identities)
     receipt = {'mode': args.mode, 'manifestHash': recovery['manifestHash'], **target,
-               'imageId': target_image_id, 'startedAt': datetime.now(timezone.utc).isoformat()}
+               'imageId': target_image_id, 'phase': 'quiescing', 'startedAt': datetime.now(timezone.utc).isoformat()}
     write_receipt(intent_path, receipt, exclusive=True)
+    quiesce_public()
+    check_drift(recovery, inspect_service(), api(root, '/application.one?applicationId=' + APP), identities)
+    require(public_is_quiesced(), 'Public tasks resumed before image update; intent retained')
+    receipt.update(phase='quiesced', quiescedAt=datetime.now(timezone.utc).isoformat())
+    write_receipt(intent_path, receipt)
     env, count = re.subn(r'^GIT_SHA=.*$', 'GIT_SHA=' + target['sha'], recovery['app']['env'], flags=re.M)
     require(count == 1, 'Expected one SHA override')
     api(root, '/application.update', {'applicationId': APP, 'dockerImage': target['image'], 'env': env})
+    require(public_is_quiesced(), 'Public tasks resumed before redeploy; intent retained')
     api(root, '/application.redeploy', {'applicationId': APP, 'title': 'ZMR ' + args.mode + ' ' + target['sha'][:7]})
     print('Requested one public deployment; verifying exact running image', flush=True)
     for attempt in range(60):
@@ -225,9 +259,11 @@ def execute(args):
         current = live['Spec']['TaskTemplate']['ContainerSpec']
         if not (live.get('UpdateStatus', {}).get('State') == 'completed' and len(tasks) == 1
                 and tasks[0]['Status']['State'] == 'running' and tasks[0]['Spec']['ContainerSpec']['Image'] == target['image']
-                and current['Image'] == target['image']):
+                and current['Image'] == target['image'] and live['Spec']['Mode']['Replicated']['Replicas'] == 1):
             continue
         container_id = tasks[0]['Status']['ContainerStatus']['ContainerID']
+        running = ssh("docker ps --no-trunc --filter label=com.docker.swarm.service.name=" + SERVICE + " --format '{{.ID}}'").split()
+        require(running == [container_id], 'Unexpected overlapping public container')
         actual = json.loads(ssh('docker inspect ' + shlex.quote(container_id)))[0]
         require(actual['Image'] == target_image_id, 'Actual container image ID mismatch')
         require(inspect_revision(actual['Image']) == target['sha'], 'Actual container OCI mismatch')
@@ -259,7 +295,7 @@ def main():
         parser.error('Rollback derives identity from protected actual baseline snapshots')
     try:
         execute(args)
-    except (ValueError, KeyError, IndexError, OSError) as error:
+    except (ValueError, KeyError, IndexError, OSError, subprocess.CalledProcessError) as error:
         # Do not print potentially secret snapshot content or subprocess response bodies.
         raise SystemExit('Deployment guard failed: ' + (str(error) if isinstance(error, ValueError) else type(error).__name__)) from None
 

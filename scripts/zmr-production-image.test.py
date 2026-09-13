@@ -24,10 +24,10 @@ class Recovery(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.when = datetime.now(timezone.utc).isoformat()
         self.app = {'applicationId': operator.APP, 'sourceType': 'docker', 'dockerImage': OLD,
-                    'env': 'GIT_SHA=' + OLD_SHA + '\nSIGNUP=0\nMODEL=unchanged'}
+                    'replicas': 1, 'env': 'GIT_SHA=' + OLD_SHA + '\nSIGNUP=0\nMODEL=unchanged'}
         self.old = {'Image': OLD, 'Env': self.app['env'].splitlines(),
                     'Mounts': [{'Source': 'zenod-mt-data', 'Target': '/data'}]}
-        self.service = {'Spec': {'Name': operator.SERVICE, 'TaskTemplate': {'ContainerSpec': self.old}},
+        self.service = {'Spec': {'Name': operator.SERVICE, 'Mode': {'Replicated': {'Replicas': 1}}, 'TaskTemplate': {'ContainerSpec': self.old}},
                         'UpdateStatus': {'State': 'completed'}}
         self.manifest = {'version': 1, 'createdAt': self.when, 'baselineObservedAt': self.when,
                          'target': {'applicationId': operator.APP, 'service': operator.SERVICE, 'host': operator.HOST},
@@ -127,32 +127,54 @@ class Recovery(unittest.TestCase):
         with self.assertRaises(ValueError):
             operator.check_drift(recovery, self.service, pending, identities)
 
+    def test_non_single_replica_baseline_or_pending_configuration_fails(self):
+        pending = {**self.app, 'replicas': 2}
+        with self.assertRaisesRegex(ValueError, 'Replica configuration drift'):
+            operator.check_drift(self.load(), self.service, pending, {(OLD, OLD_SHA)})
+        self.app['replicas'] = 2
+        self.save('app', self.app)
+        self.flush()
+        with self.assertRaisesRegex(ValueError, 'one declared public replica'):
+            self.load()
+
     def test_check_only_never_uses_network(self):
         args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=True)
         with patch.object(operator, 'ssh', side_effect=AssertionError('network')), patch.object(operator, 'api', side_effect=AssertionError('network')):
             operator.execute(args)
 
-    def run_flow(self, fail_dispatch=False, wrong_oci=False, wrong_actual=False, wrong_baseline=False):
+    def run_flow(self, fail_dispatch=False, wrong_oci=False, wrong_actual=False, wrong_baseline=False, fail_quiescence=None, interrupt_quiescence=False):
         state = {'service': copy.deepcopy(self.service), 'app': copy.deepcopy(self.app)}
         mutations = []
+        stops = []
         def api(root, endpoint, body=None):
             if endpoint.startswith('/application.one'):
                 return copy.deepcopy(state['app'])
             mutations.append(endpoint)
             if endpoint == '/application.update':
+                self.assertEqual(state['service']['Spec']['Mode']['Replicated']['Replicas'], 0)
                 state['app'].update(body)
             elif endpoint == '/application.redeploy':
+                self.assertEqual(state['service']['Spec']['Mode']['Replicated']['Replicas'], 0)
                 if fail_dispatch and len(mutations) == 2:
                     raise RuntimeError('simulated interrupted redeploy')
+                state['service']['Spec']['Mode']['Replicated']['Replicas'] = 1
                 state['service']['Spec']['TaskTemplate']['ContainerSpec'].update(Image=state['app']['dockerImage'], Env=state['app']['env'].splitlines())
             return {}
         def ssh(command):
             if command.startswith('docker pull'):
                 return ''
+            if command == 'docker service scale --detach ' + operator.SERVICE + '=0':
+                stops.append(len(mutations))
+                state['service']['Spec']['Mode']['Replicated']['Replicas'] = 0
+                if interrupt_quiescence and len(stops) == 1:
+                    raise RuntimeError('simulated interrupted quiescence')
+                return ''
+            if command.startswith('docker ps '):
+                return 'container1' if state['service']['Spec']['Mode']['Replicated']['Replicas'] else ''
             if command.startswith('docker service ps'):
                 return 'task1'
             if command == 'docker inspect task1':
-                return json.dumps([{'Status': {'State': 'running', 'ContainerStatus': {'ContainerID': 'container1'}}, 'Spec': {'ContainerSpec': state['service']['Spec']['TaskTemplate']['ContainerSpec']}}])
+                return json.dumps([{'Status': {'State': 'running' if state['service']['Spec']['Mode']['Replicated']['Replicas'] else 'shutdown', 'ContainerStatus': {'ContainerID': 'container1'}}, 'Spec': {'ContainerSpec': state['service']['Spec']['TaskTemplate']['ContainerSpec']}}])
             if command == 'docker inspect container1':
                 is_new = state['service']['Spec']['TaskTemplate']['ContainerSpec']['Image'] == NEW
                 image_id = 'sha256:actual-candidate' if is_new else 'sha256:actual-baseline'
@@ -166,7 +188,10 @@ class Recovery(unittest.TestCase):
             return json.dumps({'status': 'ok', 'sha': operator.git_sha(state['app']['env'].splitlines())}).encode()
         args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=False)
         operator.write_receipt(self.root / 'queue-clear.json', {'manifestHash': operator.digest(self.manifest_path), 'mode': 'deploy', 'pendingDeployments': 0, 'checkedAt': self.when})
-        with patch.object(operator, 'api', side_effect=api), patch.object(operator, 'inspect_service', side_effect=lambda: copy.deepcopy(state['service'])), patch.object(operator, 'ssh', side_effect=ssh), patch.object(operator, 'inspect_revision', side_effect=lambda image: ('f' * 40 if wrong_oci else NEW_SHA) if image in (NEW, 'sha256:actual-candidate') or (wrong_actual and image == 'sha256:wrong-image') else OLD_SHA), patch.object(operator.time, 'sleep'), patch.object(operator.subprocess, 'check_output', side_effect=health):
+        real_quiesced = operator.public_is_quiesced
+        def quiesced():
+            return False if args.mode == fail_quiescence else real_quiesced()
+        with patch.object(operator, 'public_is_quiesced', side_effect=quiesced), patch.object(operator, 'api', side_effect=api), patch.object(operator, 'inspect_service', side_effect=lambda: copy.deepcopy(state['service'])), patch.object(operator, 'ssh', side_effect=ssh), patch.object(operator, 'inspect_revision', side_effect=lambda image: ('f' * 40 if wrong_oci else NEW_SHA) if image in (NEW, 'sha256:actual-candidate') or (wrong_actual and image == 'sha256:wrong-image') else OLD_SHA), patch.object(operator.time, 'sleep'), patch.object(operator.subprocess, 'check_output', side_effect=health):
             if wrong_actual or wrong_baseline:
                 with self.assertRaisesRegex(ValueError, 'image ID mismatch'):
                     operator.execute(args)
@@ -180,7 +205,13 @@ class Recovery(unittest.TestCase):
                 self.assertEqual(mutations, [])
                 self.assertFalse((self.root / 'deploy-intent.json').exists())
                 return
-            if fail_dispatch:
+            if fail_quiescence == 'deploy':
+                with self.assertRaisesRegex(ValueError, 'did not quiesce'):
+                    operator.execute(args)
+                self.assertEqual(mutations, [])
+                self.assertTrue((self.root / 'deploy-intent.json').exists())
+                return
+            if fail_dispatch or interrupt_quiescence:
                 with self.assertRaises(RuntimeError):
                     operator.execute(args)
             else:
@@ -191,11 +222,47 @@ class Recovery(unittest.TestCase):
             with self.assertRaises(ValueError):
                 operator.execute(args)
             operator.write_receipt(self.root / 'queue-clear.json', {'manifestHash': operator.digest(self.manifest_path), 'mode': 'rollback', 'deployIntentSha256': operator.digest(self.root / 'deploy-intent.json'), 'pendingDeployments': 0, 'checkedAt': self.when})
+            if fail_quiescence == 'rollback':
+                with self.assertRaisesRegex(ValueError, 'did not quiesce'):
+                    operator.execute(args)
+                self.assertEqual(mutations, ['/application.update', '/application.redeploy'])
+                self.assertTrue((self.root / 'rollback-intent.json').exists())
+                return
             operator.execute(args)
         self.assertEqual(state['app']['dockerImage'], OLD)
         self.assertEqual(state['app']['env'], self.app['env'])
         self.assertEqual(state['service']['Spec']['TaskTemplate']['ContainerSpec']['Mounts'], self.old['Mounts'])
-        self.assertEqual(mutations, ['/application.update', '/application.redeploy'] * 2)
+        self.assertEqual(mutations, ['/application.update', '/application.redeploy'] * (1 if interrupt_quiescence else 2))
+        self.assertEqual(stops, [0, 0 if interrupt_quiescence else 2])
+
+
+    def test_failed_deploy_quiescence_never_updates_or_redeploys(self):
+        self.run_flow(fail_quiescence='deploy')
+
+    def test_failed_rollback_quiescence_never_updates_or_redeploys(self):
+        self.run_flow(fail_quiescence='rollback')
+
+    def test_interrupted_quiescence_allows_reviewed_rollback(self):
+        self.run_flow(interrupt_quiescence=True)
+
+    def test_shutdown_desired_but_running_or_orphaned_task_is_not_quiesced(self):
+        stopped = copy.deepcopy(self.service)
+        stopped['Spec']['Mode']['Replicated']['Replicas'] = 0
+        for status in ('running', 'starting', 'orphaned'):
+            def ssh(command):
+                if command.startswith('docker service ps'):
+                    return 'old-task'
+                if command == 'docker inspect old-task':
+                    return json.dumps([{'Status': {'State': status}, 'DesiredState': 'shutdown'}])
+                raise AssertionError(command)
+            with patch.object(operator, 'inspect_service', return_value=stopped), patch.object(operator, 'ssh', side_effect=ssh):
+                self.assertFalse(operator.public_is_quiesced())
+
+    def test_stopped_tasks_but_stray_running_container_is_not_quiesced(self):
+        stopped = copy.deepcopy(self.service)
+        stopped['Spec']['Mode']['Replicated']['Replicas'] = 0
+        with patch.object(operator, 'inspect_service', return_value=stopped), patch.object(operator, 'ssh', side_effect=['', 'old-container']):
+            self.assertFalse(operator.public_is_quiesced())
 
     def test_deploy_rollback_preserves_env_mount_and_blocks_repeat(self):
         self.run_flow()
