@@ -198,3 +198,10 @@ it('retains intention when compacting a multilingual new claim',async()=>{
  const result=await applyReconciliation(input('# A\n[[Index]]\n',source),[{...op('add',source),statement}]);
  expect(result.pending).toEqual([]);expect(result.content).toContain(statement);
 });
+it('refuses to borrow a retracted number from an unrelated target',async()=>{
+ const raw='# A\n- The session date is September 8.\n- Guest capacity is 12.\n[[Index]]\n';
+ const source='Correction: not 12 guests but 15 guests.';
+ const prepared=input(raw,source);
+ const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement:'Guest capacity is 15.',correctionQuote:source}]);
+ expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+});
