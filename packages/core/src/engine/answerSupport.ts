@@ -60,6 +60,10 @@ export class AnswerSupportRegistry {
     }
     return hints;
   }
+  selectedViews(selections: AnswerSupportSelection[]): FactView[] {
+    if (!Array.isArray(selections) || selections.length > 24) return [];
+    return [...new Map(selections.flatMap(selection => { const support=selection && this.supports.get(selection.id); return support && "view" in support ? [[JSON.stringify(support.view), support.view] as const] : []; })).values()];
+  }
   selectedPassages(selections: AnswerSupportSelection[]): NotePassage[] {
     if (!Array.isArray(selections) || selections.length > 24) return [];
     return [...new Map(selections.flatMap(selection => { const support=selection && this.supports.get(selection.id); return support && "passage" in support ? [[`${support.passage.identity}:${support.passage.version}`, support.passage] as const] : []; })).values()];

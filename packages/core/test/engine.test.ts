@@ -538,7 +538,27 @@ describe("BrainEngine", () => {
     const synonym = await e.ask("¿Qué trabajo rechaza el taller Orchid?");
     expect(synonym.text).toContain(restriction);
     expect(synonym.text).not.toContain(oldClaim);
-  });
+    const mixedTime = await e.ask("What is the current workshop policy, and what was it before?");
+    expect(mixedTime.text).toContain(restriction);
+    expect(mixedTime.text).not.toContain(oldClaim);
+    llm.answerOverride = async input => {
+      const pinned = JSON.parse(input.vaultBriefing.split("Pinned source support IDs: ")[1]!);
+      return { text: "Unused model prose", readPaths: [], supportSelections: [{ id: pinned[0].answerSupports[0].id, mode: "raw_report" }] };
+    };
+    expect((await e.ask("Explain this pinned hypothesis", { contextRefs: [capture.evidenceRef] })).text).toContain(hypothesis);
+    llm.answerOverride = async (_input, tools) => {
+      const first = JSON.parse(await tools.readNote!(page));
+      const selected = first.factView.answerSupports.find((support: any) => support.key === "orchid.fact0");
+      const changed = parseNote(await readFile(join(repo.path, page), "utf8"));
+      (changed.frontmatter!.memoryFacts as any[])[0].statement = oldClaim;
+      await writeFile(join(repo.path, page), serializeNote(changed.frontmatter!, changed.body));
+      await tools.readFacts!({ path: page }); // New explicit view must not hide stale selected automatic view.
+      return { text: restriction, readPaths: [page], supportSelections: [{ id: selected.id, mode: "current" }] };
+    };
+    const staleSelection = await e.ask("What is the current workshop policy?");
+    expect(staleSelection.text).toContain("snapshot changed");
+    expect(staleSelection.text).not.toContain(restriction);
+  }, 15_000);
 
   function engine() {
     return createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" } });

@@ -45,7 +45,7 @@ import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
-import { readNotePassage, type NoteReadOptions, type NotePassage } from "../ops/passage.js";
+import { readNotePassage, notePassageVersion, type NoteReadOptions, type NotePassage } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
@@ -2176,6 +2176,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       throw new ContextRefError(`At most ${MAX_ASK_CONTEXT_REFS} evidence context refs are allowed.`);
     }
     const pinnedSpans: Array<{ path: string; text: string }> = [];
+    const pinnedPassages: NotePassage[] = [];
     const pinnedSources: Answer["sources"] = [];
     for (const contextRef of contextRefs) {
       const match = EVIDENCE_CONTEXT_REF_RE.exec(contextRef);
@@ -2196,6 +2197,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const end = following < 0 ? note.body.length : start + 1 + following;
       const text = note.body.slice(start, end).trim();
       pinnedSpans.push({ path, text });
+      pinnedPassages.push({ source: repositorySourceRef(path, `^${anchor}`), readPath: contextRef, identity: contextRef, part: "body",
+        frontmatterChars: JSON.stringify(note.frontmatter).length, version: notePassageVersion(note), body: note.body.slice(start, end),
+        extent: { unit: "utf16", start, end, total: note.body.length, scopeStart: start, scopeEnd: end, sectionStart: start, sectionEnd: end },
+        omittedBefore: false, truncated: false, nextCursor: null });
       pinnedSources.push(repositorySourceRef(path, `^${anchor}`));
     }
     const pinnedBriefing = pinnedSpans.length > 0
@@ -2218,10 +2223,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
     const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch);
-    const pinnedSupports = contextRefs.length ? await Promise.all(contextRefs.map(async ref => {
-      const read = JSON.parse(await session.tools.readNote!(ref, { maxChars: 8000 }));
-      return { ref, answerSupports: read.answerSupports };
-    })) : [];
+    const pinnedSupports = pinnedPassages.map(passage => ({ ref: passage.identity, ...session.registerPinned(passage) }));
     const result = await llm.answer(
       {
         question,
@@ -2282,7 +2284,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     async function automaticFactProjection(path: string) {
       const normalizedPath = normalizeMarkdownNotePath(path);
       const explicit = () => factReads.some(read => normalizeMarkdownNotePath(read.input.path) === normalizedPath);
-      if (contextRefs.length > 0 || historicalQuestion || path.includes("#") || normalizedPath.startsWith("Log/") || !tools.readFacts || explicit()) return;
+      if (contextRefs.length > 0 || path.includes("#") || normalizedPath.startsWith("Log/") || !tools.readFacts || explicit()) return;
       if (!automaticFactReads.has(normalizedPath)) {
         automaticFactReads.set(normalizedPath, (async () => {
           const note = await getNote(vaultPath, normalizedPath, sourceResolver);
@@ -2419,6 +2421,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
     ])) as unknown as VaultReadTools;
     return {
       tools: trackedTools,
+      registerPinned: (passage: NotePassage) => {
+        const answerSupports = supportRegistry.addPassage(passage);
+        return { answerSupports, answerSupportPartial: supportRegistry.lastPassageSelectionPartial };
+      },
       required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {
@@ -2487,6 +2493,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
           text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
         } else if (result.supportSelections !== undefined) {
           let selectedSnapshotChanged = factSnapshotChanged;
+          for (const view of supportRegistry.selectedViews(result.supportSelections)) {
+            const input = { path: view.path, ...(view.key ? { key: view.key } : {}), ...(view.mode === "historical" ? { asOf: view.asOf } : {}) };
+            try { if (JSON.stringify(JSON.parse(await tools.readFacts!(input))) !== JSON.stringify(view)) selectedSnapshotChanged = true; }
+            catch { selectedSnapshotChanged = true; }
+          }
           for (const passage of supportRegistry.selectedPassages(result.supportSelections)) {
             try { if ((JSON.parse(await tools.readNote!(passage.readPath, { maxChars: 256 })) as NotePassage).version !== passage.version) selectedSnapshotChanged = true; }
             catch { selectedSnapshotChanged = true; }
