@@ -1,3 +1,6 @@
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
+import { MEANING_FOLDERS } from "../vault/files.js";
 import { createHash } from "node:crypto";
 import type { Classification, ClassificationTopic } from "../llm/types.js";
 import type { EnrichEvidenceInput, TopicFilingResult } from "../types.js";
@@ -67,7 +70,7 @@ export function parseFilingReceipt(content: string, input: EnrichEvidenceInput):
     const ids = value.classification.topics.map(topic => topic.ideaId);
     if (ids.some(id => typeof id !== "string" || !id) || new Set(ids).size !== ids.length) return null;
     for (const [path, file] of Object.entries(value.files)) {
-      if (!safeFilingPath(path) || file.afterHash !== publicationContentHash(file.after)) return null;
+      if (!safeFilingPath(path) || typeof file.after !== "string" || file.afterHash !== publicationContentHash(file.after)) return null;
     }
     return value;
   } catch { return null; }
@@ -75,7 +78,7 @@ export function parseFilingReceipt(content: string, input: EnrichEvidenceInput):
 
 function safeFilingPath(path: string): boolean {
   return !!path && !path.startsWith("/") && !path.includes("\\") && !path.split("/").some(part => part === ".." || part === "." || !part)
-    && !["Log", "_attachments", ".git"].includes(path.split("/")[0]!);
+    && !!MEANING_FOLDERS[path.split("/")[0]!] && path.endsWith(".md");
 }
 
 /** Verify only this attempt's known workspace edits; never reset unknown files. */
@@ -97,4 +100,15 @@ export function unfinishedFilingTopics(receipt: FilingReceipt): FrozenTopic[] {
     const completed = new Set(outcome?.filedPages ?? []);
     return [{ ...structuredClone(topic), pages: topic.pages.filter(page => !completed.has(page.path)) }];
   });
+}
+
+/** Same meaning-page policy on replay; never follow symlinks into other files. */
+export async function assertFilingTarget(vaultPath: string, path: string, canonicalReceipt = false): Promise<void> {
+  if (!(canonicalReceipt ? /^Inbox\/filing-\d{4}-\d{2}-\d{2}-e-[a-zA-Z0-9-]+\.md$/.test(path) : safeFilingPath(path))) throw new Error("invalid_filing_target");
+  let current = vaultPath;
+  for (const part of path.split("/")) {
+    current = join(current, part);
+    const stat = await lstat(current).catch(error => { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; });
+    if (stat?.isSymbolicLink()) throw new Error("filing_symlink_target");
+  }
 }

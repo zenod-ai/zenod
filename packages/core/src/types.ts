@@ -99,6 +99,8 @@ export interface StoreResult {
 }
 
 export interface EnrichEvidenceInput extends StoreInput {
+  /** Host-only lease fence; never serialized into evidence or receipt identity. */
+  assertActive?: () => void;
   /** Exact immutable evidence entry previously committed by captureEvidence. */
   evidenceRef: string;
 }

@@ -1,3 +1,4 @@
+import { withVaultWriteLock } from "../git/vaultWriteLock.js";
 import { filingPublicationConflict, verifyPublicationBase, verifyPublicationFiles } from "./publicationGuard.js";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -280,7 +281,8 @@ export class DriveVaultRepository implements VaultRepository {
 
   static async open(options: DriveVaultRepositoryOptions): Promise<DriveVaultRepository> {
     const repository = new DriveVaultRepository(options);
-    await repository.initialize();
+    await mkdir(repository.path, { recursive: true });
+    await withVaultWriteLock(repository.path, () => repository.initialize());
     return repository;
   }
 
@@ -369,8 +371,7 @@ export class DriveVaultRepository implements VaultRepository {
       else await this.provision();
     }
     await this.ensureStandardFolders();
-    await this.materializeFromAuthority();
-    await this.importExternalEdits();
+    if (await this.materializeFromAuthority()) await this.importExternalEdits();
   }
 
   private async discoverManifestFile(rootFolderId: string): Promise<DriveVaultFile | null> {
@@ -800,16 +801,19 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private async materializeFromAuthority(): Promise<void> {
+  private async materializeFromAuthority(): Promise<boolean> {
     const bundleData = await this.options.client.download(this.manifest.bundle.fileId);
     if (sha256(bundleData) !== this.manifest.bundle.checksum) throw new Error("Drive Git bundle checksum mismatch");
     await this.verifyBundleData(bundleData, this.manifest.commitSha);
     const localHead = await access(join(this.path, ".git"))
       .then(async () => simpleGit(this.path).revparse(["HEAD"]).then((value) => value.trim()).catch(() => null))
       .catch(() => null);
-    if (localHead === this.manifest.commitSha) {
+    if (localHead) {
       await this.configureGit();
-      return;
+      if ((await this.pendingChanges()).length) return false;
+      if (localHead === this.manifest.commitSha) return true;
+      try { await this.verifyBundleData(bundleData, this.manifest.commitSha, localHead); }
+      catch (error) { if (error instanceof Error && error.message === "filing_local_commit_requires_recovery") return false; throw error; }
     }
     const bundlePath = join(this.stateDir, `restore-${this.idFactory()}.bundle`);
     const restored = join(this.stateDir, `restore-${this.idFactory()}`);
@@ -826,6 +830,7 @@ export class DriveVaultRepository implements VaultRepository {
       await rm(this.path, { recursive: true, force: true });
       await rename(restored, this.path);
       await this.configureGit();
+      return true;
     } finally {
       await rm(bundlePath, { force: true });
       await rm(restored, { recursive: true, force: true });
@@ -930,7 +935,7 @@ export class DriveVaultRepository implements VaultRepository {
     const manifestFile = await this.options.client.getFile(this.manifestFile.id);
     await this.loadManifest(manifestFile);
     await this.validateManifestAuthority(manifestFile, this.manifest);
-    await this.materializeFromAuthority();
+    if (!(await this.materializeFromAuthority())) throw new Error("filing_local_changes_require_recovery");
     await this.importExternalEdits();
   }
 
@@ -947,8 +952,14 @@ export class DriveVaultRepository implements VaultRepository {
   async currentRevision(): Promise<VaultRevision> {
     const revision = await this.currentPublishedRevision();
     const localHead = (await this.git.revparse(["HEAD"])).trim();
-    if (localHead !== this.manifest.commitSha) await this.materializeFromAuthority();
+    if (localHead !== this.manifest.commitSha && !(await this.materializeFromAuthority())) throw new Error("filing_local_changes_require_recovery");
     return revision;
+  }
+
+  async isCurrentHeadPublished(): Promise<boolean> {
+    const head = (await this.git.revparse(["HEAD"])).trim();
+    try { await this.currentPublishedRevision(head); return true; }
+    catch (error) { if (error instanceof Error && error.message === "filing_local_commit_requires_recovery") return false; throw error; }
   }
 
   async pullForFiling(): Promise<void> {

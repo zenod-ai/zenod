@@ -59,6 +59,8 @@ export interface VaultRepository {
   pullForFiling?(): Promise<void>;
   /** Verify remote publication without mistaking a prepared local commit for durable evidence. */
   currentPublishedRevision?(): Promise<VaultRevision>;
+  /** Whether the local commit is contained in verified provider history. */
+  isCurrentHeadPublished?(): Promise<boolean>;
   /** Return the durable revision currently materialized in the local workspace. */
   currentRevision(): Promise<VaultRevision>;
   trackedFiles(): Promise<string[]>;

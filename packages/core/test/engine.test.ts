@@ -972,6 +972,60 @@ describe("BrainEngine", () => {
     expect(filed.topics![0]!.ideaId).toMatch(/^idea-/); expect(filed.topics![0]!.appliedOperationIds).toHaveLength(1);
   });
 
+  it.each(["before-page", "after-page", "before-push", "after-push"] as const)("recovers exact atomic filing at %s without regenerating an applied idea", async (crash) => {
+    const content = "Insurance renewal is in October.";
+    const reconcile = vi.fn(async (value: import("../src/engine/reconciliation.js").ReconciliationInput) => value.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds, sourceQuote: value.sources.find(source => source.id === idea.sourceIds[0])!.text, statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));
+    Object.assign(llm, { reconcile });
+    const e = engine(); const captured = await e.captureEvidence!({ content, source: "whatsapp" });
+    const rawBefore = await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8");
+    const input = { content, source: "whatsapp" as const, evidenceRef: captured.evidenceRef };
+    const originalPublish = repo.commitAndPublish.bind(repo);
+    let calls = 0;
+    if (crash === "before-push" || crash === "after-push") {
+      vi.spyOn(repo, "commitAndPublish").mockImplementationOnce(async (message, guard) => {
+        if (crash === "before-push") await repo.commit(message);
+        else await originalPublish(message, guard);
+        throw new Error("synthetic crash");
+      });
+    }
+    await expect(e.enrichEvidence!({ ...input, assertActive: () => {
+      calls++;
+      if ((crash === "before-page" && calls >= 5) || (crash === "after-page" && calls >= 6)) throw new Error("synthetic crash");
+    } })).rejects.toThrow("synthetic crash");
+    const beforeRetryCalls = llm.classifyCalls;
+    if (crash === "before-push") {
+      const localHead = await repo.headSha();
+      const reopened = createEngine({ repo: await VaultRepo.open({ workdir: repo.path }), state, llm, readSyncTtlMs: 0 });
+      await reopened.search("Insurance");
+      expect(await repo.headSha()).toBe(localHead);
+      await expect(reopened.captureEvidence!({ content: "unrelated new capture", source: "selftest" })).rejects.toThrow("filing_recovery_pending");
+    }
+    const recovered = await e.enrichEvidence!(input);
+    expect(recovered.filing).toBe("filed");
+    expect(reconcile).toHaveBeenCalledTimes(1); expect(llm.classifyCalls).toBe(beforeRetryCalls);
+    expect(recovered.topics![0]!.appliedOperationIds).toHaveLength(1);
+    const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
+    expect(page.match(/<!-- zenod-op:/g)).toHaveLength(1);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(rawBefore);
+    const replay = await e.enrichEvidence!(input);
+    expect(replay.commitSha).toBe(recovered.commitSha); expect(reconcile).toHaveBeenCalledTimes(1);
+    expect((await repo.currentPublishedRevision()).id).toBe(recovered.revision!.id);
+  });
+
+  it("recovers a checkpointed no-op without inventing an unchanged file publication", async () => {
+    const content = "Insurance renewal is in October.";
+    const reconcile = vi.fn(async (request: import("../src/engine/reconciliation.js").ReconciliationInput) => request.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds,
+      sourceQuote: request.sources.find(source => source.id === idea.sourceIds[0])!.text, statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));
+    Object.assign(llm, { reconcile }); const e = engine();
+    const stored = await e.store({ content, source: "selftest" });
+    const before = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
+    const input = { content, source: "selftest" as const, evidenceRef: stored.evidenceRef }; let checks = 0;
+    await expect(e.enrichEvidence!({ ...input, assertActive: () => { if (++checks >= 5) throw new Error("crash after no-op checkpoint"); } })).rejects.toThrow("crash after no-op checkpoint");
+    expect((await e.enrichEvidence!(input)).filing).toBe("filed");
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(await readFile(join(repo.path, "Areas/Insurance.md"), "utf8")).toBe(before);
+  });
+
   it("rejects a stale atomic page revision while preserving the concurrent edit", async () => {
     const path=join(repo.path,"Areas/Insurance.md"); const original=await readFile(path,"utf8");
     Object.assign(llm,{reconcile:async(value:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
@@ -1170,7 +1224,7 @@ describe("BrainEngine", () => {
     expect(result.topics!.flatMap((topic) => topic.sourceSpans).map((span) => content.slice(span.start, span.end)).join("")).toBe(content);
   });
 
-  it("keeps evidence-only topic enrichment at the captured revision without a composer or Inbox write", async () => {
+  it("persists evidence-only completion once and replays without classifier or composer calls", async () => {
     const content = "Microphone check.";
     const e = engine();
     const captured = await e.captureEvidence!({ content, source: "whatsapp" });
@@ -1178,9 +1232,13 @@ describe("BrainEngine", () => {
       { topic: "check", summary: "check", confidence: 0.9, disposition: "evidence_only", evidenceQuotes: [content], pages: [] },
     ] }));
     const result = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef });
-    expect(result).toMatchObject({ filing: "filed", pagesTouched: [], commitSha: captured.commitSha });
+    expect(result.filing).toBe("filed");
+    expect(result.commitSha).not.toBe(captured.commitSha);
     expect(result.topics![0]!.status).toBe("filed");
     expect(llm.composeCalls).toBe(0);
+    const replay = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef });
+    expect(replay.commitSha).toBe(result.commitSha);
+    expect(llm.classify).toHaveBeenCalledTimes(1);
   });
 
   it("preserves classified topics when a later segment classifier is unavailable", async () => {

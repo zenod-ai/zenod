@@ -21,6 +21,12 @@ describe("durable filing plan", () => {
     expect(filingReceiptPath(input.evidenceRef)).toBe("Inbox/filing-2026-09-13-e-fixture.md");
     expect(() => filingReceiptPath("Log/../secret#^e-x")).toThrow();
   });
+  it.each([".github/workflows/run.yml", "package.json", "Notes/run.sh", "Log/2026-09-13.md", "Notes/../config.md"])("rejects a resealed edited plan targeting %s", path => {
+    const original = fixture(); const { filingRevision: _old, ...payload } = original;
+    const edited = sealFilingReceipt({ ...payload, files: { [path]: { beforeHash: null, after: "untrusted instructions", afterHash: hash("untrusted instructions") } } });
+    expect(parseFilingReceipt(renderFilingReceipt(edited), input)).toBeNull();
+  });
+
   it("only recognizes exact known edits and preserves CRLF; unrelated edits cannot be recovered", () => {
     const receipt = fixture(); const path = filingReceiptPath(input.evidenceRef);
     const changes = [{ path, before: null, after: renderFilingReceipt(receipt) }, { path: "Notes/A.md", before: "old\r\n", after: "approved exact bytes\r\n" }];

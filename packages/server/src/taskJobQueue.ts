@@ -183,6 +183,7 @@ export class TaskJobQueue {
           throw new Error("capture-first enrichment is unavailable");
         }
         const result = await engine.enrichEvidence({
+          assertActive: () => this.store.assertClaim(job),
           evidenceRef: job.input.evidenceRef,
           ...(job.input.semanticRange ? { semanticRange: job.input.semanticRange } : {}),
           content: job.input.content ?? "",

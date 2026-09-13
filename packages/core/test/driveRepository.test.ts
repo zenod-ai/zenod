@@ -325,7 +325,12 @@ describe("DriveVaultRepository", () => {
     expect((await repo.currentPublishedRevision()).commitSha).toBe(base.commitSha);
     await expect(repo.pullForFiling()).rejects.toThrow("filing_local_commit_requires_recovery");
     expect((await git.revparse(["HEAD"])).trim()).toBe(prepared);
-    const published = await repo.commitAndPublish("recover verified filing", guard);
+    const reopened = await open(drive, workdir);
+    expect((await simpleGit(workdir).revparse(["HEAD"])).trim()).toBe(prepared);
+    await expect(reopened.pull()).rejects.toThrow("filing_local_changes_require_recovery");
+    await expect(reopened.currentRevision()).rejects.toThrow("filing_local_changes_require_recovery");
+    expect(await readFile(join(workdir, "Notes/Idea.md"), "utf8")).toBe(content);
+    const published = await reopened.commitAndPublish("recover verified filing", guard);
     expect(published.provider).toBe("google_drive"); expect(published.id).not.toBe(base.id);
     expect((await repo.currentPublishedRevision()).id).toBe(published.id);
     expect(await readFile(join(workdir, "Notes/Idea.md"), "utf8")).toBe(content);

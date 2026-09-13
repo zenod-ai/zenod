@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getNote, NoteNotFoundError } from "../src/ops/get.js";
 import { searchVault } from "../src/ops/search.js";
 import { githubUrl } from "../src/vault/github.js";
@@ -11,6 +11,22 @@ const FIXTURE = fileURLToPath(new URL("./fixtures/vault", import.meta.url));
 const LOCATION = { repo: "zenod-ai/fixture", branch: "main" };
 
 describe("searchVault", () => {
+  it.each([false, true])("excludes recovery snapshots but preserves real memory, Inbox and direct receipt access (fallback %s)", async fallback => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-search-receipt-"));
+    try {
+      for (const folder of ["Inbox", "Notes", "Log"]) await mkdir(join(dir, folder));
+      const receipt = "Inbox/filing-2026-09-13-e-fixture.md";
+      await writeFile(join(dir, receipt), "# Recovery snapshot\n\nRetired-uniquely claim. Shared-fixture claim.\n");
+      await writeFile(join(dir, "Notes/Current.md"), "# Current\n\nShared-fixture claim.\n");
+      await writeFile(join(dir, "Log/2026-09-13.md"), "# Raw source\n\nShared-fixture claim.\n");
+      await writeFile(join(dir, "Inbox/User note.md"), "# User note\n\nShared-fixture claim.\n");
+      if (fallback) vi.stubEnv("PATH", "/nonexistent-ripgrep-fixture");
+      expect(await searchVault(dir, "Retired-uniquely")).toEqual([]);
+      expect((await searchVault(dir, "Shared-fixture")).map(hit => hit.path).sort()).toEqual(["Inbox/User note.md", "Log/2026-09-13.md", "Notes/Current.md"]);
+      expect((await getNote(dir, receipt)).body).toContain("Retired-uniquely");
+    } finally { vi.unstubAllEnvs(); await rm(dir, { recursive: true, force: true }); }
+  });
+
   it("finds the insurance area by tag, title, and body", async () => {
     const hits = await searchVault(FIXTURE, "insurance", LOCATION);
     expect(hits.length).toBeGreaterThan(0);

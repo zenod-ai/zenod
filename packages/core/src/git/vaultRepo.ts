@@ -101,6 +101,11 @@ export class VaultRepo implements VaultRepository {
     return this.revisionForSha(sha, []);
   }
 
+  async isCurrentHeadPublished(): Promise<boolean> {
+    const published = await this.currentPublishedRevision();
+    return (await this.git.raw(["rev-list", "--max-count=1", await this.headSha(), "--not", published.id])).trim() === "";
+  }
+
   async pullForFiling(): Promise<void> {
     await this.currentPublishedRevision();
     await this.git.merge(["--ff-only", `refs/remotes/origin/${this.branch}`]);
