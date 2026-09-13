@@ -28,6 +28,7 @@ const IN_FLIGHT_STATE = "running" as const;
 // resumes/retries them to completion with the normal receipt. The retry bound prevents
 // a repeatedly crashing job from looping forever.
 const MAX_CAPTURE_RESUME_ATTEMPTS = 3;
+const MAX_FILING_RESUME_ATTEMPTS = 1;
 export const TASK_JOB_LEASE_MS = 4 * 60_000;
 
 export interface TaskJobInput {
@@ -132,6 +133,8 @@ export interface TaskJob {
   kind: TaskJobKind;
   /** Durable caller identity for capture replay and legacy provenance recovery. */
   idempotencyKey: string | null;
+  /** Unique generation of this claim, distinct even when the same process reclaims a job. */
+  claimToken: string | null;
   input: TaskJobInput;
   status: TaskJobStatus;
   result: TaskJobResult | null;
@@ -146,6 +149,7 @@ interface Row {
   id: string;
   kind: string;
   idempotency_key: string | null;
+  claim_token?: string | null;
   input_json: string;
   status: string;
   result_json: string | null;
@@ -160,6 +164,7 @@ function rowToJob(row: Row): TaskJob {
     id: row.id,
     kind: row.kind as TaskJobKind,
     idempotencyKey: row.idempotency_key,
+    claimToken: row.claim_token ?? null,
     input: JSON.parse(row.input_json || "{}") as TaskJobInput,
     status: row.status as TaskJobStatus,
     result: row.result_json ? (JSON.parse(row.result_json) as TaskJobResult) : null,
@@ -205,6 +210,7 @@ export class TaskJobStore {
       `ALTER TABLE task_jobs ADD COLUMN tenant_id TEXT`,
       `ALTER TABLE task_jobs ADD COLUMN idempotency_key TEXT`,
       `ALTER TABLE task_jobs ADD COLUMN owner_id TEXT`,
+      `ALTER TABLE task_jobs ADD COLUMN claim_token TEXT`,
       `ALTER TABLE task_jobs ADD COLUMN lease_expires_at INTEGER`,
     ];
     for (const migration of migrations) {
@@ -241,6 +247,7 @@ export class TaskJobStore {
          SET status='queued',
              attempts=attempts+1,
              owner_id=NULL,
+             claim_token=NULL,
              lease_expires_at=NULL,
              updated_at=?
          WHERE tenant_id=? AND status=? AND kind IN ('store', 'media_ingest', 'enrich_memory') AND attempts < ?
@@ -258,6 +265,7 @@ export class TaskJobStore {
                           THEN 'interrupted by a server restart (gave up after ' || attempts || ' retries)'
                           ELSE 'interrupted by a server restart' END,
                owner_id=NULL,
+               claim_token=NULL,
                lease_expires_at=NULL,
                updated_at=?
          WHERE tenant_id=? AND status=?
@@ -335,7 +343,7 @@ export class TaskJobStore {
     const row = this.db
       .prepare(
         `UPDATE task_jobs
-         SET status='running', owner_id=?, lease_expires_at=?, updated_at=?
+         SET status='running', owner_id=?, claim_token=?, lease_expires_at=?, updated_at=?
          WHERE tenant_id=? AND status='queued' AND id=(
            SELECT id FROM task_jobs
            WHERE tenant_id=? AND status='queued'${kindFilter}
@@ -344,19 +352,45 @@ export class TaskJobStore {
          )
          RETURNING *`,
       )
-      .get(this.ownerId, now + TASK_JOB_LEASE_MS, now, this.tenantId, this.tenantId, ...kindArgs) as Row | undefined;
+      .get(this.ownerId, randomUUID(), now + TASK_JOB_LEASE_MS, now, this.tenantId, this.tenantId, ...kindArgs) as Row | undefined;
     return row ? rowToJob(row) : null;
   }
 
-  renewClaim(id: string, now: number = Date.now()): boolean {
+  renewClaim(claim: Pick<TaskJob, "id" | "claimToken">, now: number = Date.now()): boolean {
     const result = this.db
       .prepare(
         `UPDATE task_jobs
          SET lease_expires_at=?, updated_at=?
-         WHERE tenant_id=? AND id=? AND status='running' AND owner_id=?`,
+         WHERE tenant_id=? AND id=? AND status='running' AND owner_id=? AND claim_token=? AND lease_expires_at>?`,
       )
-      .run(now + TASK_JOB_LEASE_MS, now, this.tenantId, id, this.ownerId);
+      .run(now + TASK_JOB_LEASE_MS, now, this.tenantId, claim.id, this.ownerId, claim.claimToken, now);
     return result.changes === 1;
+  }
+
+  /** Execution/publish fence; lease expiry is final even before another worker recovers it. */
+  assertClaim(claim: Pick<TaskJob, "id" | "claimToken">, now: number = Date.now()): void {
+    const live = this.db.prepare(`SELECT 1 FROM task_jobs WHERE tenant_id=? AND id=?
+      AND status='running' AND owner_id=? AND claim_token=? AND lease_expires_at>?`)
+      .get(this.tenantId, claim.id, this.ownerId, claim.claimToken, now);
+    if (!live) throw new Error("task_job_claim_lost");
+  }
+
+  /** Bounded retry of transient unfinished filing; uncertainty requires new context. */
+  resumePending(claim: Pick<TaskJob, "id" | "claimToken">, result: StoreResult, now: number = Date.now()): boolean {
+    return result.filing === "pending" && this.requeueFiling(claim, JSON.stringify(result), null, now);
+  }
+
+  /** Retry a typed provider recovery failure without inventing a publication receipt. */
+  resumePublicationFailure(claim: Pick<TaskJob, "id" | "claimToken">, error: string, now: number = Date.now()): boolean {
+    return this.requeueFiling(claim, null, error, now);
+  }
+
+  private requeueFiling(claim: Pick<TaskJob, "id" | "claimToken">, resultJson: string | null, error: string | null, now: number): boolean {
+    return this.db.prepare(`UPDATE task_jobs SET status='queued', result_json=COALESCE(?,result_json), error=?, attempts=attempts+1,
+      owner_id=NULL, claim_token=NULL, lease_expires_at=NULL, updated_at=?
+      WHERE tenant_id=? AND id=? AND kind='enrich_memory' AND status='running' AND owner_id=?
+      AND claim_token=? AND lease_expires_at>? AND attempts<?`)
+      .run(resultJson, error, now, this.tenantId, claim.id, this.ownerId, claim.claimToken, now, MAX_FILING_RESUME_ATTEMPTS).changes === 1;
   }
 
   nextRunningLeaseExpiry(): number | null {
@@ -385,15 +419,16 @@ export class TaskJobStore {
   }
 
   update(id: string, patch: TaskJobPatch, now: number = Date.now()): void {
-    this.applyPatch(id, patch, now, false);
+    this.applyPatch(id, patch, now);
   }
 
   /** Finish a job only while this store instance still owns its live claim. */
-  updateClaimed(id: string, patch: TaskJobPatch, now: number = Date.now()): boolean {
-    return this.applyPatch(id, patch, now, true);
+  updateClaimed(claim: Pick<TaskJob, "id" | "claimToken">, patch: TaskJobPatch, now: number = Date.now()): boolean {
+    return this.applyPatch(claim.id, patch, now, claim.claimToken);
   }
 
-  private applyPatch(id: string, patch: TaskJobPatch, now: number, claimedOnly: boolean): boolean {
+  private applyPatch(id: string, patch: TaskJobPatch, now: number, claimToken?: string | null): boolean {
+    const claimedOnly = claimToken !== undefined;
     const sets: string[] = [];
     const vals: unknown[] = [];
     const push = (col: string, val: unknown) => {
@@ -406,15 +441,16 @@ export class TaskJobStore {
     if (sets.length === 0) return false;
     if (claimedOnly && patch.status !== undefined && patch.status !== "running") {
       push("owner_id", null);
+      push("claim_token", null);
       push("lease_expires_at", null);
     }
     push("updated_at", now);
     vals.push(this.tenantId, id);
-    if (claimedOnly) vals.push(this.ownerId);
+    if (claimedOnly) vals.push(this.ownerId, claimToken, now);
     const result = this.db
       .prepare(
         `UPDATE task_jobs SET ${sets.join(", ")}
-         WHERE tenant_id=? AND id=?${claimedOnly ? " AND status='running' AND owner_id=?" : ""}`,
+         WHERE tenant_id=? AND id=?${claimedOnly ? " AND status='running' AND owner_id=? AND claim_token=? AND lease_expires_at>?" : ""}`,
       )
       .run(...(vals as never[]));
     return result.changes === 1;

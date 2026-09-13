@@ -1,5 +1,8 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
+import { assertFilingTarget, filingInputFingerprint, filingReceiptPath, freezeFilingClassification, parseFilingReceipt, renderFilingReceipt, sealFilingReceipt, verifyPreparedFilingChanges, type FilingReceipt, type FrozenTopic } from "./filingReceipt.js";
+import { publicationContentHash } from "../vault/publicationGuard.js";
 import { sourceWindows, semanticBounds, resolveTopicSpans, reviewedSourceSpans } from "./sourcePassages.js";
 import { appendMemoryFacts, projectFacts, renderFactViews, type FactProposal, type FactView } from "./temporalFacts.js";
 import type {
@@ -51,7 +54,7 @@ import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
 import { sanitizeGroundedAnswer, suppressIncompleteAbsence, evidenceTextMatchesQuestion } from "./answerGrounding.js";
-import { listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
+import { isFilingReceiptPath, listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
 import {
   isAffirmativeApproval,
@@ -456,7 +459,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
   const location = options.location ?? {};
   const now = options.now ?? (() => new Date());
-  const queue = new WriteQueue();
+  const queue = new WriteQueue(repo ? vaultPath : undefined);
   const readSyncTtl = options.readSyncTtlMs ?? DEFAULT_READ_SYNC_TTL_MS;
   let lastSyncMs = Number.NEGATIVE_INFINITY;
 
@@ -533,6 +536,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * rebases over a store's half-written working tree. Offline is fine —
    * reads then serve the local clone, same as store's pull fallback.
    */
+  async function assertNoInterruptedFiling(): Promise<void> {
+    if (!repo) return;
+    if ((await repo.pendingChanges()).some(change => isFilingReceiptPath(change.path))
+      || (repo.isCurrentHeadPublished && !(await repo.isCurrentHeadPublished()))) throw new Error("filing_recovery_pending");
+  }
+
+  async function safeReadRevision(): Promise<VaultRevision> {
+    assertVault(repo);
+    return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); });
+  }
+
   async function syncForRead(): Promise<void> {
     if (!repo) return; // vaultless: nothing to pull
     if (now().getTime() - lastSyncMs < readSyncTtl) return;
@@ -544,9 +558,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     if (queue.busy) return;
     await queue.run(async () => {
       if (now().getTime() - lastSyncMs < readSyncTtl) return; // a queued turn already synced
-      await repo.pull().catch(() => {});
+      await (repo.pullForFiling ? repo.pullForFiling() : repo.pull()).catch(() => {});
       lastSyncMs = now().getTime();
-    });
+    }, "interactive", { lockWaitMs: 0 }).catch(error => { if (!(error instanceof VaultWriteBusyError)) throw error; });
   }
 
   function estimateTokens(text: string): number {
@@ -669,7 +683,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return {
       readFacts: async (input) => {
         const note = await getNote(vaultPath, input.path, sourceResolver);
-        const revision = await repo.currentRevision();
+        const revision = await safeReadRevision();
         return JSON.stringify(await projectFacts({ ...input, path: note.path }, note.frontmatter.memoryFacts, now(), async ref => {
           const [path, anchor] = ref.split("#^") as [string, string];
           await getNote(vaultPath, path, sourceResolver); // containment/symlink guard shared with ordinary reads
@@ -695,7 +709,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         } } satisfies EntrySearchResult);
       } } : {}),
       readNote: async (path: string, readOptions?: NoteReadOptions) => {
-        const revision = await repo.currentRevision();
+        const revision = await safeReadRevision();
         const anchors = path.includes("#") ? [] : pinnedRefs
           .filter((ref) => normalizeMarkdownNotePath(ref.split("#")[0]!) === normalizeMarkdownNotePath(path))
           .map((ref) => ref.split("#^")[1]!);
@@ -895,6 +909,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     assertVault(repo);
     if (input.write) {
       return queue.run(async () => {
+        await assertNoInterruptedFiling();
         await repo.pull().catch(() => {});
         lastSyncMs = now().getTime();
         const source = await collectBacklogSource(input);
@@ -1273,6 +1288,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
 
     return queue.run(async (): Promise<WorkResult> => {
+      await assertNoInterruptedFiling();
       await repo.pull().catch(() => {});
       lastSyncMs = now().getTime();
 
@@ -1430,12 +1446,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   /** Shared bounded classifier for synchronous stores and capture-first enrichment. */
   async function classifySource(snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>,
-    input: StoreInput, captured: boolean): Promise<Classification> {
+    input: StoreInput, captured: boolean, onlyRanges?: Array<{ start: number; end: number }>): Promise<Classification> {
     const windows = sourceWindows(input);
     const segments = windows.map(window => window.content);
     const entities = verbatimEntityCandidates(segments.join(""));
     const classifications: Classification[] = [];
     for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+      if (onlyRanges && !onlyRanges.some(range => range.start === windows[segmentIndex]!.range.start && range.end === windows[segmentIndex]!.range.end)) continue;
       const segment = segments[segmentIndex]!;
       let classified: Classification | null = null;
       let lastError: unknown;
@@ -1491,6 +1508,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function fileTopicAssignments(
     content: string, evidenceRef: string, logPath: string, classification: Classification,
     snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>, evidenceLine?: number, semanticRange?: StoreInput["semanticRange"],
+    filingPlan?: { input: EnrichEvidenceInput; baseRevision: VaultRevision; prior?: FilingReceipt },
   ): Promise<StoreResult> {
     assertVault(repo);
     type Outcome = NonNullable<StoreResult["topics"]>[number];
@@ -1512,10 +1530,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
         status: topic.classificationFailed ? "pending" : uncertain ? "uncertain" : "filed",
         ...(topic.classificationFailed ? { reason: "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
       };
+      const priorOutcome = filingPlan?.prior?.outcomes.find(item => item.ideaId === topic.ideaId);
+      if (priorOutcome) Object.assign(outcome, structuredClone(priorOutcome));
+      else if (filingPlan && !uncertain && topic.disposition !== "evidence_only") { outcome.status = "pending"; outcome.reason = "filing_not_started"; }
       outcomes.push(outcome);
       covered.push(...spans);
-      if (uncertain || topic.disposition === "evidence_only") continue;
-      for (const page of pages) {
+      if (uncertain || topic.disposition === "evidence_only" || priorOutcome?.status === "filed" || priorOutcome?.status === "uncertain") continue;
+      for (const page of pages.filter(page => !outcome.filedPages.includes(page.path))) {
         const group = groups.get(page.path) ?? { page, outcomes: [], facts: [] };
         if (groups.has(page.path) && page.aliases?.length) group.page = { ...group.page, aliases: [...(group.page.aliases ?? []), ...page.aliases] };
         group.outcomes.push(outcome);
@@ -1533,6 +1554,29 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
     if (uncovered.length) outcomes.push({ topic: "Unassigned source content", evidenceRef, sourceSpans: uncovered,
       confidence: 0, disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "source_not_assigned" });
+    let receipt: FilingReceipt | undefined;
+    const receiptPath = filingPlan ? filingReceiptPath(evidenceRef) : undefined;
+    const checkpoint = async (phase: "prepared" | "ready" = "prepared") => {
+      if (!filingPlan || !receiptPath) return;
+      filingPlan.input.assertActive?.();
+      await assertFilingTarget(vaultPath, receiptPath, true);
+      receipt = sealFilingReceipt({ version: 1, evidenceRef, inputFingerprint: filingInputFingerprint(filingPlan.input),
+        baseRevision: filingPlan.baseRevision, phase,
+        classification: freezeFilingClassification(classification as Classification & { topics: FrozenTopic[] }),
+        outcomes: structuredClone(outcomes), files: receipt?.files ?? {} });
+      await mkdir(join(vaultPath, "Inbox"), { recursive: true });
+      const absolute = join(vaultPath, receiptPath); const temporary = join(vaultPath, ".git", "zenod-filing-receipt.tmp");
+      await writeFile(temporary, renderFilingReceipt(receipt)); await rename(temporary, absolute);
+    };
+    const prepareFile = async (path: string, before: string | null, after: string) => {
+      if (!filingPlan) return;
+      await assertFilingTarget(vaultPath, path);
+      if (!receipt) await checkpoint();
+      if (before === after) delete receipt!.files[path];
+      else receipt!.files[path] = { beforeHash: publicationContentHash(before), after, afterHash: publicationContentHash(after) };
+      await checkpoint();
+    };
+    await checkpoint();
     const factEvidence = await getEvidenceEntry(vaultPath, evidenceRef, sourceResolver);
     const touched: string[] = [];
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
@@ -1548,6 +1592,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const absolute = join(vaultPath, path);
       const currentContent = await readFile(absolute, "utf8").catch(() => null);
       let lastWrittenContent: string | null = null;
+      const previousOutcomes = group.outcomes.map(outcome => structuredClone(outcome));
       try {
         if (group.page.action === "update" && currentContent === null) throw new Error("update_target_missing");
         const folder = path.split("/")[0] ?? "";
@@ -1575,22 +1620,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
           reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
           const operations = await llm.reconcile(prepared.request);
           const reconciled = await applyReconciliation(prepared,operations);
+          for (const outcome of group.outcomes) {
+            const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);
+            const pending=reconciled.pending.filter(item=>item.ideaIds.includes(outcome.ideaId!));
+            outcome.appliedOperationIds=[...new Set([...(outcome.appliedOperationIds??[]),...reconciled.appliedOperations.filter(operation=>operation.ideaIds.includes(outcome.ideaId!)).map(operation=>operation.id)])];
+            if (pending.length) {outcome.status="pending";outcome.reason=pending.map(item=>item.reason).join("; ");}
+            else { outcome.filedPages.push(path); outcome.status = outcome.pages.every(page => outcome.filedPages.includes(page)) ? "filed" : "pending"; if (outcome.status === "filed") delete outcome.reason; }
+          }
+          await prepareFile(path, currentContent, reconciled.content);
           // The model's awaited work cannot overwrite a page changed since context preparation.
           if ((await readFile(absolute,"utf8").catch(() => null)) !== currentContent) throw new Error("reconciliation_revision_changed");
           if (reconciled.content !== currentContent && reconciled.appliedOperationIds.length) {
+            filingPlan?.input.assertActive?.();
             await mkdir(dirname(absolute),{recursive:true});
             await writeFile(absolute,reconciled.content); lastWrittenContent=reconciled.content;
             const report=await lintVault(vaultPath,[path]);
             if (report.errors.length || checkEvidenceImmutability(await repo.pendingChanges()).length) throw new Error("reconciliation_validation_failed");
             touched.push(path);
           }
-          for (const outcome of group.outcomes) {
-            const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);
-            const pending=reconciled.pending.filter(item=>item.ideaIds.includes(outcome.ideaId!));
-            outcome.appliedOperationIds=[...new Set([...(outcome.appliedOperationIds??[]),...reconciled.appliedOperations.filter(operation=>operation.ideaIds.includes(outcome.ideaId!)).map(operation=>operation.id)])];
-            if (pending.length) {outcome.status="pending";outcome.reason=pending.map(item=>item.reason).join("; ");}
-            else outcome.filedPages.push(path);
-          }
+          if (receipt && reconciled.content === currentContent) delete receipt.files[path];
+          await checkpoint();
           continue;
         }
         let previousErrors: import("../types.js").LintError[] | undefined;
@@ -1605,6 +1654,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
               ...(previousErrors ? { previousErrors } : {}) });
           await mkdir(dirname(absolute), { recursive: true });
           lastWrittenContent = appendMemoryFacts(compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next, currentContent, group.facts, factEvidence, assignedEvidence);
+          for (const outcome of group.outcomes) { if (!outcome.filedPages.includes(path)) outcome.filedPages.push(path); outcome.status = outcome.pages.every(page => outcome.filedPages.includes(page)) ? "filed" : "pending"; if (outcome.status === "filed") delete outcome.reason; }
+          await prepareFile(path, currentContent, lastWrittenContent);
+          filingPlan?.input.assertActive?.();
           await writeFile(absolute, lastWrittenContent);
           const report = await lintVault(vaultPath, [path]);
           previousErrors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
@@ -1612,19 +1664,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }
         if (!valid) throw new Error("composition_validation_failed");
         touched.push(path);
-        for (const outcome of group.outcomes) outcome.filedPages.push(path);
+        for (const outcome of group.outcomes) { if (!outcome.filedPages.includes(path)) outcome.filedPages.push(path); outcome.status = outcome.pages.every(page => outcome.filedPages.includes(page)) ? "filed" : "pending"; if (outcome.status === "filed") delete outcome.reason; }
+        await checkpoint();
       } catch (error) {
         // Restore only this page. Evidence and independently successful pages remain intact.
         if (lastWrittenContent !== null && (await readFile(absolute,"utf8").catch(() => null)) === lastWrittenContent) {
           if (currentContent === null) await rm(absolute, { force: true });
           else await writeFile(absolute, currentContent);
         }
-        for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = error instanceof Error && /^(reconciliation_|branch_context_)/.test(error.message) ? error.message : "page_filing_failed"; }
+        if (receipt) delete receipt.files[path];
+        group.outcomes.forEach((outcome, index) => { Object.assign(outcome, previousOutcomes[index]); outcome.appliedOperationIds = previousOutcomes[index]!.appliedOperationIds ?? []; });
+        for (const outcome of group.outcomes) { outcome.filedPages = outcome.filedPages.filter(page => page !== path); outcome.status = "pending"; outcome.reason = error instanceof Error && /^(reconciliation_|branch_context_)/.test(error.message) ? error.message : "page_filing_failed"; }
       }
     }
     const unresolved = outcomes.filter((outcome) => outcome.status !== "filed");
     // Stable per-evidence record preserves assignments and unresolved names without polluting candidate pages.
-    if (unresolved.length) {
+    if (!filingPlan && unresolved.length) {
       const recordPath = `Inbox/filing-${logPath.slice(4, -3)}-${evidenceRef.split("#^")[1]}.md`;
       const record = ["---", "status: filing-record", `evidence: ${JSON.stringify(evidenceRef)}`, "---", "", "# Topic filing receipt", "",
         "```json", JSON.stringify(outcomes, null, 2), "```", "",
@@ -1633,8 +1688,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await writeFile(join(vaultPath, recordPath), record);
       touched.push(recordPath);
     }
-    const revision = (await repo.pendingChanges()).length
-      ? await repo.commitAndPublish(`memory: topic filing ${classification.summary}`)
+    await checkpoint("ready");
+    if (receiptPath) touched.push(receiptPath);
+    const pendingChanges = await repo.pendingChanges();
+    const revision = pendingChanges.length
+      ? await repo.commitAndPublish(`memory: topic filing ${classification.summary}`, filingPlan && receiptPath ? {
+        expectedRevision: filingPlan.baseRevision, receiptPath,
+        expectedFiles: Object.fromEntries([...Object.entries(receipt!.files).map(([path, file]) => [path, file.afterHash]), [receiptPath, publicationContentHash(renderFilingReceipt(receipt!))]]),
+        ...(filingPlan.input.assertActive ? { assertActive: filingPlan.input.assertActive } : {}),
+      } : undefined)
       : await repo.currentRevision();
     return { evidenceRef, pagesTouched: touched, ...storePublication(revision, logPath, evidenceLine ? `L${evidenceLine}` : undefined, touched), topics: outcomes,
       filing: outcomes.some((outcome) => outcome.status === "pending") ? "pending" : unresolved.length ? "uncertain" : "filed" };
@@ -1648,6 +1710,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function captureEvidence(input: StoreInput): Promise<StoreResult> {
     assertVault(repo);
     return queue.run(async () => {
+      await assertNoInterruptedFiling();
       await repo.pull().catch(() => {
         // offline or empty remote — proceed against the local clone
       });
@@ -1691,28 +1754,91 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * The typed classifier is a spend gate: only integrate_page may call the
    * full-page composer. Evidence-only captures require no second commit.
    */
+  function receiptFilingResult(receipt: FilingReceipt, revision: VaultRevision, paths: string[] = []): StoreResult {
+    const logPath = receipt.evidenceRef.split("#^")[0]!;
+    return { evidenceRef: receipt.evidenceRef, pagesTouched: paths,
+      ...storePublication(revision, logPath, undefined, paths), topics: receipt.outcomes,
+      filing: receipt.outcomes.some(outcome => outcome.status === "pending") ? "pending"
+        : receipt.outcomes.some(outcome => outcome.status !== "filed") ? "uncertain" : "filed" };
+  }
+
   async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
     assertVault(repo);
     return queue.run(async () => {
-      await repo.pull().catch(() => {
-        // offline or empty remote — proceed against the local clone
-      });
+      input.assertActive?.();
+      const receiptPath = filingReceiptPath(input.evidenceRef);
+      const receiptAbsolute = join(vaultPath, receiptPath);
+      await assertFilingTarget(vaultPath, receiptPath, true);
+      const loadReceipt = async () => parseFilingReceipt(await readFile(receiptAbsolute, "utf8").catch(() => ""), input);
+      const publishedRevision = () => repo.currentPublishedRevision ? repo.currentPublishedRevision() : repo.currentRevision();
+      let published = await publishedRevision();
+      let recoveredPaths: string[] = [];
+      let prior = await loadReceipt();
+      const changes = await repo.pendingChanges();
+      const localPublished = repo.isCurrentHeadPublished ? await repo.isCurrentHeadPublished() : true;
+      if (changes.length || !localPublished) {
+        if (!prior) throw new Error("filing_unrecognized_local_changes");
+        if (prior.phase === "prepared") {
+          if (!localPublished || prior.baseRevision.provider !== published.provider || prior.baseRevision.id !== published.id
+            || !verifyPreparedFilingChanges(prior, changes, receiptPath)) throw new Error("filing_prepared_plan_conflict");
+          // Replay exact host-approved candidate bytes. They still require the
+          // normal validation; a prepared hash alone never authorizes publishing.
+          for (const [path, file] of Object.entries(prior.files)) {
+            await assertFilingTarget(vaultPath, path);
+            input.assertActive?.();
+            if (file.after === null) await rm(join(vaultPath, path), { force: true });
+            else { await mkdir(dirname(join(vaultPath, path)), { recursive: true }); await writeFile(join(vaultPath, path), file.after); }
+          }
+          const validation = await lintVault(vaultPath, Object.keys(prior.files));
+          if (validation.errors.length || checkEvidenceImmutability(await repo.pendingChanges()).length) throw new Error("filing_prepared_plan_validation_failed");
+          const { filingRevision: _previous, ...payload } = prior;
+          prior = sealFilingReceipt({ ...payload, phase: "ready" });
+          input.assertActive?.();
+          const temporary = join(vaultPath, ".git", "zenod-filing-receipt.tmp");
+          await writeFile(temporary, renderFilingReceipt(prior)); await rename(temporary, receiptAbsolute);
+        }
+        for (const path of Object.keys(prior.files)) await assertFilingTarget(vaultPath, path);
+        const readyValidation = await lintVault(vaultPath, Object.keys(prior.files));
+        if (readyValidation.errors.length || checkEvidenceImmutability(await repo.pendingChanges()).length) throw new Error("filing_ready_plan_validation_failed");
+        input.assertActive?.();
+        recoveredPaths = Object.keys(prior.files);
+        published = await repo.commitAndPublish("memory: recover validated filing", {
+          expectedRevision: prior.baseRevision, receiptPath,
+          expectedFiles: Object.fromEntries([...Object.entries(prior.files).map(([path, file]) => [path, file.afterHash]), [receiptPath, publicationContentHash(renderFilingReceipt(prior))]]),
+          ...(input.assertActive ? { assertActive: input.assertActive } : {}),
+        });
+      }
+      input.assertActive?.();
+      if (repo.pullForFiling) await repo.pullForFiling(); else await repo.pull();
       lastSyncMs = now().getTime();
       const evidence = await getEvidenceEntry(vaultPath, input.evidenceRef, sourceResolver);
-      const capturedRevision = await repo.currentRevision();
+      const capturedRevision = await publishedRevision();
       if (input.content.trimEnd() !== evidence.content) return evidenceResult(evidence, capturedRevision);
+      prior = await loadReceipt();
+      if (prior?.phase === "ready" && !prior.outcomes.some(outcome => outcome.status === "pending")) return receiptFilingResult(prior, capturedRevision, recoveredPaths);
       const config = await loadBrainConfig(vaultPath);
       const snapshot = await scanVault(vaultPath);
       let classification: Classification;
       try {
-        classification = await classifySource(snapshot, config, input, true);
+        if (prior) {
+          const windows = sourceWindows(input);
+          classification = { ...prior.classification, topics: prior.classification.topics.map(topic => ({ ...structuredClone(topic),
+            sourcePassages: windows.find(window => window.range.start === topic.sourceRange?.start && window.range.end === topic.sourceRange?.end)?.passages ?? windows.flatMap(window => window.passages) })) };
+          const failures = classification.topics!.filter(topic => topic.classificationFailed && topic.sourceRange);
+          if (failures.length) {
+            const retried = await classifySource(snapshot, config, input, true, failures.map(topic => topic.sourceRange!));
+            classification.topics = [...classification.topics!.filter(topic => !failures.includes(topic)), ...(retried.topics ?? [])];
+            classification.reviewedSourceSpans = [...(classification.reviewedSourceSpans ?? []), ...(retried.reviewedSourceSpans ?? [])];
+          }
+        } else classification = await classifySource(snapshot, config, input, true);
       } catch (error) {
         console.warn(`[librarian] enrichment gate unavailable for ${input.evidenceRef}: ${(error as Error).message}`);
         return evidenceResult(evidence, capturedRevision);
       }
 
       if (classification.topics) {
-        return fileTopicAssignments(input.content, input.evidenceRef, evidence.path, classification, snapshot, config, undefined, input.semanticRange);
+        return fileTopicAssignments(input.content, input.evidenceRef, evidence.path, classification, snapshot, config, undefined, input.semanticRange,
+          { input, baseRevision: capturedRevision, ...(prior ? { prior } : {}) });
       }
       const disposition = classification.disposition === "integrate_page"
         ? "integrate_page"
@@ -1817,6 +1943,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function store(input: StoreInput, priority: QueuePriority = "interactive"): Promise<StoreResult> {
     assertVault(repo);
     return queue.run(async () => {
+      await assertNoInterruptedFiling();
       const stored = await (async (): Promise<StoreResult> => {
       await repo.pull().catch(() => {
         // offline or empty remote — proceed against the local clone

@@ -103,7 +103,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete recall and reliable multi-idea reconciliation into cited knowledge. | implementation active | Source/catalog candidates reviewed; atomic writes and durable retry work active. Production awaits integrated quality/cost and recovery proof. | PR1244 integrated; PR1247 source, PR1246 catalog, PR1245 operator tooling; [research](planning/zenod-memory-reconciliation/README.md) | 2026-09-13 Europe/Paris | Integrate reviewed dependencies, validate real-pipeline candidate, then bounded rollout and live acceptance. |
+| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete source-grounded multi-idea filing and recall. | active | Source/catalog/atomic updates integrated; durable recovery under final review. | PR1247/1246/1249/1250; mainf19c29c | 2026-09-13 | Finish ZMR14 review/CI, evaluate frozen candidate, then scoped production rollout/live tests. |
 | ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | active — deployed verification | Public29ddb62 verified; affected live recall3/3; upgrade/undo and deployment boundary documented. | [Deployment leaf](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | 2026-09-06 Europe/Paris | Reuse documented process for the next authorized upgrade. |
 
 ## Bootstrap Map

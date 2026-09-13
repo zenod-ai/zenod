@@ -71,3 +71,6 @@ export function isIndexFile(relPath: string): boolean {
   const base = basenameOf(relPath);
   return base === "index" || base.endsWith("Index");
 }
+
+/** Recovery records contain snapshots, not independent current memory claims. */
+export const isFilingReceiptPath = (path: string): boolean => /^Inbox\/filing-\d{4}-\d{2}-\d{2}-e-[a-zA-Z0-9-]+\.md$/.test(path);

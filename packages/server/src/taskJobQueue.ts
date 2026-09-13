@@ -1,4 +1,4 @@
-import type { BrainEngine } from "zenod";
+import { VaultPublicationError, type BrainEngine } from "zenod";
 import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchive.js";
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
@@ -122,7 +122,7 @@ export class TaskJobQueue {
 
   private async process(job: TaskJob): Promise<void> {
     const leaseHeartbeat = setInterval(
-      () => this.store.renewClaim(job.id),
+      () => this.store.renewClaim(job),
       Math.max(1_000, Math.floor(TASK_JOB_LEASE_MS / 3)),
     );
     leaseHeartbeat.unref?.();
@@ -135,7 +135,7 @@ export class TaskJobQueue {
           job.input.source ?? "mcp",
           { conversationKey: job.input.conversationKey ?? "mcp" },
         );
-        completed = this.store.updateClaimed(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job, { status: "done", result });
       } else if (job.kind === "task") {
         const engine = await this.getEngine();
         const result = await engine.handleTasking({
@@ -143,7 +143,7 @@ export class TaskJobQueue {
           surface: "mcp",
           conversationKey: job.input.conversationKey ?? "mcp",
         });
-        completed = this.store.updateClaimed(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job, { status: "done", result });
       } else if (job.kind === "store") {
         const engine = await this.getEngine();
         const result = await engine.store({
@@ -156,12 +156,12 @@ export class TaskJobQueue {
           ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
         assertDurableStoreReceipt(result);
-        completed = this.store.updateClaimed(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job, { status: "done", result });
       } else if (job.kind === "media_ingest") {
         const rejection = this.admit(job.kind, job.input);
         if (rejection) throw new Error(rejection.message);
         if (!this.settings) {
-          completed = this.store.updateClaimed(job.id, {
+          completed = this.store.updateClaimed(job, {
             status: "done",
             result: mediaIngestUnavailableReceipt(job.input, null),
           });
@@ -175,7 +175,7 @@ export class TaskJobQueue {
             job.idempotencyKey ?? job.id,
             (input, idempotencyKey) => this.enqueue("enrich_memory", input, idempotencyKey),
           );
-          completed = this.store.updateClaimed(job.id, { status: "done", result });
+          completed = this.store.updateClaimed(job, { status: "done", result });
         }
       } else if (job.kind === "enrich_memory") {
         const engine = await this.getEngine();
@@ -183,6 +183,7 @@ export class TaskJobQueue {
           throw new Error("capture-first enrichment is unavailable");
         }
         const result = await engine.enrichEvidence({
+          assertActive: () => this.store.assertClaim(job),
           evidenceRef: job.input.evidenceRef,
           ...(job.input.semanticRange ? { semanticRange: job.input.semanticRange } : {}),
           content: job.input.content ?? "",
@@ -194,7 +195,7 @@ export class TaskJobQueue {
           ...(job.input.sourceId ? { sourceId: job.input.sourceId } : {}),
         });
         assertDurableStoreReceipt(result);
-        completed = this.store.updateClaimed(job.id, { status: "done", result });
+        completed = this.store.resumePending(job, result) || this.store.updateClaimed(job, { status: "done", result });
       } else {
         const engine = await this.getEngine();
         const result = await engine.work({
@@ -202,13 +203,15 @@ export class TaskJobQueue {
           ...(job.input.plan ? { plan: job.input.plan } : {}),
         });
         assertDurableWorkReceipt(result);
-        completed = this.store.updateClaimed(job.id, { status: "done", result });
+        completed = this.store.updateClaimed(job, { status: "done", result });
       }
-      if (completed) console.log(`[task-job] ${job.id} done: ${job.kind}`);
+      if (completed) console.log(`[task-job] ${job.id} ${this.store.get(job.id)?.status ?? "updated"}: ${job.kind}`);
       else console.warn(`[task-job] ${job.id} result ignored after claim ownership changed`);
     } catch (err) {
       console.error(`[task-job] ${job.id} failed:`, err);
-      if (!this.store.updateClaimed(job.id, { status: "error", error: (err as Error).message })) {
+      if (job.kind === "enrich_memory" && err instanceof VaultPublicationError && err.failure.retryable
+        && this.store.resumePublicationFailure(job, err.message)) return;
+      if (!this.store.updateClaimed(job, { status: "error", error: (err as Error).message })) {
         console.warn(`[task-job] ${job.id} error ignored after claim ownership changed`);
       }
     } finally {
@@ -544,8 +547,8 @@ async function transcribeMedia(
 }
 
 function suppliedTranscriptExtraction(input: TaskJobInput, archived: ArchivedMediaInput): MediaExtraction {
-  const body = input.providedTranscript?.trim() ?? "";
-  if (!body) throw new Error("authenticated channel supplied an empty transcript");
+  const body = input.providedTranscript ?? "";
+  if (!body.trim()) throw new Error("authenticated channel supplied an empty transcript");
   return {
     body,
     provider: input.transcriptionProvider?.trim() || "authenticated channel transcription",
@@ -609,7 +612,7 @@ async function extractVisualMedia(
 
 function extractTextMedia(archived: ArchivedMediaInput): { body: string; provider: string; kind: "text"; filename: string; label: string } {
   const body = archived.data.toString("utf8").trim();
-  if (!body) throw new Error(`text extraction failed for ${archived.filename}: no text found`);
+  if (!body.trim()) throw new Error(`text extraction failed for ${archived.filename}: no text found`);
   return {
     body,
     provider: "plain text",

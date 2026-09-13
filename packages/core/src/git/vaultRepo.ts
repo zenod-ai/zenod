@@ -1,3 +1,4 @@
+import { filingPublicationConflict, verifyPublicationBase, verifyPublicationFiles } from "../vault/publicationGuard.js";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { simpleGit, type SimpleGit, type StatusResult } from "simple-git";
@@ -7,6 +8,7 @@ import {
   githubVaultRevision,
   type VaultRepository,
   type VaultRevision,
+  type VaultPublicationGuard,
 } from "../vault/repository.js";
 
 export interface VaultRepoOptions {
@@ -90,6 +92,23 @@ export class VaultRepo implements VaultRepository {
   async pull(): Promise<void> {
     await this.ensureFreshRemote();
     await this.git.pull("origin", this.branch, { "--rebase": "true" });
+  }
+
+  async currentPublishedRevision(): Promise<VaultRevision> {
+    await this.ensureFreshRemote();
+    await this.git.fetch("origin", this.branch);
+    const sha = (await this.git.revparse([`refs/remotes/origin/${this.branch}`])).trim();
+    return this.revisionForSha(sha, []);
+  }
+
+  async isCurrentHeadPublished(): Promise<boolean> {
+    const published = await this.currentPublishedRevision();
+    return (await this.git.raw(["rev-list", "--max-count=1", await this.headSha(), "--not", published.id])).trim() === "";
+  }
+
+  async pullForFiling(): Promise<void> {
+    await this.currentPublishedRevision();
+    await this.git.merge(["--ff-only", `refs/remotes/origin/${this.branch}`]);
   }
 
   async headSha(): Promise<string> {
@@ -192,7 +211,8 @@ export class VaultRepo implements VaultRepository {
   }
 
   /** Provider-neutral publication boundary; legacy commitAndPush remains available during migration. */
-  async commitAndPublish(message: string): Promise<VaultRevision> {
+  async commitAndPublish(message: string, guard?: VaultPublicationGuard): Promise<VaultRevision> {
+    if (guard) return this.publishGuardedFiling(message, guard);
     const changedPaths = (await this.pendingChanges()).map((change) => change.path);
     const commitSha = await this.commitAndPush(message);
     const canonicalLocation = {
@@ -205,6 +225,38 @@ export class VaultRepo implements VaultRepository {
         .map((path) => githubUrl(canonicalLocation, path))
         .filter(Boolean),
     );
+  }
+
+  private async publishGuardedFiling(message: string, guard: VaultPublicationGuard): Promise<VaultRevision> {
+    const published = await this.currentPublishedRevision();
+    let head = await this.headSha();
+    const pending = await this.pendingChanges();
+    if (pending.length) {
+      verifyPublicationBase(published, guard);
+      if (head !== guard.expectedRevision.id) filingPublicationConflict(guard);
+      verifyPublicationFiles(pending, guard);
+      guard.assertActive?.();
+      head = await this.commit(message);
+    }
+    // Recovery may publish only one exact prepared filing commit, never an
+    // unrelated local commit or a rebased transaction with different context.
+    const parents = (await this.git.show(["-s", "--format=%P", head])).trim();
+    if (parents !== guard.expectedRevision.id) filingPublicationConflict(guard);
+    const paths = (await this.git.raw(["diff", "--name-only", "-z", guard.expectedRevision.id, head])).split("\0").filter(Boolean);
+    const changes: FileChange[] = await Promise.all(paths.map(async path => ({ path,
+      before: await this.git.show([`${guard.expectedRevision.id}:${path}`]).catch(() => null),
+      after: await this.git.show([`${head}:${path}`]).catch(() => null),
+    })));
+    verifyPublicationFiles(changes, guard);
+    const contains = async (revision: VaultRevision) => (await this.git.raw(["rev-list", "--max-count=1", head, "--not", revision.id])).trim() === "";
+    if (published.id !== guard.expectedRevision.id && !(await contains(published))) filingPublicationConflict(guard);
+    if (!(await contains(published))) {
+      guard.assertActive?.();
+      // No rebase or force push: a concurrent remote change must reject this plan.
+      try { await this.git.push("origin", this.branch); } catch { /* Verify remote before deciding whether a lost response was failure. */ }
+    }
+    if (!(await contains(await this.currentPublishedRevision()))) filingPublicationConflict(guard);
+    return this.revisionForSha(head, paths.map(path => githubUrl({ ...(this.repo ? { repo: this.repo } : {}), branch: head }, path)).filter(Boolean));
   }
 
   /** Resolve a vault path using the current GitHub branch compatibility URL. */

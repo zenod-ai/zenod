@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,6 +15,26 @@ import { TaskJobQueue } from "../src/taskJobQueue.js";
 const tmpDb = () => join(mkdtempSync(join(tmpdir(), "zenod-taskjob-")), "task.sqlite");
 
 describe("TaskJobStore restart durability (C-27 / #580)", () => {
+  it("upgrades an existing database additively and remains readable by the prior schema consumer", () => {
+    const path = tmpDb();
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`CREATE TABLE task_jobs (id TEXT PRIMARY KEY, tenant_id TEXT, idempotency_key TEXT, kind TEXT NOT NULL,
+      input_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 0,
+      owner_id TEXT, lease_expires_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+      INSERT INTO task_jobs (id,tenant_id,kind,input_json,status,created_at,updated_at) VALUES ('legacy','tenant-alpha','enrich_memory','{}','queued',1,1);`);
+    legacy.close();
+    const upgraded = new TaskJobStore(path, "tenant-alpha");
+    const claimed = upgraded.claimNextQueued()!;
+    expect(claimed.id).toBe("legacy"); expect(claimed.claimToken).toEqual(expect.any(String));
+    upgraded.updateClaimed(claimed, { status: "done" }); upgraded.close();
+    const priorReader = new DatabaseSync(path);
+    expect(priorReader.prepare("SELECT id,status,attempts FROM task_jobs WHERE id='legacy'").get()).toMatchObject({ id: "legacy", status: "done", attempts: 0 });
+    // Old inserts omit the additive nullable generation column and remain valid.
+    priorReader.prepare("INSERT INTO task_jobs(id,tenant_id,kind,input_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").run("old-writer", "tenant-alpha", "store", "{}", "queued", 2, 2);
+    expect(priorReader.prepare("SELECT claim_token FROM task_jobs WHERE id='old-writer'").get()).toMatchObject({ claim_token: null });
+    priorReader.close();
+  });
+
   it("re-queues interrupted semantic enrichment without duplicating its idempotent job", () => {
     const path = tmpDb();
     let store = new TaskJobStore(path, "tenant-alpha");
@@ -296,7 +317,7 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(replacement.get(accepted.id)).toMatchObject({ status: "queued", attempts: 1 });
     expect(
       originalOwner.updateClaimed(
-        accepted.id,
+        originalOwner.get(accepted.id)!,
         {
           status: "done",
           result: {
@@ -313,7 +334,7 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(replacement.claimNextQueued(1_000 + TASK_JOB_LEASE_MS + 3)?.id).toBe(accepted.id);
     expect(
       replacement.updateClaimed(
-        accepted.id,
+        replacement.get(accepted.id)!,
         {
           status: "done",
           result: {
@@ -331,6 +352,42 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     });
     originalOwner.close();
     replacement.close();
+  });
+
+  it("rejects expired renewal and late results even before recovery, including same-instance reclaims", () => {
+    const store = new TaskJobStore(tmpDb(), "tenant-alpha", () => 1_000);
+    const job = store.enqueue("enrich_memory", { content: "source" }, "same-source", 1_000);
+    const first = store.claimNextQueued(1_000)!;
+    const expired = 1_000 + TASK_JOB_LEASE_MS;
+    expect(store.renewClaim(first, expired)).toBe(false);
+    expect(store.updateClaimed(first, { status: "done" }, expired)).toBe(false);
+    expect(store.resumePublicationFailure(first, "stale provider recovery", expired)).toBe(false);
+    expect(() => store.assertClaim(first, expired)).toThrow("task_job_claim_lost");
+    store.recoverExpiredRunning(expired);
+    const second = store.claimNextQueued(expired + 1)!;
+    expect(second.id).toBe(job.id);
+    expect(second.claimToken).not.toBe(first.claimToken);
+    expect(store.renewClaim(first, expired + 2)).toBe(false);
+    expect(store.updateClaimed(first, { status: "done" }, expired + 2)).toBe(false);
+    expect(store.resumePublicationFailure(first, "stale provider recovery", expired + 2)).toBe(false);
+    expect(() => store.assertClaim(second, expired + 2)).not.toThrow();
+    expect(store.updateClaimed(second, { status: "done" }, expired + 2)).toBe(true);
+    store.close();
+  });
+
+  it.each(["filed", "uncertain", "pending"] as const)("resumes pending enrichment once through the supported queue boundary: %s", async (filing) => {
+    const store = new TaskJobStore(tmpDb(), "tenant-alpha");
+    const enrichEvidence = vi.fn(async () => ({ evidenceRef: "Log/2026-09-13.md#^e-resume", pagesTouched: [],
+      commitSha: "e".repeat(40), githubUrls: [], filing }));
+    const queue = new TaskJobQueue(store, async () => ({ enrichEvidence }) as unknown as BrainEngine);
+    const job = queue.enqueue("enrich_memory", { evidenceRef: "Log/2026-09-13.md#^e-resume", content: "source" }, "source-resume");
+    for (let n = 0; n < 100 && store.get(job.id)?.status !== "done"; n++) await new Promise(r => setTimeout(r, 5));
+    await queue.close();
+    expect(enrichEvidence).toHaveBeenCalledTimes(filing === "pending" ? 2 : 1);
+    expect(store.get(job.id)).toMatchObject({ status: "done", attempts: filing === "pending" ? 1 : 0, result: { filing } });
+    expect(store.enqueue("enrich_memory", { content: "ignored replay" }, "source-resume").id).toBe(job.id);
+    expect(store.recent()).toHaveLength(1);
+    store.close();
   });
 
   it("waits for an active claim before shutdown closes its store", async () => {

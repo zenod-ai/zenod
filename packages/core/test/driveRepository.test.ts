@@ -17,6 +17,8 @@ import {
   type DriveVaultRevisionRecord,
 } from "../src/index.js";
 
+import { publicationContentHash } from "../src/vault/publicationGuard.js";
+
 interface Stored extends DriveVaultFile { data: Buffer }
 
 class FakeDrive implements DriveVaultClient {
@@ -312,6 +314,56 @@ afterEach(async () => {
 });
 
 describe("DriveVaultRepository", () => {
+  it("guards exact filing publication and refuses unvalidated prepared local commits", async () => {
+    const drive = new FakeDrive(); const workdir = await temp("filing-guard"); const repo = await open(drive, workdir);
+    const base = await repo.currentPublishedRevision();
+    const receiptPath = "Inbox/filing-fixture.md";
+    const receipt = "validated receipt\r\n"; const content = "cited idea\r\n";
+    await writeVaultFile(workdir, receiptPath, receipt); await writeVaultFile(workdir, "Notes/Idea.md", content);
+    const guard = { expectedRevision: base, receiptPath, expectedFiles: { [receiptPath]: publicationContentHash(receipt), "Notes/Idea.md": publicationContentHash(content) } };
+    const git = simpleGit(workdir); await git.add("-A"); await git.commit("prepared filing"); const prepared = (await git.revparse(["HEAD"])).trim();
+    expect((await repo.currentPublishedRevision()).commitSha).toBe(base.commitSha);
+    await expect(repo.pullForFiling()).rejects.toThrow("filing_local_commit_requires_recovery");
+    expect((await git.revparse(["HEAD"])).trim()).toBe(prepared);
+    const reopened = await open(drive, workdir);
+    expect((await simpleGit(workdir).revparse(["HEAD"])).trim()).toBe(prepared);
+    await expect(reopened.pull()).rejects.toThrow("filing_local_changes_require_recovery");
+    await expect(reopened.currentRevision()).rejects.toThrow("filing_local_changes_require_recovery");
+    expect(await readFile(join(workdir, "Notes/Idea.md"), "utf8")).toBe(content);
+    const published = await reopened.commitAndPublish("recover verified filing", guard);
+    expect(published.provider).toBe("google_drive"); expect(published.id).not.toBe(base.id);
+    expect((await repo.currentPublishedRevision()).id).toBe(published.id);
+    expect(await readFile(join(workdir, "Notes/Idea.md"), "utf8")).toBe(content);
+    await repo.pullForFiling();
+  });
+
+  it.each([1, 2, 3, 4].flatMap(call => (["before", "after"] as const).map(phase => ({ call, phase }))))("resumes the existing guarded Drive journal after failure $phase mutation $call", async ({ call, phase }) => {
+    const drive = new FakeDrive(); const workdir = await temp(`guard-journal-${phase}-${call}`); const repo = await open(drive, workdir);
+    const base = await repo.currentPublishedRevision(); const receiptPath = "Inbox/filing-fixture.md";
+    await writeVaultFile(workdir, receiptPath, "validated receipt\r\n"); await writeVaultFile(workdir, "Notes/Idea.md", "cited idea\r\n");
+    const guard = { expectedRevision: base, receiptPath, expectedFiles: { [receiptPath]: publicationContentHash("validated receipt\r\n"), "Notes/Idea.md": publicationContentHash("cited idea\r\n") } };
+    drive.resetMutationCounter(); drive.failAt = { call, phase };
+    try { await repo.commitAndPublish("first guarded attempt", guard); }
+    catch (error) { expect(error).toBeInstanceOf(VaultPublicationError); expect((error as VaultPublicationError).failure.retryable).toBe(true); }
+    expect(drive.faultTriggered).toBe(true); drive.failAt = null;
+    const reopened = await open(drive, workdir);
+    const result = await reopened.commitAndPublish("resume exact journal", guard);
+    expect((await repo.currentPublishedRevision()).id).toBe(result.id);
+    expect(await readFile(join(workdir, "Notes/Idea.md"), "utf8")).toBe("cited idea\r\n");
+    expect([...drive.files.values()].filter(file => file.name === "Idea.md")).toHaveLength(1);
+    expect(await repo.pendingChanges()).toEqual([]);
+  }, 15_000);
+
+  it("allows a clean published ancestor to catch up without overwriting unknown local edits", async () => {
+    const drive = new FakeDrive(); const workdir = await temp("filing-follow"); const repo = await open(drive, workdir);
+    const peer = await open(drive, await temp("filing-peer"));
+    await writeVaultFile(peer.path, "Notes/Peer.md", "published change\n"); const revision = await peer.commitAndPublish("peer advance");
+    await repo.pullForFiling(); expect((await repo.currentRevision()).id).toBe(revision.id);
+    await writeVaultFile(workdir, "Notes/Unknown.md", "unrelated local work\n");
+    await expect(repo.pullForFiling()).rejects.toThrow("filing_local_changes_require_recovery");
+    expect(await readFile(join(workdir, "Notes/Unknown.md"), "utf8")).toBe("unrelated local work\n");
+  });
+
   it("runs the real engine store/search/get/ask loop and publishes Log plus meaning page", async () => {
     const drive = new FakeDrive();
     const workdir = await temp("engine");
@@ -916,7 +968,8 @@ describe("DriveVaultRepository", () => {
       drive.raceData = `# External ${raceWindow}\n`;
 
       await expect(repo.commitAndPublish("racing update")).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Areas/Home.md"] } });
-      expect((await repo.currentRevision()).id).toBe(base.id);
+      expect((await repo.currentPublishedRevision()).id).toBe(base.id);
+      await expect(repo.currentRevision()).rejects.toThrow("filing_local_changes_require_recovery");
       const conflictRoot = join(`${workdir}.state`, "conflicts");
       const conflictFiles = await readdir(conflictRoot, { recursive: true });
       expect(conflictFiles.some((path) => String(path).endsWith("Home.md"))).toBe(true);
@@ -939,7 +992,8 @@ describe("DriveVaultRepository", () => {
     await writeVaultFile(workdir, "Notes/Race.md", "journal race\n");
     drive.authorityRace = { targetName: "transaction.json", phase, externalFileId: "self", data: '{"tampered":true}' };
     await expect(repo.commitAndPublish("journal race")).rejects.toMatchObject({ failure: { code: "conflict" } });
-    expect((await repo.currentRevision()).id).toBe(base.id);
+    expect((await repo.currentPublishedRevision()).id).toBe(base.id);
+      await expect(repo.currentRevision()).rejects.toThrow("filing_local_changes_require_recovery");
     const conflicts = await readdir(join(`${workdir}.state`, "conflicts"), { recursive: true });
     expect(conflicts.some((path) => String(path).includes("journal-"))).toBe(true);
     await expect(open(drive, await temp(`journal-race-restart-${phase}`))).rejects.toMatchObject({ failure: { code: "conflict" } });
@@ -1061,7 +1115,7 @@ describe("DriveVaultRepository", () => {
     await expect(open(drive, await temp("adversarial-manifest-restart"), "binding-one")).rejects.toThrow(/outside its bound/);
     expect(drive.mutationCount).toBe(beforeManifestOpen);
     expect(drive.files.get(victim.id)?.data.toString()).toBe("two\n");
-  });
+  }, 15_000);
 
   it("rejects a jointly edited same-vault manifest and journal before mutating the redirected victim", async () => {
     const drive = new FakeDrive();

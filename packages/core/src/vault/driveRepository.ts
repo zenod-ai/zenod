@@ -1,3 +1,5 @@
+import { withVaultWriteLock } from "../git/vaultWriteLock.js";
+import { filingPublicationConflict, verifyPublicationBase, verifyPublicationFiles } from "./publicationGuard.js";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -9,6 +11,7 @@ import {
   VaultPublicationError,
   type VaultRepository,
   type VaultRevision,
+  type VaultPublicationGuard,
 } from "./repository.js";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -278,7 +281,8 @@ export class DriveVaultRepository implements VaultRepository {
 
   static async open(options: DriveVaultRepositoryOptions): Promise<DriveVaultRepository> {
     const repository = new DriveVaultRepository(options);
-    await repository.initialize();
+    await mkdir(repository.path, { recursive: true });
+    await withVaultWriteLock(repository.path, () => repository.initialize());
     return repository;
   }
 
@@ -367,8 +371,7 @@ export class DriveVaultRepository implements VaultRepository {
       else await this.provision();
     }
     await this.ensureStandardFolders();
-    await this.materializeFromAuthority();
-    await this.importExternalEdits();
+    if (await this.materializeFromAuthority()) await this.importExternalEdits();
   }
 
   private async discoverManifestFile(rootFolderId: string): Promise<DriveVaultFile | null> {
@@ -798,16 +801,19 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private async materializeFromAuthority(): Promise<void> {
+  private async materializeFromAuthority(): Promise<boolean> {
     const bundleData = await this.options.client.download(this.manifest.bundle.fileId);
     if (sha256(bundleData) !== this.manifest.bundle.checksum) throw new Error("Drive Git bundle checksum mismatch");
     await this.verifyBundleData(bundleData, this.manifest.commitSha);
     const localHead = await access(join(this.path, ".git"))
       .then(async () => simpleGit(this.path).revparse(["HEAD"]).then((value) => value.trim()).catch(() => null))
       .catch(() => null);
-    if (localHead === this.manifest.commitSha) {
+    if (localHead) {
       await this.configureGit();
-      return;
+      if ((await this.pendingChanges()).length) return false;
+      if (localHead === this.manifest.commitSha) return true;
+      try { await this.verifyBundleData(bundleData, this.manifest.commitSha, localHead); }
+      catch (error) { if (error instanceof Error && error.message === "filing_local_commit_requires_recovery") return false; throw error; }
     }
     const bundlePath = join(this.stateDir, `restore-${this.idFactory()}.bundle`);
     const restored = join(this.stateDir, `restore-${this.idFactory()}`);
@@ -824,6 +830,7 @@ export class DriveVaultRepository implements VaultRepository {
       await rm(this.path, { recursive: true, force: true });
       await rename(restored, this.path);
       await this.configureGit();
+      return true;
     } finally {
       await rm(bundlePath, { force: true });
       await rm(restored, { recursive: true, force: true });
@@ -928,20 +935,42 @@ export class DriveVaultRepository implements VaultRepository {
     const manifestFile = await this.options.client.getFile(this.manifestFile.id);
     await this.loadManifest(manifestFile);
     await this.validateManifestAuthority(manifestFile, this.manifest);
-    await this.materializeFromAuthority();
+    if (!(await this.materializeFromAuthority())) throw new Error("filing_local_changes_require_recovery");
     await this.importExternalEdits();
   }
 
-  async currentRevision(): Promise<VaultRevision> {
+  async currentPublishedRevision(requiredAncestor?: string): Promise<VaultRevision> {
     const manifestFile = await this.options.client.getFile(this.manifestFile.id);
     await this.loadManifest(manifestFile);
     await this.validateManifestAuthority(manifestFile, this.manifest);
     const bundle = await this.options.client.download(this.manifest.bundle.fileId);
     if (sha256(bundle) !== this.manifest.bundle.checksum) throw new Error("Drive Git bundle checksum mismatch");
-    await this.verifyBundleData(bundle, this.manifest.commitSha);
-    const localHead = (await this.git.revparse(["HEAD"])).trim();
-    if (localHead !== this.manifest.commitSha) await this.materializeFromAuthority();
+    await this.verifyBundleData(bundle, this.manifest.commitSha, requiredAncestor);
     return this.revision([]);
+  }
+
+  async currentRevision(): Promise<VaultRevision> {
+    const revision = await this.currentPublishedRevision();
+    const localHead = (await this.git.revparse(["HEAD"])).trim();
+    if (localHead !== this.manifest.commitSha && !(await this.materializeFromAuthority())) throw new Error("filing_local_changes_require_recovery");
+    return revision;
+  }
+
+  async isCurrentHeadPublished(): Promise<boolean> {
+    const head = (await this.git.revparse(["HEAD"])).trim();
+    try { await this.currentPublishedRevision(head); return true; }
+    catch (error) { if (error instanceof Error && error.message === "filing_local_commit_requires_recovery") return false; throw error; }
+  }
+
+  async pullForFiling(): Promise<void> {
+    await this.recoverTransactions();
+    // Do not discard a prepared transaction or unrelated local edits to refresh.
+    if ((await this.pendingChanges()).length) throw new Error("filing_local_changes_require_recovery");
+    const head = (await this.git.revparse(["HEAD"])).trim();
+    // A clean older published ancestor may advance; an unpublished local commit
+    // must be recovered through its exact receipt plan before materialization.
+    await this.currentPublishedRevision(head);
+    await this.pull();
   }
 
   /** Durable Drive IDs discovered or created during bootstrap; safe for the tenant binding record. */
@@ -982,7 +1011,46 @@ export class DriveVaultRepository implements VaultRepository {
     await this.git.clean("f", ["-d"]);
   }
 
-  async commitAndPublish(message: string): Promise<VaultRevision> {
+  async commitAndPublish(message: string, guard?: VaultPublicationGuard): Promise<VaultRevision> {
+    if (guard) {
+      const head = (await this.git.revparse(["HEAD"])).trim();
+      let pending = await this.pendingChanges();
+      const preparedCommit = !pending.length && head !== guard.expectedRevision.commitSha;
+      if (preparedCommit) {
+        const parents = (await this.git.show(["-s", "--format=%P", head])).trim();
+        if (parents !== guard.expectedRevision.commitSha) filingPublicationConflict(guard);
+        const paths = (await this.git.raw(["diff", "--name-only", "-z", parents, head])).split("\0").filter(Boolean);
+        const changes = await Promise.all(paths.map(async path => ({ path,
+          before: await this.git.show([`${parents}:${path}`]).catch(() => null),
+          after: await this.git.show([`${head}:${path}`]).catch(() => null),
+        })));
+        verifyPublicationFiles(changes, guard);
+      } else verifyPublicationFiles(pending, guard);
+      guard.assertActive?.();
+      // Finish an existing provider journal before considering a new transaction.
+      // A lost journal-create response may leave its exact local files unstaged.
+      await this.recoverTransactions(guard);
+      const published = await this.currentPublishedRevision();
+      if (preparedCommit && published.commitSha === head) return this.revision(Object.keys(guard.expectedFiles));
+      if (published.id !== guard.expectedRevision.id) {
+        // Recovery can restore the original journal commit after a lost create
+        // response. Verify that published tree against the same exact plan.
+        const recoveredHead = (await this.git.revparse(["HEAD"])).trim();
+        if (published.commitSha === recoveredHead) {
+          await this.verifyGuardedCommit(recoveredHead, guard);
+          return this.revision(Object.keys(guard.expectedFiles));
+        }
+        filingPublicationConflict(guard);
+      }
+      verifyPublicationBase(published, guard);
+      if (preparedCommit) {
+        guard.assertActive?.();
+        await this.git.reset(["--soft", guard.expectedRevision.commitSha!]);
+        pending = await this.pendingChanges();
+      }
+      verifyPublicationFiles(pending, guard);
+      guard.assertActive?.();
+    }
     const status = await this.git.status();
     const changedPaths = [...new Set([...status.modified, ...status.created, ...status.not_added, ...status.deleted])].map(normalizePath);
     if (!changedPaths.length) throw new VaultPublicationError({ code: "failed_before_write", message: "no vault changes to publish", retryable: false });
@@ -1021,6 +1089,7 @@ export class DriveVaultRepository implements VaultRepository {
     await this.writeLocalJournal(journal);
     let journalFile: DriveVaultFile | null = null;
     try {
+      guard?.assertActive?.();
       journalFile = await this.createRemoteJournal(journal);
       const revision = await this.applyJournal(journal, journalFile, baseManifest);
       await rm(this.localJournalPath(transactionId), { force: true });
@@ -1044,6 +1113,16 @@ export class DriveVaultRepository implements VaultRepository {
         pendingPaths: journal.mutations.filter((mutation) => mutation.state !== "applied").map((mutation) => mutation.path),
       });
     }
+  }
+
+  private async verifyGuardedCommit(head: string, guard: VaultPublicationGuard): Promise<void> {
+    const base = guard.expectedRevision.commitSha;
+    if (!base || (await this.git.show(["-s", "--format=%P", head])).trim() !== base) filingPublicationConflict(guard);
+    const paths = (await this.git.raw(["diff", "--name-only", "-z", base, head])).split("\0").filter(Boolean);
+    verifyPublicationFiles(await Promise.all(paths.map(async path => ({ path,
+      before: await this.git.show([`${base}:${path}`]).catch(() => null),
+      after: await this.git.show([`${head}:${path}`]).catch(() => null),
+    }))), guard);
   }
 
   private async assertRemoteBase(paths: string[]): Promise<void> {
@@ -1894,7 +1973,7 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private async recoverTransactions(): Promise<void> {
+  private async recoverTransactions(guard?: VaultPublicationGuard): Promise<void> {
     const remote = await this.options.client.listFiles({ folderId: this.transactionsFolderId, pageSize: 1000, allPages: true });
     for (const file of remote.filter((candidate) => candidate.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-"))) {
       const marker = await this.options.client.download(file.id).then((data) => JSON.parse(data.toString("utf8")) as {
@@ -2003,7 +2082,15 @@ export class DriveVaultRepository implements VaultRepository {
         await this.configureGit();
         const localHead = (await this.git.revparse(["HEAD"])).trim();
         if (localHead !== journal.targetCommitSha) {
+          const pending = await this.pendingChanges();
+          if (guard) {
+            if (pending.length) verifyPublicationFiles(pending, guard);
+            if (localHead !== guard.expectedRevision.commitSha) await this.verifyGuardedCommit(localHead, guard);
+          } else if (pending.length || localHead !== this.manifest.commitSha) {
+            throw new Error("filing_local_changes_require_recovery");
+          }
           await this.git.raw(["fetch", bundlePath, "refs/heads/main:refs/heads/recovery"]);
+          if (guard) await this.verifyGuardedCommit(journal.targetCommitSha, guard);
           await this.git.reset(["--hard", journal.targetCommitSha]);
         }
       } else {
@@ -2060,7 +2147,7 @@ export class DriveVaultRepository implements VaultRepository {
     };
   }
 
-  private async verifyBundleData(data: Buffer, expectedHead: string): Promise<void> {
+  private async verifyBundleData(data: Buffer, expectedHead: string, requiredAncestor?: string): Promise<void> {
     const bundlePath = join(this.stateDir, `verify-${this.idFactory()}.bundle`);
     const verifier = join(this.stateDir, `verify-repo-${this.idFactory()}`);
     const restored = join(this.stateDir, `verify-clone-${this.idFactory()}`);
@@ -2081,6 +2168,12 @@ export class DriveVaultRepository implements VaultRepository {
       const coldGit = simpleGit(restored);
       const coldHead = (await coldGit.revparse(["HEAD"])).trim();
       if (coldHead !== expectedHead) throw new Error("Drive Git bundle is not cold-cloneable at manifest HEAD");
+      if (requiredAncestor) {
+        const ancestor = await coldGit.revparse(["--verify", `${requiredAncestor}^{commit}`]).catch(() => "");
+        if (ancestor.trim() !== requiredAncestor || (await coldGit.raw(["rev-list", "--max-count=1", requiredAncestor, "--not", expectedHead])).trim()) {
+          throw new Error("filing_local_commit_requires_recovery");
+        }
+      }
     } finally {
       await rm(bundlePath, { force: true });
       await rm(verifier, { recursive: true, force: true });

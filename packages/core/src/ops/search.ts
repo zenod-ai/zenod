@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Hit } from "../types.js";
-import { listAttachmentFiles, listMarkdownFiles, tierOf } from "../vault/files.js";
+import { isFilingReceiptPath, listAttachmentFiles, listMarkdownFiles, tierOf } from "../vault/files.js";
 import { scanVault } from "../vault/pages.js";
 import { vaultSourceRef, type VaultSourceContext } from "../vault/source.js";
 
@@ -41,6 +41,7 @@ export async function searchVault(vaultPath: string, query: string, location: Va
 
   const scores = new Map<string, SearchScore>();
   const bump = (path: string, score: number, snippet: string, matchedText: string) => {
+    if (isFilingReceiptPath(path)) return;
     const normalizedText = normalizePhrase(matchedText);
     const cur = scores.get(path);
     if (cur) {
@@ -156,7 +157,8 @@ function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
         try {
           const event = JSON.parse(line) as { type: string; data?: { path?: { text?: string }; lines?: { text?: string } } };
           if (event.type === "match" && event.data?.path?.text && event.data.lines?.text) {
-            hits.push({ path: event.data.path.text.replace(/^\.\//, ""), line: event.data.lines.text });
+            const path = event.data.path.text.replace(/^\.\//, "");
+            if (!isFilingReceiptPath(path)) hits.push({ path, line: event.data.lines.text });
           }
         } catch {
           // ignore malformed event lines
@@ -175,6 +177,7 @@ function grepBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
 async function scanBodies(vaultPath: string, terms: string[]): Promise<BodyHit[]> {
   const hits: BodyHit[] = [];
   for (const file of await listMarkdownFiles(vaultPath)) {
+    if (isFilingReceiptPath(file)) continue;
     const content = await readFile(join(vaultPath, file), "utf8");
     for (const line of content.split("\n")) {
       const lower = line.toLowerCase();

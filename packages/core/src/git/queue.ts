@@ -1,3 +1,5 @@
+import { withVaultWriteLock } from "./vaultWriteLock.js";
+
 /**
  * Serialized write queue: exactly one writing turn at a time per vault, so two
  * stores fired together land as two clean commits, never interleaved (the
@@ -13,6 +15,7 @@
 export type QueuePriority = "interactive" | "background";
 
 export class WriteQueue {
+  constructor(private readonly vaultPath?: string) {}
   private running = false;
   private readonly lanes: Record<QueuePriority, Array<() => void>> = {
     interactive: [],
@@ -27,12 +30,12 @@ export class WriteQueue {
     return this.running;
   }
 
-  run<T>(fn: () => Promise<T>, priority: QueuePriority = "interactive"): Promise<T> {
+  run<T>(fn: () => Promise<T>, priority: QueuePriority = "interactive", options: { lockWaitMs?: number } = {}): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const task = (): void => {
         this.running = true;
         Promise.resolve()
-          .then(fn)
+          .then(() => this.vaultPath ? withVaultWriteLock(this.vaultPath, fn, options.lockWaitMs) : fn())
           .then(resolve, reject)
           .finally(() => {
             this.running = false;
