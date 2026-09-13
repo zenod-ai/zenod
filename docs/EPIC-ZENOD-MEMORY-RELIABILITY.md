@@ -14,7 +14,7 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
-Last reconciled commit: f19c29c9d234ef2bd726d306c595f59cad269e90 (main, PR1250); source/catalog/atomic writes and tooling integrated; durable recovery under review; no new deployment
+Last reconciled commit: 6e0af0c tested product; 9e032af operator-only integration; semantic acceptance failed and bounded repair wave active
 Planner: Jordi + ZMR-release-planner
 Worker: /root/zmr11_worker ZMR-18; /root/zmr12_worker ZMR-19; /root/zmr_acceptance_design ZMR-20
 Tester: /root owns next independent ZMR-15 acceptance after worker repairs; ZMR-17 pending candidate
@@ -253,7 +253,6 @@ Dependencies control delivery. #1237–#1243 are approved; #1254–#1256 repair 
 | [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241) | 5 | BUILD evaluation; actual pipeline | 90 min checkpoint | Tester | /root | Prove multi-idea reconciliation and cost | semantic FAIL on first candidate | ZMR-18–20 repairs | ../wt-zmr-candidate | detached | 6e0af0c | independent semantic review; 3/18 complete recall | 2026-09-13 | Repaired regression + independent ASR |
 | [ZMR-16 #1242](https://github.com/zenod-ai/zenod/issues/1242) | 6 | BUILD helper; existing deployment | 90 min checkpoint | Operator | /root | Deploy reviewed candidate | helper PR1245/1253 integrated; deployment gated | ZMR-15 | ../wt-zmr-16-quiesce | codex/zmr-16-quiesce | 9e032af | 23 offline tests, installed Dokploy review, CI | 2026-09-13 | Fresh recovery packet after quality pass |
 | [ZMR-17 #1243](https://github.com/zenod-ai/zenod/issues/1243) | 7 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Tester | unassigned | Run production voice-note acceptance and hand off human testing | approved, dependency waiting | ZMR-16 | ../wt-zmr-17 at dispatch | codex/zmr-17 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
-
 | [ZMR-18 #1254](https://github.com/zenod-ai/zenod/issues/1254) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Resolve exact source references safely | active | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-18 | codex/zmr-18 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Focused repair, tests and independent review |
 | [ZMR-19 #1255](https://github.com/zenod-ai/zenod/issues/1255) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Supply existing statements and correction context | active | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-19 | codex/zmr-19 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Focused repair, tests and independent review |
 | [ZMR-20 #1256](https://github.com/zenod-ai/zenod/issues/1256) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr_acceptance_design | Preserve supported question-relevant answers | active | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-20 | codex/zmr-20 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Focused repair, tests and independent review |
