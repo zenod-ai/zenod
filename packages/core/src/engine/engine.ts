@@ -36,6 +36,8 @@ import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault } from "../vault/lint.js";
 import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks } from "./meaningNotes.js";
+import { prepareReconciliation, applyReconciliation, reconciliationIdeaId } from "./reconciliation.js";
+import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
@@ -1470,7 +1472,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }],
       };
       if (!classified) throw lastError ?? new Error("classification returned no result");
-      if ((segments.length > 1 || input.semanticRange) && !classified.topics) classified.topics = [{
+      if ((segments.length > 1 || input.semanticRange || llm.reconcile) && !classified.topics) classified.topics = [{
         topic: classified.summary, summary: classified.summary, evidenceQuotes: [segment],
         confidence: classified.confidence, disposition: classified.disposition ?? "integrate_page",
         pages: classified.pages, ...(classified.question ? { question: classified.question } : {}),
@@ -1503,8 +1505,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
       })).values()];
       const uncertain = invalid || !Number.isFinite(topic.confidence) || topic.confidence < config.confidenceThreshold
         || topic.disposition === "needs_clarification" || (topic.disposition !== "evidence_only" && !pages.length);
+      topic.ideaId ??= reconciliationIdeaId(evidenceRef,(classification.topics??[]).indexOf(topic),topic.topic,spans);
       const outcome: Outcome = {
-        topic: topic.topic, evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
+        topic: topic.topic, ideaId:topic.ideaId,evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
         confidence: Number.isFinite(topic.confidence) ? Math.max(0, Math.min(1, topic.confidence)) : 0, disposition: topic.disposition, pages: pages.map((page) => page.path), filedPages: [],
         status: topic.classificationFailed ? "pending" : uncertain ? "uncertain" : "filed",
         ...(topic.classificationFailed ? { reason: "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
@@ -1534,6 +1537,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const touched: string[] = [];
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
     const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
+    const atomicContext = llm.reconcile ? await branchContext(vaultPath, snapshot, [...groups.entries()].flatMap(([path, group]) => group.outcomes.map(outcome => ({
+      topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
+    })))) : null;
     for (const [path, group] of groups) {
       if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) {
         for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "invalid_meaning_path"; }
@@ -1541,6 +1547,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
       const absolute = join(vaultPath, path);
       const currentContent = await readFile(absolute, "utf8").catch(() => null);
+      let lastWrittenContent: string | null = null;
       try {
         if (group.page.action === "update" && currentContent === null) throw new Error("update_target_missing");
         const folder = path.split("/")[0] ?? "";
@@ -1552,6 +1559,40 @@ export function createEngine(options: EngineOptions): BrainEngine {
           summary: group.outcomes.map((outcome) => outcome.topic).join("; "), pages: [group.page],
           confidence: Math.min(...group.outcomes.map((outcome) => outcome.confidence)) };
         const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
+        if (llm.reconcile && atomicContext) {
+          if (currentContent !== null && !atomicContext.branches.some(branch => branch.path === path)) throw new Error("branch_context_unavailable");
+          const sources = sourceSpans.flatMap(span => {
+            const chunks: Array<{id:string;start:number;end:number;text:string}> = [];
+            for (let start = span.start; start < span.end;) {
+              let end = Math.min(span.end, start + 1600);
+              if (/^[\uDC00-\uDFFF]$/.test(content[end] ?? "")) end--;
+              chunks.push({id:`${span.passageId ?? "source"}:${start}:${end}`,start,end,text:content.slice(start,end)}); start=end;
+            }
+            return chunks;
+          });
+          const prepared = prepareReconciliation({path,raw:currentContent,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
+            ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
+          reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
+          const operations = await llm.reconcile(prepared.request);
+          const reconciled = await applyReconciliation(prepared,operations);
+          // The model's awaited work cannot overwrite a page changed since context preparation.
+          if ((await readFile(absolute,"utf8").catch(() => null)) !== currentContent) throw new Error("reconciliation_revision_changed");
+          if (reconciled.content !== currentContent && reconciled.appliedOperationIds.length) {
+            await mkdir(dirname(absolute),{recursive:true});
+            await writeFile(absolute,reconciled.content); lastWrittenContent=reconciled.content;
+            const report=await lintVault(vaultPath,[path]);
+            if (report.errors.length || checkEvidenceImmutability(await repo.pendingChanges()).length) throw new Error("reconciliation_validation_failed");
+            touched.push(path);
+          }
+          for (const outcome of group.outcomes) {
+            const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);
+            const pending=reconciled.pending.filter(item=>item.ideaIds.includes(outcome.ideaId!));
+            outcome.appliedOperationIds=[...new Set([...(outcome.appliedOperationIds??[]),...reconciled.appliedOperations.filter(operation=>operation.ideaIds.includes(outcome.ideaId!)).map(operation=>operation.id)])];
+            if (pending.length) {outcome.status="pending";outcome.reason=pending.map(item=>item.reason).join("; ");}
+            else outcome.filedPages.push(path);
+          }
+          continue;
+        }
         let previousErrors: import("../types.js").LintError[] | undefined;
         let valid = false;
         for (let attempt = 0; attempt <= COMPOSE_RETRIES; attempt += 1) {
@@ -1563,7 +1604,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
               classification: pageClassification, tagVocabulary: config.tags, today: todayString(now()), requiredType, linkHints,
               ...(previousErrors ? { previousErrors } : {}) });
           await mkdir(dirname(absolute), { recursive: true });
-          await writeFile(absolute, appendMemoryFacts(compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next, currentContent, group.facts, factEvidence, assignedEvidence));
+          lastWrittenContent = appendMemoryFacts(compact ? appendAliasEvidence(next, group.page, assignedEvidence, citation) : next, currentContent, group.facts, factEvidence, assignedEvidence);
+          await writeFile(absolute, lastWrittenContent);
           const report = await lintVault(vaultPath, [path]);
           previousErrors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
           if (!previousErrors.length) { valid = true; break; }
@@ -1571,11 +1613,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (!valid) throw new Error("composition_validation_failed");
         touched.push(path);
         for (const outcome of group.outcomes) outcome.filedPages.push(path);
-      } catch {
+      } catch (error) {
         // Restore only this page. Evidence and independently successful pages remain intact.
-        if (currentContent === null) await rm(absolute, { force: true });
-        else await writeFile(absolute, currentContent);
-        for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "page_filing_failed"; }
+        if (lastWrittenContent !== null && (await readFile(absolute,"utf8").catch(() => null)) === lastWrittenContent) {
+          if (currentContent === null) await rm(absolute, { force: true });
+          else await writeFile(absolute, currentContent);
+        }
+        for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = error instanceof Error && /^(reconciliation_|branch_context_)/.test(error.message) ? error.message : "page_filing_failed"; }
       }
     }
     const unresolved = outcomes.filter((outcome) => outcome.status !== "filed");
