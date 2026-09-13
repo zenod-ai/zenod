@@ -81,3 +81,8 @@ export function prepareAsrEnvironment(env) {
   for (const key of ['ZMR_EVAL_OPENROUTER_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY']) delete env[key];
   return evaluationKey;
 }
+
+/** Never begin replay or recall while enrichment is unfinished or failed. */
+export function requireCompletedEnrichment(job) {
+  if (job?.status !== 'done' || !job.input || !job.result) throw new Error('ASR enrichment did not complete; replay/recall blocked');
+}

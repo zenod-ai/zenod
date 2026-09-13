@@ -8,10 +8,11 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
-import {budgetLedger,parseWireUsage,prepareAsrEnvironment} from './policy.mjs';
-const {values:a}=parseArgs({options:{runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'}}});
-for(const k of ['candidate-sha','audio','audio-sha256','source','source-sha256','model-dir','model-sha256','out','prices','questions','seed-pages'])if(!a[k])throw new Error('Missing --'+k);
+import {budgetLedger,parseWireUsage,prepareAsrEnvironment,requireCompletedEnrichment} from './policy.mjs';
+const {values:a}=parseArgs({options:{runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'},'captured-at':{type:'string'}}});
+for(const k of ['candidate-sha','audio','audio-sha256','source','source-sha256','model-dir','model-sha256','out','prices','questions','seed-pages','captured-at'])if(!a[k])throw new Error('Missing --'+k);
 if(!/^[a-f0-9]{40}$/.test(a['candidate-sha'])||process.env.GIT_SHA!==a['candidate-sha'])throw new Error('Exact candidate container GIT_SHA required');
+if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(a['captured-at'])||!Number.isFinite(Date.parse(a['captured-at'])))throw new Error('Frozen canonical UTC captured-at required');
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const audio=await readFile(a.audio),source=await readFile(a.source);
 const modelHash=createHash('sha256');for await(const chunk of createReadStream(join(a['model-dir'],'ggml-large-v3-turbo.bin')))modelHash.update(chunk);
@@ -60,9 +61,9 @@ const engine=createEngine({repo,llm,state,readSyncTtlMs:0});
 const store=new TaskJobStore(join(workspace,'jobs.sqlite'),'synthetic-asr');
 const settings={get:key=>({artifact_archive_provider:'local',artifact_archive_local_dir:join(workspace,'archive'),groq_api_key:'',openai_api_key:'',openrouter_api_key:''})[key]??null,whisperModel:()=> 'large-v3-turbo',openrouterTranscriptionModel:()=> 'openai/whisper-large-v3-turbo',longTranscriptionProvider:()=> 'local',useOpenAiForLongTranscription:()=>false};
 const queue=new TaskJobQueue(store,async()=>engine,settings);
-const report={mode:'ACTUAL_LOCAL_ASR_MEDIA_QUEUE_CAPTURE_ENRICH_RECALL',candidateSha:a['candidate-sha'],audioSha256:hash(audio),sourceSha256:hash(source),modelSha256:a['model-sha256'],workspace,startedAt:new Date().toISOString(),semanticEvaluation:'INDEPENDENT_REVIEW_REQUIRED',recalls:[],budgetUsd:0.5,seedSha256:hash(seedBytes),pricesSha256:hash(pricesBytes),questionsSha256:hash(questionsBytes),driverSha256:hash(await readFile(fileURLToPath(import.meta.url))),phoneIngress:false};
+const report={mode:'ACTUAL_LOCAL_ASR_MEDIA_QUEUE_CAPTURE_ENRICH_RECALL',candidateSha:a['candidate-sha'],capturedAt:a['captured-at'],audioSha256:hash(audio),sourceSha256:hash(source),modelSha256:a['model-sha256'],workspace,startedAt:new Date().toISOString(),semanticEvaluation:'INDEPENDENT_REVIEW_REQUIRED',recalls:[],budgetUsd:0.5,seedSha256:hash(seedBytes),pricesSha256:hash(pricesBytes),questionsSha256:hash(questionsBytes),driverSha256:hash(await readFile(fileURLToPath(import.meta.url))),phoneIngress:false};
 try {
- const job=queue.enqueue('media_ingest',{mediaType:'audio',contentType:'voice_note',bytesRef:'data:audio/wav;base64,'+audio.toString('base64'),filename:'synthetic-asr.wav',sourceHint:'ZMR synthetic local ASR evaluator'},'synthetic-asr:'+hash(audio));
+ const job=queue.enqueue('media_ingest',{mediaType:'audio',contentType:'voice_note',bytesRef:'data:audio/wav;base64,'+audio.toString('base64'),filename:'synthetic-asr.wav',sourceHint:'ZMR synthetic local ASR evaluator',senderTimestamp:a['captured-at']},'synthetic-asr:'+hash(audio));
  const deadline=Date.now()+30*60*1000;let terminal;
  while(Date.now()<deadline){terminal=store.get(job.id);if(['done','error','cancelled','interrupted'].includes(terminal?.status))break;await new Promise(r=>setTimeout(r,250));}
  report.mediaJob=terminal;if(terminal?.status!=='done')throw new Error('ASR media capture did not complete');
@@ -70,12 +71,14 @@ try {
  for(const url of [raw,transcriptUrl])if(url.protocol!=='file:'||!fileURLToPath(url).startsWith(workspace+'/'))throw new Error('Archive outside isolated workspace');
  const transcript=await readFile(transcriptUrl,'utf8');await writeFile(join(out,'actual-asr-transcript.txt'),transcript,{mode:0o600});
  const evidence=await engine.getEntry(result.digest.evidenceRef);
- report.invariants={archivedAudioMatches:hash(await readFile(raw))===hash(audio),transcriptNonempty:transcript.trim().length>0,rawEvidenceContainsActualTranscript:evidence.content.includes(transcript.trimEnd()),actualLocalProvider:/whisper/i.test(result.extraction.provider??'')&&!/provided|evaluation/i.test(result.extraction.provider??'')};
+ report.invariants={archivedAudioMatches:hash(await readFile(raw))===hash(audio),transcriptNonempty:transcript.trim().length>0,rawEvidenceContainsActualTranscript:evidence.content.includes(transcript.trimEnd()),evidenceTimestamp:evidence.capturedAt===a['captured-at'],evidenceContentType:evidence.contentType==='voice_note',evidenceSource:evidence.source==='mcp',evidenceSourceId:evidence.sourceId==='synthetic-asr:'+hash(audio),actualLocalProvider:/whisper/i.test(result.extraction.provider??'')&&!/provided|evaluation/i.test(result.extraction.provider??'')};
  report.actualTranscriptSha256=hash(Buffer.from(transcript));report.enrichmentJobId=result.digest.enrichmentJobId;
  if(!Object.values(report.invariants).every(Boolean))throw new Error('ASR custody invariant failed');
  const enrichDeadline=Date.now()+30*60*1000;let enrichment;
  while(Date.now()<enrichDeadline){enrichment=store.get(report.enrichmentJobId);if(['done','error','cancelled','interrupted'].includes(enrichment?.status))break;await new Promise(r=>setTimeout(r,250));}
- report.enrichmentJob=enrichment;report.invariants.enrichmentCompleted=enrichment?.status==='done';
+ report.enrichmentJob=enrichment;requireCompletedEnrichment(enrichment);report.invariants.enrichmentCompleted=true;
+ report.invariants.enrichmentIdentity=enrichment.input.capturedAt===a['captured-at']&&enrichment.input.contentType==='voice_note'&&enrichment.input.source==='mcp'&&enrichment.input.sourceId===evidence.sourceId&&enrichment.input.evidenceRef===evidence.evidenceRef;
+ if(!report.invariants.enrichmentIdentity)throw new Error('Enrichment provenance mismatch');
  await save('pages-after.json',await snapshots());report.publishedRevision=await repo.currentPublishedRevision();
  const beforeReplay=await repo.currentRevision();report.replay=await engine.enrichEvidence(enrichment.input);report.afterReplayRevision=await repo.currentRevision();
  await save('pages-after-replay.json',await snapshots());

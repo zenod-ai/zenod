@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sha256, validateFixture, sourceInput, utf16Range, budgetLedger, parseWireUsage, coverageRows, prepareAsrEnvironment} from './policy.mjs';
+import {sha256, validateFixture, sourceInput, utf16Range, budgetLedger, parseWireUsage, coverageRows, prepareAsrEnvironment, requireCompletedEnrichment} from './policy.mjs';
 const fixture = {id:'synthetic', seed_pages:{'Projects/A.md':'# A'}, transcript:'😀 Blue. Red.', ground_truth:[{id:'blue',start:2,end:7,text:'Blue.',operation:'add',page:'Projects/A.md'}]};
 const prices={'minimax/minimax-m3':{inputUsdPerMillion:0.30,outputUsdPerMillion:1.20,maxOutputTokens:1000}};
 test('freeze fixture, convert codepoints, and exclude ground truth from source input',()=>{
@@ -52,4 +52,11 @@ test('real ASR rejects simulation hooks and removes credentials before child pro
   const key=prepareAsrEnvironment(env);assert.equal(key,'synthetic-test-key');
   assert.deepEqual(env,{NODE_ENV:'production',PATH:'/synthetic/bin'});
   assert.throws(()=>prepareAsrEnvironment({NODE_ENV:'production'}),/Protected evaluation key/);
+});
+
+test('unfinished or failed ASR enrichment cannot enter replay/recall',()=>{
+  for(const status of ['queued','running','error','cancelled','interrupted'])assert.throws(()=>requireCompletedEnrichment({status,input:{},result:{}}),/replay\/recall blocked/);
+  assert.throws(()=>requireCompletedEnrichment(undefined));
+  assert.throws(()=>requireCompletedEnrichment({status:'done',input:{},result:null}));
+  assert.doesNotThrow(()=>requireCompletedEnrichment({status:'done',input:{},result:{}}));
 });
