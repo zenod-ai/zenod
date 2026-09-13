@@ -579,6 +579,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
                       "end": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "passageId": {
+                        "type": "string"
                       }
                     },
                     "additionalProperties": false
@@ -2599,6 +2602,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
                       "end": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "passageId": {
+                        "type": "string"
                       }
                     },
                     "additionalProperties": false
@@ -3145,6 +3151,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
                       "end": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "passageId": {
+                        "type": "string"
                       }
                     },
                     "additionalProperties": false
@@ -6978,6 +6987,9 @@ export const TOOL_OUTPUT_SCHEMAS = (
                       "end": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "passageId": {
+                        "type": "string"
                       }
                     },
                     "additionalProperties": false

@@ -1073,6 +1073,51 @@ describe("BrainEngine", () => {
     expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
   });
 
+  it("keeps beginning and tail ideas when middle classification fails and source identity is retried", async () => {
+    // Ground truth is three independent ideas; the middle one must remain pending.
+    const beginning = "El vídeo explica efectos de red.";
+    const tail = "Final decision: release the English captions on Friday.";
+    const content = beginning + " a".repeat(6500) + " MIDDLE_OUTAGE: discutir presupuesto." + " b".repeat(6500) + tail;
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      if (input.content.includes("MIDDLE_OUTAGE")) throw new Error("synthetic middle outage");
+      const quote = input.content.includes(beginning) ? beginning : tail;
+      const passage = input.sourcePassages!.find(p => p.text.includes(quote))!;
+      return { confidence: 0.9, summary: "known idea", tags: [], pages: [], topics: [{
+        topic: quote === beginning ? "Network education" : "English caption release", summary: "known idea", confidence: 0.9,
+        disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
+        evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 0 }],
+      }] };
+    });
+    const e = engine();
+    const input = { content, source: "whatsapp" as const, sourceId: "synthetic-partial-voice-note", verbatim: true };
+    const captured = await e.captureEvidence!(input);
+    expect((await e.captureEvidence!(input)).evidenceRef).toBe(captured.evidenceRef);
+    const before = await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8");
+    const result = await e.enrichEvidence!({ ...input, evidenceRef: captured.evidenceRef });
+    expect(result.topics?.filter(t => t.status === "filed").map(t => t.topic)).toEqual(["Network education", "English caption release"]);
+    expect(result.topics?.filter(t => t.reason === "classification_unavailable")).toHaveLength(1);
+    expect(result.topics?.filter(t => t.status === "filed").flatMap(t => t.sourceSpans).map(s => content.slice(s.start, s.end))).toEqual([beginning, tail]);
+    expect(llm.classify).toHaveBeenCalledTimes(4); // Three bounded windows, one middle retry.
+    expect(llm.composeCalls).toBe(0);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+  });
+
+  it.each([true, false])("separates minimal support from passage review coverage (addressed review: %s)", async (reviewed) => {
+    const content = "Bueno, pensando en lo que hablamos, la decisión es: publish captions on Friday. Eso era todo, gracias.";
+    const quote = "publish captions on Friday";
+    llm.classify = vi.fn(async (input: ClassifyInput) => ({
+      confidence: 0.9, summary: "Caption schedule", tags: [], pages: [],
+      ...(reviewed ? { passageReviews: [{ passageId: input.sourcePassages![0]!.id, status: "assigned" as const }] } : {}),
+      topics: [{ topic: "Caption schedule", summary: "Caption schedule", confidence: 0.9, disposition: "evidence_only" as const,
+        pages: [], evidenceQuotes: [], evidenceAssignments: [{ passageId: input.sourcePassages![0]!.id, quote, occurrence: 0 }] }],
+    }));
+    const result = await engine().store({ content, source: "whatsapp", verbatim: true });
+    expect(result.topics![0]!.sourceSpans.map(span => content.slice(span.start, span.end))).toEqual([quote]);
+    expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(!reviewed);
+    expect(result.filing).toBe(reviewed ? "filed" : "uncertain");
+    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(!reviewed);
+  });
+
   it("records invalid and omitted source assignments without handing invented text to the composer", async () => {
     llm.classify = vi.fn(async () => ({ confidence: 0.99, summary: "bad quote", tags: [], pages: [], topics: [
       { topic: "invented", summary: "invented", confidence: 0.99, disposition: "integrate_page", evidenceQuotes: ["not in the capture"],

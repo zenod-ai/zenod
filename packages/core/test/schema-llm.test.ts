@@ -19,7 +19,8 @@ describe("classificationSchema (OpenAI-strict compatibility)", () => {
 
   it("still allows question to be null", () => {
     const parsed = classificationSchema.parse({
-      topics: [{ topic: "x", facts: [], evidenceQuotes: ["x"], disposition: "evidence_only", confidence: 0.9, pages: [], summary: "x", question: null }],
+      passageReviews: [],
+      topics: [{ topic: "x", facts: [], evidenceAssignments: [], evidenceQuotes: ["x"], disposition: "evidence_only", confidence: 0.9, pages: [], summary: "x", question: null }],
       disposition: "evidence_only",
       confidence: 0.9,
       summary: "x",
@@ -40,7 +41,8 @@ describe("classificationSchema (OpenAI-strict compatibility)", () => {
  */
 describe("repairStructuredJson (Z-8 fence recovery)", () => {
   const obj = {
-    topics: [{ topic: "x", facts: [], evidenceQuotes: ["x"], disposition: "append_compact_note", confidence: 0.8, pages: [], summary: "x", question: null }],
+    passageReviews: [],
+    topics: [{ topic: "x", facts: [], evidenceAssignments: [], evidenceQuotes: ["x"], disposition: "append_compact_note", confidence: 0.8, pages: [], summary: "x", question: null }],
     disposition: "append_compact_note",
     confidence: 0.8,
     summary: "s",

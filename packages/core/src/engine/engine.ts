@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { sourceWindows, semanticBounds, resolveTopicSpans, reviewedSourceSpans } from "./sourcePassages.js";
 import { appendMemoryFacts, projectFacts, renderFactViews, type FactProposal, type FactView } from "./temporalFacts.js";
 import type {
   Answer,
@@ -368,7 +369,7 @@ export interface EngineOptions {
 // an Inbox stub, so a hard case is parked for the user, never half-applied.
 const COMPOSE_RETRIES = 1;
 const CLASSIFY_RETRIES = 1;
-export const LONG_MEMORY_SEGMENT_CHARS = 12_000;
+export { LONG_MEMORY_SEGMENT_CHARS, segmentLongMemoryContent } from "./sourcePassages.js";
 const WORK_RETRIES = 2;
 const DEFAULT_READ_SYNC_TTL_MS = 60_000;
 const MAX_BRIEFING_MEANING_PAGES = 80;
@@ -377,28 +378,6 @@ const MAX_BRIEFING_ATTACHMENTS = 40;
 const MAX_BRIEFING_SUMMARY_CHARS = 240;
 const MAX_ASK_CONTEXT_REFS = 10;
 const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
-
-/** Preserve one raw capture while classifying long voice notes topic-sized piece by piece. */
-export function segmentLongMemoryContent(
-  content: string,
-  maxChars = LONG_MEMORY_SEGMENT_CHARS,
-): string[] {
-  if (!content || content.length <= maxChars) return [content];
-  const segments: string[] = [];
-  let offset = 0;
-  while (offset < content.length) {
-    let end = Math.min(content.length, offset + maxChars);
-    if (end < content.length) {
-      const window = content.slice(offset, end);
-      const boundary = Math.max(window.lastIndexOf("\n\n"), window.lastIndexOf(". "), window.lastIndexOf(" "));
-      if (boundary >= maxChars / 2) end = offset + boundary + 1;
-      if (/^[\uDC00-\uDFFF]$/.test(content[end] ?? "")) end -= 1;
-    }
-    segments.push(content.slice(offset, end));
-    offset = end;
-  }
-  return segments;
-}
 
 function verbatimEntityCandidates(content: string): string[] {
   return [...new Set(content.match(/\b[A-Z][A-Za-z0-9'-]{2,}(?:\s+[A-Z][A-Za-z0-9'-]{2,}){0,3}\b/g) ?? [])]
@@ -417,6 +396,7 @@ function mergeSegmentClassifications(classifications: Classification[]): Classif
   const questions = [...new Set(classifications.map((item) => item.question).filter(Boolean))];
   return {
     topics: classifications.flatMap((item) => item.topics ?? []),
+    reviewedSourceSpans: classifications.flatMap(item => item.reviewedSourceSpans ?? []),
     confidence: Math.min(...classifications.map((item) => item.confidence)),
     summary: classifications.map((item) => item.summary).join("; ").slice(0, 240),
     tags: [...new Set(classifications.flatMap((item) => item.tags))],
@@ -1432,7 +1412,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput) {
     return classifyCandidates({ classify: async (bounded: ClassifyInput) => {
-      reportTokenCost("classify", [bounded.content, bounded.context ?? "", ...bounded.hints,
+      reportTokenCost("classify", [bounded.sourcePassages ? JSON.stringify(bounded.sourcePassages) : bounded.content, bounded.sourcePassages ? "" : bounded.context ?? "", ...bounded.hints,
         bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(",")], undefined, "bounded-candidates");
       return llm.classify(bounded);
     } }, vaultPath, snapshot, input);
@@ -1446,10 +1426,69 @@ export function createEngine(options: EngineOptions): BrainEngine {
     } }, input);
   }
 
+  /** Shared bounded classifier for synchronous stores and capture-first enrichment. */
+  async function classifySource(snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>,
+    input: StoreInput, captured: boolean): Promise<Classification> {
+    const windows = sourceWindows(input);
+    const segments = windows.map(window => window.content);
+    const entities = verbatimEntityCandidates(segments.join(""));
+    const classifications: Classification[] = [];
+    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+      const segment = segments[segmentIndex]!;
+      let classified: Classification | null = null;
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
+        const hints = [
+          ...(input.hints ?? []),
+          ...(captured ? ["This evidence is already durably captured. Spend full-page composition only when semantic integration is explicitly justified."] : []),
+          ...(segments.length > 1
+            ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
+            : []),
+          ...(entities.length > 0
+            ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
+            : []),
+        ];
+        try {
+          classified = await classifyMeaning(snapshot, {
+            content: segment,
+            sourcePassages: windows[segmentIndex]!.passages,
+            sourceRange: windows[segmentIndex]!.range,
+            context: windows[segmentIndex]!.context,
+            hints,
+            pageIndex: snapshot.pages,
+            tagVocabulary: config.tags,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!classified && segments.length > 1) classified = {
+        confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
+          topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
+          confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
+        }],
+      };
+      if (!classified) throw lastError ?? new Error("classification returned no result");
+      if ((segments.length > 1 || input.semanticRange) && !classified.topics) classified.topics = [{
+        topic: classified.summary, summary: classified.summary, evidenceQuotes: [segment],
+        confidence: classified.confidence, disposition: classified.disposition ?? "integrate_page",
+        pages: classified.pages, ...(classified.question ? { question: classified.question } : {}),
+      }];
+      if (classified.topics) {
+        classified.topics = classified.topics.map((topic) => ({ ...topic,
+          sourceRange: windows[segmentIndex]!.range, sourcePassages: windows[segmentIndex]!.passages }));
+      }
+      classified.reviewedSourceSpans = reviewedSourceSpans(input.content, classified, windows[segmentIndex]!);
+      classifications.push(classified);
+    }
+    return mergeSegmentClassifications(classifications);
+  }
+
   /** File independently validated topic assignments; a failed page cannot erase another page or raw evidence. */
   async function fileTopicAssignments(
     content: string, evidenceRef: string, logPath: string, classification: Classification,
-    snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>, evidenceLine?: number,
+    snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>, evidenceLine?: number, semanticRange?: StoreInput["semanticRange"],
   ): Promise<StoreResult> {
     assertVault(repo);
     type Outcome = NonNullable<StoreResult["topics"]>[number];
@@ -1457,17 +1496,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const covered: Array<{ start: number; end: number }> = [];
     const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] }>();
     for (const topic of classification.topics ?? []) {
-      const spans: Outcome["sourceSpans"] = [];
-      let invalid = !topic.evidenceQuotes.length;
-      for (const quote of topic.evidenceQuotes) {
-        const range = topic.sourceRange ?? { start: 0, end: content.length };
-        const segment = content.slice(range.start, range.end);
-        const localStart = quote.trim() ? segment.indexOf(quote) : -1;
-        const start = localStart < 0 ? -1 : range.start + localStart;
-        // Repeated quotes are ambiguous evidence identities, never silently choose the first.
-        if (start < 0 || segment.indexOf(quote, localStart + 1) >= 0) { invalid = true; continue; }
-        if (!spans.some((span) => span.start === start && span.end === start + quote.length)) spans.push({ start, end: start + quote.length });
-      }
+      const { spans, invalid } = resolveTopicSpans(content, topic);
       const pages = [...new Map(topic.pages.map((page) => {
         const path = normalizeMarkdownNotePath(page.path);
         return [path, { ...page, path }];
@@ -1487,14 +1516,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const group = groups.get(page.path) ?? { page, outcomes: [], facts: [] };
         if (groups.has(page.path) && page.aliases?.length) group.page = { ...group.page, aliases: [...(group.page.aliases ?? []), ...page.aliases] };
         group.outcomes.push(outcome);
-        group.facts.push(...(topic.facts ?? []).filter(fact => topic.evidenceQuotes.some(quote => quote.includes(fact.statement))));
+        group.facts.push(...(topic.facts ?? []).filter(fact => spans.some(span => content.slice(span.start, span.end).includes(fact.statement))));
         groups.set(page.path, group);
       }
     }
     // Classifier omissions remain visible, even when it confidently assigns other topics.
-    let cursor = 0;
+    const bounds = semanticBounds({ content, ...(semanticRange ? { semanticRange } : {}) });
+    let cursor = bounds.start;
     const uncovered: Outcome["sourceSpans"] = [];
-    for (const span of [...covered, { start: content.length, end: content.length }].sort((a, b) => a.start - b.start)) {
+    for (const span of [...(classification.reviewedSourceSpans ?? covered), { start: bounds.end, end: bounds.end }].sort((a, b) => a.start - b.start)) {
       if (span.start > cursor && content.slice(cursor, span.start).trim()) uncovered.push({ start: cursor, end: span.start });
       cursor = Math.max(cursor, span.end);
     }
@@ -1626,74 +1656,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
       lastSyncMs = now().getTime();
       const evidence = await getEvidenceEntry(vaultPath, input.evidenceRef, sourceResolver);
       const capturedRevision = await repo.currentRevision();
+      if (input.content.trimEnd() !== evidence.content) return evidenceResult(evidence, capturedRevision);
       const config = await loadBrainConfig(vaultPath);
       const snapshot = await scanVault(vaultPath);
-      const segments = segmentLongMemoryContent(input.content);
-      const entities = verbatimEntityCandidates(input.content);
-      const classifications: Classification[] = [];
+      let classification: Classification;
       try {
-        for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
-          const segment = segments[segmentIndex]!;
-          let classified: Classification | null = null;
-          let lastError: unknown;
-          for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
-            const hints = [
-              ...(input.hints ?? []),
-              "This evidence is already durably captured. Spend full-page composition only when semantic integration is explicitly justified.",
-              ...(segments.length > 1
-                ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
-                : []),
-              ...(entities.length > 0
-                ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
-                : []),
-            ];
-            try {
-              classified = await classifyMeaning(snapshot, {
-                content: segment,
-                context: [segments[segmentIndex - 1]?.slice(-400), segments[segmentIndex + 1]?.slice(0, 400)].filter(Boolean).join("\n"),
-                hints,
-                pageIndex: snapshot.pages,
-                tagVocabulary: config.tags,
-              });
-              break;
-            } catch (error) {
-              lastError = error;
-            }
-          }
-          if (!classified && segments.length > 1) classified = {
-            confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
-              topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
-              confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
-            }],
-          };
-          if (!classified) throw lastError ?? new Error("classification returned no result");
-          if (segments.length > 1 && !classified.topics) classified.topics = [{
-            topic: classified.summary, summary: classified.summary, evidenceQuotes: [segment],
-            confidence: classified.confidence, disposition: classified.disposition ?? "integrate_page",
-            pages: classified.pages, ...(classified.question ? { question: classified.question } : {}),
-          }];
-          if (classified.topics) {
-            const start = segments.slice(0, segmentIndex).reduce((length, part) => length + part.length, 0);
-            classified.topics = classified.topics.map((topic) => ({ ...topic, sourceRange: { start, end: start + segment.length } }));
-          }
-          classifications.push(classified);
-        }
+        classification = await classifySource(snapshot, config, input, true);
       } catch (error) {
         console.warn(`[librarian] enrichment gate unavailable for ${input.evidenceRef}: ${(error as Error).message}`);
         return evidenceResult(evidence, capturedRevision);
       }
 
-      const classification = mergeSegmentClassifications(classifications);
       if (classification.topics) {
-        // All assignment offsets and compositions must refer to the committed raw capture.
-        if (input.content.trimEnd() !== evidence.content) return evidenceResult(evidence, capturedRevision);
-        return fileTopicAssignments(input.content, input.evidenceRef, evidence.path, classification, snapshot, config);
+        return fileTopicAssignments(input.content, input.evidenceRef, evidence.path, classification, snapshot, config, undefined, input.semanticRange);
       }
-      const disposition = classifications.some((item) => item.disposition === "integrate_page")
+      const disposition = classification.disposition === "integrate_page"
         ? "integrate_page"
-        : classifications.some((item) => item.disposition === "append_compact_note")
+        : classification.disposition === "append_compact_note"
           ? "append_compact_note"
-          : classifications.some((item) => item.disposition === "needs_clarification")
+          : classification.disposition === "needs_clarification"
             ? "needs_clarification"
             : "evidence_only";
       classification.pages = classification.pages.map((page) => ({
@@ -1817,55 +1798,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const snapshot = await scanVault(vaultPath);
       let classification: Classification;
       try {
-        const segments = segmentLongMemoryContent(input.content);
-        const entities = verbatimEntityCandidates(input.content);
-        const classifications: Classification[] = [];
-        for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
-          const segment = segments[segmentIndex]!;
-          let classified: Classification | null = null;
-          let lastError: unknown;
-          for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
-            const hints = [
-              ...(input.hints ?? []),
-              ...(segments.length > 1
-                ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
-                : []),
-              ...(entities.length > 0
-                ? [`Preserve these source spellings verbatim when uncertain: ${entities.join(", ")}`]
-                : []),
-            ];
-            try {
-              classified = await classifyMeaning(snapshot, {
-                content: segment,
-                context: [segments[segmentIndex - 1]?.slice(-400), segments[segmentIndex + 1]?.slice(0, 400)].filter(Boolean).join("\n"),
-                hints,
-                pageIndex: snapshot.pages,
-                tagVocabulary: config.tags,
-              });
-              break;
-            } catch (error) {
-              lastError = error;
-            }
-          }
-          if (!classified && segments.length > 1) classified = {
-            confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
-              topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
-              confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
-            }],
-          };
-          if (!classified) throw lastError ?? new Error("classification returned no result");
-          if (segments.length > 1 && !classified.topics) classified.topics = [{
-            topic: classified.summary, summary: classified.summary, evidenceQuotes: [segment],
-            confidence: classified.confidence, disposition: classified.disposition ?? "integrate_page",
-            pages: classified.pages, ...(classified.question ? { question: classified.question } : {}),
-          }];
-          if (classified.topics) {
-            const start = segments.slice(0, segmentIndex).reduce((length, part) => length + part.length, 0);
-            classified.topics = classified.topics.map((topic) => ({ ...topic, sourceRange: { start, end: start + segment.length } }));
-          }
-          classifications.push(classified);
-        }
-        classification = mergeSegmentClassifications(classifications);
+        classification = await classifySource(snapshot, config, input, false);
       } catch {
         // Preserve the raw capture even when the classifier produces empty or
         // unparsable output twice. This is a successful save with filing
@@ -1892,7 +1825,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       };
 
       if (classification.topics) {
-        return fileTopicAssignments(input.content, evidenceRef, evidence.logPath, classification, snapshot, config, evidence.line);
+        return fileTopicAssignments(input.content, evidenceRef, evidence.logPath, classification, snapshot, config, evidence.line, input.semanticRange);
       }
 
       // 4. With no candidate, preserve the evidence and question in an Inbox stub.

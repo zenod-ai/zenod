@@ -98,6 +98,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     const input = {
       mediaType: "audio" as const, contentType,
       bytesRef: `data:audio/ogg;base64,${Buffer.from("same audio bytes").toString("base64")}`,
+      contentHint: "This belongs to the PatronBTC educational video project.",
       filename: "same.ogg", sourceHint: contentType === "voice_note" ? "WhatsApp voice note" : "WhatsApp audio",
       senderTimestamp: "2026-09-08T11:48:55Z", providedTranscript: "Source identity regression transcript", transcriptionDisposition: "provided" as const,
     };
@@ -108,6 +109,17 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(store.get(job.id)?.status).toBe("done");
     expect(captureEvidence).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ contentType, capturedAt: input.senderTimestamp, sourceId: `tenant:whatsapp:${contentType}`, source: "whatsapp" }));
     expect(enrichEvidence).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ contentType, capturedAt: input.senderTimestamp, evidenceRef: receipt.evidenceRef }));
+    const captureInput = (captureEvidence.mock.calls[0] as unknown as [StoreInput])[0];
+    const enrichedInput = (enrichEvidence.mock.calls[0] as unknown as [StoreInput])[0];
+    expect(captureInput.content).toContain("ingested through Zenod media seam");
+    expect(enrichedInput.content).toBe(captureInput.content);
+    expect(enrichedInput.semanticRange).toEqual(captureInput.semanticRange);
+    expect(enrichedInput.hints).toContain(`User context: ${input.contentHint}`);
+    expect(captureInput.hints).toEqual(enrichedInput.hints);
+    expect(enrichedInput.content.slice(enrichedInput.semanticRange!.start, enrichedInput.semanticRange!.end)).toBe(input.providedTranscript);
+    const enrichmentId = (store.get(job.id)!.result as MediaIngestReceipt).digest.enrichmentJobId!;
+    expect(store.get(enrichmentId)!.input.semanticRange).toEqual(captureInput.semanticRange);
+
     store.close();
   });
 
@@ -483,7 +495,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(stored[0]!.content).toContain("Media type: image/png");
     expect(stored[0]!.content).toContain("Source: mcp-test");
     expect(stored[0]!.content).toContain("Source timestamp: 2026-07-31T15:00:00.000Z");
-    expect(stored[0]!.hints).toEqual(["launch"]);
+    expect(stored[0]!.hints).toEqual(["launch", "User context: remember the launch metric"]);
     expect(stored[0]!.verbatim).toBe(true);
   });
 

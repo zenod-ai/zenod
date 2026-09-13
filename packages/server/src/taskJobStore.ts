@@ -41,6 +41,8 @@ export interface TaskJobInput {
   plan?: string;
   /** store: the memory content to file through the librarian pipeline. */
   content?: string;
+  /** Host-owned semantic transcript offsets preserved through the durable job. */
+  semanticRange?: { start: number; end: number };
   /** store: optional filing hints. */
   hints?: string[];
   /** store: force verbatim evidence recording. */

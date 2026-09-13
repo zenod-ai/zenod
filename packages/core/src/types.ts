@@ -23,6 +23,8 @@ export type MemoryContentType =
 export interface StoreInput {
   /** The memory to store: a message, a fact, a capture. */
   content: string;
+  /** Host-owned UTF-16 transcript bounds within content; raw evidence remains unchanged. */
+  semanticRange?: { start: number; end: number };
   /** Where this memory arrived from. */
   source: Surface;
   /** Optional caller hints, e.g. "this belongs to the property project". */
@@ -48,7 +50,7 @@ export interface TopicFilingResult {
   topic: string;
   evidenceRef: string;
   /** UTF-16 offsets in the original raw capture, end exclusive. */
-  sourceSpans: Array<{ start: number; end: number }>;
+  sourceSpans: Array<{ start: number; end: number; passageId?: string }>;
   confidence: number;
   disposition: "evidence_only" | "append_compact_note" | "integrate_page" | "needs_clarification";
   pages: string[];

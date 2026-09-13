@@ -708,7 +708,7 @@ describe("MCP endpoint", () => {
     fakeEngine.store = async (input) => {
       const result = await originalStore(input);
       return { ...result, filing: "uncertain", topics: [
-        { topic: "Insurance", evidenceRef: result.evidenceRef, sourceSpans: [{ start: 0, end: 9 }], confidence: 0.95,
+        { topic: "Insurance", evidenceRef: result.evidenceRef, sourceSpans: [{ start: 0, end: 9, passageId: "p-source-0-9" }], confidence: 0.95,
           disposition: "integrate_page", pages: ["Areas/Insurance.md"], filedPages: ["Areas/Insurance.md"], status: "filed" },
         { topic: "Znot", evidenceRef: result.evidenceRef, sourceSpans: [{ start: 10, end: 14 }], confidence: 0.2,
           disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "Which name?" },
@@ -718,7 +718,7 @@ describe("MCP endpoint", () => {
     try {
       const terminal = await runAsyncToolTerminal(client, "store_memory", { content: "Insurance Znot" });
       expect(terminal.evidence[0]).toMatchObject({ filing: "uncertain", topics: [
-        { topic: "Insurance", status: "filed", filedPages: ["Areas/Insurance.md"] }, { topic: "Znot", status: "uncertain" },
+        { topic: "Insurance", status: "filed", filedPages: ["Areas/Insurance.md"], sourceSpans: [{ start: 0, end: 9, passageId: "p-source-0-9" }] }, { topic: "Znot", status: "uncertain" },
       ] });
       expect(validateToolResponse("zenod.get_task_result", terminal)).toBe(terminal);
     } finally { fakeEngine.store = originalStore; await client.close(); }
