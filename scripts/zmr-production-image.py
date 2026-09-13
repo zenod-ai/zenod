@@ -112,7 +112,7 @@ def load_recovery(manifest_path, mode, candidate_sha=None, candidate_image=None,
     if mode == 'deploy':
         fresh(fields['restore_verified_at'], now)
     return {'root': root, 'manifestHash': digest(manifest_path), 'app': app, 'service': service,
-            'old': old, 'candidate': candidate, 'rollback': rollback}
+            'old': old, 'candidate': candidate, 'rollback': rollback, 'baselineImageId': image['Id']}
 
 
 def check_drift(recovery, live, pending, identities):
@@ -160,6 +160,10 @@ def inspect_service():
     return json.loads(ssh('docker service inspect ' + SERVICE))[0]
 
 
+def inspect_image_id(image):
+    return ssh('docker image inspect --format ' + shlex.quote('{{.Id}}') + ' ' + shlex.quote(image)).strip()
+
+
 def inspect_revision(image):
     return ssh('docker image inspect --format ' + shlex.quote('{{index .Config.Labels "org.opencontainers.image.revision"}}') + ' ' + shlex.quote(image)).strip()
 
@@ -195,13 +199,18 @@ def execute(args):
         task = json.loads(ssh('docker inspect ' + shlex.quote(ids[0])))[0]
         require(task['Status']['State'] == 'running' and task['Spec']['ContainerSpec']['Image'] == recovery['rollback']['image'], 'Baseline task mismatch')
         actual = json.loads(ssh('docker inspect ' + shlex.quote(task['Status']['ContainerStatus']['ContainerID'])))[0]
+        require(actual['Image'] == recovery['baselineImageId'] == inspect_image_id(recovery['rollback']['image']), 'Actual baseline image ID mismatch')
         require(inspect_revision(actual['Image']) == recovery['rollback']['sha'], 'Actual baseline OCI mismatch')
     ssh('docker pull ' + shlex.quote(target['image']))
     require(inspect_revision(target['image']) == target['sha'], 'Target OCI revision mismatch')
+    target_image_id = inspect_image_id(target['image'])
+    require(bool(target_image_id), 'Missing target image ID')
+    if args.mode == 'rollback':
+        require(target_image_id == recovery['baselineImageId'], 'Rollback image ID mismatch')
     # Re-check after pull, immediately before writing intent and mutating desired state.
     check_drift(recovery, inspect_service(), api(root, '/application.one?applicationId=' + APP), identities)
     receipt = {'mode': args.mode, 'manifestHash': recovery['manifestHash'], **target,
-               'startedAt': datetime.now(timezone.utc).isoformat()}
+               'imageId': target_image_id, 'startedAt': datetime.now(timezone.utc).isoformat()}
     write_receipt(intent_path, receipt, exclusive=True)
     env, count = re.subn(r'^GIT_SHA=.*$', 'GIT_SHA=' + target['sha'], recovery['app']['env'], flags=re.M)
     require(count == 1, 'Expected one SHA override')
@@ -220,6 +229,7 @@ def execute(args):
             continue
         container_id = tasks[0]['Status']['ContainerStatus']['ContainerID']
         actual = json.loads(ssh('docker inspect ' + shlex.quote(container_id)))[0]
+        require(actual['Image'] == target_image_id, 'Actual container image ID mismatch')
         require(inspect_revision(actual['Image']) == target['sha'], 'Actual container OCI mismatch')
         try:
             health = json.loads(subprocess.check_output(['curl', '--fail', '--silent', '--show-error', '--max-time', '10', HEALTH]))

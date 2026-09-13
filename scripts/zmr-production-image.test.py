@@ -132,7 +132,7 @@ class Recovery(unittest.TestCase):
         with patch.object(operator, 'ssh', side_effect=AssertionError('network')), patch.object(operator, 'api', side_effect=AssertionError('network')):
             operator.execute(args)
 
-    def run_flow(self, fail_dispatch=False, wrong_oci=False):
+    def run_flow(self, fail_dispatch=False, wrong_oci=False, wrong_actual=False, wrong_baseline=False):
         state = {'service': copy.deepcopy(self.service), 'app': copy.deepcopy(self.app)}
         mutations = []
         def api(root, endpoint, body=None):
@@ -154,13 +154,26 @@ class Recovery(unittest.TestCase):
             if command == 'docker inspect task1':
                 return json.dumps([{'Status': {'State': 'running', 'ContainerStatus': {'ContainerID': 'container1'}}, 'Spec': {'ContainerSpec': state['service']['Spec']['TaskTemplate']['ContainerSpec']}}])
             if command == 'docker inspect container1':
-                return json.dumps([{'Image': state['app']['dockerImage']}])
+                is_new = state['service']['Spec']['TaskTemplate']['ContainerSpec']['Image'] == NEW
+                image_id = 'sha256:actual-candidate' if is_new else 'sha256:actual-baseline'
+                if (wrong_actual and is_new) or (wrong_baseline and not is_new):
+                    image_id = 'sha256:wrong-image'
+                return json.dumps([{'Image': image_id}])
+            if command.startswith('docker image inspect --format') and '.Id' in command:
+                return 'sha256:actual-candidate' if NEW in command else 'sha256:actual-baseline'
             raise AssertionError(command)
         def health(*args, **kwargs):
             return json.dumps({'status': 'ok', 'sha': operator.git_sha(state['app']['env'].splitlines())}).encode()
         args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=False)
         operator.write_receipt(self.root / 'queue-clear.json', {'manifestHash': operator.digest(self.manifest_path), 'mode': 'deploy', 'pendingDeployments': 0, 'checkedAt': self.when})
-        with patch.object(operator, 'api', side_effect=api), patch.object(operator, 'inspect_service', side_effect=lambda: copy.deepcopy(state['service'])), patch.object(operator, 'ssh', side_effect=ssh), patch.object(operator, 'inspect_revision', side_effect=lambda image: ('f' * 40 if wrong_oci else NEW_SHA) if image == NEW else OLD_SHA), patch.object(operator.time, 'sleep'), patch.object(operator.subprocess, 'check_output', side_effect=health):
+        with patch.object(operator, 'api', side_effect=api), patch.object(operator, 'inspect_service', side_effect=lambda: copy.deepcopy(state['service'])), patch.object(operator, 'ssh', side_effect=ssh), patch.object(operator, 'inspect_revision', side_effect=lambda image: ('f' * 40 if wrong_oci else NEW_SHA) if image in (NEW, 'sha256:actual-candidate') or (wrong_actual and image == 'sha256:wrong-image') else OLD_SHA), patch.object(operator.time, 'sleep'), patch.object(operator.subprocess, 'check_output', side_effect=health):
+            if wrong_actual or wrong_baseline:
+                with self.assertRaisesRegex(ValueError, 'image ID mismatch'):
+                    operator.execute(args)
+                self.assertFalse((self.root / 'deploy-verified.json').exists())
+                if wrong_baseline:
+                    self.assertEqual(mutations, [])
+                return
             if wrong_oci:
                 with self.assertRaises(ValueError):
                     operator.execute(args)
@@ -189,6 +202,12 @@ class Recovery(unittest.TestCase):
 
     def test_interrupted_dispatch_blocks_repeat_but_allows_reviewed_rollback(self):
         self.run_flow(fail_dispatch=True)
+
+    def test_same_sha_wrong_actual_image_cannot_verify(self):
+        self.run_flow(wrong_actual=True)
+
+    def test_same_sha_wrong_baseline_cannot_dispatch(self):
+        self.run_flow(wrong_baseline=True)
 
     def test_wrong_candidate_oci_cannot_mutate_desired_state(self):
         self.run_flow(wrong_oci=True)
