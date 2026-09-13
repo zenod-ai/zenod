@@ -443,6 +443,7 @@ async function processMediaIngest(
     extraction.body,
   ].join("\n");
   const semanticRange = { start: content.length - extraction.body.length, end: content.length };
+  const filingHints = [...(input.mediaHints ?? []), ...(input.contentHint ? [`User context: ${input.contentHint.slice(0, 2000)}`] : [])];
   const storeInput = {
     content,
     semanticRange,
@@ -450,7 +451,7 @@ async function processMediaIngest(
     verbatim: true,
     contentType,
     ...(input.senderTimestamp ? { capturedAt: input.senderTimestamp } : {}),
-    hints: [...(input.mediaHints ?? []), ...(input.contentHint ? [`User context: ${input.contentHint.slice(0, 2000)}`] : [])],
+    hints: filingHints,
     sourceId: captureIdentity,
   } as const;
   const stored = engine.captureEvidence
