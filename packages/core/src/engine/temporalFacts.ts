@@ -3,14 +3,24 @@ import type { MemoryEntry } from "../types.js";
 import { parseNote, serializeNote } from "../vault/frontmatter.js";
 import type { VaultSourceRef } from "../vault/repository.js";
 
+export interface LegacyStatementHistory {
+  path:string; statement:string; statementId:string; contentHash:string;
+  provider:"github"|"google_drive"; revision:string;
+}
 /** Optional classifier extension. Every substantive value is an exact source quote. */
 export interface FactProposal {
   key: string;
   statement: string;
+  /** Model-authored compact wording; source truth remains the exact statement quote. */
+  renderedStatement?: string;
+  reportedConflict?:boolean;
+  legacySupersedes?: LegacyStatementHistory;
   effectiveDate: string | null;
   effectiveDateQuote: string | null;
   correctionQuote: string | null;
   supersedesQuotes: string[];
+  /** Host-bound current statement IDs from the atomic reconciliation packet. */
+  supersedesIds?: string[];
   verificationQuote: string | null;
 }
 export interface MemoryFact extends FactProposal {
@@ -33,12 +43,26 @@ export interface FactView {
   legacy: boolean;
   facts: Array<MemoryFact & { status: "active" | "superseded" | "conflict" | "undated" | "future" | "unsupported"; source?: VaultSourceRef }>;
   warnings: string[];
+  priorStatements?: Array<LegacyStatementHistory & {supersededByEvidenceRef:string}>;
 }
 const REF = /^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[a-f0-9]{6}$/;
 const CORRECTION = /\b(correct(?:ion|ed|ing)?|replaces?|supersedes?|instead|no longer)\b/i;
 const UNCERTAIN_CORRECTION = /\b(do not|don't|not (?:a )?correction|should not|never|may|might|could|consider|hypothetical|if|plan to|need to|will)\b/i;
 function explicitCorrection(quote: string, statement: string): boolean {
   return quote.includes(statement) && CORRECTION.test(quote) && !UNCERTAIN_CORRECTION.test(quote);
+}
+/** The bounded model chooses semantic direction; code validates explicit intent and addresses.
+ * This supports spoken corrections without requiring the old statement to be recited verbatim.
+ */
+export function targetedCorrection(quote: string, statement: string): boolean {
+  return quote.includes(statement)
+    && /\b(correct(?:ion|ed|ing)?|replace|replaces|supersede|supersedes|corrijo|corrige|rectifico|sustituyo|reemplazo)\b|correcci[oó]n/iu.test(quote)
+    && !/\b(if|maybe|might|could|hypothetical|consider|do not|don't|not a correction|should not|never|quiz[aá]s|podr[ií]a|hipot[eé]tico|si|no corrijo|no es una correcci[oó]n)\b/iu.test(quote);
+}
+function supportsCorrection(fact: MemoryFact, target: MemoryFact): boolean {
+  return Boolean(fact.correctionQuote && (fact.supersedesIds?.includes(target.id)
+    ? targetedCorrection(fact.correctionQuote, fact.statement)
+    : directionalCorrection(fact.correctionQuote, target.statement, fact.statement)));
 }
 function quotedStatement(statement: string): string {
   const literal = statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -93,6 +117,12 @@ export function parseMemoryFacts(value: unknown): MemoryFact[] {
     && (fact.verificationQuote === null || typeof fact.verificationQuote === "string")
     && Array.isArray(fact.supersedesQuotes) && fact.supersedesQuotes.every((v: unknown) => typeof v === "string")
     && Array.isArray(fact.supersedes) && fact.supersedes.every((v: unknown) => typeof v === "string")
+    && (fact.supersedesIds === undefined || (Array.isArray(fact.supersedesIds) && fact.supersedesIds.every((v: unknown) => typeof v === "string")))
+    && (fact.renderedStatement === undefined || (typeof fact.renderedStatement === "string" && fact.renderedStatement.length <= 800))
+    && (fact.legacySupersedes === undefined || (typeof fact.legacySupersedes === "object" && fact.legacySupersedes !== null
+      && typeof fact.legacySupersedes.path === "string" && typeof fact.legacySupersedes.statement === "string" && fact.legacySupersedes.statement.length<=1600
+      && typeof fact.legacySupersedes.statementId === "string" && /^[a-f0-9]{64}$/.test(fact.legacySupersedes.contentHash)
+      && ["github","google_drive"].includes(fact.legacySupersedes.provider) && typeof fact.legacySupersedes.revision === "string" && fact.legacySupersedes.revision.length>0))
     && typeof fact.unresolvedCorrection === "boolean");
 }
 
@@ -117,16 +147,23 @@ export function appendMemoryFacts(raw: string, original: string | null, proposal
     const id = factId(evidence.evidenceRef, key, proposal.statement);
     if ([...prior, ...additions].some(fact => fact.id === id)) continue;
     const correctionQuote = proposal.correctionQuote && proposal.correctionQuote.length <= 2400
-      && assignedEvidence.includes(proposal.correctionQuote) && explicitCorrection(proposal.correctionQuote, proposal.statement)
+      && assignedEvidence.includes(proposal.correctionQuote) && ((proposal.supersedesIds?.length || proposal.legacySupersedes) ? targetedCorrection(proposal.correctionQuote, proposal.statement) : explicitCorrection(proposal.correctionQuote, proposal.statement))
       ? proposal.correctionQuote : null;
     const effectiveDateQuote = proposal.effectiveDateQuote && proposal.effectiveDateQuote.length <= 2400
       && assignedEvidence.includes(proposal.effectiveDateQuote) ? proposal.effectiveDateQuote : null;
     const effectiveDate = validFactDate(proposal.effectiveDate) && explicitEffectiveDate(effectiveDateQuote, proposal.statement, proposal.effectiveDate) ? proposal.effectiveDate : null;
     const origin = SYNTHETIC.test(evidence.content) || evidence.source === "selftest" ? "synthetic" : "user_report";
     const requested = (proposal.supersedesQuotes ?? []).filter(quote => typeof quote === "string" && quote.length > 0).slice(0, 24);
+    const targeted = (proposal.supersedesIds ?? []).slice(0, 24);
     const supersedes: string[] = [];
-    let unresolvedCorrection = Boolean(proposal.correctionQuote || requested.length);
-    if (correctionQuote && requested.length) {
+    let unresolvedCorrection = Boolean(proposal.correctionQuote || requested.length || targeted.length || proposal.legacySupersedes);
+    if (correctionQuote && proposal.legacySupersedes && !targeted.length) {
+      unresolvedCorrection = false;
+    } else if (correctionQuote && targeted.length) {
+      const matches = prior.filter(fact => targeted.includes(fact.id) && fact.key === key && fact.origin === origin);
+      unresolvedCorrection = matches.length !== new Set(targeted).size || matches.some(fact => effectiveDate && fact.effectiveDate && effectiveDate < fact.effectiveDate);
+      if (!unresolvedCorrection) supersedes.push(...matches.map(fact => fact.id));
+    } else if (correctionQuote && requested.length) {
       unresolvedCorrection = false;
       for (const quote of requested) {
         // Both replacement intent and its exact old statement must occur in new evidence.
@@ -139,9 +176,9 @@ export function appendMemoryFacts(raw: string, original: string | null, proposal
     }
     // An ambiguous multi-target correction must not partially suppress old facts.
     if (unresolvedCorrection) supersedes.length = 0;
-    additions.push({ id, key, statement: proposal.statement, evidenceRef: evidence.evidenceRef,
+    additions.push({ id, key, statement: proposal.statement, ...(proposal.renderedStatement ? {renderedStatement:proposal.renderedStatement} : {}), ...(proposal.reportedConflict ? {reportedConflict:true} : {}), ...(proposal.legacySupersedes ? {legacySupersedes:proposal.legacySupersedes} : {}), evidenceRef: evidence.evidenceRef,
       evidenceDate: Number.isNaN(Date.parse(evidence.capturedAt)) ? null : evidence.capturedAt,
-      effectiveDate, effectiveDateQuote: effectiveDate ? effectiveDateQuote : null, correctionQuote, supersedesQuotes: requested, supersedes, unresolvedCorrection, origin,
+      effectiveDate, effectiveDateQuote: effectiveDate ? effectiveDateQuote : null, correctionQuote, supersedesQuotes: requested, ...(targeted.length ? {supersedesIds: targeted} : {}), supersedes, unresolvedCorrection, origin,
       verificationQuote: verificationScope(proposal.verificationQuote, proposal.statement, { ...evidence, content: assignedEvidence }) });
   }
   // Preserve even legacy/unknown metadata records verbatim; only validated records enter projection.
@@ -187,24 +224,30 @@ export async function projectFacts(
       ...(supported ? { source: { path: entry.evidenceRef, url: entry.url, provider: entry.provider,
         ...(entry.revisionId ? { revisionId: entry.revisionId } : {}), ...(entry.githubUrl ? { githubUrl: entry.githubUrl } : {}) } } : {}) });
   }
+  const history = view.facts.filter(fact => fact.status !== "unsupported" && fact.legacySupersedes?.path === input.path && fact.correctionQuote && targetedCorrection(fact.correctionQuote,fact.statement))
+    .map(fact => ({...fact.legacySupersedes!,supersededByEvidenceRef:fact.evidenceRef}));
+  if (history.length) {
+    view.priorStatements=history;
+    view.warnings.push("Prior legacy statements are preserved from the recorded repository revision/content hash. Their original Log evidence and effective dates are unknown; they are note history, not independently verified historical facts.");
+  }
   const eligible = view.facts.filter(fact => fact.status === "active");
   for (const fact of eligible) {
     // Revalidate every persisted edge before applying any of a multi-target correction.
     if (fact.supersedes.some(id => {
       const target = view.facts.find(candidate => candidate.id === id);
-      return !target || !fact.correctionQuote || !directionalCorrection(fact.correctionQuote, target.statement, fact.statement);
+      return !target || !supportsCorrection(fact, target);
     })) fact.unresolvedCorrection = true;
     // Revalidate relation semantics, not just a model-authored ID in frontmatter.
     for (const target of eligible) {
       if (fact.unresolvedCorrection || !fact.supersedes.includes(target.id) || fact.id === target.id
-        || fact.key !== target.key || fact.origin !== target.origin || !fact.correctionQuote || !explicitCorrection(fact.correctionQuote, fact.statement)
-        || !directionalCorrection(fact.correctionQuote, target.statement, fact.statement) || !fact.supersedesQuotes.includes(target.statement)
+        || fact.key !== target.key || fact.origin !== target.origin || !supportsCorrection(fact, target)
+        || (!fact.supersedesIds?.includes(target.id) && !fact.supersedesQuotes.includes(target.statement))
         || (fact.effectiveDate && target.effectiveDate && fact.effectiveDate < target.effectiveDate)) continue;
       target.status = "superseded";
     }
   }
   for (const fact of eligible.filter(fact => fact.status === "active")) {
-    if (fact.unresolvedCorrection || eligible.some(other => other.id !== fact.id && other.status !== "superseded"
+    if (fact.reportedConflict || fact.unresolvedCorrection || eligible.some(other => other.id !== fact.id && other.status !== "superseded"
       && other.key === fact.key && other.origin === fact.origin && other.statement !== fact.statement)) fact.status = "conflict";
   }
   view.warnings.push("Memory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.");
@@ -226,6 +269,7 @@ export function renderFactViews(views: FactView[]): string {
       if (fact.status === "unsupported") { lines.push(`- ${fact.key}: unsupported record; original evidence unavailable or mismatched.`); continue; }
       lines.push(`- ${fact.status === "conflict" ? "Unresolved conflict — " : fact.status === "undated" ? "Effective date unknown — " : ""}${fact.origin === "synthetic" ? "Synthetic fixture" : "User report"}: ${JSON.stringify(fact.statement)} [${fact.evidenceRef}](${fact.source!.url}). Effective: ${fact.effectiveDate ?? "unknown"}; evidence captured: ${fact.evidenceDate ?? "unknown"}.${fact.verificationQuote ? ` Reported verification scope: ${JSON.stringify(fact.verificationQuote)}.` : " Verification scope: unknown."}`);
     }
+    for (const prior of view.priorStatements ?? []) lines.push(`- Prior note statement (superseded; original evidence/date unknown): ${JSON.stringify(prior.statement)} — ${prior.path}, ${prior.provider} revision ${prior.revision}; correction evidence ${prior.supersededByEvidenceRef}.`);
     lines.push(...view.warnings);
     return lines.join("\n");
   }).join("\n\n");

@@ -13,6 +13,8 @@ export interface BrainLlm {
   classify(input: ClassifyInput): Promise<Classification>;
   /** Compose the full new content of one meaning page, integrating the evidence. */
   composePage(input: ComposePageInput): Promise<string>;
+  /** Minimal cited operations over bounded source/current-statement packets. */
+  reconcile?(input: import("../engine/reconciliation.js").ReconciliationInput): Promise<import("../engine/reconciliation.js").ReconciliationOperation[]>;
   /**
    * Describe an image using the vision model. Returns a plain-text description
    * that can be stored as a memory or used as engine input.
@@ -81,6 +83,8 @@ export interface ClassificationPage {
 }
 
 export interface ClassificationTopic {
+  /** Host-owned stable identity, retained by pending filing replay. */
+  ideaId?:string;
   /** Exact source assignments; occurrence is zero-based within the addressed passage. */
   evidenceAssignments?: Array<{ passageId: string; quote: string; occurrence: number }>;
   /** Engine-owned permitted passage table, overwritten after each model call. */

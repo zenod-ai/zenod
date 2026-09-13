@@ -48,6 +48,7 @@ export interface AttachmentInput {
 
 export interface TopicFilingResult {
   topic: string;
+  ideaId?:string;
   evidenceRef: string;
   /** UTF-16 offsets in the original raw capture, end exclusive. */
   sourceSpans: Array<{ start: number; end: number; passageId?: string }>;
@@ -56,6 +57,8 @@ export interface TopicFilingResult {
   pages: string[];
   /** Successful destinations, separate from proposed pages when filing is partial. */
   filedPages: string[];
+  /** Host-applied atomic edits/no-ops, scoped by immutable evidence and target. */
+  appliedOperationIds?: string[];
   status: "filed" | "uncertain" | "pending";
   reason?: string;
 }
