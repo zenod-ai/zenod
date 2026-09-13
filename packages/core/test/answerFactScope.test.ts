@@ -21,7 +21,11 @@ describe("question-scoped temporal answer presentation", () => {
   });
   it("keeps corrected legacy history by evidence association despite different wording", () => {
     const v = view(); v.priorStatements = [{ path: v.path, statement: "The original shade was vermilion.", statementId: "old", contentHash: "hash", provider: "github", revision: "old-revision", supersededByEvidenceRef: ref }];
-    expect(questionFactViews("What is Orchid color?", [v])[0]!.priorStatements).toEqual(v.priorStatements);
+    const colorHistory = v.priorStatements[0]!;
+    v.facts[1]!.legacySupersedes = colorHistory;
+    const capacityHistory = { ...colorHistory, statementId: "old-capacity", statement: "The room used to hold two people." };
+    v.priorStatements.push(capacityHistory); v.facts[2]!.legacySupersedes = capacityHistory;
+    expect(questionFactViews("What is Orchid color?", [v])[0]!.priorStatements).toEqual([colorHistory]);
   });
   it("retains explicit historical scope, legacy and partial warnings", () => {
     const v = { ...view(), key: "color", mode: "historical" as const, complete: false, warnings: ["partial"] };

@@ -29,7 +29,7 @@ export function questionFactViews(question: string, views: FactView[], answerTex
     const keys = new Set(view.facts.filter(fact => overlaps(question, fact.statement, scopePath(view)) || answerText.includes(fact.statement)).map(fact => fact.key));
     if (!keys.size) return [];
     return [{ ...view, facts: view.facts.filter(fact => keys.has(fact.key)),
-      ...(view.priorStatements ? { priorStatements: view.priorStatements.filter(prior => view.facts.some(fact => keys.has(fact.key) && fact.evidenceRef === prior.supersededByEvidenceRef)) } : {}) }];
+      ...(view.priorStatements ? { priorStatements: view.priorStatements.filter(prior => view.facts.some(fact => keys.has(fact.key) && fact.evidenceRef === prior.supersededByEvidenceRef && fact.legacySupersedes?.statementId === prior.statementId && fact.legacySupersedes.path === prior.path)) } : {}) }];
   });
 }
 
