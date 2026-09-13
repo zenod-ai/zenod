@@ -1158,12 +1158,13 @@ describe("BrainEngine", () => {
     const beginning = "El vídeo explica efectos de red.";
     const tail = "Final decision: release the English captions on Friday.";
     const content = beginning + " a".repeat(6500) + " MIDDLE_OUTAGE: discutir presupuesto." + " b".repeat(6500) + tail;
+    let outage = true;
     llm.classify = vi.fn(async (input: ClassifyInput) => {
-      if (input.content.includes("MIDDLE_OUTAGE")) throw new Error("synthetic middle outage");
-      const quote = input.content.includes(beginning) ? beginning : tail;
+      if (input.content.includes("MIDDLE_OUTAGE") && outage) throw new Error("synthetic middle outage");
+      const quote = input.content.includes("MIDDLE_OUTAGE") ? "discutir presupuesto." : input.content.includes(beginning) ? beginning : tail;
       const passage = input.sourcePassages!.find(p => p.text.includes(quote))!;
       return { confidence: 0.9, summary: "known idea", tags: [], pages: [], topics: [{
-        topic: quote === beginning ? "Network education" : "English caption release", summary: "known idea", confidence: 0.9,
+        topic: quote === beginning ? "Network education" : quote === tail ? "English caption release" : "Budget", summary: "known idea", confidence: 0.9,
         disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
         evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 0 }],
       }] };
@@ -1179,6 +1180,12 @@ describe("BrainEngine", () => {
     expect(result.topics?.filter(t => t.status === "filed").flatMap(t => t.sourceSpans).map(s => content.slice(s.start, s.end))).toEqual([beginning, tail]);
     expect(llm.classify).toHaveBeenCalledTimes(4); // Three bounded windows, one middle retry.
     expect(llm.composeCalls).toBe(0);
+    outage = false;
+    const resumed = await e.enrichEvidence!({ ...input, evidenceRef: captured.evidenceRef });
+    expect(llm.classify).toHaveBeenCalledTimes(5); // Only the failed middle window is revisited.
+    expect(resumed.topics!.some(topic => topic.reason === "classification_unavailable")).toBe(false);
+    expect(resumed.topics!.filter(topic => topic.status === "filed").map(topic => topic.topic)).toEqual(["Network education", "English caption release", "Budget"]);
+    for (const previous of result.topics!.filter(topic => topic.status === "filed")) expect(resumed.topics!.find(topic => topic.ideaId === previous.ideaId)).toEqual(previous);
     expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
   });
 
