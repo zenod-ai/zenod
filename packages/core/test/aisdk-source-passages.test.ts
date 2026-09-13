@@ -19,6 +19,7 @@ describe("addressed classifier prompt boundary", () => {
     await llm.classify({ content, sourcePassages: window.passages, sourceRange: window.range,
       context: "must not duplicate neighboring data", pageIndex: [], hints: [], tagVocabulary: [] });
     const request = vi.mocked(generateObject).mock.calls[0]![0];
+    expect(request.maxOutputTokens).toBe(8192);
     const prompt = String(request.prompt);
     const system = String(request.system);
     expect(prompt).toContain(JSON.stringify(window.passages));

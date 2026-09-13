@@ -807,6 +807,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       result = await generateObject({
       model: this.model(this.classifyModelId),
       schema: classificationSchema,
+      // Bound multi-topic structured output; incomplete output follows the existing failure path.
+      maxOutputTokens: 8192,
       experimental_repairText: REPAIR_HOOK,
       system: [
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
