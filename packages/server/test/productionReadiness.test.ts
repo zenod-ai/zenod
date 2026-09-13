@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assertPublicSignupIsReady,
   checkoutEnabled,
@@ -45,6 +45,16 @@ const googleReadyEnv: NodeJS.ProcessEnv = {
 };
 
 describe("production readiness gate", () => {
+  beforeEach(() => {
+    // Readiness wrappers use the system clock; keep it aligned with the fixtures.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-13T00:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("pins the current one-plan Terms and legal version", async () => {
     const terms = await readFile(
       new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
@@ -158,6 +168,13 @@ describe("production readiness gate", () => {
       ok: true,
       detail: "The monthly Hosted price is configured",
     });
+  });
+
+  it("closes signup and checkout when previously valid evidence ages out", () => {
+    vi.setSystemTime(new Date("2026-09-13T00:00:00.000Z"));
+    expect(checkoutEnabled(readyEnv)).toBe(false);
+    expect(() => assertPublicSignupIsReady(readyEnv)).toThrow(/backup_restore/);
+    expect(() => assertPublicSignupIsReady(googleReadyEnv)).toThrow(/google_drive_vault_acceptance/);
   });
 
   it("does not accept a legacy yearly price in place of the monthly Hosted price", () => {

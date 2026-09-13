@@ -103,7 +103,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete passage/date-range recall, focused topic filing, and current-versus-historical answers. | active — release validation | Public29ddb62 live; bounded filing/recall repair complete, latest recall3/3; broader ZMR-8 acceptance remains. | [September review](planning/zenod-memory-reliability-review.md); [#1199 merged](https://github.com/zenod-ai/zenod/pull/1199) | 2026-09-06 21:08 CEST | Retain final live evidence and broader acceptance follow-ups. |
+| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete recall and reliable multi-idea reconciliation into cited knowledge. | approved backlog | ZMR-11–17 not queued; planning PR integration precedes dispatch. Earlier ZMR-1–7 integrated; broader acceptance remains open. | [Target flow and research](planning/zenod-memory-reconciliation/README.md); #1237–#1243 | 2026-09-13 Europe/Paris | Integrate planning PR, then bind ZMR-11. |
 | ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | active — deployed verification | Public29ddb62 verified; affected live recall3/3; upgrade/undo and deployment boundary documented. | [Deployment leaf](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | 2026-09-06 Europe/Paris | Reuse documented process for the next authorized upgrade. |
 
 ## Bootstrap Map
