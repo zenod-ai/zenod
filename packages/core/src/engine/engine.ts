@@ -1497,7 +1497,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }];
       if (classified.topics) {
         classified.topics = classified.topics.map((topic) => ({ ...topic,
-          sourceRange: windows[segmentIndex]!.range, sourcePassages: windows[segmentIndex]!.passages }));
+          sourceRange: windows[segmentIndex]!.range, sourcePassages: windows[segmentIndex]!.passages }))
+          // Exact, valid support wholly in neighbor context belongs to its owning
+          // window. Malformed/ambiguous assignments remain visible as pending.
+          .filter(topic => !resolveTopicSpans(input.content, topic).nonOwnedContext);
       }
       classified.reviewedSourceSpans = reviewedSourceSpans(input.content, classified, windows[segmentIndex]!);
       classifications.push(classified);
@@ -1517,14 +1520,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const covered: Array<{ start: number; end: number }> = [];
     const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] }>();
     for (const topic of classification.topics ?? []) {
-      const { spans, invalid } = resolveTopicSpans(content, topic);
+      const { spans: identitySpans, supportSpans, invalid } = resolveTopicSpans(content, topic, {
+        completePropositions: !!topic.evidenceAssignments?.length && topic.pages.length > 0
+          && (topic.disposition === "integrate_page" || topic.disposition === "append_compact_note"),
+        semanticRange,
+      });
+      const spans = supportSpans ?? identitySpans;
       const pages = [...new Map(topic.pages.map((page) => {
         const path = normalizeMarkdownNotePath(page.path);
         return [path, { ...page, path }];
       })).values()];
       const uncertain = invalid || !Number.isFinite(topic.confidence) || topic.confidence < config.confidenceThreshold
         || topic.disposition === "needs_clarification" || (topic.disposition !== "evidence_only" && !pages.length);
-      topic.ideaId ??= reconciliationIdeaId(evidenceRef,(classification.topics??[]).indexOf(topic),topic.topic,spans);
+      topic.ideaId ??= reconciliationIdeaId(evidenceRef,(classification.topics??[]).indexOf(topic),topic.topic,identitySpans);
       const outcome: Outcome = {
         topic: topic.topic, ideaId:topic.ideaId,evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
         confidence: Number.isFinite(topic.confidence) ? Math.max(0, Math.min(1, topic.confidence)) : 0, disposition: topic.disposition, pages: pages.map((page) => page.path), filedPages: [],

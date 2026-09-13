@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEngine, LONG_MEMORY_SEGMENT_CHARS } from "../src/engine/engine.js";
+import { sourceWindows } from "../src/engine/sourcePassages.js";
 import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
@@ -1251,6 +1252,63 @@ describe("BrainEngine", () => {
     expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(!reviewed);
     expect(result.filing).toBe(reviewed ? "filed" : "uncertain");
     expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(!reviewed);
+  });
+
+  it("passes complete recipient and qualified reported propositions to reconciliation while unknown routing stays uncertain", async () => {
+    const delivery = "For Insurance, each visitor should receive a reusable waterproof guide.";
+    const report = "A collaborator reports Friday for Insurance. It is unconfirmed and does not change our agreed Thursday.";
+    const content = delivery + "\n\n" + report + "\n\nMarta changed it, but the project and change are unknown.";
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      const passage = input.sourcePassages![0]!;
+      return { confidence: 0.95, summary: "three independent ideas", tags: [], pages: [],
+        passageReviews: [{ passageId: passage.id, status: "assigned" as const }],
+        topics: [
+          ...[["Visitor delivery", "reusable waterproof guide"], ["Unconfirmed report", "reports Friday"]].map(([topic, quote]) => ({
+            topic: topic!, summary: topic!, confidence: 0.95, disposition: "append_compact_note" as const,
+            pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" as const }], evidenceQuotes: [],
+            evidenceAssignments: [{ passageId: passage.id, quote: quote!, occurrence: 0 }],
+          })),
+          { topic: "Unknown destination", summary: "unknown change", confidence: 0.2, disposition: "needs_clarification" as const,
+            pages: [], evidenceQuotes: [], evidenceAssignments: [{ passageId: passage.id, quote: "Marta changed it", occurrence: 0 }] },
+        ] };
+    });
+    const reconcile = vi.fn(async (request: import("../src/engine/reconciliation.js").ReconciliationInput) => {
+      const support = request.sources.map(source => source.text).join("\n");
+      expect(support).toContain(delivery);
+      expect(support).toContain(report);
+      expect(support).not.toContain("Marta");
+      expect(request.ideas).toHaveLength(2);
+      expect(new Set(request.ideas.map(idea => idea.id)).size).toBe(2);
+      return request.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds,
+        sourceQuote: request.sources.find(source => source.id === idea.sourceIds[0])!.text,
+        statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null }));
+    });
+    Object.assign(llm, { reconcile });
+    const result = await engine().store({ content, source: "whatsapp", verbatim: true });
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(result.topics!.map(topic => topic.status)).toEqual(["filed", "filed", "uncertain"]);
+    const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
+    expect(page).toContain(delivery);
+    expect(page).toContain(report);
+  });
+
+  it.each([false, true])("omits valid neighbor-only duplicates while malformed neighbor assignments remain visible (%s)", async malformed => {
+    const content = Array.from({ length: 420 }, (_, i) => `Background sentence number ${i} is recorded.\n\n`).join("");
+    const windows = sourceWindows({ content });
+    const owner = windows[0]!.passages.filter(p => p.end <= windows[0]!.range.end).at(-1)!;
+    const quote = owner.text.trim();
+    llm.classify = vi.fn(async (input: ClassifyInput) => ({ confidence: 0.95, summary: "source review", tags: [], pages: [],
+      passageReviews: input.sourcePassages!.filter(p => p.start >= input.sourceRange!.start && p.end <= input.sourceRange!.end)
+        .map(p => ({ passageId: p.id, status: "evidence_only" as const })),
+      topics: input.sourcePassages!.some(p => p.id === owner.id) ? [{ topic: "Independent owned idea", summary: "source check",
+        confidence: 0.95, disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
+        evidenceAssignments: [{ passageId: owner.id, quote, occurrence: 0 },
+          ...(malformed && input.sourceRange!.start > owner.start ? [{ passageId: "wrong-id", quote, occurrence: 0 }] : [])] }] : [],
+    }));
+    const result = await engine().store({ content, source: "whatsapp", verbatim: true });
+    expect(result.topics!.filter(topic => topic.status === "filed")).toHaveLength(1);
+    expect(result.topics!.filter(topic => topic.reason === "source_assignment_invalid")).toHaveLength(malformed ? 1 : 0);
+    expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(false);
   });
 
   it("records invalid and omitted source assignments without handing invented text to the composer", async () => {

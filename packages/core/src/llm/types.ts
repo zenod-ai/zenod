@@ -97,6 +97,7 @@ export interface ClassificationTopic {
   topic: string;
   /** Exact, nonempty quotes from ClassifyInput.content; engine resolves original offsets. */
   evidenceQuotes: string[];
+  /** Certainty of source interpretation and destination, not truth probability of the reported claim. */
   confidence: number;
   disposition: NonNullable<Classification["disposition"]>;
   pages: ClassificationPage[];
