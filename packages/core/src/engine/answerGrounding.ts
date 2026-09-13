@@ -211,6 +211,18 @@ export function sanitizeGroundedAnswer(input: {
   return sanitized || "I couldn't verify that exact detail from the sources read for this question.";
 }
 
+/** The same actually-read, question-scoped raw entries used by citation grounding. */
+export function groundedRawEntries(input: Parameters<typeof sanitizeGroundedAnswer>[0]): Array<{ ref: string; text: string }> {
+  const scoped = scopedSources(input.question, input.readSpans, input.selectedEvidenceRefs);
+  for (const span of input.pinnedSpans ?? []) scoped.set(span.path, `${scoped.get(span.path) ?? ""}\n${span.text}`);
+  return [...scoped].filter(([path]) => LOG_PATH_RE.test(path)).flatMap(([path, text]) =>
+    evidenceBlocks(text).map(block => ({ ref: `${path}#^${block.anchor}`,
+      // Decode only the Log source body, never heading/transport metadata. Keep
+      // host unread-gap markers so separated passages cannot manufacture a quote.
+      text: block.text.split("\n").flatMap(line => line.startsWith("> ") ? [line.slice(2)] : line === ">" ? [""] : line.includes("[unread gap]") ? [line] : []).join("\n"),
+    })));
+}
+
 /** Drop unquoted absence clauses when the host knows evidence remains unread.
  * Quoted reports are still subject to ordinary grounding, not promoted to facts.
  */

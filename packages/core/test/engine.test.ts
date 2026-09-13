@@ -8,6 +8,7 @@ import { createEngine, LONG_MEMORY_SEGMENT_CHARS } from "../src/engine/engine.js
 import { __resetApprovalTokens } from "../src/approvalTokens.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
+import { appendMemoryFacts } from "../src/engine/temporalFacts.js";
 import { parseNote, serializeNote } from "../src/vault/frontmatter.js";
 import { listMarkdownFiles } from "../src/vault/files.js";
 import type { FileChange, VaultRepository, VaultRevision } from "../src/index.js";
@@ -486,6 +487,53 @@ describe("BrainEngine", () => {
   afterEach(async () => {
     state.close();
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("keeps a raw-only qualified hypothesis alongside a requested current fact without injecting other page facts", async () => {
+    const e = engine();
+    const hypothesis = "Orchid hypothesis: a shadow display might improve spatial learning; this remains unverified.";
+    const restriction = "Orchid workshop does not repair batteries.";
+    const unrelated = "Orchid workshop capacity is eight seats.";
+    const oldClaim = "Orchid workshop repairs batteries.";
+    const content = [hypothesis, restriction, unrelated, oldClaim].join("\n");
+    const capture = await e.captureEvidence!({ content, source: "selftest" });
+    const [path, anchor] = capture.evidenceRef.split("#^");
+    const page = "Notes/Orchid.md";
+    const raw = serializeNote({ title: "Orchid", type: "note", summary: "Orchid workshop" }, "# Orchid\n");
+    const entry = { evidenceRef: capture.evidenceRef, path: path!, anchor: anchor!, title: "Orchid", content, source: "selftest", verbatim: true, capturedAt: new Date().toISOString(), url: capture.evidenceUrl!, provider: "github" as const, revisionId: "fixture" };
+    const facts = [restriction, unrelated].map((statement, i) => ({ key: `orchid.fact${i}`, statement, effectiveDate: null, effectiveDateQuote: null, correctionQuote: null, supersedesQuotes: [], verificationQuote: null }));
+    await writeFile(join(repo.path, page), appendMemoryFacts(raw, raw, facts, entry));
+    const git = simpleGit(repo.path); await git.add(page); await git.commit("generic mixed answer fixture"); await git.push();
+    const modelAnswer = `Unverified hypothesis: "${hypothesis}" (${capture.evidenceRef})\nBattery restriction: "${restriction}" (${capture.evidenceRef})`;
+    llm.answerOverride = async (_input, tools) => {
+      await tools.readNote!(page);
+      await tools.readNote!(capture.evidenceRef);
+      return { text: modelAnswer, readPaths: [page, capture.evidenceRef] };
+    };
+    const result = await e.ask("What is the Orchid hypothesis and what batteries does the workshop not repair?");
+    expect(modelAnswer).toContain(hypothesis);
+    expect(result.text).toContain(hypothesis);
+    expect(result.text).toContain(restriction);
+    expect(result.text).not.toContain(unrelated);
+    expect(result.text).toContain(capture.evidenceRef);
+    llm.answerOverride = async (_input, tools) => {
+      await tools.readNote!(page); await tools.readNote!(capture.evidenceRef);
+      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef] };
+    };
+    const rawOnly = await e.ask("What is the unverified Orchid workshop hypothesis?");
+    expect(rawOnly.text).toContain(hypothesis);
+    expect(rawOnly.text).not.toContain(restriction);
+    expect(rawOnly.text).not.toContain(unrelated);
+    llm.answerOverride = async (_input, tools) => {
+      await tools.readNote!(page); await tools.readNote!(capture.evidenceRef);
+      return { text: `Currently: "${oldClaim}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef] };
+    };
+    const stale = await e.ask("Does the Orchid workshop repair batteries currently?");
+    expect(stale.text).toContain(restriction);
+    expect(stale.text).not.toContain(oldClaim);
+    // Even a synonym-only display miss must never bypass host temporal authority.
+    const synonym = await e.ask("What is the Orchid workshop policy?");
+    expect(synonym.text).not.toContain(oldClaim);
   });
 
   function engine() {

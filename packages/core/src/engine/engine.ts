@@ -4,6 +4,7 @@ import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.j
 import { assertFilingTarget, filingInputFingerprint, filingReceiptPath, freezeFilingClassification, parseFilingReceipt, renderFilingReceipt, sealFilingReceipt, verifyPreparedFilingChanges, type FilingReceipt, type FrozenTopic } from "./filingReceipt.js";
 import { publicationContentHash } from "../vault/publicationGuard.js";
 import { sourceWindows, semanticBounds, resolveTopicSpans, reviewedSourceSpans } from "./sourcePassages.js";
+import { questionFactViews, rawAnswerQuotations } from "./answerFactScope.js";
 import { appendMemoryFacts, projectFacts, renderFactViews, type FactProposal, type FactView } from "./temporalFacts.js";
 import type {
   Answer,
@@ -53,7 +54,7 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
-import { sanitizeGroundedAnswer, suppressIncompleteAbsence, evidenceTextMatchesQuestion } from "./answerGrounding.js";
+import { sanitizeGroundedAnswer, suppressIncompleteAbsence, evidenceTextMatchesQuestion, groundedRawEntries } from "./answerGrounding.js";
 import { isFilingReceiptPath, listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
 import {
@@ -2396,7 +2397,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
               if (passage.part === "body") {
                 const facts = await automaticFactProjection(path);
                 if (facts) return JSON.stringify({ ...passage, factView: facts.view,
-                  instruction: "Verified current structured facts for this selected page accompany its bounded prose. For current questions they take precedence over older prose for the same fact; conflicts and unknown dates stay explicit. They do not establish past state. For a historical date or narrower key, call read_facts with that exact scope." });
+                  instruction: "Verified current structured facts for this selected page accompany its bounded prose. For current questions they take precedence over older prose for the same fact; conflicts and unknown dates stay explicit. They do not establish past state. For a historical date or narrower key, call read_facts with that exact scope. When combining these facts with raw-only material, include short exact full source sentences retaining their qualifications; the host can preserve verified quotations outside structured fact scope." });
               }
               return text;
             },
@@ -2422,10 +2423,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const automatic = [...automaticFacts.values()].filter(auto => !historicalQuestion && !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === auto.input.path)
           && auto.view.facts.some(fact => evidenceTextMatchesQuestion(question, fact.statement)));
         const relevantAutomaticFailure = [...automaticFactFailures].some(path => !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === path));
+        const allFactViews = [...factViews, ...automatic.map(read => read.view)];
+        const finalFactViews = questionFactViews(question, allFactViews, result.text);
         const useFactAnswer = explicitFactReadAttempts > 0 || automatic.length > 0 || relevantAutomaticFailure;
         const finalFactWarnings = [...factReadWarnings, ...(relevantAutomaticFailure
           ? ["A relevant page fact projection failed or exceeded the four-note budget; current state is not established for that page."] : [])];
-        const finalFactViews = [...factViews, ...automatic.map(read => read.view)];
         let factSnapshotChanged = false;
         for (const read of [...factReads, ...automatic]) {
           try { if (await tools.readFacts!(read.input) !== read.result) factSnapshotChanged = true; }
@@ -2452,22 +2454,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         let text: string;
         const absence = coverage.status !== "partial" && (coverage.continuation.length > 0 || coverage.failedReads.length > 0)
           ? suppressIncompleteAbsence(result.text) : { text: result.text, suppressed: false };
-        if (coverage.status === "partial" || !catalogSnapshotValid) {
-          coverage.status = "partial";
-          const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
-          const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
-          const unread = coverage.searches.reduce((n, search) => n + search.unreadEvidenceRefs.length, 0);
-          const progress = coverage.searches.length > 0
-            ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
-            : "No bounded entry scope was enumerated.";
-          text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
-        } else if (useFactAnswer) {
-          text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
-            : [finalFactViews.length ? renderFactViews(finalFactViews) : "I could not verify temporal facts from the requested scope.", ...new Set(finalFactWarnings)].filter(Boolean).join("\n\n");
-        } else if (sources.length === 0 && conversationReadSpans.length === 0) {
-          text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
-        } else {
-          text = sanitizeGroundedAnswer({
+        const groundingInput = {
             // A complete typed audit has an explicit host-filtered evidence scope;
             // generic date/audit words must not discard its successfully read entries.
             question: boundedAudit ? "" : question,
@@ -2482,9 +2469,25 @@ export function createEngine(options: EngineOptions): BrainEngine {
             ],
             pinnedSpans,
             ...(catalogSnapshotValid ? { selectedEvidenceRefs: new Set(catalogEntries.keys()) } : {}),
-          });
+        };
+        if (coverage.status === "partial" || !catalogSnapshotValid) {
+          coverage.status = "partial";
+          const enumerated = coverage.searches.reduce((n, search) => n + search.enumeratedEntries, 0);
+          const matched = coverage.searches.reduce((n, search) => n + search.matchedEntries, 0);
+          const unread = coverage.searches.reduce((n, search) => n + search.unreadEvidenceRefs.length, 0);
+          const progress = coverage.searches.length > 0
+            ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
+            : "No bounded entry scope was enumerated.";
+          text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
+        } else if (useFactAnswer) {
+          text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
+            : [rawAnswerQuotations({ question, text: absence.text, views: allFactViews, evidence: groundedRawEntries(groundingInput) }), finalFactViews.length ? renderFactViews(finalFactViews) : "No structured current fact was selected for this question. Raw quotations describe reports, not established current state.", ...new Set(finalFactWarnings)].filter(Boolean).join("\n\n");
+        } else if (sources.length === 0 && conversationReadSpans.length === 0) {
+          text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
+        } else {
+          text = sanitizeGroundedAnswer(groundingInput);
         }
-        if (absence.suppressed && !useFactAnswer) {
+        if (absence.suppressed) {
           coverage.status = "partial";
           text += "\n\nCoverage is partial: some evidence remains unread. Absence is not established; continue with the exact refs/cursors in coverage.continuation.";
         }
