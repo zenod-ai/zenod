@@ -13,13 +13,13 @@ test('freeze fixture, convert codepoints, and exclude ground truth from source i
 });
 test('retains unknown cost reservations and blocks another request before transport',()=>{
   const ledger=budgetLedger({budgetUsd:0.0013,maxRequests:2,prices});
-  const row=ledger.reserve({model:'minimax/minimax-m3',messages:[]}); ledger.complete(row,{usage:null},'failed');
-  assert.equal(ledger.exposureUsd,row.reservedUsd);assert.throws(()=>ledger.reserve({model:'minimax/minimax-m3',messages:[]}));
+  const row=ledger.reserve({model:'minimax/minimax-m3',max_tokens:1000,messages:[]}); ledger.complete(row,{usage:null},'failed');
+  assert.equal(ledger.exposureUsd,row.reservedUsd);assert.throws(()=>ledger.reserve({model:'minimax/minimax-m3',max_tokens:1000,messages:[]}));
 });
 test('actual costs replace reservation, failed retry and unknown model are bounded',()=>{
   const ledger=budgetLedger({budgetUsd:1,maxRequests:1,prices});
-  const row=ledger.reserve({model:'minimax/minimax-m3'});ledger.complete(row,{usage:{cost:0.002}},'succeeded');
-  assert.equal(ledger.exposureUsd,0.002);assert.throws(()=>ledger.reserve({model:'minimax/minimax-m3'}));
+  const row=ledger.reserve({model:'minimax/minimax-m3',max_tokens:1000});ledger.complete(row,{usage:{cost:0.002}},'succeeded');
+  assert.equal(ledger.exposureUsd,0.002);assert.throws(()=>ledger.reserve({model:'minimax/minimax-m3',max_tokens:1000}));
   assert.throws(()=>budgetLedger({budgetUsd:1,maxRequests:2,prices}).reserve({model:'unreviewed'}));
 });
 test('stream usage parsed without headers; missing usage stays unknown',()=>{
@@ -29,4 +29,17 @@ test('stream usage parsed without headers; missing usage stays unknown',()=>{
 test('span overlap is only structural coverage, never semantic pass',()=>{
   const row=coverageRows(fixture,{topics:[{sourceSpans:[{start:3,end:8}],topic:'unrelated invention'}]})[0];
   assert.equal(row.structurallyAssigned,true);assert.equal(row.semanticVerdict,'REVIEW_REQUIRED');
+});
+
+test('wire output cap must be explicit, valid and within reviewed ceiling before reservation',()=>{
+  const ledger=budgetLedger({budgetUsd:1,maxRequests:10,prices});
+  for (const limits of [{},{max_tokens:null},{max_tokens:0},{max_tokens:1001},{max_completion_tokens:1001},
+    {max_tokens:100,max_completion_tokens:1000},{max_tokens:100,max_completion_tokens:null}]) {
+    assert.throws(()=>ledger.reserve({model:'minimax/minimax-m3',...limits}));
+    assert.equal(ledger.rows.length,0); assert.equal(ledger.exposureUsd,0);
+  }
+  for (const limits of [{max_tokens:100},{max_completion_tokens:100},{max_tokens:100,max_completion_tokens:100}]) {
+    const body={model:'minimax/minimax-m3',...limits}; const before=JSON.stringify(body);
+    assert.ok(ledger.reserve(body).reservedUsd>0);assert.equal(JSON.stringify(body),before);
+  }
 });

@@ -44,7 +44,10 @@ export function budgetLedger({budgetUsd, maxRequests, prices}) {
     if (!price || ![price.inputUsdPerMillion, price.outputUsdPerMillion, price.maxOutputTokens].every(Number.isFinite)
         || price.inputUsdPerMillion < 0 || price.outputUsdPerMillion < 0 || price.maxOutputTokens < 1) throw new Error('Missing reviewed model price/output limit');
     // Conservative byte upper bound for uncached input; no cache savings assumed.
-    const output = body.max_tokens ?? body.max_completion_tokens ?? price.maxOutputTokens;
+    const limits = ['max_tokens', 'max_completion_tokens'].filter(key => Object.hasOwn(body, key)).map(key => body[key]);
+    if (!limits.length || limits.some(value => !Number.isInteger(value) || value <= 0)
+        || (limits.length === 2 && limits[0] !== limits[1])) throw new Error('Explicit unambiguous wire output limit required');
+    const output = limits[0];
     if (!Number.isInteger(output) || output <= 0 || output > price.maxOutputTokens) throw new Error('Unknown model output exposure');
     const reservation = (Buffer.byteLength(JSON.stringify(body)) * price.inputUsdPerMillion + output * price.outputUsdPerMillion) / 1e6;
     if (exposure + reservation > budgetUsd) throw new Error('evaluation_cost_budget_exhausted');
