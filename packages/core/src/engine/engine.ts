@@ -4,7 +4,7 @@ import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.j
 import { assertFilingTarget, filingInputFingerprint, filingReceiptPath, freezeFilingClassification, parseFilingReceipt, renderFilingReceipt, sealFilingReceipt, verifyPreparedFilingChanges, type FilingReceipt, type FrozenTopic } from "./filingReceipt.js";
 import { publicationContentHash } from "../vault/publicationGuard.js";
 import { sourceWindows, semanticBounds, resolveTopicSpans, reviewedSourceSpans } from "./sourcePassages.js";
-import { questionFactViews, rawAnswerQuotations } from "./answerFactScope.js";
+import { AnswerSupportRegistry, ANSWER_SUPPORT_INSTRUCTION } from "./answerSupport.js";
 import { appendMemoryFacts, projectFacts, renderFactViews, type FactProposal, type FactView } from "./temporalFacts.js";
 import type {
   Answer,
@@ -54,7 +54,7 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
-import { sanitizeGroundedAnswer, suppressIncompleteAbsence, evidenceTextMatchesQuestion, groundedRawEntries } from "./answerGrounding.js";
+import { sanitizeGroundedAnswer, suppressIncompleteAbsence } from "./answerGrounding.js";
 import { isFilingReceiptPath, listAttachmentFiles, MEANING_FOLDERS, normalizeMarkdownNotePath } from "../vault/files.js";
 import { conversationId } from "../conversation.js";
 import {
@@ -2218,10 +2218,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
     const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch);
+    const pinnedSupports = contextRefs.length ? await Promise.all(contextRefs.map(async ref => {
+      const read = JSON.parse(await session.tools.readNote!(ref, { maxChars: 8000 }));
+      return { ref, answerSupports: read.answerSupports };
+    })) : [];
     const result = await llm.answer(
       {
         question,
-        vaultBriefing: scopedBriefing.text,
+        answerSupportContract: "v1",
+        vaultBriefing: scopedBriefing.text + (pinnedSupports.length ? `\nPinned source support IDs: ${JSON.stringify(pinnedSupports)}` : ""),
         conversation: [],
         ...(pinnedBriefing
           ? {
@@ -2244,13 +2249,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     pinnedSources: Answer["sources"] = [],
     entrySearch?: AskOptions["entrySearch"],
   ) {
+    const supportRegistry = new AnswerSupportRegistry();
     const tools = readTools(contextRefs, entrySearch, true, async hits => {
       const views: FactView[] = [];
       // Bounded host reads prevent model selection from skipping applicable facts.
       // Search snippets remain discovery hints; only readFacts verifies evidence.
       for (const hit of hits.slice(0, 4).filter(hit => hit.path.endsWith(".md"))) {
         const facts = await automaticFactProjection(hit.path);
-        if (facts) views.push(facts.view);
+        if (facts) views.push({ ...facts.view, answerSupports: supportRegistry.addFacts(facts.view) } as FactView);
       }
       return views.length ? `Verified fact context from bounded search-hit reads: ${JSON.stringify(views)}` : "";
     });
@@ -2281,8 +2287,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         automaticFactReads.set(normalizedPath, (async () => {
           const note = await getNote(vaultPath, normalizedPath, sourceResolver);
           // Unverified metadata is only an applicability signal, never evidence.
-          if (!Array.isArray(note.frontmatter.memoryFacts) || !note.frontmatter.memoryFacts.some(fact => fact && typeof fact === "object"
-            && typeof fact.statement === "string" && evidenceTextMatchesQuestion(question, fact.statement))) return;
+          if (!Array.isArray(note.frontmatter.memoryFacts) || !note.frontmatter.memoryFacts.length) return;
           try {
             if (++factReadAttempts > 4) throw new Error("Fact read budget exhausted");
             const input = { path: normalizedPath };
@@ -2314,7 +2319,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         factViews.push(view);
         factReads.push({ input, result: text });
         factSources.push(...view.facts.flatMap(fact => fact.source ? [fact.source] : []));
-        return text;
+        return JSON.stringify({ ...view, answerSupports: supportRegistry.addFacts(view), answerInstruction: ANSWER_SUPPORT_INSTRUCTION });
       } } : {}),
       searchChats: async (query: string) => {
         const result = await tools.searchChats(query); coverageTracker.chats = true;
@@ -2390,16 +2395,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
               const passage = JSON.parse(text) as NotePassage;
               coverageTracker.recordRead(passage);
               readPassages.push(passage);
+              const answerSupports = supportRegistry.addPassage(passage);
+              const answerSupportPartial = supportRegistry.lastPassageSelectionPartial;
               passageSources.set(passage.identity, { ...passage.source, path: passage.identity.includes("#^") ? passage.identity : passage.source.path });
               // Ordinary meaning-page body reads must not hide source-qualified
               // facts behind a stale prefix. Reuse the bounded verified projection.
               // Exact/pinned evidence and explicit metadata inspection keep their scope.
-              if (passage.part === "body") {
+              {
                 const facts = await automaticFactProjection(path);
-                if (facts) return JSON.stringify({ ...passage, factView: facts.view,
-                  instruction: "Verified current structured facts for this selected page accompany its bounded prose. For current questions they take precedence over older prose for the same fact; conflicts and unknown dates stay explicit. They do not establish past state. For a historical date or narrower key, call read_facts with that exact scope. When combining these facts with raw-only material, include short exact full source sentences retaining their qualifications; the host can preserve verified quotations outside structured fact scope." });
+                if (facts) return JSON.stringify({ ...passage, answerSupports, answerSupportPartial, factView: { ...facts.view, answerSupports: supportRegistry.addFacts(facts.view) },
+                  instruction: ANSWER_SUPPORT_INSTRUCTION });
               }
-              return text;
+              return JSON.stringify({ ...passage, answerSupports, answerSupportPartial, answerInstruction: ANSWER_SUPPORT_INSTRUCTION });
             },
           }
         : {}),
@@ -2414,17 +2421,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
       tools: trackedTools,
       required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
-      finalize: async (result: { text: string }): Promise<Answer> => {
+      finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {
         // Projection and source evidence must still describe the same local snapshot.
         // An explicit key/date read supersedes the automatic page projection,
         // regardless of tool order. Never mix current auto facts into historical scope.
         // Current projections cannot resolve a requested historical scope. Let the
         // model select read_facts(asOf) or retain its grounded historical prose.
-        const automatic = [...automaticFacts.values()].filter(auto => !historicalQuestion && !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === auto.input.path)
-          && auto.view.facts.some(fact => evidenceTextMatchesQuestion(question, fact.statement)));
+        const automatic = [...automaticFacts.values()].filter(auto => !historicalQuestion && !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === auto.input.path));
         const relevantAutomaticFailure = [...automaticFactFailures].some(path => !factReads.some(read => normalizeMarkdownNotePath(read.input.path) === path));
         const allFactViews = [...factViews, ...automatic.map(read => read.view)];
-        const finalFactViews = questionFactViews(question, allFactViews, result.text);
+        const finalFactViews = allFactViews;
         const useFactAnswer = explicitFactReadAttempts > 0 || automatic.length > 0 || relevantAutomaticFailure;
         const finalFactWarnings = [...factReadWarnings, ...(relevantAutomaticFailure
           ? ["A relevant page fact projection failed or exceeded the four-note budget; current state is not established for that page."] : [])];
@@ -2479,9 +2485,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
             ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
             : "No bounded entry scope was enumerated.";
           text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
+        } else if (result.supportSelections !== undefined) {
+          let selectedSnapshotChanged = factSnapshotChanged;
+          for (const passage of supportRegistry.selectedPassages(result.supportSelections)) {
+            try { if ((JSON.parse(await tools.readNote!(passage.readPath, { maxChars: 256 })) as NotePassage).version !== passage.version) selectedSnapshotChanged = true; }
+            catch { selectedSnapshotChanged = true; }
+          }
+          text = selectedSnapshotChanged ? "The selected source snapshot changed during this question. Repeat its source/fact reads before answering." : supportRegistry.render(result.supportSelections).text;
         } else if (useFactAnswer) {
           text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
-            : [rawAnswerQuotations({ question, text: absence.text, views: allFactViews, evidence: groundedRawEntries(groundingInput) }), finalFactViews.length ? renderFactViews(finalFactViews) : "No structured current fact was selected for this question. Raw quotations describe reports, not established current state.", ...new Set(finalFactWarnings)].filter(Boolean).join("\n\n");
+            : [finalFactViews.length ? renderFactViews(finalFactViews) : "No structured current fact was selected for this question. Raw quotations describe reports, not established current state.", ...new Set(finalFactWarnings)].filter(Boolean).join("\n\n");
         } else if (sources.length === 0 && conversationReadSpans.length === 0) {
           text = "I couldn't verify an answer from source text read for this question. Search results and listed citations alone are not supporting evidence.";
         } else {
@@ -2612,6 +2625,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // read-only chunks are replayed after that proof; action turns emit one gated block.
     const pendingDeltas: string[] = [];
     const answerInput: AnswerInput = {
+      ...(repo ? { answerSupportContract: "v1" as const } : {}),
       question,
       conversationId: approvalCid,
       vaultBriefing: briefing.text,
@@ -2648,7 +2662,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const memoryAnswer = memorySession.required(result.readPaths)
+    const memoryAnswer = (memorySession.required(result.readPaths) || result.supportSelections !== undefined)
       ? await memorySession.finalize(result)
       : undefined;
     // Mutation receipts and approval guards retain priority over memory synthesis.
@@ -2724,6 +2738,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const question = contextNote ? `${contextNote}\n\nOriginal user message:\n${input.text}` : input.text;
     reportTokenCost("tasking", [briefing.text, ...window.map((m) => m.text), question], briefing);
     const answerInput: AnswerInput = {
+      ...(repo ? { answerSupportContract: "v1" as const } : {}),
       question,
       conversationId: approvalCid,
       vaultBriefing: briefing.text,
@@ -2761,7 +2776,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const memoryAnswer = memorySession.required(result.readPaths)
+    const memoryAnswer = (memorySession.required(result.readPaths) || result.supportSelections !== undefined)
       ? await memorySession.finalize(result)
       : undefined;
     // Mutation receipts and approval guards retain priority over memory synthesis.

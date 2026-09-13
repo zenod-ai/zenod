@@ -158,6 +158,8 @@ export interface ChatToolEvent {
 }
 
 export interface AnswerInput {
+  /** Opt-in host support selection in the existing final completion. */
+  answerSupportContract?: "v1";
   question: string;
   /** Host-owned transient instruction for a bounded recovery attempt; never part of user content or tool arguments. */
   hostInstruction?: string;
@@ -359,6 +361,8 @@ export interface DriveSourceTools {
 }
 
 export interface AnswerResult {
+  /** Host resolves these turn-local IDs; model text never supplies canonical facts. */
+  supportSelections?: import("../engine/answerSupport.js").AnswerSupportSelection[];
   text: string;
   /** Vault-relative paths the loop actually opened — provenance for citations. */
   readPaths: string[];

@@ -64,6 +64,19 @@ describe("ZMR-8 customer streaming chat parity", () => {
       expect(result.sources).toEqual(expect.arrayContaining([expect.objectContaining({ path: manifest.refs.late, provider })]));
     });
   });
+  it("renders explicit selected source support without leaking model protocol or invented prose", async () => {
+    await journey(async (_input, tools) => {
+      const read = JSON.parse(await tools.readNote!("Log/2026-01-01.md#^e-000002"));
+      expect(read.answerSupports.length).toBeGreaterThan(0);
+      return { text: "Invented current value: turquoise.", readPaths: [read.identity], supportSelections: [{ id: read.answerSupports[0].id, mode: "raw_report" as const }] };
+    }, async (app, headers) => {
+      const result = await ask(app, headers, "¿Qué color original guardé para ORCHID?");
+      expect(result.text).toContain("amber");
+      expect(result.text).not.toContain("turquoise");
+      expect(result.text).not.toContain("supportSelections");
+      expect(result.text).toContain("Raw source report");
+    });
+  });
   it("does not turn a complete heading section into a whole-log absence claim", async () => {
     await journey(async (_input, tools) => {
       const first = JSON.parse(await tools.readNote!("Log/2026-01-01.md"));

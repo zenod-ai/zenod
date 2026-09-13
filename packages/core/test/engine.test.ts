@@ -495,7 +495,7 @@ describe("BrainEngine", () => {
     const restriction = "Orchid workshop does not repair batteries.";
     const unrelated = "Orchid workshop capacity is eight seats.";
     const oldClaim = "Orchid workshop repairs batteries.";
-    const content = [hypothesis, restriction, unrelated, oldClaim].join("\n");
+    const content = [hypothesis, restriction, unrelated, oldClaim].join("\n\n");
     const capture = await e.captureEvidence!({ content, source: "selftest" });
     const [path, anchor] = capture.evidenceRef.split("#^");
     const page = "Notes/Orchid.md";
@@ -506,9 +506,12 @@ describe("BrainEngine", () => {
     const git = simpleGit(repo.path); await git.add(page); await git.commit("generic mixed answer fixture"); await git.push();
     const modelAnswer = `Unverified hypothesis: "${hypothesis}" (${capture.evidenceRef})\nBattery restriction: "${restriction}" (${capture.evidenceRef})`;
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(page);
-      await tools.readNote!(capture.evidenceRef);
-      return { text: modelAnswer, readPaths: [page, capture.evidenceRef] };
+      const pageRead = JSON.parse(await tools.readNote!(page));
+      const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
+      return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
+        { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
+        { id: pageRead.factView.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
+      ] };
     };
     const result = await e.ask("What is the Orchid hypothesis and what batteries does the workshop not repair?");
     expect(modelAnswer).toContain(hypothesis);
@@ -517,22 +520,23 @@ describe("BrainEngine", () => {
     expect(result.text).not.toContain(unrelated);
     expect(result.text).toContain(capture.evidenceRef);
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(page); await tools.readNote!(capture.evidenceRef);
-      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef] };
+      await tools.readNote!(page); const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
+      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" }] };
     };
     const rawOnly = await e.ask("What is the unverified Orchid workshop hypothesis?");
     expect(rawOnly.text).toContain(hypothesis);
     expect(rawOnly.text).not.toContain(restriction);
     expect(rawOnly.text).not.toContain(unrelated);
     llm.answerOverride = async (_input, tools) => {
-      await tools.readNote!(page); await tools.readNote!(capture.evidenceRef);
-      return { text: `Currently: "${oldClaim}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef] };
+      const pageRead = JSON.parse(await tools.readNote!(page)); await tools.readNote!(capture.evidenceRef);
+      return { text: `Currently: "${oldClaim}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: pageRead.factView.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" }] };
     };
     const stale = await e.ask("Does the Orchid workshop repair batteries currently?");
     expect(stale.text).toContain(restriction);
     expect(stale.text).not.toContain(oldClaim);
     // Even a synonym-only display miss must never bypass host temporal authority.
-    const synonym = await e.ask("What is the Orchid workshop policy?");
+    const synonym = await e.ask("¿Qué trabajo rechaza el taller Orchid?");
+    expect(synonym.text).toContain(restriction);
     expect(synonym.text).not.toContain(oldClaim);
   });
 
