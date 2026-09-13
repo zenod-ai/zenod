@@ -24,7 +24,7 @@ class Recovery(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.when = datetime.now(timezone.utc).isoformat()
         self.app = {'applicationId': operator.APP, 'sourceType': 'docker', 'dockerImage': OLD,
-                    'replicas': 1, 'env': 'GIT_SHA=' + OLD_SHA + '\nSIGNUP=0\nMODEL=unchanged'}
+                    'replicas': 1, 'modeSwarm': None, 'serverId': None, 'env': 'GIT_SHA=' + OLD_SHA + '\nSIGNUP=0\nMODEL=unchanged'}
         self.old = {'Image': OLD, 'Env': self.app['env'].splitlines(),
                     'Mounts': [{'Source': 'zenod-mt-data', 'Target': '/data'}]}
         self.service = {'Spec': {'Name': operator.SERVICE, 'Mode': {'Replicated': {'Replicas': 1}}, 'TaskTemplate': {'ContainerSpec': self.old}},
@@ -146,7 +146,7 @@ class Recovery(unittest.TestCase):
             with patch.object(operator, 'ssh', side_effect=AssertionError('scale/network')), patch.object(operator, 'api', side_effect=AssertionError('API')):
                 with self.assertRaisesRegex(ValueError, 'local public application'):
                     operator.execute(args)
-            del self.app[key]
+            self.app[key] = None
 
     def test_swarm_override_or_remote_pending_drift_never_scales_or_mutates_api(self):
         args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=False)
