@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-09-06
-Updated: 2026-09-06
+Updated: 2026-09-13
 Repository: zenod-ai/zenod
 Primary document: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md
 Spine ID: ZMR
@@ -12,14 +12,16 @@ Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Additional root rationale: n/a
 GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
-Active spine steward: voice-note-identity delivery worker (current parent task /root)
-Steward since: 2026-09-06 00:19 CEST (2026-09-05 22:19 UTC)
-Last reconciled commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 deployed; final affected recall checks 3/3 pass
+Active spine steward: ZMR-reconciliation-planner (current task /root)
+Steward since: 2026-09-13T16:29:08.606098+00:00
+Last reconciled commit: 4b90068c27d0b59705d4a6c9584d2f0ba947dcd7 (main); September 13 backlog only, no new deployment
 Planner: Jordi + ZMR-release-planner
-Worker: /root/zmr_8_chat_review — verified facts on ordinary reads; /root/zmr_deploy_audit — sole production operator
-Tester: parent direct live MCP acceptance; independent agent review
+Worker: unassigned for ZMR-11–17; earlier assignments are historical
+Tester: unassigned for ZMR-15/17
 
 ## Role Bindings
+
+Current planner/steward: ZMR-reconciliation-planner (/root), bound to this spine for the approved September 13 backlog. No worker is dispatched. The previous bindings below document the earlier delivery phase.
 
 | Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
 |---|---|---|---|---|
@@ -31,9 +33,11 @@ Tester: parent direct live MCP acceptance; independent agent review
 ## Write Scope
 
 Bound spine: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md
-Active steward: ZMR-delivery-manager (parent task /root)
+Active steward: ZMR-reconciliation-planner (current task /root)
 
 The user requested this new release epic and backlog, then explicitly authorized delivery management and ticket subagents on 2026-09-06. ZMR-delivery-manager is the sole steward and remains primarily available for coordination and reporting. Ticket execution proceeds in dependency order after control-plane integration; ZMR-9/10 remain deferred until human SHIP acceptance. Parent edits are limited to lineage metadata and a compact new-child rollup. Existing Phylax delivery and Alpha launch state, gates and linked issues remain read-only. No sibling implementation ownership is transferred. Record outgoing/incoming steward, absolute time, base and next action at handoff. Book binding: inactive.
+
+September 13 authority: Jordi approved the target flow and requested creation of its backlog, including production deployment and testing. This turn creates/reconciles tickets and a planning PR only. Deployment/testing belongs to the planned bounded release scope once exact candidate, recovery and target prerequisites pass. Earlier authorizations persist; do not repeat permission requests for unchanged approved scope. No model switch, historical bulk repair, billing/signup or unrelated channel change is included.
 
 ## Authority By Artifact
 
@@ -61,6 +65,21 @@ Release name: **Memory Reliability**. No semantic version or launch date is inve
 
 ## Definition Of Done
 
+### SHIP: September 13 reconciliation increment
+
+1. Submit a representative long mixed-topic VN through existing supported production phone ingestion under a designated test identity.
+2. Open the archived audio, separate transcript and exact Log entry; verify identity, timestamps and unchanged source.
+3. Wait for enrichment; inspect all substantive idea outcomes, including explicit uncertainty without blocking clear topics.
+4. Verify existing-idea source linking, a new cited statement and a correction with history on the correct branches.
+5. Replay the capture/job identity and verify no duplicate evidence, claims or source links.
+6. Retrieve beginning/middle/end details and current/prior knowledge in three fresh conversations with exact citations.
+7. Hand Jordi the same deployed build, actual source refs, UI screenshots/MCP traces, measured tokens/cost, rollback and remaining risks after operator pass.
+
+ZMR-15 proves the integrated candidate before ZMR-16 deployment; ZMR-17 owns this live journey. No full-release success claim follows from this increment alone. Existing broader acceptance below remains open.
+
+### Earlier SHIP acceptance retained
+
+
 SHIP — exercise the exact approved live candidate through direct Zenod MCP, as Jordi explicitly authorized on 2026-09-06. The existing customer portal has no chat composer; a new browser surface or test environment is not a prerequisite. Use isolated conversation keys and clearly named test captures. Reuse existing components; BUILD means a bounded extension where the reviewed implementation lacks the behavior, subject to ZMR-1 current-main verification.
 
 - [ ] 1. Open the existing customer surface and capture a synthetic long, multi-topic memory; wait for the terminal receipt and open its evidence. BUILD extension of existing store/chat surfaces.
@@ -87,6 +106,17 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
+Phase: approved multi-idea reconciliation backlog, not dispatched
+Last verified: 2026-09-13 Europe/Paris
+Integration target: main
+Fresh base commit: 4b90068c27d0b59705d4a6c9584d2f0ba947dcd7 (planning base; re-pin at worker dispatch)
+Next action: integrate the planning PR, then bind ZMR-11 #1237 to reproduce and repair source/idea mapping.
+Blockers: no backlog-creation blocker. Planning PR integration and fresh worker binding precede implementation; production requires tested immutable candidate and verified recovery packet.
+Acceptance boundary: ZMR-11–17 extend the existing pipeline. ZMR-1–7 are closed/integrated; ZMR-8 remains open for broader release acceptance; ZMR-9/10 remain deferred. No production SHA was reverified in this backlog turn.
+
+### Historical production and repair state
+
+
 2026-09-08 bounded repair: [#1231](https://github.com/zenod-ai/zenod/issues/1231), owner current parent task. PRs [#1232](https://github.com/zenod-ai/zenod/pull/1232), [#1233](https://github.com/zenod-ai/zenod/pull/1233) and [#1234](https://github.com/zenod-ai/zenod/pull/1234) are merged; final implementation source `631f85109dfa45fed95394a1e94d2d709c373fe6`, dedicated worktree `/Users/jordi/Documents/GitHub/wt-voice-note-identity`, branch `codex/voice-note-grounded-recall`. Jordi authorized deployment/testing and required simple source-derived labels and general log-based retrieval. The historical source audit proved 11 PTT notes and three ordinary audio attachments; bounded metadata correction restored all five September VNs without changing transcript bodies. The source capture fix is deployed in default Phylax at `d02493cc0a7cb658ee5eedeea57039dd6fc264cb`. The final public retrieval rollout at `631f851` is verified: actual OCI/health, retained environment/mount, and all three fresh unhinted live recalls return the correct latest five September refs. The source capture companion remains connected/ready. Fresh phone acceptance passed at 19:25:42 UTC: original PTT identity, raw log voice_note/source timestamp, archive/transcription, completed enrichment, one newest entry and exact conversational recall all verified without correction. Remaining limitation: one earlier free-form summary used processing times despite correct source timestamps/order. Next action: retain the narrow prose-time limitation in #1231; no additional deployment is required for this passing capture test. No phrase-specific routing, new storage or separate VN index. [Evidence](evidence/voice-note-recency-2026-09-08/README.md). Prior release state below is historical.
 
 Phase: bounded production upgrade and observed repair loop complete; broader release acceptance remains open
@@ -101,6 +131,16 @@ Blockers: none for the bounded upgrade. Full original release benchmarks and hum
 Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0414121a6912ace825f3cdf07fc5f508944afc3cafec7352660db32a83042, actual task/OCI/health verified after update completed 2026-09-07 00:17:23 UTC. All three fresh boundary recalls passed and cited the current saved evidence. Filing had passed on c5da66f and remains included. [Exact final evidence](evidence/zmr-live-29ddb62/README.md). Original rollback and verified backup retained; no storage migration.
 
 ## Execution Cursor
+
+Last attempted: create approved target-flow backlog including production deployment and live acceptance.
+Result: ZMR-11–17 #1237–#1243 created and dependency-linked; isolated planning branch contains research, editable slide and synthetic evaluation harness.
+Execution status: backlog ready; implementation not queued
+Waiting on: planning PR integration and delivery-manager binding
+Approved work: backlog creation now; bounded implementation/deployment/testing scope documented for subsequent delivery. No paid model comparison or model switch.
+Next action: integrate planning PR, then begin ZMR-11 on fresh main.
+
+### Historical execution receipts
+
 
 Historical filing receipt: `c5da66f00ec6125e7e6f268d0d49291ac6ee8502` live at 22:36:24.878 UTC, image `sha256:d1b4b7448f9e681ef750710a6fd11d2f7368fe6dc717a35e0f1f60ad2f76561d`, actual OCI/task/health and preservation checks pass. Job `31c1d895-d5bb-4b06-9129-65bf9b109796` filed the exact repository boundary to Projects/Zenod.md (revision c906053f), one topic and zero uncertainty/pending. Natural recall audit `test_86c1f595cebc4d9ea46822a0bb9031b0` nevertheless returned obsolete Herald scope from old body text. Five correct new frontmatter memoryFacts verified; worker is reusing verified-fact projection on ordinary unpinned page reads. See `docs/evidence/zmr-live-c5da66f/`.
 
@@ -121,6 +161,8 @@ Next action: integrate final evidence; retain named broader acceptance limitatio
 
 
 ## Bootstrap Map
+
+Current increment: [approved target-flow research](planning/zenod-memory-reconciliation/README.md), [editable slide](planning/zenod-memory-reconciliation/slides/zenod-target-flow.pptx), [slide preview](planning/zenod-memory-reconciliation/slides/zenod-target-flow.png). These are required reads for ZMR-11–17. The standalone synthetic harness is not production replay or acceptance proof.
 
 | Priority | Link | Why It Matters | When To Read |
 |---|---|---|---|
@@ -158,7 +200,29 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 | D8 | 2026-09-06 | accepted | Anything unanswered | Simplest option, journal it, keep moving within scope. | Human gates remain gates; absent approval never authorizes production. | This spine | Material scope decision |
 | D9 | 2026-09-06 | accepted | In-place work | BUILD rows mean extending inspected existing primitives; PORT/DUPLICATE only when actually moving/copying proven code. | Do not label an in-place algorithm fix a wholesale port. | Reuse inventory | ZMR-1 inventory |
 
+| D10 | 2026-09-13 | accepted | Minimal reconciliation | One immutable voice note may update several branches. Group related ideas and apply the smallest cited change. | Reuse capture/enrichment; no second pipeline. | Approved target-flow slide and this conversation | Acceptance failure |
+| D11 | 2026-09-13 | accepted | Context and cost | Stable source passages, complete bounded branch discovery, batched atomic operations and explicit pending work. | A one-second latency or fixed cost is not promised; measure real calls. | Research note | Measured cost/quality |
+| D12 | 2026-09-13 | accepted | Model scope | Live configured classifier observed as MiniMax M3; DeepSeek comparison requested as price delta only. | No model switch or paid A/B is required for this release. | Read-only settings and pricing research | Explicit model-change request |
+| D13 | 2026-09-13 | accepted | Production and test scope | Backlog includes bounded Zenod-only production rollout, verified backups/rollback and live VN/MCP acceptance. | Prepare exact candidate/targets/delta before action; seek new approval only for material expansion. | Jordi approved backlog including deployment and test | New service/data/provider scope |
+| D14 | 2026-09-13 | accepted | Live test boundary | Use an existing supported test identity and synthetic source; inspect real phone ingress plus MCP evidence/recall. | No new browser chat product; no unrelated personal-page pollution or automatic historical repair. | Existing ZMR MCP acceptance decision and current target | Test-identity blocker |
+
 ## Issue Ledger
+
+### Current approved increment: multi-idea reconciliation
+
+Sequential default. #1237–#1243 are proposed and not queued. Reconcile and pin fresh main for each worker; no active owner is inferred from old /root assignment names.
+
+| Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| [ZMR-11 #1237](https://github.com/zenod-ai/zenod/issues/1237) | 1 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Preserve source identity while extracting every voice-note idea | proposed, not queued | planning PR | ../wt-zmr-11 at dispatch | codex/zmr-11 | pin fresh main | approved target flow | 2026-09-13 | Bind after planning PR |
+| [ZMR-12 #1238](https://github.com/zenod-ai/zenod/issues/1238) | 2 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Find complete branch context with a bounded memory catalog | proposed, not queued | ZMR-11 | ../wt-zmr-12 at dispatch | codex/zmr-12 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-13 #1239](https://github.com/zenod-ai/zenod/issues/1239) | 3 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Apply minimal cited changes to existing knowledge | proposed, not queued | ZMR-11, ZMR-12 | ../wt-zmr-13 at dispatch | codex/zmr-13 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-14 #1240](https://github.com/zenod-ai/zenod/issues/1240) | 4 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | unassigned | Make enrichment receipts and retries truthful and idempotent | proposed, not queued | ZMR-13 | ../wt-zmr-14 at dispatch | codex/zmr-14 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241) | 5 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Tester | unassigned | Prove multi-idea reconciliation and cost on an integrated candidate | proposed, not queued | ZMR-11, ZMR-12, ZMR-13, ZMR-14 | ../wt-zmr-15 at dispatch | codex/zmr-15 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-16 #1242](https://github.com/zenod-ai/zenod/issues/1242) | 6 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Operator | unassigned | Deploy the reviewed reconciliation candidate to production | proposed, not queued | ZMR-15 | ../wt-zmr-16 at dispatch | codex/zmr-16 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+| [ZMR-17 #1243](https://github.com/zenod-ai/zenod/issues/1243) | 7 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Tester | unassigned | Run production voice-note acceptance and hand off human testing | proposed, not queued | ZMR-16 | ../wt-zmr-17 at dispatch | codex/zmr-17 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
+
+### Earlier release ledger (historical assignments)
 
 Bound repair: [#1231](https://github.com/zenod-ai/zenod/issues/1231) — current worker; deployed, recent-entry recall passes; fresh phone acceptance passes; prose-time limitation remains; PRs #1232/#1233/#1234 merged through `631f851`; reuse existing transport/ingestion/evidence/receipt components. Acceptance: source PTT survives restart, timestamps/identity preserved, mixed-format newest-first retrieval and exact reads pass, arbitrary audio stays audio, deployment/live checks recorded. Existing release tickets below remain in their recorded state.
 
@@ -183,9 +247,12 @@ One ticket, one dedicated branch/worktree; manager records owner, absolute workt
 
 ## Human Gates
 
+For the September 13 increment, Jordi approved inclusion of production deployment and testing in the backlog. The exact candidate/target/delta, backup/restore and rollback are mandatory work before action, not a reason to repeat approval for unchanged scope. No production action occurs during backlog creation. Material destructive changes, a model/provider switch, sibling service/session changes or public/billing changes still require their exact separate gate. Historical deployment approvals above remain valid for their recorded scope.
+
+
 | Gate | Human Owner | Trigger | Exact Approval / Input Required | What May Continue |
 |---|---|---|---|---|
-| Deploy candidate | Jordi | Candidate passes local acceptance | Exact immutable image/targets/config delta, verified backup/restore and rollback under existing readiness rules | Local fixtures and review |
+| Deploy candidate | Jordi | ZMR-15 passes and ZMR-16 packet is concrete | Bounded rollout/test scope approved 2026-09-13; record immutable image/target/delta and verified recovery. Material scope expansion needs exact approval. | Local fixtures, review and packet preparation |
 | Bulk vault changes | Jordi | Maintenance proposal | Exact plan/diff and recovery path | Read-only proposal |
 | Provider/data-processing change | Jordi | Optional external index/provider | Named provider, data handling and cost terms | Offline/local evaluation |
 | Release acceptance | Jordi | Manager clean live journey | Same-candidate experiential acceptance | Prepare evidence |
@@ -201,12 +268,20 @@ At 2026-09-06 21:08 CEST, repair completed and sole ownership transferred to /ro
 
 | Date | Scope | Commit | Environment / Surface | Command / Method | Result | Evidence |
 |---|---|---|---|---|---|---|
+| 2026-09-13 | Approved reconciliation backlog | main base 4b90068 plus planning branch | isolated worktree / GitHub | strict spine validator, six offline harness tests, issue link verification and diff check | ZMR strict passes; six tests pass. Extended graph validator reports no ZMR errors, historical Foundation schema errors and an omitted sibling input; no full-graph pass claimed. No paid inference or production changes. | #1237–#1243 and research note |
 | 2026-09-06 | Prior review | ca39aa9 local | local checkout | npm run test -w zenod -- test/memoryEntries.test.ts test/aisdk-retrieval-retry.test.ts test/engine.test.ts | 60 tests passed; not release acceptance | [Review](planning/zenod-memory-reliability-review.md) |
 | 2026-09-06 | Release planning | working tree | local documents / GitHub | validate_spine.py --strict on ZMR; issue-body/link reconciliation | ZMR passes strict validation; #1188 tracker and #1189–#1198 created and linked | This task |
 | 2026-09-06 | Parent graph | working tree | Foundation + ZMR | validate_spine.py --graph | ZMR has no errors/warnings and reciprocal registration resolves; whole-family validation fails on Foundation's pre-existing missing Execution Cursor and legacy Decisions columns | Parent migration deferred to Foundation steward |
 | 2026-09-06 | Control-plane integration | base fb8b07c5910b3424c4a15da4e1cfaa920cee4e22 | isolated worktree / local documents | Shared updated validator: strict ZMR and Foundation+ZMR graph; git diff --check | ZMR strict and reciprocal graph checks pass; Foundation retains 11 pre-existing structural errors and 27 v2 warnings | No product or deployed behavior validated |
 
 ## Handoff Journal
+
+### 2026-09-13 — Approved reconciliation backlog and stewardship handoff
+
+Outgoing recorded steward: voice-note-identity delivery worker; earlier worker bindings are historical. Incoming: ZMR-reconciliation-planner (current /root), planning only, from main 4b90068. Seven tickets #1237–#1243 cover source mapping, complete context, atomic writes, receipts/retries, candidate proof, production rollout and live acceptance. No implementation dispatched and no production action performed. #1188 tracker and #1196 acceptance are reconciled rather than duplicated. Root edits are restricted to the ZMR rollup. Planning branch: codex/zmr-reconciliation-backlog. Next: integrate planning PR and bind ZMR-11.
+
+Tooling: Zenod create_issue returned silent_ack; read-only GitHub verification recovered #1237. Remaining ticket creation used gh with exact body files, avoiding duplicate creation. This is the previously recorded receipt gap, not an ingestion regression.
+
 
 ### User-authorized production rollout and reversibility
 

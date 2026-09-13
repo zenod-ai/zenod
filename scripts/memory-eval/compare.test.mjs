@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {score,reserveCost,inputFor} from './compare.mjs';
+const suite=JSON.parse(await readFile(new URL('./fixtures.json',import.meta.url)));
+test('gold labels are consistent with IDs and action constraints',()=>{for(const c of suite.cases){const result=score({decisions:c.expected.map(e=>({...e,rationale:'fixture'}))},c,suite.pages);assert.equal(result.valid,true,JSON.stringify(result));assert.equal(result.correct,result.total);}});
+test('duplicate and absent assignments cannot score as complete',()=>{const c=suite.cases[0];const d={...c.expected[0],rationale:'x'};assert.equal(score({decisions:[d,d]},c,suite.pages).valid,false);assert.equal(score({decisions:[d]},c,suite.pages).correct,0);});
+test('unknown claim IDs and malformed responses fail closed',()=>{const c=suite.cases[1];assert.equal(score({decisions:[{...c.expected[0],claimId:'invented',rationale:'x'}]},c,suite.pages).valid,false);assert.equal(score(null,c,suite.pages).correct,0);assert.equal(score({decisions:[null]},c,suite.pages).valid,false);});
+test('wrong destination is penalized even with structurally valid output',()=>{const c=suite.cases[0];const decisions=c.expected.map(e=>({...e,pageId:'poly',rationale:'x'}));assert.equal(score({decisions},c,suite.pages).correct,0);});
+test('budget reserves peak pricing and rejects unknown prices',()=>{assert.equal(reserveCost({pricing:{prompt:1,completion:2,overrides:[{prompt:3,completion:4}]}},100,10),12628);assert.throws(()=>reserveCost({pricing:{}},100,10));});
+test('long fixture has meaningful tail and no mutation of source fixture',()=>{const c=suite.cases.at(-1);const before=JSON.stringify(c);const input=inputFor(c,suite.pages);assert.ok(input.passages[0].text.length>5000);assert.equal(JSON.stringify(c),before);assert.match(input.passages.at(-1).text,/airport/);});
