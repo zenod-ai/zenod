@@ -137,6 +137,30 @@ class Recovery(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'one declared public replica'):
             self.load()
 
+    def test_swarm_override_or_remote_baseline_never_scales_or_calls_api(self):
+        args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=False)
+        for key, value in [('modeSwarm', {'Global': {}}), ('serverId', 'another-server')]:
+            self.app[key] = value
+            self.save('app', self.app)
+            self.flush()
+            with patch.object(operator, 'ssh', side_effect=AssertionError('scale/network')), patch.object(operator, 'api', side_effect=AssertionError('API')):
+                with self.assertRaisesRegex(ValueError, 'local public application'):
+                    operator.execute(args)
+            del self.app[key]
+
+    def test_swarm_override_or_remote_pending_drift_never_scales_or_mutates_api(self):
+        args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=False)
+        operator.write_receipt(self.root / 'queue-clear.json', {'manifestHash': operator.digest(self.manifest_path), 'mode': 'deploy', 'pendingDeployments': 0, 'checkedAt': self.when})
+        for key, value in [('modeSwarm', {'Global': {}}), ('serverId', 'another-server')]:
+            def api(root, endpoint, body=None):
+                self.assertTrue(endpoint.startswith('/application.one'))
+                self.assertIsNone(body)
+                return {**self.app, key: value}
+            with patch.object(operator, 'inspect_service', return_value=self.service), patch.object(operator, 'ssh', side_effect=AssertionError('scale/network')), patch.object(operator, 'api', side_effect=api):
+                with self.assertRaisesRegex(ValueError, 'placement/Swarm mode drift'):
+                    operator.execute(args)
+            self.assertFalse((self.root / 'deploy-intent.json').exists())
+
     def test_check_only_never_uses_network(self):
         args = types.SimpleNamespace(manifest=str(self.manifest_path), mode='deploy', candidate_sha=NEW_SHA, candidate_image=NEW, check_only=True)
         with patch.object(operator, 'ssh', side_effect=AssertionError('network')), patch.object(operator, 'api', side_effect=AssertionError('network')):

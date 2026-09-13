@@ -96,6 +96,7 @@ def load_recovery(manifest_path, mode, candidate_sha=None, candidate_image=None,
     rollback = {'image': old['Image'], 'sha': image['Config']['Labels']['org.opencontainers.image.revision']}
     require(re.fullmatch(IMAGE, rollback['image']) and re.fullmatch(SHA, rollback['sha']), 'Invalid recorded rollback identity')
     require(service['Spec']['Name'] == SERVICE and app['applicationId'] == APP and app['sourceType'] == 'docker', 'Snapshot target mismatch')
+    require(app.get('modeSwarm') is None and app.get('serverId') is None, 'Expected local public application without Swarm mode override')
     require(app.get('replicas') == 1 and service['Spec'].get('Mode', {}).get('Replicated', {}).get('Replicas') == 1, 'Expected one declared public replica')
     require(app['dockerImage'] == old['Image'] and container['Config']['Image'] == old['Image'], 'Baseline image mismatch')
     require(container['Image'] == image['Id'], 'Baseline actual image ID mismatch')
@@ -124,6 +125,7 @@ def check_drift(recovery, live, pending, identities):
     require(stable_env(current['Env']) == stable_env(old['Env']), 'Runtime environment drift')
     require(stable_env(pending['env'].splitlines()) == stable_env(recovery['app']['env'].splitlines()), 'Pending environment drift')
     require(pending['sourceType'] == recovery['app']['sourceType'], 'Source type drift')
+    require(pending.get('modeSwarm') is None and pending.get('serverId') is None, 'Application placement/Swarm mode drift')
     require(pending.get('replicas') == 1 and live['Spec'].get('Mode', {}).get('Replicated', {}).get('Replicas') in (0, 1), 'Replica configuration drift')
     require((current['Image'], git_sha(current['Env'])) in identities, 'Runtime image/SHA drift')
     require((pending['dockerImage'], git_sha(pending['env'].splitlines())) in identities, 'Pending image/SHA drift')
