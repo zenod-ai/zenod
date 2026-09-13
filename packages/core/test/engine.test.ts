@@ -1038,6 +1038,41 @@ describe("BrainEngine", () => {
     expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
   });
 
+  it("classifies semantic transcript without media wrapper and addresses repeated occurrences independently", async () => {
+    // Synthetic, hand-reviewed ideas: educational video, network effects, uncertain name.
+    // The repeated sentence supports two distinct ideas, not a deduplication key.
+    const transcript = "PatronBTC explica Bitcoin.\r\nLa red crece. La red crece.\r\nQuizás Znot. 👩🏽‍💻 café";
+    const prefix = 'Voice note "demo.ogg" ingested through Zenod media seam.\nRaw artifact: drive://synthetic\n\n';
+    const content = prefix + transcript;
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      expect(input.content).toBe(transcript);
+      const passages = (input as ClassifyInput & { sourcePassages?: Array<{ id: string; text: string }> }).sourcePassages;
+      expect(passages?.length).toBeGreaterThan(0);
+      const passage = passages!.find((part) => part.text.includes("La red crece. La red crece."))!;
+      return { confidence: 0.9, summary: "three ideas", tags: [], pages: [], topics: [
+        ...["Network adoption", "Network feedback"].map((topic, occurrence) => ({
+          topic, summary: topic, confidence: 0.9, disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
+          evidenceAssignments: [{ passageId: passage.id, quote: "La red crece.", occurrence }],
+        })),
+        { topic: "Educational video", summary: "video", confidence: 0.9, disposition: "evidence_only" as const, pages: [], evidenceQuotes: ["PatronBTC explica Bitcoin."] },
+        { topic: "Uncertain name", summary: "Znot", confidence: 0.1, disposition: "needs_clarification" as const, pages: [], evidenceQuotes: ["Quizás Znot."] },
+      ] };
+    });
+    const e = engine();
+    const captured = await e.captureEvidence!({ content, source: "whatsapp", sourceId: "synthetic-multi-idea" });
+    const before = await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8");
+    const result = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef,
+      ...{ semanticRange: { start: prefix.length, end: content.length } } });
+    expect(result.topics?.slice(0, 4).map((topic) => [topic.topic, topic.status])).toEqual([
+      ["Network adoption", "filed"], ["Network feedback", "filed"], ["Educational video", "filed"], ["Uncertain name", "uncertain"],
+    ]);
+    const spans = result.topics!.slice(0, 2).flatMap((topic) => topic.sourceSpans);
+    expect(spans.map((span) => content.slice(span.start, span.end))).toEqual(["La red crece.", "La red crece."]);
+    expect(spans[0]!.start).not.toBe(spans[1]!.start);
+    expect(result.topics!.flatMap((topic) => topic.sourceSpans).every((span) => span.start >= prefix.length)).toBe(true);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+  });
+
   it("records invalid and omitted source assignments without handing invented text to the composer", async () => {
     llm.classify = vi.fn(async () => ({ confidence: 0.99, summary: "bad quote", tags: [], pages: [], topics: [
       { topic: "invented", summary: "invented", confidence: 0.99, disposition: "integrate_page", evidenceQuotes: ["not in the capture"],
