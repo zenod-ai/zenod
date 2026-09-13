@@ -8,7 +8,7 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
-import {budgetLedger,parseWireUsage} from './policy.mjs';
+import {budgetLedger,parseWireUsage,prepareAsrEnvironment} from './policy.mjs';
 const {values:a}=parseArgs({options:{runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'}}});
 for(const k of ['candidate-sha','audio','audio-sha256','source','source-sha256','model-dir','model-sha256','out','prices','questions','seed-pages'])if(!a[k])throw new Error('Missing --'+k);
 if(!/^[a-f0-9]{40}$/.test(a['candidate-sha'])||process.env.GIT_SHA!==a['candidate-sha'])throw new Error('Exact candidate container GIT_SHA required');
@@ -18,7 +18,7 @@ const modelHash=createHash('sha256');for await(const chunk of createReadStream(j
 if((await readFile(join(resolve(a.runtime),'.gitsha'),'utf8')).trim()!==a['candidate-sha'])throw new Error('Baked candidate source identity mismatch');
 if(hash(audio)!==a['audio-sha256']||hash(source)!==a['source-sha256']||modelHash.digest('hex')!==a['model-sha256'])throw new Error('Frozen ASR input/model checksum mismatch');
 // Local ASR never receives cloud credentials; model asset must already exist.
-if(!process.env.ZMR_EVAL_OPENROUTER_KEY)throw new Error('Protected evaluation key required');
+const evaluationKey=prepareAsrEnvironment(process.env);
 const pricesBytes=await readFile(a.prices),prices=JSON.parse(pricesBytes);
 if(prices.syntheticTransportOnly||!prices.reviewedAt||!prices.source)throw new Error('Reviewed actual prices required');
 const seedBytes=await readFile(a['seed-pages']),seedPages=JSON.parse(seedBytes);
@@ -27,7 +27,6 @@ const questionsBytes=await readFile(a.questions),questions=JSON.parse(questionsB
 if(!Array.isArray(questions)||questions.length<3||questions.length>5||questions.some(q=>!q.id||typeof q.question!=='string'||q.question.length>1500))throw new Error('3–5 frozen recall questions required');
 // Each of the two frozen speech fixtures gets at most $0.50 and40wire attempts.
 const ledger=budgetLedger({budgetUsd:0.5,maxRequests:40,prices:prices.models});
-for(const key of ['GROQ_API_KEY','OPENAI_API_KEY','OPENROUTER_API_KEY'])delete process.env[key];
 process.env.ZENOD_WHISPER_MODEL_DIR=resolve(a['model-dir']);process.env.ZENOD_WHISPER_MODEL='large-v3-turbo';process.env.ZENOD_WHISPER_LANGUAGE='auto';
 let deniedNetworkCalls=0;const actualFetch=globalThis.fetch;
 globalThis.fetch=async(input,init)=>{
@@ -56,7 +55,7 @@ await save('pages-before.json',await snapshots());
 await writeFile(join(out,'frozen-seed-pages.json'),seedBytes,{mode:0o600});
 await writeFile(join(out,'frozen-speech-source.txt'),source,{mode:0o600});await writeFile(join(out,'frozen-questions.json'),questionsBytes,{mode:0o600});await writeFile(join(out,'reviewed-prices.json'),pricesBytes,{mode:0o600});
 const state=new SqliteStateStore(join(workspace,'memory.sqlite'));
-const llm=createBrainLlm({provider:'openrouter',apiKey:process.env.ZMR_EVAL_OPENROUTER_KEY,classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3'});
+const llm=createBrainLlm({provider:'openrouter',apiKey:evaluationKey,classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3'});
 const engine=createEngine({repo,llm,state,readSyncTtlMs:0});
 const store=new TaskJobStore(join(workspace,'jobs.sqlite'),'synthetic-asr');
 const settings={get:key=>({artifact_archive_provider:'local',artifact_archive_local_dir:join(workspace,'archive'),groq_api_key:'',openai_api_key:'',openrouter_api_key:''})[key]??null,whisperModel:()=> 'large-v3-turbo',openrouterTranscriptionModel:()=> 'openai/whisper-large-v3-turbo',longTranscriptionProvider:()=> 'local',useOpenAiForLongTranscription:()=>false};

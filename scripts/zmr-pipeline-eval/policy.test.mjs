@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sha256, validateFixture, sourceInput, utf16Range, budgetLedger, parseWireUsage, coverageRows} from './policy.mjs';
+import {sha256, validateFixture, sourceInput, utf16Range, budgetLedger, parseWireUsage, coverageRows, prepareAsrEnvironment} from './policy.mjs';
 const fixture = {id:'synthetic', seed_pages:{'Projects/A.md':'# A'}, transcript:'😀 Blue. Red.', ground_truth:[{id:'blue',start:2,end:7,text:'Blue.',operation:'add',page:'Projects/A.md'}]};
 const prices={'minimax/minimax-m3':{inputUsdPerMillion:0.30,outputUsdPerMillion:1.20,maxOutputTokens:1000}};
 test('freeze fixture, convert codepoints, and exclude ground truth from source input',()=>{
@@ -42,4 +42,14 @@ test('wire output cap must be explicit, valid and within reviewed ceiling before
     const body={model:'minimax/minimax-m3',...limits}; const before=JSON.stringify(body);
     assert.ok(ledger.reserve(body).reservedUsd>0);assert.equal(JSON.stringify(body),before);
   }
+});
+
+test('real ASR rejects simulation hooks and removes credentials before child processes',()=>{
+  for(const hook of [{NODE_ENV:'test'},{VITEST:'true'},{VITEST:''},{ZENOD_WHISPER_FAKE_TRANSCRIPT:'pretend speech'},{ZENOD_TRANSCRIPTION_FAKE_FAIL_PROVIDERS:'groq'}]) {
+    assert.throws(()=>prepareAsrEnvironment({ZMR_EVAL_OPENROUTER_KEY:'synthetic-test-key',...hook}),/rejects test/);
+  }
+  const env={NODE_ENV:'production',ZMR_EVAL_OPENROUTER_KEY:'synthetic-test-key',OPENROUTER_API_KEY:'synthetic-cloud',GROQ_API_KEY:'synthetic-groq',OPENAI_API_KEY:'synthetic-openai',PATH:'/synthetic/bin'};
+  const key=prepareAsrEnvironment(env);assert.equal(key,'synthetic-test-key');
+  assert.deepEqual(env,{NODE_ENV:'production',PATH:'/synthetic/bin'});
+  assert.throws(()=>prepareAsrEnvironment({NODE_ENV:'production'}),/Protected evaluation key/);
 });

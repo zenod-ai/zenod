@@ -69,3 +69,15 @@ export function coverageRows(fixture, result, contentOffset = 0) {
       structurallyAssigned: matches.length > 0, matchedTopics: matches, semanticVerdict: 'REVIEW_REQUIRED'};
   });
 }
+
+/** Isolate real ASR from test hooks and keep model credentials out of child env. */
+export function prepareAsrEnvironment(env) {
+  if (env.NODE_ENV === 'test' || Object.hasOwn(env, 'VITEST')
+      || Object.keys(env).some(key => /^ZENOD_(?:WHISPER_FAKE|TRANSCRIPTION_FAKE)/.test(key))) {
+    throw new Error('Actual ASR rejects test/provider simulation hooks');
+  }
+  const evaluationKey = env.ZMR_EVAL_OPENROUTER_KEY;
+  if (typeof evaluationKey !== 'string' || !evaluationKey) throw new Error('Protected evaluation key required');
+  for (const key of ['ZMR_EVAL_OPENROUTER_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY']) delete env[key];
+  return evaluationKey;
+}
