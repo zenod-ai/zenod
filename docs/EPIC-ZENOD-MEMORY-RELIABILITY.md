@@ -14,14 +14,14 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
-Last reconciled commit: 6e0af0c tested product; 9e032af operator-only integration; semantic acceptance failed and bounded repair wave active
+Last reconciled commit: b183806fd7a994eaaa8088ce600319042f2c815e; second actual semantic run failed; next bounded contract repair wave active
 Planner: Jordi + ZMR-release-planner
-Worker: /root/zmr11_worker ZMR-18; /root/zmr12_worker ZMR-19; /root/zmr_acceptance_design ZMR-20
+Worker: /root/zmr11_worker ZMR-21; /root/zmr12_worker ZMR-22; /root/zmr_acceptance_design ZMR-23
 Tester: /root owns next independent ZMR-15 acceptance after worker repairs; ZMR-17 pending candidate
 
 ## Role Bindings
 
-Current delivery manager/steward: ZMR-reconciliation-delivery-manager (/root). Jordi explicitly requested implementation and ticket subagents. ZMR-11–14 are integrated with independent review and CI. Actual ZMR-15 evaluation failed semantic acceptance; ZMR-18–20 are bounded repairs under the existing acceptance, pinned to 6e0af0c. Production remains unchanged pending quality and recovery evidence. Earlier bindings below are historical.
+Current delivery manager/steward: ZMR-reconciliation-delivery-manager (/root). ZMR-11–14 and 18–20 are integrated with review/CI. Second actual-model run still failed; ZMR-21–23 repair complete propositions, atomic per-idea decisions and explicit answer support. Parent alone stewards spines and integrates. Production remains unchanged. Earlier bindings below are historical.
 
 | Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
 |---|---|---|---|---|
@@ -106,13 +106,13 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: actual-model acceptance failed; three bounded repairs active
+Phase: second semantic acceptance failed; bounded contract repairs active
 Last verified: 2026-09-13 Europe/Paris
 Integration target: main
-Fresh base commit: 6e0af0c0f93d8320eb83effca519b015ea456a6c (frozen tested product and repair-wave base); operator-only PR1253 integrated at 9e032af
-Next action: independently review and integrate ZMR-18–20, freeze repaired candidate, rerun development regression and separately frozen Spanish/English ASR acceptance.
-Blockers: source-binding rejection, missing existing statement context and answer projection caused semantic failure. No production deployment until acceptance passes and fresh recovery packet is verified. Genuine phone acceptance still needs an isolated route; other authorized work continues.
-Acceptance boundary: extend the existing evidence/enrichment pipeline; no new service, model switch or historical refiling. ZMR-1–7 closed; ZMR-8 broader acceptance open; ZMR-9/10 deferred. Public runtime remains 631f85109dfa45fed95394a1e94d2d709c373fe6; no new rollout.
+Fresh base commit: b183806fd7a994eaaa8088ce600319042f2c815e (frozen second candidate and new repair-wave base)
+Next action: review/integrate ZMR-21–23, replay recorded model failures through the actual host before another paid regression, then preserve independent Spanish/English ASR for a passing candidate.
+Blockers: partial retries duplicated capacity/correction claims; short source fragments lost a requirement; uncertain known-project claim stayed outside meaning; lexical answer selection still discarded correct bilingual answers. Production requires semantic acceptance and verified recovery. Genuine phone acceptance still needs an isolated route.
+Acceptance boundary: existing evidence/enrichment pipeline and current models; no new service, provider switch or historical refiling. ZMR-8 broader acceptance remains open; ZMR-9/10 deferred. Public runtime remains 631f85109dfa45fed95394a1e94d2d709c373fe6; no new rollout.
 
 ### Historical production and repair state
 
@@ -132,12 +132,16 @@ Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0
 
 ## Execution Cursor
 
-Last attempted: real current-model evaluation of frozen candidate 6e0af0c against a budget-capped production baseline variant 9ce6e74.
-Result: raw evidence and all 12 structural invariants passed; 11/11 ideas recognized, only 4/11 bound to valid spans, 1/10 intended meaning operations correct. Complete recall 3/18 versus baseline 4/18. Candidate total $0.20395703; ingestion/reconciliation including retry $0.01392383. Semantic verdict FAIL; no deployment. [Measured evidence](evidence/zmr-reconciliation-2026-09-13/README.md).
-Execution status: ZMR-11–14 integrated; ZMR-18/19/20 dispatched in disjoint repair wave. Operator quiescence helper PR1253 independently reviewed, 23 offline tests and CI passed, integrated.
-Waiting on: bounded source, context and answer repairs, then actual independent acceptance.
-Approved work: implement/test/deploy existing increment using subagents; /root remains delivery manager. Deployment requires candidate quality and recovery checks. No paid model comparison or model switch.
-Next action: integrate reviewed repairs and test new frozen candidate. The failed fixture is now a development regression; separate ASR fixtures remain reserved for fresh acceptance.
+Last attempted: second actual current-model regression on b183806, after reviewed ZMR-18–20 and green CI.
+Result: source addresses cover all 11 expected idea rows; 12 reported preservation invariants pass, but manual partial-replay review finds duplicate meaning writes. Final strict minimal operations 6/10; complete recall 5/18 (19/48 answer subclaims). Ten otherwise complete model answers lost content in host finalization. Total $0.17521696 across 63 requests; ingestion/reconciliation including replay $0.00991026. Semantic FAIL; no ASR acceptance consumed or deployment performed.
+Execution status: first repair wave integrated. ZMR-21 source-proposition/routing contract, ZMR-22 atomic decisions/retry and ZMR-23 explicit answer support dispatched at pinned b183806.
+Waiting on: contract repairs and recorded-output regression before the next actual-model run.
+Approved work: continue bounded implementation/test/deployment scope with subagents; /root remains delivery manager. No paid model comparison, model switch or new storage authority.
+Next action: review complete decisions and explicit support selection, test new frozen candidate, then independent ASR and production recovery/live testing. [Evidence](evidence/zmr-reconciliation-2026-09-13/README.md).
+
+### Contract repair wave — 2026-09-13
+
+Pinned b183806fd7a994eaaa8088ce600319042f2c815e, no rebases during wave. ZMR-21 owns classifier/source proposition support; ZMR-22 owns reconciliation and filing retry; ZMR-23 owns answer support/result and finalization. Workers coordinate distinct engine/adapter sections and do not share working directories. This repairs the same acceptance; its gates are unchanged. Explicit support IDs replace failed lexical answer selection without another model service. Per-idea decisions reuse the existing receipt/publication transaction. Independent ASR cases stay unavailable to implementation tuning.
 
 ### Acceptance repair wave — 2026-09-13
 
@@ -242,7 +246,7 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 
 ### Current approved increment: multi-idea reconciliation
 
-Dependencies control delivery. #1237–#1243 are approved; #1254–#1256 repair measured failures within that acceptance. The disjoint repair wave is pinned to 6e0af0c; re-pin after integration, not during worker proofs.
+Dependencies control delivery. #1237–#1243 are approved; #1254–#1256 repair measured failures within that acceptance. The current contract repair wave #1261–#1263 is pinned to b183806; re-pin after integration, not during worker proofs.
 
 | Issue | Wave | Method | Budget | Role | Owner / Assignment | Title | Status | Depends On | Worktree | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -250,12 +254,15 @@ Dependencies control delivery. #1237–#1243 are approved; #1254–#1256 repair 
 | [ZMR-12 #1238](https://github.com/zenod-ai/zenod/issues/1238) | 2 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | completed catalog assignment | Find complete branch context with a bounded memory catalog | integrated; PR1246 | ZMR-11 | ../wt-zmr-12 at dispatch | codex/zmr-12 | f4bf9bb | independent review + CI + 21 combined tests | 2026-09-13 | Real-model routing in ZMR-15 |
 | [ZMR-13 #1239](https://github.com/zenod-ai/zenod/issues/1239) | 3 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Apply minimal cited changes to existing knowledge | integrated; PR1249 | ZMR-11, ZMR-12 | ../wt-zmr-13 at dispatch | codex/zmr-13 | 121fa34 | independent final5d84eed review + 19 focused tests + CI | 2026-09-13 | Real semantic evaluation in ZMR-15 |
 | [ZMR-14 #1240](https://github.com/zenod-ai/zenod/issues/1240) | 4 | BUILD extension; existing pipeline | 90 min checkpoint | Ticket worker | completed | Truthful durable receipts and retries | integrated; PR1251 | ZMR-13 | ../wt-zmr-14 | codex/zmr-14 | 6e0af0c | independent 36 critical tests, build and CI; actual preservation pass | 2026-09-13 | Retain quality gate |
-| [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241) | 5 | BUILD evaluation; actual pipeline | 90 min checkpoint | Tester | /root | Prove multi-idea reconciliation and cost | semantic FAIL on first candidate | ZMR-18–20 repairs | ../wt-zmr-candidate | detached | 6e0af0c | independent semantic review; 3/18 complete recall | 2026-09-13 | Repaired regression + independent ASR |
+| [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241) | 5 | BUILD evaluation; actual pipeline | 90 min checkpoint | Tester | /root | Prove multi-idea reconciliation and cost | semantic FAIL on two candidates | ZMR-21–23 repairs | ../wt-zmr-candidate-repair | detached | b183806 | independent 6/10 minimal operations, 5/18 complete recall | 2026-09-13 | Recorded-output repair, regression, then independent ASR |
 | [ZMR-16 #1242](https://github.com/zenod-ai/zenod/issues/1242) | 6 | BUILD helper; existing deployment | 90 min checkpoint | Operator | /root | Deploy reviewed candidate | helper PR1245/1253 integrated; deployment gated | ZMR-15 | ../wt-zmr-16-quiesce | codex/zmr-16-quiesce | 9e032af | 23 offline tests, installed Dokploy review, CI | 2026-09-13 | Fresh recovery packet after quality pass |
 | [ZMR-17 #1243](https://github.com/zenod-ai/zenod/issues/1243) | 7 | BUILD extension; reuse existing pipeline | 90 min checkpoint | Tester | unassigned | Run production voice-note acceptance and hand off human testing | approved, dependency waiting | ZMR-16 | ../wt-zmr-17 at dispatch | codex/zmr-17 | pin fresh main | approved target flow | 2026-09-13 | Wait for dependencies |
-| [ZMR-18 #1254](https://github.com/zenod-ai/zenod/issues/1254) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Resolve exact source references safely | active | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-18 | codex/zmr-18 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Focused repair, tests and independent review |
-| [ZMR-19 #1255](https://github.com/zenod-ai/zenod/issues/1255) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Supply existing statements and correction context | active | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-19 | codex/zmr-19 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Focused repair, tests and independent review |
-| [ZMR-20 #1256](https://github.com/zenod-ai/zenod/issues/1256) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr_acceptance_design | Preserve supported question-relevant answers | active | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-20 | codex/zmr-20 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Focused repair, tests and independent review |
+| [ZMR-18 #1254](https://github.com/zenod-ai/zenod/issues/1254) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Resolve exact source references safely | integrated PR1258; second semantic gate failed | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-18 | codex/zmr-18 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Follow measured contract repairs |
+| [ZMR-19 #1255](https://github.com/zenod-ai/zenod/issues/1255) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Supply existing statements and correction context | integrated PR1259; second semantic gate failed | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-19 | codex/zmr-19 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Follow measured contract repairs |
+| [ZMR-20 #1256](https://github.com/zenod-ai/zenod/issues/1256) | repair A | BUILD repair; reuse existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr_acceptance_design | Preserve supported question-relevant answers | integrated PR1260; second semantic gate failed | measured ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-20 | codex/zmr-20 | 6e0af0c | issue reproducer and frozen failed run | 2026-09-13 | Follow measured contract repairs |
+| [ZMR-21 #1261](https://github.com/zenod-ai/zenod/issues/1261) | repair B | BUILD contract repair; existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Complete source propositions and routing certainty | active | second ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-21 | codex/zmr-21 | b183806 | recorded actual failures in #1241 | 2026-09-13 | Implement generic recorded-output regressions, review and CI |
+| [ZMR-22 #1262](https://github.com/zenod-ai/zenod/issues/1262) | repair B | BUILD contract repair; existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Atomic per-idea decisions and partial retries | active | second ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-22 | codex/zmr-22 | b183806 | recorded actual failures in #1241 | 2026-09-13 | Implement generic recorded-output regressions, review and CI |
+| [ZMR-23 #1263](https://github.com/zenod-ai/zenod/issues/1263) | repair B | BUILD contract repair; existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr_acceptance_design | Explicit bounded answer support selection | active | second ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-23 | codex/zmr-23 | b183806 | recorded actual failures in #1241 | 2026-09-13 | Implement generic recorded-output regressions, review and CI |
 
 ### Earlier release ledger (historical assignments)
 
@@ -492,3 +499,11 @@ Use EpicSpine and the operational preamble above. Ticket workers read Foundation
 - ZMR-18 /root/zmr11_worker: exact unique and adjacent-passage source references; ambiguous/wrong-ID references fail closed; shared-passage independent ideas preserved.
 - ZMR-19 /root/zmr12_worker: bounded existing statement context, semantic linking and explicit correction support; qualification guards remain effective.
 - ZMR-20 /root/zmr_acceptance_design: question-relevant supported answer survives host projection, with current/prior and citation constraints intact.
+
+### Contract repair dispatch bindings — 2026-09-13
+
+Use EpicSpine and the operational preamble above. Root -> ZMR -> linked issue; Book inactive. Parent /root is sole delivery manager/spine steward. All workers use pinned b183806fd7a994eaaa8088ce600319042f2c815e, main integration, ledger worktrees/branches and 90-minute checkpoints. Write bound code/tests and detailed issue handoff only; no self-merge, production action, provider/model change, new storage service or private fixture publication. No paid reruns before review; ASR cases remain untouched. Replay recorded actual failures and generic variants; keep exact source/qualification, current/prior authority and successful sibling independence. Handoff exact SHA/PR/tests/limitations. Go.
+
+- ZMR-21: preserve complete atomic propositions and bounded exact context; known-project uncertainty reaches reconciliation as uncertain knowledge, while ambiguous destination stays pending.
+- ZMR-22: prevalidate one complete decision per idea/branch; existing receipt completion suppresses replay even if generated operation wording changes; correction state/history remain distinct.
+- ZMR-23: model selects host-owned support IDs in the existing final completion; host validates and renders canonical facts/history or complete raw reports. Internal selection JSON must not leak into user streaming. No widening synonym lists or new judge service.
