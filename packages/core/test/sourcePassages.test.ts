@@ -83,6 +83,70 @@ describe("original-evidence passage addresses", () => {
     }
   });
 
+  it("rejects wrong addresses, gaps, altered text and ambiguous occurrence values", () => {
+    const content = "x".repeat(790) + "Decision: blue on Friday." + " y".repeat(800);
+    const window = sourceWindows({ content })[0]!;
+    const quote = "Decision: blue on Friday.";
+    const base = { ...topic, sourceRange: window.range, sourcePassages: window.passages };
+    const assignment = { passageId: window.passages[0]!.id, quote, occurrence: 0 };
+    expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [assignment] }).invalid).toBe(false);
+    for (const sourcePassages of [
+      window.passages.filter((_, i) => i !== 1),
+      window.passages.map((p, i) => i === 1 ? { ...p, text: p.text + "fabricated" } : p),
+      [...window.passages, window.passages[0]!],
+    ]) expect(resolveTopicSpans(content, { ...base, sourcePassages, evidenceAssignments: [assignment] }).invalid).toBe(true);
+    expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [{ ...assignment, passageId: window.passages.at(-1)!.id }] }).invalid).toBe(true);
+    for (const occurrence of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [{ ...assignment, occurrence }] }).invalid).toBe(true);
+    }
+    expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [{ ...assignment, quote: "Decision: blue  on Friday." }] }).invalid).toBe(true);
+  });
+
+  it("keeps ownership and multiple ideas independent for a shared cross-window quote", () => {
+    const content = "x".repeat(11_990) + "We chose the blue cover for Friday." + " y".repeat(900);
+    const window = sourceWindows({ content })[0]!;
+    const quote = "We chose the blue cover for Friday.";
+    const neighbor = window.passages.find(p => p.start === window.range.end)!;
+    const topics = ["Cover color", "Delivery day"].map(name => ({ ...topic, topic: name,
+      sourceRange: window.range, sourcePassages: window.passages,
+      evidenceAssignments: [{ passageId: neighbor.id, quote, occurrence: 1 }] }));
+    for (const idea of topics) {
+      const resolved = resolveTopicSpans(content, idea);
+      expect(resolved.invalid).toBe(false);
+      expect(content.slice(resolved.spans[0]!.start, resolved.spans[0]!.end)).toBe(quote);
+    }
+    const neighborOnly = neighbor.text.slice(neighbor.text.indexOf("the blue"), neighbor.text.indexOf("Friday.") + 7);
+    expect(resolveTopicSpans(content, { ...topics[0]!, evidenceAssignments: [{ passageId: neighbor.id, quote: neighborOnly, occurrence: 0 }] }).invalid).toBe(true);
+    expect(topics).toHaveLength(2);
+  });
+
+  it("never rebinds a duplicate quote to another passage and coalesces duplicate support only", () => {
+    const quote = "Repeat this.";
+    const content = quote + " x".repeat(400) + quote;
+    const window = sourceWindows({ content })[0]!;
+    const first = window.passages[0]!;
+    const last = window.passages.at(-1)!;
+    for (const [passage, expected] of [[first, 0], [last, content.lastIndexOf(quote)]] as const) {
+      const resolved = resolveTopicSpans(content, { ...topic, sourcePassages: window.passages,
+        evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 1 }] });
+      expect(resolved.invalid).toBe(false);
+      expect(resolved.spans[0]!.start).toBe(expected);
+    }
+    const bridgedContent = "x".repeat(790) + "Two claims share this exact sentence.";
+    const bridged = sourceWindows({ content: bridgedContent })[0]!;
+    const evidenceAssignments = bridged.passages.map(p => ({ passageId: p.id,
+      quote: "Two claims share this exact sentence.", occurrence: 0 }));
+    for (const name of ["Claim one", "Claim two"]) {
+      const resolved = resolveTopicSpans(bridgedContent, { ...topic, topic: name,
+        sourcePassages: bridged.passages, evidenceAssignments });
+      expect(resolved.invalid).toBe(false);
+      expect(resolved.spans).toHaveLength(1);
+      expect(resolved.spans[0]).toMatchObject({ start: 790, end: bridgedContent.length });
+    }
+    expect(resolveTopicSpans(bridgedContent, { ...topic, sourcePassages: [bridged.passages[0]!],
+      evidenceAssignments: [evidenceAssignments[0]!] }).invalid).toBe(true);
+  });
+
   it("does not accept forged, duplicate, unresolved, or unsupported assigned passage reviews", () => {
     const content = "A durable idea. Some conversational filler.";
     const window = sourceWindows({ content })[0]!;

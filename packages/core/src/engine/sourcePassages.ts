@@ -68,19 +68,40 @@ export function resolveTopicSpans(content: string, topic: ClassificationTopic) {
   const spans: Array<{ start: number; end: number; passageId?: string }> = [];
   let invalid = !(topic.evidenceAssignments?.length || topic.evidenceQuotes.length);
   for (const assignment of topic.evidenceAssignments ?? []) {
-    const passage = topic.sourcePassages?.find(p => p.id === assignment.passageId);
-    if (!passage || !assignment.quote.trim() || !Number.isSafeInteger(assignment.occurrence) || assignment.occurrence < 0 || assignment.occurrence >= passage.text.length) {
+    const supplied = topic.sourcePassages ?? [];
+    const addressed = supplied.filter(p => p.id === assignment.passageId);
+    const passage = addressed[0];
+    if (addressed.length !== 1 || !passage || !assignment.quote.trim()
+      || !Number.isSafeInteger(assignment.occurrence) || assignment.occurrence < 0) {
       invalid = true; continue;
     }
-    let local = -1;
-    for (let n = 0; n <= assignment.occurrence; n++) {
-      local = passage.text.indexOf(assignment.quote, local + 1);
-      if (local < 0) break;
-    }
-    if (local < 0 || content.slice(passage.start + local, passage.start + local + assignment.quote.length) !== assignment.quote) {
+    // Search only a contiguous, byte-exact run of supplied host passages. A quote
+    // may cross a segmentation boundary, but its address must overlap the match.
+    const ordered = [...supplied].sort((a, b) => a.start - b.start);
+    const index = ordered.indexOf(passage);
+    let first = index;
+    let last = index;
+    while (first > 0 && ordered[first - 1]!.end === ordered[first]!.start) first--;
+    while (last + 1 < ordered.length && ordered[last]!.end === ordered[last + 1]!.start) last++;
+    const run = ordered.slice(first, last + 1);
+    if (run.some(p => !Number.isSafeInteger(p.start) || !Number.isSafeInteger(p.end)
+      || p.start < 0 || p.end <= p.start || p.end > content.length
+      || content.slice(p.start, p.end) !== p.text)) {
       invalid = true; continue;
     }
-    spans.push({ start: passage.start + local, end: passage.start + local + assignment.quote.length, passageId: passage.id });
+    const start = run[0]!.start;
+    const segment = content.slice(start, run.at(-1)!.end);
+    const matches: number[] = [];
+    for (let local = segment.indexOf(assignment.quote); local >= 0;
+      local = segment.indexOf(assignment.quote, local + 1)) {
+      const absolute = start + local;
+      if (absolute < passage.end && absolute + assignment.quote.length > passage.start) matches.push(absolute);
+    }
+    // Occurrence is useful only for repeated matches. A unique exact address is
+    // already unambiguous; redundant model numbering must not discard evidence.
+    const absolute = matches.length === 1 ? matches[0] : matches[assignment.occurrence];
+    if (absolute === undefined) { invalid = true; continue; }
+    spans.push({ start: absolute, end: absolute + assignment.quote.length, passageId: passage.id });
   }
   // Legacy classifiers retain exact, unique quote resolution inside their owned chunk.
   // Addressed assignments supersede the legacy field when both are returned.

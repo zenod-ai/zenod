@@ -85,7 +85,7 @@ export interface ClassificationPage {
 export interface ClassificationTopic {
   /** Host-owned stable identity, retained by pending filing replay. */
   ideaId?:string;
-  /** Exact source assignments; occurrence is zero-based within the addressed passage. */
+  /** Exact source assignments. Quote must overlap the addressed passage and may span contiguous supplied neighbors. occurrence disambiguates repeated matches (zero-based); redundant numbering is ignored for one exact match. */
   evidenceAssignments?: Array<{ passageId: string; quote: string; occurrence: number }>;
   /** Engine-owned permitted passage table, overwritten after each model call. */
   sourcePassages?: SourcePassage[];
