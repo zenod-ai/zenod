@@ -107,6 +107,9 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     const ideaIds = operation.ideaIds ?? (input.ideas ? [] : prepared.ideas.filter(idea=>idea.sourceIds.some(id=>sourceIds.includes(id))).map(idea=>idea.id));
     const sources = sourceIds.map(id => prepared.request.sources.find(source => source.id === id));
     const fail = (reason: string) => result.pending.push({sourceIds, ideaIds, reason});
+    // Missing later evidence may negate/correct an earlier span of this idea.
+    // Do not publish a provisional current claim from incomplete source support.
+    if (ideaIds.some(id=>prepared.omittedSourcesByIdea.has(id))) continue;
     if (!ideaIds.length || ideaIds.some(id=>!prepared.request.ideas.some(idea=>idea.id===id && idea.sourceIds.some(sourceId=>sourceIds.includes(sourceId))))) { fail("idea_assignment_invalid"); continue; }
     if (!sourceIds.length || sources.some(source => !source) || !operation.sourceQuote.trim() || operation.sourceQuote.length > 1600
       || !sources.some(source => source!.text.includes(operation.sourceQuote))) { fail("source_support_invalid"); continue; }

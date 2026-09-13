@@ -128,13 +128,17 @@ it('keeps an idea pending when its later source associations or source text exce
   for(const size of [30,1600]) {
     const sources=Array.from({length:12},(_,i)=>({id:`s${i}`,start:i*size,end:(i+1)*size,text:(i===11?'Correction: latest decision differs.':'Early note.').padEnd(size,'x')}));
     const prepared=input('# A\n[[Index]]\n',sources.map(source=>source.text).join(''));
-    prepared.input.sources=sources;
-    prepared.input.ideas=[{id:'recurring',topic:'One recurring idea',sourceIds:sources.map(source=>source.id)}];
+    const sibling={id:'clear',start:0,end:23,text:'Independent clear note.'};
+    prepared.input.sources=[sibling,...sources];
+    prepared.input.ideas=[{id:'recurring',topic:'One recurring idea',sourceIds:sources.map(source=>source.id)},{id:'clear-idea',topic:'Independent idea',sourceIds:['clear']}];
     const bounded=prepareReconciliation(prepared.input);
     expect(bounded.request.ideas[0]).toMatchObject({sourcePartial:true});
     expect(bounded.omittedSourcesByIdea.get('recurring')).toContain('s11');
-    const result=await applyReconciliation(bounded,[{...op('add','Early note.'),ideaIds:['recurring'],sourceIds:['s0'],statement:'Early note.'}]);
+    const result=await applyReconciliation(bounded,[{...op('add','Early note.'),ideaIds:['recurring'],sourceIds:['s0'],statement:'Early note.'},{...op('add',sibling.text),ideaIds:['clear-idea'],sourceIds:['clear'],statement:sibling.text}]);
     expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['recurring'],sourceIds:expect.arrayContaining(['s11']),reason:'reconciliation_source_context_incomplete'}));
     expect(result.appliedOperationIds).toHaveLength(1);
+    expect(result.appliedOperations[0]!.ideaIds).toEqual(['clear-idea']);
+    expect(result.content).not.toContain('Early note.');
+    expect(result.content).toContain(sibling.text);
   }
 });
