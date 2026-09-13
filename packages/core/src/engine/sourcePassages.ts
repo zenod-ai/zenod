@@ -64,7 +64,9 @@ export function sourceWindows(input: Pick<StoreInput, "content" | "semanticRange
 }
 
 /** Addresses prove exact provenance, not semantic relevance. Never deduplicate ideas by address. */
-export function resolveTopicSpans(content: string, topic: ClassificationTopic) {
+export function resolveTopicSpans(content: string, topic: ClassificationTopic, options: {
+  completePropositions?: boolean; semanticRange?: { start: number; end: number } | undefined;
+} = {}) {
   const spans: Array<{ start: number; end: number; passageId?: string }> = [];
   let invalid = !(topic.evidenceAssignments?.length || topic.evidenceQuotes.length);
   for (const assignment of topic.evidenceAssignments ?? []) {
@@ -114,8 +116,63 @@ export function resolveTopicSpans(content: string, topic: ClassificationTopic) {
     spans.push({ start: range.start + local, end: range.start + local + quote.length });
   }
   // A neighboring passage can complete a proposition, but never generate a neighbor-only topic.
-  if (topic.sourceRange && !spans.some(s => s.start < topic.sourceRange!.end && s.end > topic.sourceRange!.start)) invalid = true;
-  return { invalid, spans: [...new Map(spans.map(s => [`${s.start}:${s.end}`, s])).values()] };
+  const outsideOwned = !!topic.sourceRange && !spans.some(s => s.start < topic.sourceRange!.end && s.end > topic.sourceRange!.start);
+  const nonOwnedContext = !invalid && spans.length > 0 && outsideOwned;
+  if (outsideOwned) invalid = true;
+  const unique = [...new Map(spans.map(s => [`${s.start}:${s.end}`, s])).values()];
+  // Original matches remain the identity input. Expanded context is a separate
+  // host-owned support envelope and cannot rescue an invalid/neighbor-only match.
+  if (options.completePropositions && topic.sourcePassages?.length && !invalid) {
+    const supportSpans = completeSourcePropositions(content, topic.sourcePassages, unique, options.semanticRange);
+    return { invalid: supportSpans === null, spans: unique, supportSpans: supportSpans ?? [] };
+  }
+  return { invalid, spans: unique, nonOwnedContext };
+}
+
+const MAX_PROPOSITION_CONTEXT_CHARS = 3200;
+type SourceSpan = { start: number; end: number; passageId?: string };
+
+/** Exact bounded source context, not a semantic claim validator. Paragraphs keep
+ * adjacent attribution/qualification together. Continuous ASR uses complete
+ * sentences plus one preceding/following sentence, without clipping any sentence.
+ */
+function completeSourcePropositions(content: string, passages: SourcePassage[], spans: SourceSpan[],
+  semanticRange?: { start: number; end: number }): SourceSpan[] | null {
+  const bounds = semanticBounds({ content, ...(semanticRange ? { semanticRange } : {}) });
+  const text = content.slice(bounds.start, bounds.end);
+  const paragraphs: Array<{ start: number; end: number }> = [];
+  let start = bounds.start;
+  for (const match of text.matchAll(/\r?\n[ \t]*\r?\n/g)) {
+    paragraphs.push({ start, end: bounds.start + match.index! });
+    start = bounds.start + match.index! + match[0].length;
+  }
+  paragraphs.push({ start, end: bounds.end });
+  const ordered = [...passages].sort((a, b) => a.start - b.start);
+  const result: SourceSpan[] = [];
+  for (const span of spans) {
+    const containing = paragraphs.filter(p => p.start < span.end && p.end > span.start);
+    if (!containing.length) return null;
+    let envelope = { start: containing[0]!.start, end: containing.at(-1)!.end };
+    if (envelope.end - envelope.start > MAX_PROPOSITION_CONTEXT_CHARS) {
+      const sentences = [...new Intl.Segmenter("en", { granularity: "sentence" }).segment(content.slice(envelope.start, envelope.end))]
+        .map(part => ({ start: envelope.start + part.index, end: envelope.start + part.index + part.segment.length }));
+      const first = sentences.findIndex(part => part.end > span.start);
+      const last = sentences.findLastIndex(part => part.start < span.end);
+      if (first < 0 || last < first) return null;
+      envelope = { start: sentences[Math.max(0, first - 1)]!.start, end: sentences[Math.min(sentences.length - 1, last + 1)]!.end };
+    }
+    if (envelope.end - envelope.start > MAX_PROPOSITION_CONTEXT_CHARS) return null;
+    // Compute true boundaries against original semantic source, then prove every
+    // byte was actually supplied. Table cuts must never become sentence boundaries.
+    let covered = envelope.start;
+    for (const passage of ordered.filter(p => p.start < envelope.end && p.end > envelope.start)) {
+      if (passage.start > covered || content.slice(passage.start, passage.end) !== passage.text) return null;
+      covered = Math.max(covered, passage.end);
+    }
+    if (covered < envelope.end) return null;
+    result.push({ ...span, ...envelope });
+  }
+  return [...new Map(result.map(span => [`${span.start}:${span.end}`, span])).values()];
 }
 
 /** Coverage means a passage was reviewed, not that every idea was correctly understood. */
