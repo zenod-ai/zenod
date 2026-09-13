@@ -35,11 +35,11 @@ it('links an exact existing thought without duplicate prose and rejects date/own
     expect(rejected.content).toBe(raw);
   }
 });
-it('rejects unsupported quotes and target IDs while independently adding valid operations', async () => {
+it('rejects unsupported quotes before any other decision for the same idea', async () => {
   const text='Video explains logarithms.'; const prepared=input('# A\n[[Index]]\n',text);
   const result=await applyReconciliation(prepared,[op('add','Invented claim.'),op('add',text)]);
-  expect(result.content).not.toContain('Invented claim'); expect(result.content).toContain(text);
-  expect(result.pending).toHaveLength(1); expect(result.appliedOperationIds).toHaveLength(1);
+  expect(result.content).not.toContain('Invented claim'); expect(result.content).not.toContain(text);
+  expect(result.pending).toHaveLength(1); expect(result.appliedOperationIds).toHaveLength(0);
 });
 it('reinforces a Spanish paraphrase with one new citation and no duplicate thought', async () => {
   const raw='# A\n\nThe video explains logarithms as orders of magnitude.\n[[Index]]\n';
@@ -204,4 +204,65 @@ it('refuses to borrow a retracted number from an unrelated target',async()=>{
  const prepared=input(raw,source);
  const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement:'Guest capacity is 15.',correctionQuote:source}]);
  expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+});
+
+it('rejects all mixed decisions for one idea before writing while preserving a separate sibling', async () => {
+  for (const secondKind of ['link_source','supersede'] as const) {
+    const source='Capacity is 6. Correction: opening moves to 19. Tools are inspected.';
+    const initial=input('# A\nCapacity is 6.\nOpening is on 12.\n[[Index]]\n',source);
+    initial.input.ideas=[{id:'ambiguous',topic:'Capacity or opening',sourceIds:['p1']},{id:'tools',topic:'Tools',sourceIds:['p1']}];
+    const prepared=prepareReconciliation(initial.input);
+    const target=prepared.request.statements.find(s=>s.text===(secondKind==='link_source'?'Capacity is 6.':'Opening is on 12.'))!;
+    const result=await applyReconciliation(prepared,[
+      {...op('add','Capacity is 6.'),ideaIds:['ambiguous']},
+      {...op(secondKind,secondKind==='link_source'?':123:456':'opening moves to 19',target.id),ideaIds:['ambiguous'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'},
+      {...op('add','Tools are inspected.'),ideaIds:['tools']},
+    ]);
+    expect(result.appliedOperations.map(o=>o.ideaIds)).toEqual([['tools']]);
+    expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['ambiguous'],reason:'reconciliation_multiple_decisions'}));
+    expect(result.content.split('Capacity is 6.')).toHaveLength(2);
+    expect(result.content).not.toContain('**Correction:**');
+    expect(result.content).toContain('Tools are inspected.');
+  }
+});
+it('uses completed idea identity across changed wording and action IDs on a partial retry',async()=>{
+ const initial=input('# A\nOpening is on 12.\n[[Index]]\n','Correction: opening moves to 19. Tools are inspected.');
+ initial.input.ideas=[{id:'date',topic:'Opening',sourceIds:['p1']},{id:'tools',topic:'Tools',sourceIds:['p1']}];
+ const prepared=prepareReconciliation(initial.input);
+ const first=await applyReconciliation(prepared,[{...op('supersede','opening moves to 19',prepared.request.statements[0]!.id),ideaIds:['date'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ expect(first.pending).toHaveLength(1);
+ const retrySeed=input(first.content,initial.input.evidence.content);retrySeed.input.ideas=initial.input.ideas;retrySeed.input.completedIdeaIds=['date'];
+ const retry=prepareReconciliation(retrySeed.input);
+ const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Opening moves to 19.')!.id),ideaIds:['date'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'},{...op('add','Tools are inspected.'),ideaIds:['tools']}]);
+ expect(result.pending).toEqual([]);
+ expect(result.content).not.toContain('Opening is scheduled for 19.');
+ expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)).toHaveLength(1);
+});
+it('rejects self-supersession from the same evidence even with a changed idea identity',async()=>{
+ const prepared=input('# A\nOpening is on 12.\n[[Index]]\n','Correction: opening moves to 19.');
+ const first=await applyReconciliation(prepared,[{...op('supersede','opening moves to 19',prepared.request.statements[0]!.id),statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ const retrySeed=input(first.content,prepared.input.evidence.content);retrySeed.input.ideas=[{id:'regenerated',topic:'Opening',sourceIds:['p1']}];
+ const retry=prepareReconciliation(retrySeed.input);
+ const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Opening moves to 19.')!.id),ideaIds:['regenerated'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ expect(result.content).toBe(first.content);
+ expect(result.pending[0]?.reason).toBe('reconciliation_same_evidence_target');
+});
+
+it('does not append an exact same-evidence claim with regenerated operation and idea IDs',async()=>{
+ const firstSeed=input('# A\n[[Index]]\n','Tools are inspected.');
+ const first=await applyReconciliation(firstSeed,[op('add','Tools are inspected.')]);
+ const retrySeed=input(first.content,'Tools are inspected.');retrySeed.input.ideas=[{id:'different-idea',topic:'Tools',sourceIds:['p1']}];
+ const result=await applyReconciliation(prepareReconciliation(retrySeed.input),[{...op('add','Tools are inspected'),ideaIds:['different-idea'],statement:'Tools are inspected.'}]);
+ expect(result.content).toBe(first.content);expect(result.pending).toEqual([]);
+});
+it('requires a compact new correction statement, keeping historical claims host-owned',async()=>{
+ const source='Correction: opening is not on 8 but on 15.';
+ const prepared=input('# A\nOpening is on 8.\n[[Index]]\n',source);
+ for(const statement of [null,'Opening is on 15; the old date was 8.']) {
+  const result=await applyReconciliation(prepared,[{...op('supersede','on 15',prepared.request.statements[0]!.id),statement,correctionQuote:source}]);
+  expect(result.content).toBe(prepared.input.raw);expect(result.pending.length).toBeGreaterThan(0);
+ }
+ const good=await applyReconciliation(prepared,[{...op('supersede','on 15',prepared.request.statements[0]!.id),statement:'Opening is on 15.',correctionQuote:source}]);
+ expect(good.pending).toEqual([]);
+ expect(parseMemoryFacts(parseNote(good.content).frontmatter!.memoryFacts)[0]!.legacySupersedes!.statement).toBe('Opening is on 8.');
 });

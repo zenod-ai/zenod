@@ -1617,7 +1617,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
             return chunks;
           });
           const prepared = prepareReconciliation({path,raw:currentContent,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
-            ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
+            completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
+            ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
           reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
           const operations = await llm.reconcile(prepared.request);
           const reconciled = await applyReconciliation(prepared,operations);
@@ -1625,8 +1626,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
             const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);
             const pending=reconciled.pending.filter(item=>item.ideaIds.includes(outcome.ideaId!));
             outcome.appliedOperationIds=[...new Set([...(outcome.appliedOperationIds??[]),...reconciled.appliedOperations.filter(operation=>operation.ideaIds.includes(outcome.ideaId!)).map(operation=>operation.id)])];
-            if (pending.length) {outcome.status="pending";outcome.reason=pending.map(item=>item.reason).join("; ");}
-            else { outcome.filedPages.push(path); outcome.status = outcome.pages.every(page => outcome.filedPages.includes(page)) ? "filed" : "pending"; if (outcome.status === "filed") delete outcome.reason; }
+            const retryable = pending.filter(item=>item.reason!=="conflict_retained");
+            if (retryable.length) {outcome.status="pending";outcome.reason=retryable.map(item=>item.reason).join("; ");}
+            else {
+              if (!outcome.filedPages.includes(path)) outcome.filedPages.push(path);
+              if (pending.some(item=>item.reason==="conflict_retained")) outcome.uncertainPages=[...new Set([...(outcome.uncertainPages??[]),path])];
+              const complete=outcome.pages.every(page=>outcome.filedPages.includes(page));
+              outcome.status=complete ? outcome.uncertainPages?.length ? "uncertain" : "filed" : "pending";
+              if (outcome.status === "filed") delete outcome.reason;
+              else if (outcome.uncertainPages?.length) outcome.reason="conflict_retained";
+            }
           }
           await prepareFile(path, currentContent, reconciled.content);
           // The model's awaited work cannot overwrite a page changed since context preparation.
@@ -1674,7 +1683,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           else await writeFile(absolute, currentContent);
         }
         if (receipt) delete receipt.files[path];
-        group.outcomes.forEach((outcome, index) => { Object.assign(outcome, previousOutcomes[index]); outcome.appliedOperationIds = previousOutcomes[index]!.appliedOperationIds ?? []; });
+        group.outcomes.forEach((outcome, index) => { Object.assign(outcome, previousOutcomes[index]); outcome.appliedOperationIds = previousOutcomes[index]!.appliedOperationIds ?? []; outcome.uncertainPages = previousOutcomes[index]!.uncertainPages ?? []; });
         for (const outcome of group.outcomes) { outcome.filedPages = outcome.filedPages.filter(page => page !== path); outcome.status = "pending"; outcome.reason = error instanceof Error && /^(reconciliation_|branch_context_)/.test(error.message) ? error.message : "page_filing_failed"; }
       }
     }

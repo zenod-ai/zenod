@@ -1020,6 +1020,68 @@ describe("BrainEngine", () => {
     expect(filed.topics![0]!.ideaId).toMatch(/^idea-/); expect(filed.topics![0]!.appliedOperationIds).toHaveLength(1);
   });
 
+  it("retries only unfinished atomic ideas after rejecting a mixed recorded-style plan", async () => {
+    const path="Projects/Workshop.md";
+    await writeFile(join(repo.path,path),"# Workshop\nCapacity is 6.\nOpening is on 12.\n[[Index]]\n");
+    await repo.commitAndPublish("seed workshop");
+    const parts=["Capacity is 6.","Correction: opening moves to 19.","Tools are inspected."];
+    const content=parts.join("\n\n");
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Workshop update",tags:[],pages:[],topics:parts.map((quote,i)=>({topic:["Capacity","Opening","Tools"][i]!,summary:quote,evidenceQuotes:[quote],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Workshop",action:"update" as const}]}))}));
+    let attempt=0;
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      attempt++;
+      const decision=(topic:string,kind:"add"|"link_source"|"supersede",quote:string,target:string|null=null,statement:string|null=null)=>{
+        const idea=request.ideas.find(idea=>idea.topic===topic)!;
+        return {kind,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:quote,targetId:target,statement,factKey:null,correctionQuote:kind==="supersede"?parts[1]!:null,reason:null};
+      };
+      if(attempt===1) return [decision("Capacity","add",parts[0]!),decision("Capacity","link_source",":123:456",request.statements.find(s=>s.text===parts[0])!.id),decision("Opening","supersede","opening moves to 19",request.statements.find(s=>s.text==="Opening is on 12.")!.id,"Opening moves to 19."),decision("Tools","add","Invented support.")];
+      expect(request.ideas.map(idea=>idea.topic)).toEqual(["Capacity","Tools"]);
+      expect(request.ideas[0]!.priorFailure).toContain("reconciliation_multiple_decisions");
+      return [decision("Capacity","link_source",parts[0]!,request.statements.find(s=>s.text===parts[0])!.id),decision("Tools","add",parts[2]!,null,"We inspect tools.")];
+    });
+    Object.assign(llm,{reconcile});const e=engine();
+    const captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const input={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(input);
+    expect(first.topics!.find(t=>t.topic==="Opening")).toMatchObject({status:"filed",filedPages:[path]});
+    expect(first.topics!.find(t=>t.topic==="Capacity")!.appliedOperationIds).toEqual([]);
+    const firstPage=await readFile(join(repo.path,path),"utf8");
+    expect(parseNote(firstPage).body.match(/Capacity is 6\./g)).toHaveLength(1);
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
+    const second=await reopened.enrichEvidence!(input);
+    expect(second.filing).toBe("filed");
+    const page=await readFile(join(repo.path,path),"utf8");
+    expect(parseNote(page).body.match(/Opening moves to 19\./g)).toHaveLength(1);
+    expect(parseNote(page).body.match(/Capacity is 6\./g)).toHaveLength(1);
+    expect(parseNote(page).frontmatter!.memoryFacts).toHaveLength(1);
+    expect(llm.classify).toHaveBeenCalledTimes(1);
+    const replay=await reopened.enrichEvidence!(input);
+    expect(replay.commitSha).toBe(second.commitSha);expect(reconcile).toHaveBeenCalledTimes(2);
+  });
+
+  it("files a conflict once while retrying the same idea's other destination", async()=>{
+    const paths=["Projects/First.md","Projects/Second.md"];
+    for(const path of paths) await writeFile(join(repo.path,path),"# Workshop\nOpening is on 12.\n[[Index]]\n");
+    await repo.commitAndPublish("seed conflict destinations");
+    const content="A colleague reports opening is on 19.";
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Conflicting date",tags:[],pages:[],topics:[{topic:"Opening report",summary:content,evidenceQuotes:[content],confidence:0.95,disposition:"integrate_page" as const,pages:paths.map(path=>({path,title:"Workshop",action:"update" as const}))}]}));
+    let secondCalls=0;
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      if(request.path===paths[1] && ++secondCalls===1) throw new Error("synthetic model failure");
+      return [{kind:"conflict" as const,ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,sourceQuote:content,statement:content,targetId:request.statements[0]!.id,factKey:null,correctionQuote:null,reason:null}];
+    });
+    Object.assign(llm,{reconcile});const e=engine();const captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const input={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(input);expect(first.filing).toBe("pending");
+    expect(first.topics![0]).toMatchObject({filedPages:[paths[0]],uncertainPages:[paths[0]]});
+    const before=await readFile(join(repo.path,paths[0]!),"utf8");
+    const second=await e.enrichEvidence!(input);expect(second.filing).toBe("uncertain");
+    expect(second.topics![0]).toMatchObject({status:"uncertain",filedPages:paths,uncertainPages:paths});
+    expect(await readFile(join(repo.path,paths[0]!),"utf8")).toBe(before);
+    const replay=await e.enrichEvidence!(input);expect(replay.commitSha).toBe(second.commitSha);
+    expect(reconcile.mock.calls.map(([request])=>request.path)).toEqual([paths[0],paths[1],paths[1]]);
+  });
+
   it.each(["before-page", "after-page", "before-push", "after-push"] as const)("recovers exact atomic filing at %s without regenerating an applied idea", async (crash) => {
     const content = "Insurance renewal is in October.";
     const reconcile = vi.fn(async (value: import("../src/engine/reconciliation.js").ReconciliationInput) => value.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds, sourceQuote: value.sources.find(source => source.id === idea.sourceIds[0])!.text, statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));

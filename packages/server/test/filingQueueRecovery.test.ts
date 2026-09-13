@@ -12,24 +12,31 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 
 describe("supported queue filing replay", () => {
-  it.each([false, true])("resumes only unfinished work through the real queue (publication recovery: %s)", async publicationFailure => {
+  it.each([false, true, "mixed"] as const)("resumes only unfinished work through the real queue (recovery mode: %s)", async mode => {
+    const publicationFailure=mode===true; const mixed=mode==="mixed";
     const root = await mkdtemp(join(tmpdir(), "zenod-queue-filing-")); roots.push(root);
     const bare = join(root, "origin.git"); await mkdir(bare); await simpleGit(bare).init(true, { "--initial-branch": "main" });
     const repo = await VaultRepo.open({ workdir: join(root, "vault"), remoteUrl: bare });
     await cp(fileURLToPath(new URL("../../core/test/fixtures/vault", import.meta.url)), repo.path, { recursive: true });
     await repo.commitAndPublish("fixture");
     const content = "Insurance renewal is in October. Axa is the provider.";
-    const paths = ["Areas/Insurance.md", "Notes/Axa.md"];
+    const paths = mixed ? ["Areas/Insurance.md", "Areas/Insurance.md"] : ["Areas/Insurance.md", "Notes/Axa.md"];
     const classify = vi.fn(async () => ({ confidence: 0.95, summary: "two ideas", tags: [], pages: [], topics: paths.map((path, index) => ({
       topic: `Idea ${index + 1}`, summary: `Idea ${index + 1}`, confidence: 0.95, disposition: "integrate_page" as const,
       evidenceQuotes: [content], pages: [{ path, title: index ? "Axa" : "Insurance", action: "update" as const }],
     })) }));
     let failedOnce = false;
     const reconcile = vi.fn(async (request: any) => {
-      if (!publicationFailure && request.path === paths[1] && !failedOnce) { failedOnce = true; throw new Error("synthetic transient provider outage"); }
-      return request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id], sourceIds: idea.sourceIds,
-        sourceQuote: request.sources.find((source: any) => source.id === idea.sourceIds[0]).text,
+      if (!mixed && !publicationFailure && request.path === paths[1] && !failedOnce) { failedOnce = true; throw new Error("synthetic transient provider outage"); }
+      const operations=request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id], sourceIds: idea.sourceIds,
+        sourceQuote: mixed ? (idea.topic==="Idea 1" ? "Insurance renewal is in October." : "Axa is the provider.") : request.sources.find((source: any) => source.id === idea.sourceIds[0]).text,
         statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null }));
+      if(mixed && !failedOnce) {failedOnce=true;return [...operations,{...operations[0],kind:"link_source",sourceQuote:":123:456",targetId:"missing"}];}
+      if(mixed) {
+        expect(request.ideas.map((idea:any)=>idea.topic)).toEqual(["Idea 1"]);
+        expect(request.ideas[0].priorFailure).toContain("reconciliation_multiple_decisions");
+      }
+      return operations;
     });
     const state = new SqliteStateStore(join(root, "state.sqlite"));
     const engine = createEngine({ repo, state, llm: { classify, reconcile } as unknown as BrainLlm });
@@ -40,7 +47,7 @@ describe("supported queue filing replay", () => {
     if (publicationFailure) vi.spyOn(repo, "commitAndPublish").mockImplementationOnce(async () => {
       throw new VaultPublicationError({ code: "partial_recovering", message: "synthetic provider recovery required", retryable: true, transactionId: "fixture", paths });
     });
-    const expectedCalls = publicationFailure ? 2 : 3;
+    const expectedCalls = publicationFailure || mixed ? 2 : 3;
     try {
       const input = { content, source: "selftest" as const, sourceId: "queue-fixture", evidenceRef: captured.evidenceRef };
       const job = queue.enqueue("enrich_memory", input, "enrich:tenant-a:queue-fixture");
@@ -49,8 +56,8 @@ describe("supported queue filing replay", () => {
       expect(done.status).toBe("done"); expect(done.attempts).toBe(1);
       expect(done.result).toMatchObject({ filing: "filed", topics: [expect.objectContaining({ status: "filed" }), expect.objectContaining({ status: "filed" })] });
       expect(classify).toHaveBeenCalledTimes(1); expect(reconcile).toHaveBeenCalledTimes(expectedCalls);
-      expect(reconcile.mock.calls.map(([request]) => request.path)).toEqual(publicationFailure ? paths : [paths[0], paths[1], paths[1]]);
-      for (const path of paths) expect((await readFile(join(repo.path, path), "utf8")).match(/<!-- zenod-op:/g)).toHaveLength(1);
+      expect(reconcile.mock.calls.map(([request]) => request.path)).toEqual(publicationFailure || mixed ? paths : [paths[0], paths[1], paths[1]]);
+      for (const path of paths) expect((await readFile(join(repo.path, path), "utf8")).match(/<!-- zenod-op:/g)).toHaveLength(mixed ? 2 : 1);
       const receiptPath = `Inbox/filing-${captured.evidenceRef.slice(4, 14)}-${captured.evidenceRef.split("#^")[1]}.md`;
       expect(await readFile(join(repo.path, receiptPath), "utf8")).toContain("status: filing-resolved");
       expect(await readFile(logPath, "utf8")).toBe(raw);

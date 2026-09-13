@@ -57,6 +57,8 @@ export interface TopicFilingResult {
   pages: string[];
   /** Successful destinations, separate from proposed pages when filing is partial. */
   filedPages: string[];
+  /** Filed conflict reports: knowledge remains uncertain, but this destination needs no retry. */
+  uncertainPages?: string[];
   /** Host-applied atomic edits/no-ops, scoped by immutable evidence and target. */
   appliedOperationIds?: string[];
   status: "filed" | "uncertain" | "pending";
