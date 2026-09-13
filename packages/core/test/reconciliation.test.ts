@@ -142,3 +142,66 @@ it('keeps an idea pending when its later source associations or source text exce
     expect(result.content).toContain(sibling.text);
   }
 });
+
+it.each([
+  ['Corrijo la fecha: la sesión ya no será el 8 de septiembre; será el 15 de septiembre.', 'La sesión será el 15 de septiembre.'],
+  ['Correction: the session is not on September 8 but on September 15.', 'The session is on September 15.'],
+])('accepts a compact new claim from a full explicit contrastive correction: %s', async (source, statement) => {
+  const raw = '# A\n- The session is on September 8.\n[[Index]]\n';
+  const prepared = input(raw, source); const target = prepared.request.statements[0]!;
+  const result = await applyReconciliation(prepared, [{...op('supersede', source, target.id),statement,correctionQuote:source}]);
+  expect(result.pending).toEqual([]);
+  const view = await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async()=>evidence(source));
+  expect(view.facts[0]!.status).toBe('active');
+  expect(view.priorStatements![0]!.statement).toBe(target.text);
+  expect(result.content).toContain(statement);
+});
+it.each([
+  ['Corrección: ya no usamos 8 unidades; no usaremos 15 unidades.', 'Usaremos 15 unidades.'],
+  ['Correction: no longer 8 units; we may use 15 units.', 'We use 15 units.'],
+  ['Correction: not 8 units but 15 units without a deposit.', 'We use 15 units.'],
+  ['Correction: not 8 units but 15 units.', 'We use 22 units.'],
+])('does not weaken the replacement clause: %s',async(source,statement)=>{
+  const raw='# A\n- We use 8 units.\n[[Index]]\n'; const prepared=input(raw,source);
+  const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement,correctionQuote:source}]);
+  expect(result.content).toBe(raw); expect(result.pending.length).toBeGreaterThan(0);
+});
+it.each([
+ ['El curso podría necesitar un depósito.', 'The course needs a deposit.'],
+ ['La apertura está prevista para el 15.', 'The opening is on the 15.'],
+ ['Sigo queriendo enseñar con mapas.', 'The course teaches with maps.'],
+ ['We will not record attendees.', 'We will record attendees.'],
+ ['El curso funciona sin grabaciones.', 'The course records attendees.'],
+])('rejects qualified or negative source weakening in ADD: %s',async(source,statement)=>{
+ const raw='# A\n[[Index]]\n';const result=await applyReconciliation(input(raw,source),[{...op('add',source),statement}]);
+ expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+});
+
+it.each([
+ ['We will not record the participants.', 'No grabaremos a los participantes.'],
+ ['The course may require a deposit.', 'El curso podría necesitar un depósito.'],
+ ['Alice approved the September 15 session.', 'Alice aprobó la sesión del 15 de septiembre.'],
+])('reinforces multilingual equivalent qualifiers without adding duplicate prose: %s',async(old,source)=>{
+ const raw=`# A\n- ${old}\n[[Index]]\n`;const prepared=input(raw,source);
+ const result=await applyReconciliation(prepared,[op('link_source',source,prepared.request.statements[0]!.id)]);
+ expect(result.pending).toEqual([]);expect(result.content).toContain(`${old} [[2026-09-13#^e-000001]]`);
+ expect(result.content).not.toContain(source);
+});
+it('does not treat an ADD as permission to drop a denied old value from correction evidence',async()=>{
+ const source='Correction: not 8 units but 15 units.';const raw='# A\n- We use 8 units.\n[[Index]]\n';
+ const result=await applyReconciliation(input(raw,source),[{...op('add',source),statement:'We use 15 units.'}]);
+ expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+});
+
+it('retains intention when compacting a multilingual new claim',async()=>{
+ const source='Sigo queriendo enseñar con mapas.';const statement='The author wants to teach using maps.';
+ const result=await applyReconciliation(input('# A\n[[Index]]\n',source),[{...op('add',source),statement}]);
+ expect(result.pending).toEqual([]);expect(result.content).toContain(statement);
+});
+it('refuses to borrow a retracted number from an unrelated target',async()=>{
+ const raw='# A\n- The session date is September 8.\n- Guest capacity is 12.\n[[Index]]\n';
+ const source='Correction: not 12 guests but 15 guests.';
+ const prepared=input(raw,source);
+ const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement:'Guest capacity is 15.',correctionQuote:source}]);
+ expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+});
