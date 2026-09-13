@@ -1,0 +1,144 @@
+import { expect, it } from 'vitest';
+import { prepareReconciliation, applyReconciliation } from '../src/engine/reconciliation.js';
+import { pageRevision, catalogSections } from '../src/vault/pages.js';
+import { parseNote, serializeNote } from '../src/vault/frontmatter.js';
+import { appendMemoryFacts, parseMemoryFacts, projectFacts } from "../src/engine/temporalFacts.js";
+import type { MemoryEntry } from '../src/types.js';
+const ref = 'Log/2026-09-13.md#^e-000001';
+const evidence = (content: string): MemoryEntry => ({evidenceRef:ref, path:'Log/2026-09-13.md',anchor:'e-000001',title:'source',content,source:'mcp',verbatim:true,capturedAt:'2026-09-13T10:00:00Z',url:'https://example.invalid/source',provider:'github'});
+function input(raw: string, source: string) {
+  const body = parseNote(raw).body;
+  const context = {branches:[{id:'page',path:'Projects/A.md',revision:pageRevision(raw),topics:['topic'],title:'A',scope:'A',sections:catalogSections('Projects/A.md',body).map(section => ({id:section.id,revision:section.revision,start:section.start,end:section.end,excerptStart:section.start,text:body.slice(section.start,section.end),truncated:false}))}],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0};
+  return prepareReconciliation({path:'Projects/A.md',raw,title:'A',type:'project',today:'2026-09-13',evidence:evidence(source),sources:[{id:'p1',start:0,end:source.length,text:source}],context,links:['[[Index]]'],repositoryRevision:{provider:'github',id:'fixture-prior-revision',committedAt:'2026-09-12T10:00:00Z',urls:[]}});
+}
+const op = (kind: 'add'|'link_source'|'supersede'|'conflict'|'clarify', quote:string,targetId:string|null=null) => ({kind,sourceIds:['p1'],sourceQuote:quote,targetId,factKey:null,correctionQuote:null,reason:null});
+it('adds supported text to legacy Markdown preserving all old bytes and deduplicates replay', async () => {
+  const raw = '# A\n\nExisting untouched prose.\n[[Index]]\n'; const text = 'The video explains logarithms.';
+  const prepared = input(raw,text);
+  const result = await applyReconciliation(prepared,[op('add',text)]);
+  expect(result.content).toContain(raw);
+  expect(result.content).toContain(text);
+  expect(result.content).toContain('[[2026-09-13#^e-000001]]');
+  expect(result.appliedOperationIds).toHaveLength(1);
+  const replay = await applyReconciliation(input(result.content,text),[op('add',text)]);
+  expect(replay.content).toBe(result.content);
+});
+it('links an exact existing thought without duplicate prose and rejects date/owner/negation changes', async () => {
+  const raw = '# A\n\n- Alice approved launch on 2026-10-01.\n[[Index]]\n'; const text = 'Alice approved launch on 2026-10-01.';
+  const prepared = input(raw,text); const target = prepared.request.statements.find(s=>s.text===text)!;
+  const result = await applyReconciliation(prepared,[op('link_source',text,target.id)]);
+  expect(result.content.split(text)).toHaveLength(2);
+  for (const changed of ['Bob approved launch on 2026-10-01.','Alice did not approve launch on 2026-10-01.','Alice approved launch on 2026-11-01.','Alice may approve launch on 2026-10-01.']) {
+    const candidate = input(raw,changed);
+    const rejected = await applyReconciliation(candidate,[op('link_source',changed,target.id)]);
+    expect(rejected.pending[0]?.reason).toBe('equivalence_not_established');
+    expect(rejected.content).toBe(raw);
+  }
+});
+it('rejects unsupported quotes and target IDs while independently adding valid operations', async () => {
+  const text='Video explains logarithms.'; const prepared=input('# A\n[[Index]]\n',text);
+  const result=await applyReconciliation(prepared,[op('add','Invented claim.'),op('add',text)]);
+  expect(result.content).not.toContain('Invented claim'); expect(result.content).toContain(text);
+  expect(result.pending).toHaveLength(1); expect(result.appliedOperationIds).toHaveLength(1);
+});
+it('reinforces a Spanish paraphrase with one new citation and no duplicate thought', async () => {
+  const raw='# A\n\nThe video explains logarithms as orders of magnitude.\n[[Index]]\n';
+  const text='El vídeo explica logaritmos como órdenes de magnitud.';
+  const prepared=input(raw,text);
+  const result=await applyReconciliation(prepared,[op('link_source',text,prepared.request.statements[0]!.id)]);
+  expect(result.pending).toEqual([]);
+  expect(result.content).not.toContain(text);
+  expect(result.content).toContain('The video explains logarithms as orders of magnitude. [[2026-09-13#^e-000001]]');
+});
+
+it('applies natural Spanish correction to an English current fact without reciting the old sentence', async () => {
+  const old='The launch is on 12.';
+  const e0={...evidence(old),evidenceRef:'Log/2026-09-13.md#^e-000002'};
+  const seed=serializeNote({title:'A',type:'project',tags:[],summary:'A',created:'2026-09-12',updated:'2026-09-12'},`${old}\n[[Index]]\n`);
+  const raw=appendMemoryFacts(seed,seed,[{key:'launch.date',statement:old,effectiveDate:null,effectiveDateQuote:null,correctionQuote:null,supersedesQuotes:[],verificationQuote:null}],e0);
+  const source='Corrijo la fecha: ya no el 12, será el 19.';
+  const prepared=input(raw,source); const target=prepared.request.statements.find(s=>s.text===old)!;
+  const result=await applyReconciliation(prepared,[{...op('supersede','será el 19',target.id),statement:'El lanzamiento será el 19.',correctionQuote:source}]);
+  expect(result.pending).toEqual([]); expect(result.content).toContain(old);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async ref=>ref===e0.evidenceRef?e0:evidence(source));
+  expect(view.facts.map(f=>f.status)).toEqual(['superseded','active']);
+  for (const uncertain of ['Quizás corrijo la fecha: será el 19.','If I correct the date, it could be 19.']) {
+    const pending=await applyReconciliation(input(raw,uncertain),[{...op('supersede',uncertain,target.id),correctionQuote:uncertain}]);
+    expect(pending.pending.length).toBeGreaterThan(0); expect(pending.content).toBe(raw);
+  }
+});
+it('corrects legacy prose while exposing its exact prior statement and real revision separately from evidence', async () => {
+  const old='The launch is on 12.'; const raw=`# A\n${old}\n[[Index]]\n`;
+  const source='Correction: the launch moves to 19.'; const prepared=input(raw,source);
+  const target=prepared.request.statements.find(s=>s.text===old)!;
+  const result=await applyReconciliation(prepared,[{...op('supersede','the launch moves to 19',target.id),statement:'The launch moves to 19.',correctionQuote:source}]);
+  expect(result.pending).toEqual([]); expect(result.content).toContain(raw);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async()=>evidence(source));
+  expect(view.facts[0]!.status).toBe('active');
+  expect(view.priorStatements).toEqual([expect.objectContaining({statement:old,revision:'fixture-prior-revision',contentHash:pageRevision(raw),supersededByEvidenceRef:ref})]);
+  expect(view.warnings.join(' ')).toContain('original Log evidence');
+});
+it('keeps conflicting reports rather than silently correcting a current fact', async () => {
+  const old='The launch is on 12.'; const raw=`# A\n${old}\n[[Index]]\n`;
+  const source='Bob reports the launch is on 19.';const prepared=input(raw,source);
+  const result=await applyReconciliation(prepared,[op('conflict',source,prepared.request.statements.find(s=>s.text===old)!.id)]);
+  expect(result.content).toContain(old); expect(result.content).toContain('Unresolved conflict');
+  expect(result.pending[0]!.reason).toBe('conflict_retained');
+  expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.supersedes).toEqual([]);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async()=>evidence(source));
+  expect(view.facts[0]!.status).toBe('conflict');
+});
+it('accounts for separate ideas sharing a source passage, even when only one operation succeeds', async () => {
+  const prepared=input('# A\n[[Index]]\n','Video explains logarithms. Passport expires in May.');
+  prepared.input.ideas=[{id:'video',topic:'Video',sourceIds:['p1']},{id:'travel',topic:'Travel',sourceIds:['p1']}];
+  const grouped=prepareReconciliation(prepared.input);
+  const result=await applyReconciliation(grouped,[{...op('add','Video explains logarithms.'),ideaIds:['video'],statement:'The video explains logarithms.'}]);
+  expect(result.appliedOperations[0]!.ideaIds).toEqual(['video']);
+  expect(result.pending).toContainEqual({ideaIds:['travel'],sourceIds:['p1'],reason:'reconciliation_idea_unassigned'});
+});
+
+it('keeps successive correction targets linked to the existing fact chain',async()=>{
+  let raw='# A\nThe launch is on 12.\n[[Index]]\n';
+  const entries=new Map<string,MemoryEntry>();
+  for (const [n,value] of [[1,19],[2,20]] as const) {
+    const source=`Correction: the launch moves to ${value}.`;
+    const prepared=input(raw,source);
+    prepared.input.evidence={...evidence(source),evidenceRef:`Log/2026-09-13.md#^e-00000${n}`};entries.set(prepared.input.evidence.evidenceRef,prepared.input.evidence);
+    const target=prepared.request.statements.find(statement=>statement.text===(n===1?'The launch is on 12.':'The launch moves to 19.'))!;
+    expect(target).toBeDefined();
+    if(n===2) expect(target.factKey).not.toBeNull();
+    const result=await applyReconciliation(prepared,[{...op('supersede',`the launch moves to ${value}`,target.id),statement:`The launch moves to ${value}.`,correctionQuote:source}]);
+    expect(result.pending).toEqual([]);raw=result.content;
+  }
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(raw).frontmatter!.memoryFacts,new Date('2026-09-13'),async ref=>entries.get(ref)!);
+  expect(view.facts.map(fact=>fact.status)).toEqual(['superseded','active']);
+  expect(view.priorStatements![0]!.statement).toBe('The launch is on 12.');
+  const linked=input(raw,'El lanzamiento se mueve al 20.');
+  linked.input.evidence={...evidence('El lanzamiento se mueve al 20.'),evidenceRef:'Log/2026-09-13.md#^e-000003'};
+  const current=linked.request.statements.find(statement=>statement.text==='The launch moves to 20.')!;
+  expect(current.factKey).toBe(view.facts[1]!.key);
+  const reinforced=await applyReconciliation(linked,[op('link_source','El lanzamiento se mueve al 20.',current.id)]);
+  expect(reinforced.pending).toEqual([]);
+  expect(reinforced.content).toContain('[[2026-09-13#^e-000003]]');
+  expect(reinforced.content.split('The launch moves to 20.')).toHaveLength(raw.split('The launch moves to 20.').length);
+  expect(parseMemoryFacts(parseNote(reinforced.content).frontmatter!.memoryFacts)).toHaveLength(2);
+});
+
+it('keeps an idea pending when its later source associations or source text exceed the packet budget',async()=>{
+  for(const size of [30,1600]) {
+    const sources=Array.from({length:12},(_,i)=>({id:`s${i}`,start:i*size,end:(i+1)*size,text:(i===11?'Correction: latest decision differs.':'Early note.').padEnd(size,'x')}));
+    const prepared=input('# A\n[[Index]]\n',sources.map(source=>source.text).join(''));
+    const sibling={id:'clear',start:0,end:23,text:'Independent clear note.'};
+    prepared.input.sources=[sibling,...sources];
+    prepared.input.ideas=[{id:'recurring',topic:'One recurring idea',sourceIds:sources.map(source=>source.id)},{id:'clear-idea',topic:'Independent idea',sourceIds:['clear']}];
+    const bounded=prepareReconciliation(prepared.input);
+    expect(bounded.request.ideas[0]).toMatchObject({sourcePartial:true});
+    expect(bounded.omittedSourcesByIdea.get('recurring')).toContain('s11');
+    const result=await applyReconciliation(bounded,[{...op('add','Early note.'),ideaIds:['recurring'],sourceIds:['s0'],statement:'Early note.'},{...op('add',sibling.text),ideaIds:['clear-idea'],sourceIds:['clear'],statement:sibling.text}]);
+    expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['recurring'],sourceIds:expect.arrayContaining(['s11']),reason:'reconciliation_source_context_incomplete'}));
+    expect(result.appliedOperationIds).toHaveLength(1);
+    expect(result.appliedOperations[0]!.ideaIds).toEqual(['clear-idea']);
+    expect(result.content).not.toContain('Early note.');
+    expect(result.content).toContain(sibling.text);
+  }
+});

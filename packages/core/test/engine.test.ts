@@ -957,6 +957,32 @@ describe("BrainEngine", () => {
     });
   }
 
+  it("uses atomic reconciliation for legacy store and compact captured enrichment without page composition", async () => {
+    const path="Projects/Legacy.md"; const raw="# Legacy\n\nUnrelated preserved history.\n[[Index]]\n";
+    await writeFile(join(repo.path,path),raw); await repo.commitAndPublish("seed plain legacy project");
+    llm.classifyPath=path; llm.disposition="append_compact_note";
+    const reconcile=vi.fn(async (value:import("../src/engine/reconciliation.js").ReconciliationInput) => value.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:value.sources.find(source=>source.id===idea.sourceIds[0])!.text,statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null})));
+    Object.assign(llm,{reconcile});
+    const e=engine(); const first=await e.store({content:"The video explains logarithms.",source:"mcp"});
+    expect(first.filing).toBe("filed");expect(llm.composeCalls).toBe(0);
+    expect(await readFile(join(repo.path,path),"utf8")).toContain(raw);
+    const captured=await e.captureEvidence!({content:"The video also explains network effects.",source:"whatsapp",sourceId:"atomic-fixture"});
+    const filed=await e.enrichEvidence!({content:"The video also explains network effects.",source:"whatsapp",evidenceRef:captured.evidenceRef});
+    expect(filed.filing).toBe("filed"); expect(reconcile).toHaveBeenCalledTimes(2); expect(llm.composeCalls).toBe(0);
+    expect(filed.topics![0]!.ideaId).toMatch(/^idea-/); expect(filed.topics![0]!.appliedOperationIds).toHaveLength(1);
+  });
+
+  it("rejects a stale atomic page revision while preserving the concurrent edit", async () => {
+    const path=join(repo.path,"Areas/Insurance.md"); const original=await readFile(path,"utf8");
+    Object.assign(llm,{reconcile:async(value:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      await writeFile(path,original+"\nConcurrent owner edit.\n");
+      return [{kind:"add" as const,ideaIds:[value.ideas[0]!.id],sourceIds:[value.sources[0]!.id],sourceQuote:value.sources[0]!.text,statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    }});
+    const result=await engine().store({content:"New atomic evidence.",source:"mcp"});
+    expect(result.filing).toBe("pending"); expect(result.topics![0]!.reason).toBe("reconciliation_revision_changed");
+    expect(await readFile(path,"utf8")).toBe(original+"\nConcurrent owner edit.\n");
+  });
+
   it("files clear topics independently, preserves mangled names and exact spans, and composes duplicate paths once", async () => {
     const content = "Insurance renews in April.\n\nAxa telephone is unchanged.\n\nZnot or Zenod should handle the unnamed thing.";
     topicLlm(content);
