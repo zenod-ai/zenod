@@ -1,5 +1,7 @@
 # ZMR production rollout — 2026-09-06
 
+Historical evidence only. The commands and helper defaults below describe the September 6 release. For a new rollout or current rollback, use the [candidate-bound operator runbook](../../runbooks/zmr-production-image.md); the current helper requires an explicit fresh recovery manifest and has no September 6 defaults.
+
 Operator: `/root/zmr_deploy_audit`, delegated by delivery manager. Jordi explicitly approved production deployment, testing and fixes, and requested easy undo. This supersedes the earlier pre-deployment test-provider waiting gate. Production deployment verified on2026-09-06 at20:06:05UTC; parent owns customer MCP/browser acceptance.
 
 Target is public Zenod only: Dokploy application `2dkayH_eAur427leH64MT`, Swarm service `zenod-mt-fxpzoo`, durable mount `zenod-mt-data:/data`. Private Phylax remains untouched. Candidate is exact locally validated product `392d058a599bdf5fc69d17157282b8f9154dcf28`, immutable image `ghcr.io/zenod-ai/zenod@sha256:d21468dbf09f33550c52eb53bed32adea616842b4a144cd5cda428861f151a93`.
