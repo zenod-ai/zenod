@@ -560,6 +560,15 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 "topic": {
                   "type": "string"
                 },
+                "ideaId": {
+                  "type": "string"
+                },
+                "appliedOperationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "evidenceRef": {
                   "type": "string"
                 },
@@ -2583,6 +2592,15 @@ export const TOOL_OUTPUT_SCHEMAS = (
                 "topic": {
                   "type": "string"
                 },
+                "ideaId": {
+                  "type": "string"
+                },
+                "appliedOperationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "evidenceRef": {
                   "type": "string"
                 },
@@ -3131,6 +3149,15 @@ export const TOOL_OUTPUT_SCHEMAS = (
               "properties": {
                 "topic": {
                   "type": "string"
+                },
+                "ideaId": {
+                  "type": "string"
+                },
+                "appliedOperationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "evidenceRef": {
                   "type": "string"
@@ -6967,6 +6994,15 @@ export const TOOL_OUTPUT_SCHEMAS = (
               "properties": {
                 "topic": {
                   "type": "string"
+                },
+                "ideaId": {
+                  "type": "string"
+                },
+                "appliedOperationIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "evidenceRef": {
                   "type": "string"

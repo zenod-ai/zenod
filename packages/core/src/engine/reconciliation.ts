@@ -27,7 +27,7 @@ const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(va
 export const reconciliationIdeaId = (ref:string,index:number,topic:string,spans:Array<{start:number;end:number}>) => `idea-${digest([ref,index,topic,spans.map(span=>[span.start,span.end])])}`;
 const citationFor = (ref: string) => `[[${ref.replace(/^Log\//, "").replace(".md#", "#")}]]`;
 const CITATION = /\[\[\d{4}-\d{2}-\d{2}#\^e-[a-f0-9]{6}(?:\|[^\]]*)?\]\]/g;
-const clean = (line: string) => line.replace(/<!-- zenod-op:[a-f0-9]+ -->/g, "").replace(CITATION, "").replace(/^\s*[-*>]\s*/, "").replace(/\s*\(\s*\)\s*\.?$/, "").trim();
+const clean = (line: string) => line.replace(/<!-- zenod-op:[a-f0-9]+ -->/g, "").replace(CITATION, "").replace(/^\s*[-*>]\s*/, "").replace(/^\*\*(?:Correction|Unresolved conflict):\*\*\s*/, "").replace(/\s*\(\s*\)\s*\.?$/, "").trim();
 const equivalent = (a: string, b: string) => a.normalize("NFKC").replace(/[\s.,;:!?]+/gu, " ").trim().toLowerCase() === b.normalize("NFKC").replace(/[\s.,;:!?]+/gu, " ").trim().toLowerCase();
 /** Obvious semantic changes cannot be hidden by a LINK_SOURCE decision.
  * Paraphrase equivalence beyond this floor remains the bounded model's judgment.
@@ -45,6 +45,7 @@ interface PrepareInput {
   path: string; raw: string | null; title: string; type: string; today: string;
   repositoryRevision?: import("../vault/repository.js").VaultRevision;
   ideas?:ReconciliationIdea[];
+  facts?:FactProposal[];
   evidence: MemoryEntry; sources: ReconciliationSource[]; context: BranchContextPacket; links: string[];
 }
 export function prepareReconciliation(input: PrepareInput) {
@@ -110,24 +111,25 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
       continue;
     }
     const statement = operation.statement?.trim() || operation.sourceQuote;
-    if (statement.length>800 || !compatibleLink(statement,operation.sourceQuote)) {fail("statement_qualifiers_changed");continue;}
+    if (operation.kind!=="link_source" && (statement.length>800 || !compatibleLink(statement,operation.sourceQuote))) {fail("statement_qualifiers_changed");continue;}
     const target = operation.targetId ? targets.get(operation.targetId) : undefined;
     if (operation.kind === "clarify") { fail("reconciliation_needs_clarification"); continue; }
     if (operation.kind !== "add" && !target) { fail("statement_target_invalid"); continue; }
     if (operation.kind === "link_source") {
       if (!compatibleLink(target!.text, operation.sourceQuote)) { fail("equivalence_not_established"); continue; }
       const current = edits.get(operation.targetId!)?.text ?? target!.line;
-      edits.set(operation.targetId!, {start: target!.start, end: target!.end, text: current.includes(citation) ? current : `${current} ${citation} ${marker}`});
+      if (!current.includes(citation)) edits.set(operation.targetId!, {start: target!.start, end: target!.end, text: `${current} ${citation} ${marker}`});
     } else {
       const knownKey = prepared.request.statements.find(statement => statement.id === operation.targetId)?.factKey;
       const factKey = operation.kind === "supersede" || operation.kind === "conflict" ? knownKey ?? operation.factKey ?? `legacy.${digest([input.path,target!.text])}` : operation.factKey;
       const legacy = operation.kind === "supersede" && !knownKey && input.repositoryRevision && input.raw !== null
         ? {path:input.path,statement:target!.text,statementId:operation.targetId!,contentHash:pageRevision(input.raw),provider:input.repositoryRevision.provider,revision:input.repositoryRevision.id} : undefined;
       if (operation.kind === "supersede" && ((!knownKey && !legacy) || !factKey || !operation.correctionQuote || !sources.some(source => source!.text.includes(operation.correctionQuote!)))) { fail("correction_target_or_intent_unverified"); continue; }
-      const proposal: FactProposal | null = factKey ? {key: factKey, statement:operation.sourceQuote, renderedStatement:statement, ...(operation.kind==="conflict" ? {reportedConflict:true} : {}), ...(legacy ? {legacySupersedes:legacy} : {}), effectiveDate: null, effectiveDateQuote: null,
+      const classifiedFact=input.facts?.find(fact=>fact.key===factKey && fact.statement===operation.sourceQuote);
+      const proposal: FactProposal | null = factKey ? {key: factKey, statement:operation.sourceQuote, renderedStatement:statement, ...(operation.kind==="conflict" ? {reportedConflict:true} : {}), ...(legacy ? {legacySupersedes:legacy} : {}), effectiveDate: classifiedFact?.effectiveDate??null, effectiveDateQuote: classifiedFact?.effectiveDateQuote??null,
         correctionQuote: operation.kind === "supersede" ? operation.correctionQuote : null,
         supersedesQuotes: operation.kind === "supersede" ? [target!.text] : [],
-        ...(operation.kind === "supersede" ? {supersedesIds: parseMemoryFacts(parsed?.frontmatter?.memoryFacts).filter(fact => fact.key === factKey && equivalent(fact.renderedStatement ?? fact.statement, target!.text)).map(fact => fact.id)} : {}), verificationQuote: null} : null;
+        ...(operation.kind === "supersede" ? {supersedesIds: parseMemoryFacts(parsed?.frontmatter?.memoryFacts).filter(fact => fact.key === factKey && equivalent(fact.renderedStatement ?? fact.statement, target!.text)).map(fact => fact.id)} : {}), verificationQuote: classifiedFact?.verificationQuote??null} : null;
       if (operation.kind === "supersede") {
         const trialSeed = parsed?.frontmatter ? input.raw! : serializeNote({title:input.title,type:input.type,tags:[],summary:input.title,created:input.today,updated:input.today},parsed?.body??"");
         const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, sources.map(source => source!.text).join("\n\n"));

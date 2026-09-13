@@ -1570,7 +1570,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             }
             return chunks;
           });
-          const prepared = prepareReconciliation({path,raw:currentContent,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
+          const prepared = prepareReconciliation({path,raw:currentContent,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
             ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
           reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
           const operations = await llm.reconcile(prepared.request);

@@ -85,6 +85,8 @@ it('keeps conflicting reports rather than silently correcting a current fact', a
   expect(result.content).toContain(old); expect(result.content).toContain('Unresolved conflict');
   expect(result.pending[0]!.reason).toBe('conflict_retained');
   expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.supersedes).toEqual([]);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async()=>evidence(source));
+  expect(view.facts[0]!.status).toBe('conflict');
 });
 it('accounts for separate ideas sharing a source passage, even when only one operation succeeds', async () => {
   const prepared=input('# A\n[[Index]]\n','Video explains logarithms. Passport expires in May.');
@@ -93,4 +95,31 @@ it('accounts for separate ideas sharing a source passage, even when only one ope
   const result=await applyReconciliation(grouped,[{...op('add','Video explains logarithms.'),ideaIds:['video'],statement:'The video explains logarithms.'}]);
   expect(result.appliedOperations[0]!.ideaIds).toEqual(['video']);
   expect(result.pending).toContainEqual({ideaIds:['travel'],sourceIds:['p1'],reason:'reconciliation_idea_unassigned'});
+});
+
+it('keeps successive correction targets linked to the existing fact chain',async()=>{
+  let raw='# A\nThe launch is on 12.\n[[Index]]\n';
+  const entries=new Map<string,MemoryEntry>();
+  for (const [n,value] of [[1,19],[2,20]] as const) {
+    const source=`Correction: the launch moves to ${value}.`;
+    const prepared=input(raw,source);
+    prepared.input.evidence={...evidence(source),evidenceRef:`Log/2026-09-13.md#^e-00000${n}`};entries.set(prepared.input.evidence.evidenceRef,prepared.input.evidence);
+    const target=prepared.request.statements.find(statement=>statement.text===(n===1?'The launch is on 12.':'The launch moves to 19.'))!;
+    expect(target).toBeDefined();
+    if(n===2) expect(target.factKey).not.toBeNull();
+    const result=await applyReconciliation(prepared,[{...op('supersede',`the launch moves to ${value}`,target.id),statement:`The launch moves to ${value}.`,correctionQuote:source}]);
+    expect(result.pending).toEqual([]);raw=result.content;
+  }
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(raw).frontmatter!.memoryFacts,new Date('2026-09-13'),async ref=>entries.get(ref)!);
+  expect(view.facts.map(fact=>fact.status)).toEqual(['superseded','active']);
+  expect(view.priorStatements![0]!.statement).toBe('The launch is on 12.');
+  const linked=input(raw,'El lanzamiento se mueve al 20.');
+  linked.input.evidence={...evidence('El lanzamiento se mueve al 20.'),evidenceRef:'Log/2026-09-13.md#^e-000003'};
+  const current=linked.request.statements.find(statement=>statement.text==='The launch moves to 20.')!;
+  expect(current.factKey).toBe(view.facts[1]!.key);
+  const reinforced=await applyReconciliation(linked,[op('link_source','El lanzamiento se mueve al 20.',current.id)]);
+  expect(reinforced.pending).toEqual([]);
+  expect(reinforced.content).toContain('[[2026-09-13#^e-000003]]');
+  expect(reinforced.content.split('The launch moves to 20.')).toHaveLength(raw.split('The launch moves to 20.').length);
+  expect(parseMemoryFacts(parseNote(reinforced.content).frontmatter!.memoryFacts)).toHaveLength(2);
 });
