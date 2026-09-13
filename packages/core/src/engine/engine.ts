@@ -1607,12 +1607,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
         if (llm.reconcile && atomicContext) {
           if (currentContent !== null && !atomicContext.branches.some(branch => branch.path === path)) throw new Error("branch_context_unavailable");
-          const sources = sourceSpans.flatMap(span => {
+          // Adjacent ASR ideas can have overlapping complete context envelopes.
+          // Union host ranges before chunking so the source table stays coherent;
+          // immutable idea identity remains based on the original assignments.
+          const sourceRanges: Array<{start:number;end:number}> = [];
+          for (const span of sourceSpans) {
+            const previous=sourceRanges.at(-1);
+            if(previous && span.start<=previous.end) previous.end=Math.max(previous.end,span.end);
+            else sourceRanges.push({start:span.start,end:span.end});
+          }
+          const sources = sourceRanges.flatMap(span => {
             const chunks: Array<{id:string;start:number;end:number;text:string}> = [];
             for (let start = span.start; start < span.end;) {
               let end = Math.min(span.end, start + 1600);
               if (/^[\uDC00-\uDFFF]$/.test(content[end] ?? "")) end--;
-              chunks.push({id:`${span.passageId ?? "source"}:${start}:${end}`,start,end,text:content.slice(start,end)}); start=end;
+              chunks.push({id:`source:${start}:${end}`,start,end,text:content.slice(start,end)}); start=end;
             }
             return chunks;
           });

@@ -298,3 +298,11 @@ it('retains independently validated effective-date support around the compact cl
  expect(result.pending).toEqual([]);
  expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.effectiveDate).toBe('2026-10-01');
 });
+it('accepts separate correction sentences with a complete exact correction context',async()=>{
+ const claim='Each visitor receives a chart.';
+ const context='I correct the previous entry.\n\n'+claim;
+ const prepared=input('# A\nEach visitor receives a ticket.\n[[Index]]\n',context);
+ const result=await applyReconciliation(prepared,[{...op('supersede',claim,prepared.request.statements[0]!.id),statement:claim,correctionQuote:context}]);
+ expect(result.pending).toEqual([]);
+ expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.legacySupersedes!.statement).toBe('Each visitor receives a ticket.');
+});

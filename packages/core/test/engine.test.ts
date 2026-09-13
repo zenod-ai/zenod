@@ -1020,6 +1020,26 @@ describe("BrainEngine", () => {
     expect(filed.topics![0]!.ideaId).toMatch(/^idea-/); expect(filed.topics![0]!.appliedOperationIds).toHaveLength(1);
   });
 
+  it("unions overlapping ASR context envelopes without losing independent ideas",async()=>{
+    const lead="The room opens in the morning. ";
+    const first="Each visitor receives a chart. ";
+    const second="Each teacher receives a pen. ";
+    const tail="The room closes in the evening.";
+    const content=Array.from({length:100},(_,i)=>`Background observation ${i} is recorded. `).join("")+lead+first+second+tail;
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"ASR recipients",tags:[],pages:[],topics:[
+      {topic:"Visitors",summary:"Visitors",evidenceQuotes:[lead+first+second]},
+      {topic:"Teachers",summary:"Teachers",evidenceQuotes:[first+second+tail]},
+    ].map(topic=>({...topic,confidence:0.95,disposition:"integrate_page" as const,pages:[{path:"Areas/Insurance.md",title:"Insurance",action:"update" as const}]}))}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.sources).toHaveLength(1);
+      expect(request.ideas).toHaveLength(2);
+      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:idea.topic==="Visitors"?first.trim():second.trim(),statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null}));
+    });
+    Object.assign(llm,{reconcile});const e=engine();const captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
+    expect(result.filing).not.toBe("pending");expect(result.topics!.filter(topic=>topic.status==="filed")).toHaveLength(2);
+  });
+
   it("files a complete proposition crossing the host source chunk boundary",async()=>{
     const quote="Each visitor must receive a durable chart printed on waterproof paper before leaving.";
     const content="Background. ".repeat(131)+quote;

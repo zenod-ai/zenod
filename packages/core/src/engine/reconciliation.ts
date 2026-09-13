@@ -234,7 +234,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
         ...(operation.kind === "supersede" ? {supersedesIds: parseMemoryFacts(parsed?.frontmatter?.memoryFacts).filter(fact => fact.key === factKey && equivalent(fact.renderedStatement ?? fact.statement, target!.text)).map(fact => fact.id)} : {}), verificationQuote: classifiedFact?.verificationQuote??null} : null;
       if (operation.kind === "supersede") {
         const trialSeed = parsed?.frontmatter ? input.raw! : serializeNote({title:input.title,type:input.type,tags:[],summary:input.title,created:input.today,updated:input.today},parsed?.body??"");
-        const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, operation.correctionQuote!);
+        const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, [operation.sourceQuote,operation.correctionQuote!].join("\n\n"));
         const fact = parseMemoryFacts(parseNote(trial).frontmatter?.memoryFacts).find(fact => fact.evidenceRef === input.evidence.evidenceRef && fact.statement === operation.sourceQuote);
         if ((!fact?.supersedes.length && !fact?.legacySupersedes) || fact.unresolvedCorrection) { fail("correction_direction_unverified"); continue; }
       }
