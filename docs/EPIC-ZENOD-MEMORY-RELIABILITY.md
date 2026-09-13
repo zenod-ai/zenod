@@ -133,7 +133,7 @@ Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0
 ## Execution Cursor
 
 Last attempted: real current-model evaluation of frozen candidate 6e0af0c against a budget-capped production baseline variant 9ce6e74.
-Result: raw evidence and all 12 structural invariants passed; 11/11 ideas recognized, only 4/11 bound to valid spans, 1/10 intended meaning operations correct. Complete recall 3/18 versus baseline 4/18. Candidate total $0.20395703; ingestion/reconciliation including retry $0.01392383. Semantic verdict FAIL; no deployment.
+Result: raw evidence and all 12 structural invariants passed; 11/11 ideas recognized, only 4/11 bound to valid spans, 1/10 intended meaning operations correct. Complete recall 3/18 versus baseline 4/18. Candidate total $0.20395703; ingestion/reconciliation including retry $0.01392383. Semantic verdict FAIL; no deployment. [Measured evidence](evidence/zmr-reconciliation-2026-09-13/README.md).
 Execution status: ZMR-11–14 integrated; ZMR-18/19/20 dispatched in disjoint repair wave. Operator quiescence helper PR1253 independently reviewed, 23 offline tests and CI passed, integrated.
 Waiting on: bounded source, context and answer repairs, then actual independent acceptance.
 Approved work: implement/test/deploy existing increment using subagents; /root remains delivery manager. Deployment requires candidate quality and recovery checks. No paid model comparison or model switch.
