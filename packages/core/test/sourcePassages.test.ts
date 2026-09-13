@@ -58,6 +58,31 @@ describe("original-evidence passage addresses", () => {
     }
   });
 
+  it("resolves unique exact quotes despite redundant occurrence numbering", () => {
+    const content = "First idea. Única idea 👩🏽‍💻.\r\nTail.  ";
+    const window = sourceWindows({ content })[0]!;
+    for (const occurrence of [0, 1, 99]) {
+      const resolved = resolveTopicSpans(content, { ...topic, sourceRange: window.range, sourcePassages: window.passages,
+        evidenceAssignments: [{ passageId: window.passages[0]!.id, quote: "Única idea 👩🏽‍💻.", occurrence }] });
+      expect(resolved.invalid).toBe(false);
+      expect(resolved.spans.map(s => content.slice(s.start, s.end))).toEqual(["Única idea 👩🏽‍💻."]);
+    }
+  });
+
+  it("resolves a sentence crossing adjacent supplied passages with exact original offsets", () => {
+    const content = "x".repeat(790) + "Decision: use azul\r\nfor Friday 👩🏽‍💻.  ";
+    const window = sourceWindows({ content })[0]!;
+    const quote = "Decision: use azul\r\nfor Friday 👩🏽‍💻.  ";
+    expect(window.passages.length).toBe(2);
+    for (const passage of window.passages) {
+      const resolved = resolveTopicSpans(content, { ...topic, sourceRange: window.range, sourcePassages: window.passages,
+        evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 1 }] });
+      expect(resolved.invalid).toBe(false);
+      expect(resolved.spans[0]).toMatchObject({ start: 790, end: content.length });
+      expect(content.slice(resolved.spans[0]!.start, resolved.spans[0]!.end)).toBe(quote);
+    }
+  });
+
   it("does not accept forged, duplicate, unresolved, or unsupported assigned passage reviews", () => {
     const content = "A durable idea. Some conversational filler.";
     const window = sourceWindows({ content })[0]!;
