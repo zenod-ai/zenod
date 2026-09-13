@@ -377,12 +377,20 @@ export class TaskJobStore {
 
   /** Bounded retry of transient unfinished filing; uncertainty requires new context. */
   resumePending(claim: Pick<TaskJob, "id" | "claimToken">, result: StoreResult, now: number = Date.now()): boolean {
-    if (result.filing !== "pending") return false;
-    return this.db.prepare(`UPDATE task_jobs SET status='queued', result_json=?, attempts=attempts+1,
+    return result.filing === "pending" && this.requeueFiling(claim, JSON.stringify(result), null, now);
+  }
+
+  /** Retry a typed provider recovery failure without inventing a publication receipt. */
+  resumePublicationFailure(claim: Pick<TaskJob, "id" | "claimToken">, error: string, now: number = Date.now()): boolean {
+    return this.requeueFiling(claim, null, error, now);
+  }
+
+  private requeueFiling(claim: Pick<TaskJob, "id" | "claimToken">, resultJson: string | null, error: string | null, now: number): boolean {
+    return this.db.prepare(`UPDATE task_jobs SET status='queued', result_json=COALESCE(?,result_json), error=?, attempts=attempts+1,
       owner_id=NULL, claim_token=NULL, lease_expires_at=NULL, updated_at=?
       WHERE tenant_id=? AND id=? AND kind='enrich_memory' AND status='running' AND owner_id=?
       AND claim_token=? AND lease_expires_at>? AND attempts<?`)
-      .run(JSON.stringify(result), now, this.tenantId, claim.id, this.ownerId, claim.claimToken, now, MAX_FILING_RESUME_ATTEMPTS).changes === 1;
+      .run(resultJson, error, now, this.tenantId, claim.id, this.ownerId, claim.claimToken, now, MAX_FILING_RESUME_ATTEMPTS).changes === 1;
   }
 
   nextRunningLeaseExpiry(): number | null {

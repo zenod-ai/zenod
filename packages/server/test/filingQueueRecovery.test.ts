@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { simpleGit } from "simple-git";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEngine, VaultRepo, SqliteStateStore, type BrainLlm } from "zenod";
+import { createEngine, VaultRepo, SqliteStateStore, VaultPublicationError, type BrainEngine, type BrainLlm } from "zenod";
 import { TaskJobStore } from "../src/taskJobStore.js";
 import { TaskJobQueue } from "../src/taskJobQueue.js";
 
@@ -12,7 +12,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 
 describe("supported queue filing replay", () => {
-  it("resumes only a failed sibling, resolves the same receipt, and makes complete source replay free", async () => {
+  it.each([false, true])("resumes only unfinished work through the real queue (publication recovery: %s)", async publicationFailure => {
     const root = await mkdtemp(join(tmpdir(), "zenod-queue-filing-")); roots.push(root);
     const bare = join(root, "origin.git"); await mkdir(bare); await simpleGit(bare).init(true, { "--initial-branch": "main" });
     const repo = await VaultRepo.open({ workdir: join(root, "vault"), remoteUrl: bare });
@@ -26,7 +26,7 @@ describe("supported queue filing replay", () => {
     })) }));
     let failedOnce = false;
     const reconcile = vi.fn(async (request: any) => {
-      if (request.path === paths[1] && !failedOnce) { failedOnce = true; throw new Error("synthetic transient provider outage"); }
+      if (!publicationFailure && request.path === paths[1] && !failedOnce) { failedOnce = true; throw new Error("synthetic transient provider outage"); }
       return request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id], sourceIds: idea.sourceIds,
         sourceQuote: request.sources.find((source: any) => source.id === idea.sourceIds[0]).text,
         statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null }));
@@ -37,6 +37,10 @@ describe("supported queue filing replay", () => {
     const logPath = join(repo.path, captured.evidenceRef.split("#")[0]!); const raw = await readFile(logPath, "utf8");
     const jobs = new TaskJobStore(join(root, "jobs.sqlite"), "tenant-a");
     const queue = new TaskJobQueue(jobs, async () => engine);
+    if (publicationFailure) vi.spyOn(repo, "commitAndPublish").mockImplementationOnce(async () => {
+      throw new VaultPublicationError({ code: "partial_recovering", message: "synthetic provider recovery required", retryable: true, transactionId: "fixture", paths });
+    });
+    const expectedCalls = publicationFailure ? 2 : 3;
     try {
       const input = { content, source: "selftest" as const, sourceId: "queue-fixture", evidenceRef: captured.evidenceRef };
       const job = queue.enqueue("enrich_memory", input, "enrich:tenant-a:queue-fixture");
@@ -44,8 +48,8 @@ describe("supported queue filing replay", () => {
       const done = jobs.get(job.id)!;
       expect(done.status).toBe("done"); expect(done.attempts).toBe(1);
       expect(done.result).toMatchObject({ filing: "filed", topics: [expect.objectContaining({ status: "filed" }), expect.objectContaining({ status: "filed" })] });
-      expect(classify).toHaveBeenCalledTimes(1); expect(reconcile).toHaveBeenCalledTimes(3);
-      expect(reconcile.mock.calls.map(([request]) => request.path)).toEqual([paths[0], paths[1], paths[1]]);
+      expect(classify).toHaveBeenCalledTimes(1); expect(reconcile).toHaveBeenCalledTimes(expectedCalls);
+      expect(reconcile.mock.calls.map(([request]) => request.path)).toEqual(publicationFailure ? paths : [paths[0], paths[1], paths[1]]);
       for (const path of paths) expect((await readFile(join(repo.path, path), "utf8")).match(/<!-- zenod-op:/g)).toHaveLength(1);
       const receiptPath = `Inbox/filing-${captured.evidenceRef.slice(4, 14)}-${captured.evidenceRef.split("#^")[1]}.md`;
       expect(await readFile(join(repo.path, receiptPath), "utf8")).toContain("status: filing-resolved");
@@ -53,7 +57,7 @@ describe("supported queue filing replay", () => {
       const published = await repo.currentPublishedRevision();
       expect(queue.enqueue("enrich_memory", input, "enrich:tenant-a:queue-fixture").id).toBe(job.id);
       await queue.close();
-      expect(reconcile).toHaveBeenCalledTimes(3); expect((await repo.currentPublishedRevision()).id).toBe(published.id);
+      expect(reconcile).toHaveBeenCalledTimes(expectedCalls); expect((await repo.currentPublishedRevision()).id).toBe(published.id);
     } finally { await queue.close(); jobs.close(); state.close(); }
   }, 30_000);
 });
@@ -92,3 +96,17 @@ it("lets the winning queue recover publication when the original lease expires b
     expect((await readFile(join(repo.path, "Areas/Insurance.md"), "utf8")).match(/<!-- zenod-op:/g)).toHaveLength(1);
   } finally { await queue.close(); await winningQueue?.close(); original.close(); winner?.close(); state.close(); clock?.mockRestore(); }
 }, 30_000);
+
+
+it("exhausts the shared provider retry budget truthfully without fabricating a durable result", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zenod-queue-publication-exhausted-")); roots.push(root);
+  const jobs = new TaskJobStore(join(root, "jobs.sqlite"), "tenant");
+  const enrichEvidence = vi.fn(async () => { throw new VaultPublicationError({ code: "partial_recovering", message: "provider still recovering", retryable: true, transactionId: "fixture", paths: ["Notes/Idea.md"] }); });
+  const queue = new TaskJobQueue(jobs, async () => ({ enrichEvidence }) as unknown as BrainEngine);
+  try {
+    const job = queue.enqueue("enrich_memory", { evidenceRef: "Log/2026-09-13.md#^e-fixture", content: "source" });
+    for (let i = 0; i < 100 && jobs.get(job.id)?.status !== "error"; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    expect(jobs.get(job.id)).toMatchObject({ status: "error", attempts: 1, result: null, error: "provider still recovering" });
+    expect(enrichEvidence).toHaveBeenCalledTimes(2);
+  } finally { await queue.close(); jobs.close(); }
+});

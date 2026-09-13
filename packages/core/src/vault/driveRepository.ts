@@ -1013,10 +1013,10 @@ export class DriveVaultRepository implements VaultRepository {
 
   async commitAndPublish(message: string, guard?: VaultPublicationGuard): Promise<VaultRevision> {
     if (guard) {
-      verifyPublicationBase(await this.currentPublishedRevision(), guard);
       const head = (await this.git.revparse(["HEAD"])).trim();
       let pending = await this.pendingChanges();
-      if (!pending.length && head !== this.manifest.commitSha) {
+      const preparedCommit = !pending.length && head !== guard.expectedRevision.commitSha;
+      if (preparedCommit) {
         const parents = (await this.git.show(["-s", "--format=%P", head])).trim();
         if (parents !== guard.expectedRevision.commitSha) filingPublicationConflict(guard);
         const paths = (await this.git.raw(["diff", "--name-only", "-z", parents, head])).split("\0").filter(Boolean);
@@ -1025,10 +1025,27 @@ export class DriveVaultRepository implements VaultRepository {
           after: await this.git.show([`${head}:${path}`]).catch(() => null),
         })));
         verifyPublicationFiles(changes, guard);
+      } else verifyPublicationFiles(pending, guard);
+      guard.assertActive?.();
+      // Finish an existing provider journal before considering a new transaction.
+      // A lost journal-create response may leave its exact local files unstaged.
+      await this.recoverTransactions(guard);
+      const published = await this.currentPublishedRevision();
+      if (preparedCommit && published.commitSha === head) return this.revision(Object.keys(guard.expectedFiles));
+      if (published.id !== guard.expectedRevision.id) {
+        // Recovery can restore the original journal commit after a lost create
+        // response. Verify that published tree against the same exact plan.
+        const recoveredHead = (await this.git.revparse(["HEAD"])).trim();
+        if (published.commitSha === recoveredHead) {
+          await this.verifyGuardedCommit(recoveredHead, guard);
+          return this.revision(Object.keys(guard.expectedFiles));
+        }
+        filingPublicationConflict(guard);
+      }
+      verifyPublicationBase(published, guard);
+      if (preparedCommit) {
         guard.assertActive?.();
-        // Only this exact verified unpublished commit is converted back to the
-        // adapter's existing journal input; no unrelated edits are reset.
-        await this.git.reset(["--soft", parents]);
+        await this.git.reset(["--soft", guard.expectedRevision.commitSha!]);
         pending = await this.pendingChanges();
       }
       verifyPublicationFiles(pending, guard);
@@ -1096,6 +1113,16 @@ export class DriveVaultRepository implements VaultRepository {
         pendingPaths: journal.mutations.filter((mutation) => mutation.state !== "applied").map((mutation) => mutation.path),
       });
     }
+  }
+
+  private async verifyGuardedCommit(head: string, guard: VaultPublicationGuard): Promise<void> {
+    const base = guard.expectedRevision.commitSha;
+    if (!base || (await this.git.show(["-s", "--format=%P", head])).trim() !== base) filingPublicationConflict(guard);
+    const paths = (await this.git.raw(["diff", "--name-only", "-z", base, head])).split("\0").filter(Boolean);
+    verifyPublicationFiles(await Promise.all(paths.map(async path => ({ path,
+      before: await this.git.show([`${base}:${path}`]).catch(() => null),
+      after: await this.git.show([`${head}:${path}`]).catch(() => null),
+    }))), guard);
   }
 
   private async assertRemoteBase(paths: string[]): Promise<void> {
@@ -1946,7 +1973,7 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private async recoverTransactions(): Promise<void> {
+  private async recoverTransactions(guard?: VaultPublicationGuard): Promise<void> {
     const remote = await this.options.client.listFiles({ folderId: this.transactionsFolderId, pageSize: 1000, allPages: true });
     for (const file of remote.filter((candidate) => candidate.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-"))) {
       const marker = await this.options.client.download(file.id).then((data) => JSON.parse(data.toString("utf8")) as {
@@ -2055,7 +2082,15 @@ export class DriveVaultRepository implements VaultRepository {
         await this.configureGit();
         const localHead = (await this.git.revparse(["HEAD"])).trim();
         if (localHead !== journal.targetCommitSha) {
+          const pending = await this.pendingChanges();
+          if (guard) {
+            if (pending.length) verifyPublicationFiles(pending, guard);
+            if (localHead !== guard.expectedRevision.commitSha) await this.verifyGuardedCommit(localHead, guard);
+          } else if (pending.length || localHead !== this.manifest.commitSha) {
+            throw new Error("filing_local_changes_require_recovery");
+          }
           await this.git.raw(["fetch", bundlePath, "refs/heads/main:refs/heads/recovery"]);
+          if (guard) await this.verifyGuardedCommit(journal.targetCommitSha, guard);
           await this.git.reset(["--hard", journal.targetCommitSha]);
         }
       } else {

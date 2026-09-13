@@ -1,4 +1,4 @@
-import type { BrainEngine } from "zenod";
+import { VaultPublicationError, type BrainEngine } from "zenod";
 import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchive.js";
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
@@ -209,6 +209,8 @@ export class TaskJobQueue {
       else console.warn(`[task-job] ${job.id} result ignored after claim ownership changed`);
     } catch (err) {
       console.error(`[task-job] ${job.id} failed:`, err);
+      if (job.kind === "enrich_memory" && err instanceof VaultPublicationError && err.failure.retryable
+        && this.store.resumePublicationFailure(job, err.message)) return;
       if (!this.store.updateClaimed(job, { status: "error", error: (err as Error).message })) {
         console.warn(`[task-job] ${job.id} error ignored after claim ownership changed`);
       }

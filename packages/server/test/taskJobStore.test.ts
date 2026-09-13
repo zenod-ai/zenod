@@ -361,6 +361,7 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     const expired = 1_000 + TASK_JOB_LEASE_MS;
     expect(store.renewClaim(first, expired)).toBe(false);
     expect(store.updateClaimed(first, { status: "done" }, expired)).toBe(false);
+    expect(store.resumePublicationFailure(first, "stale provider recovery", expired)).toBe(false);
     expect(() => store.assertClaim(first, expired)).toThrow("task_job_claim_lost");
     store.recoverExpiredRunning(expired);
     const second = store.claimNextQueued(expired + 1)!;
@@ -368,6 +369,7 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     expect(second.claimToken).not.toBe(first.claimToken);
     expect(store.renewClaim(first, expired + 2)).toBe(false);
     expect(store.updateClaimed(first, { status: "done" }, expired + 2)).toBe(false);
+    expect(store.resumePublicationFailure(first, "stale provider recovery", expired + 2)).toBe(false);
     expect(() => store.assertClaim(second, expired + 2)).not.toThrow();
     expect(store.updateClaimed(second, { status: "done" }, expired + 2)).toBe(true);
     store.close();
