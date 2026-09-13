@@ -38,6 +38,14 @@ export interface VaultSourceRef {
 /** A source used to ground an answer; kept named separately for public schemas. */
 export type VaultCitation = VaultSourceRef;
 
+/** Validated filing publication; exact paths/hashes fence prepared-commit recovery. */
+export interface VaultPublicationGuard {
+  expectedRevision: VaultRevision;
+  receiptPath: string;
+  expectedFiles: Record<string, string | null>;
+  assertActive?: () => void;
+}
+
 /**
  * Repository-shaped boundary used by the existing local Markdown workflow.
  * Implementations own remote synchronization and publication semantics only.
@@ -47,13 +55,17 @@ export interface VaultRepository {
   readonly provider: VaultProvider;
 
   pull(): Promise<void>;
+  /** Filing sync must never rebase a prepared local transaction. */
+  pullForFiling?(): Promise<void>;
+  /** Verify remote publication without mistaking a prepared local commit for durable evidence. */
+  currentPublishedRevision?(): Promise<VaultRevision>;
   /** Return the durable revision currently materialized in the local workspace. */
   currentRevision(): Promise<VaultRevision>;
   trackedFiles(): Promise<string[]>;
   contentAtHead(path: string): Promise<string | null>;
   pendingChanges(): Promise<FileChange[]>;
   discardChanges(): Promise<void>;
-  commitAndPublish(message: string): Promise<VaultRevision>;
+  commitAndPublish(message: string, guard?: VaultPublicationGuard): Promise<VaultRevision>;
   urlFor(path: string, anchor?: string): string | null;
 }
 

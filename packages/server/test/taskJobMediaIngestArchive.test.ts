@@ -100,7 +100,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
       bytesRef: `data:audio/ogg;base64,${Buffer.from("same audio bytes").toString("base64")}`,
       contentHint: "This belongs to the PatronBTC educational video project.",
       filename: "same.ogg", sourceHint: contentType === "voice_note" ? "WhatsApp voice note" : "WhatsApp audio",
-      senderTimestamp: "2026-09-08T11:48:55Z", providedTranscript: "Source identity regression transcript", transcriptionDisposition: "provided" as const,
+      senderTimestamp: "2026-09-08T11:48:55Z", providedTranscript: "  Source identity regression transcript\r\n\r\n", transcriptionDisposition: "provided" as const,
     };
     const job = queue.enqueue("media_ingest", input, `tenant:whatsapp:${contentType}`);
     expect(queue.enqueue("media_ingest", input, `tenant:whatsapp:${contentType}`).id).toBe(job.id);
@@ -117,6 +117,9 @@ describe("TaskJobQueue media_ingest archive integration", () => {
     expect(enrichedInput.hints).toContain(`User context: ${input.contentHint}`);
     expect(captureInput.hints).toEqual(enrichedInput.hints);
     expect(enrichedInput.content.slice(enrichedInput.semanticRange!.start, enrichedInput.semanticRange!.end)).toBe(input.providedTranscript);
+    const mediaReceipt = store.get(job.id)!.result as MediaIngestReceipt;
+    expect(await readFile(new URL(mediaReceipt.rawArtifact.handle))).toEqual(Buffer.from("same audio bytes"));
+    expect(await readFile(new URL(mediaReceipt.extraction.transcriptHandle!), "utf8")).toBe(input.providedTranscript);
     const enrichmentId = (store.get(job.id)!.result as MediaIngestReceipt).digest.enrichmentJobId!;
     expect(store.get(enrichmentId)!.input.semanticRange).toEqual(captureInput.semanticRange);
 
