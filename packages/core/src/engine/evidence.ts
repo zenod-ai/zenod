@@ -236,6 +236,14 @@ export async function getEvidenceEntry(
   const anchor = evidenceRef.slice(marker + 2);
   if (!logDate(path) || !validAnchor(anchor)) throw new Error(`invalid evidence ref: ${evidenceRef}`);
   const text = await readFile(join(vaultPath, path), "utf8");
+  return evidenceEntryFromText(evidenceRef, text, location);
+}
+
+/** Parse already bounded source bytes using the same exact evidence identity checks. */
+export function evidenceEntryFromText(evidenceRef: string, text: string, location: VaultSourceContext = {}): MemoryEntry {
+  const marker = evidenceRef.lastIndexOf("#^");
+  const path = evidenceRef.slice(0, marker), anchor = evidenceRef.slice(marker + 2);
+  if (marker < 0 || !logDate(path) || !validAnchor(anchor)) throw new Error(`invalid evidence ref: ${evidenceRef}`);
   const entry = parseEvidenceFile(path, text, location).find((candidate) => candidate.anchor === anchor);
   if (!entry) throw new Error(`evidence entry not found: ${evidenceRef}`);
   return entry;
