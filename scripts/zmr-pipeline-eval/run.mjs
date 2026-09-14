@@ -7,11 +7,11 @@ import {tmpdir} from 'node:os';
 import {pathToFileURL, fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {sha256, HELDOUT_SHA256, validateFixture, sourceInput, budgetLedger, coverageRows, terminalProviderGuard, evaluationFetch, evaluationCostSummary, evaluationCompletion, runEvaluationRecalls} from './policy.mjs';
-import {classifyModelOption, evaluationModels} from './models.mjs';
+import {classifyModelOption, organizerReasoningOption, evaluationModels} from './models.mjs';
 const {values: args} = parseArgs({options:{
   live:{type:'boolean',default:false}, 'offline-smoke':{type:'boolean',default:false}, fixture:{type:'string',default:'/tmp/zmr15-heldout/heldout.json'},
   'candidate-repo':{type:'string'}, 'candidate-sha':{type:'string'}, out:{type:'string'}, prices:{type:'string'},
-  'classify-model':classifyModelOption,
+  'classify-model':classifyModelOption,'organizer-reasoning-effort':organizerReasoningOption,
   questions:{type:'string'}, audio:{type:'string'}, 'ask-model':{type:'string',default:'x-ai/grok-4.3'},
   'budget-usd':{type:'string',default:'1'}, 'max-requests':{type:'string',default:'60'},
 }});
@@ -23,7 +23,7 @@ if (args.live && args['offline-smoke']) throw new Error('Choose live or offline 
 if (!args.live && !args['offline-smoke']) {
   console.log(JSON.stringify({mode:'OFFLINE_PLAN_ONLY', fixtureId:fixture.id, fixtureSha256:HELDOUT_SHA256,
     sourceChars:fixture.transcript.length, evaluatorIdeas:fixture.ground_truth.length,
-    plannedSurface:mode, classifier:models.classifyModel, askModel:models.askModel,
+    plannedSurface:mode, classifier:models.classifyModel, askModel:models.askModel, organizerReasoningEffort:models.organizerReasoningEffort??null,
     externalCalls:0, needs:['accepted exact candidate SHA', 'reviewed price manifest', 'private recall question file',
       'existing key supplied securely via ZMR_EVAL_OPENROUTER_KEY at execution', 'independent semantic review after run'],
     limitations:['not phone ingress', 'provided transcript does not evaluate ASR', 'span coverage is not idea correctness']},null,2));
@@ -47,7 +47,7 @@ const questions = JSON.parse(questionsBytes);
 if (!Array.isArray(questions) || questions.length < 3 || questions.length > 10 || questions.some(q=>!q.id || typeof q.question!=='string' || q.question.length>1500)) throw new Error('Provide 3–10 frozen recall questions');
 const telemetry = {mode, candidateSha:args['candidate-sha'], fixtureSha256:sha256(bytes), pricingSha256:sha256(pricingBytes),
   questionsSha256:sha256(questionsBytes), node:process.version, platform:process.platform, startedAt:new Date().toISOString(),
-  classifier:models.classifyModel, askModel:models.askModel, modelUsage:[], engineTokenEstimates:[], operations:[], requests:[], recalls:[], budgetBlocks:[],
+  classifier:models.classifyModel, askModel:models.askModel, organizerReasoningEffort:models.organizerReasoningEffort??null, modelUsage:[], engineTokenEstimates:[], operations:[], requests:[], recalls:[], budgetBlocks:[],
   acceptance:'NOT_EVALUATED', syntheticTransport:args['offline-smoke'], externalCalls:0, billingWarning:'Budget uses reviewed rate reservations; unexpected provider charges can exceed a reservation. Missing usage is never zero cost.'};
 await save('run.json',telemetry);
 await writeFile(join(output,'frozen-fixture.json'),bytes,{mode:0o600});
