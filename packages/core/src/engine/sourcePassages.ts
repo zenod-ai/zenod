@@ -171,7 +171,7 @@ function completeSourcePropositions(content: string, passages: SourcePassage[], 
 
 /** Coverage means a passage was reviewed, not that every idea was correctly understood. */
 export function reviewedSourceSpans(content: string, classification: Classification,
-  window: ReturnType<typeof sourceWindows>[number]): Array<{ start: number; end: number }> {
+  window: Pick<ReturnType<typeof sourceWindows>[number], "passages" | "range">): Array<{ start: number; end: number }> {
   const validSupport = (classification.topics ?? []).flatMap(topic => {
     const resolved = resolveTopicSpans(content, topic);
     return resolved.invalid ? [] : resolved.spans;

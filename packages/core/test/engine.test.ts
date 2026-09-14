@@ -507,11 +507,24 @@ describe("BrainEngine", () => {
     const git = simpleGit(repo.path); await git.add(page); await git.commit("generic mixed answer fixture"); await git.push();
     const modelAnswer = `Unverified hypothesis: "${hypothesis}" (${capture.evidenceRef})\nBattery restriction: "${restriction}" (${capture.evidenceRef})`;
     llm.answerOverride = async (_input, tools) => {
+      const discovery = await tools.searchVault!("Orchid");
+      expect(discovery).toContain(page);
+      expect(discovery).not.toContain("answerSupports");
+      expect(discovery).not.toContain("Source-backed fact candidates");
+      // Discovery must not spend the bounded fact-read allowance. All four
+      // explicit reads remain available and verify source-backed current facts.
+      let lastExplicit: any;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const explicit = lastExplicit = JSON.parse(await tools.readFacts!({ path: page }));
+        expect(explicit.facts.find((fact: any) => fact.key === "orchid.fact0").source.path).toBe(capture.evidenceRef);
+        expect(explicit.answerSupports.find((support: any) => support.key === "orchid.fact0").modes).toContain("current");
+      }
       const pageRead = JSON.parse(await tools.readNote!(page));
+      expect(pageRead.factView).toBeUndefined(); // Explicit scope remains authoritative.
       const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
       return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
         { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
-        { id: pageRead.factView.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
+        { id: lastExplicit.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
       ] };
     };
     const result = await e.ask("What is the Orchid hypothesis and what batteries does the workshop not repair?");
@@ -1570,6 +1583,60 @@ describe("BrainEngine", () => {
     expect(result.topics!.filter(topic => topic.status === "filed")).toHaveLength(1);
     expect(result.topics!.filter(topic => topic.reason === "classification_unavailable" && topic.status === "pending")).toHaveLength(malformed ? 1 : 0);
     expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(false);
+  });
+
+  it.each([false, true])("retries assigned reviews backed by empty quote arrays without inventing topics (%s)", async exhausted => {
+    const content = "Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);
+    const original = llm.classify.bind(llm);
+    const inputs: ClassifyInput[] = [];
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      inputs.push(input);
+      const result = await original(input);
+      if (exhausted || inputs.length === 1) result.topics = [{ ...result.topics![0]!, evidenceQuotes: [], evidenceAssignments: [] }];
+      return { ...result, passageReviews: input.sourcePassages!.map(passage => ({ passageId: passage.id, status: "assigned" as const })) };
+    });
+    const result = await engine().store({ content, source: "selftest", verbatim: true });
+    expect(inputs).toHaveLength(2);
+    expect(inputs[1]!.hints.join(" ")).toContain("every owned passage marked assigned");
+    expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(exhausted);
+    expect(result.pagesTouched.includes("Areas/Insurance.md")).toBe(!exhausted);
+  });
+
+  it.each([false, true])("retries false assigned coverage from a neighbor-only result and leaves exhausted owned source unassigned (%s)", async exhausted => {
+    const content = Array.from({ length: 420 }, (_, i) => `Background sentence number ${i} is recorded.\n\n`).join("").trimEnd();
+    const windows = sourceWindows({ content });
+    expect(windows).toHaveLength(2);
+    const neighbor = windows[0]!.passages.filter(p => p.end <= windows[0]!.range.end).at(-1)!;
+    const inputs: ClassifyInput[] = [];
+    let tailCalls = 0;
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      inputs.push(input);
+      const owned = input.sourcePassages!.filter(p => p.start >= input.sourceRange!.start && p.end <= input.sourceRange!.end);
+      const tail = input.sourceRange!.start > 0;
+      if (tail) tailCalls++;
+      const repaired = tail && !exhausted && tailCalls > 1;
+      const makeTopic = (passage: typeof neighbor, name: string) => ({ topic: name, summary: name, confidence: 0.95,
+        disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
+        evidenceAssignments: [{ passageId: passage.id, quote: passage.text.trim(), occurrence: 0 }] });
+      return { confidence: 0.95, summary: "source review", tags: [], pages: [],
+        passageReviews: owned.map(p => ({ passageId: p.id,
+          status: tail && !repaired ? "assigned" as const : "evidence_only" as const })),
+        topics: [makeTopic(neighbor, "First owned idea"), ...(repaired ? [makeTopic(owned[0]!, "Tail owned idea")] : [])],
+      };
+    });
+    const e = engine();
+    const captured = await e.captureEvidence!({ content, source: "selftest", verbatim: true });
+    const result = await e.enrichEvidence!({ content, evidenceRef: captured.evidenceRef, source: "selftest", verbatim: true });
+    expect(inputs).toHaveLength(3);
+    expect(tailCalls).toBe(2);
+    expect(inputs[1]!.hints.join(" ")).not.toContain("every owned passage marked assigned");
+    expect(inputs[2]!.hints.join(" ")).toContain("every owned passage marked assigned");
+    expect(result.topics!.filter(topic => topic.topic === "First owned idea" && topic.status === "filed")).toHaveLength(1);
+    expect(result.topics!.some(topic => topic.topic === "Tail owned idea")).toBe(!exhausted);
+    expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(exhausted);
+    expect(llm.composeCalls).toBe(0);
+    expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
   });
 
   it("records invalid and omitted source assignments without handing invented text to the composer", async () => {

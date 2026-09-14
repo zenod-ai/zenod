@@ -37,6 +37,23 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   expect(requests[1].tools.find((t:any)=>t.function.name==="submit_memory_answer").function.parameters.properties.supportSelections.maxItems).toBe(24);
   expect(deltas).toEqual([]);expect(events).not.toContain("submit_memory_answer");
  });
+ it.each([false,true])("keeps discovery nonterminal until a source read (stream=%s)",async streaming=>{
+  const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[read]},{calls:[submit]}]);
+  const discovery=vi.fn(async()=>"Notes/Atlas.md (score 9) — Atlas teaching plan");
+  const result=await llm(8).answer({...input,...(streaming?{onTextDelta:()=>{}}:{})},{...tools,searchVault:discovery,readNote:async()=>"unused"});
+  expect(requests).toHaveLength(3);
+  expect(requests[1].tools.map((t:any)=>t.function.name)).not.toContain("submit_memory_answer");
+  expect(requests[1].tools.map((t:any)=>t.function.name)).toContain("read_facts");
+  expect(requests[2].tools.map((t:any)=>t.function.name)).toContain("submit_memory_answer");
+  expect(result.supportSelections).toEqual([{id,mode:"current"}]);
+ });
+ it("rejects an unadvertised early empty submission after discovery only",async()=>{
+  const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[{name:"submit_memory_answer",input:{supportSelections:[]}}]}]);
+  const result=await llm(8).answer(input,{...tools,searchVault:async()=>"Notes/Atlas.md (score 9) — Atlas",readNote:async()=>"unused"});
+  expect(requests[1].tools.map((t:any)=>t.function.name)).not.toContain("submit_memory_answer");
+  expect(result.supportProtocolError).toBe("invalid_submission");
+  expect(result.supportSelections).toBeUndefined();
+ });
  it("permits additional bounded reads then forces only submit in the last existing round",async()=>{
   const requests=wire([{calls:[read]},{calls:[read]},{calls:[submit]}]);
   const result=await llm(3).answer(input,tools);expect(result.supportSelections).toHaveLength(1);
