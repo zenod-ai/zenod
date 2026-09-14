@@ -12,6 +12,11 @@ it('uses one bounded structured classifier-model call with idea identity and rea
   expect(call.maxOutputTokens).toBe(4000);
   expect(String(call.system)).toContain('untrusted data');
   expect(String(call.system)).toContain('each IDEA');
+  expect(String(call.system)).toContain('exactly ONE decision');
+  expect(String(call.system)).toContain('ONLY the new current claim');
+  expect(String(call.system)).toContain('priorFailure');
+  expect(String(call.system)).toContain('shortest exact complete relevant proposition clause');
+  expect(String(call.system)).toContain('actor, recipient, scope, negation, uncertainty and attribution');
   expect(String(call.system)).toContain('cross-language equivalents');
   expect(usage).toHaveBeenCalledWith(expect.objectContaining({operation:'compose',model:'minimax/minimax-m3',inputTokens:111,outputTokens:22}));
 });

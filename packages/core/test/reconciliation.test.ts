@@ -35,11 +35,11 @@ it('links an exact existing thought without duplicate prose and rejects date/own
     expect(rejected.content).toBe(raw);
   }
 });
-it('rejects unsupported quotes and target IDs while independently adding valid operations', async () => {
+it('rejects unsupported quotes before any other decision for the same idea', async () => {
   const text='Video explains logarithms.'; const prepared=input('# A\n[[Index]]\n',text);
   const result=await applyReconciliation(prepared,[op('add','Invented claim.'),op('add',text)]);
-  expect(result.content).not.toContain('Invented claim'); expect(result.content).toContain(text);
-  expect(result.pending).toHaveLength(1); expect(result.appliedOperationIds).toHaveLength(1);
+  expect(result.content).not.toContain('Invented claim'); expect(result.content).not.toContain(text);
+  expect(result.pending).toHaveLength(1); expect(result.appliedOperationIds).toHaveLength(0);
 });
 it('reinforces a Spanish paraphrase with one new citation and no duplicate thought', async () => {
   const raw='# A\n\nThe video explains logarithms as orders of magnitude.\n[[Index]]\n';
@@ -204,4 +204,105 @@ it('refuses to borrow a retracted number from an unrelated target',async()=>{
  const prepared=input(raw,source);
  const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement:'Guest capacity is 15.',correctionQuote:source}]);
  expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+});
+
+it('rejects all mixed decisions for one idea before writing while preserving a separate sibling', async () => {
+  for (const secondKind of ['link_source','supersede'] as const) {
+    const source='Capacity is 6. Correction: opening moves to 19. Tools are inspected.';
+    const initial=input('# A\nCapacity is 6.\nOpening is on 12.\n[[Index]]\n',source);
+    initial.input.ideas=[{id:'ambiguous',topic:'Capacity or opening',sourceIds:['p1']},{id:'tools',topic:'Tools',sourceIds:['p1']}];
+    const prepared=prepareReconciliation(initial.input);
+    const target=prepared.request.statements.find(s=>s.text===(secondKind==='link_source'?'Capacity is 6.':'Opening is on 12.'))!;
+    const result=await applyReconciliation(prepared,[
+      {...op('add','Capacity is 6.'),ideaIds:['ambiguous']},
+      {...op(secondKind,secondKind==='link_source'?':123:456':'opening moves to 19',target.id),ideaIds:['ambiguous'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'},
+      {...op('add','Tools are inspected.'),ideaIds:['tools']},
+    ]);
+    expect(result.appliedOperations.map(o=>o.ideaIds)).toEqual([['tools']]);
+    expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['ambiguous'],reason:'reconciliation_multiple_decisions'}));
+    expect(result.content.split('Capacity is 6.')).toHaveLength(2);
+    expect(result.content).not.toContain('**Correction:**');
+    expect(result.content).toContain('Tools are inspected.');
+  }
+});
+it('uses completed idea identity across changed wording and action IDs on a partial retry',async()=>{
+ const initial=input('# A\nOpening is on 12.\n[[Index]]\n','Correction: opening moves to 19. Tools are inspected.');
+ initial.input.ideas=[{id:'date',topic:'Opening',sourceIds:['p1']},{id:'tools',topic:'Tools',sourceIds:['p1']}];
+ const prepared=prepareReconciliation(initial.input);
+ const first=await applyReconciliation(prepared,[{...op('supersede','opening moves to 19',prepared.request.statements[0]!.id),ideaIds:['date'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ expect(first.pending).toHaveLength(1);
+ const retrySeed=input(first.content,initial.input.evidence.content);retrySeed.input.ideas=initial.input.ideas;retrySeed.input.completedIdeaIds=['date'];
+ const retry=prepareReconciliation(retrySeed.input);
+ const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Opening moves to 19.')!.id),ideaIds:['date'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'},{...op('add','Tools are inspected.'),ideaIds:['tools']}]);
+ expect(result.pending).toEqual([]);
+ expect(result.content).not.toContain('Opening is scheduled for 19.');
+ expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)).toHaveLength(1);
+});
+it('rejects self-supersession from the same evidence even with a changed idea identity',async()=>{
+ const prepared=input('# A\nOpening is on 12.\n[[Index]]\n','Correction: opening moves to 19.');
+ const first=await applyReconciliation(prepared,[{...op('supersede','opening moves to 19',prepared.request.statements[0]!.id),statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ const retrySeed=input(first.content,prepared.input.evidence.content);retrySeed.input.ideas=[{id:'regenerated',topic:'Opening',sourceIds:['p1']}];
+ const retry=prepareReconciliation(retrySeed.input);
+ const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Opening moves to 19.')!.id),ideaIds:['regenerated'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ expect(result.content).toBe(first.content);
+ expect(result.pending[0]?.reason).toBe('reconciliation_same_evidence_target');
+});
+
+it('does not append an exact same-evidence claim with regenerated operation and idea IDs',async()=>{
+ const firstSeed=input('# A\n[[Index]]\n','Tools are inspected.');
+ const first=await applyReconciliation(firstSeed,[op('add','Tools are inspected.')]);
+ const retrySeed=input(first.content,'Tools are inspected.');retrySeed.input.ideas=[{id:'different-idea',topic:'Tools',sourceIds:['p1']}];
+ const result=await applyReconciliation(prepareReconciliation(retrySeed.input),[{...op('add','Tools are inspected'),ideaIds:['different-idea'],statement:'Tools are inspected.'}]);
+ expect(result.content).toBe(first.content);expect(result.pending).toEqual([]);
+});
+it('requires a compact new correction statement, keeping historical claims host-owned',async()=>{
+ const source='Correction: opening is not on 8 but on 15.';
+ const prepared=input('# A\nOpening is on 8.\n[[Index]]\n',source);
+ for(const statement of [null,'Opening is on 15; the old date was 8.']) {
+  const result=await applyReconciliation(prepared,[{...op('supersede','on 15',prepared.request.statements[0]!.id),statement,correctionQuote:source}]);
+  expect(result.content).toBe(prepared.input.raw);expect(result.pending.length).toBeGreaterThan(0);
+ }
+ const good=await applyReconciliation(prepared,[{...op('supersede','on 15',prepared.request.statements[0]!.id),statement:'Opening is on 15.',correctionQuote:source}]);
+ expect(good.pending).toEqual([]);
+ expect(parseMemoryFacts(parseNote(good.content).frontmatter!.memoryFacts)[0]!.legacySupersedes!.statement).toBe('Opening is on 8.');
+});
+
+it.each(['add','supersede'] as const)('accepts an exact %s proposition across contiguous source chunks',async kind=>{
+ const prefix='Background. '.repeat(131);
+ const clause='Each visitor must receive a durable chart printed on waterproof paper before leaving.';
+ const correction='Correction: '+clause;
+ const content=prefix+correction;
+ const seed=input('# A\nEach visitor receives a paper ticket.\n[[Index]]\n',content);
+ seed.input.sourceContent=content;
+ seed.input.sources=[{id:'left',start:0,end:1600,text:content.slice(0,1600)},{id:'right',start:1600,end:content.length,text:content.slice(1600)}];
+ seed.input.ideas=[{id:'chart',topic:'Visitor chart',sourceIds:['left','right']}];
+ const prepared=prepareReconciliation(seed.input);
+ const result=await applyReconciliation(prepared,[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:['left','right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
+ expect(result.pending).toEqual([]);expect(result.appliedOperationIds).toHaveLength(1);
+ for(const bad of ['gap','overlap','length','bytes','unknown'] as const) {
+  const changed=structuredClone(seed.input);
+  if(bad==='gap') {changed.sources[1]!.start++;changed.sources[1]!.end++;}
+  if(bad==='overlap') {changed.sources[1]!.start--;changed.sources[1]!.end--;}
+  if(bad==='length') changed.sources[1]!.end++;
+  if(bad==='bytes') changed.sources[1]!.text=changed.sources[1]!.text.replace('paper','metal');
+  const rejected=await applyReconciliation(prepareReconciliation(changed),[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:['left',bad==='unknown'?'missing':'right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
+  expect(rejected.content,bad).toBe(changed.raw);expect(rejected.pending.length,bad).toBeGreaterThan(0);
+ }
+});
+it('retains independently validated effective-date support around the compact claim',async()=>{
+ const claim='The policy requires helmets.';
+ const content=claim+' effective 2026-10-01';
+ const prepared=input('# A\n[[Index]]\n',content);
+ prepared.input.facts=[{key:'policy.helmets',statement:claim,effectiveDate:'2026-10-01',effectiveDateQuote:content,correctionQuote:null,supersedesQuotes:[],verificationQuote:null}];
+ const result=await applyReconciliation(prepared,[{...op('add',claim),factKey:'policy.helmets'}]);
+ expect(result.pending).toEqual([]);
+ expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.effectiveDate).toBe('2026-10-01');
+});
+it('accepts separate correction sentences with a complete exact correction context',async()=>{
+ const claim='Each visitor receives a chart.';
+ const context='I correct the previous entry.\n\n'+claim;
+ const prepared=input('# A\nEach visitor receives a ticket.\n[[Index]]\n',context);
+ const result=await applyReconciliation(prepared,[{...op('supersede',claim,prepared.request.statements[0]!.id),statement:claim,correctionQuote:context}]);
+ expect(result.pending).toEqual([]);
+ expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.legacySupersedes!.statement).toBe('Each visitor receives a ticket.');
 });

@@ -621,6 +621,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
                     "type": "string"
                   }
                 },
+                "uncertainPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "status": {
                   "enum": [
                     "filed",
@@ -2653,6 +2659,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
                     "type": "string"
                   }
                 },
+                "uncertainPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
                 "status": {
                   "enum": [
                     "filed",
@@ -3206,6 +3218,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
                   }
                 },
                 "filedPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "uncertainPages": {
                   "type": "array",
                   "items": {
                     "type": "string"
@@ -7051,6 +7069,12 @@ export const TOOL_OUTPUT_SCHEMAS = (
                   }
                 },
                 "filedPages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "uncertainPages": {
                   "type": "array",
                   "items": {
                     "type": "string"
