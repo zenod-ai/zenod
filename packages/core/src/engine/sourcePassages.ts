@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Classification, ClassificationTopic, SourcePassage } from "../llm/types.js";
 import type { StoreInput } from "../types.js";
+import { resolveRawSourceQuote } from "./sourceQuote.js";
 
 export const LONG_MEMORY_SEGMENT_CHARS = 12_000;
 const PASSAGE_CHARS = 800;
@@ -93,17 +94,10 @@ export function resolveTopicSpans(content: string, topic: ClassificationTopic, o
     }
     const start = run[0]!.start;
     const segment = content.slice(start, run.at(-1)!.end);
-    const matches: number[] = [];
-    for (let local = segment.indexOf(assignment.quote); local >= 0;
-      local = segment.indexOf(assignment.quote, local + 1)) {
-      const absolute = start + local;
-      if (absolute < passage.end && absolute + assignment.quote.length > passage.start) matches.push(absolute);
-    }
-    // Occurrence is useful only for repeated matches. A unique exact address is
-    // already unambiguous; redundant model numbering must not discard evidence.
-    const absolute = matches.length === 1 ? matches[0] : matches[assignment.occurrence];
-    if (absolute === undefined) { invalid = true; continue; }
-    spans.push({ start: absolute, end: absolute + assignment.quote.length, passageId: passage.id });
+    const match = resolveRawSourceQuote([{ start, text: segment }], assignment.quote,
+      { maxRawChars: segment.length, exactOccurrence: assignment.occurrence, overlap: passage });
+    if (!match) { invalid = true; continue; }
+    spans.push({ start: match.start, end: match.end, passageId: passage.id });
   }
   // Legacy classifiers retain exact, unique quote resolution inside their owned chunk.
   // Addressed assignments supersede the legacy field when both are returned.

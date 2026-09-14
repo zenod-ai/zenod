@@ -13,6 +13,49 @@ function input(raw: string, source: string) {
   return prepareReconciliation({path:'Projects/A.md',raw,title:'A',type:'project',today:'2026-09-13',evidence:evidence(source),sources:[{id:'p1',start:0,end:source.length,text:source}],context,links:['[[Index]]'],repositoryRevision:{provider:'github',id:'fixture-prior-revision',committedAt:'2026-09-12T10:00:00Z',urls:[]}});
 }
 const op = (kind: 'add'|'link_source'|'supersede'|'conflict'|'clarify', quote:string,targetId:string|null=null) => ({kind,sourceIds:['p1'],sourceQuote:quote,targetId,factKey:null,correctionQuote:null,reason:null});
+
+it('canonicalizes ASR line wrapping before operation identity, fact persistence and replay', async () => {
+  const source = 'Now I am correcting the bicycle workshop date that I mentioned earlier.\n The workshop will not be on November 14.\n It will be on November 21.\n This replaces the earlier date.\n It is not a second session.\n The activity and the arrangements for entering the building remain the same.\n Please preserve the previous date as history, but use the new date when answering a question about the next workshop.';
+  const prepared = input('# A\nThe workshop is on November 14.\n[[Index]]\n', source);
+  prepared.input.sourceContent = source;
+  const split = source.indexOf('It will');
+  prepared.input.sources = [{ id:'left',start:0,end:split,text:source.slice(0,split) },{ id:'right',start:split,end:source.length,text:source.slice(split) }];
+  const bounded = prepareReconciliation(prepared.input);
+  const folded = source.replace(/\s+/g,' ');
+  const operation = {...op('supersede',folded,bounded.request.statements[0]!.id),sourceIds:['left','right'],correctionQuote:folded};
+  const result = await applyReconciliation(bounded,[operation]);
+  expect(result.pending).toEqual([]);
+  const fact = parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!;
+  expect(fact.statement).toBe(source); expect(fact.correctionQuote).toBe(source);
+  expect(fact.legacySupersedes?.statement).toBe('The workshop is on November 14.');
+  expect(operation.sourceQuote).toBe(folded); expect(prepared.input.evidence.content).toBe(source);
+  const exact = await applyReconciliation(bounded,[{...operation,sourceQuote:source,correctionQuote:source}]);
+  expect(exact.appliedOperationIds).toEqual(result.appliedOperationIds);
+  expect(exact.content).toBe(result.content);
+  const retry = prepareReconciliation({...prepared.input,raw:result.content,context:{...prepared.input.context,branches:[]}});
+  const replay = await applyReconciliation(retry,[operation]);
+  expect(replay.content).toBe(result.content); expect(replay.appliedOperationIds).toEqual(result.appliedOperationIds);
+});
+
+it('persists raw replacement and correction quotes rather than the folded model strings', async () => {
+  const replacement='La sesión será\r\n el 19 de octubre.';
+  const source=`Corrijo la fecha anterior\n del 12 de octubre. ${replacement}`;
+  const prepared=input('# A\nThe session is planned for October 12.\n[[Index]]\n',source);
+  const folded=source.replace(/\s+/g,' ');
+  const result=await applyReconciliation(prepared,[{...op('supersede',folded,prepared.request.statements[0]!.id),replacementQuote:replacement.replace(/\s+/g,' '),correctionQuote:folded}]);
+  expect(result.pending).toEqual([]);
+  const fact=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!;
+  expect(fact.statement).toBe(replacement);expect(fact.correctionQuote).toBe(source);
+});
+
+it('rejects real ASR noncontiguous stitching, ambiguity and normalized quotes over the raw budget', async () => {
+  const source='We will explain how to inspect the wheels and adjust the height of a bicycle seat.\n Visitors do not need to bring their own bicycle because the center has bicycles for the demonstration.\n The side entrance must remain clear because people also use it to reach the meeting room.\n This part concerns organization and access.\n A different intervening idea.\n The activity and the arrangements for entering the building remain the same.';
+  const stitched=source.replace(' A different intervening idea.\n','').replace(/\s+/g,' ');
+  for (const [raw,quote] of [[source,stitched],['Maya\n waters. Maya\t waters.','Maya waters.'],['Maya'+ '\n'.repeat(1600)+'waters.','Maya waters.']]) {
+    const result=await applyReconciliation(input('# A\n[[Index]]\n',raw!),[op('add',quote!)]);
+    expect(result.appliedOperationIds).toEqual([]);expect(result.pending.some(p=>p.reason==='source_support_invalid')).toBe(true);
+  }
+});
 it('adds supported text to legacy Markdown preserving all old bytes and deduplicates replay', async () => {
   const raw = '# A\n\nExisting untouched prose.\n[[Index]]\n'; const text = 'The video explains logarithms.';
   const prepared = input(raw,text);

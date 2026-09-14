@@ -99,7 +99,7 @@ describe("original-evidence passage addresses", () => {
     for (const occurrence of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
       expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [{ ...assignment, occurrence }] }).invalid).toBe(true);
     }
-    expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [{ ...assignment, quote: "Decision: blue  on Friday." }] }).invalid).toBe(true);
+    expect(resolveTopicSpans(content, { ...base, evidenceAssignments: [{ ...assignment, quote: "Decision: blue  on Friday." }] }).invalid).toBe(false);
   });
 
   it("keeps ownership and multiple ideas independent for a shared cross-window quote", () => {
@@ -170,4 +170,38 @@ describe("original-evidence passage addresses", () => {
     }
     expect(() => sourceWindows({ content: "😀hello", semanticRange: { start: 1, end: 7 } })).toThrow();
   });
+});
+
+it("resolves line-wrapped topic quotes across adjacent passages but keeps source ownership and gaps", () => {
+  const content = "Other idea. 😀 Maya\n is responsible for watering\r\n on Thursdays. Last idea.";
+  const cut = content.indexOf("watering");
+  const passages = [{ id: "left", start: 0, end: cut, text: content.slice(0, cut) },
+    { id: "right", start: cut, end: content.length, text: content.slice(cut) }];
+  const quote = "Maya is responsible for watering on Thursdays.";
+  for (const passage of passages) {
+    const resolved = resolveTopicSpans(content, { ...topic, sourcePassages: passages,
+      evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 99 }] });
+    expect(resolved.invalid).toBe(false);
+    expect(resolved.spans).toEqual([{ start: content.indexOf("Maya"), end: content.indexOf(" Last"), passageId: passage.id }]);
+  }
+  for (const sourcePassages of [[passages[0]!], [passages[0]!, { ...passages[1]!, start: cut + 1, text: content.slice(cut + 1) }]]) {
+    expect(resolveTopicSpans(content, { ...topic, sourcePassages,
+      evidenceAssignments: [{ passageId: "left", quote, occurrence: 0 }] }).invalid).toBe(true);
+  }
+  expect(resolveTopicSpans(content, { ...topic, sourcePassages: passages, sourceRange: { start: 0, end: 5 },
+    evidenceAssignments: [{ passageId: "right", quote, occurrence: 0 }] }).invalid).toBe(true);
+  expect(resolveTopicSpans(content, { ...topic, sourceRange: { start: 0, end: 5 }, evidenceQuotes: [quote] }).invalid).toBe(true);
+});
+
+it("rejects ambiguous whitespace-only assignments even with an occurrence", () => {
+  const content = "Repeat\n this. Repeat\t this.";
+  const passages = sourceWindows({ content })[0]!.passages;
+  for (const occurrence of [0, 1]) expect(resolveTopicSpans(content, { ...topic, sourcePassages: passages,
+    evidenceAssignments: [{ passageId: passages[0]!.id, quote: "Repeat this.", occurrence }] }).invalid).toBe(true);
+});
+
+it("preserves the legacy evidenceQuotes exact-only contract", () => {
+  const content = "Maya\n waters on Thursdays.";
+  expect(resolveTopicSpans(content, { ...topic, evidenceQuotes: ["Maya waters on Thursdays."] }).invalid).toBe(true);
+  expect(resolveTopicSpans(content, { ...topic, evidenceQuotes: [content] }).invalid).toBe(false);
 });
