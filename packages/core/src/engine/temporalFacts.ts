@@ -11,7 +11,7 @@ export interface LegacyStatementHistory {
 export interface FactProposal {
   key: string;
   statement: string;
-  /** Model-authored compact wording; source truth remains the exact statement quote. */
+  /** Historical display wording; new atomic reconciliation uses exact source-native text. */
   renderedStatement?: string;
   reportedConflict?:boolean;
   legacySupersedes?: LegacyStatementHistory;

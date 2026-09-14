@@ -71,7 +71,7 @@ it('corrects legacy prose while exposing its exact prior statement and real revi
   const old='The launch is on 12.'; const raw=`# A\n${old}\n[[Index]]\n`;
   const source='Correction: the launch moves to 19.'; const prepared=input(raw,source);
   const target=prepared.request.statements.find(s=>s.text===old)!;
-  const result=await applyReconciliation(prepared,[{...op('supersede','the launch moves to 19',target.id),statement:'The launch moves to 19.',correctionQuote:source}]);
+  const result=await applyReconciliation(prepared,[{...op('supersede','the launch moves to 19',target.id),statement:'Correction: the launch moves to 19.',correctionQuote:source}]);
   expect(result.pending).toEqual([]); expect(result.content).toContain(raw);
   const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async()=>evidence(source));
   expect(view.facts[0]!.status).toBe('active');
@@ -104,7 +104,7 @@ it('keeps successive correction targets linked to the existing fact chain',async
     const source=`Correction: the launch moves to ${value}.`;
     const prepared=input(raw,source);
     prepared.input.evidence={...evidence(source),evidenceRef:`Log/2026-09-13.md#^e-00000${n}`};entries.set(prepared.input.evidence.evidenceRef,prepared.input.evidence);
-    const target=prepared.request.statements.find(statement=>statement.text===(n===1?'The launch is on 12.':'The launch moves to 19.'))!;
+    const target=prepared.request.statements.find(statement=>statement.text===(n===1?'The launch is on 12.':'Correction: the launch moves to 19.'))!;
     expect(target).toBeDefined();
     if(n===2) expect(target.factKey).not.toBeNull();
     const result=await applyReconciliation(prepared,[{...op('supersede',`the launch moves to ${value}`,target.id),statement:`The launch moves to ${value}.`,correctionQuote:source}]);
@@ -115,7 +115,7 @@ it('keeps successive correction targets linked to the existing fact chain',async
   expect(view.priorStatements![0]!.statement).toBe('The launch is on 12.');
   const linked=input(raw,'El lanzamiento se mueve al 20.');
   linked.input.evidence={...evidence('El lanzamiento se mueve al 20.'),evidenceRef:'Log/2026-09-13.md#^e-000003'};
-  const current=linked.request.statements.find(statement=>statement.text==='The launch moves to 20.')!;
+  const current=linked.request.statements.find(statement=>statement.text==='Correction: the launch moves to 20.')!;
   expect(current.factKey).toBe(view.facts[1]!.key);
   const reinforced=await applyReconciliation(linked,[op('link_source','El lanzamiento se mueve al 20.',current.id)]);
   expect(reinforced.pending).toEqual([]);
@@ -146,7 +146,7 @@ it('keeps an idea pending when its later source associations or source text exce
 it.each([
   ['Corrijo la fecha: la sesión ya no será el 8 de septiembre; será el 15 de septiembre.', 'La sesión será el 15 de septiembre.'],
   ['Correction: the session is not on September 8 but on September 15.', 'The session is on September 15.'],
-])('accepts a compact new claim from a full explicit contrastive correction: %s', async (source, statement) => {
+])('retains source-native wording for a full explicit contrastive correction: %s', async (source, statement) => {
   const raw = '# A\n- The session is on September 8.\n[[Index]]\n';
   const prepared = input(raw, source); const target = prepared.request.statements[0]!;
   const result = await applyReconciliation(prepared, [{...op('supersede', source, target.id),statement,correctionQuote:source}]);
@@ -154,7 +154,7 @@ it.each([
   const view = await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-13'),async()=>evidence(source));
   expect(view.facts[0]!.status).toBe('active');
   expect(view.priorStatements![0]!.statement).toBe(target.text);
-  expect(result.content).toContain(statement);
+  expect(result.content).toContain(source);
 });
 it.each([
   ['Corrección: ya no usamos 8 unidades; no usaremos 15 unidades.', 'Usaremos 15 unidades.'],
@@ -164,7 +164,7 @@ it.each([
 ])('does not weaken the replacement clause: %s',async(source,statement)=>{
   const raw='# A\n- We use 8 units.\n[[Index]]\n'; const prepared=input(raw,source);
   const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement,correctionQuote:source}]);
-  expect(result.content).toBe(raw); expect(result.pending.length).toBeGreaterThan(0);
+  expect(result.pending).toEqual([]);expect(result.content).toContain(source);expect(result.content).not.toContain(statement);
 });
 it.each([
  ['El curso podría necesitar un depósito.', 'The course needs a deposit.'],
@@ -172,9 +172,9 @@ it.each([
  ['Sigo queriendo enseñar con mapas.', 'The course teaches with maps.'],
  ['We will not record attendees.', 'We will record attendees.'],
  ['El curso funciona sin grabaciones.', 'The course records attendees.'],
-])('rejects qualified or negative source weakening in ADD: %s',async(source,statement)=>{
+])('ignores generated weakening and retains qualified or negative source in ADD: %s',async(source,statement)=>{
  const raw='# A\n[[Index]]\n';const result=await applyReconciliation(input(raw,source),[{...op('add',source),statement}]);
- expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+ expect(result.pending).toEqual([]);expect(result.content).toContain(source);expect(result.content).not.toContain(statement);
 });
 
 it.each([
@@ -190,20 +190,20 @@ it.each([
 it('does not treat an ADD as permission to drop a denied old value from correction evidence',async()=>{
  const source='Correction: not 8 units but 15 units.';const raw='# A\n- We use 8 units.\n[[Index]]\n';
  const result=await applyReconciliation(input(raw,source),[{...op('add',source),statement:'We use 15 units.'}]);
- expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+ expect(result.pending).toEqual([]);expect(result.content).toContain(source);expect(result.content).not.toContain('We use 15 units.');
 });
 
 it('retains intention when compacting a multilingual new claim',async()=>{
  const source='Sigo queriendo enseñar con mapas.';const statement='The author wants to teach using maps.';
  const result=await applyReconciliation(input('# A\n[[Index]]\n',source),[{...op('add',source),statement}]);
- expect(result.pending).toEqual([]);expect(result.content).toContain(statement);
+ expect(result.pending).toEqual([]);expect(result.content).toContain(source);
 });
 it('refuses to borrow a retracted number from an unrelated target',async()=>{
  const raw='# A\n- The session date is September 8.\n- Guest capacity is 12.\n[[Index]]\n';
  const source='Correction: not 12 guests but 15 guests.';
  const prepared=input(raw,source);
  const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),statement:'Guest capacity is 15.',correctionQuote:source}]);
- expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('statement_qualifiers_changed');
+ expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('correction_target_values_incompatible');
 });
 
 it('rejects all mixed decisions for one idea before writing while preserving a separate sibling', async () => {
@@ -233,7 +233,7 @@ it('uses completed idea identity across changed wording and action IDs on a part
  expect(first.pending).toHaveLength(1);
  const retrySeed=input(first.content,initial.input.evidence.content);retrySeed.input.ideas=initial.input.ideas;retrySeed.input.completedIdeaIds=['date'];
  const retry=prepareReconciliation(retrySeed.input);
- const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Opening moves to 19.')!.id),ideaIds:['date'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'},{...op('add','Tools are inspected.'),ideaIds:['tools']}]);
+ const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Correction: opening moves to 19.')!.id),ideaIds:['date'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'},{...op('add','Tools are inspected.'),ideaIds:['tools']}]);
  expect(result.pending).toEqual([]);
  expect(result.content).not.toContain('Opening is scheduled for 19.');
  expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)).toHaveLength(1);
@@ -243,7 +243,7 @@ it('rejects self-supersession from the same evidence even with a changed idea id
  const first=await applyReconciliation(prepared,[{...op('supersede','opening moves to 19',prepared.request.statements[0]!.id),statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'}]);
  const retrySeed=input(first.content,prepared.input.evidence.content);retrySeed.input.ideas=[{id:'regenerated',topic:'Opening',sourceIds:['p1']}];
  const retry=prepareReconciliation(retrySeed.input);
- const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Opening moves to 19.')!.id),ideaIds:['regenerated'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'}]);
+ const result=await applyReconciliation(retry,[{...op('supersede','opening moves to 19',retry.request.statements.find(s=>s.text==='Correction: opening moves to 19.')!.id),ideaIds:['regenerated'],statement:'Opening is scheduled for 19.',correctionQuote:'Correction: opening moves to 19.'}]);
  expect(result.content).toBe(first.content);
  expect(result.pending[0]?.reason).toBe('reconciliation_same_evidence_target');
 });
@@ -255,12 +255,12 @@ it('does not append an exact same-evidence claim with regenerated operation and 
  const result=await applyReconciliation(prepareReconciliation(retrySeed.input),[{...op('add','Tools are inspected'),ideaIds:['different-idea'],statement:'Tools are inspected.'}]);
  expect(result.content).toBe(first.content);expect(result.pending).toEqual([]);
 });
-it('requires a compact new correction statement, keeping historical claims host-owned',async()=>{
+it('uses the complete source correction when replacement is elliptical, keeping history host-owned',async()=>{
  const source='Correction: opening is not on 8 but on 15.';
  const prepared=input('# A\nOpening is on 8.\n[[Index]]\n',source);
  for(const statement of [null,'Opening is on 15; the old date was 8.']) {
   const result=await applyReconciliation(prepared,[{...op('supersede','on 15',prepared.request.statements[0]!.id),statement,correctionQuote:source}]);
-  expect(result.content).toBe(prepared.input.raw);expect(result.pending.length).toBeGreaterThan(0);
+  expect(result.pending).toEqual([]);expect(result.content).toContain(source);expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.statement).toBe(source);
  }
  const good=await applyReconciliation(prepared,[{...op('supersede','on 15',prepared.request.statements[0]!.id),statement:'Opening is on 15.',correctionQuote:source}]);
  expect(good.pending).toEqual([]);
@@ -333,4 +333,42 @@ it('uses exact natural correction wording instead of a generated English planned
   const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-14'),async()=>evidence(source));
   expect(view.priorStatements?.[0]?.statement).toBe(target.text);
   expect(view.facts[0]?.status).toBe('active');
+});
+
+it('selects a complete exact replacement while retaining correction context and prior provenance',async()=>{
+ const replacement='La sesión será el 19 de octubre.';
+ const source=`Corrijo la fecha anterior del 12 de octubre. ${replacement}`;
+ const prepared=input('# A\nThe session is planned for October 12.\n[[Index]]\n',source);
+ const result=await applyReconciliation(prepared,[{...op('supersede',replacement,prepared.request.statements[0]!.id),replacementQuote:replacement,correctionQuote:source}]);
+ expect(result.pending).toEqual([]);
+ const fact=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!;
+ expect(fact.statement).toBe(replacement);expect(fact.correctionQuote).toBe(source);expect(fact.legacySupersedes?.statement).toBe('The session is planned for October 12.');
+});
+it.each(['Correction: the session is on 19.','On 2026-09-14 I correct the date. The session is on 19.'])('does not require old-number extraction for a new-only correction: %s',async source=>{
+ const prepared=input('# A\nThe session is on 12.\n[[Index]]\n',source);
+ const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),correctionQuote:source}]);
+ expect(result.pending).toEqual([]);expect(result.content).toContain(source);
+});
+it('rejects an invented replacement and retains the existing explicit hypothetical correction guard',async()=>{
+ for(const [source,replacement,reason] of [
+  ['Correction: the launch is on 19.','The launch is on 25.','replacement_support_invalid'],
+  ['I might correct the launch to 19.',null,'correction_direction_unverified'],
+ ] as const){
+  const raw='# A\nThe launch is on 12.\n[[Index]]\n';const prepared=input(raw,source);
+  const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),replacementQuote:replacement,correctionQuote:source}]);
+  expect(result.content).toBe(raw);expect(result.pending[0]?.reason).toBe(reason);
+ }
+});
+it('defers an oversized complete correction report instead of silently clipping its qualifications',async()=>{
+ const source='Correction: '+ 'background context. '.repeat(90)+'The launch is on 19.';
+ const raw='# A\nThe launch is on 12.\n[[Index]]\n';const prepared=input(raw,source);
+ const result=await applyReconciliation(prepared,[{...op('supersede','The launch is on 19.',prepared.request.statements[0]!.id),correctionQuote:source}]);
+ expect(result.content).toBe(raw);expect(result.pending[0]?.reason).toBe('complete_statement_exceeds_budget');
+});
+it('uses source wording rather than ignored paraphrase in operation identity and direct replay',async()=>{
+ const source='Je souhaite préparer des cartes pour les visiteurs.';
+ const first=await applyReconciliation(input('# A\n[[Index]]\n',source),[{...op('add',source),statement:'The visitors receive maps.'}]);
+ const replay=await applyReconciliation(input(first.content,source),[{...op('add',source),statement:'A completely different ignored paraphrase.'}]);
+ expect(replay.content).toBe(first.content);expect(replay.appliedOperationIds).toEqual(first.appliedOperationIds);
+ expect(parseNote(first.content).body).toContain(source);expect(first.content).not.toContain('The visitors receive maps.');
 });

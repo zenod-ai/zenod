@@ -1045,6 +1045,29 @@ describe("BrainEngine", () => {
     expect(filed.topics![0]!.ideaId).toMatch(/^idea-/); expect(filed.topics![0]!.appliedOperationIds).toHaveLength(1);
   });
 
+  it("routes explicit known evidence-only destinations to source-native reconciliation without guessing missing destinations",async()=>{
+    const path="Projects/Teaching.md";
+    await writeFile(join(repo.path,path),"# Teaching\nTeach using scale models.\n[[Index]]\n");await repo.commitAndPublish("seed teaching");
+    const parts=["Seguimos enseñando con modelos de escala.","Tengo una hipótesis sin verificar. No lo doy por probado.","Un colega propone otra fecha. No está confirmada.","Reserve two places for teachers."];
+    const content=parts.join("\n\n");
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Teaching ideas",tags:[],pages:[],topics:parts.map((quote,i)=>({topic:["Scale","Hypothesis","Report","Unrouted"][i]!,summary:quote,evidenceQuotes:[quote],confidence:0.95,disposition:"evidence_only" as const,pages:i===3?[]:[{path,title:"Teaching",action:"update" as const}]}))}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.ideas.map(idea=>idea.topic)).toEqual(["Scale","Hypothesis","Report"]);
+      return request.ideas.map(idea=>({kind:idea.topic==="Scale"?"link_source" as const:idea.topic==="Report"?"conflict" as const:"add" as const,
+        ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:request.sources.find(source=>source.id===idea.sourceIds[0])!.text,
+        targetId:idea.topic==="Scale"?request.statements.find(statement=>statement.text==="Teach using scale models.")!.id:null,
+        statement:"This generated paraphrase must never be stored.",factKey:null,correctionQuote:null,reason:null}));
+    });Object.assign(llm,{reconcile});
+    const e=engine();const captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
+    const result=await e.enrichEvidence!(request);
+    expect(result.topics!.find(topic=>topic.topic==="Scale")).toMatchObject({confidence:0.95,filedPages:[path]});
+    expect(result.topics!.find(topic=>topic.topic==="Report")).toMatchObject({status:"uncertain",filedPages:[path],uncertainPages:[path]});
+    expect(result.topics!.find(topic=>topic.topic==="Unrouted")).toMatchObject({pages:[],filedPages:[]});
+    const raw=await readFile(join(repo.path,path),"utf8");expect(raw).toContain(parts[1]);expect(raw).toContain(parts[2]);expect(raw).not.toContain("This generated paraphrase");expect(raw).not.toContain(parts[3]);
+    const replay=await e.enrichEvidence!(request);expect(replay.commitSha).toBe(result.commitSha);expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
   it("unions overlapping ASR context envelopes without losing independent ideas",async()=>{
     const lead="The room opens in the morning. ";
     const first="Each visitor receives a chart. ";
@@ -1111,7 +1134,7 @@ describe("BrainEngine", () => {
     const second=await reopened.enrichEvidence!(input);
     expect(second.filing).toBe("filed");
     const page=await readFile(join(repo.path,path),"utf8");
-    expect(parseNote(page).body.match(/Opening moves to 19\./g)).toHaveLength(1);
+    expect(parseNote(page).body.match(/Correction: opening moves to 19\./g)).toHaveLength(1);
     expect(parseNote(page).body.match(/Capacity is 6\./g)).toHaveLength(1);
     expect(parseNote(page).frontmatter!.memoryFacts).toHaveLength(1);
     expect(llm.classify).toHaveBeenCalledTimes(1);
