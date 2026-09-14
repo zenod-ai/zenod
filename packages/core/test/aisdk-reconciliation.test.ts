@@ -12,7 +12,7 @@ it('uses one bounded structured classifier-model call with idea identity and rea
   expect(call.maxOutputTokens).toBe(4000);
   expect(String(call.system)).toContain('untrusted data');
   expect(String(call.system)).toContain('each IDEA');
-  expect(String(call.system)).toContain('exactly ONE decision');
+  expect(String(call.system)).toContain('A coarse idea may require multiple operations');
   expect(String(call.system)).toContain('complete correction report as sourceQuote');
   expect(String(call.system)).toContain('priorFailure');
   expect(String(call.system)).toContain('shortest exact complete relevant proposition clause');

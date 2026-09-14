@@ -34,7 +34,7 @@ describe("supported queue filing replay", () => {
       if(mixed && !failedOnce) {failedOnce=true;return [...operations,{...operations[0],kind:"link_source",sourceQuote:":123:456",targetId:"missing"}];}
       if(mixed) {
         expect(request.ideas.map((idea:any)=>idea.topic)).toEqual(["Idea 1"]);
-        expect(request.ideas[0].priorFailure).toContain("reconciliation_multiple_decisions");
+        expect(request.ideas[0].priorFailure).toContain("source_support_invalid");
       }
       return operations;
     });

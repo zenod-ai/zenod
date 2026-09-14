@@ -130,38 +130,50 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
   const validatedFactSupport = new Set<string>();
   const covered = new Set<string>();
   const seen = new Set<string>();
+  const effects = new Set<string>();
   const completed = new Set(input.completedIdeaIds ?? []);
   const assignedIdeas = (operation: ReconciliationOperation) => [...new Set(operation.ideaIds ?? (input.ideas ? [] : prepared.ideas.filter(idea=>idea.sourceIds.some(id=>operation.sourceIds.includes(id))).map(idea=>idea.id)))];
-  // Validate the whole decision envelope before any per-idea mutation. A valid
-  // ADD followed by an invalid LINK is one contradictory decision, not success.
-  const decisions = new Map<string, number>();
-  for (const operation of operations) for (const id of assignedIdeas(operation)) decisions.set(id,(decisions.get(id) ?? 0)+1);
-  const rejected = new Set<string>();
-  for (const idea of prepared.ideas) {
-    if (completed.has(idea.id)) { covered.add(idea.id); continue; }
-    if (operations.length > 24 || (decisions.get(idea.id) ?? 0)>1) {
-      rejected.add(idea.id); covered.add(idea.id);
-      result.pending.push({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:operations.length>24 ? "reconciliation_decision_budget_exceeded" : "reconciliation_multiple_decisions"});
-    }
+  // Components share idea completion or an exact target/claim resource. Each
+  // component contributes buffered changes only after every operation validates.
+  // Targets always refer to the original snapshot, never another operation's output.
+  const bounded = operations.slice(0,24);
+  const parents = bounded.map((_,i)=>i);
+  const root = (i:number):number => parents[i]===i ? i : (parents[i]=root(parents[i]!));
+  const claim = (operation:ReconciliationOperation) => {
+    const sources=operation.sourceIds.map(id=>prepared.request.sources.find(source=>source.id===id));
+    return sources.some(source=>!source) ? null : canonicalSourceQuote(sources as ReconciliationSource[],operation.sourceQuote,1600,input.sourceContent);
+  };
+  const claims=bounded.map(claim);
+  for(let i=0;i<bounded.length;i++) for(let j=0;j<i;j++) {
+    const a=bounded[i]!,b=bounded[j]!;
+    if(assignedIdeas(a).some(id=>assignedIdeas(b).includes(id))
+      || (a.targetId && a.targetId===b.targetId)
+      || (claims[i] && claims[i]===claims[j])) parents[root(i)]=root(j);
   }
-  for (const proposed of operations.slice(0, 24)) {
+  const groups=new Map<number,ReconciliationOperation[]>();
+  bounded.forEach((operation,i)=>groups.set(root(i),[...(groups.get(root(i))??[]),operation]));
+  if(operations.length>24) {
+    result.pending=prepared.ideas.filter(idea=>!completed.has(idea.id)).map(idea=>({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:"reconciliation_decision_budget_exceeded"}));
+    return result;
+  }
+  for(const group of groups.values()) {
+    const groupIdeas=[...new Set(group.flatMap(assignedIdeas))].filter(id=>!completed.has(id));
+    const checkpoint={edits:new Map(edits), additions:additions.length,proposals:proposals.length,
+      support:new Set(validatedFactSupport),seen:new Set(seen),effects:new Set(effects),applied:result.appliedOperationIds.length,
+      operations:result.appliedOperations.length,pending:result.pending.length};
+    const groupClaims=new Map<string,Array<{kind:string;targetId:string|null;statement:string;replacement:string|null;correction:string|null}>>();
+    for (const proposed of group) {
     // Never mutate model output. Canonical raw quotes precede operation identity,
     // target checks and fact persistence, including correction/replacement fields.
     const operation = { ...proposed };
     const sourceIds = [...new Set(operation.sourceIds)];
     const ideaIds = assignedIdeas(operation).filter(id=>!completed.has(id));
     if (!ideaIds.length && assignedIdeas(operation).some(id=>completed.has(id))) continue;
-    if (ideaIds.some(id=>rejected.has(id))) {
-      for (const id of ideaIds.filter(id=>!rejected.has(id))) {
-        covered.add(id); result.pending.push({sourceIds,ideaIds:[id],reason:"reconciliation_shared_decision_invalid"});
-      }
-      continue;
-    }
     const sources = sourceIds.map(id => prepared.request.sources.find(source => source.id === id));
     const fail = (reason: string) => result.pending.push({sourceIds, ideaIds, reason});
     // Missing later evidence may negate/correct an earlier span of this idea.
     // Do not publish a provisional current claim from incomplete source support.
-    if (ideaIds.some(id=>prepared.omittedSourcesByIdea.has(id))) continue;
+    if (ideaIds.some(id=>prepared.omittedSourcesByIdea.has(id))) { fail("reconciliation_source_context_incomplete"); continue; }
     if (!ideaIds.length || ideaIds.some(id=>!prepared.request.ideas.some(idea=>idea.id===id && idea.sourceIds.some(sourceId=>sourceIds.includes(sourceId))))) { fail("idea_assignment_invalid"); continue; }
     const canonical = (quote: string, limit = 1600) => canonicalSourceQuote(sources as ReconciliationSource[],quote,limit,input.sourceContent);
     const sourceQuote = sourceIds.length && !sources.some(source => !source) ? canonical(operation.sourceQuote) : null;
@@ -179,8 +191,21 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     }
     for (const id of ideaIds) covered.add(id);
     const id = digest([input.evidence.evidenceRef, ideaIds.sort(), sourceIds.sort(), operation.kind, operation.targetId, operation.sourceQuote, operation.replacementQuote??null, operation.kind === "supersede" ? operation.correctionQuote : null]);
+    // Same exact source claim cannot mean both reinforcement and novelty;
+    // different changes to one target cannot silently overwrite one another.
+    const decision={kind:operation.kind,targetId:operation.targetId,statement:operation.sourceQuote,replacement:operation.replacementQuote??null,correction:operation.kind==="supersede"?operation.correctionQuote:null};
+    const effect=digest(decision);
+    const keys=[`quote:${operation.sourceQuote}`,...(operation.targetId?[`target:${operation.targetId}`]:[])];
+    const incompatible=keys.some(key=>(groupClaims.get(key)??[]).some(prior=>{
+      if(key.startsWith("target:") && (prior.kind==="conflict" || operation.kind==="conflict")) return false;
+      return !(prior.kind===operation.kind && prior.targetId===operation.targetId
+        && ((prior.statement===operation.sourceQuote && prior.replacement===decision.replacement && prior.correction===decision.correction) || operation.kind==="link_source"));
+    }));
+    if(incompatible) {fail("reconciliation_incompatible_decisions");continue;}
+    keys.forEach(key=>groupClaims.set(key,[...(groupClaims.get(key)??[]),decision]));
     const marker = `<!-- zenod-op:${id} -->`;
-    if (input.raw?.includes(marker) || seen.has(id)) {
+    if (input.raw?.includes(marker) || seen.has(id) || effects.has(effect)) {
+      effects.add(effect);
       result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds});
       if (operation.kind === "conflict") fail("conflict_retained");
       continue;
@@ -203,7 +228,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     if (operation.kind === "supersede" && target && equivalent(statement,target.text)) { fail("correction_new_state_unchanged"); continue; }
     if (operation.kind === "add" && operation.targetId !== null) { fail("add_target_must_be_null"); continue; }
     if (operation.kind === "add" && [...targets.values()].some(existing=>existing.line.includes(citation) && equivalent(existing.text,statement))) {
-      result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds}); continue;
+      effects.add(effect); result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds}); continue;
     }
     if (operation.kind === "clarify") { fail("reconciliation_needs_clarification"); continue; }
     if ((operation.kind === "link_source" || operation.kind === "supersede" || operation.targetId !== null) && !target) { fail("statement_target_invalid"); continue; }
@@ -245,12 +270,27 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
       additions.push(`\n- ${qualifier}${statement.replace(/\n/g," ")} ${citation} ${marker}`);
       if (operation.kind === "conflict") fail("conflict_retained");
     }
-    seen.add(id); result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds});
+    effects.add(effect); seen.add(id); result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds});
+  }
+    const failures=result.pending.slice(checkpoint.pending).filter(item=>item.reason!=="conflict_retained");
+    if(failures.length) {
+      edits.clear();checkpoint.edits.forEach((value,key)=>edits.set(key,value));
+      additions.length=checkpoint.additions;proposals.length=checkpoint.proposals;
+      validatedFactSupport.clear();checkpoint.support.forEach(value=>validatedFactSupport.add(value));
+      seen.clear();checkpoint.seen.forEach(value=>seen.add(value));
+      effects.clear();checkpoint.effects.forEach(value=>effects.add(value));
+      result.appliedOperationIds.length=checkpoint.applied;result.appliedOperations.length=checkpoint.operations;
+      result.pending.length=checkpoint.pending;
+      for(const ideaId of groupIdeas) {
+        covered.add(ideaId);
+        result.pending.push({ideaIds:[ideaId],sourceIds:prepared.ideas.find(idea=>idea.id===ideaId)?.sourceIds??[],reason:failures.map(item=>item.reason).filter((reason,i,all)=>all.indexOf(reason)===i).join("; ")});
+      }
+    }
   }
   for (const idea of prepared.ideas) {
     if (completed.has(idea.id)) continue;
     const omitted=prepared.omittedSourcesByIdea.get(idea.id);
-    if (omitted?.length) result.pending.push({sourceIds:omitted,ideaIds:[idea.id],reason:"reconciliation_source_context_incomplete"});
+    if (omitted?.length && !result.pending.some(item=>item.ideaIds.includes(idea.id))) result.pending.push({sourceIds:omitted,ideaIds:[idea.id],reason:"reconciliation_source_context_incomplete"});
     else if (!covered.has(idea.id)) result.pending.push({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:"reconciliation_idea_unassigned"});
   }
   if (!result.appliedOperationIds.length || (!edits.size && !additions.length)) return result;

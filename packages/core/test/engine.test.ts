@@ -1233,6 +1233,25 @@ describe("BrainEngine", () => {
     expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toContain(quote);
   });
 
+  it("files a coarse idea as reinforcement plus a new condition and replays the completed receipt", async()=>{
+    const path="Projects/Garden.md",existing="Mina waters on Tuesday.",condition="If it rains, Mina checks the drain before watering.";
+    await writeFile(join(repo.path,path),`# Garden\n${existing}\n[[Index]]\n`);await repo.commitAndPublish("seed garden");
+    const content=existing+" "+condition;
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Garden",tags:[],pages:[],topics:[{topic:"Watering assignment and new rain procedure",summary:content,evidenceQuotes:[content],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Garden",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      const common={ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,factKey:null,correctionQuote:null,reason:null};
+      return [{...common,kind:"link_source" as const,sourceQuote:existing,targetId:request.statements.find(s=>s.text===existing)!.id},{...common,kind:"add" as const,sourceQuote:condition,targetId:null}];
+    });
+    Object.assign(llm,{reconcile});const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.filing).toBe("filed");
+    expect(first.topics![0]!.appliedOperationIds).toHaveLength(2);
+    const page=await readFile(join(repo.path,path),"utf8");expect(page.split(existing)).toHaveLength(2);expect(page.split(condition)).toHaveLength(2);
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
+    const replay=await reopened.enrichEvidence!(request);expect(replay.commitSha).toBe(first.commitSha);
+    expect(await readFile(join(repo.path,path),"utf8")).toBe(page);expect(reconcile).toHaveBeenCalledOnce();expect(llm.classify).toHaveBeenCalledOnce();
+  });
+
   it("retries only unfinished atomic ideas after rejecting a mixed recorded-style plan", async () => {
     const path="Projects/Workshop.md";
     await writeFile(join(repo.path,path),"# Workshop\nCapacity is 6.\nOpening is on 12.\n[[Index]]\n");
@@ -1249,7 +1268,7 @@ describe("BrainEngine", () => {
       };
       if(attempt===1) return [decision("Capacity","add",parts[0]!),decision("Capacity","link_source",":123:456",request.statements.find(s=>s.text===parts[0])!.id),decision("Opening","supersede","opening moves to 19",request.statements.find(s=>s.text==="Opening is on 12.")!.id,"Opening moves to 19."),decision("Tools","add","Invented support.")];
       expect(request.ideas.map(idea=>idea.topic)).toEqual(["Capacity","Tools"]);
-      expect(request.ideas[0]!.priorFailure).toContain("reconciliation_multiple_decisions");
+      expect(request.ideas[0]!.priorFailure).toContain("source_support_invalid");
       return [decision("Capacity","link_source",parts[0]!,request.statements.find(s=>s.text===parts[0])!.id),decision("Tools","add",parts[2]!,null,"We inspect tools.")];
     });
     Object.assign(llm,{reconcile});const e=engine();
