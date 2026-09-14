@@ -4,11 +4,11 @@ import { renderFactViews, type FactView } from "./temporalFacts.js";
 
 export type AnswerSupportMode = "current" | "historical" | "prior" | "conflict" | "raw_report";
 export interface AnswerSupportSelection { id: string; mode: AnswerSupportMode }
-export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kind: "fact" | "prior" | "passage"; factId?: string; key?: string; excerpt?: string; start?: number; end?: number; offsetUnit?: "decoded-region-utf16"; regionStart?: number; granularity?: "paragraph" | "sentence" }
+export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kind: "fact" | "prior" | "passage"; factId?: string; key?: string; excerpt?: string; start?: number; end?: number; offsetUnit?: "decoded-region-utf16"; regionStart?: number; granularity?: "paragraph" | "sentence" | "list_item" }
 type Support = { hint: AnswerSupportHint; view: FactView; factId?: string; priorId?: string }
   | { hint: AnswerSupportHint; passage: NotePassage; text: string };
 const digest = (value: unknown) => `as_${createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24)}`;
-export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. Do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. The host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue with nextCursor and omit query, or seek with a literal query and omit cursor. Never send query and cursor together. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
+export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. Do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. The host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue with nextCursor and omit query, or seek with a literal query and omit cursor. Never send query and cursor together. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Prefer the smallest complete relevant support; use the parent paragraph when qualifications cannot be preserved by the selected children. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
 
 // Intl may split a newline-delimited attribution from the following sentence.
 // Keep that prefix attached instead of issuing an unqualified child handle.
@@ -29,6 +29,42 @@ function completeSentenceSegments(text:string, clippedStart:boolean, clippedEnd:
   return segments.filter(part=>/[.!?。！？]["'”’)]*\s*$/u.test(part.segment));
 }
 
+type SourceBlock = { text:string; start:number; granularity:"paragraph"|"list_item" };
+const listMarker = /^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+\S/m;
+function navigationOnly(text:string):boolean {
+  return text.split("\n").every(line=>{
+    const value=line.trim();
+    return !value || /^#{1,6}\s/.test(value) || /^(?:[-*_]\s*){3,}$/.test(value)
+      || !value.replace(/<!--[^]*?-->/g,"").replace(/\[\[[^\]]+\]\]/g,"").replace(/\[[^\]]*\]\([^)]*\)/g,"").trim();
+  });
+}
+/** Markdown structure only: nested items and indented continuation paragraphs
+ * stay with their top-level item. A prose attribution preceding a list stays
+ * attached rather than becoming an unqualified child claim.
+ */
+function sourceBlocks(raw:string,isLog:boolean):SourceBlock[] {
+  const paragraphs=[...raw.matchAll(/[^\n]+(?:\n(?!\s*\n)[^\n]+)*/g)].map(p=>({text:p[0],start:p.index!}));
+  if(isLog) return paragraphs.map(p=>({...p,granularity:"paragraph"}));
+  const grouped:Array<{text:string;start:number}>=[];
+  for(const paragraph of paragraphs){
+    const previous=grouped.at(-1);
+    if(previous && ((listMarker.test(previous.text) && /^[ \t]+\S/.test(paragraph.text))
+      || (!navigationOnly(previous.text) && /:\s*$/.test(previous.text) && listMarker.exec(paragraph.text)?.index===0))){
+      previous.text=raw.slice(previous.start,paragraph.start+paragraph.text.length);
+    } else grouped.push({...paragraph});
+  }
+  return grouped.flatMap<SourceBlock>(block=>{
+    if(navigationOnly(block.text)) return [];
+    const first=listMarker.exec(block.text);
+    if(!first || first.index!==0) return [{...block,granularity:"paragraph" as const}];
+    const indent=first[1]!.length;
+    const starts=[...block.text.matchAll(/^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+\S/gm)]
+      .filter(m=>m[1]!.length<=indent).map(m=>m.index!);
+    return starts.map((start,i)=>({text:block.text.slice(start,starts[i+1]??block.text.length),start:block.start+start,granularity:"list_item" as const}))
+      .filter(block=>!navigationOnly(block.text.replace(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/,"")));
+  });
+}
+
 /** Turn-local handles for source actually read. Selection is semantic model work;
  * canonical text, identity, temporal status and citations remain host authority. */
 export class AnswerSupportRegistry {
@@ -41,7 +77,7 @@ export class AnswerSupportRegistry {
       const modes: AnswerSupportMode[] = !view.complete || !fact.source || fact.status === "unsupported" || fact.status === "future" ? []
         : fact.status === "superseded" ? ["prior"] : fact.status === "conflict" ? ["conflict"]
         : fact.status === "undated" ? ["raw_report"] : [view.mode === "historical" ? "historical" : "current"];
-      const hint: AnswerSupportHint = { id: digest(["fact", view, fact.id]), kind: "fact", factId: fact.id, key: fact.key, modes };
+      const hint: AnswerSupportHint = { id: digest(["fact", view, fact.id]), kind: "fact", factId: fact.id, key: fact.key, modes, excerpt:fact.statement.slice(0,160) };
       this.supports.set(hint.id, { hint, view, factId: fact.id }); hints.push(hint);
     }
     for (const prior of view.priorStatements ?? []) {
@@ -67,20 +103,25 @@ export class AnswerSupportRegistry {
     for (const region of regions) {
       const isLog = passage.source.path.startsWith("Log/");
       const raw = isLog ? region.body.split("\n").flatMap(line => line.startsWith("> ") ? [line.slice(2)] : line === ">" ? [""] : []).join("\n") : region.body;
-      const paragraphs = [...raw.matchAll(/[^\n]+(?:\n(?!\s*\n)[^\n]+)*/g)];
+      const paragraphs = sourceBlocks(raw,isLog);
       for (let i=0;i<paragraphs.length;i++) {
-        const paragraph=paragraphs[i]!; const text=paragraph[0].trim();
+        const paragraph=paragraphs[i]!; const text=paragraph.text.trim();
         if (!text) continue;
-        const clippedStart=i===0 && region.start>region.first.extent.sectionStart;
-        const clippedEnd=i===paragraphs.length-1 && region.end<region.last.extent.sectionEnd;
+        const clippedStart=!raw.slice(0,paragraph.start).trim() && region.start>region.first.extent.sectionStart;
+        const clippedEnd=paragraph.start+paragraph.text.length>=raw.trimEnd().length && region.end<region.last.extent.sectionEnd;
         const partial=text.length>4000 || clippedStart || clippedEnd;
         if(partial) this.lastPassageSelectionPartial=true;
         // Sentence children expose exact actually-read excerpts, never a clipped
         // first/last sentence. Surrounding source stays visible to the selector;
         // semantic qualification completeness is not established by this handle.
-        const segments=partial ? completeSentenceSegments(paragraph[0],clippedStart,clippedEnd)
-          .map(segment=>({text:segment.segment.trim(),start:paragraph.index!+segment.index+segment.segment.length-segment.segment.trimStart().length,granularity:"sentence" as const}))
-          : [{text,start:paragraph.index!+paragraph[0].length-paragraph[0].trimStart().length,granularity:"paragraph" as const}];
+        const parent={text,start:paragraph.start+paragraph.text.length-paragraph.text.trimStart().length,granularity:paragraph.granularity};
+        const sentences=completeSentenceSegments(paragraph.text,clippedStart,clippedEnd)
+          .map(segment=>({text:segment.segment.trim(),start:paragraph.start+segment.index+segment.segment.length-segment.segment.trimStart().length,granularity:"sentence" as const}));
+        // Never split a list item's continuation qualifications into bare claims.
+        // Complete prose may offer smaller existing sentence handles plus its
+        // parent: qualification completeness remains a source-reading decision.
+        const segments=paragraph.granularity==="list_item" ? (partial ? [] : [parent])
+          : partial ? sentences : sentences.length>1 && !listMarker.test(paragraph.text) ? [...sentences,parent] : [parent];
         for(const segment of segments){
           if(!segment.text || segment.text.length>4000){this.lastPassageSelectionPartial=true;continue;}
           const hint: AnswerSupportHint = { id:digest(["passage",passage.identity,passage.version,region.start,segment.start,segment.text]),kind:"passage",modes:["raw_report"],excerpt:segment.text.slice(0,160),offsetUnit:"decoded-region-utf16",regionStart:region.start,start:segment.start,end:segment.start+segment.text.length,granularity:segment.granularity };
