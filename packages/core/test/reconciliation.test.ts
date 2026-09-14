@@ -285,11 +285,11 @@ it('rejects all mixed decisions for one idea before writing while preserving a s
     const target=prepared.request.statements.find(s=>s.text===(secondKind==='link_source'?'Capacity is 6.':'Opening is on 12.'))!;
     const result=await applyReconciliation(prepared,[
       {...op('add','Capacity is 6.'),ideaIds:['ambiguous']},
-      {...op(secondKind,secondKind==='link_source'?':123:456':'opening moves to 19',target.id),ideaIds:['ambiguous'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'},
+      {...op(secondKind,':123:456',target.id),ideaIds:['ambiguous'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'},
       {...op('add','Tools are inspected.'),ideaIds:['tools']},
     ]);
     expect(result.appliedOperations.map(o=>o.ideaIds)).toEqual([['tools']]);
-    expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['ambiguous'],reason:'reconciliation_multiple_decisions'}));
+    expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['ambiguous'],reason:'source_support_invalid'}));
     expect(result.content.split('Capacity is 6.')).toHaveLength(2);
     expect(result.content).not.toContain('**Correction:**');
     expect(result.content).toContain('Tools are inspected.');
@@ -509,4 +509,48 @@ it.each([
  expect(past.facts.map(f=>f.status)).toEqual(['undated','undated']);expect(renderFactViews([past])).toContain('Effective date unknown');
  const missing=await projectFacts({path:'Projects/A.md'},metadata,new Date('2026-09-14'),async()=>{throw Error('unavailable')});
  expect(renderFactViews([missing])).not.toContain('Recorded correction report');
+});
+
+
+it('preserves a new condition alongside reinforcement in one coarse idea',async()=>{
+ const source='Mina checks on Tuesday. If it rains, Mina checks the drain before watering.';
+ const prepared=input('# A\nMina checks on Tuesday.\n[[Index]]\n',source);
+ const result=await applyReconciliation(prepared,[op('link_source','Mina checks on Tuesday.',prepared.request.statements[0]!.id),op('add','If it rains, Mina checks the drain before watering.')]);
+ expect(result.pending).toEqual([]);expect(result.appliedOperationIds).toHaveLength(2);
+ expect(result.content).toContain('Mina checks on Tuesday. [[2026-09-13#^e-000001]]');
+ expect(result.content).toContain('If it rains, Mina checks the drain before watering.');
+ const replay=await applyReconciliation(input(result.content,source),[op('link_source','Mina checks on Tuesday.',prepared.request.statements[0]!.id),op('add','If it rains, Mina checks the drain before watering.')]);
+ expect(replay.content).toBe(result.content);
+});
+it.each([false,true])('rolls back valid plus invalid group regardless of order (%s)',async reverse=>{
+ const source='New procedure applies. Existing schedule holds.';
+ const prepared=input('# A\nExisting schedule holds.\n[[Index]]\n',source);
+ const decisions=[op('add','New procedure applies.'),op('link_source','Invented source.',prepared.request.statements[0]!.id)];
+ const result=await applyReconciliation(prepared,reverse?decisions.reverse():decisions);
+ expect(result.content).toBe(prepared.input.raw);expect(result.appliedOperations).toEqual([]);
+ expect(result.pending[0]!.reason).toBe('source_support_invalid');
+});
+it('rolls back transitive shared ideas including clarification, preserving independent groups',async()=>{
+ const source='First procedure. Second procedure. Third procedure. Healthy procedure.';
+ const seed=input('# A\n[[Index]]\n',source);seed.input.ideas=['A','B','C','D'].map(id=>({id,topic:id,sourceIds:['p1']}));
+ const prepared=prepareReconciliation(seed.input);
+ const result=await applyReconciliation(prepared,[{...op('add','First procedure.'),ideaIds:['A']},{...op('add','Second procedure.'),ideaIds:['A','B']},{...op('clarify','Third procedure.'),ideaIds:['B','C']},{...op('add','Healthy procedure.'),ideaIds:['D']}]);
+ expect(result.content).not.toContain('First procedure.');expect(result.content).not.toContain('Second procedure.');expect(result.content).toContain('Healthy procedure.');
+ expect(result.appliedOperations.map(operation=>operation.ideaIds)).toEqual([['D']]);
+ expect(result.pending.flatMap(item=>item.ideaIds).sort()).toEqual(['A','B','C']);
+});
+it('allows overlapping complete qualification contexts for separate claims',async()=>{
+ const source='Only if approved: Mina checks the drain. Only if approved: Mina checks the drain. Omar records the result.';
+ const prepared=input('# A\n[[Index]]\n',source);
+ const result=await applyReconciliation(prepared,[op('add','Only if approved: Mina checks the drain.'),op('add','Only if approved: Mina checks the drain. Omar records the result.')]);
+ expect(result.pending).toEqual([]);expect(result.appliedOperations).toHaveLength(2);
+ expect(result.content).toContain('Only if approved: Mina checks the drain. Omar records the result.');
+});
+it('rejects incompatible corrections of one original target even across distinct ideas',async()=>{
+ const source='Correction: launch is now on 19. Correction: launch is now on 26.';
+ const seed=input('# A\nLaunch is on 12.\n[[Index]]\n',source);seed.input.ideas=['A','B'].map(id=>({id,topic:id,sourceIds:['p1']}));
+ const prepared=prepareReconciliation(seed.input),target=prepared.request.statements[0]!.id;
+ const result=await applyReconciliation(prepared,['Correction: launch is now on 19.','Correction: launch is now on 26.'].map((quote,i)=>({...op('supersede',quote,target),ideaIds:[i?'B':'A'],correctionQuote:quote})));
+ expect(result.content).toBe(seed.input.raw);expect(result.appliedOperations).toEqual([]);
+ expect(result.pending.every(item=>item.reason.includes('reconciliation_incompatible_decisions'))).toBe(true);
 });

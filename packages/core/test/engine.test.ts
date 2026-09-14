@@ -1249,7 +1249,7 @@ describe("BrainEngine", () => {
       };
       if(attempt===1) return [decision("Capacity","add",parts[0]!),decision("Capacity","link_source",":123:456",request.statements.find(s=>s.text===parts[0])!.id),decision("Opening","supersede","opening moves to 19",request.statements.find(s=>s.text==="Opening is on 12.")!.id,"Opening moves to 19."),decision("Tools","add","Invented support.")];
       expect(request.ideas.map(idea=>idea.topic)).toEqual(["Capacity","Tools"]);
-      expect(request.ideas[0]!.priorFailure).toContain("reconciliation_multiple_decisions");
+      expect(request.ideas[0]!.priorFailure).toContain("source_support_invalid");
       return [decision("Capacity","link_source",parts[0]!,request.statements.find(s=>s.text===parts[0])!.id),decision("Tools","add",parts[2]!,null,"We inspect tools.")];
     });
     Object.assign(llm,{reconcile});const e=engine();
