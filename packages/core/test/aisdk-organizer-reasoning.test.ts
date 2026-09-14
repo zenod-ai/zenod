@@ -31,7 +31,7 @@ it.each([undefined,'low','none'].flatMap(effort=>[undefined,['fireworks'],['fire
   expect(request.provider).toEqual(order?{only:order,order,require_parameters:true}:undefined);
   expect(request.response_format.type).toBe('json_schema');expect(request.response_format.json_schema.strict).toBe(true);
  }
- expect(requests[0].max_tokens).toBe(8192);expect(requests[1].max_tokens).toBe(effort === 'low' ? 8192 : 4000);
+ expect(requests[0].max_tokens).toBe(effort === 'low' ? 16384 : 8192);expect(requests[1].max_tokens).toBe(effort === 'low' ? 8192 : 4000);
  // Other stages keep their existing independent output budgets.
  expect(requests[2]).not.toHaveProperty('max_tokens');
  expect(requests[3]).not.toHaveProperty('max_tokens');

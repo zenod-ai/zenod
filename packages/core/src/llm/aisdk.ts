@@ -155,6 +155,7 @@ export const MIN_MAX_STEPS = 2;
 export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
 export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
+const MAX_LOW_CLASSIFY_OUTPUT_TOKENS = 16384;
 const COUNCIL_TOOL_SUFFIX_RE = /__[0-9a-f]{16}$/i;
 const READ_ONLY_STATUS_TEXT = "Read-only answer — no action was performed.";
 
@@ -840,7 +841,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       ...(this.organizerProviderOptions ? { providerOptions: this.organizerProviderOptions } : {}),
       schema: classificationSchema,
       // Bound multi-topic structured output; incomplete output follows the existing failure path.
-      maxOutputTokens: 8192,
+      maxOutputTokens: this.organizerProviderOptions?.openai.reasoningEffort === "low" ? MAX_LOW_CLASSIFY_OUTPUT_TOKENS : 8192,
       experimental_repairText: REPAIR_HOOK,
       system: [
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
