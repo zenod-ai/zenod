@@ -70,10 +70,10 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
             finally { failFactProjection = false; }
             expect(results[0]).toContain("Notes/Orchid.md");
             if (input.question.includes("pinned") || input.question.includes("failure") || input.question.includes("facts-first")) {
-              expect(results[0]).not.toContain("Verified fact context");
+              expect(results[0]).not.toContain("Source-backed fact candidates");
             } else {
-              expect(results[0]).toContain("Verified fact context");
-              const views = JSON.parse(results[0]!.split("Verified fact context from bounded search-hit reads: ")[1]!);
+              expect(results[0]).toContain("Source-backed fact candidates");
+              const views = JSON.parse(results[0]!.split("Source-backed fact candidates from bounded search-hit reads (not relevance-verified; select only facts that answer the question): ")[1]!);
               for (const view of views) {
                 expect(view.mode).toBe("current");
                 for (const support of view.answerSupports) {
@@ -104,7 +104,7 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
                 const path = i === 0 ? "Notes/Orchid.md" : `Notes/Orchid${i}.md`;
                 const page = JSON.parse(await tools.readNote!(path, { query: "Product vision" }));
                 if (i === 0) firstRead = page;
-                expect(page.body).toContain("Product vision is a personal library for durable knowledge.");
+                expect(packetBody(page)).toContain("Product vision is a personal library for durable knowledge.");
                 if (failFactProjection) expect(page.factView).toBeUndefined();
                 else if (page.factView) expect(page.factView.mode).toBe("current");
                 readPaths.push(path);
@@ -122,22 +122,22 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
             const first = JSON.parse(await tools.readNote!("Notes/Orchid.md"));
             expect(first.factView.facts).toBeDefined();
             const page = JSON.parse(await tools.readNote!("Notes/Orchid.md", { query: "Orchid color" }));
-            expect(page.body).toContain("Orchid color is amber.");
-            expect(page.body).not.toContain("Orchid color is blue.");
+            expect(packetBody(page)).toContain("Orchid color is amber.");
+            expect(packetBody(page)).not.toContain("Orchid color is blue.");
             expect(page.factView.facts.some((fact: {statement: string; status: string}) => fact.statement === "Orchid color is blue." && fact.status === "active")).toBe(true);
             return { text: "Orchid color is amber. That is the current scope.", readPaths: ["Notes/Orchid.md"] };
           }
           if (input.question === "What is the product vision of this page?") {
             const page = JSON.parse(await tools.readNote!("Notes/Orchid.md", { query: "Product vision" }));
             expect(page.factView.mode).toBe("current");
-            expect(page.body).toContain("Product vision is a personal library for durable knowledge.");
+            expect(packetBody(page)).toContain("Product vision is a personal library for durable knowledge.");
             return selectVision(tools, page);
           }
           if (input.question === "What was Orchid's color as of January 2026?") {
             const page = JSON.parse(await tools.readNote!("Notes/Orchid.md", { query: "Orchid color" }));
             expect(page.factView.mode).toBe("current");
             expect(page.factView.answerSupports.every((support: { modes: string[] }) => !support.modes.includes("historical"))).toBe(true);
-            expect(page.body).toContain("Orchid color is amber.");
+            expect(packetBody(page)).toContain("Orchid color is amber.");
             return { text: "The older page prose says Orchid color is amber.", readPaths: ["Notes/Orchid.md"] };
           }
           if (input.question === "Orchid color: page-first" || input.question === "Orchid color: facts-first") {
@@ -316,3 +316,17 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
     } finally { await client?.close(); await server?.close(); state.close(); await rm(dir,{ recursive: true, force: true, maxRetries: 3 }); }
   }, 60000);
 });
+
+/** Answer tools return bounded section packets; assertions still inspect original text and provenance. */
+function packetBody(packet: { source: unknown; version: string; bodyChars: number; passages: Array<{body:string;source:unknown;version:string;identity:string}> }): string {
+  expect(Array.isArray(packet.passages)).toBe(true);
+  for (const section of packet.passages) {
+    expect(section.source).toEqual(packet.source);
+    expect(section.version).toBe(packet.version);
+    expect(section.identity).toEqual(expect.any(String));
+  }
+  expect(new Set(packet.passages.map(section=>section.identity)).size).toBe(packet.passages.length);
+  const body=packet.passages.map(section=>section.body).join("");
+  expect(body.length).toBe(packet.bodyChars);
+  return body;
+}
