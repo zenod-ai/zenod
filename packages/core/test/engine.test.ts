@@ -1083,6 +1083,34 @@ describe("BrainEngine", () => {
     });
   }
 
+
+  it.each([false, true])("repairs empty topic destinations within the existing retry while preserving siblings (exhausted: %s)", async (exhausted) => {
+    const content = "Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);
+    const original = llm.classify.bind(llm);
+    const inputs: ClassifyInput[] = [];
+    llm.classify = vi.fn(async (input: ClassifyInput) => {
+      inputs.push(input);
+      const result = await original(input);
+      result.pages = [{ path: "Areas/Insurance.md", action: "update", title: "Insurance" }];
+      if (exhausted || inputs.length === 1) result.topics![0]!.pages = [];
+      return result;
+    });
+    const e = engine();
+    const captured = await e.captureEvidence!({ content, source: "selftest" });
+    const result = await e.enrichEvidence!({ content, source: "selftest", evidenceRef: captured.evidenceRef });
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]!.hints.join(" ")).not.toContain("Structural correction:");
+    expect(inputs[1]!.hints.join(" ")).toContain("Top-level pages do not route topics");
+    expect(result.topics!.find(topic => topic.topic === "Axa")!.status).toBe("filed");
+    expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
+    if (exhausted) {
+      expect(result.topics!.find(topic => topic.topic === "Insurance")!.reason).toBe("classification_unavailable");
+      expect(result.pagesTouched).not.toContain("Areas/Insurance.md");
+    }
+    expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
   it("uses atomic reconciliation for legacy store and compact captured enrichment without page composition", async () => {
     const path="Projects/Legacy.md"; const raw="# Legacy\n\nUnrelated preserved history.\n[[Index]]\n";
     await writeFile(join(repo.path,path),raw); await repo.commitAndPublish("seed plain legacy project");

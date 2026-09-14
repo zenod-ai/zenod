@@ -515,7 +515,7 @@ const classificationSchema = z.object({
     confidence: z.number().min(0).max(1).describe("Confidence in understanding the source proposition and selecting its destination, NOT probability that the reported claim is true. A clearly attributed unconfirmed claim on a known branch can have high routing confidence."),
     disposition: z.enum(["evidence_only", "append_compact_note", "integrate_page", "needs_clarification"]).describe("Route every substantive idea, including repeated knowledge and qualified reports, to reconciliation. evidence_only is only for captures with no substantive meaning; never decide novelty here."),
     pages: z.array(z.object({ path: z.string(), action: z.enum(["create", "update"]), title: z.string(),
-      aliases: z.array(z.object({ name: z.string(), evidenceQuote: z.string() })).describe("Only explicitly stated equivalent names. Quote must contain both this page title and alias exactly. Empty when uncertain; never normalize raw spelling.") })),
+      aliases: z.array(z.object({ name: z.string(), evidenceQuote: z.string() })).describe("Only explicitly stated equivalent names. Quote must contain both this page title and alias exactly. Empty when uncertain; never normalize raw spelling.") })).describe("Authoritative destinations for THIS topic only. Required non-empty for append_compact_note and integrate_page; use needs_clarification with empty pages when unknown. Top-level pages never substitute for this array; do not broadcast unrelated destinations."),
     summary: z.string(),
     question: z.string().nullable(),
   })).min(1).describe("Every distinct topic with its own confidence, evidence and filing decision; include uncertain topics too"),
@@ -532,7 +532,7 @@ const classificationSchema = z.object({
         title: z.string(),
       }),
     )
-    .describe("meaning pages this memory touches (1-3)"),
+    .describe("Legacy aggregate of meaning pages this memory touches (1-3). When topics are present, each topic.pages independently owns its destinations; this aggregate never routes a topic."),
   question: z
     .string()
     .nullable()
@@ -857,6 +857,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         "- integrate_page: use only when the user explicitly asks to integrate/synthesize/organize, or the material substantially changes durable project/domain knowledge.",
         "- needs_clarification: the requested durable meaning cannot be determined safely.",
         "Full-page composition is expensive. Do not select integrate_page merely because a related page exists.",
+        "Each append_compact_note or integrate_page topic MUST name its own supported pages. Top-level pages are only a legacy aggregate, never a substitute for topic.pages. Keep unrelated topic destinations separate; unknown destinations require needs_clarification, not a fabricated route.",
         "Folders: Areas/ (ongoing life domains), Projects/ (finite work), Notes/ (reusable knowledge).",
         `Tag vocabulary (use ONLY these): ${input.tagVocabulary.join(", ")}`,
         "Existing pages (path | title | tags | summary):",
