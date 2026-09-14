@@ -32,6 +32,7 @@ export const SETTING_KEYS = [
   "openrouter_api_key",
   "model_ask",
   "model_classify",
+  "model_classify_reasoning_effort",
   "model_vision",
   "model_max_steps",
   "google_service_account_json",
@@ -161,6 +162,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   openrouter_api_key: "OPENROUTER_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
+  model_classify_reasoning_effort: "ZENOD_MODEL_CLASSIFY_REASONING_EFFORT",
   model_vision: "ZENOD_MODEL_VISION",
   model_max_steps: "ZENOD_MODEL_MAX_STEPS",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
@@ -599,6 +601,14 @@ export class Settings {
     return Boolean(
       this.getRaw("github_app_id") && this.getRaw("github_app_private_key") && this.getRaw("github_app_installation_id"),
     );
+  }
+
+  /** Explicit organizer-only reasoning; absent preserves provider defaults. */
+  organizerReasoningEffort(): "low" | undefined {
+    const value = this.get("model_classify_reasoning_effort");
+    if (!value) return undefined;
+    if (value !== "low") throw new Error("model_classify_reasoning_effort must be low or unset");
+    return value;
   }
 
   /** Configured tool-step budget per reply; undefined = engine default. */
