@@ -36,8 +36,9 @@ describe("explicit source selection contract",()=>{
   });
   it("retains a complete raw qualification and never upgrades it to current state",()=>{
     const registry=new AnswerSupportRegistry();const text="Rejected claim:\nWe repair batteries. This is only an unverified hypothesis.";
-    const hints=registry.addPassage(passage(text));expect(hints).toHaveLength(1);
-    expect(registry.render([{id:hints[0]!.id,mode:"raw_report"}]).text).toContain(text);
+    const hints=registry.addPassage(passage(text));const parent=hints.find(h=>h.granularity==="paragraph")!;
+    expect(hints.filter(h=>h.granularity==="sentence")[0]!.excerpt).toContain("Rejected claim:");
+    expect(registry.render([{id:parent.id,mode:"raw_report"}]).text).toContain(text);
     expect(registry.render([{id:hints[0]!.id,mode:"current"}]).valid).toBe(false);
   });
   it("does not issue raw handles for partial edge paragraphs or metadata",()=>{
@@ -97,4 +98,68 @@ describe("explicit source selection contract",()=>{
     expect(decodeSupportedAnswer("Hello!",[])).toEqual({text:"Hello!",readPaths:[]});
     const bad=decodeSupportedAnswer('{"supportSelections":',[]);expect(bad.text).toBe("");expect(bad.supportProtocolError).toBe("invalid_submission");expect(bad.supportSelections).toBeUndefined();
   });
+});
+
+function meaning(body:string, options:Partial<NotePassage>={}):NotePassage {
+ const original=passage(body);return {...original,body,source:{...source,path:'Projects/Shared.md'},readPath:'Projects/Shared.md',identity:'Projects/Shared.md#section-0',extent:{unit:'utf16',start:0,end:body.length,total:body.length,scopeStart:0,scopeEnd:body.length,sectionStart:0,sectionEnd:body.length},...options};
+}
+it('offers complete list item handles instead of an unrelated first preview or backlink',()=>{
+ const body='# Plan\n\n- The session moved to Friday.\n- Each visitor receives a reusable waterproof map.\n- Two places are free for rural teachers.\n\n[[Projects/Workshop|Workshop]]\n';
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
+ expect(hints).toHaveLength(3);expect(hints.every(h=>h.granularity==='list_item')).toBe(true);
+ for(const phrase of ['reusable waterproof map','free for rural teachers']) {
+  const hint=hints.find(h=>h.excerpt?.includes(phrase))!;expect(hint).toBeDefined();
+  const selected=registry.render([{id:hint.id,mode:'raw_report'}]);expect(selected.text).toContain(phrase);expect(selected.text).not.toContain('Friday');expect(selected.text).not.toContain('[[Projects/Workshop');
+  expect(body.slice(hint.start!,hint.end!)).toBe(hint.excerpt);
+ }
+});
+it('keeps nested and blank-line continuation qualifications attached to the owning item',()=>{
+ const first='- The proposed demo uses ropes.\n  This is not verified.\n  - Only a hypothesis.\n\n  It must not be presented as proven.';
+ const body=first+'\n- A separate map requirement.\n';const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
+ expect(hints).toHaveLength(2);
+ expect(registry.render([{id:hints[0]!.id,mode:'raw_report'}]).text).toContain(first);
+ expect(hints.some(h=>h.excerpt?.startsWith('This is not'))).toBe(false);
+});
+it('does not detach a prose attribution introducing a list',()=>{
+ const body='Unconfirmed claims:\n\n- The room holds twenty people.\n- The price may double.';
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
+ expect(hints).toHaveLength(1);expect(registry.render([{id:hints[0]!.id,mode:'raw_report'}]).text).toContain(body);
+});
+it('omits clipped list items while retaining complete interior items and current caps',()=>{
+ const body='- First item with missing prior context.\n- Middle complete item.\n- Last item with unfinished qualifier';
+ const p=meaning(body);p.extent.sectionStart=-5;p.extent.sectionEnd=body.length+20;
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(p);
+ expect(hints.map(h=>h.excerpt)).toEqual(['- Middle complete item.']);expect(registry.lastPassageSelectionPartial).toBe(true);
+ const many=Array.from({length:40},(_,i)=>`- Independent requirement ${i}.`).join('\n');
+ const capped=new AnswerSupportRegistry();expect(capped.addPassage(meaning(many))).toHaveLength(32);expect(capped.lastPassageSelectionPartial).toBe(true);
+});
+it('gives fact handles a bounded exact statement preview without changing identity or modes',()=>{
+ const registry=new AnswerSupportRegistry(),v=view();v.facts[1]!.statement='A long statement '+ 'qualified '.repeat(30);
+ const hints=registry.addFacts(v);expect(hints[1]!.excerpt).toBe(v.facts[1]!.statement.slice(0,160));expect(hints[1]!.excerpt!.length).toBe(160);
+ expect(hints[1]!.modes).toEqual(['current']);expect(registry.addFacts(v)[1]!.id).toBe(hints[1]!.id);
+});
+
+it('offers precise children for complete short prose while retaining the qualified parent',()=>{
+ const body='The astronomy kit includes a reusable map. A rope demonstration might help explain orbits. This remains unverified.';
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(passage(body));
+ const children=hints.filter(h=>h.granularity==='sentence');expect(children).toHaveLength(3);
+ expect(children[0]!.excerpt).toContain('reusable map');
+ expect(registry.render([{id:children[0]!.id,mode:'raw_report'}]).text).not.toContain('rope');
+ const parent=hints.find(h=>h.granularity==='paragraph')!;expect(registry.render([{id:parent.id,mode:'raw_report'}]).text).toContain(body);
+ expect(registry.render([{id:children[1]!.id,mode:'current'}]).valid).toBe(false);
+});
+it('keeps the 256-turn ceiling and recovers hints omitted only by the per-read budget',()=>{
+ const raw=Array.from({length:40},(_,i)=>`- Requirement ${i}.`).join('\n');
+ const registry=new AnswerSupportRegistry();const first=registry.addPassage(meaning(raw));const second=registry.addPassage(meaning(raw));
+ expect(first).toHaveLength(32);expect(second).toHaveLength(8);expect(second[7]!.excerpt).toContain('Requirement 39');
+ for(let i=1;i<7;i++) registry.addPassage(meaning(raw,{identity:`Projects/Other${i}.md#section-0`}));
+ const remaining=registry.addPassage(meaning(raw,{identity:'Projects/Last.md#section-0'}));expect(remaining).toHaveLength(24);
+ expect(registry.addPassage(meaning(raw,{identity:'Projects/Overflow.md#section-0'}))).toEqual([]);expect(registry.lastPassageSelectionPartial).toBe(true);
+});
+it('treats leading whitespace before a clipped attribution as an unknown source edge',()=>{
+ const body='\n\njected claim:\nWe repair batteries. A complete separate statement. Tail remains incomplete';
+ const p=meaning(body);p.extent.sectionStart=-20;p.extent.sectionEnd=body.length+20;
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(p);
+ expect(hints.length).toBeGreaterThan(0);expect(hints.some(h=>h.excerpt?.includes('We repair batteries'))).toBe(false);
+ expect(hints.some(h=>h.excerpt?.includes('complete separate statement'))).toBe(true);
 });

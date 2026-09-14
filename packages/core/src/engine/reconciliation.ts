@@ -195,7 +195,9 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
       const retracted=[...(operation.correctionQuote ?? "").matchAll(/\b(?:ya\s+no|no\s+longer|not|no)\b[^;,.\n]*?(?=\s*\b(?:but|sino)\b|[;,])/giu)];
       const oldNumbers=new Set(target.text.match(/\d+(?:[-./]\d+)*/g) ?? []);
       const retired=retracted.length===1 ? retracted[0]![0].match(/\d+(?:[-./]\d+)*/g) ?? [] : [];
-      if(retired.some(value=>!oldNumbers.has(value))) {fail("correction_target_values_incompatible");continue;}
+      // No numeric literals means this floor has nothing comparable (the old
+      // value may be written in words). Absence is not evidence of a mismatch.
+      if(oldNumbers.size && retired.some(value=>!oldNumbers.has(value))) {fail("correction_target_values_incompatible");continue;}
     }
     if (operation.kind === "supersede" && target?.line.includes(citation)) { fail("reconciliation_same_evidence_target"); continue; }
     if (operation.kind === "supersede" && target && equivalent(statement,target.text)) { fail("correction_new_state_unchanged"); continue; }

@@ -30,6 +30,17 @@ describe("classificationSchema (OpenAI-strict compatibility)", () => {
     });
     expect(parsed.question).toBeNull();
   });
+
+  it("keeps independent propositions on the same page compatible with the strict schema", () => {
+    const page={path:"Projects/Shared.md",action:"update",title:"Shared",aliases:[]};
+    const topics=["Rosa schedules the inspections.","Purchasing another scanner is not authorized.","The repair estimate is still unknown."]
+      .map(quote=>({topic:quote,facts:[],evidenceAssignments:[{passageId:"p-shared",quote,occurrence:0}],evidenceQuotes:[],disposition:"append_compact_note",confidence:0.9,pages:[page],summary:quote,question:null}));
+    const parsed=classificationSchema.parse({passageReviews:[{passageId:"p-shared",status:"assigned"}],topics,disposition:"append_compact_note",confidence:0.9,summary:"Maintain separate propositions",tags:[],pages:[page],question:null});
+    expect(parsed.topics).toHaveLength(3);
+    expect(parsed.topics.every(topic=>topic.pages[0]?.path===page.path)).toBe(true);
+    expect(classificationSchema.shape.topics.description).toContain("One topic per independently maintainable proposition");
+    expect(classificationSchema.shape.topics.element.shape.facts.description).toContain("Never bundle independently maintainable claims");
+  });
 });
 
 /**
