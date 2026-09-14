@@ -3,6 +3,7 @@ import { prepareReconciliation, applyReconciliation } from '../src/engine/reconc
 import { pageRevision, catalogSections } from '../src/vault/pages.js';
 import { parseNote, serializeNote } from '../src/vault/frontmatter.js';
 import { appendMemoryFacts, parseMemoryFacts, projectFacts, renderFactViews } from "../src/engine/temporalFacts.js";
+import { hasMutationSuccessClaim } from '../src/mutationReceipt.js';
 import { AnswerSupportRegistry } from '../src/engine/answerSupport.js';
 import type { MemoryEntry } from '../src/types.js';
 const ref = 'Log/2026-09-13.md#^e-000001';
@@ -429,14 +430,15 @@ it.each([
  const view=await projectFacts({path:'Projects/A.md'},metadata,new Date('2026-09-14'),async()=>evidence(source));
  expect(view.facts.map(f=>f.status)).toEqual(['conflict','conflict']);
  const rendered=renderFactViews([view]);
- expect(rendered).toContain('Applied correction report');expect(rendered).toContain('Conflicting report (not applied as a correction)');
+ expect(rendered).toContain('Recorded correction report');expect(rendered).toContain('Conflicting report (not applied as a correction)');
+ expect(hasMutationSuccessClaim(rendered)).toBe(false);
  expect(rendered).toContain(correction);expect(rendered).toContain(report);expect(rendered).toContain('Prior note statement (superseded');
  const registry=new AnswerSupportRegistry();const hints=registry.addFacts(view);
  expect(hints.filter(h=>h.kind==='fact').map(h=>h.modes)).toEqual([['conflict'],['conflict']]);
  const selected=registry.render(hints.map(h=>({id:h.id,mode:h.modes[0]!})));
- expect(selected.valid).toBe(true);expect(selected.text).toContain('Applied correction report');expect(selected.text).toContain(report);
+ expect(selected.valid).toBe(true);expect(selected.text).toContain('Recorded correction report');expect(selected.text).toContain(report);
  const past=await projectFacts({path:'Projects/A.md',asOf:'2026-09-01'},metadata,new Date('2026-09-14'),async()=>evidence(source));
  expect(past.facts.map(f=>f.status)).toEqual(['undated','undated']);expect(renderFactViews([past])).toContain('Effective date unknown');
  const missing=await projectFacts({path:'Projects/A.md'},metadata,new Date('2026-09-14'),async()=>{throw Error('unavailable')});
- expect(renderFactViews([missing])).not.toContain('Applied correction report');
+ expect(renderFactViews([missing])).not.toContain('Recorded correction report');
 });
