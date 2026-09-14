@@ -250,6 +250,31 @@ it('refuses to borrow a retracted number from an unrelated target',async()=>{
  expect(result.content).toBe(raw);expect(result.pending[0]!.reason).toBe('correction_target_values_incompatible');
 });
 
+it('accepts the actual Spanish numeric correction when the prior date is written in words', async () => {
+  const old='The workshop date is dieciséis de octubre.';
+  const source='Ahora corrijo la fecha del taller de bicicletas que dije antes.\n El taller no será el 16 de octubre, será el 23 de octubre.\n Esta es una corrección de la fecha anterior, no una segunda sesión.\n El contenido de la actividad y la forma de acceso siguen siendo los mismos.\n Conviene conservar la fecha anterior como historia, pero usar la nueva cuando se pregunte por la próxima sesión.';
+  const prepared=input(`# A\n${old}\n[[Index]]\n`,source);
+  prepared.input.sourceContent=source;
+  const target=prepared.request.statements[0]!;
+  const result=await applyReconciliation(prepared,[{...op('supersede',source,target.id),correctionQuote:source}]);
+  expect(result.pending).toEqual([]);
+  const fact=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!;
+  expect(fact.statement).toBe(source);expect(fact.correctionQuote).toBe(source);
+  expect(fact.legacySupersedes?.statement).toBe(old);expect(fact.legacySupersedes?.statementId).toBe(target.id);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-15'),async()=>evidence(source));
+  expect(view.facts[0]!.status).toBe('active');expect(view.priorStatements?.[0]?.statement).toBe(old);
+  expect(prepared.input.evidence.content).toBe(source);
+  const unsupported=await applyReconciliation(prepared,[{...op('supersede',source.replace('23','24'),target.id),correctionQuote:source}]);
+  expect(unsupported.appliedOperationIds).toEqual([]);expect(unsupported.pending.some(p=>p.reason==='source_support_invalid')).toBe(true);
+});
+
+it.each(['The workshop date is 15 de octubre.','The workshop date is 24 de octubre.'])('retains positive literal mismatch rejection: %s', async old => {
+  const source='Corrijo la fecha: el taller no será el 16 de octubre, será el 23 de octubre.';
+  const prepared=input(`# A\n${old}\n[[Index]]\n`,source);
+  const result=await applyReconciliation(prepared,[{...op('supersede',source,prepared.request.statements[0]!.id),correctionQuote:source}]);
+  expect(result.appliedOperationIds).toEqual([]);expect(result.pending[0]!.reason).toBe('correction_target_values_incompatible');
+});
+
 it('rejects all mixed decisions for one idea before writing while preserving a separate sibling', async () => {
   for (const secondKind of ['link_source','supersede'] as const) {
     const source='Capacity is 6. Correction: opening moves to 19. Tools are inspected.';
