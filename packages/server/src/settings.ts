@@ -250,6 +250,7 @@ export class Settings {
     api_key?: string
     model_ask?: string
     model_classify?: string
+    model_classify_reasoning_effort?: string
     vault_repo?: string
     vault_branch?: string
     backlog_repo?: string
@@ -266,7 +267,7 @@ export class Settings {
     if (input.session_secret) this.store.setSetting("session_secret", input.session_secret);
     if (input.provider) this.store.setSetting("provider", input.provider);
     if (input.provider && input.api_key) this.set(PROVIDER_KEY[input.provider as Provider], input.api_key);
-    for (const k of ["model_ask", "model_classify", "vault_repo", "vault_branch", "backlog_repo"] as const) {
+    for (const k of ["model_ask", "model_classify", "model_classify_reasoning_effort", "vault_repo", "vault_branch", "backlog_repo"] as const) {
       if (input[k]) this.setRaw(k, input[k]!);
     }
     for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {
@@ -604,10 +605,10 @@ export class Settings {
   }
 
   /** Explicit organizer-only reasoning; absent preserves provider defaults. */
-  organizerReasoningEffort(): "low" | undefined {
+  organizerReasoningEffort(): "none" | "low" | undefined {
     const value = this.get("model_classify_reasoning_effort");
     if (!value) return undefined;
-    if (value !== "low") throw new Error("model_classify_reasoning_effort must be low or unset");
+    if (value !== "low" && value !== "none") throw new Error("model_classify_reasoning_effort must be none, low or unset");
     return value;
   }
 
