@@ -15,6 +15,7 @@ test('empty or whitespace-altered model identifiers fail before execution',()=>{
 });
 
 test('optional organizer effort is forwarded unchanged and unsupported values fail',()=>{
+ assert.deepEqual(parse(['--organizer-reasoning-effort','none']),{classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3',organizerReasoningEffort:'none'});
  assert.deepEqual(parse(['--organizer-reasoning-effort','low']),{classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3',organizerReasoningEffort:'low'});
- for(const value of ['none','high',''])assert.throws(()=>parse(['--organizer-reasoning-effort',value]),/must be low/);
+ for(const value of ['medium','high',''])assert.throws(()=>parse(['--organizer-reasoning-effort',value]),/must be none, low/);
 });

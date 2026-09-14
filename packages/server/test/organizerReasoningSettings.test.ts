@@ -10,7 +10,10 @@ it('persists organizer-only low effort per tenant and seeds from explicit enviro
   expect(new Settings(first).organizerReasoningEffort()).toBe('low');
   expect(b.organizerReasoningEffort()).toBeUndefined();
   a.set('model_classify_reasoning_effort','high');
-  expect(()=>a.organizerReasoningEffort()).toThrow(/must be low/);
+  expect(()=>a.organizerReasoningEffort()).toThrow(/must be none, low/);
+  a.applyProvision({token:'offline-provision',model_classify_reasoning_effort:'none'});expect(a.organizerReasoningEffort()).toBe('none');
+  a.set('model_classify_reasoning_effort','none');expect(new Settings(first).organizerReasoningEffort()).toBe('none');
+  expect(b.organizerReasoningEffort()).toBeUndefined();
   a.set('model_classify_reasoning_effort','');expect(a.organizerReasoningEffort()).toBeUndefined();
  }finally{first.close();second.close();}
 });
