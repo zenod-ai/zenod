@@ -1,8 +1,8 @@
-# ZMR-23 answer support contract
+# Answer support contract
 
-Bound issue: [#1263](https://github.com/zenod-ai/zenod/issues/1263). This repairs finalization; it does not establish release or production acceptance.
+Bound issues: [ZMR-23 #1263](https://github.com/zenod-ai/zenod/issues/1263), [ZMR-25 #1269](https://github.com/zenod-ai/zenod/issues/1269). This repairs finalization; it does not establish release or production acceptance.
 
-The prior finalizer guessed relevant facts from lexical overlap or exact quotation wording. Correct multilingual answers could disappear. The existing final model completion now selects turn-local supports:
+The prior finalizer guessed relevant facts from lexical overlap or exact quotation wording. Correct multilingual answers could disappear. The existing final model completion selects turn-local supports by calling the internal `submit_memory_answer` tool with:
 
 ```json
 {"supportSelections":[{"id":"as_<24 hex characters>","mode":"current"}]}
@@ -16,6 +16,8 @@ No model/provider, output ceiling, tool-round budget or storage changes. No extr
 
 Raw previews are limited to 160 characters; at most 32 new raw-support hints are returned per registration. Earlier IDs remain usable in the turn. Oversized or partially read paragraphs can expose complete sentence children, retaining exact source text and decoded UTF-16 coordinates. Unknown edge groups are excluded after joining attribution prefixes; actual section extents distinguish a missing tail from an omitted beginning. Source omissions and metadata budget limits remain explicitly partial. At most 256 registered raw/fact handles are admitted by the raw registration budget. Pinned support reuses the already resolved entry and the ordinary reader's content-version calculation. Selected fact views and raw versions are independently revalidated, including an old automatic view followed by a newer explicit view. Unknown IDs, incompatible modes, unavailable facts and changed snapshots fail closed. Correct-looking discovery snippets do not become source support.
 
-AISDK buffers the opt-in vault completion before decoding; tool-progress events remain available, but internal JSON never reaches text callbacks. Ordinary prose and general JSON without support reads remain compatible. Legacy adapters without the optional result field retain conservative temporal finalization, without the discarded lexical selector.
+AISDK uses native per-step tool choice and a terminal stop condition. After a support read, the dedicated read-only ask scope permits bounded memory reads or `submit_memory_answer`; its final existing round permits only submission. Pinned reads set an explicit host flag. Mixed action loops retain their configured authorized tools and authoritative peer results. Submission stops without empty-text recovery or another completion. SDK execution is guarded as well as its advertised tool list in the explicit read-only scope. Tool-progress events remain available, but internal submission arguments never reach text callbacks. Missing/malformed submission is reported as a protocol failure, separately from unknown IDs or incompatible modes. Ordinary prose and general JSON without support reads remain compatible. Legacy adapters without the optional result field retain conservative temporal finalization, without the discarded lexical selector.
 
 Validation covers generic bilingual/mixed/current/prior/conflict cases, actual engine/HTTP seams and all recorded regression read sequences. Historical outputs predate IDs, so replay uses evaluator-simulated selection and cannot prove live model compliance. A search-only case lacks source support; an unread unconfirmed report cannot be invented. Fresh evaluation remains a separate gate, and independent ASR fixtures are not development inputs.
+
+ZMR-25 offline validation exercises actual SDK HTTP serialization and SSE processing with local responses: required tool choice, continued reads, pinned evidence, terminal stop, no extra completion, ordinary actions and protocol buffering. The two recorded real prose failures were replayed unchanged through the adapter and now produce explicit missing-submission outcomes. This does not prove that a real model follows the new typed tool contract; a fresh paid evaluation remains required once the separate provider quota blocker is resolved.

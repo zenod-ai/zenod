@@ -95,6 +95,6 @@ describe("explicit source selection contract",()=>{
   });
   it("keeps ordinary legacy prose compatible and malformed protocol fail-closed",()=>{
     expect(decodeSupportedAnswer("Hello!",[])).toEqual({text:"Hello!",readPaths:[]});
-    const bad=decodeSupportedAnswer('{"supportSelections":',[]);expect(bad.text).toBe("");expect(new AnswerSupportRegistry().render(bad.supportSelections!).valid).toBe(false);
+    const bad=decodeSupportedAnswer('{"supportSelections":',[]);expect(bad.text).toBe("");expect(bad.supportProtocolError).toBe("invalid_submission");expect(bad.supportSelections).toBeUndefined();
   });
 });

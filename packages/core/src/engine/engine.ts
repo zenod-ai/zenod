@@ -1,3 +1,4 @@
+import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
@@ -2260,6 +2261,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       {
         question,
         answerSupportContract: "v1",
+        answerSupportRead: pinnedSupports.length > 0,
+        answerSupportScope: "memory_only",
         vaultBriefing: scopedBriefing.text + (pinnedSupports.length ? `\nPinned source support IDs: ${JSON.stringify(pinnedSupports)}` : ""),
         conversation: [],
         ...(pinnedBriefing
@@ -2523,6 +2526,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
             ? `${enumerated} of ${matched} matching entries enumerated; ${unread} enumerated entries still require complete evidence reads.`
             : "No bounded entry scope was enumerated.";
           text = `Coverage is partial. I cannot give a complete audit from this turn. ${progress} ${coverage.continuation.length > 0 ? "Continue with the queries, exact refs and cursors in coverage.continuation; restart a search if its snapshot changed." : "Use search_entries with the requested date/source/content scope, then read its exact evidence refs before synthesis."}`;
+        } else if (result.supportProtocolError) {
+          text = ANSWER_PROTOCOL_FAILURE_TEXT;
         } else if (result.supportSelections !== undefined) {
           let selectedSnapshotChanged = factSnapshotChanged;
           for (const view of supportRegistry.selectedViews(result.supportSelections)) {
@@ -2705,7 +2710,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const memoryAnswer = (memorySession.required(result.readPaths) || result.supportSelections !== undefined)
+    const memoryAnswer = (memorySession.required(result.readPaths) || result.supportSelections !== undefined || result.supportProtocolError !== undefined)
       ? await memorySession.finalize(result)
       : undefined;
     // Mutation receipts and approval guards retain priority over memory synthesis.
@@ -2819,7 +2824,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         options.peerTools,
       );
     }
-    const memoryAnswer = (memorySession.required(result.readPaths) || result.supportSelections !== undefined)
+    const memoryAnswer = (memorySession.required(result.readPaths) || result.supportSelections !== undefined || result.supportProtocolError !== undefined)
       ? await memorySession.finalize(result)
       : undefined;
     // Mutation receipts and approval guards retain priority over memory synthesis.

@@ -161,6 +161,10 @@ export interface ChatToolEvent {
 export interface AnswerInput {
   /** Opt-in host support selection in the existing final completion. */
   answerSupportContract?: "v1";
+  /** Host already registered pinned source reads before the model loop. */
+  answerSupportRead?: boolean;
+  /** Only the dedicated read-only ask surface may restrict an answer to memory tools. */
+  answerSupportScope?: "memory_only";
   question: string;
   /** Host-owned transient instruction for a bounded recovery attempt; never part of user content or tool arguments. */
   hostInstruction?: string;
@@ -362,6 +366,8 @@ export interface DriveSourceTools {
 }
 
 export interface AnswerResult {
+  /** Protocol failure is distinct from a submitted unknown or temporally invalid ID. */
+  supportProtocolError?: "missing_submission" | "invalid_submission";
   /** Host resolves these turn-local IDs; model text never supplies canonical facts. */
   supportSelections?: import("../engine/answerSupport.js").AnswerSupportSelection[];
   text: string;

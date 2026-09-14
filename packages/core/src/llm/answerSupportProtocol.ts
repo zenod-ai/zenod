@@ -16,5 +16,7 @@ export function decodeSupportedAnswer(text: string, readPaths: string[], require
     });
     // Ignore all generated prose, even with a valid ID: the host owns wording.
     return {text:"",readPaths,supportSelections};
-  } catch { return {text:"",readPaths,supportSelections:[{id:"invalid",mode:"raw_report"}]}; }
+  } catch { return {text:"",readPaths,supportProtocolError:"invalid_submission"}; }
 }
+
+export const ANSWER_PROTOCOL_FAILURE_TEXT = "The model did not submit a valid memory-answer selection. Repeat the question; the source evidence was not rejected as invalid.";

@@ -996,7 +996,14 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     peerTools?: PeerTools,
   ): Promise<AnswerResult> {
     const readPaths = new Set<string>();
-    let supportRead = false;
+    let supportRead = input.answerSupportRead === true;
+    let submittedAnswer: AnswerResult | undefined;
+    let submissionAllowedThisStep = supportRead;
+    let finalAnswerStep = false;
+    const submissionSchema = z.object({ supportSelections: z.array(z.object({
+      id: z.string().regex(/^as_[a-f0-9]{24}$/),
+      mode: z.enum(["current", "historical", "prior", "conflict", "raw_report"]),
+    }).strict()).max(24) }).strict();
     // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
     // the tool execution. This does not consume another model/tool round.
@@ -1580,7 +1587,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // guillotined mid-loop. The last step forces a text answer (prepareStep
     // below), so usable tool-calling rounds = maxSteps - 1.
     const toolRounds = Math.max(1, this.maxSteps - 1);
-    const budgetNote = [
+    const budgetNote = input.answerSupportContract ? [
+      `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; the final round allows submission or ordinary prose but no action tools. A completed authoritative action may return its receipt as prose."}`,
+      "Submission ends this turn immediately; the host renders the selected evidence. Do not produce a closing prose answer after submission.",
+    ].join(" ") : [
       `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
       "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
       "If you are near the limit, stop gathering and answer with what you have — a clearly-caveated partial answer always beats no answer.",
@@ -1627,6 +1637,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     ]
       .filter(Boolean)
       .join("\n\n");
+    let ordinaryAnswerTools: string[] = [];
     const config = {
       model: this.model(this.askModelId),
       maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
@@ -1636,17 +1647,43 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         { role: "system", content: systemText, providerOptions: this.cacheBreakpoint },
         ...messages,
       ] as ModelMessage[],
-      stopWhen: stepCountIs(this.maxSteps),
+      stopWhen: [stepCountIs(this.maxSteps), () => submittedAnswer !== undefined],
       // Some models omit the collision suffix from a long discovered MCP name.
       // Repair only that one exact, unique omission before any tool event or
       // execution. The selected tool's schema and host authorization still run.
       experimental_repairToolCall: repairConnectedPeerToolCall,
-      // Hard guarantee against the empty-reply failure: on the final step,
-      // disable tools so the model is forced to produce text from what it has.
-      // It can plan around this because the budget is in its system prompt.
-      prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-        stepNumber >= this.maxSteps - 1 ? { toolChoice: "none" as const } : {},
+      // Typed memory completion occupies the existing final round, not a
+      // recovery/judge call. Other action and conversation paths retain prose.
+      prepareStep: ({ stepNumber }: { stepNumber: number }) => {
+        submissionAllowedThisStep = supportRead && !authoritativePeerResult;
+        finalAnswerStep = stepNumber >= this.maxSteps-1;
+        if (input.answerSupportContract && supportRead && !authoritativePeerResult) {
+          if(input.answerSupportScope!=="memory_only") return stepNumber>=this.maxSteps-1
+            ? {activeTools:["submit_memory_answer"],toolChoice:"auto" as const}
+            : {activeTools:[...ordinaryAnswerTools,"submit_memory_answer"],toolChoice:"required" as const};
+          const activeTools: Array<"submit_memory_answer"|"search_vault"|"read_note"|"list_pages"|"read_facts"|"search_entries"> = ["submit_memory_answer"];
+          if (stepNumber < this.maxSteps-1) {
+            if(tools.searchVault) activeTools.push("search_vault","read_note","list_pages");
+            if(tools.readFacts) activeTools.push("read_facts");
+            if(tools.searchEntries) activeTools.push("search_entries");
+          }
+          return { activeTools, toolChoice: "required" as const };
+        }
+        return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(stepNumber >= this.maxSteps-1 ? {toolChoice:"none" as const} : {}) };
+      },
       tools: {
+        ...(input.answerSupportContract ? {
+          submit_memory_answer: tool({
+            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. No prose is accepted. This terminal tool ends the current turn without another completion.",
+            inputSchema: submissionSchema,
+            execute: async (submission) => {
+              if (!submissionAllowedThisStep || submittedAnswer) {
+                submittedAnswer = {text:"",readPaths:sourcePaths(),supportProtocolError:"invalid_submission"};
+              } else submittedAnswer = {text:"",readPaths:sourcePaths(),supportSelections:submission.supportSelections};
+              return {submitted:true};
+            },
+          }),
+        } : {}),
         ...taskToolSet,
         ...driveToolSet,
         ...peerToolSet,
@@ -1766,8 +1803,21 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
             return result;
           },
         }),
-      },
+      } as ToolSet,
     };
+    ordinaryAnswerTools = Object.keys(config.tools).filter(name=>name!=="submit_memory_answer");
+    // activeTools constrains the wire schema, but the SDK still executes against
+    // the full tool map. Keep the memory-only step boundary enforced locally.
+    const memoryReadNames = new Set(["search_vault","read_note","list_pages","read_facts","search_entries"]);
+    for(const [name,definition] of Object.entries(config.tools)) {
+      if(name==="submit_memory_answer" || memoryReadNames.has(name) || !definition.execute) continue;
+      const execute=definition.execute;
+      definition.execute=async (args,options)=> {
+        if(input.answerSupportContract && finalAnswerStep) return "ERROR: the final answer round cannot execute action tools.";
+        if(input.answerSupportScope === "memory_only" && input.answerSupportContract && supportRead && !authoritativePeerResult) return "ERROR: memory answer mode permits only bounded source reads or terminal support submission.";
+        return execute(args,options);
+      };
+    }
 
     // streamText executes a tool as soon as its tool-call chunk arrives, before
     // later chunks reveal whether the same model step contains a second proposal.
@@ -1791,12 +1841,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           // Reasoning is internal and never shown, but tracked so an
           // empty-text recovery can report how much thinking was discarded.
           reasoning += part.text;
-        } else if (part.type === "tool-call") {
+        } else if (part.type === "tool-call" && part.toolName !== "submit_memory_answer") {
           // readPaths is tracked by the read_note tool's execute wrapper below.
           input.onToolEvent?.({ phase: "start", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
-        } else if (part.type === "tool-result") {
+        } else if (part.type === "tool-result" && part.toolName !== "submit_memory_answer") {
           input.onToolEvent?.({ phase: "end", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
-        } else if (part.type === "tool-error") {
+        } else if (part.type === "tool-error" && part.toolName !== "submit_memory_answer") {
           input.onToolEvent?.({ phase: "error", tool: part.toolName, label: toolLabel(part.toolName, part.input) });
         } else if (part.type === "error") {
           // The provider failed mid-stream (bad key, out of quota, rate limit).
@@ -1808,7 +1858,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         }
       }
       this.reportUsage("answer", this.askModelId, await result.totalUsage, await result.providerMetadata);
-      if (!text.trim()) {
+      if (!text.trim() && !submittedAnswer && !(input.answerSupportContract && supportRead)) {
         const response = await result.response;
         text = await this.recoverEmptyAnswer(
           config.model,
@@ -1818,7 +1868,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           input.answerSupportContract ? undefined : input.onTextDelta,
         );
       }
-      const answer = input.answerSupportContract && !authoritativePeerResult ? decodeSupportedAnswer(text, sourcePaths(), supportRead) : { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
+      const answer = input.answerSupportContract && !authoritativePeerResult ? submittedAnswer ?? (supportRead ? {text:"",readPaths:sourcePaths(),supportProtocolError:"missing_submission" as const} : decodeSupportedAnswer(text, sourcePaths())) : { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
       if (input.answerSupportContract && answer.text) input.onTextDelta?.(answer.text);
       return answer;
     }
@@ -1831,7 +1881,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         }: {
           toolCall: { toolName: string; input: unknown } | undefined;
         }) => {
-          if (!toolCall) return;
+          if (!toolCall || toolCall.toolName === "submit_memory_answer") return;
           input.onToolEvent?.({
             phase: "start",
             tool: toolCall.toolName,
@@ -1845,7 +1895,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           toolCall: { toolName: string; input: unknown } | undefined;
           success: boolean;
         }) => {
-          if (!toolCall) return;
+          if (!toolCall || toolCall.toolName === "submit_memory_answer") return;
           input.onToolEvent?.({
             phase: success ? "end" : "error",
             tool: toolCall.toolName,
@@ -1856,7 +1906,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     });
     this.reportUsage("answer", this.askModelId, result.totalUsage, result.providerMetadata);
     let text = result.text;
-    if (!text.trim()) {
+    if (!text.trim() && !submittedAnswer && !(input.answerSupportContract && supportRead)) {
       text = await this.recoverEmptyAnswer(
         config.model,
         config.messages,
@@ -1864,7 +1914,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         result.reasoningText ?? "",
       );
     }
-    const answer = input.answerSupportContract && !authoritativePeerResult ? decodeSupportedAnswer(text, sourcePaths(), supportRead) : { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
+    const answer = input.answerSupportContract && !authoritativePeerResult ? submittedAnswer ?? (supportRead ? {text:"",readPaths:sourcePaths(),supportProtocolError:"missing_submission" as const} : decodeSupportedAnswer(text, sourcePaths())) : { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
     if (connectedBatchRequiresGenerate && answer.text) input.onTextDelta?.(answer.text);
     return answer;
   }
