@@ -37,3 +37,18 @@ it('enforces per-kind target requirements and exact-source fields at the provide
  expect(String(call.system)).toContain('never generate a translated or paraphrased statement');
  expect(String(call.system)).toContain('if elliptical, leave it null');
 });
+
+it('requires positive branch relevance and semantic reaffirmation before addition',async()=>{
+ const llm=createBrainLlm({provider:'openrouter',apiKey:'synthetic-unused'});
+ const input={path:'Projects/Garden.md',revision:'test',contextPartial:false,statements:[{id:'st-plan',text:'The garden needs a rain gauge.',sectionId:'section',factKey:null}],sources:[{id:'s1',start:0,end:43,text:'El jardín sigue necesitando un pluviómetro.'}],ideas:[{id:'i1',topic:'Garden requirement',sourceIds:['s1']}]};
+ await llm.reconcile!(input);
+ const call=vi.mocked(generateObject).mock.calls.at(-1)![0];
+ expect(call.prompt).toBe(JSON.stringify(input));
+ expect(String(call.system)).toContain('knowledge about THIS destination branch');
+ expect(String(call.system)).toContain('return CLARIFY with null targetId');
+ expect(String(call.system)).toContain('Continuity wording alone adds another source');
+ expect(String(call.system)).toContain('changed actor/recipient, quantity, scope, modality or polarity');
+ expect(String(call.system)).toContain('cross-language paraphrases');
+ expect(String(call.system)).toContain('All target IDs name pre-batch statements');
+ expect(String(call.system)).toContain('full qualification');
+});

@@ -6,6 +6,6 @@ export function evaluationModels(args) {
   const askModel=args['ask-model'] ?? 'x-ai/grok-4.3';
   if (![classifyModel,askModel].every(value=>typeof value==='string'&&value.trim()===value&&value.length>0)) throw new Error('Nonempty exact model identifiers required');
   const organizerReasoningEffort=args['organizer-reasoning-effort'];
-  if (organizerReasoningEffort!==undefined&&organizerReasoningEffort!=='low') throw new Error('Organizer reasoning effort must be low or omitted');
+  if (organizerReasoningEffort!==undefined&&!['none','low'].includes(organizerReasoningEffort)) throw new Error('Organizer reasoning effort must be none, low or omitted');
   return {classifyModel,askModel,...(organizerReasoningEffort?{organizerReasoningEffort}:{})};
 }

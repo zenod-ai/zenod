@@ -383,3 +383,20 @@ it.each(['add','conflict','supersede'] as const)('round-trips an exact %s statem
  const view=await projectFacts({path:'Projects/A.md'},facts,new Date('2026-09-14'),async()=>evidence(source));
  expect(view.facts[0]?.status).toBe(kind==='conflict'?'conflict':'active');
 });
+it('retains correction and complete conflicting report across related idea descriptors without linking to a changed target',async()=>{
+ const correction='Correction: the session moves from 8 to 15.';
+ const report='A colleague suggests 22. That is unconfirmed; our agreed date remains 15.';
+ const source=correction+'\n\n'+report;
+ const base=input('# A\nThe session is on 8.\n[[Index]]\n',source);
+ const prepared=prepareReconciliation({...base.input,ideas:[{id:'change',topic:'Corrected date',sourceIds:['p1']},{id:'report',topic:'Unconfirmed alternative',sourceIds:['p1']},{id:'retained',topic:'Agreed date retained',sourceIds:['p1']}]});
+ const target=prepared.request.statements.find(s=>s.text==='The session is on 8.')!.id;
+ const result=await applyReconciliation(prepared,[{...op('supersede',correction,target),ideaIds:['change'],correctionQuote:correction},{...op('conflict',report,target),ideaIds:['report','retained']}]);
+ expect(result.appliedOperations).toHaveLength(2);
+ expect(result.appliedOperations.flatMap(item=>item.ideaIds).sort()).toEqual(['change','report','retained']);
+ expect(result.pending).toEqual([expect.objectContaining({reason:'conflict_retained',ideaIds:['report','retained']})]);
+ const facts=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts);
+ expect(facts).toHaveLength(2);expect(facts[0]!.legacySupersedes?.statement).toBe('The session is on 8.');
+ expect(facts[1]!.reportedConflict).toBe(true);expect(facts[1]!.statement).toBe(report);expect(facts[1]!.key).toBe(facts[0]!.key);
+ const rejected=await applyReconciliation(prepared,[{...op('link_source','our agreed date remains 15.',target),ideaIds:['retained']}]);
+ expect(rejected.appliedOperations).toEqual([]);expect(rejected.pending.some(item=>item.reason==='equivalence_not_established')).toBe(true);
+});

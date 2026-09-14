@@ -383,7 +383,7 @@ describe("Zenod chassis unit", () => {
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ vault_repo: repo }),
+          body: JSON.stringify({ vault_repo: repo, model_classify_reasoning_effort: token === "alpha-token" ? "none" : "low" }),
         });
         expect(response.status).toBe(200);
       }
@@ -396,11 +396,14 @@ describe("Zenod chassis unit", () => {
         headers: { authorization: "Bearer beta-token" },
       });
       expect(await alpha.json()).toMatchObject({
-        settings: { vault_repo: "owner/alpha" },
+        settings: { vault_repo: "owner/alpha", model_classify_reasoning_effort: "none" },
       });
       expect(await beta.json()).toMatchObject({
-        settings: { vault_repo: "owner/beta" },
+        settings: { vault_repo: "owner/beta", model_classify_reasoning_effort: "low" },
       });
+
+      expect(unit.runtimes.get("tenant-alpha")!.settings.organizerReasoningEffort()).toBe("none");
+      expect(unit.runtimes.get("tenant-beta")!.settings.organizerReasoningEffort()).toBe("low");
 
       const anonymous = await unit.app.request("/api/settings");
       expect(anonymous.status).toBe(401);

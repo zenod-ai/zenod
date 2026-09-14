@@ -32,6 +32,8 @@ describe("addressed classifier prompt boundary", () => {
     expect(system).toContain("unknown project");
     expect(system).toContain("EVERY independent idea");
     expect(system).toContain("Reconciliation alone decides ADD versus reinforcement versus conflict");
+    expect(system).toContain("Destination relevance is positive support, not keyword overlap");
+    expect(system).toContain("A genuine negative constraint about the subject itself remains durable knowledge");
     expect(system).toContain("Repeated existing knowledge still needs a new source citation");
     expect(system).toContain("A clearly new project may propose a valid new path");
     expect(prompt.match(/Caption release Friday/g)).toHaveLength(1);
