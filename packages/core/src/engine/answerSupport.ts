@@ -55,13 +55,7 @@ function sourceBlocks(raw:string,isLog:boolean):SourceBlock[] {
   }
   return grouped.flatMap<SourceBlock>(block=>{
     if(navigationOnly(block.text)) return [];
-    let first=listMarker.exec(block.text);
-    // A heading needs no blank separator before a Markdown list. Keep that
-    // navigation in raw context, without folding it into every claim handle.
-    if(first && first.index>0 && navigationOnly(block.text.slice(0,first.index))){
-      block={text:block.text.slice(first.index),start:block.start+first.index};
-      first=listMarker.exec(block.text);
-    }
+    const first=listMarker.exec(block.text);
     if(!first || first.index!==0) return [{...block,granularity:"paragraph" as const}];
     const indent=first[1]!.length;
     const starts=[...block.text.matchAll(/^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+\S/gm)]

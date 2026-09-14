@@ -104,7 +104,7 @@ function meaning(body:string, options:Partial<NotePassage>={}):NotePassage {
  const original=passage(body);return {...original,body,source:{...source,path:'Projects/Shared.md'},readPath:'Projects/Shared.md',identity:'Projects/Shared.md#section-0',extent:{unit:'utf16',start:0,end:body.length,total:body.length,scopeStart:0,scopeEnd:body.length,sectionStart:0,sectionEnd:body.length},...options};
 }
 it('offers complete list item handles instead of an unrelated first preview or backlink',()=>{
- const body='# Plan\n- The session moved to Friday.\n- Each visitor receives a reusable waterproof map.\n- Two places are free for rural teachers.\n\n[[Projects/Workshop|Workshop]]\n';
+ const body='# Plan\n\n- The session moved to Friday.\n- Each visitor receives a reusable waterproof map.\n- Two places are free for rural teachers.\n\n[[Projects/Workshop|Workshop]]\n';
  const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
  expect(hints).toHaveLength(3);expect(hints.every(h=>h.granularity==='list_item')).toBe(true);
  for(const phrase of ['reusable waterproof map','free for rural teachers']) {
