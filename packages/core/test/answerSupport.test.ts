@@ -78,6 +78,11 @@ describe("explicit source selection contract",()=>{
     const hints=registry.addPassage(passage("missing beginning. Complete middle report. Unfinished ending",{omittedBefore:true,truncated:true}));
     expect(hints.map(h=>h.excerpt)).toEqual(["Complete middle report."]);
   });
+  it("drops a clipped attribution together with the claim it qualifies",()=>{
+    const registry=new AnswerSupportRegistry();
+    const hints=registry.addPassage(passage("jected claim:\nWe repair batteries. Complete report.",{omittedBefore:true}));
+    expect(hints.map(h=>h.excerpt)).toEqual(["Complete report."]);
+  });
   it("rejects punctuation at an unknown read edge, including a cut decimal",()=>{
     const registry=new AnswerSupportRegistry();
     const hints=registry.addPassage(passage("Complete report. The limit is 3.",{truncated:true}));

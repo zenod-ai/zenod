@@ -16,13 +16,17 @@ function completeSentenceSegments(text:string, clippedStart:boolean, clippedEnd:
   const segments:Array<{segment:string;index:number}>=[];
   let pending="",start=0;
   const parts=[...new Intl.Segmenter(undefined,{granularity:"sentence"}).segment(text)];
-  for(const [index,part] of parts.entries()) {
-    if((clippedStart && index===0) || (clippedEnd && index===parts.length-1)) continue;
+  for(const part of parts) {
     if(!pending) start=part.index;
     pending+=part.segment;
     if(/[.!?。！？]["'”’)]*\s*$/u.test(pending)) { segments.push({segment:pending,index:start});pending=""; }
   }
-  return segments;
+  // Drop unknown edges only after grouping attribution with its sentence.
+  // Otherwise a clipped "jected claim:\n" could expose the next claim alone.
+  if(pending) segments.push({segment:pending,index:start});
+  if(clippedStart) segments.shift();
+  if(clippedEnd) segments.pop();
+  return segments.filter(part=>/[.!?。！？]["'”’)]*\s*$/u.test(part.segment));
 }
 
 /** Turn-local handles for source actually read. Selection is semantic model work;
