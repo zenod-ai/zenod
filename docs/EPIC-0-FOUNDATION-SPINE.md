@@ -103,7 +103,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Multi-idea filing and grounded recall using existing evidence pipeline. | acceptance repair | Filing10/10; reviewed recall/source-address repairs awaiting repeat semantic and ASR acceptance. No credential wait; production unchanged. | [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241), repairs #1288–#1289 | 2026-09-15 Europe/Paris | Exact candidate acceptance, fresh recovery, authorized public deployment and live checks. |
+| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete multi-idea filing and grounded recall using existing evidence pipeline. | acceptance repair | Source-native and typed-answer repairs integrated at 56c2308 with review/CI; provider quota blocks paid acceptance; production unchanged. | [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241), contract repair #1268–#1269 | 2026-09-13 Europe/Paris | Restore existing provider quota, then semantic/ASR acceptance and verified recovery before authorized rollout. |
 | ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | active — deployed verification | Public29ddb62 verified; affected live recall3/3; upgrade/undo and deployment boundary documented. | [Deployment leaf](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | 2026-09-06 Europe/Paris | Reuse documented process for the next authorized upgrade. |
 
 ## Bootstrap Map

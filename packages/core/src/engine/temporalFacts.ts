@@ -274,7 +274,7 @@ export function renderFactViews(views: FactView[]): string {
         view.priorStatements?.some(prior => prior.statementId === fact.legacySupersedes?.statementId && prior.supersededByEvidenceRef === fact.evidenceRef)
         || fact.supersedes.some(id => view.facts.some(target => target.id === id && target.status === "superseded" && supportsCorrection(fact, target)))
       );
-      const provenance = appliedCorrection ? "Applied correction report — "
+      const provenance = appliedCorrection ? "Recorded correction report — "
         : fact.reportedConflict ? "Conflicting report (not applied as a correction) — "
         : fact.status === "conflict" ? "Unresolved conflict — " : "";
       lines.push(`- ${provenance}${fact.status === "undated" ? "Effective date unknown — " : ""}${fact.origin === "synthetic" ? "Synthetic fixture" : "User report"}: ${JSON.stringify(fact.statement)} [${fact.evidenceRef}](${fact.source!.url}). Effective: ${fact.effectiveDate ?? "unknown"}; evidence captured: ${fact.evidenceDate ?? "unknown"}.${fact.verificationQuote ? ` Reported verification scope: ${JSON.stringify(fact.verificationQuote)}.` : " Verification scope: unknown."}`);
