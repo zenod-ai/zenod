@@ -1066,6 +1066,15 @@ describe("BrainEngine", () => {
     expect(result.topics!.find(topic=>topic.topic==="Unrouted")).toMatchObject({pages:[],filedPages:[]});
     const raw=await readFile(join(repo.path,path),"utf8");expect(raw).toContain(parts[1]);expect(raw).toContain(parts[2]);expect(raw).not.toContain("This generated paraphrase");expect(raw).not.toContain(parts[3]);
     const replay=await e.enrichEvidence!(request);expect(replay.commitSha).toBe(result.commitSha);expect(reconcile).toHaveBeenCalledTimes(1);
+    llm.answerOverride=async(_input,tools)=>{
+      const view=JSON.parse(await tools.readFacts!({path}));
+      const report=view.facts.find((fact:{key:string})=>fact.key.startsWith("report."));
+      expect(report.status).toBe("conflict");expect(report.supersedes).toEqual([]);
+      const support=view.answerSupports.find((item:{factId:string})=>item.factId===report.id);
+      expect(support.modes).toEqual(["conflict"]);
+      return {text:"",readPaths:[path],supportSelections:[{id:support.id,mode:"conflict"}]};
+    };
+    expect((await e.ask("What was the unconfirmed report?")).text).toContain(parts[2]);
   });
 
   it("unions overlapping ASR context envelopes without losing independent ideas",async()=>{

@@ -33,6 +33,7 @@ describe("addressed classifier prompt boundary", () => {
     expect(system).toContain("EVERY independent idea");
     expect(system).toContain("Reconciliation alone decides ADD versus reinforcement versus conflict");
     expect(system).toContain("Repeated existing knowledge still needs a new source citation");
+    expect(system).toContain("A clearly new project may propose a valid new path");
     expect(prompt.match(/Caption release Friday/g)).toHaveLength(1);
   });
 });
