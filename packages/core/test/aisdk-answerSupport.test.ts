@@ -100,3 +100,18 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   for(const text of ["Hello!",'{"ordinary":"requested JSON"}']){const requests=wire([{text}]);expect((await llm().answer(input,tools)).text).toBe(text);expect(requests).toHaveLength(1)}
  });
 });
+
+it('advertises exclusive seek/continuation and completes a valid continuation within existing rounds',async()=>{
+ const path='Log/2026-09-01.md', cursor='host-next-cursor';
+ const readNote=vi.fn(async(_path:string,options:any)=>{
+  if(options.cursor){expect(options.query).toBeUndefined();expect(options.cursor).toBe(cursor);return JSON.stringify({body:'Complete teaching proposition.',answerSupports:[{id,modes:['raw_report']}]})}
+  return JSON.stringify({body:'# Daily log',queryMatched:false,nextCursor:cursor,answerSupports:[],readPartial:true});
+ });
+ const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report'}]}}]}]);
+ const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',listPages:async()=>'',readNote});
+ expect(result.supportSelections).toEqual([{id,mode:'raw_report'}]);expect(requests).toHaveLength(3);expect(readNote).toHaveBeenCalledTimes(2);
+ const advertised=requests[0].tools.find((t:any)=>t.function.name==='read_note').function;
+ expect(advertised.description).toContain('Never send query and cursor together');
+ expect(advertised.parameters.properties.cursor.description).toContain('omit query');
+ expect(advertised.parameters.properties.query.description).toContain('omit cursor');
+});

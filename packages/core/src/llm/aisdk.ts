@@ -61,11 +61,11 @@ export type Provider = "anthropic" | "openai" | "openrouter" | "groq";
 const noteReadSchema = z.object({
   path: z.string(),
   part: z.enum(["body", "frontmatter"]).optional(),
-  query: z.string().max(1000).optional().describe("Literal text to locate inside the note; omit when continuing"),
-  cursor: z.string().max(2048).optional().describe("nextCursor from a prior read of the same path and version"),
+  query: z.string().max(1000).optional().describe("Literal contiguous text to locate inside the note; omit cursor when seeking. Not a keyword search."),
+  cursor: z.string().max(2048).optional().describe("nextCursor from a prior read of the same path and version; omit query when continuing. Never combine cursor and query."),
   maxChars: z.number().int().min(256).max(8000).optional(),
 });
-const noteReadDescription = "Read a bounded section of a note or exact Log/path.md#^e-xxxxxx evidence block. Returns source/version/identity, body, extent and nextCursor. Use query to jump to literal text anywhere in a long note; follow nextCursor with the same path and part (omit query) to continue. Use part=frontmatter for paginated note metadata; frontmatterChars reports its size. omittedBefore means earlier text is outside this response; restart without query/cursor to read from the beginning. Exact anchored reads never include neighboring entries. Partial coverage, budget exhaustion or an unmatched query is not proof of absence: disclose incomplete coverage.";
+const noteReadDescription = "Read a bounded section of a note or exact Log/path.md#^e-xxxxxx evidence block. Returns source/version/identity, body, extent and nextCursor. Never send query and cursor together. SEEK: send query with literal contiguous source text and omit cursor. CONTINUE: send nextCursor with the same path and part and omit query, including after queryMatched=false. An unmatched query can be followed with cursor alone or retried with a new literal query alone. Use part=frontmatter for paginated note metadata; frontmatterChars reports its size. omittedBefore means earlier text is outside this response; restart without query/cursor to read from the beginning. Exact anchored reads never include neighboring entries. Partial coverage, budget exhaustion or an unmatched query is not proof of absence: disclose incomplete coverage.";
 
 
 /**
@@ -1786,7 +1786,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   }
                   if (passages.length === 1) return result;
                   return JSON.stringify({ passages, nextCursor: passages.at(-1)!.nextCursor,
-                    instruction: "Bounded daily-log passages, not a whole-file absence check. Read each body. If nextCursor remains, continue with the same path/cursor or seek with query; unread entries may contain the answer." });
+                    instruction: "Bounded daily-log passages, not a whole-file absence check. Read each body. If nextCursor remains, continue with the same path/cursor and omit query, or seek with query and omit cursor; never send both. Unread entries may contain the answer." });
                 },
               }),
               list_pages: tool({
