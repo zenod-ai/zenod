@@ -573,6 +573,47 @@ describe("BrainEngine", () => {
     for(const answer of answers){expect(answer.text).toContain("did not submit");expect(answer.text).not.toContain("unknown, unavailable");expect(answer.text).not.toContain("No structured current fact");}
   });
 
+  it("exposes substantive small-page supports in one read without mode promotion", async () => {
+    const path="Projects/Small Workshop.md";
+    await mkdir(join(repo.path,"Projects"),{recursive:true});
+    await writeFile(join(repo.path,path),"---\ntitle: Small Workshop\n---\n\n# Small Workshop\n\n## Responsibilities\nMina checks brakes. Pavel checks wheels.\n\n## Scope\nWe do not repair batteries.\n");
+    await repo.commitAndPush("small headed page");
+    const e=engine();let mode: "raw_report"|"current"="raw_report";
+    llm.answerOverride=async (_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(path));
+      const selected=packet.answerSupports.find((h:any)=>h.excerpt?.includes("Mina checks"));
+      expect(selected).toBeDefined();
+      expect(packet.passages.length).toBeGreaterThan(1);
+      expect(packet.readPartial).toBe(false);expect(packet.nextCursor).toBeNull();
+      expect(selected.modes).toEqual(["raw_report"]);
+      expect(packet.answerInstruction).not.toContain('"mode":"current"');
+      return {text:"",readPaths:[path],supportSelections:[{id:selected.id,mode}]};
+    };
+    const answer=await e.ask("Who checks brakes and wheels at Small Workshop?");
+    expect(answer.text).toContain("Mina checks brakes. Pavel checks wheels.");
+    expect(answer.text).not.toContain("We do not repair batteries.");
+    mode="current";
+    expect((await e.ask("Who checks brakes and wheels?")).text).toContain("temporally incompatible");
+  });
+
+  it("keeps the per-read support hint budget when packing many sections", async () => {
+    const path="Projects/Many claims.md";
+    await mkdir(join(repo.path,"Projects"),{recursive:true});
+    await writeFile(join(repo.path,path),Array.from({length:8},(_,i)=>`# Topic ${i}\n\n`+Array.from({length:8},(_,j)=>`Recorded statement ${i}-${j}.\n\n`).join("")).join(""));
+    await repo.commitAndPush("bounded support fixture");
+    llm.answerOverride=async (_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(path));
+      expect(packet.answerSupports).toHaveLength(32);
+      expect(packet.answerSupportPartial).toBe(true);
+      expect(packet.readPartial).toBe(false);
+      const targeted=JSON.parse(await tools.readNote!(path,{query:"Recorded statement 7-7"}));
+      const recovered=targeted.answerSupports.find((h:any)=>h.excerpt?.includes("Recorded statement 7-7"));
+      expect(recovered).toBeDefined();
+      return {text:"",readPaths:[path],supportSelections:[{id:recovered.id,mode:"raw_report"}]};
+    };
+    expect((await engine().ask("What statements are recorded?")).text).toContain("Recorded statement 7-7.");
+  });
+
   function engine() {
     return createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" } });
   }

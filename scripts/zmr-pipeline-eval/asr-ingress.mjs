@@ -8,7 +8,7 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
-import {budgetLedger,prepareAsrEnvironment,requireCompletedEnrichment,terminalProviderGuard,evaluationFetch,evaluationCostSummary,evaluationCompletion,runEvaluationRecalls} from './policy.mjs';
+import {budgetLedger,prepareAsrEnvironment,requireCompletedEnrichment,terminalProviderGuard,evaluationFetch,evaluationCostSummary,evaluationCompletion,evaluationTerminalSummary,runEvaluationRecalls} from './policy.mjs';
 import {classifyModelOption, organizerReasoningOption, evaluationModels} from './models.mjs';
 const {values:a}=parseArgs({options:{'classify-model':classifyModelOption,'organizer-reasoning-effort':organizerReasoningOption,'organizer-provider-order':{type:'string'},runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'},'captured-at':{type:'string'},'source-repo':{type:'string'}}});
 const models=evaluationModels(a);
@@ -109,15 +109,18 @@ try {
  report.status=completion.status;report.recallCoverage=completion.recallCoverage;
  report.semanticEvaluation=report.status==='AWAITING_INDEPENDENT_SEMANTIC_REVIEW'?'INDEPENDENT_REVIEW_REQUIRED':report.status;
  if(report.status!=='AWAITING_INDEPENDENT_SEMANTIC_REVIEW')process.exitCode=1;
-}catch(error){report.status=quota.terminal?'INCOMPLETE_PROVIDER_QUOTA':budgetBlocks.length?'INCOMPLETE_BUDGET':'FAILED';report.errorClass=error.name;process.exitCode=1;}
+}catch(error){report.status=quota.terminal?quota.terminal.status:budgetBlocks.length?'INCOMPLETE_BUDGET':'FAILED';report.errorClass=error.name;process.exitCode=1;}
 finally{
  await queue.close();if(report.enrichmentJobId)report.enrichmentJob=store.get(report.enrichmentJobId);store.close();state.close();
  globalThis.fetch=actualFetch;report.requests=ledger.rows;Object.assign(report,evaluationCostSummary(ledger));
  report.recallCoverage=evaluationCompletion({quota,recalls:report.recalls,plannedRecalls:questions.length*3}).recallCoverage;
- if(quota.terminal){report.status='INCOMPLETE_PROVIDER_QUOTA';report.providerQuota=quota.terminal;process.exitCode=1;
-  await save('pages-after-quota.json',await snapshots());}
+ if(quota.terminal){report.status=quota.terminal.status;Object.assign(report,evaluationTerminalSummary(quota));process.exitCode=1;
+  await save(quota.terminal.status==='INCOMPLETE_PROVIDER_QUOTA'?'pages-after-quota.json':'pages-after-deadline.json',await snapshots());}
  if(report.status!=='AWAITING_INDEPENDENT_SEMANTIC_REVIEW')report.semanticEvaluation=report.status;
  report.deniedNetworkCalls=deniedNetworkCalls;report.finishedAt=new Date().toISOString();await save('asr-run.json',report);
  console.log(JSON.stringify({status:report.status,out,semanticEvaluation:report.semanticEvaluation,...evaluationCostSummary(ledger),
-  ...(quota.terminal?{providerQuota:quota.terminal}:{})}));
+  ...evaluationTerminalSummary(quota)}));
 }
+
+// Final private receipt is already durable; do not wait for a noncooperative socket.
+if(quota.terminal?.status==='INCOMPLETE_PROVIDER_DEADLINE')process.exit(1);

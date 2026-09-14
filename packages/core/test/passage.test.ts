@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readNotePassage } from "../src/ops/passage.js";
+import { readNotePassage, readNotePacket } from "../src/ops/passage.js";
 import { AnswerSupportRegistry } from "../src/engine/answerSupport.js";
 import { getNote } from "../src/ops/get.js";
 
@@ -144,5 +144,52 @@ describe("bounded memory passages", () => {
     for (const bad of ["../outside", "..\\outside", "/etc/passwd", "Notes/Escape.md", "Notes/Internal.md", ".git/config", "Notes/../../outside"]) {
       await expect(readNotePassage(root, bad)).rejects.toThrow();
     }
+  });
+});
+
+
+describe("substantive section packets", () => {
+  it("reads a small headed page in one bounded packet without losing section identities", async () => {
+    const text = "\n# Workshop\n\n## Responsibilities\nLucia checks brakes; Omar checks wheels.\n\n## Limits\nNo electric battery repair.\n";
+    const root = await vault(text, "Notes/Workshop.md");
+    const packet = await readNotePacket(root, "Notes/Workshop.md");
+    expect("passages" in packet).toBe(true);
+    if (!("passages" in packet)) throw new Error("expected packet");
+    expect(packet.passages.map(p => p.body).join("")).toBe(text);
+    expect(new Set(packet.passages.map(p => p.identity)).size).toBe(packet.passages.length);
+    expect(packet.readPartial).toBe(false); expect(packet.nextCursor).toBeNull();
+    const registry = new AnswerSupportRegistry();
+    const hints = packet.passages.flatMap(p => registry.addPassage(p));
+    const selected = hints.find(h => h.excerpt?.includes("Lucia"))!;
+    expect(selected.modes).toEqual(["raw_report"]);
+    expect(registry.render([{id:selected.id,mode:"raw_report"}]).text).toContain("Omar checks wheels");
+    expect(registry.render([{id:selected.id,mode:"current"}]).valid).toBe(false);
+  });
+  it("keeps exact and pinned entry boundaries unchanged", async () => {
+    const root = await vault(body);
+    for (const [ref,pins] of [[`${path}#^e-000001`,undefined],[path,["e-000001"]]] as const) {
+      const result = await readNotePacket(root, ref, {maxChars:500}, {}, pins);
+      expect("passages" in result).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("NEIGHBOR-SECRET");
+    }
+  });
+  it("stops a heading-dense packet at sixteen sections with explicit continuation", async () => {
+    const text=Array.from({length:40},(_,i)=>`# Section ${i}\n\n`).join("");
+    const root=await vault(text,"Notes/Headings.md");
+    const packet=await readNotePacket(root,"Notes/Headings.md");
+    if (!("passages" in packet)) throw new Error("expected packet");
+    expect(packet.passages).toHaveLength(16);expect(packet.readPartial).toBe(true);
+    expect(packet.nextCursor).toBeTruthy();
+  });
+  it("bounds section count/body bytes and resumes without gaps", async () => {
+    const text = Array.from({length:40},(_,i)=>`# Section ${i}\n${"hello ".repeat(20)}\n`).join("");
+    const root = await vault(text,"Notes/Many.md"); let cursor: string|undefined; let actual="";
+    do {
+      const packet = await readNotePacket(root,"Notes/Many.md",{maxChars:512,cursor});
+      if (!("passages" in packet)) throw new Error("expected packet");
+      expect(packet.bodyChars).toBeLessThanOrEqual(512);expect(packet.passages.length).toBeLessThanOrEqual(16);
+      actual+=packet.passages.map(p=>p.body).join("");cursor=packet.nextCursor??undefined;
+    } while(cursor);
+    expect(actual).toBe(text);
   });
 });
