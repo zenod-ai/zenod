@@ -561,6 +561,18 @@ describe("BrainEngine", () => {
     expect(staleSelection.text).not.toContain(restriction);
   }, 15_000);
 
+  it("preserves explicit protocol failure across ask, chat and tasking instead of projecting unrelated facts", async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"A complete source statement.",source:"selftest"});
+    llm.answerOverride=async (input,tools)=>{
+      if(input.answerSupportRead) expect(input.answerSupportScope).toBe("memory_only");
+      await tools.readNote!(capture.evidenceRef);
+      return {text:"",readPaths:[capture.evidenceRef],supportProtocolError:"missing_submission"};
+    };
+    const answers=[await e.ask("What is the statement?"),await e.ask("Explain this",{contextRefs:[capture.evidenceRef]}),
+      await e.chat("What is the statement?","web"),await e.handleTasking({text:"What is the statement?",surface:"web",conversationKey:"protocol-failure"})];
+    for(const answer of answers){expect(answer.text).toContain("did not submit");expect(answer.text).not.toContain("unknown, unavailable");expect(answer.text).not.toContain("No structured current fact");}
+  });
+
   function engine() {
     return createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" } });
   }
