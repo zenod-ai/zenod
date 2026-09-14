@@ -400,3 +400,17 @@ it('retains correction and complete conflicting report across related idea descr
  const rejected=await applyReconciliation(prepared,[{...op('link_source','our agreed date remains 15.',target),ideaIds:['retained']}]);
  expect(rejected.appliedOperations).toEqual([]);expect(rejected.pending.some(item=>item.reason==='equivalence_not_established')).toBe(true);
 });
+
+it.each([
+ 'Correction: the session will no longer be on 12 October; it will be on 19 October.',
+ 'Corrijo la fecha: la sesión ya no será el 12 de octubre; será el 19 de octubre.',
+])('retains complete correction report and previous history with null replacement: %s',async source=>{
+ const prepared=input('# A\nThe session is on 12 October.\n[[Index]]\n',source);
+ const target=prepared.request.statements[0]!;
+ const result=await applyReconciliation(prepared,[{...op('supersede',source,target.id),replacementQuote:null,correctionQuote:source}]);
+ expect(result.pending).toEqual([]);
+ const fact=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!;
+ expect(fact.statement).toBe(source);expect(fact.correctionQuote).toBe(source);expect(fact.legacySupersedes?.statement).toBe(target.text);
+ const replay=await applyReconciliation(input(result.content,source),[{...op('supersede',source,target.id),replacementQuote:null,correctionQuote:source}]);
+ expect(replay.content).toBe(result.content);
+});

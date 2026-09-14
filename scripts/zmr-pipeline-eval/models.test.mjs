@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseArgs} from 'node:util';
 import {classifyModelOption,organizerReasoningOption,evaluationModels} from './models.mjs';
-const parse=argv=>evaluationModels(parseArgs({args:argv,options:{'classify-model':classifyModelOption,'organizer-reasoning-effort':organizerReasoningOption,'ask-model':{type:'string'}}}).values);
+const parse=argv=>evaluationModels(parseArgs({args:argv,options:{'classify-model':classifyModelOption,'organizer-provider-order':{type:'string'},'organizer-reasoning-effort':organizerReasoningOption,'ask-model':{type:'string'}}}).values);
 test('existing organizing and answer defaults remain unchanged',()=>{
  assert.deepEqual(parse([]),{classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3'});
 });
@@ -18,4 +18,9 @@ test('optional organizer effort is forwarded unchanged and unsupported values fa
  assert.deepEqual(parse(['--organizer-reasoning-effort','none']),{classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3',organizerReasoningEffort:'none'});
  assert.deepEqual(parse(['--organizer-reasoning-effort','low']),{classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3',organizerReasoningEffort:'low'});
  for(const value of ['medium','high',''])assert.throws(()=>parse(['--organizer-reasoning-effort',value]),/must be none, low/);
+});
+
+test('forwards explicit bounded organizer providers without changing model/effort defaults',()=>{
+ assert.deepEqual(parse(['--organizer-provider-order','fireworks,together']).organizerProviderOrder,['fireworks','together']);
+ for(const value of ['', 'fireworks,fireworks','fireworks/priority','a,b,c,d'])assert.throws(()=>parse(['--organizer-provider-order',value]),/provider order/);
 });

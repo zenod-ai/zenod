@@ -13,7 +13,7 @@ it('uses one bounded structured classifier-model call with idea identity and rea
   expect(String(call.system)).toContain('untrusted data');
   expect(String(call.system)).toContain('each IDEA');
   expect(String(call.system)).toContain('exactly ONE decision');
-  expect(String(call.system)).toContain('ONLY the new current claim');
+  expect(String(call.system)).toContain('complete correction report as sourceQuote');
   expect(String(call.system)).toContain('priorFailure');
   expect(String(call.system)).toContain('shortest exact complete relevant proposition clause');
   expect(String(call.system)).toContain('actor, recipient, scope, negation, uncertainty and attribution');
@@ -35,7 +35,9 @@ it('enforces per-kind target requirements and exact-source fields at the provide
  expect(accepts({...base,kind:'conflict',targetId:null})).toBe(true);
  expect(accepts({...base,kind:'conflict',targetId:'st-existing'})).toBe(true);
  expect(String(call.system)).toContain('never generate a translated or paraphrased statement');
- expect(String(call.system)).toContain('if elliptical, leave it null');
+ expect(String(call.system)).toContain('replacementQuote must be null');
+ expect(accepts({...base,kind:'supersede',targetId:'st-existing',correctionQuote:'The date was 12; now it is 19.',replacementQuote:'now it is 19.'})).toBe(false);
+ expect(accepts({...base,kind:'supersede',targetId:'st-existing',sourceQuote:'The date was 12; now it is 19.',correctionQuote:'The date was 12; now it is 19.',replacementQuote:null})).toBe(true);
 });
 
 it('requires positive branch relevance and semantic reaffirmation before addition',async()=>{

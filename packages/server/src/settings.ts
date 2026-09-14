@@ -33,6 +33,7 @@ export const SETTING_KEYS = [
   "model_ask",
   "model_classify",
   "model_classify_reasoning_effort",
+  "model_classify_provider_order",
   "model_vision",
   "model_max_steps",
   "google_service_account_json",
@@ -163,6 +164,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   model_ask: "ZENOD_MODEL_ASK",
   model_classify: "ZENOD_MODEL_CLASSIFY",
   model_classify_reasoning_effort: "ZENOD_MODEL_CLASSIFY_REASONING_EFFORT",
+  model_classify_provider_order: "ZENOD_MODEL_CLASSIFY_PROVIDER_ORDER",
   model_vision: "ZENOD_MODEL_VISION",
   model_max_steps: "ZENOD_MODEL_MAX_STEPS",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
@@ -251,6 +253,7 @@ export class Settings {
     model_ask?: string
     model_classify?: string
     model_classify_reasoning_effort?: string
+    model_classify_provider_order?: string
     vault_repo?: string
     vault_branch?: string
     backlog_repo?: string
@@ -267,7 +270,7 @@ export class Settings {
     if (input.session_secret) this.store.setSetting("session_secret", input.session_secret);
     if (input.provider) this.store.setSetting("provider", input.provider);
     if (input.provider && input.api_key) this.set(PROVIDER_KEY[input.provider as Provider], input.api_key);
-    for (const k of ["model_ask", "model_classify", "model_classify_reasoning_effort", "vault_repo", "vault_branch", "backlog_repo"] as const) {
+    for (const k of ["model_ask", "model_classify", "model_classify_reasoning_effort", "model_classify_provider_order", "vault_repo", "vault_branch", "backlog_repo"] as const) {
       if (input[k]) this.setRaw(k, input[k]!);
     }
     for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {
@@ -610,6 +613,15 @@ export class Settings {
     if (!value) return undefined;
     if (value !== "low" && value !== "none") throw new Error("model_classify_reasoning_effort must be none, low or unset");
     return value;
+  }
+
+  /** Explicit ordered OpenRouter base providers; empty deletes the override. */
+  organizerProviderOrder(): string[] | undefined {
+    const value = this.get("model_classify_provider_order");
+    if (!value) return undefined;
+    const order = value.split(",");
+    if (order.length > 3 || new Set(order).size !== order.length || order.some(slug => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug))) throw new Error("model_classify_provider_order requires 1–3 unique comma-separated base provider slugs");
+    return order;
   }
 
   /** Configured tool-step budget per reply; undefined = engine default. */

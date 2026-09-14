@@ -383,7 +383,7 @@ describe("Zenod chassis unit", () => {
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ vault_repo: repo, model_classify_reasoning_effort: token === "alpha-token" ? "none" : "low" }),
+          body: JSON.stringify({ vault_repo: repo, model_classify_reasoning_effort: token === "alpha-token" ? "none" : "low", model_classify_provider_order: token === "alpha-token" ? "fireworks,together" : "together" }),
         });
         expect(response.status).toBe(200);
       }
@@ -396,14 +396,16 @@ describe("Zenod chassis unit", () => {
         headers: { authorization: "Bearer beta-token" },
       });
       expect(await alpha.json()).toMatchObject({
-        settings: { vault_repo: "owner/alpha", model_classify_reasoning_effort: "none" },
+        settings: { vault_repo: "owner/alpha", model_classify_reasoning_effort: "none", model_classify_provider_order: "fireworks,together" },
       });
       expect(await beta.json()).toMatchObject({
-        settings: { vault_repo: "owner/beta", model_classify_reasoning_effort: "low" },
+        settings: { vault_repo: "owner/beta", model_classify_reasoning_effort: "low", model_classify_provider_order: "together" },
       });
 
       expect(unit.runtimes.get("tenant-alpha")!.settings.organizerReasoningEffort()).toBe("none");
       expect(unit.runtimes.get("tenant-beta")!.settings.organizerReasoningEffort()).toBe("low");
+      expect(unit.runtimes.get("tenant-alpha")!.settings.organizerProviderOrder()).toEqual(["fireworks", "together"]);
+      expect(unit.runtimes.get("tenant-beta")!.settings.organizerProviderOrder()).toEqual(["together"]);
 
       const anonymous = await unit.app.request("/api/settings");
       expect(anonymous.status).toBe(401);
