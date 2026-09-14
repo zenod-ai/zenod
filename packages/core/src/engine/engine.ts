@@ -1,4 +1,4 @@
-import { checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT } from "./classificationContract.js";
+import { checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -1435,7 +1435,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return classifyCandidates({ classify: async (bounded: ClassifyInput) => {
       reportTokenCost("classify", [bounded.sourcePassages ? JSON.stringify(bounded.sourcePassages) : bounded.content, bounded.sourcePassages ? "" : bounded.context ?? "", ...bounded.hints,
         bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(",")], undefined, "bounded-candidates");
-      return checkTopicSourceAddresses(checkTopicDestinations(await llm.classify(bounded), exhaustedRetry), sourceContent, bounded, exhaustedRetry);
+      const routed = checkTopicDestinations(await llm.classify(bounded), exhaustedRetry);
+      const addressed = checkTopicSourceAddresses(routed, sourceContent, bounded, exhaustedRetry);
+      return checkAssignedPassageCoverage(addressed, sourceContent, bounded, exhaustedRetry);
     } }, vaultPath, snapshot, input);
   }
 
@@ -1464,6 +1466,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...(input.hints ?? []),
           ...(lastError instanceof ClassificationDestinationError ? [DESTINATION_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceAddressError ? [SOURCE_ADDRESS_CORRECTION_HINT] : []),
+          ...(lastError instanceof ClassificationSourceCoverageError ? [SOURCE_COVERAGE_CORRECTION_HINT] : []),
           ...(captured ? ["This evidence is already durably captured. Spend full-page composition only when semantic integration is explicitly justified."] : []),
           ...(segments.length > 1
             ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
