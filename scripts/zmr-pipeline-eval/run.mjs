@@ -6,7 +6,7 @@ import {resolve, join, dirname} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL, fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {sha256, HELDOUT_SHA256, validateFixture, sourceInput, budgetLedger, coverageRows, terminalProviderGuard, evaluationFetch, evaluationCostSummary, evaluationCompletion, runEvaluationRecalls} from './policy.mjs';
+import {sha256, HELDOUT_SHA256, validateFixture, sourceInput, budgetLedger, coverageRows, terminalProviderGuard, evaluationFetch, evaluationCostSummary, evaluationCompletion,evaluationTerminalSummary, runEvaluationRecalls} from './policy.mjs';
 import {classifyModelOption, organizerReasoningOption, evaluationModels} from './models.mjs';
 const {values: args} = parseArgs({options:{
   live:{type:'boolean',default:false}, 'offline-smoke':{type:'boolean',default:false}, fixture:{type:'string',default:'/tmp/zmr15-heldout/heldout.json'},
@@ -69,7 +69,7 @@ globalThis.fetch=evaluationFetch({ledger,quota,stage:()=>currentStage,
   onBudgetBlock:row=>telemetry.budgetBlocks.push(row),
   onRequest:(row,body)=>save('wire-request-'+row.request+'.json',body),
   onResponse:(row,text)=>writeFile(join(output,'wire-response-'+row.request+'.txt'),text,{mode:0o600}),
-  onFinish:async()=>{telemetry.requests=ledger.rows;Object.assign(telemetry,evaluationCostSummary(ledger));if(quota.terminal)telemetry.providerQuota=quota.terminal;await save('run.json',telemetry);},
+  onFinish:async()=>{telemetry.requests=ledger.rows;Object.assign(telemetry,evaluationCostSummary(ledger));Object.assign(telemetry,evaluationTerminalSummary(quota));await save('run.json',telemetry);},
   fetchImpl:async request=>{
     const body=await request.clone().json(),row=ledger.rows.at(-1);let response;
     if(args['offline-smoke']){
@@ -186,19 +186,22 @@ try {
   await save('semantic-review.json',{status:telemetry.acceptance.startsWith('INCOMPLETE_')?telemetry.acceptance:'REVIEW_REQUIRED',assignmentRows:telemetry.assignmentCoverage,
     checks:['Review each new/changed claim for entailment and qualification','Review false LINK_SOURCE/lost distinctions','Verify correction history and unresolved conflicts','Review every mandatory recall answer in all three fresh sessions','Compute idea/candidate/operation recall from model traces, not source overlap alone'],
     falseWrites:null,unsupportedClaims:null,correctOperations:null,ideaRecall:null,candidateRecall:null});
-}catch(error){telemetry.acceptance=quota.terminal?'INCOMPLETE_PROVIDER_QUOTA':telemetry.budgetBlocks.length?'INCOMPLETE_BUDGET':'RUN_FAILED';telemetry.errorClass=error.name;telemetry.failureStage=currentStage;
+}catch(error){telemetry.acceptance=quota.terminal?quota.terminal.status:telemetry.budgetBlocks.length?'INCOMPLETE_BUDGET':'RUN_FAILED';telemetry.errorClass=error.name;telemetry.failureStage=currentStage;
   if(String(error.message).startsWith('evaluation_'))telemetry.errorCode=error.message;process.exitCode=1;
 }finally{
   // close waits for the real durable job; leave isolated workspace for review/recovery.
   await queue?.close();store?.close();state?.close();globalThis.fetch=originalFetch;
   telemetry.finishedAt=new Date().toISOString();telemetry.requests=ledger.rows;Object.assign(telemetry,evaluationCostSummary(ledger));
   telemetry.recallCoverage=evaluationCompletion({quota,recalls:telemetry.recalls,plannedRecalls:questions.length*3}).recallCoverage;
-  if(quota.terminal){if(snapshots)await save('pages-after-quota.json',await snapshots());telemetry.acceptance='INCOMPLETE_PROVIDER_QUOTA';telemetry.providerQuota=quota.terminal;process.exitCode=1;
-    await save('semantic-review.json',{status:telemetry.acceptance,recallCoverage:telemetry.recallCoverage,providerQuota:quota.terminal,
+  if(quota.terminal){if(snapshots)await save(quota.terminal.status==='INCOMPLETE_PROVIDER_QUOTA'?'pages-after-quota.json':'pages-after-deadline.json',await snapshots());telemetry.acceptance=quota.terminal.status;Object.assign(telemetry,evaluationTerminalSummary(quota));process.exitCode=1;
+    await save('semantic-review.json',{status:telemetry.acceptance,recallCoverage:telemetry.recallCoverage,...evaluationTerminalSummary(quota),
       assignmentRows:telemetry.assignmentCoverage??[],note:'Review observed partial evidence only; unstarted trials are unmeasured.'});}
 
   const latencies=ledger.rows.map(row=>row.latencyMs).filter(Number.isFinite).sort((a,b)=>a-b);
   telemetry.requestLatency={samples:latencies.length,p50:latencies[Math.max(0,Math.ceil(latencies.length*.5)-1)]??null,p95:latencies[Math.max(0,Math.ceil(latencies.length*.95)-1)]??null};
   await save('run.json',telemetry);
-  console.log(JSON.stringify({acceptance:telemetry.acceptance,output,requests:ledger.rows.length,...evaluationCostSummary(ledger),...(quota.terminal?{providerQuota:quota.terminal}:{}),semanticQuality:'NOT_AUTOMATICALLY_SCORED',surface:mode},null,2));
+  console.log(JSON.stringify({acceptance:telemetry.acceptance,output,requests:ledger.rows.length,...evaluationCostSummary(ledger),...evaluationTerminalSummary(quota),semanticQuality:'NOT_AUTOMATICALLY_SCORED',surface:mode},null,2));
 }
+
+// Final private receipt is already durable; do not wait for a noncooperative socket.
+if(quota.terminal?.status==='INCOMPLETE_PROVIDER_DEADLINE')process.exit(1);
