@@ -9,7 +9,9 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {budgetLedger,prepareAsrEnvironment,requireCompletedEnrichment,terminalProviderGuard,evaluationFetch,evaluationCostSummary,evaluationCompletion,runEvaluationRecalls} from './policy.mjs';
-const {values:a}=parseArgs({options:{runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'},'captured-at':{type:'string'},'source-repo':{type:'string'}}});
+import {classifyModelOption, evaluationModels} from './models.mjs';
+const {values:a}=parseArgs({options:{'classify-model':classifyModelOption,runtime:{type:'string',default:'/app'},'candidate-sha':{type:'string'},audio:{type:'string'},'audio-sha256':{type:'string'},source:{type:'string'},'source-sha256':{type:'string'},'model-dir':{type:'string'},'model-sha256':{type:'string'},out:{type:'string'},prices:{type:'string'},questions:{type:'string'},'seed-pages':{type:'string'},'captured-at':{type:'string'},'source-repo':{type:'string'}}});
+const models=evaluationModels(a);
 for(const k of ['candidate-sha','audio','audio-sha256','source','source-sha256','model-dir','model-sha256','out','prices','questions','seed-pages','captured-at'])if(!a[k])throw new Error('Missing --'+k);
 const evaluationKey=prepareAsrEnvironment(process.env);
 const runtime=resolve(a['source-repo']??a.runtime);
@@ -25,7 +27,7 @@ if(!a['source-repo']&&(await readFile(join(runtime,'.gitsha'),'utf8')).trim()!==
 if(hash(audio)!==a['audio-sha256']||hash(source)!==a['source-sha256']||modelHash.digest('hex')!==a['model-sha256'])throw new Error('Frozen ASR input/model checksum mismatch');
 // Local ASR never receives cloud credentials; model asset must already exist.
 const pricesBytes=await readFile(a.prices),prices=JSON.parse(pricesBytes);
-if(prices.syntheticTransportOnly||!prices.reviewedAt||!prices.source)throw new Error('Reviewed actual prices required');
+if(prices.syntheticTransportOnly||!prices.reviewedAt||!prices.source||!prices.models?.[models.classifyModel]||!prices.models?.[models.askModel])throw new Error('Reviewed actual prices required');
 const seedBytes=await readFile(a['seed-pages']),seedPages=JSON.parse(seedBytes);
 if(!seedPages||typeof seedPages!=='object'||Array.isArray(seedPages)||Object.entries(seedPages).some(([path,text])=>typeof text!=='string'||!path.endsWith('.md')||!['Projects','Areas','Notes'].includes(path.split('/')[0])||path.split('/').some(p=>!p||p==='..'||p==='.')||path.includes('\\')))throw new Error('Unsafe seed pages');
 const questionsBytes=await readFile(a.questions),questions=JSON.parse(questionsBytes);
@@ -63,7 +65,7 @@ await save('pages-before.json',await snapshots());
 await writeFile(join(out,'frozen-seed-pages.json'),seedBytes,{mode:0o600});
 await writeFile(join(out,'frozen-speech-source.txt'),source,{mode:0o600});await writeFile(join(out,'frozen-questions.json'),questionsBytes,{mode:0o600});await writeFile(join(out,'reviewed-prices.json'),pricesBytes,{mode:0o600});
 const state=new SqliteStateStore(join(workspace,'memory.sqlite'));
-const llmRaw=createBrainLlm({provider:'openrouter',apiKey:evaluationKey,classifyModel:'minimax/minimax-m3',askModel:'x-ai/grok-4.3'});
+const llmRaw=createBrainLlm({provider:'openrouter',apiKey:evaluationKey,...models});
 const llm=new Proxy(llmRaw,{get(target,property){const method=Reflect.get(target,property);if(typeof method!=='function')return method;
  return async(...params)=>{quota.assertActive();const previous=currentStage;currentStage=String(property);
   try{return await method.apply(target,params);}finally{currentStage=previous;}};}});
@@ -71,7 +73,8 @@ const engine=createEngine({repo,llm,state,readSyncTtlMs:0});
 const store=new TaskJobStore(join(workspace,'jobs.sqlite'),'synthetic-asr');
 const settings={get:key=>({artifact_archive_provider:'local',artifact_archive_local_dir:join(workspace,'archive'),groq_api_key:'',openai_api_key:'',openrouter_api_key:''})[key]??null,whisperModel:()=> 'large-v3-turbo',openrouterTranscriptionModel:()=> 'openai/whisper-large-v3-turbo',longTranscriptionProvider:()=> 'local',useOpenAiForLongTranscription:()=>false};
 const queue=new TaskJobQueue(store,async()=>engine,settings);
-const report={mode:a['source-repo']?'ACTUAL_NATIVE_CANDIDATE_ASR_MEDIA_QUEUE':'ACTUAL_IMAGE_CANDIDATE_ASR_MEDIA_QUEUE',candidateSha:a['candidate-sha'],capturedAt:a['captured-at'],audioSha256:hash(audio),sourceSha256:hash(source),modelSha256:a['model-sha256'],workspace,startedAt:new Date().toISOString(),semanticEvaluation:'NOT_EVALUATED',recalls:[],budgetBlocks,budgetUsd:0.5,seedSha256:hash(seedBytes),pricesSha256:hash(pricesBytes),questionsSha256:hash(questionsBytes),driverSha256:hash(await readFile(fileURLToPath(import.meta.url))),phoneIngress:false};
+const report={classifier:models.classifyModel,askModel:models.askModel,mode:a['source-repo']?'ACTUAL_NATIVE_CANDIDATE_ASR_MEDIA_QUEUE':'ACTUAL_IMAGE_CANDIDATE_ASR_MEDIA_QUEUE',candidateSha:a['candidate-sha'],capturedAt:a['captured-at'],audioSha256:hash(audio),sourceSha256:hash(source),modelSha256:a['model-sha256'],workspace,startedAt:new Date().toISOString(),semanticEvaluation:'NOT_EVALUATED',recalls:[],budgetBlocks,budgetUsd:0.5,seedSha256:hash(seedBytes),pricesSha256:hash(pricesBytes),questionsSha256:hash(questionsBytes),driverSha256:hash(await readFile(fileURLToPath(import.meta.url))),phoneIngress:false};
+report.harnessHashes=Object.fromEntries(await Promise.all(['asr-ingress.mjs','policy.mjs','models.mjs'].map(async name=>[name,hash(await readFile(new URL(name,import.meta.url)))])));
 try {
  const job=queue.enqueue('media_ingest',{mediaType:'audio',contentType:'voice_note',bytesRef:'data:audio/wav;base64,'+audio.toString('base64'),filename:'synthetic-asr.wav',sourceHint:'ZMR synthetic local ASR evaluator',senderTimestamp:a['captured-at']},'synthetic-asr:'+hash(audio));
  const deadline=Date.now()+30*60*1000;let terminal;
