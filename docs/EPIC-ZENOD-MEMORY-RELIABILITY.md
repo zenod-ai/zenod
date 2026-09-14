@@ -14,14 +14,14 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
-Last reconciled commit: 56c2308ebb4ccf180776a3500f4e457e7d912db8; ZMR-24–25 and evaluation safeguard reviewed and integrated; provider quota blocks paid acceptance
+Last reconciled commit: 8324982; ZMR-26 integrated; restored provider quota; failed semantic acceptance drives ZMR-27/28 repairs
 Planner: Jordi + ZMR-release-planner
 Worker: ZMR-24–25 and terminal-provider repair complete; /root retains delivery management
-Tester: /root owns next independent acceptance after repairs and restored quota; ZMR-17 pending quality
+Tester: /root owns next independent acceptance after ZMR-27/28; ZMR-17 pending quality
 
 ## Role Bindings
 
-Current delivery manager/steward: ZMR-reconciliation-delivery-manager (/root). ZMR-11–14 and 18–25 are integrated with review/CI. Third actual-model run failed; subsequent source-native and typed-answer repairs have offline proof only. Parent alone stewards spines and integrates. Production remains unchanged. Earlier bindings below are historical.
+Current delivery manager/steward: ZMR-reconciliation-delivery-manager (/root). ZMR-11–14 and 18–26 are integrated with review/CI. Completed DeepSeek low regression failed semantic acceptance; ZMR-27/28 address measured retrieval and organizer defects. Parent alone stewards spines and integrates. Production remains unchanged. Earlier bindings below are historical.
 
 | Identity | Assignment Identity | Bound Issue / Scope | Authority | Handoff |
 |---|---|---|---|---|
@@ -544,3 +544,8 @@ ZMR-26 #1276 is bound to /root/zmr11_worker for the exact stopped-run compatibil
 User explicitly requests continuation until deployed. Existing authorization includes implementation, model switch, production deployment and testing. No approval/key wait remains. Production unchanged at 631f851. Low-effort candidate 31fceaf failed independent semantic review: 3/10 minimal filing, 2/18 complete answers, 6/48 subclaims; six expected meaning outcomes pending, one duplicate and one unrelated destination write. Reported cost $0.265089518 plus $0.032578875 retained unknown reservations. Raw custody/replay safety passes, semantic release gate does not. Private evidence: candidate-deepseek-low-regression/independent-semantic-review.json. No ASR or deployed proof inferred.
 
 ZMR-27 and ZMR-28 run concurrently in separate worktrees: retrieval/support affordances versus classifier/reconciliation provider/output contracts. Worker27 owns passage/readTools/answer-support engine sections; worker28 owns organizing adapter/prompts/options and their tests. Coordinate engine overlap before editing. Root alone stewards and integrates. ZMR26 CI rerun follows unchanged five-second Drive timeout reproduced passing; do not conflate CI with semantics. Next: repair, review, actual-model regression, independent ASR, verified backup/recovery, exact-image deployment and bounded production acceptance. No bulk historical refile, outbound WhatsApp or Phylax change.
+
+
+Targeted compatibility probe: replayed the exact failing reconciliation request with only reasoning_effort changed from low to none. Together returned HTTP200, complete JSON, finish=stop, 1094 output tokens/0 reasoning tokens in19.94s, reported cost$0.001839. This is one-provider wire/output evidence only; full host validation, semantic completeness and deployment remain unproved. ZMR28 may expose opt-in none through the existing SDK field while retaining stage isolation. Private evidence: zenod-zmr-20260914/reasoning-none-probe. Public documented disable semantics: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens .
+
+ZMR17 operator-preparation narrow delegation: /root/zmr_acceptance_design may finish the private isolated-test live adapter and tests, including new organizer effort snapshot/restoration. No production mutation before root dispatch. Root separately applies the accepted organizing configuration to the owner tenant after live isolated acceptance; no unrelated tenant/global model changes.
