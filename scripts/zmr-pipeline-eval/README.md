@@ -19,7 +19,7 @@ Public summaries contain a sanitized quota code/stage, not the provider error me
 
 ## Candidate-bound execution
 
-Actual model testing waits for the manager's accepted integrated ZMR-11–14 candidate. This preparatory PR neither authorizes an earlier quality run nor substitutes for that dependency. At execution, record fresh read-only production provider/model configuration and verify the defaults still match: OpenRouter MiniMax M3 classification, Grok 4.3 ask/composition. This is an algorithm evaluation; no DeepSeek comparison or production model switch is performed.
+Actual model testing waits for the manager's accepted integrated ZMR-11–14 candidate. This preparatory PR neither authorizes an earlier quality run nor substitutes for that dependency. At execution, record fresh read-only production provider/model configuration and verify the defaults still match: OpenRouter MiniMax M3 classification, Grok 4.3 ask/composition. Both drivers accept `--classify-model <exact OpenRouter model ID>` for an explicitly approved organizing-model evaluation; the default remains `minimax/minimax-m3`. The selected ID is forwarded to classification/reconciliation and recorded in the plan/run manifest. The primary driver retains `--ask-model`; ASR retains Grok 4.3 for answers. Reviewed prices must cover both selected models. This option does not change production configuration or authorize paid calls.
 
 Create a private price manifest from current reviewed OpenRouter model/provider prices and documented output limits. The runner requires both configured models, charges reservations without cache savings, and refuses unlisted model IDs. Example shape, **not executable pricing**:
 
