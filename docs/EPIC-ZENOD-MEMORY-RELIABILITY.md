@@ -106,13 +106,13 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: offline contract repairs integrated; paid acceptance blocked by provider quota
+Phase: quota restored; DeepSeek organizing-model acceptance resumed
 Last verified: 2026-09-14 Europe/Paris
 Integration target: main
 Fresh base commit: 56c2308ebb4ccf180776a3500f4e457e7d912db8 (integration main; ZMR-24/25 proof base 2eb3cc446fba574e7831f72f591cc68f1a0a1ef3; no rebases during proof)
-Next action: resume bounded actual-model regression on the frozen integrated candidate only after the existing key quota is restored. Independent ASR, verified recovery and production testing remain quality-gated.
-Blockers: exact third candidate achieved 5/10 minimal meaning outcomes; two completed answers failed the prompt-only format contract, and 16 answers remain unmeasured after provider monthly-quota failure. Existing key quota must be restored for paid acceptance. Production requires semantic acceptance and verified recovery; genuine phone acceptance still needs an isolated route.
-Acceptance boundary: existing evidence/enrichment pipeline and current models; no new service, provider switch or historical refiling. ZMR-8 broader acceptance remains open; ZMR-9/10 deferred. Public runtime remains 631f85109dfa45fed95394a1e94d2d709c373fe6; no new rollout.
+Next action: run bounded actual-model regression with the user-approved DeepSeek V4.1 Flash organizing model and unchanged Grok answer model. Independent ASR, verified recovery and production testing remain quality-gated.
+Blockers: exact third candidate achieved 5/10 minimal meaning outcomes; two completed answers failed the prompt-only format contract, and 16 answers remain unmeasured after provider monthly-quota failure. The existing key limit was restored by Jordi and verified read-only; paid acceptance has resumed. Production requires semantic acceptance and verified recovery; genuine phone acceptance still needs an isolated route.
+Acceptance boundary: existing evidence/enrichment pipeline; user-approved organizing-model switch to DeepSeek V4.1 Flash through the same OpenRouter provider; no new service or historical refiling. ZMR-8 broader acceptance remains open; ZMR-9/10 deferred. Public runtime remains 631f85109dfa45fed95394a1e94d2d709c373fe6; no new rollout.
 
 ### Historical production and repair state
 
@@ -265,6 +265,8 @@ Dependencies control delivery. #1237–#1243 are approved; #1254–#1256 repair 
 | [ZMR-23 #1263](https://github.com/zenod-ai/zenod/issues/1263) | repair B | BUILD contract repair; existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr_acceptance_design | Explicit bounded answer support selection | integrated PR1267 | second ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-23 | codex/zmr-23 | b183806 | independent exact f53c9e9 review, focused tests and CI | 2026-09-13 | Actual model semantic acceptance |
 | [ZMR-24 #1268](https://github.com/zenod-ai/zenod/issues/1268) | repair C | BUILD contract repair; existing pipeline | 90 min checkpoint | Ticket worker | /root/zmr12_worker | Complete routing and source-native minimal updates | merged; CI/review pass | third ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-24 | codex/zmr-24 | 2eb3cc4 | actual source/target failure triage | 2026-09-14 | Fresh actual-model acceptance after quota restoration |
 | [ZMR-25 #1269](https://github.com/zenod-ai/zenod/issues/1269) | repair C | BUILD contract repair; existing answer loop | 90 min checkpoint | Ticket worker | /root/zmr_acceptance_design | Typed terminal answer support submission | merged; CI/review pass | third ZMR-15 failure | /Users/jordi/Documents/GitHub/wt-zmr-25 | codex/zmr-25 | 2eb3cc4 | actual prompt-compliance failure triage | 2026-09-14 | Fresh actual-model acceptance after quota restoration |
+
+| [ZMR-26 #1276](https://github.com/zenod-ai/zenod/issues/1276) | repair D | BUILD organizer reasoning control; existing adapter | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Bounded DeepSeek structured organizing | ready | DeepSeek regression truncation | /Users/jordi/Documents/GitHub/wt-zmr-26 | codex/zmr-26 | 8432ec9 plus this control-plane commit | first call8192 output/7585 reasoning tokens | 2026-09-14 | Implement and independently review explicit organizer reasoning control |
 
 ### Earlier release ledger (historical assignments)
 
@@ -524,3 +526,12 @@ ZMR-24 PR #1273 is reviewed and merged; ZMR-25 PR #1272 is reviewed and merged a
 The existing OpenRouter key still requires quota restoration before new semantic acceptance. The source-native operation replay passes all eight previously routed branch decisions, but the two classifier omissions require fresh model proof. Typed submission tests prove protocol mechanics, not semantic selection. Root remains sole delivery manager and spine steward; workers have completed implementation/review. Retain the clean combined candidate and private development evidence. After quota restoration: freeze the new exact main SHA, run bounded actual regression, independently review all outcomes, then consume untouched ASR fixtures and prepare verified recovery before the authorized production rollout. No further generic deployment approval is needed for that unchanged scope.
 
 Final integrated source: `56c2308ebb4ccf180776a3500f4e457e7d912db8`, tree-identical to the tested local combined commit `b013b8ae284b9c85102b9a8f92115cda64ad0a9e`. Frozen clean checkout: `/Users/jordi/Documents/GitHub/wt-zmr-final-contract-check`. Product PR CI passed: #1271 run34796910545; #1273 run34797336298; #1272 run34797572743 attempt2. Production remains `631f85109dfa45fed95394a1e94d2d709c373fe6`.
+
+
+### 2026-09-14 — Quota restoration, organizing-model selection and live incident diagnosis
+
+Jordi explicitly requested DeepSeek V4.1 Flash for the organizing stage, then restored the existing OpenRouter key spending limit and instructed delivery to continue. This supersedes the earlier no-model-switch scope only for model_classify: classification, atomic reconciliation and backlog extraction. Ask, whole-page composition and transcription remain on their existing models/providers. The key status endpoint now succeeds with a $20 monthly limit and approximately $17.99 remaining; no key, limit or billing change was made by the agent. Evaluation retains the existing $1 regression cap. DeepSeek endpoint JSON-schema capability varies by provider; actual schema compatibility must be measured.
+
+The new screenshot shows capture/transcription success followed by summary failures at 20:15 and 21:05. A read-only operator diagnosis runs alongside candidate validation; no outbound WhatsApp messages or production mutations are authorized merely by screenshot contents. Root remains delivery manager.
+
+ZMR-26 #1276 is bound to /root/zmr11_worker for the exact stopped-run compatibility failure. No candidate quality claim follows from the aborted run: $0.014073 reported usage, $0.045201375 retained unknown reservations, $0.059274375 total exposure across three reserved attempts. DeepSeek first output was truncated, later transport timed out; source/raw evidence remains intact. The issue was created through Zenod, which returned silent_ack; direct GitHub read verified #1276 and avoided duplicate creation.
