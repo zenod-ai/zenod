@@ -64,34 +64,41 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
         async answer(input: AnswerInput, tools: VaultReadTools) {
           if (input.question.startsWith("Search:")) {
             if (input.question.includes("facts-first")) await readHistoricalColor(tools);
-            failFactProjection = input.question.includes("failure");
-            let results: string[];
-            try { results = await Promise.all(Array.from({ length: 5 }, () => tools.searchVault!("Orchid"))); }
-            finally { failFactProjection = false; }
+            const results = await Promise.all(Array.from({ length: 5 }, () => tools.searchVault!("Orchid")));
             expect(results[0]).toContain("Notes/Orchid.md");
-            if (input.question.includes("pinned") || input.question.includes("failure") || input.question.includes("facts-first")) {
-              expect(results[0]).not.toContain("Source-backed fact candidates");
-            } else {
-              expect(results[0]).toContain("Source-backed fact candidates");
-              const views = JSON.parse(results[0]!.split("Source-backed fact candidates from bounded search-hit reads (not relevance-verified; select only facts that answer the question): ")[1]!);
-              for (const view of views) {
-                expect(view.mode).toBe("current");
-                for (const support of view.answerSupports) {
-                  const fact = view.facts.find((fact: { id: string }) => fact.id === support.factId);
-                  expect(support.modes).not.toContain("historical");
-                  if (fact.status === "superseded") expect(support.modes).toEqual(["prior"]);
-                  if (fact.status === "active") expect(support.modes).toEqual(["current"]);
+            for (const result of results) {
+              expect(result).not.toContain("answerSupports");
+              expect(result).not.toContain("Source-backed fact candidates");
+            }
+            // Discovery does not read facts. Traverse the discovered page before
+            // testing canonical current/prior projection and its failure guards.
+            let discoveredPage;
+            failFactProjection = input.question.includes("failure");
+            try {
+              if (!input.question.includes("pinned")) {
+                const page = discoveredPage = JSON.parse(await tools.readNote!("Notes/Orchid.md", { query: "Product vision" }));
+                if (input.question.includes("failure") || input.question.includes("facts-first")) {
+                  expect(page.factView).toBeUndefined();
+                } else {
+                  const view = page.factView;
+                  expect(view.mode).toBe("current");
+                  for (const support of view.answerSupports) {
+                    const fact = view.facts.find((fact: { id: string }) => fact.id === support.factId);
+                    expect(support.modes).not.toContain("historical");
+                    if (fact.status === "superseded") expect(support.modes).toEqual(["prior"]);
+                    if (fact.status === "active") expect(support.modes).toEqual(["current"]);
+                  }
                 }
               }
-            }
+            } finally { failFactProjection = false; }
             if (input.question.includes("search-first")) await readHistoricalColor(tools);
             if (input.question.includes("changed")) {
               const path = join(repo.path, "Log/2026-09-06.md");
               await writeFile(path, (await readFile(path, "utf8")).replaceAll("Orchid color is blue.", "Orchid color is altered."));
             }
-            // Deliberately skip the fact-bearing hit and read only a stale secondary page.
+            // A subsequent stale secondary read must not override verified page facts.
             if (!input.question.includes("pinned")) await tools.readNote!("Notes/OldPlan.md", { query: "Orchid color" });
-            if (input.question.includes("vision")) return selectVision(tools);
+            if (input.question.includes("vision")) return selectVision(tools, discoveredPage);
             return { text: "Orchid color is amber.", readPaths: ["Notes/OldPlan.md"] };
           }
           if (input.question.startsWith("Projection failure:") || input.question.startsWith("Five pages:")) {
