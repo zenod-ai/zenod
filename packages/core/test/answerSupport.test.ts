@@ -98,3 +98,42 @@ describe("explicit source selection contract",()=>{
     const bad=decodeSupportedAnswer('{"supportSelections":',[]);expect(bad.text).toBe("");expect(bad.supportProtocolError).toBe("invalid_submission");expect(bad.supportSelections).toBeUndefined();
   });
 });
+
+function meaning(body:string, options:Partial<NotePassage>={}):NotePassage {
+ const original=passage(body);return {...original,body,source:{...source,path:'Projects/Shared.md'},readPath:'Projects/Shared.md',identity:'Projects/Shared.md#section-0',extent:{unit:'utf16',start:0,end:body.length,total:body.length,scopeStart:0,scopeEnd:body.length,sectionStart:0,sectionEnd:body.length},...options};
+}
+it('offers complete list item handles instead of an unrelated first preview or backlink',()=>{
+ const body='# Plan\n\n- The session moved to Friday.\n- Each visitor receives a reusable waterproof map.\n- Two places are free for rural teachers.\n\n[[Projects/Workshop|Workshop]]\n';
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
+ expect(hints).toHaveLength(3);expect(hints.every(h=>h.granularity==='list_item')).toBe(true);
+ for(const phrase of ['reusable waterproof map','free for rural teachers']) {
+  const hint=hints.find(h=>h.excerpt?.includes(phrase))!;expect(hint).toBeDefined();
+  const selected=registry.render([{id:hint.id,mode:'raw_report'}]);expect(selected.text).toContain(phrase);expect(selected.text).not.toContain('Friday');expect(selected.text).not.toContain('[[Projects/Workshop');
+  expect(body.slice(hint.start!,hint.end!)).toBe(hint.excerpt);
+ }
+});
+it('keeps nested and blank-line continuation qualifications attached to the owning item',()=>{
+ const first='- The proposed demo uses ropes.\n  This is not verified.\n  - Only a hypothesis.\n\n  It must not be presented as proven.';
+ const body=first+'\n- A separate map requirement.\n';const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
+ expect(hints).toHaveLength(2);
+ expect(registry.render([{id:hints[0]!.id,mode:'raw_report'}]).text).toContain(first);
+ expect(hints.some(h=>h.excerpt?.startsWith('This is not'))).toBe(false);
+});
+it('does not detach a prose attribution introducing a list',()=>{
+ const body='Unconfirmed claims:\n\n- The room holds twenty people.\n- The price may double.';
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(meaning(body));
+ expect(hints).toHaveLength(1);expect(registry.render([{id:hints[0]!.id,mode:'raw_report'}]).text).toContain(body);
+});
+it('omits clipped list items while retaining complete interior items and current caps',()=>{
+ const body='- First item with missing prior context.\n- Middle complete item.\n- Last item with unfinished qualifier';
+ const p=meaning(body);p.extent.sectionStart=-5;p.extent.sectionEnd=body.length+20;
+ const registry=new AnswerSupportRegistry();const hints=registry.addPassage(p);
+ expect(hints.map(h=>h.excerpt)).toEqual(['- Middle complete item.']);expect(registry.lastPassageSelectionPartial).toBe(true);
+ const many=Array.from({length:40},(_,i)=>`- Independent requirement ${i}.`).join('\n');
+ const capped=new AnswerSupportRegistry();expect(capped.addPassage(meaning(many))).toHaveLength(32);expect(capped.lastPassageSelectionPartial).toBe(true);
+});
+it('gives fact handles a bounded exact statement preview without changing identity or modes',()=>{
+ const registry=new AnswerSupportRegistry(),v=view();v.facts[1]!.statement='A long statement '+ 'qualified '.repeat(30);
+ const hints=registry.addFacts(v);expect(hints[1]!.excerpt).toBe(v.facts[1]!.statement.slice(0,160));expect(hints[1]!.excerpt!.length).toBe(160);
+ expect(hints[1]!.modes).toEqual(['current']);expect(registry.addFacts(v)[1]!.id).toBe(hints[1]!.id);
+});
