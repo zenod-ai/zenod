@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import type { Classification } from "../src/llm/types.js";
-import { checkTopicDestinations, ClassificationDestinationError, checkTopicSourceAddresses, ClassificationSourceAddressError } from "../src/engine/classificationContract.js";
+import { checkTopicDestinations, ClassificationDestinationError, checkTopicSourceAddresses, ClassificationSourceAddressError, checkAssignedPassageCoverage, ClassificationSourceCoverageError } from "../src/engine/classificationContract.js";
 const recorded = JSON.parse(readFileSync(new URL("./fixtures/classification-empty-topic-pages.json", import.meta.url), "utf8")) as Classification;
 
 describe("topic-owned destination contract", () => {
@@ -64,5 +64,41 @@ describe("classifier source address retry contract", () => {
     expect(checkTopicSourceAddresses(original, content, { ...host, sourceRange: { start: 25, end: content.length } })).toBe(original);
     const legacy = { ...recorded, topics: [{ ...recorded.topics![0]!, evidenceQuotes: ["not present"] }] };
     expect(checkTopicSourceAddresses(legacy, content, host)).toBe(legacy);
+  });
+});
+
+
+describe("assigned passage coverage retry contract", () => {
+  const content = "Neighbor idea. Owned idea.";
+  const host = { sourceRange: { start: 15, end: content.length }, sourcePassages: [
+    { id: "neighbor", start: 0, end: 15, text: content.slice(0, 15) },
+    { id: "owned", start: 15, end: content.length, text: content.slice(15) },
+  ] };
+  const topic = { ...recorded.topics![0]!, evidenceQuotes: [], evidenceAssignments: [
+    { passageId: "neighbor", quote: "Neighbor idea.", occurrence: 0 },
+  ] };
+  const classification: Classification = { ...recorded, topics: [topic], passageReviews: [
+    { passageId: "neighbor", status: "assigned" }, { passageId: "owned", status: "assigned" },
+  ] };
+  it("rejects the measured neighbor-only false owned-coverage claim without changing exhausted output", () => {
+    expect(() => checkAssignedPassageCoverage(classification, content, host)).toThrow(ClassificationSourceCoverageError);
+    expect(checkAssignedPassageCoverage(classification, content, host, true)).toBe(classification);
+    expect(classification.topics![0]).toBe(topic);
+  });
+  it.each([[], undefined])("rejects assigned coverage with empty/missing topics (%s)", topics => {
+    const empty = { ...classification, topics: topics ?? [{ ...topic, evidenceAssignments: [], evidenceQuotes: [] }] };
+    expect(() => checkAssignedPassageCoverage(empty, content, host)).toThrow(ClassificationSourceCoverageError);
+  });
+  it("accepts real owned support and retains valid neighbor topics without requiring them to own the window", () => {
+    const valid = { ...classification, topics: [topic, { ...topic, evidenceAssignments: [
+      { passageId: "owned", quote: "Owned idea.", occurrence: 0 },
+    ] }] };
+    expect(checkAssignedPassageCoverage(valid, content, host)).toBe(valid);
+  });
+  it("does not retry a neighbor-only topic without a false owned assigned claim or a legacy response", () => {
+    const honest = { ...classification, passageReviews: [{ passageId: "owned", status: "evidence_only" as const }] };
+    expect(checkAssignedPassageCoverage(honest, content, host)).toBe(honest);
+    const { passageReviews, ...legacy } = classification;
+    expect(checkAssignedPassageCoverage(legacy, content, host)).toBe(legacy);
   });
 });
