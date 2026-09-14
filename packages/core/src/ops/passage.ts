@@ -33,6 +33,10 @@ export interface NotePassage {
   scopeEvidenceRefs?: string[];
 }
 
+export function notePassageVersion(note: { frontmatter: Record<string, unknown>; body: string }): string {
+  return `sha256:${hash(JSON.stringify([note.frontmatter, note.body]))}`;
+}
+
 interface Section { start: number; end: number; anchor?: string }
 interface Cursor { v: 1; scope: string; version: string; offset: number }
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -89,7 +93,7 @@ export async function readNotePassage(
   if (anchor && !exact) throw new Error(`evidence entry not found: ${requested}`);
   const lower = exact?.start ?? (allowedAnchors ? all[0]!.start : 0);
   const upper = exact?.end ?? (allowedAnchors ? all.at(-1)!.end : content.length);
-  const version = `sha256:${hash(JSON.stringify([note.frontmatter, note.body]))}`;
+  const version = notePassageVersion(note);
   const scope = hash(JSON.stringify([await realpath(vaultPath), note.provider, note.path, anchor ?? "", note.revisionId ?? "", part, allowedAnchors ? [...allowedAnchors].sort() : null]));
   let start = lower;
   let queryMatched: boolean | undefined;

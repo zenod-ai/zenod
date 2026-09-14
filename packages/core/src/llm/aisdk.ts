@@ -14,6 +14,8 @@ import {
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+import { decodeSupportedAnswer } from "./answerSupportProtocol.js";
+import { ANSWER_SUPPORT_INSTRUCTION } from "../engine/answerSupport.js";
 import { classificationDiagnostic } from "./classificationDiagnostic.js";
 import {
   coerceEditIssueLabelsForUserRequest,
@@ -987,6 +989,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     peerTools?: PeerTools,
   ): Promise<AnswerResult> {
     const readPaths = new Set<string>();
+    let supportRead = false;
     // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
     // the tool execution. This does not consume another model/tool round.
@@ -1583,7 +1586,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       ...(tools.searchEntries ? ["TYPED RETRIEVAL: use search_entries for chronological lists, content categories, dates, sources and memory inventories. Put category in contentType, chronological direction in order, and requested count in limit. query is only literal subject/transcript terms; omit it for category-only lists. Add date/source filters only when requested. The result includes bounded source passage reads alongside discovery entries. Answer from successful passage bodies and use catalog capturedAt as source time; Log headings record processing time. Read unread exact evidenceRefs and follow passage cursors when needed. Set exhaustive=true for complete inventories; the host enumerates within its declared budget. Echo the actual scope; complete lexical enumeration is not complete semantic recall. Pinned evidence is primary. Never treat conversation-history results as durable memory. If coverage is partial, say so and retain continuation; never claim an exhaustive answer or absence."] : []),
       "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.",
       "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
-      ...(tools.readFacts ? ["TEMPORAL FACTS: for current state, corrections, conflicting facts or a requested historical date, find the relevant meaning page then use read_facts (exact key when known). Set asOf to the explicitly requested YYYY-MM-DD for historical effective state; omit for latest reports. Do not substitute read_note prose for this projection. Its source-backed active/conflict/undated/unsupported states are authoritative only for the selected note/key. Explicit supersession differs from contradiction; unknown dates stay unknown. Use original evidence for legacy notes. Historical bug reports are reports at their evidence date, never fresh validation; absence of a fix record is not proof no fix exists. Synthetic facts stay labeled. Cite each material claim and state verification scope. The host renders this temporal report directly, so select all relevant keys before finishing."] : []),
+      ...(tools.readFacts ? ["TEMPORAL FACTS: for current state, corrections, conflicting facts or a requested historical date, find the relevant meaning page then use read_facts (exact key when known). Set asOf to the explicitly requested YYYY-MM-DD for historical effective state; omit for latest reports. Do not substitute read_note prose for this projection. Its source-backed active/conflict/undated/unsupported states are authoritative only for the selected note/key. Explicit supersession differs from contradiction; unknown dates stay unknown. Use original evidence for legacy notes. Historical bug reports are reports at their evidence date, never fresh validation; absence of a fix record is not proof no fix exists. Synthetic facts stay labeled. Cite each material claim and state verification scope. The host renders selected support IDs, so choose the relevant answerSupports IDs/modes from the actual tool result; never invent a key or ID."] : []),
       "SYNTHETIC EVIDENCE: 'synthetic test data' or quarantine in Inbox means it is not a real user fact; it does NOT mean the evidence is absent or forbidden to recall. When the user explicitly asks about a synthetic fixture, answer from its evidence and clearly label the answer synthetic. Do not promote it to a real user fact. Attributes not present in that evidence remain unknown.",
     ].join(" ");
     const captureRecord = (capture: NonNullable<AnswerInput["captureContext"]>[number]) => ({
@@ -1609,6 +1612,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const systemText = [
       input.vaultBriefing,
       input.hostInstruction,
+      input.answerSupportContract ? ANSWER_SUPPORT_INSTRUCTION : "",
       captureContextNote,
       ...briefingExtras,
       budgetNote,
@@ -1650,6 +1654,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 inputSchema: z.object({ query: z.string() }),
                 execute: async ({ query }) => {
                   const recordSearch = (searchQuery: string, result: string): void => {
+                    supportRead ||= result.includes("answerSupports");
                     input.onReadAction?.("search_vault", { query: searchQuery }, result);
                   };
                   const result = await tools.searchVault!(query);
@@ -1676,6 +1681,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 execute: async ({ path, ...options }) => {
                   const read = async (readOptions: typeof options) => {
                     const result = await tools.readNote!(path, readOptions);
+                    supportRead ||= result.includes("answerSupports");
                     readPaths.add(path);
                     input.onReadAction?.("read_note", { path, ...readOptions }, result);
                     return result;
@@ -1719,6 +1725,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
             inputSchema: z.object({ path: z.string(), key: z.string().max(160).optional(), asOf: z.string().optional() }),
             execute: async (args) => {
               const result = await tools.readFacts!(args);
+              supportRead ||= result.includes("answerSupports");
               input.onReadAction?.("read_facts", args, result);
               return result;
             },
@@ -1736,6 +1743,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
             }),
             execute: async (query) => {
               const result = await tools.searchEntries!(Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined)) as import("../engine/entryPagination.js").EntrySearchInput);
+              supportRead ||= result.includes("answerSupports");
               input.onReadAction?.("search_entries", query, result);
               return result;
             },
@@ -1771,7 +1779,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
           text += part.text;
-          input.onTextDelta?.(part.text);
+          if (!input.answerSupportContract) input.onTextDelta?.(part.text);
         } else if (part.type === "reasoning-delta") {
           // Reasoning is internal and never shown, but tracked so an
           // empty-text recovery can report how much thinking was discarded.
@@ -1800,10 +1808,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           config.messages,
           response.messages,
           reasoning,
-          input.onTextDelta,
+          input.answerSupportContract ? undefined : input.onTextDelta,
         );
       }
-      return { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
+      const answer = input.answerSupportContract && !authoritativePeerResult ? decodeSupportedAnswer(text, sourcePaths(), supportRead) : { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
+      if (input.answerSupportContract && answer.text) input.onTextDelta?.(answer.text);
+      return answer;
     }
 
     const result = await generateText({
@@ -1847,8 +1857,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         result.reasoningText ?? "",
       );
     }
-    if (connectedBatchRequiresGenerate && text) input.onTextDelta?.(text);
-    return { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
+    const answer = input.answerSupportContract && !authoritativePeerResult ? decodeSupportedAnswer(text, sourcePaths(), supportRead) : { text: authoritativePeerResult ?? text, readPaths: sourcePaths() };
+    if (connectedBatchRequiresGenerate && answer.text) input.onTextDelta?.(answer.text);
+    return answer;
   }
 
   async work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult> {

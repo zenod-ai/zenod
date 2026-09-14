@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readNotePassage } from "../src/ops/passage.js";
+import { AnswerSupportRegistry } from "../src/engine/answerSupport.js";
 import { getNote } from "../src/ops/get.js";
 
 const roots: string[] = [];
@@ -39,6 +40,22 @@ describe("bounded memory passages", () => {
     } while (cursor);
     expect(reconstructed).toBe(entry + "\n");
     expect((await getNote(root, path)).body).toBe(body);
+  });
+
+  it("registers the final complete source after real paginated Log reads", async()=>{
+    const transcript="First complete sentence. "+"Background material. ".repeat(250)+"Final qualified statement.";
+    const root=await vault("# Log\n\n## 00:00 Target  ^e-000001\n- source: test\n\n> "+transcript+"\n"+neighbor);
+    const registry=new AnswerSupportRegistry();let cursor:string|undefined;const hints=[];
+    do {
+      const page=await readNotePassage(root,`${path}#^e-000001`,{cursor,maxChars:701});
+      hints.push(...registry.addPassage(page));cursor=page.nextCursor??undefined;
+      if(!cursor) { expect(page.truncated).toBe(true);expect(page.extent.end).toBe(page.extent.sectionEnd); }
+    } while(cursor);
+    const last=hints.find(h=>h.excerpt?.includes("Final qualified statement."));
+    expect(last).toBeDefined();
+    expect(transcript.slice(last!.start,last!.end)).toBe("Final qualified statement.");
+    expect(registry.render([{id:last!.id,mode:"raw_report"}]).text).toContain("Final qualified statement.");
+    expect(registry.render([{id:last!.id,mode:"raw_report"}]).text).not.toContain("NEIGHBOR-SECRET");
   });
 
   it("locates a late passage, reports skipped extent and resumes without conflating no match with absence", async () => {
