@@ -617,11 +617,13 @@ export class Runtime {
 
     const repo = vaultless ? null : await this.getRepo();
     const organizerReasoningEffort = this.settings.organizerReasoningEffort();
+    const organizerProviderOrder = this.settings.organizerProviderOrder();
     const llm = createBrainLlm({
       provider: this.settings.provider(),
       apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
       ...(organizerReasoningEffort ? { organizerReasoningEffort } : {}),
+      ...(organizerProviderOrder ? { organizerProviderOrder } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
       ...(this.settings.get("model_vision") ? { visionModel: this.settings.get("model_vision")! } : {}),
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
