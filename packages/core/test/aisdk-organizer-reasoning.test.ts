@@ -12,7 +12,7 @@ function transport() {
   return new Response(JSON.stringify({id:'offline',object:'chat.completion',created:0,model:request.model,choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  }));return requests;
 }
-it.each([undefined,'low'] as const)('actual SDK sends organizer effort %s only on organizing operations, even with shared model IDs',async effort=>{
+it.each([undefined,'low','none'] as const)('actual SDK sends organizer effort %s only on organizing operations, even with shared model IDs',async effort=>{
  const requests=transport();
  const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused',classifyModel:'synthetic/shared',askModel:'synthetic/shared',organizerReasoningEffort:effort});
  await llm.classify({content:'Synthetic proposition.',context:'',pageIndex:[],hints:[],tagVocabulary:[]});
@@ -31,7 +31,7 @@ it.each([undefined,'low'] as const)('actual SDK sends organizer effort %s only o
 });
 it('rejects unsupported effort or provider before transport',()=>{
  const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
- for(const effort of ['none','high','',null])expect(()=>createBrainLlm({provider:'openrouter',apiKey:'offline',organizerReasoningEffort:effort as any})).toThrow(/Organizer reasoning effort/);
+ for(const effort of ['medium','high','',null])expect(()=>createBrainLlm({provider:'openrouter',apiKey:'offline',organizerReasoningEffort:effort as any})).toThrow(/Organizer reasoning effort/);
  for(const provider of ['anthropic','groq'] as const)expect(()=>createBrainLlm({provider,apiKey:'offline',organizerReasoningEffort:'low'})).toThrow(/Organizer reasoning effort/);
  expect(fetch).not.toHaveBeenCalled();
 });
