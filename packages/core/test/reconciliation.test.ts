@@ -372,3 +372,14 @@ it('uses source wording rather than ignored paraphrase in operation identity and
  expect(replay.content).toBe(first.content);expect(replay.appliedOperationIds).toEqual(first.appliedOperationIds);
  expect(parseNote(first.content).body).toContain(source);expect(first.content).not.toContain('The visitors receive maps.');
 });
+it.each(['add','conflict','supersede'] as const)('round-trips an exact %s statement beyond the historical display cap',async kind=>{
+ const source=(kind==='supersede'?'Correction: the session is on 19. ':kind==='conflict'?'A colleague reports another date, but it is unconfirmed. ':'The session includes a demonstration. ')+ 'The supporting explanation is retained in its original wording. '.repeat(15);
+ expect(source.length).toBeGreaterThan(800);expect(source.length).toBeLessThanOrEqual(1600);
+ const prepared=input('# A\nThe session is on 12.\n[[Index]]\n',source);
+ const result=await applyReconciliation(prepared,[{...op(kind,source,kind==='supersede'?prepared.request.statements[0]!.id:null),factKey:kind==='add'?'session.details':null,correctionQuote:kind==='supersede'?source:null}]);
+ expect(result.appliedOperations).toHaveLength(1);
+ const facts=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts);
+ expect(facts).toHaveLength(1);expect(facts[0]!.statement).toBe(source);expect(facts[0]!.renderedStatement).toBeUndefined();
+ const view=await projectFacts({path:'Projects/A.md'},facts,new Date('2026-09-14'),async()=>evidence(source));
+ expect(view.facts[0]?.status).toBe(kind==='conflict'?'conflict':'active');
+});
