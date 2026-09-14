@@ -1,0 +1,68 @@
+{
+  "confidence": 0.9,
+  "disposition": "append_compact_note",
+  "summary": "Actual response routing projection",
+  "tags": [],
+  "pages": [
+    {
+      "path": "Projects/Aula Horizonte.md",
+      "action": "update",
+      "title": "Aula Horizonte"
+    },
+    {
+      "path": "Projects/Taller Naranjo.md",
+      "action": "update",
+      "title": "Taller Naranjo"
+    }
+  ],
+  "topics": [
+    {
+      "topic": "Observed topic 1",
+      "summary": "Routing projection",
+      "evidenceQuotes": [],
+      "confidence": 0.93,
+      "disposition": "append_compact_note",
+      "pages": []
+    },
+    {
+      "topic": "Observed topic 2",
+      "summary": "Routing projection",
+      "evidenceQuotes": [],
+      "confidence": 0.9,
+      "disposition": "append_compact_note",
+      "pages": []
+    },
+    {
+      "topic": "Observed topic 3",
+      "summary": "Routing projection",
+      "evidenceQuotes": [],
+      "confidence": 0.88,
+      "disposition": "append_compact_note",
+      "pages": []
+    },
+    {
+      "topic": "Observed topic 4",
+      "summary": "Routing projection",
+      "evidenceQuotes": [],
+      "confidence": 0.92,
+      "disposition": "append_compact_note",
+      "pages": []
+    },
+    {
+      "topic": "Observed topic 5",
+      "summary": "Routing projection",
+      "evidenceQuotes": [],
+      "confidence": 0.91,
+      "disposition": "append_compact_note",
+      "pages": []
+    },
+    {
+      "topic": "Observed topic 6",
+      "summary": "Routing projection",
+      "evidenceQuotes": [],
+      "confidence": 0.6,
+      "disposition": "needs_clarification",
+      "pages": []
+    }
+  ]
+}
