@@ -11,7 +11,7 @@ function view(): FactView {
 }
 function passage(text:string, options:Partial<NotePassage>={}):NotePassage {
   const body=`## Capture ^e-123abc\n- source: test\n\n${text.split("\n").map(line=>"> "+line).join("\n")}`;
-  return {source,identity:ref,readPath:ref,version:"sha256:frozen",part:"body",frontmatterChars:0,body,extent:{unit:"utf16",start:0,end:body.length,total:body.length,scopeStart:0,scopeEnd:body.length,sectionStart:0,sectionEnd:body.length},omittedBefore:false,truncated:false,nextCursor:null,...options};
+  return {source,identity:ref,readPath:ref,version:"sha256:frozen",part:"body",frontmatterChars:0,body,extent:{unit:"utf16",start:0,end:body.length,total:body.length,scopeStart:0,scopeEnd:body.length,sectionStart:options.omittedBefore ? -1 : 0,sectionEnd:body.length+(options.truncated ? 1 : 0)},omittedBefore:false,truncated:false,nextCursor:null,...options};
 }
 describe("explicit source selection contract",()=>{
   it("selects canonical current state across question languages and ignores arbitrary wrong model wording",()=>{

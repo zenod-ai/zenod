@@ -70,8 +70,8 @@ export class AnswerSupportRegistry {
       for (let i=0;i<paragraphs.length;i++) {
         const paragraph=paragraphs[i]!; const text=paragraph[0].trim();
         if (!text) continue;
-        const clippedStart=i===0 && region.first.omittedBefore;
-        const clippedEnd=i===paragraphs.length-1 && region.last.truncated;
+        const clippedStart=i===0 && region.start>region.first.extent.sectionStart;
+        const clippedEnd=i===paragraphs.length-1 && region.end<region.last.extent.sectionEnd;
         const partial=text.length>4000 || clippedStart || clippedEnd;
         if(partial) this.lastPassageSelectionPartial=true;
         // Sentence children expose exact actually-read excerpts, never a clipped
