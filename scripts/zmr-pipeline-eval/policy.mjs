@@ -87,18 +87,21 @@ export function requireCompletedEnrichment(job) {
   if (job?.status !== 'done' || !job.input || !job.result) throw new Error('ASR enrichment did not complete; replay/recall blocked');
 }
 
-/** Run-local latch: a provider quota denial cannot be repaired by SDK/job retries. */
+/** Run-local latch: terminal quota/deadline failures cannot be repaired by retries. */
 export function terminalProviderGuard() {
   let terminal = null;
   return {
     get terminal() { return terminal; },
     assertActive() {
       if (terminal) {
-        const error = new Error('evaluation_provider_quota_exhausted');
-        error.name = 'EvaluationProviderQuotaError';
+        const error = new Error(terminal.code);
+        error.name = terminal.status === 'INCOMPLETE_PROVIDER_DEADLINE' ? 'EvaluationProviderDeadlineError' : 'EvaluationProviderQuotaError';
         error.isRetryable = false;
         throw error;
       }
+    },
+    deadline({stage,request},timeoutMs) {
+      terminal ??= {status:'INCOMPLETE_PROVIDER_DEADLINE',code:'evaluation_provider_deadline_exceeded',stage,request,timeoutMs,at:new Date().toISOString()};
     },
     observe(status, text, {stage, request}) {
       if (terminal || status !== 403) return;
@@ -115,7 +118,8 @@ export function terminalProviderGuard() {
 /** Actual HTTP boundary shared by both drivers; catches SDK and durable-job retries. */
 export function evaluationFetch({ledger, quota, fetchImpl, stage = () => 'unknown',
   onRequest = async () => {}, onResponse = async () => {}, onFinish = async () => {},
-  onBudgetBlock = () => {}, onDenied = () => {}}) {
+  onBudgetBlock = () => {}, onDenied = () => {}, timeoutMs = 120000}) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120000) throw new Error("Evaluation request deadline must be within 1–120000ms");
   return async (input, init) => {
     quota.assertActive();
     const request = new Request(input, init), url = new URL(request.url);
@@ -131,16 +135,36 @@ export function evaluationFetch({ledger, quota, fetchImpl, stage = () => 'unknow
     try {
       await onRequest(row, body);
       quota.assertActive(); // An earlier in-flight request may have latched while saving.
-      const response=await fetchImpl(new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(120000)])}));
-      const text=await response.clone().text();
+      const controller=new AbortController();
+      let timer;
+      // Abort alone is cooperative. Race the entire transport/body operation so
+      // noncooperative fetches or bodies cannot hold the evaluator indefinitely.
+      const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>{
+        quota.deadline(row,timeoutMs);
+        try {quota.assertActive();} catch(error) {reject(error);}
+        controller.abort(new Error('evaluation_provider_deadline_exceeded'));
+      },timeoutMs);});
+      let response,text;
+      try {
+        ({response,text}=await Promise.race([
+          (async()=>{
+            const response=await fetchImpl(new Request(request,{signal:AbortSignal.any([request.signal,controller.signal])}));
+            const text=await response.clone().text();
+            return {response,text};
+          })(),deadline,
+        ]));
+      } finally {clearTimeout(timer);}
+      // Only the winning completion may settle usage or persist output. A late
+      // completion after the deadline must leave its unknown reservation intact.
       quota.observe(response.status,text,row);
       ledger.complete(row,parseWireUsage(text),response.ok?'succeeded':'failed'); settled=true; row.httpStatus=response.status;
       await onResponse(row,text);
-      if (quota.terminal) {
+      if (quota.terminal?.status === 'INCOMPLETE_PROVIDER_QUOTA') {
         // Preserve the exact response privately, but keep SDK/job errors safe too.
         return new Response(JSON.stringify({error:{code:403,message:'evaluation_provider_quota_exhausted'}}),
           {status:403,headers:{'content-type':'application/json'}});
       }
+      quota.assertActive();
       return response;
     } catch(error) {
       if (!settled) ledger.complete(row,null,'failed');
@@ -157,9 +181,9 @@ export function evaluationCostSummary(ledger) {
 export function evaluationCompletion({quota, recalls, plannedRecalls, budgetBlocks = [], invariantFailed = false, offline = false}) {
   const recallCoverage={planned:plannedRecalls,attempted:recalls.length,completed:recalls.filter(row=>row.answer).length,
     failed:recalls.filter(row=>!row.answer).length,notStarted:Math.max(0,plannedRecalls-recalls.length)};
-  const status=quota.terminal?'INCOMPLETE_PROVIDER_QUOTA':invariantFailed?'INVARIANT_FAILURE':budgetBlocks.length?'INCOMPLETE_BUDGET'
+  const status=quota.terminal?quota.terminal.status:invariantFailed?'INVARIANT_FAILURE':budgetBlocks.length?'INCOMPLETE_BUDGET'
     :recallCoverage.completed!==plannedRecalls?'INCOMPLETE_CALL_FAILURE':offline?'OFFLINE_PLUMBING_ONLY':'AWAITING_INDEPENDENT_SEMANTIC_REVIEW';
-  return {status,recallCoverage,...(quota.terminal?{providerQuota:quota.terminal}:{})};
+  return {status,recallCoverage,...evaluationTerminalSummary(quota)};
 }
 
 /** Preserve attempted trials only. A terminal provider denial leaves the rest unmeasured. */
@@ -169,4 +193,10 @@ export async function runEvaluationRecalls({questions, quota, recalls, runTrial}
     try { recalls.push({id:question.id,trial,question:question.question,...await runTrial(question,trial),semanticVerdict:'REVIEW_REQUIRED'}); }
     catch(error) { recalls.push({id:question.id,trial,errorClass:error.name,semanticVerdict:'FAILED_CALL'}); }
   }
+}
+
+export function evaluationTerminalSummary(guard) {
+  if (!guard.terminal) return {};
+  return guard.terminal.status==='INCOMPLETE_PROVIDER_DEADLINE'
+    ? {providerDeadline:guard.terminal} : {providerQuota:guard.terminal};
 }

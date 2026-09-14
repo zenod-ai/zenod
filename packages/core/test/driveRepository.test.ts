@@ -392,7 +392,7 @@ describe("DriveVaultRepository", () => {
       async describeImage() { return "image"; },
       async answer(_input, tools) {
         const passage = JSON.parse(await tools.readNote!("Areas/Insurance.md", { query: "renewal" }));
-        expect(passage.body).toContain("Policy renewal recorded");
+        expect(packetBody(passage)).toContain("Policy renewal recorded");
         expect(passage.source).toMatchObject({ path: "Areas/Insurance.md", provider: "google_drive" });
         return { text: "The policy renewal is recorded.", readPaths: [] };
       },
@@ -456,7 +456,7 @@ describe("DriveVaultRepository", () => {
       async describeImage() { return "image"; },
       async answer(_input, tools) {
         const passage = JSON.parse(await tools.readNote!("Areas/Home.md", { query: "Home" }));
-        expect(passage.body).toContain("# Home");
+        expect(packetBody(passage)).toContain("# Home");
         expect(passage.source).toMatchObject({ path: "Areas/Home.md", provider: "google_drive" });
         return { text: "The reconstructed Home note is available.", readPaths: [] };
       },
@@ -1161,3 +1161,17 @@ describe("DriveVaultRepository", () => {
     expect(drive.files.get(victim.id)?.data.toString()).toBe("victim\n");
   });
 });
+
+/** Answer tools return bounded section packets; assertions still inspect original text and provenance. */
+function packetBody(packet: { source: unknown; version: string; bodyChars: number; passages: Array<{body:string;source:unknown;version:string;identity:string}> }): string {
+  expect(Array.isArray(packet.passages)).toBe(true);
+  for (const section of packet.passages) {
+    expect(section.source).toEqual(packet.source);
+    expect(section.version).toBe(packet.version);
+    expect(section.identity).toEqual(expect.any(String));
+  }
+  expect(new Set(packet.passages.map(section=>section.identity)).size).toBe(packet.passages.length);
+  const body=packet.passages.map(section=>section.body).join("");
+  expect(body.length).toBe(packet.bodyChars);
+  return body;
+}
