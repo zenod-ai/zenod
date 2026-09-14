@@ -11,6 +11,12 @@ node --test scripts/zmr-pipeline-eval/*.test.mjs
 
 The held-out fixture remains private to evaluation at `/tmp/zmr15-heldout/heldout.json`. Its frozen SHA256 is `9f4730688c2d94212d6d9daeecdf9285eedc4d5f924c25721e820438d37aeb21`; the runner rejects changed bytes or invalid source offsets. Expected operations never enter model requests. Preserve the private fixture and recall questions independently; do not send their expected operations to implementation workers or tune on this held-out result. Questions are frozen separately and their hash recorded. Source offsets authored in codepoints are converted to JavaScript UTF-16 before comparing runtime evidence spans.
 
+## Organizing-model reasoning
+
+Both drivers accept `--organizer-reasoning-effort low`, forwarded through the real adapter's `organizerReasoningEffort` option; this is not a transport rewrite. The server uses the corresponding tenant setting `model_classify_reasoning_effort`, seeded by `ZENOD_MODEL_CLASSIFY_REASONING_EFFORT`. Omission preserves provider defaults. Only explicit `low` on OpenAI/OpenRouter is accepted. Classification, reconciliation and backlog extraction receive the setting; answers and whole-page composition do not, even when they share the same model ID. Existing output caps and schema validation remain unchanged.
+
+The installed OpenAI SDK serializes this as `reasoning_effort: "low"`. [OpenRouter reasoning documentation](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens) describes effort as a reasoning allocation control, not a hard token budget; excluding reasoning text does not save reasoning tokens. On 2026-09-14 the [public model catalog](https://openrouter.ai/api/v1/models) listed DeepSeek V4.1 Flash with default effort `high`, supported effort `low`, and optional reasoning. This implementation does not expose an unverified disable option. Offline wire tests prove forwarding only; actual structured completion, latency and semantic quality require bounded live acceptance.
+
 ## Terminal provider failures
 
 Both drivers latch a recognized HTTP 403 provider quota denial at the shared HTTP boundary. Later SDK retries, enrichment retries and recall trials cannot send new requests. A request already in flight cannot be unsent. The first failed trial and all earlier observations remain recorded; unstarted trials are reported separately as unmeasured. The run exits unsuccessfully with `INCOMPLETE_PROVIDER_QUOTA`, never an awaiting-review acceptance hint. Local budget exhaustion and other incomplete calls have distinct statuses.
