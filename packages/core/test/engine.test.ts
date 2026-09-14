@@ -1568,7 +1568,7 @@ describe("BrainEngine", () => {
     }));
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(result.topics!.filter(topic => topic.status === "filed")).toHaveLength(1);
-    expect(result.topics!.filter(topic => topic.reason === "source_assignment_invalid")).toHaveLength(malformed ? 1 : 0);
+    expect(result.topics!.filter(topic => topic.reason === "classification_unavailable" && topic.status === "pending")).toHaveLength(malformed ? 1 : 0);
     expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(false);
   });
 
