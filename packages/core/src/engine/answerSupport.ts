@@ -8,7 +8,7 @@ export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kin
 type Support = { hint: AnswerSupportHint; view: FactView; factId?: string; priorId?: string }
   | { hint: AnswerSupportHint; passage: NotePassage; text: string };
 const digest = (value: unknown) => `as_${createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24)}`;
-export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with {\"supportSelections\":[{\"id\":\"as_...\",\"mode\":\"current\"}]}; do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. The host renders canonical source wording and citations; do not invent IDs or keys. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
+export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. The host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue or seek within the source. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
 
 // Intl may split a newline-delimited attribution from the following sentence.
 // Keep that prefix attached instead of issuing an unqualified child handle.
@@ -50,7 +50,8 @@ export class AnswerSupportRegistry {
     }
     return hints;
   }
-  addPassage(passage: NotePassage): AnswerSupportHint[] {
+  addPassage(passage: NotePassage, hintBudget = 32): AnswerSupportHint[] {
+    hintBudget = Math.max(0, Math.min(32, Math.floor(hintBudget)));
     this.lastPassageSelectionPartial = false;
     if (passage.part !== "body") return [];
     this.passages.push(passage);
@@ -84,7 +85,7 @@ export class AnswerSupportRegistry {
           if(!segment.text || segment.text.length>4000){this.lastPassageSelectionPartial=true;continue;}
           const hint: AnswerSupportHint = { id:digest(["passage",passage.identity,passage.version,region.start,segment.start,segment.text]),kind:"passage",modes:["raw_report"],excerpt:segment.text.slice(0,160),offsetUnit:"decoded-region-utf16",regionStart:region.start,start:segment.start,end:segment.start+segment.text.length,granularity:segment.granularity };
           if (this.supports.has(hint.id)) continue; // Earlier IDs remain usable in this turn.
-          if (this.supports.size>=256 || hints.length>=32) { this.lastPassageSelectionPartial=true; continue; }
+          if (this.supports.size>=256 || hints.length>=hintBudget) { this.lastPassageSelectionPartial=true; continue; }
           this.supports.set(hint.id,{hint,passage,text:segment.text});hints.push(hint);
         }
       }

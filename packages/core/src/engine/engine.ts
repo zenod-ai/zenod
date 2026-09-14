@@ -46,7 +46,7 @@ import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
-import { readNotePassage, notePassageVersion, type NoteReadOptions, type NotePassage } from "../ops/passage.js";
+import { readNotePassage, readNotePacket, notePassageVersion, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
@@ -661,7 +661,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false): VaultReadTools {
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
     const searchChats = async (query: string) => {
@@ -715,7 +715,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const anchors = path.includes("#") ? [] : pinnedRefs
           .filter((ref) => normalizeMarkdownNotePath(ref.split("#")[0]!) === normalizeMarkdownNotePath(path))
           .map((ref) => ref.split("#^")[1]!);
-        return JSON.stringify(await readNotePassage(vaultPath, path, readOptions,
+        return JSON.stringify(await (packSections ? readNotePacket : readNotePassage)(vaultPath, path, readOptions,
           (sourcePath, anchor) => repositorySourceRef(sourcePath, anchor, revision),
           anchors.length > 0 ? anchors : undefined));
       },
@@ -2295,8 +2295,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const facts = await automaticFactProjection(hit.path);
         if (facts) views.push({ ...facts.view, answerSupports: supportRegistry.addFacts(facts.view) } as FactView);
       }
-      return views.length ? `Verified fact context from bounded search-hit reads: ${JSON.stringify(views)}` : "";
-    });
+      return views.length ? `Source-backed fact candidates from bounded search-hit reads (not relevance-verified; select only facts that answer the question): ${JSON.stringify(views)}` : "";
+    }, true);
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
@@ -2429,21 +2429,29 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 text = await tools.readNote!(path, readOptions);
                 coverageTracker.failedReads.delete(path);
               } catch (error) { coverageTracker.failedReads.add(path); throw error; }
-              const passage = JSON.parse(text) as NotePassage;
-              coverageTracker.recordRead(passage);
-              readPassages.push(passage);
-              const answerSupports = supportRegistry.addPassage(passage);
-              const answerSupportPartial = supportRegistry.lastPassageSelectionPartial;
-              passageSources.set(passage.identity, { ...passage.source, path: passage.identity.includes("#^") ? passage.identity : passage.source.path });
+              const passage = JSON.parse(text) as NotePassage | NotePassagePacket;
+              const sections = "passages" in passage ? passage.passages : [passage];
+              let answerSupportPartial = false;
+              let remainingHintBudget = 32;
+              const answerSupports = sections.flatMap(section => {
+                coverageTracker.recordRead(section);
+                readPassages.push(section);
+                const hints = supportRegistry.addPassage(section, remainingHintBudget);
+                remainingHintBudget -= hints.length;
+                answerSupportPartial ||= supportRegistry.lastPassageSelectionPartial;
+                passageSources.set(section.identity, { ...section.source, path: section.identity.includes("#^") ? section.identity : section.source.path });
+                return hints;
+              });
+              const readPartial = "readPartial" in passage ? passage.readPartial : passage.truncated;
               // Ordinary meaning-page body reads must not hide source-qualified
               // facts behind a stale prefix. Reuse the bounded verified projection.
               // Exact/pinned evidence and explicit metadata inspection keep their scope.
               {
                 const facts = await automaticFactProjection(path);
-                if (facts) return JSON.stringify({ ...passage, answerSupports, answerSupportPartial, factView: { ...facts.view, answerSupports: supportRegistry.addFacts(facts.view) },
+                if (facts) return JSON.stringify({ ...passage, answerSupports, answerSupportPartial, readPartial, factView: { ...facts.view, answerSupports: supportRegistry.addFacts(facts.view) },
                   instruction: ANSWER_SUPPORT_INSTRUCTION });
               }
-              return JSON.stringify({ ...passage, answerSupports, answerSupportPartial, answerInstruction: ANSWER_SUPPORT_INSTRUCTION });
+              return JSON.stringify({ ...passage, answerSupports, answerSupportPartial, readPartial, answerInstruction: ANSWER_SUPPORT_INSTRUCTION });
             },
           }
         : {}),
