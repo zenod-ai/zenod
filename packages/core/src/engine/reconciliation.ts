@@ -3,7 +3,7 @@ import type { MemoryEntry } from "../types.js";
 import { parseNote, serializeNote } from "../vault/frontmatter.js";
 import { pageRevision } from "../vault/pages.js";
 import type { BranchContextPacket } from "./meaningNotes.js";
-import { appendMemoryFacts, parseMemoryFacts, targetedCorrection, type FactProposal } from "./temporalFacts.js";
+import { appendMemoryFacts, parseMemoryFacts, type FactProposal } from "./temporalFacts.js";
 
 export interface ReconciliationSource { id: string; start: number; end: number; text: string }
 export interface ReconciliationStatement { id: string; text: string; sectionId: string; factKey: string | null }
@@ -14,7 +14,11 @@ export interface ReconciliationInput {
 }
 export interface ReconciliationOperation {
   kind: "add" | "link_source" | "supersede" | "conflict" | "clarify";
-  ideaIds?: string[]; statement?: string | null;
+  ideaIds?: string[];
+  /** Legacy adapter field, ignored: the host never publishes generated paraphrases. */
+  statement?: string | null;
+  /** Exact standalone replacement proposition; null keeps the complete correction report. */
+  replacementQuote?: string | null;
   sourceIds: string[]; sourceQuote: string; targetId: string | null;
   factKey: string | null; correctionQuote: string | null; reason: string | null;
 }
@@ -40,35 +44,6 @@ function compatibleLink(a: string, b: string): boolean {
     actors: [...text.matchAll(/(?<![\p{L}\p{N}_])(\p{Lu}[\p{L}]+)\s+(?:approved|owns|leads|aprob[oó]|posee|dirige)(?![\p{L}\p{N}_])/gu)].map(match => match[1]).sort().join("|"),
   });
   return JSON.stringify(signature(a)) === JSON.stringify(signature(b));
-}
-/** Compact new claims must retain explicit intention as well as uncertainty.
- * Existing imperative plan bullets can still be judged equivalent by LINK_SOURCE;
- * this additional floor applies to newly authored prose, not branch prose style.
- */
-function compatibleStatement(statement: string, source: string): boolean {
-  const intention = (text: string) => /\b(?:want(?:s|ed)?|wish(?:es|ed)?|intend(?:s|ed)?|planned|planning|aim(?:s|ed)?|quiero|quiere|queremos|queriendo|planeado|planeada|previsto|prevista|pretendo|pretende)\b/iu.test(text);
-  return compatibleLink(statement, source) && intention(statement) === intention(source);
-}
-/** A correction can quote both the rejected old value and its replacement.
- * Compare compact new prose against the asserted replacement, while retaining
- * every other number/negative/uncertainty guard. This is not an entailment proof:
- * the model still chooses the exact target and the source-supported new claim.
- */
-function compatibleCorrection(statement: string, source: string, target: string, intent: string | null): boolean {
-  if (compatibleStatement(statement, source)) return true;
-  if (!intent || !targetedCorrection(intent, source)) return false;
-  const numbers = (text: string) => text.match(/\d+(?:[-./]\d+)*/g) ?? [];
-  const oldNumbers = new Set(numbers(target));
-  // Remove only a single explicitly negated old numeric clause, bounded by a
-  // contrast/semicolon/comma. Negation in the replacement is never removed.
-  const retracted = /\b(?:ya\s+no|no\s+longer|not|no)\b[^;,.\n]*?(?=\s*\b(?:but|sino)\b|[;,])/giu;
-  const matches = [...source.matchAll(retracted)];
-  if (matches.length !== 1) return false;
-  const match = matches[0]!; const retired = numbers(match[0]);
-  if (!retired.length || retired.some(value => !oldNumbers.has(value))) return false;
-  const replacement = source.slice(0, match.index) + source.slice(match.index! + match[0].length);
-  if (!numbers(replacement).some(value => !oldNumbers.has(value))) return false;
-  return compatibleStatement(statement, replacement);
 }
 /** Match only exact bounded quotes across adjacent host-addressed chunks.
  * Never insert whitespace across gaps or concatenate unrelated source blocks.
@@ -195,47 +170,53 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     if (!sourceIds.length || sources.some(source => !source)
       || !supportsSourceQuote(sources as ReconciliationSource[],operation.sourceQuote,1600,input.sourceContent)) { fail("source_support_invalid"); continue; }
     for (const id of ideaIds) covered.add(id);
-    const id = digest([input.evidence.evidenceRef, ideaIds.sort(), sourceIds.sort(), operation.kind, operation.targetId, operation.sourceQuote, operation.statement??null]);
+    const id = digest([input.evidence.evidenceRef, ideaIds.sort(), sourceIds.sort(), operation.kind, operation.targetId, operation.sourceQuote, operation.replacementQuote??null, operation.kind === "supersede" ? operation.correctionQuote : null]);
     const marker = `<!-- zenod-op:${id} -->`;
     if (input.raw?.includes(marker) || seen.has(id)) {
       result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds});
       if (operation.kind === "conflict") fail("conflict_retained");
       continue;
     }
-    const statement = operation.statement?.trim() || operation.sourceQuote;
+    const statement = operation.kind === "supersede"
+      ? operation.replacementQuote ?? operation.correctionQuote ?? operation.sourceQuote : operation.sourceQuote;
+    if (statement.length > 1600) {fail("complete_statement_exceeds_budget");continue;}
+    if (operation.replacementQuote && (operation.kind !== "supersede" || !supportsSourceQuote(sources as ReconciliationSource[],operation.replacementQuote,1600,input.sourceContent))) {fail("replacement_support_invalid");continue;}
     const target = operation.targetId ? targets.get(operation.targetId) : undefined;
+    // Preserve only the existing explicit retraction/target mismatch floor.
+    // No new-only replacement or unrelated date is treated as old-value proof.
+    if (operation.kind === "supersede" && target) {
+      const retracted=[...(operation.correctionQuote ?? "").matchAll(/\b(?:ya\s+no|no\s+longer|not|no)\b[^;,.\n]*?(?=\s*\b(?:but|sino)\b|[;,])/giu)];
+      const oldNumbers=new Set(target.text.match(/\d+(?:[-./]\d+)*/g) ?? []);
+      const retired=retracted.length===1 ? retracted[0]![0].match(/\d+(?:[-./]\d+)*/g) ?? [] : [];
+      if(retired.some(value=>!oldNumbers.has(value))) {fail("correction_target_values_incompatible");continue;}
+    }
     if (operation.kind === "supersede" && target?.line.includes(citation)) { fail("reconciliation_same_evidence_target"); continue; }
-    if (operation.kind === "supersede" && !operation.statement?.trim()) { fail("correction_new_statement_required"); continue; }
     if (operation.kind === "supersede" && target && equivalent(statement,target.text)) { fail("correction_new_state_unchanged"); continue; }
     if (operation.kind === "add" && operation.targetId !== null) { fail("add_target_must_be_null"); continue; }
-    const compatible = operation.kind === "supersede" && target
-      ? compatibleCorrection(statement, operation.sourceQuote, target.text, operation.correctionQuote)
-      : compatibleStatement(statement, operation.sourceQuote);
-    if (operation.kind!=="link_source" && (statement.length>800 || !compatible)) {fail("statement_qualifiers_changed");continue;}
     if (operation.kind === "add" && [...targets.values()].some(existing=>existing.line.includes(citation) && equivalent(existing.text,statement))) {
       result.appliedOperationIds.push(id); result.appliedOperations.push({id,sourceIds,ideaIds}); continue;
     }
     if (operation.kind === "clarify") { fail("reconciliation_needs_clarification"); continue; }
-    if (operation.kind !== "add" && !target) { fail("statement_target_invalid"); continue; }
+    if ((operation.kind === "link_source" || operation.kind === "supersede" || operation.targetId !== null) && !target) { fail("statement_target_invalid"); continue; }
     if (operation.kind === "link_source") {
       if (!compatibleLink(target!.text, operation.sourceQuote)) { fail("equivalence_not_established"); continue; }
       const current = edits.get(operation.targetId!)?.text ?? target!.line;
       if (!current.includes(citation)) edits.set(operation.targetId!, {start: target!.start, end: target!.end, text: `${current} ${citation} ${marker}`});
     } else {
       const knownKey = prepared.request.statements.find(statement => statement.id === operation.targetId)?.factKey;
-      const factKey = operation.kind === "supersede" || operation.kind === "conflict" ? knownKey ?? operation.factKey ?? `legacy.${digest([input.path,target!.text])}` : operation.factKey;
+      const factKey = operation.kind === "supersede" || operation.kind === "conflict" ? knownKey ?? (target ? operation.factKey ?? `legacy.${digest([input.path,target.text])}` : `report.${digest([input.path,input.evidence.evidenceRef,ideaIds])}`) : operation.factKey;
       const legacy = operation.kind === "supersede" && !knownKey && input.repositoryRevision && input.raw !== null
         ? {path:input.path,statement:target!.text,statementId:operation.targetId!,contentHash:pageRevision(input.raw),provider:input.repositoryRevision.provider,revision:input.repositoryRevision.id} : undefined;
       if (operation.kind === "supersede" && ((!knownKey && !legacy) || !factKey || !operation.correctionQuote || !supportsSourceQuote(sources as ReconciliationSource[],operation.correctionQuote,2400,input.sourceContent))) { fail("correction_target_or_intent_unverified"); continue; }
       const classifiedFact=input.facts?.find(fact=>fact.key===factKey && fact.statement===operation.sourceQuote);
-      const proposal: FactProposal | null = factKey ? {key: factKey, statement:operation.sourceQuote, renderedStatement:statement, ...(operation.kind==="conflict" ? {reportedConflict:true} : {}), ...(legacy ? {legacySupersedes:legacy} : {}), effectiveDate: classifiedFact?.effectiveDate??null, effectiveDateQuote: classifiedFact?.effectiveDateQuote??null,
+      const proposal: FactProposal | null = factKey ? {key: factKey, statement, ...(operation.kind==="conflict" ? {reportedConflict:true} : {}), ...(legacy ? {legacySupersedes:legacy} : {}), effectiveDate: classifiedFact?.effectiveDate??null, effectiveDateQuote: classifiedFact?.effectiveDateQuote??null,
         correctionQuote: operation.kind === "supersede" ? operation.correctionQuote : null,
         supersedesQuotes: operation.kind === "supersede" ? [target!.text] : [],
         ...(operation.kind === "supersede" ? {supersedesIds: parseMemoryFacts(parsed?.frontmatter?.memoryFacts).filter(fact => fact.key === factKey && equivalent(fact.renderedStatement ?? fact.statement, target!.text)).map(fact => fact.id)} : {}), verificationQuote: classifiedFact?.verificationQuote??null} : null;
       if (operation.kind === "supersede") {
         const trialSeed = parsed?.frontmatter ? input.raw! : serializeNote({title:input.title,type:input.type,tags:[],summary:input.title,created:input.today,updated:input.today},parsed?.body??"");
-        const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, [operation.sourceQuote,operation.correctionQuote!].join("\n\n"));
-        const fact = parseMemoryFacts(parseNote(trial).frontmatter?.memoryFacts).find(fact => fact.evidenceRef === input.evidence.evidenceRef && fact.statement === operation.sourceQuote);
+        const trial = appendMemoryFacts(trialSeed, input.raw, [proposal!], input.evidence, [statement,operation.correctionQuote!].join("\n\n"));
+        const fact = parseMemoryFacts(parseNote(trial).frontmatter?.memoryFacts).find(fact => fact.evidenceRef === input.evidence.evidenceRef && fact.statement === statement);
         if ((!fact?.supersedes.length && !fact?.legacySupersedes) || fact.unresolvedCorrection) { fail("correction_direction_unverified"); continue; }
       }
       if (proposal) {
@@ -243,7 +224,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
         // Each exact quote was independently checked against selected chunks.
         // Passing those validated quotes avoids inventing separators inside a
         // crossing proposition when the temporal layer verifies source support.
-        validatedFactSupport.add(operation.sourceQuote);
+        validatedFactSupport.add(statement);
         if (operation.kind === "supersede") validatedFactSupport.add(operation.correctionQuote!);
         for (const quote of [classifiedFact?.effectiveDateQuote,classifiedFact?.verificationQuote]) {
           if (quote && supportsSourceQuote(sources as ReconciliationSource[],quote,2400,input.sourceContent)) validatedFactSupport.add(quote);

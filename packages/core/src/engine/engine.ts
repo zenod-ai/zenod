@@ -1497,6 +1497,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }];
       if (classified.topics) {
         classified.topics = classified.topics.map((topic) => ({ ...topic,
+          // An explicit known destination is a routing decision, not permission to
+          // discard its idea as already known. Reconciliation decides novelty.
+          // Never infer missing paths or increase the classifier's confidence.
+          disposition: llm.reconcile && topic.disposition === "evidence_only" && topic.pages.length > 0
+            && topic.pages.every(page => page.action === "update" && snapshot.pages.some(known => known.path === page.path))
+            ? "append_compact_note" as const : topic.disposition,
           sourceRange: windows[segmentIndex]!.range, sourcePassages: windows[segmentIndex]!.passages }))
           // Exact, valid support wholly in neighbor context belongs to its owning
           // window. Malformed/ambiguous assignments remain visible as pending.
