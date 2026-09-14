@@ -6,10 +6,16 @@ The default command is offline and uses no key/network:
 
 ```sh
 node scripts/zmr-pipeline-eval/run.mjs
-node --test scripts/zmr-pipeline-eval/policy.test.mjs
+node --test scripts/zmr-pipeline-eval/*.test.mjs
 ```
 
 The held-out fixture remains private to evaluation at `/tmp/zmr15-heldout/heldout.json`. Its frozen SHA256 is `9f4730688c2d94212d6d9daeecdf9285eedc4d5f924c25721e820438d37aeb21`; the runner rejects changed bytes or invalid source offsets. Expected operations never enter model requests. Preserve the private fixture and recall questions independently; do not send their expected operations to implementation workers or tune on this held-out result. Questions are frozen separately and their hash recorded. Source offsets authored in codepoints are converted to JavaScript UTF-16 before comparing runtime evidence spans.
+
+## Terminal provider failures
+
+Both drivers latch a recognized HTTP 403 provider quota denial at the shared HTTP boundary. Later SDK retries, enrichment retries and recall trials cannot send new requests. A request already in flight cannot be unsent. The first failed trial and all earlier observations remain recorded; unstarted trials are reported separately as unmeasured. The run exits unsuccessfully with `INCOMPLETE_PROVIDER_QUOTA`, never an awaiting-review acceptance hint. Local budget exhaustion and other incomplete calls have distinct statuses.
+
+Public summaries contain a sanitized quota code/stage, not the provider error message, URL or key identifier. Exact wire responses remain in the private output directory for audit. `providerReportedCostUsd` sums known reported costs only; `retainedUnknownCostReservationsUsd` retains the full reservation for attempts without reported cost. `exposureUsd` includes both and must not be described as billed cost. Restoring provider quota or beginning another paid run remains a separate manager/user gate; the harness never changes account limits.
 
 ## Candidate-bound execution
 
