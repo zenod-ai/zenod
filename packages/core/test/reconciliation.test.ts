@@ -306,3 +306,31 @@ it('accepts separate correction sentences with a complete exact correction conte
  expect(result.pending).toEqual([]);
  expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.legacySupersedes!.statement).toBe('Each visitor receives a ticket.');
 });
+
+it('keeps source-native hypothesis qualification instead of judging a translated paraphrase', async()=>{
+  const source='Tengo una hipótesis sin verificar: una demostración con cuerdas podría ayudar a entender las órbitas. No lo doy por probado.';
+  const prepared=input('# A\n[[Index]]\n',source);
+  const result=await applyReconciliation(prepared,[{...op('add',source),statement:'Unverified hypothesis: a rope demonstration could help explain orbits.'}]);
+  expect(result.pending).toEqual([]);expect(result.content).toContain(source);
+  expect(result.content).not.toContain('Unverified hypothesis:');
+});
+it('retains an untargeted attributed conflicting report without inventing current truth',async()=>{
+  const source='Un colaborador afirma que el taller será el 26. No he confirmado esa afirmación y no estoy corrigiendo nuestra fecha acordada del 19.';
+  const prepared=input('# A\n\nThe workshop is planned for 12.\n[[Index]]\n',source);
+  const result=await applyReconciliation(prepared,[op('conflict',source)]);
+  expect(result.appliedOperations).toHaveLength(1);expect(result.content).toContain(source);
+  const facts=parseMemoryFacts(parseNote(result.content).frontmatter?.memoryFacts);
+  expect(facts).toHaveLength(1);expect(facts[0]!.reportedConflict).toBe(true);expect(facts[0]!.supersedes).toEqual([]);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-14'),async()=>evidence(source));
+  expect(view.facts[0]?.status).toBe('conflict');
+});
+it('uses exact natural correction wording instead of a generated English planned qualifier',async()=>{
+  const source='Corrijo explícitamente mi fecha anterior: el primer taller ya no será el 12 de octubre; será el 19 de octubre. Guarda la fecha anterior como historia.';
+  const prepared=input('# A\n\nThe first workshop is planned for October 12.\n[[Index]]\n',source);
+  const target=prepared.request.statements.find(s=>s.text.includes('October 12'))!;
+  const result=await applyReconciliation(prepared,[{...op('supersede',source,target.id),statement:'The first workshop is planned for October 19.',correctionQuote:source}]);
+  expect(result.pending).toEqual([]);expect(result.content).toContain(source);
+  const view=await projectFacts({path:'Projects/A.md'},parseNote(result.content).frontmatter!.memoryFacts,new Date('2026-09-14'),async()=>evidence(source));
+  expect(view.priorStatements?.[0]?.statement).toBe(target.text);
+  expect(view.facts[0]?.status).toBe('active');
+});
