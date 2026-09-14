@@ -554,3 +554,36 @@ it('rejects incompatible corrections of one original target even across distinct
  expect(result.content).toBe(seed.input.raw);expect(result.appliedOperations).toEqual([]);
  expect(result.pending.every(item=>item.reason.includes('reconciliation_incompatible_decisions'))).toBe(true);
 });
+
+it('deduplicates the same source-native effect while completing distinct ideas',async()=>{
+ const source='A new procedure applies.'; const seed=input('# A\n[[Index]]\n',source);
+ seed.input.ideas=['A','B'].map(id=>({id,topic:id,sourceIds:['p1']}));
+ const prepared=prepareReconciliation(seed.input);
+ const result=await applyReconciliation(prepared,['A','B'].map(id=>({...op('add',source),ideaIds:[id]})));
+ expect(result.pending).toEqual([]);expect(result.appliedOperations.flatMap(o=>o.ideaIds)).toEqual(['A','B']);
+ expect(parseNote(result.content).body.split(source)).toHaveLength(2);
+});
+it('rejects distinct supported replacements hidden behind the same correction quote',async()=>{
+ const source='Correction: launch is on 19. Correction: launch is on 26.';
+ const prepared=input('# A\nLaunch is on 12.\n[[Index]]\n',source),target=prepared.request.statements[0]!.id;
+ const result=await applyReconciliation(prepared,['launch is on 19.','launch is on 26.'].map(replacementQuote=>({...op('supersede',source,target),correctionQuote:source,replacementQuote})));
+ expect(result.content).toBe(prepared.input.raw);expect(result.appliedOperations).toEqual([]);
+ expect(result.pending[0]!.reason).toContain('reconciliation_incompatible_decisions');
+});
+it('completes an unfinished facet of a shared operation without reopening completed ideas',async()=>{
+ const source='A complete new condition.';const seed=input('# A\n[[Index]]\n',source);
+ seed.input.ideas=['A','B'].map(id=>({id,topic:id,sourceIds:['p1']}));seed.input.completedIdeaIds=['A'];
+ const result=await applyReconciliation(prepareReconciliation(seed.input),[{...op('add',source),ideaIds:['A','B']}]);
+ expect(result.pending).toEqual([]);expect(result.appliedOperations[0]!.ideaIds).toEqual(['B']);
+ expect(result.content).toContain(source);
+});
+
+it('keeps completed facets unchanged when an unfinished shared group fails',async()=>{
+ const source='Existing condition. New condition.';const seed=input('# A\nExisting condition.\n[[Index]]\n',source);
+ seed.input.ideas=['A','B'].map(id=>({id,topic:id,sourceIds:['p1']}));seed.input.completedIdeaIds=['A'];
+ const prepared=prepareReconciliation(seed.input);
+ const failed=await applyReconciliation(prepared,[{...op('add','New condition.'),ideaIds:['A','B']},{...op('add','Invented.'),ideaIds:['B']}]);
+ expect(failed.content).toBe(seed.input.raw);expect(failed.pending.flatMap(p=>p.ideaIds)).toEqual(['B']);
+ const valid=await applyReconciliation(prepared,[{...op('add','Invented.'),ideaIds:['A']},{...op('add','New condition.'),ideaIds:['A','B']}]);
+ expect(valid.pending).toEqual([]);expect(valid.appliedOperations[0]!.ideaIds).toEqual(['B']);
+});
