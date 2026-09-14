@@ -4,11 +4,26 @@ import { renderFactViews, type FactView } from "./temporalFacts.js";
 
 export type AnswerSupportMode = "current" | "historical" | "prior" | "conflict" | "raw_report";
 export interface AnswerSupportSelection { id: string; mode: AnswerSupportMode }
-export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kind: "fact" | "prior" | "passage"; factId?: string; key?: string; excerpt?: string; start?: number; end?: number; offsetUnit?: "decoded-region-utf16"; regionStart?: number }
+export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kind: "fact" | "prior" | "passage"; factId?: string; key?: string; excerpt?: string; start?: number; end?: number; offsetUnit?: "decoded-region-utf16"; regionStart?: number; granularity?: "paragraph" | "sentence" }
 type Support = { hint: AnswerSupportHint; view: FactView; factId?: string; priorId?: string }
   | { hint: AnswerSupportHint; passage: NotePassage; text: string };
 const digest = (value: unknown) => `as_${createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24)}`;
-export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Final response must be JSON {\"supportSelections\":[{\"id\":\"as_...\",\"mode\":\"current\"}]}. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. The host renders canonical source wording and citations; do not invent IDs or keys. If answerSupportPartial is true, some edge/oversized paragraphs or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
+export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Final response must be JSON {\"supportSelections\":[{\"id\":\"as_...\",\"mode\":\"current\"}]}. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. The host renders canonical source wording and citations; do not invent IDs or keys. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
+
+// Intl may split a newline-delimited attribution from the following sentence.
+// Keep that prefix attached instead of issuing an unqualified child handle.
+function completeSentenceSegments(text:string, clippedStart:boolean, clippedEnd:boolean) {
+  const segments:Array<{segment:string;index:number}>=[];
+  let pending="",start=0;
+  const parts=[...new Intl.Segmenter(undefined,{granularity:"sentence"}).segment(text)];
+  for(const [index,part] of parts.entries()) {
+    if((clippedStart && index===0) || (clippedEnd && index===parts.length-1)) continue;
+    if(!pending) start=part.index;
+    pending+=part.segment;
+    if(/[.!?。！？]["'”’)]*\s*$/u.test(pending)) { segments.push({segment:pending,index:start});pending=""; }
+  }
+  return segments;
+}
 
 /** Turn-local handles for source actually read. Selection is semantic model work;
  * canonical text, identity, temporal status and citations remain host authority. */
@@ -51,11 +66,23 @@ export class AnswerSupportRegistry {
       for (let i=0;i<paragraphs.length;i++) {
         const paragraph=paragraphs[i]!; const text=paragraph[0].trim();
         if (!text) continue;
-        if (text.length>4000 || (i===0 && region.first.omittedBefore) || (i===paragraphs.length-1 && region.last.truncated)) { this.lastPassageSelectionPartial=true; continue; }
-        const hint: AnswerSupportHint = { id:digest(["passage",passage.identity,passage.version,region.start,paragraph.index,text]),kind:"passage",modes:["raw_report"],excerpt:text.slice(0,160),offsetUnit:"decoded-region-utf16",regionStart:region.start,start:paragraph.index!,end:paragraph.index!+paragraph[0].length };
-        if (this.supports.has(hint.id)) continue; // Earlier IDs remain usable in this turn.
-        if (this.supports.size>=256 || hints.length>=32) { this.lastPassageSelectionPartial=true; continue; }
-        this.supports.set(hint.id,{hint,passage,text});hints.push(hint);
+        const clippedStart=i===0 && region.first.omittedBefore;
+        const clippedEnd=i===paragraphs.length-1 && region.last.truncated;
+        const partial=text.length>4000 || clippedStart || clippedEnd;
+        if(partial) this.lastPassageSelectionPartial=true;
+        // Sentence children expose exact actually-read excerpts, never a clipped
+        // first/last sentence. Surrounding source stays visible to the selector;
+        // semantic qualification completeness is not established by this handle.
+        const segments=partial ? completeSentenceSegments(paragraph[0],clippedStart,clippedEnd)
+          .map(segment=>({text:segment.segment.trim(),start:paragraph.index!+segment.index+segment.segment.length-segment.segment.trimStart().length,granularity:"sentence" as const}))
+          : [{text,start:paragraph.index!+paragraph[0].length-paragraph[0].trimStart().length,granularity:"paragraph" as const}];
+        for(const segment of segments){
+          if(!segment.text || segment.text.length>4000){this.lastPassageSelectionPartial=true;continue;}
+          const hint: AnswerSupportHint = { id:digest(["passage",passage.identity,passage.version,region.start,segment.start,segment.text]),kind:"passage",modes:["raw_report"],excerpt:segment.text.slice(0,160),offsetUnit:"decoded-region-utf16",regionStart:region.start,start:segment.start,end:segment.start+segment.text.length,granularity:segment.granularity };
+          if (this.supports.has(hint.id)) continue; // Earlier IDs remain usable in this turn.
+          if (this.supports.size>=256 || hints.length>=32) { this.lastPassageSelectionPartial=true; continue; }
+          this.supports.set(hint.id,{hint,passage,text:segment.text});hints.push(hint);
+        }
       }
     }
     return hints;
@@ -77,7 +104,7 @@ export class AnswerSupportRegistry {
       if (seen.has(selection.id)) continue; seen.add(selection.id);
       if ("passage" in support) {
         const ref=support.passage.identity, url=support.passage.source.url;
-        lines.push(`Raw source report (not independently verified current state):\n${support.text}\n[${ref}](${url})`);
+        lines.push(`${support.hint.granularity === "sentence" ? "Raw source excerpt (selected sentences; surrounding qualifications may be omitted)" : "Raw source report"} (not independently verified current state):\n${support.text}\n[${ref}](${url})`);
       } else if (support.priorId) {
         const prior=support.view.priorStatements!.find(p=>p.statementId===support.priorId)!;
         lines.push(`Prior note statement (superseded; original evidence/date unknown): ${prior.statement}\n${prior.path}, ${prior.provider} revision ${prior.revision}; correction evidence ${prior.supersededByEvidenceRef}.`);

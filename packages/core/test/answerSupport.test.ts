@@ -46,6 +46,43 @@ describe("explicit source selection contract",()=>{
     const hints=registry.addPassage(passage("One complete report.\n\nAnother complete report.",{version:"complete"}));
     expect(hints).toHaveLength(2);expect(hints.every(h=>!h.excerpt?.includes("source: test"))).toBe(true);
   });
+  it("offers focused complete sentences from long bilingual source without unrelated details",()=>{
+    const registry=new AnswerSupportRegistry();
+    const text="La visión es conservar conocimiento durable.\nThe workshop color is amber.\n"+"Background material. ".repeat(550);
+    const hints=registry.addPassage(passage(text,{truncated:true}));
+    const vision=hints.find(h=>h.excerpt?.startsWith("La visión"))!;
+    expect(vision.granularity).toBe("sentence");expect(hints.length).toBeLessThanOrEqual(32);
+    expect(registry.lastPassageSelectionPartial).toBe(true);
+    const rendered=registry.render([{id:vision.id,mode:"raw_report"}]);
+    expect(rendered.text).toContain("La visión es conservar conocimiento durable.");
+    expect(rendered.text).not.toContain("amber");expect(rendered.text).toContain("Raw source excerpt");
+    expect(text.slice(vision.start,vision.end)).toBe(vision.excerpt);
+  });
+  it("retains cross-sentence qualification when the selector requests both supports",()=>{
+    const registry=new AnswerSupportRegistry();
+    const hints=registry.addPassage(passage("Students learn faster. This is only an unverified hypothesis. "+"Other context. ".repeat(400)));
+    const selected=hints.slice(0,2).map(h=>({id:h.id,mode:"raw_report" as const}));
+    const text=registry.render(selected).text;
+    expect(text).toContain("Students learn faster.");expect(text).toContain("only an unverified hypothesis");
+    // Selection carries semantic responsibility: a sentence handle is not a proof
+    // that every relevant neighboring qualification was selected.
+    expect(registry.render(selected.slice(0,1)).text).toContain("surrounding qualifications may be omitted");
+  });
+  it("keeps newline attribution attached to its sentence in long source",()=>{
+    const registry=new AnswerSupportRegistry();
+    const hints=registry.addPassage(passage("Rejected claim:\nWe repair batteries. "+"Other context. ".repeat(400)));
+    expect(hints[0]!.excerpt).toBe("Rejected claim:\nWe repair batteries.");
+  });
+  it("never offers clipped boundary fragments as complete sentence support",()=>{
+    const registry=new AnswerSupportRegistry();
+    const hints=registry.addPassage(passage("missing beginning. Complete middle report. Unfinished ending",{omittedBefore:true,truncated:true}));
+    expect(hints.map(h=>h.excerpt)).toEqual(["Complete middle report."]);
+  });
+  it("rejects punctuation at an unknown read edge, including a cut decimal",()=>{
+    const registry=new AnswerSupportRegistry();
+    const hints=registry.addPassage(passage("Complete report. The limit is 3.",{truncated:true}));
+    expect(hints.map(h=>h.excerpt)).toEqual(["Complete report."]);
+  });
   it("retains every selected source version for snapshot validation",()=>{
     const registry=new AnswerSupportRegistry();const first=registry.addPassage(passage("First complete report."));const second=registry.addPassage(passage("Second complete report.",{version:"changed"}));
     expect(registry.selectedPassages([{id:first[0]!.id,mode:"raw_report"},{id:second[0]!.id,mode:"raw_report"}]).map(p=>p.version)).toEqual(["sha256:frozen","changed"]);
