@@ -2293,16 +2293,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     entrySearch?: AskOptions["entrySearch"],
   ) {
     const supportRegistry = new AnswerSupportRegistry();
-    const tools = readTools(contextRefs, entrySearch, true, async hits => {
-      const views: FactView[] = [];
-      // Bounded host reads prevent model selection from skipping applicable facts.
-      // Search snippets remain discovery hints; only readFacts verifies evidence.
-      for (const hit of hits.slice(0, 4).filter(hit => hit.path.endsWith(".md"))) {
-        const facts = await automaticFactProjection(hit.path);
-        if (facts) views.push({ ...facts.view, answerSupports: supportRegistry.addFacts(facts.view) } as FactView);
-      }
-      return views.length ? `Source-backed fact candidates from bounded search-hit reads (not relevance-verified; select only facts that answer the question): ${JSON.stringify(views)}` : "";
-    }, true);
+    // Search discovers candidate paths. Only an actual note/fact read may
+    // register source supports and enable typed answer submission.
+    const tools = readTools(contextRefs, entrySearch, true, undefined, true);
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
