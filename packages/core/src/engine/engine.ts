@@ -1,4 +1,4 @@
-import { checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT } from "./classificationContract.js";
+import { checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -1431,11 +1431,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput, exhaustedRetry = false) {
+  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput, sourceContent: string, exhaustedRetry = false) {
     return classifyCandidates({ classify: async (bounded: ClassifyInput) => {
       reportTokenCost("classify", [bounded.sourcePassages ? JSON.stringify(bounded.sourcePassages) : bounded.content, bounded.sourcePassages ? "" : bounded.context ?? "", ...bounded.hints,
         bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(",")], undefined, "bounded-candidates");
-      return checkTopicDestinations(await llm.classify(bounded), exhaustedRetry);
+      return checkTopicSourceAddresses(checkTopicDestinations(await llm.classify(bounded), exhaustedRetry), sourceContent, bounded, exhaustedRetry);
     } }, vaultPath, snapshot, input);
   }
 
@@ -1463,6 +1463,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const hints = [
           ...(input.hints ?? []),
           ...(lastError instanceof ClassificationDestinationError ? [DESTINATION_CORRECTION_HINT] : []),
+          ...(lastError instanceof ClassificationSourceAddressError ? [SOURCE_ADDRESS_CORRECTION_HINT] : []),
           ...(captured ? ["This evidence is already durably captured. Spend full-page composition only when semantic integration is explicitly justified."] : []),
           ...(segments.length > 1
             ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
@@ -1480,7 +1481,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             hints,
             pageIndex: snapshot.pages,
             tagVocabulary: config.tags,
-          }, attempt === CLASSIFY_RETRIES);
+          }, input.content, attempt === CLASSIFY_RETRIES);
           break;
         } catch (error) {
           lastError = error;
