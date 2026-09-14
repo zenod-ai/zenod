@@ -64,12 +64,13 @@ function boundary(text: string, offset: number): number {
 }
 
 /** Bounded section/evidence read. Public get_memory remains the full-content API. */
-export async function readNotePassage(
+async function readLoadedNotePassage(
   vaultPath: string,
   requested: string,
   options: NoteReadOptions = {},
   location: VaultSourceContext = {},
   allowedAnchors?: readonly string[],
+  loadedNote?: Awaited<ReturnType<typeof getNote>>,
 ): Promise<NotePassage> {
   const maxChars = options.maxChars ?? 8000;
   const part = options.part ?? "body";
@@ -82,7 +83,7 @@ export async function readNotePassage(
   const anchor = marker < 0 ? undefined : requested.slice(marker + 1);
   if (anchor !== undefined && !/^\^e-[0-9a-f]{6}$/i.test(anchor)) throw new Error("Invalid evidence anchor");
   if (anchor && part === "frontmatter") throw new Error("Exact evidence reads cannot access file frontmatter");
-  const note = await getNote(vaultPath, path, location);
+  const note = loadedNote ?? await getNote(vaultPath, path, location);
   const frontmatterText = JSON.stringify(note.frontmatter, null, 2);
   const content = part === "frontmatter" ? frontmatterText : note.body;
   if (allowedAnchors && part === "frontmatter") throw new Error("Pinned evidence reads cannot access file frontmatter; use an exact evidence ref");
@@ -145,4 +146,46 @@ export async function readNotePassage(
     ...(allowedAnchors ? { scopeEvidenceRefs: all.map((section) => `${note.path}#^${section.anchor}`) } : {}),
     ...(queryMatched === undefined ? {} : { queryMatched }),
   };
+}
+
+export function readNotePassage(
+  vaultPath: string, requested: string, options: NoteReadOptions = {},
+  location: VaultSourceContext = {}, allowedAnchors?: readonly string[],
+): Promise<NotePassage> {
+  return readLoadedNotePassage(vaultPath, requested, options, location, allowedAnchors);
+}
+
+export interface NotePassagePacket {
+  source: VaultSourceRef;
+  readPath: string;
+  version: string;
+  part: "body" | "frontmatter";
+  passages: NotePassage[];
+  nextCursor: string | null;
+  readPartial: boolean;
+  bodyChars: number;
+}
+
+/** One snapshot and one body budget, retaining each section's exact identity.
+ * Evidence entries keep the single-section API and cannot spill into neighbors.
+ */
+export async function readNotePacket(
+  vaultPath: string, requested: string, options: NoteReadOptions = {},
+  location: VaultSourceContext = {}, allowedAnchors?: readonly string[],
+): Promise<NotePassage | NotePassagePacket> {
+  const path = requested.split("#")[0]!;
+  const note = await getNote(vaultPath, path, location);
+  const first = await readLoadedNotePassage(vaultPath, requested, options, location, allowedAnchors, note);
+  if (note.path.startsWith("Log/") || requested.includes("#") || allowedAnchors || options.part === "frontmatter") return first;
+  const passages = [first];
+  const maxChars = options.maxChars ?? 8000;
+  let bodyChars = first.body.length;
+  let last = first;
+  while (last.nextCursor && passages.length < 16 && maxChars - bodyChars >= 256) {
+    last = await readLoadedNotePassage(vaultPath, requested,
+      { part: options.part, cursor: last.nextCursor, maxChars: maxChars - bodyChars }, location, undefined, note);
+    passages.push(last); bodyChars += last.body.length;
+  }
+  return { source: first.source, readPath: first.readPath, version: first.version, part: first.part,
+    passages, nextCursor: last.nextCursor, readPartial: first.omittedBefore || last.nextCursor !== null, bodyChars };
 }
