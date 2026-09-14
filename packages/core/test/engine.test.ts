@@ -581,7 +581,7 @@ describe("BrainEngine", () => {
     const e=engine();let mode: "raw_report"|"current"="raw_report";
     llm.answerOverride=async (_input,tools)=>{
       const packet=JSON.parse(await tools.readNote!(path));
-      const selected=packet.answerSupports.find((h:any)=>h.excerpt?.includes("Mina checks"));
+      const selected=packet.answerSupports.find((h:any)=>h.granularity==="paragraph" && h.excerpt?.includes("Mina checks"));
       expect(selected).toBeDefined();
       expect(packet.passages.length).toBeGreaterThan(1);
       expect(packet.readPartial).toBe(false);expect(packet.nextCursor).toBeNull();
