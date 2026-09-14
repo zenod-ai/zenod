@@ -86,3 +86,87 @@ export function prepareAsrEnvironment(env) {
 export function requireCompletedEnrichment(job) {
   if (job?.status !== 'done' || !job.input || !job.result) throw new Error('ASR enrichment did not complete; replay/recall blocked');
 }
+
+/** Run-local latch: a provider quota denial cannot be repaired by SDK/job retries. */
+export function terminalProviderGuard() {
+  let terminal = null;
+  return {
+    get terminal() { return terminal; },
+    assertActive() {
+      if (terminal) {
+        const error = new Error('evaluation_provider_quota_exhausted');
+        error.name = 'EvaluationProviderQuotaError';
+        error.isRetryable = false;
+        throw error;
+      }
+    },
+    observe(status, text, {stage, request}) {
+      if (terminal || status !== 403) return;
+      let message;
+      try { message = JSON.parse(text)?.error?.message; } catch { return; }
+      if (typeof message !== 'string' || !/(?:key limit exceeded|quota (?:exceeded|exhausted)|monthly limit exceeded)/i.test(message)) return;
+      // Do not carry provider messages/URLs/key identifiers into public summaries.
+      terminal = {status:'INCOMPLETE_PROVIDER_QUOTA', code:'evaluation_provider_quota_exhausted',
+        httpStatus:403, stage, request, at:new Date().toISOString()};
+    },
+  };
+}
+
+/** Actual HTTP boundary shared by both drivers; catches SDK and durable-job retries. */
+export function evaluationFetch({ledger, quota, fetchImpl, stage = () => 'unknown',
+  onRequest = async () => {}, onResponse = async () => {}, onFinish = async () => {},
+  onBudgetBlock = () => {}, onDenied = () => {}}) {
+  return async (input, init) => {
+    quota.assertActive();
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.origin !== 'https://openrouter.ai' || url.pathname !== '/api/v1/chat/completions' || request.method !== 'POST') {
+      onDenied(); throw new Error('evaluation_unapproved_network_destination');
+    }
+    const body = await request.clone().json();
+    quota.assertActive();
+    let row;
+    try { row = ledger.reserve(body); } catch (error) { onBudgetBlock({stage:stage(),reason:error.message,at:new Date().toISOString()}); throw error; }
+    row.stage=stage(); row.startedAt=new Date().toISOString(); row.inputSha256=sha256(JSON.stringify(body));
+    const start=performance.now(); let settled=false;
+    try {
+      await onRequest(row, body);
+      quota.assertActive(); // An earlier in-flight request may have latched while saving.
+      const response=await fetchImpl(new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(120000)])}));
+      const text=await response.clone().text();
+      quota.observe(response.status,text,row);
+      ledger.complete(row,parseWireUsage(text),response.ok?'succeeded':'failed'); settled=true; row.httpStatus=response.status;
+      await onResponse(row,text);
+      if (quota.terminal) {
+        // Preserve the exact response privately, but keep SDK/job errors safe too.
+        return new Response(JSON.stringify({error:{code:403,message:'evaluation_provider_quota_exhausted'}}),
+          {status:403,headers:{'content-type':'application/json'}});
+      }
+      return response;
+    } catch(error) {
+      if (!settled) ledger.complete(row,null,'failed');
+      row.errorClass=error.name; throw error;
+    } finally { row.latencyMs=performance.now()-start; await onFinish(row); }
+  };
+}
+
+export function evaluationCostSummary(ledger) {
+  return {providerReportedCostUsd:ledger.rows.reduce((sum,row)=>sum+(row.actualCostUsd??0),0),
+    retainedUnknownCostReservationsUsd:ledger.rows.reduce((sum,row)=>sum+(row.actualCostUsd===null?row.reservedUsd:0),0),
+    exposureUsd:ledger.exposureUsd};
+}
+export function evaluationCompletion({quota, recalls, plannedRecalls, budgetBlocks = [], invariantFailed = false, offline = false}) {
+  const recallCoverage={planned:plannedRecalls,attempted:recalls.length,completed:recalls.filter(row=>row.answer).length,
+    failed:recalls.filter(row=>!row.answer).length,notStarted:Math.max(0,plannedRecalls-recalls.length)};
+  const status=quota.terminal?'INCOMPLETE_PROVIDER_QUOTA':invariantFailed?'INVARIANT_FAILURE':budgetBlocks.length?'INCOMPLETE_BUDGET'
+    :recallCoverage.completed!==plannedRecalls?'INCOMPLETE_CALL_FAILURE':offline?'OFFLINE_PLUMBING_ONLY':'AWAITING_INDEPENDENT_SEMANTIC_REVIEW';
+  return {status,recallCoverage,...(quota.terminal?{providerQuota:quota.terminal}:{})};
+}
+
+/** Preserve attempted trials only. A terminal provider denial leaves the rest unmeasured. */
+export async function runEvaluationRecalls({questions, quota, recalls, runTrial}) {
+  recallTrials: for (const question of questions) for (let trial=1;trial<=3;trial++) {
+    if (quota.terminal) break recallTrials;
+    try { recalls.push({id:question.id,trial,question:question.question,...await runTrial(question,trial),semanticVerdict:'REVIEW_REQUIRED'}); }
+    catch(error) { recalls.push({id:question.id,trial,errorClass:error.name,semanticVerdict:'FAILED_CALL'}); }
+  }
+}

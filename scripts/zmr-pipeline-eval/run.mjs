@@ -6,7 +6,7 @@ import {resolve, join, dirname} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL, fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {sha256, HELDOUT_SHA256, validateFixture, sourceInput, budgetLedger, parseWireUsage, coverageRows} from './policy.mjs';
+import {sha256, HELDOUT_SHA256, validateFixture, sourceInput, budgetLedger, coverageRows, terminalProviderGuard, evaluationFetch, evaluationCostSummary, evaluationCompletion, runEvaluationRecalls} from './policy.mjs';
 const {values: args} = parseArgs({options:{
   live:{type:'boolean',default:false}, 'offline-smoke':{type:'boolean',default:false}, fixture:{type:'string',default:'/tmp/zmr15-heldout/heldout.json'},
   'candidate-repo':{type:'string'}, 'candidate-sha':{type:'string'}, out:{type:'string'}, prices:{type:'string'},
@@ -61,34 +61,26 @@ await writeFile(join(output,'build.log'),buildLog,{mode:0o600});
 const ledger=budgetLedger({budgetUsd:Number(args['budget-usd']),maxRequests:Number(args['max-requests']),prices:pricing.models});
 const originalFetch=globalThis.fetch;
 let currentStage='setup';
-globalThis.fetch=async(input,init)=>{
-  const request=new Request(input,init);
-  const url=new URL(request.url);
-  if (url.origin!=='https://openrouter.ai' || request.method!=='POST' || !url.pathname.endsWith('/chat/completions')) throw new Error('evaluation_unapproved_network_destination');
-  const body=await request.clone().json();
-  let row;
-  try{row=ledger.reserve(body);}catch(error){telemetry.budgetBlocks.push({stage:currentStage,reason:error.message,at:new Date().toISOString()});throw error;} // Counts SDK retries at actual HTTP boundary.
-  row.stage=currentStage;row.startedAt=new Date().toISOString();row.inputSha256=sha256(JSON.stringify(body));
-  const start=performance.now();
-  await save('wire-request-'+row.request+'.json',body); // No headers or key are persisted.
-  try {
-    let response;
+const quota=terminalProviderGuard();
+globalThis.fetch=evaluationFetch({ledger,quota,stage:()=>currentStage,
+  onBudgetBlock:row=>telemetry.budgetBlocks.push(row),
+  onRequest:(row,body)=>save('wire-request-'+row.request+'.json',body),
+  onResponse:(row,text)=>writeFile(join(output,'wire-response-'+row.request+'.txt'),text,{mode:0o600}),
+  onFinish:async()=>{telemetry.requests=ledger.rows;Object.assign(telemetry,evaluationCostSummary(ledger));if(quota.terminal)telemetry.providerQuota=quota.terminal;await save('run.json',telemetry);},
+  fetchImpl:async request=>{
+    const body=await request.clone().json(),row=ledger.rows.at(-1);let response;
     if(args['offline-smoke']){
       const classify=JSON.stringify(body.messages).includes('Classify an incoming memory');
       const content=classify?JSON.stringify({passageReviews:[],topics:[{topic:'Offline smoke',facts:[],evidenceQuotes:['Offline plumbing fixture'],evidenceAssignments:[],disposition:'evidence_only',confidence:1,pages:[],summary:'Offline smoke',question:null}],disposition:'evidence_only',confidence:1,summary:'Offline plumbing smoke only',tags:[],pages:[],question:null}):'Offline plumbing smoke only; no semantic evaluation.';
       const base={id:'offline-'+row.request,object:'chat.completion',created:1,model:body.model};
       const usage={prompt_tokens:1,completion_tokens:1,total_tokens:2,cost:0};
       response=body.stream?new Response('data: '+JSON.stringify({...base,object:'chat.completion.chunk',choices:[{index:0,delta:{role:'assistant',content},finish_reason:null}]})+'\n\ndata: '+JSON.stringify({...base,object:'chat.completion.chunk',choices:[{index:0,delta:{},finish_reason:'stop'}],usage})+'\n\ndata: [DONE]\n',{headers:{'content-type':'text/event-stream'}}):new Response(JSON.stringify({...base,choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage}),{headers:{'content-type':'application/json'}});
-    }else{telemetry.externalCalls++;response=await originalFetch(new Request(request,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(120000)])}));}
-    const text=await response.clone().text();
-    await writeFile(join(output,'wire-response-'+row.request+'.txt'),text,{mode:0o600});
-    ledger.complete(row,parseWireUsage(text),response.ok?'succeeded':'failed');row.httpStatus=response.status;
+    }else{telemetry.externalCalls++;response=await originalFetch(request);}
     return response;
-  } catch(error) {ledger.complete(row,null,'failed');row.errorClass=error.name;throw error;}
-  finally {row.latencyMs=performance.now()-start;telemetry.requests=ledger.rows;telemetry.exposureUsd=ledger.exposureUsd;await save('run.json',telemetry);}
-};
+  },
+});
 const load = path => import(pathToFileURL(join(candidate,path)).href);
-let queue, store, state;
+let queue, store, state, snapshots;
 try {
   const {createEngine,createBrainLlm,VaultRepo}=await load('packages/core/dist/index.js');
   const {SqliteStateStore}=await load('packages/core/dist/state/sqlite.js');
@@ -107,7 +99,7 @@ try {
   await writeFile(join(seed,'Index.md'),'# Evaluation memory\n\n'+Object.keys(fixture.seed_pages).map(path=>'[['+path.slice(0,-3)+']]').join('\n')+'\n');
   localGit(seed,'add','.');localGit(seed,'commit','-m','Frozen isolated evaluation source');localGit(seed,'push','origin','main');
   const repo=await VaultRepo.open({workdir:join(workspace,'work'),remoteUrl:bare});
-  const snapshots=async()=>{
+  snapshots=async()=>{
     const result={};
     async function walk(path,relative=''){for(const entry of (await readdir(path,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){if(entry.name==='.git')continue;const rel=relative+entry.name;
       if(entry.isSymbolicLink())throw new Error('Unexpected evaluation symlink');
@@ -117,7 +109,7 @@ try {
   const llmRaw=createBrainLlm({provider:'openrouter',apiKey:args['offline-smoke']?'offline-unused-key':process.env.ZMR_EVAL_OPENROUTER_KEY,classifyModel:'minimax/minimax-m3',askModel:args['ask-model'],
     onUsage:row=>telemetry.modelUsage.push({stage:currentStage,...row})});
   const llm=new Proxy(llmRaw,{get(target,property){const method=Reflect.get(target,property);if(typeof method!=='function')return method;
-    return async(...params)=>{const previous=currentStage;currentStage=String(property);const started=performance.now();
+    return async(...params)=>{quota.assertActive();const previous=currentStage;currentStage=String(property);const started=performance.now();
       const row={method:String(property),input:JSON.parse(JSON.stringify(params[0]??null))};telemetry.operations.push(row);
       try{const result=await method.apply(target,params);row.result=JSON.parse(JSON.stringify(result??null));return result;}catch(error){row.errorClass=error.name;throw error;}
       finally{row.latencyMs=performance.now()-started;currentStage=previous;}};}});
@@ -162,9 +154,11 @@ try {
     telemetry.invariants.archivedAudioMatches=sha256(await readFile(rawUrl))===telemetry.audioSha256&&receipt.rawArtifact.sha256===telemetry.audioSha256;
     telemetry.invariants.archivedTranscriptMatches=(await readFile(transcriptUrl,'utf8'))===fixture.transcript;
   }
+  telemetry.assignmentCoverage=coverageRows(fixture,telemetry.enrichmentJob.result,sourceOffset);
   // Exercise job coalescing and direct enrichment replay separately.
   const repeatedCapture=await engine.captureEvidence({...enrichmentInput,sourceId:input.sourceId});
   telemetry.invariants.sameEvidenceIdentity=repeatedCapture.evidenceRef===captured.evidenceRef;
+  quota.assertActive();
   const replayStart=ledger.rows.length;
   telemetry.directReplay=await engine.enrichEvidence(enrichmentInput);
   const afterReplay=await snapshots();await save('pages-after-replay.json',afterReplay);
@@ -175,28 +169,33 @@ try {
   telemetry.invariants.replayForbiddenPagesUnchanged=(fixture.forbidden_updates??[]).every(path=>before[path]===afterReplay[path]);
   telemetry.replayNetworkRequests=ledger.rows.length-replayStart;
   if(!args.audio){const prior=telemetry.enrichmentJob;const same=queue.enqueue('enrich_memory',enrichmentInput,'enrich:'+input.sourceId);telemetry.invariants.sameJobIdentity=same.id===prior.id;}
-  telemetry.assignmentCoverage=coverageRows(fixture,telemetry.enrichmentJob.result,sourceOffset);
   // Fresh engine and SQLite for each question/trial: no previous answer/conversation context.
-  for(const question of questions)for(let trial=1;trial<=3;trial++){
+  await runEvaluationRecalls({questions,quota,recalls:telemetry.recalls,runTrial:async question=>{
     const fresh=new SqliteStateStore(':memory:');const start=performance.now();
-    try{const answer=await create(fresh).ask(question.question);telemetry.recalls.push({id:question.id,trial,question:question.question,answer,latencyMs:performance.now()-start,semanticVerdict:'REVIEW_REQUIRED'});}
-    catch(error){telemetry.recalls.push({id:question.id,trial,errorClass:error.name,semanticVerdict:'FAILED_CALL'});}finally{fresh.close();}
-  }
+    try{return {answer:await create(fresh).ask(question.question),latencyMs:performance.now()-start};}finally{fresh.close();}
+  }});
   telemetry.invariants.recallDoesNotMutate=JSON.stringify(await snapshots())===JSON.stringify(afterReplay);
   telemetry.invariants.candidateSourceUnchanged=JSON.stringify(await sourceHashes())===JSON.stringify(telemetry.sourceHashes)&&git('rev-parse','HEAD')===args['candidate-sha'];
-  telemetry.acceptance=!Object.values(telemetry.invariants).every(Boolean)?'INVARIANT_FAILURE':args['offline-smoke']?'OFFLINE_PLUMBING_ONLY':'AWAITING_INDEPENDENT_SEMANTIC_REVIEW';
-  if(telemetry.acceptance==='INVARIANT_FAILURE')process.exitCode=1;
-  await save('semantic-review.json',{status:'REVIEW_REQUIRED',assignmentRows:telemetry.assignmentCoverage,
+  const completion=evaluationCompletion({quota,recalls:telemetry.recalls,plannedRecalls:questions.length*3,
+    budgetBlocks:telemetry.budgetBlocks,invariantFailed:!Object.values(telemetry.invariants).every(Boolean),offline:args['offline-smoke']});
+  telemetry.acceptance=completion.status;telemetry.recallCoverage=completion.recallCoverage;
+  if(telemetry.acceptance!=='AWAITING_INDEPENDENT_SEMANTIC_REVIEW'&&telemetry.acceptance!=='OFFLINE_PLUMBING_ONLY')process.exitCode=1;
+  await save('semantic-review.json',{status:telemetry.acceptance.startsWith('INCOMPLETE_')?telemetry.acceptance:'REVIEW_REQUIRED',assignmentRows:telemetry.assignmentCoverage,
     checks:['Review each new/changed claim for entailment and qualification','Review false LINK_SOURCE/lost distinctions','Verify correction history and unresolved conflicts','Review every mandatory recall answer in all three fresh sessions','Compute idea/candidate/operation recall from model traces, not source overlap alone'],
     falseWrites:null,unsupportedClaims:null,correctOperations:null,ideaRecall:null,candidateRecall:null});
-}catch(error){telemetry.acceptance='RUN_FAILED';telemetry.errorClass=error.name;telemetry.failureStage=currentStage;
+}catch(error){telemetry.acceptance=quota.terminal?'INCOMPLETE_PROVIDER_QUOTA':telemetry.budgetBlocks.length?'INCOMPLETE_BUDGET':'RUN_FAILED';telemetry.errorClass=error.name;telemetry.failureStage=currentStage;
   if(String(error.message).startsWith('evaluation_'))telemetry.errorCode=error.message;process.exitCode=1;
 }finally{
   // close waits for the real durable job; leave isolated workspace for review/recovery.
   await queue?.close();store?.close();state?.close();globalThis.fetch=originalFetch;
-  telemetry.finishedAt=new Date().toISOString();telemetry.requests=ledger.rows;telemetry.exposureUsd=ledger.exposureUsd;
+  telemetry.finishedAt=new Date().toISOString();telemetry.requests=ledger.rows;Object.assign(telemetry,evaluationCostSummary(ledger));
+  telemetry.recallCoverage=evaluationCompletion({quota,recalls:telemetry.recalls,plannedRecalls:questions.length*3}).recallCoverage;
+  if(quota.terminal){if(snapshots)await save('pages-after-quota.json',await snapshots());telemetry.acceptance='INCOMPLETE_PROVIDER_QUOTA';telemetry.providerQuota=quota.terminal;process.exitCode=1;
+    await save('semantic-review.json',{status:telemetry.acceptance,recallCoverage:telemetry.recallCoverage,providerQuota:quota.terminal,
+      assignmentRows:telemetry.assignmentCoverage??[],note:'Review observed partial evidence only; unstarted trials are unmeasured.'});}
+
   const latencies=ledger.rows.map(row=>row.latencyMs).filter(Number.isFinite).sort((a,b)=>a-b);
   telemetry.requestLatency={samples:latencies.length,p50:latencies[Math.max(0,Math.ceil(latencies.length*.5)-1)]??null,p95:latencies[Math.max(0,Math.ceil(latencies.length*.95)-1)]??null};
   await save('run.json',telemetry);
-  console.log(JSON.stringify({acceptance:telemetry.acceptance,output,requests:ledger.rows.length,exposureUsd:ledger.exposureUsd,semanticQuality:'NOT_AUTOMATICALLY_SCORED',surface:mode},null,2));
+  console.log(JSON.stringify({acceptance:telemetry.acceptance,output,requests:ledger.rows.length,...evaluationCostSummary(ledger),...(quota.terminal?{providerQuota:quota.terminal}:{}),semanticQuality:'NOT_AUTOMATICALLY_SCORED',surface:mode},null,2));
 }
