@@ -507,7 +507,19 @@ describe("BrainEngine", () => {
     const git = simpleGit(repo.path); await git.add(page); await git.commit("generic mixed answer fixture"); await git.push();
     const modelAnswer = `Unverified hypothesis: "${hypothesis}" (${capture.evidenceRef})\nBattery restriction: "${restriction}" (${capture.evidenceRef})`;
     llm.answerOverride = async (_input, tools) => {
-      const pageRead = JSON.parse(await tools.readNote!(page));
+      const discovery = await tools.searchVault!("Orchid");
+      expect(discovery).toContain(page);
+      expect(discovery).not.toContain("answerSupports");
+      expect(discovery).not.toContain("Source-backed fact candidates");
+      // Discovery must not spend the bounded fact-read allowance. All four
+      // explicit reads remain available and verify source-backed current facts.
+      let lastExplicit: any;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const explicit = lastExplicit = JSON.parse(await tools.readFacts!({ path: page }));
+        expect(explicit.facts.find((fact: any) => fact.key === "orchid.fact0").source.path).toBe(capture.evidenceRef);
+        expect(explicit.answerSupports.find((support: any) => support.key === "orchid.fact0").modes).toContain("current");
+      }
+      const pageRead = { ...JSON.parse(await tools.readNote!(page)), factView: lastExplicit };
       const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
       return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
         { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
