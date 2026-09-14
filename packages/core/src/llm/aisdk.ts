@@ -992,6 +992,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     let supportRead = input.answerSupportRead === true;
     let submittedAnswer: AnswerResult | undefined;
     let submissionAllowedThisStep = supportRead;
+    let finalAnswerStep = false;
     const submissionSchema = z.object({ supportSelections: z.array(z.object({
       id: z.string().regex(/^as_[a-f0-9]{24}$/),
       mode: z.enum(["current", "historical", "prior", "conflict", "raw_report"]),
@@ -1580,7 +1581,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // below), so usable tool-calling rounds = maxSteps - 1.
     const toolRounds = Math.max(1, this.maxSteps - 1);
     const budgetNote = input.answerSupportContract ? [
-      `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer before the final round; a completed authoritative action may return its receipt as prose."}`,
+      `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; the final round allows submission or ordinary prose but no action tools. A completed authoritative action may return its receipt as prose."}`,
       "Submission ends this turn immediately; the host renders the selected evidence. Do not produce a closing prose answer after submission.",
     ].join(" ") : [
       `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
@@ -1648,9 +1649,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       // recovery/judge call. Other action and conversation paths retain prose.
       prepareStep: ({ stepNumber }: { stepNumber: number }) => {
         submissionAllowedThisStep = supportRead && !authoritativePeerResult;
+        finalAnswerStep = stepNumber >= this.maxSteps-1;
         if (input.answerSupportContract && supportRead && !authoritativePeerResult) {
           if(input.answerSupportScope!=="memory_only") return stepNumber>=this.maxSteps-1
-            ? {activeTools:ordinaryAnswerTools,toolChoice:"none" as const}
+            ? {activeTools:["submit_memory_answer"],toolChoice:"auto" as const}
             : {activeTools:[...ordinaryAnswerTools,"submit_memory_answer"],toolChoice:"required" as const};
           const activeTools: Array<"submit_memory_answer"|"search_vault"|"read_note"|"list_pages"|"read_facts"|"search_entries"> = ["submit_memory_answer"];
           if (stepNumber < this.maxSteps-1) {
@@ -1804,6 +1806,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       if(name==="submit_memory_answer" || memoryReadNames.has(name) || !definition.execute) continue;
       const execute=definition.execute;
       definition.execute=async (args,options)=> {
+        if(input.answerSupportContract && finalAnswerStep) return "ERROR: the final answer round cannot execute action tools.";
         if(input.answerSupportScope === "memory_only" && input.answerSupportContract && supportRead && !authoritativePeerResult) return "ERROR: memory answer mode permits only bounded source reads or terminal support submission.";
         return execute(args,options);
       };

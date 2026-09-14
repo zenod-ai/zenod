@@ -42,6 +42,16 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   const result=await llm(3).answer(input,tools);expect(result.supportSelections).toHaveLength(1);
   expect(requests).toHaveLength(3);expect(requests[2].tools.map((t:any)=>t.function.name)).toEqual(["submit_memory_answer"]);expect(requests[2].tool_choice).toBe("required");
  });
+ it("permits mixed-chat submission after a penultimate read without enabling late actions",async()=>{
+  const action=vi.fn(async()=>"must not run");
+  const requests=wire([{calls:[read]},{calls:[submit,{name:"create_item",input:{input:"late"}}]}]);
+  const {answerSupportScope:_,...mixed}=input;
+  const result=await llm(2).answer(mixed,tools,undefined,undefined,{create_item:{description:"Create item",run:action}});
+  expect(action).not.toHaveBeenCalled();
+  expect(result.supportSelections).toEqual([{id,mode:"current"}]);
+  expect(requests).toHaveLength(2);expect(requests[1].tool_choice).toBe("auto");
+  expect(requests[1].tools.map((t:any)=>t.function.name)).toEqual(["submit_memory_answer"]);
+ });
  it("requires submission for host-pinned evidence even without a model read",async()=>{
   const requests=wire([{calls:[submit]}]);const result=await llm().answer({...input,answerSupportRead:true},tools);
   expect(requests[0].tool_choice).toBe("required");expect(result.supportSelections).toHaveLength(1);expect(requests).toHaveLength(1);
