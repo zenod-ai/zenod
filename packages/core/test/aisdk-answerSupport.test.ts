@@ -108,7 +108,7 @@ it('advertises exclusive seek/continuation and completes a valid continuation wi
   return JSON.stringify({body:'# Daily log',queryMatched:false,nextCursor:cursor,answerSupports:[],readPartial:true});
  });
  const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report'}]}}]}]);
- const result=await llm(3).answer(input,{searchChats:async()=>'',search:async()=>'',listPages:async()=>'',readNote});
+ const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',listPages:async()=>'',readNote});
  expect(result.supportSelections).toEqual([{id,mode:'raw_report'}]);expect(requests).toHaveLength(3);expect(readNote).toHaveBeenCalledTimes(2);
  const advertised=requests[0].tools.find((t:any)=>t.function.name==='read_note').function;
  expect(advertised.description).toContain('Never send query and cursor together');

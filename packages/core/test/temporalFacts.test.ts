@@ -34,6 +34,7 @@ describe("source-qualified temporal facts", () => {
     }
     const view = await projectFacts({ path: "Notes/Orchid.md" }, facts(raw), now, async ref => entries.get(ref)!);
     expect(view.facts.map(f => f.status)).toEqual(["conflict", "conflict"]); expect(view.facts[1]!.supersedes).toEqual([]);
+    expect(renderFactViews([view])).toContain("Unresolved conflict"); expect(renderFactViews([view])).not.toContain("Applied correction report");
     const historical = await projectFacts({ path: "Notes/Orchid.md", asOf: "2026-02-01" }, facts(raw), now, async ref => entries.get(ref)!);
     expect(historical.facts.map(f => f.status)).toEqual(["undated", "undated"]);
     expect(renderFactViews([historical])).toContain("Effective date unknown");
@@ -126,4 +127,15 @@ describe("source-qualified temporal facts", () => {
     expect(facts(positive)[0]!.verificationQuote).toBe(bound);
   });
 
+});
+
+it('keeps an ordinary incompatible reported assertion in conflict with the existing claim',async()=>{
+ const first=entry(1,'Orchid color is amber.'),second=entry(2,'Orchid color is blue.');
+ let raw=appendMemoryFacts(seed(),seed(),[proposal(first.content)],first);
+ raw=appendMemoryFacts(raw,raw,[proposal(second.content,{reportedConflict:true})],second);
+ const view=await projectFacts({path:'Notes/Orchid.md'},facts(raw),now,async ref=>ref===first.evidenceRef?first:second);
+ expect(view.facts.map(f=>f.status)).toEqual(['conflict','conflict']);
+ const rendered=renderFactViews([view]);
+ expect(rendered).toContain('Unresolved conflict');expect(rendered).toContain('Conflicting report (not applied as a correction)');
+ expect(rendered).not.toContain('Applied correction report');
 });
