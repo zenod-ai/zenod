@@ -2,7 +2,8 @@ import { expect, it } from 'vitest';
 import { prepareReconciliation, applyReconciliation } from '../src/engine/reconciliation.js';
 import { pageRevision, catalogSections } from '../src/vault/pages.js';
 import { parseNote, serializeNote } from '../src/vault/frontmatter.js';
-import { appendMemoryFacts, parseMemoryFacts, projectFacts } from "../src/engine/temporalFacts.js";
+import { appendMemoryFacts, parseMemoryFacts, projectFacts, renderFactViews } from "../src/engine/temporalFacts.js";
+import { AnswerSupportRegistry } from '../src/engine/answerSupport.js';
 import type { MemoryEntry } from '../src/types.js';
 const ref = 'Log/2026-09-13.md#^e-000001';
 const evidence = (content: string): MemoryEntry => ({evidenceRef:ref, path:'Log/2026-09-13.md',anchor:'e-000001',title:'source',content,source:'mcp',verbatim:true,capturedAt:'2026-09-13T10:00:00Z',url:'https://example.invalid/source',provider:'github'});
@@ -413,4 +414,29 @@ it.each([
  expect(fact.statement).toBe(source);expect(fact.correctionQuote).toBe(source);expect(fact.legacySupersedes?.statement).toBe(target.text);
  const replay=await applyReconciliation(input(result.content,source),[{...op('supersede',source,target.id),replacementQuote:null,correctionQuote:source}]);
  expect(replay.content).toBe(result.content);
+});
+
+it.each([
+ ['Correction: the session will no longer be on 12 October; it will be on 19 October.', 'A colleague reports 26 October. This is unconfirmed and does not change our agreed 19 October.'],
+ ['Corrijo la fecha: la sesión ya no será el 12 de octubre; será el 19 de octubre.', 'Un colaborador afirma que será el 26 de octubre. No he confirmado esa afirmación y no estoy corrigiendo nuestra fecha acordada del 19.'],
+])('distinguishes applied correction provenance from retained conflict without declaring a winner: %s',async(correction,report)=>{
+ const source=correction+'\n\n'+report, raw='# A\nThe session is on 12 October.\n[[Index]]\n';
+ const base=input(raw,source);
+ const prepared=prepareReconciliation({...base.input,ideas:[{id:'change',topic:'Changed date',sourceIds:['p1']},{id:'report',topic:'Reported alternative',sourceIds:['p1']}]});
+ const target=prepared.request.statements[0]!.id;
+ const result=await applyReconciliation(prepared,[{...op('supersede',correction,target),ideaIds:['change'],replacementQuote:null,correctionQuote:correction},{...op('conflict',report,target),ideaIds:['report']}]);
+ const metadata=parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts);
+ const view=await projectFacts({path:'Projects/A.md'},metadata,new Date('2026-09-14'),async()=>evidence(source));
+ expect(view.facts.map(f=>f.status)).toEqual(['conflict','conflict']);
+ const rendered=renderFactViews([view]);
+ expect(rendered).toContain('Applied correction report');expect(rendered).toContain('Conflicting report (not applied as a correction)');
+ expect(rendered).toContain(correction);expect(rendered).toContain(report);expect(rendered).toContain('Prior note statement (superseded');
+ const registry=new AnswerSupportRegistry();const hints=registry.addFacts(view);
+ expect(hints.filter(h=>h.kind==='fact').map(h=>h.modes)).toEqual([['conflict'],['conflict']]);
+ const selected=registry.render(hints.map(h=>({id:h.id,mode:h.modes[0]!})));
+ expect(selected.valid).toBe(true);expect(selected.text).toContain('Applied correction report');expect(selected.text).toContain(report);
+ const past=await projectFacts({path:'Projects/A.md',asOf:'2026-09-01'},metadata,new Date('2026-09-14'),async()=>evidence(source));
+ expect(past.facts.map(f=>f.status)).toEqual(['undated','undated']);expect(renderFactViews([past])).toContain('Effective date unknown');
+ const missing=await projectFacts({path:'Projects/A.md'},metadata,new Date('2026-09-14'),async()=>{throw Error('unavailable')});
+ expect(renderFactViews([missing])).not.toContain('Applied correction report');
 });
