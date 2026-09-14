@@ -267,7 +267,17 @@ export function renderFactViews(views: FactView[]): string {
     if (!visible.length) lines.push("No supported active claim established in this selected note/key scope. This is not proof of absence elsewhere.");
     for (const fact of visible) {
       if (fact.status === "unsupported") { lines.push(`- ${fact.key}: unsupported record; original evidence unavailable or mismatched.`); continue; }
-      lines.push(`- ${fact.status === "conflict" ? "Unresolved conflict — " : fact.status === "undated" ? "Effective date unknown — " : ""}${fact.origin === "synthetic" ? "Synthetic fixture" : "User report"}: ${JSON.stringify(fact.statement)} [${fact.evidenceRef}](${fact.source!.url}). Effective: ${fact.effectiveDate ?? "unknown"}; evidence captured: ${fact.evidenceDate ?? "unknown"}.${fact.verificationQuote ? ` Reported verification scope: ${JSON.stringify(fact.verificationQuote)}.` : " Verification scope: unknown."}`);
+      // Describe the recorded operation, not a winner among competing claims.
+      // A correction label requires the already source-validated history/edge;
+      // merely carrying a correctionQuote or a model-authored ID is insufficient.
+      const appliedCorrection = !fact.unresolvedCorrection && !fact.reportedConflict && (
+        view.priorStatements?.some(prior => prior.statementId === fact.legacySupersedes?.statementId && prior.supersededByEvidenceRef === fact.evidenceRef)
+        || fact.supersedes.some(id => view.facts.some(target => target.id === id && target.status === "superseded" && supportsCorrection(fact, target)))
+      );
+      const provenance = appliedCorrection ? "Recorded correction report — "
+        : fact.reportedConflict ? "Conflicting report (not applied as a correction) — "
+        : fact.status === "conflict" ? "Unresolved conflict — " : "";
+      lines.push(`- ${provenance}${fact.status === "undated" ? "Effective date unknown — " : ""}${fact.origin === "synthetic" ? "Synthetic fixture" : "User report"}: ${JSON.stringify(fact.statement)} [${fact.evidenceRef}](${fact.source!.url}). Effective: ${fact.effectiveDate ?? "unknown"}; evidence captured: ${fact.evidenceDate ?? "unknown"}.${fact.verificationQuote ? ` Reported verification scope: ${JSON.stringify(fact.verificationQuote)}.` : " Verification scope: unknown."}`);
     }
     for (const prior of view.priorStatements ?? []) lines.push(`- Prior note statement (superseded; original evidence/date unknown): ${JSON.stringify(prior.statement)} — ${prior.path}, ${prior.provider} revision ${prior.revision}; correction evidence ${prior.supersededByEvidenceRef}.`);
     lines.push(...view.warnings);

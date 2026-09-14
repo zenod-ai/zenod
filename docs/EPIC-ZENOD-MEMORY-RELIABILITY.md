@@ -106,14 +106,13 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: topic destination repair; production infrastructure ready
-Last verified: 2026-09-15 Europe/Paris
+Phase: quota restored; DeepSeek organizing-model acceptance resumed
+Last verified: 2026-09-14 Europe/Paris
 Integration target: main
-Fresh base commit: 05a35195d986cbf91bc467ed01de3f03053c96d1 (ZMR-27/28 and evaluator deadline merged); ZMR-29 reviewed b7d258f product tree equals tested06a8832, CI pending.
-Next action: complete ZMR-30 #1286 topic-owned destination validation within the existing retry, independent review and repeat semantic acceptance; then untouched ASR cases, fresh recovery, exact image deployment and isolated live checks. User reconfirmed continue until deployed; no permission or credential wait.
-Blockers: actual06a88321da8bc3adcafa495fd8f7205b49f93380 run finished all18recalls/59requests at22:05:17UTC, cost exposure$0.224034252. Five known-project ideas had empty per-topic destinations despite correct aggregate pages; independent semantic scoring is completing. Provider routing avoided the earlier deadline; one upstream502 malformed response recovered within retry. This candidate is not accepted for deployment. Original VN raw evidence is preserved; original summary failures were the restored monthly key limit.
-Acceptance boundary: existing evidence/enrichment pipeline; approved organizer deepseek/deepseek-v4.1-flash, reasoning none, providers together,modal; ask remains x-ai/grok-4.3. No new service, historical bulk refiling or Phylax deployment. Native ASR and isolated MCP cannot establish WhatsApp phone acceptance. Public runtime remains631f85109dfa45fed95394a1e94d2d709c373fe6, independently verified22:06:39UTC; queue clear, storage adequate, fresh backup/deployment not yet performed.
-
+Fresh base commit: 56c2308ebb4ccf180776a3500f4e457e7d912db8 (integration main; ZMR-24/25 proof base 2eb3cc446fba574e7831f72f591cc68f1a0a1ef3; no rebases during proof)
+Next action: repair failed DeepSeek low regression through ZMR-27/28, independently review and rerun bounded acceptance, then ASR, recovery, deployment and production checks. User explicitly reconfirmed continue until deployed; no permission or credential wait.
+Blockers: exact third candidate achieved 5/10 minimal meaning outcomes; two completed answers failed the prompt-only format contract, and 16 answers remain unmeasured after provider monthly-quota failure. The existing key limit was restored by Jordi and verified read-only; paid acceptance has resumed. Production requires semantic acceptance and verified recovery; genuine phone acceptance still needs an isolated route.
+Acceptance boundary: existing evidence/enrichment pipeline; user-approved organizing-model switch to DeepSeek V4.1 Flash through the same OpenRouter provider; no new service or historical refiling. ZMR-8 broader acceptance remains open; ZMR-9/10 deferred. Public runtime remains 631f85109dfa45fed95394a1e94d2d709c373fe6; no new rollout.
 
 ### Historical production and repair state
 
@@ -273,7 +272,6 @@ Dependencies control delivery. #1237–#1243 are approved; #1254–#1256 repair 
 | [ZMR-29 #1284](https://github.com/zenod-ai/zenod/issues/1284) | repair F | BUILD existing organizer adapter | 90 min checkpoint | Ticket worker | /root/zmr11_worker | Reliable same-model routing and complete correction reports | ready | d17 bounded deadline run | /Users/jordi/Documents/GitHub/wt-zmr-29 | codex/zmr-29 | this control-plane commit | Taller120s timeout; Aula ellipticalreplacement | 2026-09-14 | Implement minimal adapter/wire repair; independent review |
 | [ZMR-30 #1286](https://github.com/zenod-ai/zenod/issues/1286) | repair G | FIX topic destination contract | bounded correction | Ticket worker | /root/zmr_acceptance_design | Reject contradictory empty destinations; reuse retry | ready | 06a8832 actual response | /Users/jordi/Documents/GitHub/wt-zmr-30 | codex/zmr-30 | 06a88321da8bc3adcafa495fd8f7205b49f93380 | Five substantive topics omit own pages | 2026-09-15 | Implement and independently review; repeat affected acceptance |
 | [ZMR-31 #1288](https://github.com/zenod-ai/zenod/issues/1288) | repair H | FIX recall contracts | bounded provenance repair | Ticket worker | /root/zmr12_worker | Explicit continuation; correction vs conflicting-report rendering | ready | dd47f412 actual run | /Users/jordi/Documents/GitHub/wt-zmr-31 | codex/zmr-31 | dd47f412fb9f8df727dd3819fa3b4642acfede5b | 14/18 answers,10/10 filing | 2026-09-15 | Preserve conflict safety; independent review and rerun |
-| [ZMR-32 #1289](https://github.com/zenod-ai/zenod/issues/1289) | repair H | FIX raw quote addressing | whitespace-only mapping | Ticket worker | /root/release_preflight | Preserve exact raw bytes while resolving line wraps | ready | dd47 real ASR | /Users/jordi/Documents/GitHub/wt-zmr-32 | codex/zmr-32 | dd47f412fb9f8df727dd3819fa3b4642acfede5b | Accurate ASR rejected after model whitespace folding | 2026-09-15 | Pure bounded address resolver; adversarial tests and review |
 
 ### Earlier release ledger (historical assignments)
 
