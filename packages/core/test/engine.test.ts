@@ -519,11 +519,12 @@ describe("BrainEngine", () => {
         expect(explicit.facts.find((fact: any) => fact.key === "orchid.fact0").source.path).toBe(capture.evidenceRef);
         expect(explicit.answerSupports.find((support: any) => support.key === "orchid.fact0").modes).toContain("current");
       }
-      const pageRead = { ...JSON.parse(await tools.readNote!(page)), factView: lastExplicit };
+      const pageRead = JSON.parse(await tools.readNote!(page));
+      expect(pageRead.factView).toBeUndefined(); // Explicit scope remains authoritative.
       const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
       return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
         { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
-        { id: pageRead.factView.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
+        { id: lastExplicit.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
       ] };
     };
     const result = await e.ask("What is the Orchid hypothesis and what batteries does the workshop not repair?");
