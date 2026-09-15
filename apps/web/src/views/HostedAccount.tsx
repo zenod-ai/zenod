@@ -261,11 +261,25 @@ export function HostedAccount() {
     <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-5 p-6">
       <header className="flex items-center justify-between gap-4 border-b border-border pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <img
-            src="/plates/zenod-plate-charcoal.jpg"
-            alt=""
-            className="size-10 border border-border object-cover"
-          />
+          <svg
+            viewBox="0 0 64 64"
+            role="img"
+            aria-label="Zenod"
+            className="size-10 shrink-0 border border-border"
+          >
+            <rect width="64" height="64" fill="#f3eee2" />
+            <text
+              x="32"
+              y="47"
+              fontFamily="Bodoni 72, Didot, Georgia, serif"
+              fontSize="46"
+              fontWeight="700"
+              textAnchor="middle"
+              fill="#2c241a"
+            >
+              Z
+            </text>
+          </svg>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">Zenod account</h1>
             <p className="truncate text-sm text-muted-foreground">
