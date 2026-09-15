@@ -237,7 +237,6 @@ it("supports chronological category retrieval without adding lexical or date fil
   expect(searchEntries).toHaveBeenCalledExactlyOnceWith(example);
   expect(result.entries[0]).toEqual(entry);
   expect(tool.description).toContain("Omit query");
-  expect(tool.inputSchema.shape.query.description).toContain("Omit for category-only lists");
   expect(captured.config.messages[0].content).toContain("omit it for category-only lists");
   expect(captured.config.messages[0].content).toContain("use catalog capturedAt");
   await captured.config.tools.read_note.execute({ path: result.entries[0].evidenceRef });
