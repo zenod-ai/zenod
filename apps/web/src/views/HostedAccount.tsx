@@ -162,6 +162,23 @@ export function HostedAccount() {
             </Button>
           </AlertDescription>
         </Alert>
+        <footer className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <a className="underline" href="https://zenod.dev/legal/terms.html">
+            Terms of Service
+          </a>
+          <a className="underline" href="https://zenod.dev/legal/privacy.html">
+            Privacy Policy
+          </a>
+          <a
+            className="underline"
+            href="https://zenod.dev/legal/legal-notice.html"
+          >
+            Legal notice
+          </a>
+          <a className="underline" href="mailto:support@zenod.dev">
+            Support
+          </a>
+        </footer>
       </main>
     )
   }
@@ -179,6 +196,23 @@ export function HostedAccount() {
             </Button>
           </AlertDescription>
         </Alert>
+        <footer className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <a className="underline" href="https://zenod.dev/legal/terms.html">
+            Terms of Service
+          </a>
+          <a className="underline" href="https://zenod.dev/legal/privacy.html">
+            Privacy Policy
+          </a>
+          <a
+            className="underline"
+            href="https://zenod.dev/legal/legal-notice.html"
+          >
+            Legal notice
+          </a>
+          <a className="underline" href="mailto:support@zenod.dev">
+            Support
+          </a>
+        </footer>
       </main>
     )
   }
@@ -398,6 +432,23 @@ export function HostedAccount() {
           </Card>
         </>
       )}
+      <footer className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+        <a className="underline" href="https://zenod.dev/legal/terms.html">
+          Terms of Service
+        </a>
+        <a className="underline" href="https://zenod.dev/legal/privacy.html">
+          Privacy Policy
+        </a>
+        <a
+          className="underline"
+          href="https://zenod.dev/legal/legal-notice.html"
+        >
+          Legal notice
+        </a>
+        <a className="underline" href="mailto:support@zenod.dev">
+          Support
+        </a>
+      </footer>
     </main>
   )
 }
