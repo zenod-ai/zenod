@@ -45,7 +45,7 @@ describe("explicit source selection contract",()=>{
     const registry=new AnswerSupportRegistry();expect(registry.addPassage(passage("Unfinished qualification",{truncated:true}))).toEqual([]);
     expect(registry.addPassage(passage("Missing preceding qualification",{omittedBefore:true,version:"other"}))).toEqual([]);
     const hints=registry.addPassage(passage("One complete report.\n\nAnother complete report.",{version:"complete"}));
-    expect(hints).toHaveLength(2);expect(hints.every(h=>!h.excerpt?.includes("source: test"))).toBe(true);
+    expect(hints.filter(h=>h.kind==="passage")).toHaveLength(2);expect(hints.filter(h=>h.kind==="source_summary")).toHaveLength(1);expect(hints.every(h=>!h.excerpt?.includes("source: test"))).toBe(true);
   });
   it("offers focused complete sentences from long bilingual source without unrelated details",()=>{
     const registry=new AnswerSupportRegistry();

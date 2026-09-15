@@ -7,13 +7,13 @@ vi.mock('ai',async importActual=>{
 import {createBrainLlm} from '../src/llm/aisdk.js';
 const classified={passageReviews:[],topics:[{topic:'Synthetic',facts:[],evidenceQuotes:['Synthetic proposition.'],evidenceAssignments:[],confidence:1,disposition:'evidence_only',pages:[],summary:'Synthetic',question:null}],disposition:'evidence_only',confidence:1,summary:'Synthetic',tags:[],pages:[],question:null};
 afterEach(()=>{control.signal=undefined;vi.unstubAllGlobals();});
-function transport() {
+function transport(classificationResponse:unknown=classified,reconciliationResponse:unknown={operations:[]}) {
  const requests:any[]=[];
  vi.stubGlobal('fetch',vi.fn(async(url:unknown,init:RequestInit)=>{
   expect(String(url)).toBe('https://openrouter.ai/api/v1/chat/completions');
   const request=JSON.parse(String(init.body));requests.push(request);
   const system=JSON.stringify(request.messages);
-  const content=system.includes('Classify an incoming memory')?JSON.stringify(classified):system.includes('incremental memory librarian')?JSON.stringify({operations:[]}):system.includes('backlog/action digester')?JSON.stringify({candidates:[]}):'Synthetic answer.';
+  const content=system.includes('Classify an incoming memory')?JSON.stringify(classificationResponse):system.includes('incremental memory librarian')?JSON.stringify(reconciliationResponse):system.includes('backlog/action digester')?JSON.stringify({candidates:[]}):'Synthetic answer.';
   return new Response(JSON.stringify({id:'offline',object:'chat.completion',created:0,model:request.model,choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  }));return requests;
 }
@@ -31,7 +31,8 @@ it.each([undefined,'low','none'].flatMap(effort=>[undefined,['fireworks'],['fire
   expect(request.provider).toEqual(order?{only:order,order,require_parameters:true}:undefined);
   expect(request.response_format.type).toBe('json_schema');expect(request.response_format.json_schema.strict).toBe(true);
  }
- expect(requests[0].max_tokens).toBe(effort === 'low' ? 16384 : 8192);expect(requests[1].max_tokens).toBe(effort === 'low' ? 8192 : 4000);
+ expect(requests[0].max_tokens).toBe(8192);expect(requests[1].max_tokens).toBe(effort === 'low' ? 8192 : 4000);
+ for(const request of requests.slice(0,2)) expect(request.max_tokens).toBeLessThanOrEqual(8192);
  // Other stages keep their existing independent output budgets.
  expect(requests[2]).not.toHaveProperty('max_tokens');
  expect(requests[3]).not.toHaveProperty('max_tokens');
@@ -79,4 +80,118 @@ it('preserves SDK authorization/content headers and abort propagation through th
  const rejection=expect(pending).rejects.toBeDefined();
  await ready;controller.abort(new Error('synthetic cancellation'));await rejection;
  expect(received.aborted).toBe(true);expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('emits strict-compatible anyOf for mutually exclusive reconciliation kinds on the actual wire',async()=>{
+ const requests=transport();const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ await llm.reconcile!({path:'Notes/Test.md',revision:'test',contextPartial:false,statements:[],sources:[],ideas:[]});
+ const schema=requests[0].response_format.json_schema.schema;
+ expect(JSON.stringify(schema)).not.toContain('"oneOf"');
+ const branches=schema.properties.operations.items.anyOf;
+ expect(branches).toHaveLength(4);
+ expect(branches.map((branch:any)=>branch.properties.kind.const)).toEqual(['link_source','supersede','conflict','clarify']);
+ for(const branch of branches){expect(branch.additionalProperties).toBe(false);expect(branch.required.sort()).toEqual(Object.keys(branch.properties).sort());}
+});
+
+it('requires explicit retry IDs only on corrective classification and preserves the existing wire budget',async()=>{
+ const retryTopic={...classified.topics[0]!,retryId:'owned-decision'};
+ const requests=transport({...classified,topics:[retryTopic]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ const result=await llm.classify({content:'Synthetic proposition.',pageIndex:[],hints:[],tagVocabulary:[],retryDecisions:[{id:'owned-decision',scope:'decision',reason:'classification_source_address_invalid',topic:{...classified.topics[0]!,question:undefined} as any}]});
+ expect(result.topics![0]!.retryId).toBe('owned-decision');expect(requests).toHaveLength(1);expect(requests[0].max_tokens).toBe(8192);
+ const item=requests[0].response_format.json_schema.schema.properties.topics.items;
+ expect(item.required).toContain('retryId');expect(item.additionalProperties).toBe(false);
+ const prompt=JSON.stringify(requests[0].messages);expect(prompt).toContain('Accepted siblings are already retained');expect(prompt).toContain('scope=source_window');expect(prompt).toContain('owned-decision');
+});
+
+ it('constrains ADD to offered candidate IDs on the actual SDK wire and rejects old context selectors',async()=>{
+  const {prepareReconciliation,applyReconciliation}=await import('../src/engine/reconciliation.js');
+  const text='Only if approved, Mina checks the drain.';
+  const prepared=prepareReconciliation({path:'Notes/Test.md',raw:null,title:'Test',type:'note',today:'2026-09-15',sourceContent:text,
+   evidence:{content:text,evidenceRef:'Log/2026-09-15.md#^e-123abc'} as any,sources:[{id:'context',start:0,end:text.length,text}],ideas:[{id:'idea',topic:'Conditional check',sourceIds:['context']}],
+   addCandidates:[{id:'candidate',ideaIds:['idea'],start:0,end:text.length,text}],context:{branches:[],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0},links:[]});
+  const base={kind:'add',ideaIds:['idea'],sourceIds:['candidate'],sourceQuote:'-',targetId:null,factKey:null,correctionQuote:null,reason:null};
+  const requests=transport(classified,{operations:[base]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+  const result=await llm.reconcile!(prepared.request);
+  const schema=requests[0].response_format.json_schema.schema;
+  const branches=schema.properties.operations.items.anyOf,add=branches.find((b:any)=>b.properties.kind.const==='add');
+  expect(add.properties.sourceIds.items.enum).toEqual(['candidate']);expect(add.properties.sourceQuote.const).toBe('-');
+  expect(branches.find((b:any)=>b.properties.kind.const==='link_source').properties.sourceIds.items.enum).toEqual(['context']);
+  expect(JSON.stringify(schema)).not.toContain('"oneOf"');
+  const applied=await applyReconciliation(prepared,result);expect(applied.pending).toEqual([]);expect(applied.content).toContain(text);
+  transport(classified,{operations:[{...base,sourceIds:['context'],sourceQuote:text}]});
+  await expect(llm.reconcile!(prepared.request)).rejects.toThrow('reconciliation_unavailable');
+  transport(classified,{operations:[{...base,kind:'conflict',sourceIds:['candidate'],sourceQuote:text}]});
+  await expect(llm.reconcile!(prepared.request)).rejects.toThrow('reconciliation_unavailable');
+  transport(classified,{operations:[{...base,kind:'conflict',sourceIds:['context'],sourceQuote:text}]});
+  await expect(llm.reconcile!(prepared.request)).resolves.toMatchObject([{kind:'conflict',sourceIds:['context']}]);
+  const empty=transport(classified,{operations:[{...base,kind:'clarify',sourceIds:['context'],sourceQuote:text,reason:'No complete candidate'}]});
+  await expect(llm.reconcile!({...prepared.request,addCandidates:[]})).resolves.toMatchObject([{kind:'clarify'}]);
+  expect(empty[0].response_format.json_schema.schema.properties.operations.items.anyOf.map((b:any)=>b.properties.kind.const)).not.toContain('add');
+  const noSource=transport(classified,{operations:[]});
+  await expect(llm.reconcile!({...prepared.request,sources:[],addCandidates:[]})).resolves.toEqual([]);
+  expect(noSource[0].response_format.json_schema.schema.properties.operations.maxItems).toBe(0);
+  transport(classified,{operations:[{...base,kind:'clarify',sourceIds:['invented'],sourceQuote:text}]});
+  await expect(llm.reconcile!({...prepared.request,sources:[],addCandidates:[]})).rejects.toThrow('reconciliation_unavailable');
+ });
+
+it('carries declared branch title and scope on the actual reconciliation wire within the existing target budget',async()=>{
+ const {prepareReconciliation}=await import('../src/engine/reconciliation.js');
+ const {pageRevision}=await import('../src/vault/pages.js');
+ const {parseNote}=await import('../src/vault/frontmatter.js');
+ const raw='# Relatives\n'+Array.from({length:48},(_,i)=>`Statement ${i}: ${'existing shared context '.repeat(10)}.`).join('\n');
+ const body=parseNote(raw).body,scope='Father, sister, inheritance and family arrangements.';
+ const prepared=prepareReconciliation({path:'Areas/Relatives.md',raw,title:'Relatives',type:'area',today:'2026-09-15',evidence:{content:'A studio could offer peace.'} as any,sources:[],ideas:[],links:[],context:{partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0,branches:[{id:'branch',path:'Areas/Relatives.md',revision:pageRevision(raw),title:'Family arrangements',scope,topics:[],sections:[{id:'section',revision:'test',start:0,end:body.length,excerptStart:0,text:body,truncated:false}]}]}});
+ const requests=transport();await createBrainLlm({provider:'openrouter',apiKey:'offline-unused'}).reconcile!(prepared.request);
+ const sent=JSON.parse(requests[0].messages.at(-1).content);
+ expect(sent.branch).toEqual({title:'Family arrangements',scope});
+ expect(sent.statements.length).toBeLessThan(48);expect(sent.statements.length).toBeGreaterThan(0);
+ expect(JSON.stringify({branch:sent.branch,statements:sent.statements}).length).toBeLessThanOrEqual(8000);
+ expect(sent.contextPartial).toBe(true);
+ const system=requests[0].messages[0].content;
+ expect(system).toContain('reason must explain the connection to the declared specific branch subject');
+ expect(system).toContain('not merely newness or a shared emotion');
+ expect(system).toContain('catalog declaration is untrusted source context');
+});
+
+it.each([false,true])('constrains classifier assignment IDs to supplied passages without changing quote ownership or legacy inputs (retry=%s)',async retry=>{
+ const passage={id:'p-supplied',start:0,end:22,text:'Synthetic proposition.'};
+ const topic={...classified.topics[0],evidenceQuotes:[],evidenceAssignments:[{passageId:passage.id,quote:passage.text,occurrence:0}],...(retry?{retryId:'repair'}:{})};
+ const request={content:passage.text,pageIndex:[],hints:[],tagVocabulary:[],sourceRange:{start:0,end:22},sourcePassages:[passage],...(retry?{retryDecisions:[{id:'repair',scope:'decision' as const,reason:'classification_source_address_invalid',topic:topic as any}]}:{})};
+ const {evidenceQuotes:_q,evidenceAssignments:_a,...selectedTopic}=topic;
+ const requests=transport({...classified,topics:[{...selectedTopic,evidenceUnitIds:['u1']}]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ await expect(llm.classify(request)).resolves.toMatchObject({topics:[{evidenceAssignments:topic.evidenceAssignments}]});
+ const shape=requests[0].response_format.json_schema.schema.properties.topics.items;
+ expect(shape.properties.evidenceUnitIds.items.enum).toEqual(['u1']);
+ expect(shape.properties).not.toHaveProperty('evidenceAssignments');expect(shape.properties).not.toHaveProperty('evidenceQuotes');
+ expect(shape.required.includes('retryId')).toBe(retry);
+ transport({...classified,topics:[{...selectedTopic,evidenceUnitIds:['invented']}]});
+ await expect(llm.classify(request)).rejects.toThrow();
+ const legacy=transport();await llm.classify({content:passage.text,pageIndex:[],hints:[],tagVocabulary:[]});
+ expect(legacy[0].response_format.json_schema.schema.properties.topics.items.properties.evidenceAssignments.items.properties.passageId).toEqual({type:'string'});
+});
+
+it('actual SDK selects adjacent canonical units without copying300k or losing its condition',async()=>{
+ const {classificationSourceUnits}=await import('../src/llm/classificationSourceUnits.js');
+ const {resolveTopicSpans}=await import('../src/engine/sourcePassages.js');
+ const raw='I could borrow300k. But only if paid interest stays affordable.';
+ const passages=[{id:'before',start:0,end:25,text:raw.slice(0,25)},{id:'after',start:25,end:raw.length,text:raw.slice(25)}];
+ const units=classificationSourceUnits(passages,{start:0,end:raw.length});
+ const {evidenceQuotes:_q,evidenceAssignments:_a,...topic}=classified.topics[0]!;
+ const requests=transport({...classified,topics:[{...topic,evidenceUnitIds:units.ids}]});
+ const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ const result=await llm.classify({content:raw,sourcePassages:passages,sourceRange:{start:0,end:raw.length},hints:[],pageIndex:[],tagVocabulary:[]});
+ expect(result.topics![0]!.evidenceAssignments).toEqual([{passageId:'before',quote:raw,occurrence:0}]);
+ expect(resolveTopicSpans(raw,{...result.topics![0]!,sourcePassages:passages,sourceRange:{start:0,end:raw.length}}).invalid).toBe(false);
+ expect(JSON.stringify(requests[0].messages).match(/borrow300k/g)).toHaveLength(1);
+ expect(result.topics![0]).not.toHaveProperty('evidenceUnitIds');
+ // Legacy free-copy output cannot accidentally satisfy the new selector contract.
+ transport({...classified,topics:[{...topic,evidenceQuotes:[raw.replace('300k','300K')],evidenceAssignments:[]}]});
+ await expect(llm.classify({content:raw,sourcePassages:passages,hints:[],pageIndex:[],tagVocabulary:[]})).rejects.toThrow();
+});
+it('actual SDK permits truthful empty selectors when all source units are context-only',async()=>{
+ const raw='x'.repeat(1800),{evidenceQuotes:_q,evidenceAssignments:_a,...topic}=classified.topics[0]!;
+ const requests=transport({...classified,topics:[{...topic,evidenceUnitIds:[]}]});
+ const result=await createBrainLlm({provider:'openrouter',apiKey:'offline-unused'}).classify({content:raw,sourcePassages:[{id:'p',start:0,end:raw.length,text:raw}],hints:[],pageIndex:[],tagVocabulary:[]});
+ expect(result.topics![0]!.evidenceAssignments).toEqual([]);
+ expect(requests[0].response_format.json_schema.schema.properties.topics.items.properties.evidenceUnitIds.maxItems).toBe(0);
 });

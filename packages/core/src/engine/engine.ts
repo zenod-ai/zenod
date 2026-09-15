@@ -1,4 +1,7 @@
-import { checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
+import {ownedFilingReviews,unassignedFilingSpans,mergeFilingReviews} from "./filingCoverage.js";
+import {safeCandidateClassification} from "./meaningNotes.js";
+import {ClassificationDecisions} from "./classificationDecisions.js";
+import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -405,6 +408,7 @@ function mergeSegmentClassifications(classifications: Classification[]): Classif
   return {
     topics: classifications.flatMap((item) => item.topics ?? []),
     reviewedSourceSpans: classifications.flatMap(item => item.reviewedSourceSpans ?? []),
+    passageReviews: classifications.flatMap(item=>item.passageReviews??[]),
     confidence: Math.min(...classifications.map((item) => item.confidence)),
     summary: classifications.map((item) => item.summary).join("; ").slice(0, 240),
     tags: [...new Set(classifications.flatMap((item) => item.tags))],
@@ -547,7 +551,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   async function safeReadRevision(): Promise<VaultRevision> {
     assertVault(repo);
-    return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); });
+    return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); }, 0);
   }
 
   async function syncForRead(): Promise<void> {
@@ -662,7 +666,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false, onReadBusy?: () => void): VaultReadTools {
+    // Parallel tools in one turn share only the in-flight revision probe. They
+    // must not mistake each other's brief lock for a background filing writer.
+    let revisionProbe: Promise<VaultRevision> | undefined;
+    const readRevision = (): Promise<VaultRevision> => {
+      if (revisionProbe) return revisionProbe;
+      revisionProbe = safeReadRevision().catch(error => {
+        if (error instanceof VaultWriteBusyError) { onReadBusy?.(); throw new Error("filing_in_progress: Memory filing is in progress. Please retry shortly; no coherent source was read."); }
+        throw error;
+      }).finally(() => { revisionProbe = undefined; });
+      return revisionProbe;
+    };
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
     const searchChats = async (query: string) => {
@@ -686,7 +701,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return {
       readFacts: async (input) => {
         const note = await getNote(vaultPath, input.path, sourceResolver);
-        const revision = await safeReadRevision();
+        const revision = await readRevision();
         return JSON.stringify(await projectFacts({ ...input, path: note.path }, note.frontmatter.memoryFacts, now(), async ref => {
           const [path, anchor] = ref.split("#^") as [string, string];
           await getNote(vaultPath, path, sourceResolver); // containment/symlink guard shared with ordinary reads
@@ -712,7 +727,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         } } satisfies EntrySearchResult);
       } } : {}),
       readNote: async (path: string, readOptions?: NoteReadOptions) => {
-        const revision = await safeReadRevision();
+        const revision = await readRevision();
         const anchors = path.includes("#") ? [] : pinnedRefs
           .filter((ref) => normalizeMarkdownNotePath(ref.split("#")[0]!) === normalizeMarkdownNotePath(path))
           .map((ref) => ref.split("#^")[1]!);
@@ -1431,14 +1446,29 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput, sourceContent: string, exhaustedRetry = false) {
-    return classifyCandidates({ classify: async (bounded: ClassifyInput) => {
+  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput, sourceContent: string, exhaustedRetry = false, decisions?: ClassificationDecisions) {
+    const result = await classifyCandidates({ classify: async (bounded: ClassifyInput) => {
+      const classifyInput=decisions?decisions.input(bounded):bounded;
       reportTokenCost("classify", [bounded.sourcePassages ? JSON.stringify(bounded.sourcePassages) : bounded.content, bounded.sourcePassages ? "" : bounded.context ?? "", ...bounded.hints,
-        bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(",")], undefined, "bounded-candidates");
-      const routed = checkTopicDestinations(await llm.classify(bounded), exhaustedRetry);
+        bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(","),classifyInput.retryDecisions?JSON.stringify(classifyInput.retryDecisions):""], undefined, "bounded-candidates");
+      const raw = await llm.classify(classifyInput);
+      if (decisions && raw.topics) {
+        const retained = decisions.accept(raw);
+        try { checkAssignedPassageCoverage(retained, sourceContent, bounded, false); }
+        catch (error) {
+          if (!(error instanceof ClassificationSourceCoverageError)) throw error;
+          const reviewed = reviewedSourceSpans(sourceContent, retained, {range:bounded.sourceRange!,passages:bounded.sourcePassages!});
+          decisions.coveragePending(bounded.sourcePassages!.filter(passage=>passage.start>=bounded.sourceRange!.start && passage.end<=bounded.sourceRange!.end
+            && retained.passageReviews?.some(review=>review.passageId===passage.id && review.status==="assigned")
+            && !reviewed.some(span=>span.start===passage.start && span.end===passage.end)).map(passage=>passage.id));
+        }
+        return decisions.result()!;
+      }
+      const routed = checkTopicDestinations(raw, exhaustedRetry);
       const addressed = checkTopicSourceAddresses(routed, sourceContent, bounded, exhaustedRetry);
       return checkAssignedPassageCoverage(addressed, sourceContent, bounded, exhaustedRetry);
     } }, vaultPath, snapshot, input);
+    return decisions ? decisions.settled(result) : result;
   }
 
   async function composeMeaning(input: ComposePageInput) {
@@ -1451,7 +1481,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   /** Shared bounded classifier for synchronous stores and capture-first enrichment. */
   async function classifySource(snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>,
-    input: StoreInput, captured: boolean, onlyRanges?: Array<{ start: number; end: number }>): Promise<Classification> {
+    input: StoreInput, captured: boolean, onlyRanges?: Array<{ start: number; end: number }>, retryTopics?: import("../llm/types.js").ClassificationTopic[]): Promise<Classification> {
     const windows = sourceWindows(input);
     const segments = windows.map(window => window.content);
     const entities = verbatimEntityCandidates(segments.join(""));
@@ -1461,9 +1491,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const segment = segments[segmentIndex]!;
       let classified: Classification | null = null;
       let lastError: unknown;
+      const host:ClassifyInput={content:segment,sourceRange:windows[segmentIndex]!.range,sourcePassages:windows[segmentIndex]!.passages,hints:[],pageIndex:snapshot.pages,tagVocabulary:config.tags};
+      const decisions=new ClassificationDecisions(input.content,host,retryTopics?.filter(topic=>topic.sourceRange?.start===host.sourceRange!.start&&topic.sourceRange?.end===host.sourceRange!.end));
       for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
         const hints = [
           ...(input.hints ?? []),
+          ...(lastError instanceof Error && lastError.message === "classify: structured_output_invalid" ? [COMPACT_CLASSIFICATION_RETRY_HINT] : []),
           ...(lastError instanceof ClassificationDestinationError ? [DESTINATION_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceAddressError ? [SOURCE_ADDRESS_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceCoverageError ? [SOURCE_COVERAGE_CORRECTION_HINT] : []),
@@ -1484,16 +1517,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
             hints,
             pageIndex: snapshot.pages,
             tagVocabulary: config.tags,
-          }, input.content, attempt === CLASSIFY_RETRIES);
-          break;
+          }, input.content, attempt === CLASSIFY_RETRIES, decisions);
+          if (!decisions.failed || attempt === CLASSIFY_RETRIES) break;
+          lastError = classified.topics?.some(topic=>topic.question?.includes("classification_source_address_invalid")) ? new ClassificationSourceAddressError()
+            : classified.topics?.some(topic=>topic.question?.includes("classification_assigned_passage_unsupported")) ? new ClassificationSourceCoverageError() : new ClassificationDestinationError();
         } catch (error) {
           lastError = error;
+          decisions.unavailable(error);
+          classified = decisions.result();
         }
       }
+      if (classified) classified = safeCandidateClassification(classified,snapshot,!!lastError || !!snapshot.catalogCoverage?.unreadable.length);
       if (!classified && segments.length > 1) classified = {
         confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
           topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
-          confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
+          confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true, retryDiscovery:true,
+          question:lastError instanceof Error && /^classify: [a-z_]+$/.test(lastError.message) ? lastError.message.replace("classify: ","classification_") : "classification_unavailable",
         }],
       };
       if (!classified) throw lastError ?? new Error("classification returned no result");
@@ -1516,6 +1555,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           .filter(topic => !resolveTopicSpans(input.content, topic).nonOwnedContext);
       }
       classified.reviewedSourceSpans = reviewedSourceSpans(input.content, classified, windows[segmentIndex]!);
+      classified.passageReviews = ownedFilingReviews(classified,windows[segmentIndex]!);
       classifications.push(classified);
     }
     return mergeSegmentClassifications(classifications);
@@ -1530,7 +1570,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     assertVault(repo);
     type Outcome = NonNullable<StoreResult["topics"]>[number];
     const outcomes: Outcome[] = [];
-    const covered: Array<{ start: number; end: number }> = [];
+    const addCandidates=new Map<string,import("./reconciliation.js").ReconciliationAddCandidate>();
     const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] }>();
     for (const topic of classification.topics ?? []) {
       const { spans: identitySpans, supportSpans, invalid } = resolveTopicSpans(content, topic, {
@@ -1546,17 +1586,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const uncertain = invalid || !Number.isFinite(topic.confidence) || topic.confidence < config.confidenceThreshold
         || topic.disposition === "needs_clarification" || (topic.disposition !== "evidence_only" && !pages.length);
       topic.ideaId ??= reconciliationIdeaId(evidenceRef,(classification.topics??[]).indexOf(topic),topic.topic,identitySpans);
+      if(!invalid && !topic.classificationFailed && !topic.retryDiscovery)for(const span of identitySpans){
+        const id=`source:${span.start}:${span.end}`;
+        const candidate=addCandidates.get(id)??{id,start:span.start,end:span.end,text:content.slice(span.start,span.end),ideaIds:[]};
+        if(!candidate.ideaIds.includes(topic.ideaId))candidate.ideaIds.push(topic.ideaId);
+        addCandidates.set(id,candidate);
+      }
       const outcome: Outcome = {
         topic: topic.topic, ideaId:topic.ideaId,evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
         confidence: Number.isFinite(topic.confidence) ? Math.max(0, Math.min(1, topic.confidence)) : 0, disposition: topic.disposition, pages: pages.map((page) => page.path), filedPages: [],
         status: topic.classificationFailed ? "pending" : uncertain ? "uncertain" : "filed",
-        ...(topic.classificationFailed ? { reason: "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
+        ...(topic.classificationFailed ? { reason: topic.question ?? "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
       };
       const priorOutcome = filingPlan?.prior?.outcomes.find(item => item.ideaId === topic.ideaId);
-      if (priorOutcome) Object.assign(outcome, structuredClone(priorOutcome));
+      if (priorOutcome && !filingPlan?.prior?.classification.topics.find(previous=>previous.ideaId===topic.ideaId)?.classificationFailed) Object.assign(outcome, structuredClone(priorOutcome));
       else if (filingPlan && !uncertain && topic.disposition !== "evidence_only") { outcome.status = "pending"; outcome.reason = "filing_not_started"; }
       outcomes.push(outcome);
-      covered.push(...spans);
       if (uncertain || topic.disposition === "evidence_only" || priorOutcome?.status === "filed" || priorOutcome?.status === "uncertain") continue;
       for (const page of pages.filter(page => !outcome.filedPages.includes(page.path))) {
         const group = groups.get(page.path) ?? { page, outcomes: [], facts: [] };
@@ -1566,14 +1611,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         groups.set(page.path, group);
       }
     }
-    // Classifier omissions remain visible, even when it confidently assigns other topics.
-    const bounds = semanticBounds({ content, ...(semanticRange ? { semanticRange } : {}) });
-    let cursor = bounds.start;
-    const uncovered: Outcome["sourceSpans"] = [];
-    for (const span of [...(classification.reviewedSourceSpans ?? covered), { start: bounds.end, end: bounds.end }].sort((a, b) => a.start - b.start)) {
-      if (span.start > cursor && content.slice(cursor, span.start).trim()) uncovered.push({ start: cursor, end: span.start });
-      cursor = Math.max(cursor, span.end);
-    }
+    // Exact identity evidence, not broad passage discovery or qualifier envelopes,
+    // determines which original source remains visibly unassigned in the receipt.
+    const uncovered = unassignedFilingSpans(content,classification,semanticRange);
     if (uncovered.length) outcomes.push({ topic: "Unassigned source content", evidenceRef, sourceSpans: uncovered,
       confidence: 0, disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "source_not_assigned" });
     let receipt: FilingReceipt | undefined;
@@ -1603,9 +1643,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const touched: string[] = [];
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
     const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
-    const atomicContext = llm.reconcile ? await branchContext(vaultPath, snapshot, [...groups.entries()].flatMap(([path, group]) => group.outcomes.map(outcome => ({
-      topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
-    })))) : null;
     for (const [path, group] of groups) {
       if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) {
         for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "invalid_meaning_path"; }
@@ -1626,7 +1663,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
           summary: group.outcomes.map((outcome) => outcome.topic).join("; "), pages: [group.page],
           confidence: Math.min(...group.outcomes.map((outcome) => outcome.confidence)) };
         const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
-        if (llm.reconcile && atomicContext) {
+        if (llm.reconcile) {
+          // Each existing per-page reconciliation gets its own bounded packet;
+          // unrelated destinations must not consume this target's context budget.
+          const atomicContext = await branchContext(vaultPath, snapshot, group.outcomes.map(outcome => ({
+            topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
+          })));
           if (currentContent !== null && !atomicContext.branches.some(branch => branch.path === path)) throw new Error("branch_context_unavailable");
           // Adjacent ASR ideas can have overlapping complete context envelopes.
           // Union host ranges before chunking so the source table stays coherent;
@@ -1647,10 +1689,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
             return chunks;
           });
           const prepared = prepareReconciliation({path,raw:currentContent,sourceContent:content,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
+            addCandidates:[...addCandidates.values()].map(candidate=>({...candidate,ideaIds:candidate.ideaIds.filter(id=>group.outcomes.some(outcome=>outcome.ideaId===id))})).filter(candidate=>candidate.ideaIds.length>0),
             completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
             ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
-          reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
-          const operations = await llm.reconcile(prepared.request);
+          if(prepared.request.ideas.length)reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
+          const operations = prepared.request.ideas.length ? await llm.reconcile(prepared.request) : [];
           const reconciled = await applyReconciliation(prepared,operations);
           for (const outcome of group.outcomes) {
             const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);
@@ -1666,6 +1709,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
               if (outcome.status === "filed") delete outcome.reason;
               else if (outcome.uncertainPages?.length) outcome.reason="conflict_retained";
             }
+          }
+          if (reconciled.content !== currentContent && reconciled.appliedOperationIds.length) {
+            reconciled.content = boundExistingSummary(reconciled.content);
           }
           await prepareFile(path, currentContent, reconciled.content);
           // The model's awaited work cannot overwrite a page changed since context preparation.
@@ -1866,9 +1912,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
             sourcePassages: windows.find(window => window.range.start === topic.sourceRange?.start && window.range.end === topic.sourceRange?.end)?.passages ?? windows.flatMap(window => window.passages) })) };
           const failures = classification.topics!.filter(topic => topic.classificationFailed && topic.sourceRange);
           if (failures.length) {
-            const retried = await classifySource(snapshot, config, input, true, failures.map(topic => topic.sourceRange!));
+            const retried = await classifySource(snapshot, config, input, true, failures.map(topic => topic.sourceRange!), failures);
             classification.topics = [...classification.topics!.filter(topic => !failures.includes(topic)), ...(retried.topics ?? [])];
             classification.reviewedSourceSpans = [...(classification.reviewedSourceSpans ?? []), ...(retried.reviewedSourceSpans ?? [])];
+            const rediscovered=windows.filter(window=>failures.some(topic=>topic.sourceRange?.start===window.range.start&&topic.sourceRange.end===window.range.end
+              && (topic.retryDiscovery || (!topic.evidenceAssignments&&!topic.pages.length&&topic.evidenceQuotes.length===1&&topic.evidenceQuotes[0]===input.content.slice(window.range.start,window.range.end)))));
+            classification.passageReviews=mergeFilingReviews(classification,retried,rediscovered);
           }
         } else classification = await classifySource(snapshot, config, input, true);
       } catch (error) {
@@ -2295,13 +2344,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const supportRegistry = new AnswerSupportRegistry();
     // Search discovers candidate paths. Only an actual note/fact read may
     // register source supports and enable typed answer submission.
-    const tools = readTools(contextRefs, entrySearch, true, undefined, true);
+    let readBusy = false;
+    const tools = readTools(contextRefs, entrySearch, true, undefined, true, () => { readBusy = true; });
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
     const passageSources = new Map<string, VaultSourceRef>();
     const catalogEntries = new Map<string, EntrySearchResult["entries"][number]>();
-    const automaticEntryReads = new Map<string, { snapshot: string; result: Promise<{ passage?: NotePassage; error?: string }> }>();
+    const automaticEntryReads = new Map<string, { snapshot: string; result: Promise<{ passage?: NotePassage | NotePassagePacket; error?: string }> }>();
+    let automaticEntryCharsRemaining = 20_000;
     let catalogSnapshotValid = true;
     const conversationReadSpans: Array<{ path: string; text: string }> = [];
     let factReadAttempts = 0;
@@ -2384,15 +2435,38 @@ export function createEngine(options: EngineOptions): BrainEngine {
           nextInput = { ...nextInput, cursor: page.pagination.nextCursor };
         } while (true);
         const evidence = [];
+        const eligible = [...new Set(entries.map(entry=>entry.evidenceRef))]
+          .filter(ref=>!automaticEntryReads.has(ref)).slice(0,5-automaticEntryReads.size);
         for (const entry of entries) {
           catalogEntries.set(entry.evidenceRef, entry);
           // Reuse the ordinary tracked reader: exact anchors, budgets, failed reads,
           // source identity and continuation coverage obey the same contract.
           // Pinned follow-ups keep their explicit-read authority, as fact projection does.
-          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5) {
+          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5 && automaticEntryCharsRemaining >= 256) {
+            // Reserve this entry's share before awaiting any read. Concurrent and
+            // repeated searches share the same allowance; short entries refund it.
+            const remainingEntries=eligible.filter(ref=>!automaticEntryReads.has(ref)).length;
+            const allowance=Math.max(256,Math.floor(automaticEntryCharsRemaining/Math.max(1,remainingEntries)));
+            automaticEntryCharsRemaining-=allowance;
             automaticEntryReads.set(entry.evidenceRef, { snapshot: page!.pagination.snapshot, result: (async () => {
-              try { return { passage: JSON.parse(await groundedTools.readNote!(entry.evidenceRef, { maxChars: 4000 })) as NotePassage }; }
-              catch (error) { return { error: String(error) }; }
+              const pieces:NotePassage[]=[];let consumed=0,error:string|undefined;
+              try {
+                let cursor:string|undefined;
+                do {
+                  const piece=JSON.parse(await groundedTools.readNote!(entry.evidenceRef,{maxChars:Math.min(8000,allowance-consumed),...(cursor?{cursor}:{})})) as NotePassage;
+                  pieces.push(piece);consumed+=piece.body.length;
+                  cursor=piece.nextCursor??undefined;
+                  if(!piece.body.length)break;
+                }while(cursor&&allowance-consumed>=256);
+              }catch(cause){error=String(cause);}
+              finally{automaticEntryCharsRemaining+=Math.max(0,allowance-consumed);}
+              const first=pieces[0],last=pieces.at(-1);
+              const passage=pieces.length===1?first:first&&last?{
+                source:first.source,readPath:entry.evidenceRef,version:first.version,part:first.part,passages:pieces,
+                nextCursor:last.nextCursor,bodyChars:consumed,
+                readPartial:!!error||first.extent.start>first.extent.sectionStart||last.extent.end<last.extent.sectionEnd,
+              }:undefined;
+              return {...(passage?{passage}:{}),...(error?{error}:{})};
             })() });
           }
           const read = automaticEntryReads.get(entry.evidenceRef);
@@ -2408,7 +2482,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }
         return JSON.stringify({ entries, pagination: page!.pagination, evidence,
           coverage: coverageTracker.result(),
-          instruction: "Evidence contains actual exact-entry passage reads (up to 5 per answer, 4000 characters each). Use capture.capturedAt as the source time; raw Log headings are processing time. Synthesize only from successful passage bodies, not discovery snippets. Follow passage nextCursor or read unread exact refs when needed. Partial passages do not establish absence or complete coverage. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
+          instruction: "Evidence contains actual exact-entry passage reads (up to 5 entries and 20000 characters shared per answer). Use capture.capturedAt as the source time; raw Log headings are processing time. Synthesize only from successful passage bodies, not discovery snippets. Follow passage nextCursor or read unread exact refs when needed. Partial passages do not establish absence or complete coverage. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
       } } : {}),
       ...(tools.readNote
         ? {
@@ -2467,9 +2541,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const answerSupports = supportRegistry.addPassage(passage);
         return { answerSupports, answerSupportPartial: supportRegistry.lastPassageSelectionPartial };
       },
-      required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive
+      required: (readPaths: string[]) => readBusy || attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {
+        if (readBusy) return { text: "Memory filing is in progress. Please retry your question shortly.", sources: [] };
         // Projection and source evidence must still describe the same local snapshot.
         // An explicit key/date read supersedes the automatic page projection,
         // regardless of tool order. Never mix current auto facts into historical scope.

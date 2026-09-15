@@ -61,6 +61,8 @@ export interface SourcePassage {
 }
 
 export interface ClassifyInput {
+  /** Host-owned unresolved decisions; corrections must echo their IDs. Raw context remains available only as evidence. */
+  retryDecisions?: Array<{id:string;topic:ClassificationTopic;reason:string;scope:"decision"|"source_window"}>;
   /** Code-generated evidence addresses; neighboring passages may complete an idea. */
   sourcePassages?: SourcePassage[];
   /** The owned source window; a topic must include evidence inside it. */
@@ -83,6 +85,11 @@ export interface ClassificationPage {
 }
 
 export interface ClassificationTopic {
+  /** Host-assigned classification decision identity, echoed only on corrective calls. */
+  retryId?: string;
+  /** Host-only missing-discovery marker; never supplied by model output. */
+  retryDiscovery?: boolean;
+  retrySourceRange?: {start:number;end:number};
   /** Host-owned stable identity, retained by pending filing replay. */
   ideaId?:string;
   /** Exact source assignments. Quote must overlap the addressed passage and may span contiguous supplied neighbors. occurrence disambiguates repeated matches (zero-based); redundant numbering is ignored for one exact match. */

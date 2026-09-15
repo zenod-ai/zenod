@@ -852,6 +852,25 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
     });
   });
 
+  it("preserves a source-grounded raw artifact URL excerpt from native memory reads", () => {
+    const artifact = "https://drive.google.com/file/d/synthetic-artifact/view?";
+    const source = "https://github.com/synthetic/brain/blob/revision/Log/2026-09-13.md";
+    const drafted = `Raw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):\nRaw artifact URL: ${artifact}\n[Log/2026-09-13.md#^e-test](${source})`;
+    const read = action("search_entries", JSON.stringify({
+      passages: [{ text: `Raw artifact URL: ${artifact}`, evidenceRef: "Log/2026-09-13.md#^e-test", url: source }],
+    }));
+    expect(applyReplyGate(drafted, [read])).toMatchObject({
+      isActionTurn: false, kind: "answer", intercepted: false, text: drafted,
+    });
+    // An actual read does not authorize invented links or claims of a new mutation.
+    for (const invalid of [drafted.replace("synthetic-artifact", "invented"), `Uploaded it.\n${drafted}`]) {
+      expect(applyReplyGate(invalid, [read]).kind).toBe("failure");
+    }
+    expect(applyReplyGate(drafted, []).kind).toBe("failure");
+    expect(applyReplyGate(drafted, [{ ...read, result: JSON.stringify({ isError: true, text: artifact }) }]).kind).toBe("failure");
+    expect(applyReplyGate(drafted, [{ ...read, mutationAttempt: true, result: JSON.stringify({ sourceUrl: artifact }) }]).kind).toBe("failure");
+  });
+
   it("blocks an invented X status URL when the same-turn read returned a different URL", () => {
     const returned = "https://x.com/jordi/status/123456";
     const invented = "https://x.com/jordi/status/999999";

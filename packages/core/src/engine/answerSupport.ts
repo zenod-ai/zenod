@@ -4,11 +4,11 @@ import { renderFactViews, type FactView } from "./temporalFacts.js";
 
 export type AnswerSupportMode = "current" | "historical" | "prior" | "conflict" | "raw_report";
 export interface AnswerSupportSelection { id: string; mode: AnswerSupportMode; summaryText?: string | undefined }
-export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kind: "fact" | "prior" | "passage"; factId?: string; key?: string; excerpt?: string; start?: number; end?: number; offsetUnit?: "decoded-region-utf16"; regionStart?: number; granularity?: "paragraph" | "sentence" | "list_item" }
+export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kind: "fact" | "prior" | "passage" | "source_summary"; summaryOnly?:true; factId?: string; key?: string; excerpt?: string; start?: number; end?: number; offsetUnit?: "decoded-region-utf16"; regionStart?: number; granularity?: "paragraph" | "sentence" | "list_item" }
 type Support = { hint: AnswerSupportHint; view: FactView; factId?: string; priorId?: string }
-  | { hint: AnswerSupportHint; passage: NotePassage; text: string };
+  | { hint: AnswerSupportHint; passage: NotePassage; text: string; summaryOnly?:true };
 const digest = (value: unknown) => `as_${createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24)}`;
-export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. Do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. For a requested source summary, add optional summaryText (at most 1200 characters) to each raw_report passage selection, synthesizing only that supported source and preserving doubt, alternatives, attribution, negation and conditions. The host supplies citations; do not put links or URLs in summaryText. Read the whole requested note through its cursors, or explicitly label the summary partial with unread coverage. For other modes the host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue with nextCursor and omit query, or seek with a literal query and omit cursor. Never send query and cursor together. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Prefer the smallest complete relevant support; use the parent paragraph when qualifications cannot be preserved by the selected children. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
+export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. Do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. For a requested source summary, write the concise answer in summaryText (at most 1200 characters) on each selected raw_report passage. Always include summaryText in the model submission. Choose null explicitly only for a verbatim excerpt or canonical fact mode; null does not summarize. Use a few complete relevant supports while retaining all requested subjects and necessary qualifications. Synthesize only the selected source, preserving speaker attribution, options, doubt, negation and conditions. Preserve ambiguous numbers as ambiguous; do not infer their unit, meaning or a corrected value. The host supplies citations; do not put links or URLs in summaryText. For a whole-note summary prefer the source_summary handle when available: it proves the complete exact source was read and requires nonempty summaryText; null is forbidden for that handle. It does not establish semantic truth. Otherwise read the whole requested note through its cursors, or explicitly label the summary partial with unread coverage. For other modes the host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue with nextCursor and omit query, or seek with a literal query and omit cursor. Never send query and cursor together. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Prefer the smallest complete relevant support; use the parent paragraph when qualifications cannot be preserved by the selected children. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
 
 // Intl may split a newline-delimited attribution from the following sentence.
 // Keep that prefix attached instead of issuing an unqualified child handle.
@@ -100,6 +100,18 @@ export class AnswerSupportRegistry {
       else if (p.extent.end > last.end) { last.body += p.body.slice(last.end-p.extent.start); last.end=p.extent.end;last.last=p; }
     }
     const hints: AnswerSupportHint[] = [];
+    const anchored=/^Log\/.+\.md#\^e-[0-9a-f]{6}$/i.test(passage.identity);
+    const summaryId=digest(["source_summary",passage.identity,passage.version]);
+    const complete=anchored && group.every(p=>p.extent.unit==="utf16"&&p.extent.end-p.extent.start===p.body.length
+      &&p.extent.sectionStart===passage.extent.sectionStart&&p.extent.sectionEnd===passage.extent.sectionEnd
+      &&p.source.path===passage.source.path&&p.source.provider===passage.source.provider)
+      ? regions.find(region=>region.start===passage.extent.sectionStart&&region.end===passage.extent.sectionEnd
+        &&group.every(p=>region.body.slice(p.extent.start-region.start,p.extent.end-region.start)===p.body)
+        &&region.body.split("\n").some(line=>line.startsWith("> ")&&line.slice(2).trim())) : undefined;
+    const offerSummary=!!complete&&!this.supports.has(summaryId)&&hintBudget>0&&this.supports.size<256;
+    const excerptBudget=hintBudget-(offerSummary?1:0);
+    // Keep one global slot available for a completed anchored source summary.
+    const excerptCap=this.passages.some(p=>/^Log\/.+\.md#\^e-[0-9a-f]{6}$/i.test(p.identity))?255:256;
     for (const region of regions) {
       const isLog = passage.source.path.startsWith("Log/");
       const raw = isLog ? region.body.split("\n").flatMap(line => line.startsWith("> ") ? [line.slice(2)] : line === ">" ? [""] : []).join("\n") : region.body;
@@ -126,11 +138,16 @@ export class AnswerSupportRegistry {
           if(!segment.text || segment.text.length>4000){this.lastPassageSelectionPartial=true;continue;}
           const hint: AnswerSupportHint = { id:digest(["passage",passage.identity,passage.version,region.start,segment.start,segment.text]),kind:"passage",modes:["raw_report"],excerpt:segment.text.slice(0,160),offsetUnit:"decoded-region-utf16",regionStart:region.start,start:segment.start,end:segment.start+segment.text.length,granularity:segment.granularity };
           if (this.supports.has(hint.id)) continue; // Earlier IDs remain usable in this turn.
-          if (this.supports.size>=256 || hints.length>=hintBudget) { this.lastPassageSelectionPartial=true; continue; }
+          if (this.supports.size>=excerptCap || hints.length>=excerptBudget) { this.lastPassageSelectionPartial=true; continue; }
           this.supports.set(hint.id,{hint,passage,text:segment.text});hints.push(hint);
         }
       }
     }
+    if(offerSummary){
+      const hint:AnswerSupportHint={id:summaryId,kind:"source_summary",modes:["raw_report"],summaryOnly:true,
+        excerpt:"Complete exact source read. Summarize its full content with attribution and qualifications; nonempty summaryText required."};
+      this.supports.set(summaryId,{hint,passage,text:"",summaryOnly:true});hints.push(hint);
+    }else if(complete&&!this.supports.has(summaryId))this.lastPassageSelectionPartial=true;
     return hints;
   }
   selectedViews(selections: AnswerSupportSelection[]): FactView[] {
@@ -147,6 +164,7 @@ export class AnswerSupportRegistry {
     for (const selection of selections) {
       const support=selection && this.supports.get(selection.id);
       if (!support || !support.hint.modes.includes(selection.mode)) return {text:"The answer selected unknown, unavailable or temporally incompatible support. Repeat the relevant source/fact reads; current state is not established by this selection.",valid:false};
+      if ("summaryOnly" in support && support.summaryOnly && (typeof selection.summaryText!=="string"||!selection.summaryText.trim())) return {text:"A complete-source summary requires nonempty summaryText; raw excerpts are unavailable for this handle.",valid:false};
       if (selection.summaryText !== undefined && (typeof selection.summaryText !== "string" || !selection.summaryText.trim()
         || selection.summaryText.length > 1200 || selection.mode !== "raw_report" || !("passage" in support)
         || /https?:\/\/|\]\(|\[\[|<[^>]*>/i.test(selection.summaryText))) {

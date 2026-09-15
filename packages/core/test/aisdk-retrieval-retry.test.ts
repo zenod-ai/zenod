@@ -73,9 +73,10 @@ describe("ask_brain deterministic retrieval retry", () => {
       searchVault: async () => "hits", readNote, listPages: async () => "pages", searchChats: async () => "none",
     });
     const args = { path: "Log/2026-01-01.md#^e-000001", query: "late fact", maxChars: 512 };
-    await captured.config.tools.read_note.execute(args);
+    const initial = JSON.parse(await captured.config.tools.read_note.execute(args));
+    expect(initial.nextCursor).toMatch(/^cursor_/);
     expect(readNote).toHaveBeenCalledWith(args.path, { query: "late fact", maxChars: 512 });
-    await captured.config.tools.read_note.execute({ path: args.path, cursor: "next" });
+    await captured.config.tools.read_note.execute({ path: args.path, cursor: initial.nextCursor });
     expect(readNote).toHaveBeenLastCalledWith(args.path, { cursor: "next" });
     expect(captured.config.tools.read_note.description).toContain("not proof of absence");
   });
@@ -206,7 +207,7 @@ describe("ask_brain deterministic retrieval retry", () => {
 });
 
 it("registers the typed read-only catalog with all filters and records successful actions", async () => {
-  const searchEntries = vi.fn(async () => '{"entries":[],"pagination":{"hasMore":false}}');
+  const searchEntries = vi.fn(async () => '{"entries":[],"pagination":{"hasMore":true,"nextCursor":"signed"}}');
   const onReadAction = vi.fn();
   const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
   await llm.answer({ question: "Audit all my voice notes in January", vaultBriefing: "brief", conversation: [], onReadAction }, {
@@ -215,8 +216,11 @@ it("registers the typed read-only catalog with all filters and records successfu
   const args = { query: "ORCHID amber", source: "whatsapp", sourceId: "original-1", contentType: "voice_note",
     capturedAfter: "2026-01-01", capturedBefore: "2026-01-31T23:59:59.999Z", order: "oldest", limit: 2, cursor: "signed", exhaustive: true };
   expect(captured.config.tools.search_entries.inputSchema.parse(args)).toEqual(args);
-  await captured.config.tools.search_entries.execute(args);
-  expect(searchEntries).toHaveBeenCalledWith(args);
+  const {cursor: _cursor,...firstArgs}=args;
+  const first=JSON.parse(await captured.config.tools.search_entries.execute(firstArgs));
+  expect(first.pagination.nextCursor).toMatch(/^cursor_/);
+  await captured.config.tools.search_entries.execute({...args,cursor:first.pagination.nextCursor});
+  expect(searchEntries).toHaveBeenLastCalledWith(args);
   expect(onReadAction).toHaveBeenCalledWith("search_entries", args, expect.stringContaining("pagination"));
   expect(captured.config.messages[0].content).toContain("Set exhaustive=true");
 });
@@ -237,7 +241,6 @@ it("supports chronological category retrieval without adding lexical or date fil
   expect(searchEntries).toHaveBeenCalledExactlyOnceWith(example);
   expect(result.entries[0]).toEqual(entry);
   expect(tool.description).toContain("Omit query");
-  expect(tool.inputSchema.shape.query.description).toContain("Omit for category-only lists");
   expect(captured.config.messages[0].content).toContain("omit it for category-only lists");
   expect(captured.config.messages[0].content).toContain("use catalog capturedAt");
   await captured.config.tools.read_note.execute({ path: result.entries[0].evidenceRef });

@@ -1,15 +1,17 @@
+import {AnswerSupportRegistry} from "../src/engine/answerSupport.js";
+import type {NotePassage} from "../src/ops/passage.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBrainLlm } from "../src/llm/aisdk.js";
 const id="as_0123456789abcdef01234567";
 const tools={searchChats:async()=>"none",readFacts:async()=>JSON.stringify({answerSupports:[{id,modes:["current"]}]})};
 afterEach(()=>vi.unstubAllGlobals());
 type Reply={text?:string;calls?:Array<{name:string;input:unknown}>};
-function wire(replies:Reply[]) {
+function wire(replies:Array<Reply|(()=>Reply)>) {
  const requests:any[]=[];
  vi.stubGlobal("fetch",vi.fn(async (url:unknown,init:RequestInit)=>{
   expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
   const request=JSON.parse(String(init.body));requests.push(request);
-  const reply=replies[requests.length-1];if(!reply)throw new Error("Unexpected extra model completion");
+  const queued=replies[requests.length-1];const reply=typeof queued==="function"?queued():queued;if(!reply)throw new Error("Unexpected extra model completion");
   const calls=reply.calls?.map((call,index)=>({id:`call-${requests.length}-${index}`,type:"function",index,function:{name:call.name,arguments:JSON.stringify(call.input)}}));
   const message={role:"assistant",content:reply.text??null,...(calls?{tool_calls:calls}:{})};
   const finish=calls?"tool_calls":"stop";
@@ -24,7 +26,7 @@ function wire(replies:Reply[]) {
  return requests;
 }
 const read={name:"read_facts",input:{path:"Notes/Atlas.md"}};
-const submit={name:"submit_memory_answer",input:{supportSelections:[{id,mode:"current"}]}};
+const submit={name:"submit_memory_answer",input:{supportSelections:[{id,mode:"current",summaryText:null}]}};
 const input={question:"¿Cuándo empieza?",vaultBriefing:"",conversation:[],answerSupportContract:"v1" as const,answerSupportScope:"memory_only" as const};
 const llm=(maxSteps=5)=>createBrainLlm({provider:"openrouter",apiKey:"synthetic",askModel:"x-ai/grok-4.3",maxSteps});
 describe("typed terminal answer submission through actual SDK wire",()=>{
@@ -78,11 +80,11 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   expect(result).toEqual({text:"",readPaths:[],supportProtocolError:"missing_submission"});expect(requests).toHaveLength(2);expect(result.supportSelections).toBeUndefined();
  });
  it("passes well-shaped unknown IDs and wrong allowed modes to host validation, never inventing authority",async()=>{
-  const unknown="as_ffffffffffffffffffffffff";wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:unknown,mode:"prior"}]}}]}]);
+  const unknown="as_ffffffffffffffffffffffff";wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:unknown,mode:"prior",summaryText:null}]}}]}]);
   expect((await llm().answer(input,tools)).supportSelections).toEqual([{id:unknown,mode:"prior"}]);
  });
  it("fails protocol completion on schema-invalid submission at the budget limit without recovery",async()=>{
-  const requests=wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:"invented",mode:"current"}]}}]}]);
+  const requests=wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:"invented",mode:"current",summaryText:null}]}}]}]);
   const result=await llm(2).answer(input,tools);
   expect(result.supportProtocolError).toBe("missing_submission");expect(result.supportSelections).toBeUndefined();expect(requests).toHaveLength(2);
  });
@@ -124,7 +126,7 @@ it('advertises exclusive seek/continuation and completes a valid continuation wi
   if(options.cursor){expect(options.query).toBeUndefined();expect(options.cursor).toBe(cursor);return JSON.stringify({body:'Complete teaching proposition.',answerSupports:[{id,modes:['raw_report']}]})}
   return JSON.stringify({body:'# Daily log',queryMatched:false,nextCursor:cursor,answerSupports:[],readPartial:true});
  });
- const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report'}]}}]}]);
+ const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor:'cursor_1'}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report',summaryText:null}]}}]}]);
  const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',listPages:async()=>'',readNote});
  expect(result.supportSelections).toEqual([{id,mode:'raw_report'}]);expect(requests).toHaveLength(3);expect(readNote).toHaveBeenCalledTimes(2);
  const advertised=requests[0].tools.find((t:any)=>t.function.name==='read_note').function;
@@ -141,8 +143,8 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  const summaryText="Partial source summary: renting remains tentative; the budget is unknown and inspection precedes any decision.";
  const requests=wire([
   {calls:[{name:"read_note",input:{path:ref}}]},
-  {calls:[{name:"read_note",input:{path:ref,cursor:"middle"}}]},
-  {calls:[{name:"read_note",input:{path:ref,cursor:"end"}}]},
+  {calls:[{name:"read_note",input:{path:ref,cursor:"cursor_1"}}]},
+  {calls:[{name:"read_note",input:{path:ref,cursor:"cursor_2"}}]},
   {calls:[{name:"submit_memory_answer",input:{supportSelections:[{id,mode:"raw_report",summaryText}]}}]},
  ]);
  const seen:string[]=[];
@@ -155,4 +157,64 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  const system=JSON.stringify(requests[0].messages);
  expect(system).toContain("chronological order and count FIRST");
  expect(system).toContain("covering beginning, middle and end");
+ expect(system).toContain("Always include summaryText in the model submission");
+ expect(system).toContain("Preserve ambiguous numbers as ambiguous");
+ expect(system).toContain("Use a few complete relevant supports while retaining all requested subjects");
+ const terminal=requests.at(-1).tools.find((t:any)=>t.function.name==="submit_memory_answer").function;
+ expect(terminal.description).toContain("write concise summaryText");
+ expect(terminal.description).toContain("does not summarize");
+ const selection=terminal.parameters.properties.supportSelections.items;
+ expect(selection.properties.summaryText.description).toContain("Always provide summaryText");
+ // The model must choose text or null; internal selections remain compatible.
+ expect(selection.required).toEqual(["id","mode","summaryText"]);
+ const search=requests[0].tools.find((t:any)=>t.function.name==="search_entries").function;
+ expect(search.description).toContain("identify it FIRST with contentType, order=newest and limit=1, without query");
+ expect(search.parameters.properties.query.description).toContain("Omit when first identifying a referenced latest item");
+});
+
+it.each([undefined,"", " ", "x".repeat(1201)])('rejects an omitted or invalid model summary choice without another round: %s',async summaryText=>{
+ const selection={id,mode:'raw_report',...(summaryText===undefined?{}:{summaryText})};
+ const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[selection]}}]}]);
+ const result=await llm(2).answer(input,tools);
+ expect(result.supportProtocolError).toBe('missing_submission');expect(result.supportSelections).toBeUndefined();expect(requests).toHaveLength(2);
+});
+it.each([null,'The speaker may rent; this is not decided.'])('normalizes an explicit model summary choice at the adapter boundary: %s',async summaryText=>{
+ const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report',summaryText}]}}]}]);
+ const result=await llm(2).answer(input,tools);
+ expect(result.supportSelections).toEqual([{id,mode:'raw_report',...(summaryText===null?{}:{summaryText})}]);
+ const schema=requests[1].tools.find((t:any)=>t.function.name==='submit_memory_answer').function.parameters.properties.supportSelections.items;
+ expect(schema.required).toContain('summaryText');expect(schema.properties.summaryText.anyOf).toContainEqual({type:'null'});
+});
+
+it("reads an entire17k source through short aliases before selecting its summary-only handle",async()=>{
+ const registry=new AnswerSupportRegistry(),ref="Log/2026-09-15.md#^e-123abc";
+ const raw="## Capture ^e-123abc\n\n> "+"A tentative option remains conditional on inspection. ".repeat(340);
+ const count=Math.ceil(raw.length/4000);let summaryId="";const seen:string[]=[];
+ const replies: Array<Reply|(()=>Reply)>=Array.from({length:count},(_,i)=>({calls:[{name:"read_note",input:{path:ref,...(i?{cursor:`cursor_${i}`}:{})}}]}));
+ replies.push(()=>({calls:[{name:"submit_memory_answer",input:{supportSelections:[{id:summaryId,mode:"raw_report",summaryText:"The speaker is considering an option conditional on inspection."}]}}]}));
+ const requests=wire(replies);
+ const result=await llm(8).answer(input,{searchChats:async()=>"",searchVault:async()=>"",readNote:async(path,options:any={})=>{
+  expect(path).toBe(ref);const start=options.cursor?Number(options.cursor.slice("private-cursor-".length)):0,end=Math.min(start+4000,raw.length);seen.push(raw.slice(start,end));
+  const passage:NotePassage={source:{path:ref.split("#")[0]!,provider:"github"},readPath:ref,identity:ref,version:"v1",part:"body",frontmatterChars:0,body:raw.slice(start,end),extent:{unit:"utf16",start,end,total:raw.length,scopeStart:0,scopeEnd:raw.length,sectionStart:0,sectionEnd:raw.length},truncated:end<raw.length,omittedBefore:start>0,nextCursor:end<raw.length?`private-cursor-${end}`:null};
+  const hints=registry.addPassage(passage);const summary=hints.find(h=>h.kind==="source_summary");if(summary)summaryId=summary.id;
+  expect(!!summary).toBe(end===raw.length);return JSON.stringify({...passage,answerSupports:hints});
+ }});
+ expect(raw.length).toBeGreaterThan(17000);expect(seen.join("")).toBe(raw);expect(requests).toHaveLength(count+1);
+ expect(JSON.stringify(requests)).not.toContain("private-cursor-");expect(summaryId).not.toBe("");
+ expect(registry.render(result.supportSelections!).valid).toBe(true);
+ expect(registry.selectedPassages(result.supportSelections!)[0]!.version).toBe("v1");
+});
+
+it.each(['unknown','wrong-source','stale'])('keeps cursor scope/version failures fail-closed through actual SDK: %s',async failure=>{
+ const ref='Log/2026-09-15.md#^e-123abc';
+ const readNote=vi.fn(async(path:string,options:any={})=>{
+  if(options.cursor){expect(path).toBe(ref);expect(options.cursor).toBe('private-stale-cursor');throw new Error('Source snapshot changed; restart read');}
+  return JSON.stringify({body:'Only the first portion.',nextCursor:'private-stale-cursor',answerSupports:[]});
+ });
+ const requests=wire([{calls:[{name:'read_note',input:{path:ref}}]},
+  {calls:[{name:'read_note',input:{path:failure==='wrong-source'?'Log/2026-09-15.md#^e-abcdef':ref,cursor:failure==='unknown'?'cursor_99':'cursor_1'}}]},
+  {calls:[{name:'submit_memory_answer',input:{supportSelections:[]}}]}]);
+ const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',readNote});
+ expect(readNote).toHaveBeenCalledTimes(failure==='stale'?2:1);expect(result.supportSelections).toEqual([]);expect(requests).toHaveLength(3);
+ expect(JSON.stringify(requests.at(-1).messages)).toContain(failure==='stale'?'Source snapshot changed':'Unknown cursor');
 });

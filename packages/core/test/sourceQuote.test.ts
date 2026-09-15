@@ -43,3 +43,29 @@ it("checks addressed overlap and the expanded raw length", () => {
   expect(resolveRawSourceQuote([{ start: 0, text }], "Maya waters.",
     { maxRawChars: 100, overlap: { start: 15, end: 20 } })?.quote).toBe("Maya\n\t\t waters.");
 });
+
+ it.each(['We discussed commodities. It remains a possibility.', 'We discussed commodities.It remains a possibility.'])('canonicalizes punctuation-adjacent spacing to exact raw: %s',raw=>{
+  const quote=raw.includes('. It')?raw.replace('. It','.It'):raw.replace('.It','. It');
+  expect(resolveRawSourceQuote([{start:2110,text:raw}],quote,{maxRawChars:1600})).toEqual({start:2110,end:2110+raw.length,quote:raw});
+ });
+ it.each([
+  ['Keep a part. It matters.','Keep apart.It matters.'],
+  ['The estimate is 3. 5 units.','The estimate is 3.5 units.'],
+  ['Version 3. Alpha remains pending.','Version 3.Alpha remains pending.'],
+  ['Keep this, please.','Keep this,please.'],
+  ['Keep this. It matters.','Keep this!It matters.'],
+  ['Keep this. It matters.','Keep this.it matters.'],
+  ['Use 12 units. It matters.','Use 19 units.It matters.'],
+ ])('retains lexical and numeric separators: %s', (text,quote)=>{
+  expect(resolveRawSourceQuote([{start:0,text}],quote,{maxRawChars:1600})).toBeNull();
+ });
+ it('keeps punctuation-spacing fallback ambiguous across occurrences and separate runs',()=>{
+  const text='Keep this.\nIt matters. Keep this.\tIt matters.';
+  expect(resolveRawSourceQuote([{start:0,text}],'Keep this.It matters.',{maxRawChars:1600,exactOccurrence:0,overlap:{start:0,end:2}})).toBeNull();
+  expect(resolveRawSourceQuote([{start:0,text:'Keep this.'},{start:100,text:'It matters.'}],'Keep this.It matters.',{maxRawChars:1600})).toBeNull();
+ });
+ it('checks canonical raw length and ownership after punctuation-space normalization',()=>{
+  const text='Keep this.   It matters.';
+  expect(resolveRawSourceQuote([{start:0,text}],'Keep this.It matters.',{maxRawChars:21})).toBeNull();
+  expect(resolveRawSourceQuote([{start:0,text}],'Keep this.It matters.',{maxRawChars:100,overlap:{start:100,end:200}})).toBeNull();
+ });

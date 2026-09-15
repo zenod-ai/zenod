@@ -559,11 +559,12 @@ function hasGroundedMutationPermalinkRead(
   // legitimate read evidence when the same normalized URL came back from an exact
   // successful read this turn. The normal read-synthesis gate still rejects raw
   // envelopes, ungrounded companion URLs, and mutation-success prose.
-  const statusUrls = (draftedEvidenceUrls(draftedText) ?? []).filter(isMutationPermalinkUrl);
-  if (statusUrls.length === 0) return false;
+  const urls = draftedEvidenceUrls(draftedText);
+  if (!urls?.length) return false;
+  if (!MUTATION_PERMALINK_CLAIM_RE.test(draftedText) && !urls.some(isMutationPermalinkUrl)) return false;
   const reads = actions.filter(isSameTurnReadEvidence).filter((action) => !isPeerError(action.result));
   return isSafeReadSynthesis(draftedText, reads) &&
-    statusUrls.every((url) => reads.some((action) => actionReturnsEvidenceUrl(action, url)));
+    urls.every((url) => reads.some((action) => actionReturnsEvidenceUrl(action, url)));
 }
 
 function naturalOutcomeKind(text: string): ReplyGateOutcome["kind"] {

@@ -173,6 +173,7 @@ function completeSourcePropositions(content: string, passages: SourcePassage[], 
 export function reviewedSourceSpans(content: string, classification: Classification,
   window: Pick<ReturnType<typeof sourceWindows>[number], "passages" | "range">): Array<{ start: number; end: number }> {
   const validSupport = (classification.topics ?? []).flatMap(topic => {
+    if (topic.retryDiscovery) return []; // Host discovery placeholders are not extracted idea evidence.
     const resolved = resolveTopicSpans(content, topic);
     return resolved.invalid ? [] : resolved.spans;
   });

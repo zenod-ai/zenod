@@ -1,4 +1,7 @@
-import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath } from "../src/engine/filingReceipt.js";
+import { branchContext, BRANCH_CONTEXT_MAX_CHARS } from "../src/engine/meaningNotes.js";
+import { scanVault } from "../src/vault/pages.js";
+import { withVaultWriteLock } from "../src/git/vaultWriteLock.js";
+import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath, filingInputFingerprint } from "../src/engine/filingReceipt.js";
 import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -584,6 +587,18 @@ describe("BrainEngine", () => {
     expect(staleSelection.text).not.toContain(restriction);
   }, 15_000);
 
+  it("rejects a complete-source summary when its selected source changes before finalization",async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"An option remains tentative and requires inspection.",source:"selftest"});
+    llm.answerOverride=async (_input,tools)=>{
+      const read=JSON.parse(await tools.readNote!(capture.evidenceRef));
+      const support=read.answerSupports.find((hint:any)=>hint.kind==="source_summary");expect(support).toBeDefined();
+      const path=capture.evidenceRef.split("#")[0]!;
+      await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8"))+"\nChanged source snapshot.\n");
+      return {text:"",readPaths:[capture.evidenceRef],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The option remains tentative."}]};
+    };
+    const result=await e.ask("Summarize the source");expect(result.text).toContain("snapshot changed");expect(result.text).not.toContain("The option remains tentative.");
+  });
+
   it("preserves explicit protocol failure across ask, chat and tasking instead of projecting unrelated facts", async()=>{
     const e=engine();const capture=await e.captureEvidence!({content:"A complete source statement.",source:"selftest"});
     llm.answerOverride=async (input,tools)=>{
@@ -691,6 +706,61 @@ describe("BrainEngine", () => {
     expect(reply.text).not.toContain("e-456def");
     expect(reply.sources).toHaveLength(1);
     expect(reply.coverage?.successfulReads).toHaveLength(1);
+  });
+
+  it.each([17300,25000])("shares the automatic allowance with one exact entry and preserves complete/partial coverage (%s chars)",async chars=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    const raw="## 14:16 Capture ^e-123abc\n> "+"An option is tentative. ".repeat(Math.ceil(chars/24));
+    await writeFile(join(repo.path,path),"# Log\n\n"+raw+"\n\n## 14:17 Other ^e-456def\n> Neighbor must not leak.\n");
+    const {readNotePassage}=await import("../src/ops/passage.js");
+    const first=await readNotePassage(repo.path,ref,{maxChars:8000});
+    const exact=(await readFile(join(repo.path,path),"utf8")).slice(first.extent.sectionStart,first.extent.sectionEnd);
+    const entrySearch=vi.fn(async()=>({entries:[{evidenceRef:ref,capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:1,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const result=JSON.parse(await tools.searchEntries!({contentType:"voice_note",order:"newest",limit:1}));
+      const packet=result.evidence[0].passage,pieces=packet.passages;
+      expect(packet.readPath).toBe(ref);expect(pieces).toHaveLength(3);expect(pieces.every((piece:any)=>piece.body.length<=8000&&piece.identity===ref&&piece.version===first.version)).toBe(true);
+      const text=pieces.map((piece:any)=>piece.body).join("");expect(text.length).toBeLessThanOrEqual(20000);expect(text).toBe(exact.slice(0,text.length));expect(text).not.toContain("Neighbor must not leak");
+      const summary=pieces.flatMap((piece:any)=>piece.answerSupports).find((hint:any)=>hint.kind==="source_summary");
+      if(chars<20000){expect(text).toBe(exact);expect(packet.nextCursor).toBeNull();expect(packet.readPartial).toBe(false);expect(summary).toBeDefined();}
+      else {expect(text.length).toBe(20000);expect(packet.nextCursor).toBeTruthy();expect(packet.readPartial).toBe(true);expect(summary).toBeUndefined();}
+      const repeated=JSON.parse(await tools.searchEntries!({contentType:"voice_note",order:"newest",limit:1}));expect(repeated.evidence).toEqual(result.evidence);expect(repeated.coverage.passageReadAttempts).toBe(3);
+      return {text:"",readPaths:[],supportSelections:summary?[{id:summary.id,mode:"raw_report",summaryText:"The source repeatedly describes a tentative option."}]:[]};
+    };
+    const reply=await createEngine({repo,llm,state,entrySearch}).ask("Summarize the latest voice note");
+    if(chars<20000)expect(reply.text).toContain("The source repeatedly describes a tentative option.");
+    else expect(reply.coverage?.continuation).toContainEqual(expect.objectContaining({tool:"read_note",input:expect.objectContaining({path:ref})}));
+  });
+
+  it("does not multiply automatic character allowances across concurrent searches",async()=>{
+    const path="Log/2026-09-08.md",refs=[path+"#^e-123abc",path+"#^e-456def"];
+    await writeFile(join(repo.path,path),"# Log\n\n"+refs.map(ref=>`## 14:16 Capture ^${ref.split("#^")[1]}\n> ${"A complete report. ".repeat(1600)}\n\n`).join(""));
+    const entrySearch=vi.fn(async(input:any)=>({entries:[{evidenceRef:refs[input.query==="second"?1:0],capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:2,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const results=await Promise.all([tools.searchEntries!({query:"first",limit:1}),tools.searchEntries!({query:"second",limit:1})]);
+      const evidence=results.flatMap(value=>JSON.parse(value).evidence),pieces=evidence.flatMap((entry:any)=>entry.passage?.passages??(entry.passage?[entry.passage]:[]));
+      expect(pieces.reduce((sum:number,piece:any)=>sum+piece.body.length,0)).toBeLessThanOrEqual(20000);
+      const repeated=JSON.parse(await tools.searchEntries!({query:"second",limit:1}));expect(repeated.coverage.passageReadAttempts).toBe(3);expect(repeated.coverage.searches.some((search:any)=>search.unreadEvidenceRefs.includes(refs[1]))).toBe(true);
+      return {text:"",readPaths:[],supportSelections:[]};
+    };
+    await createEngine({repo,llm,state,entrySearch}).ask("Read selected recordings");
+  });
+
+  it("retains successful automatic pieces and failed coverage when continuation becomes stale",async()=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc",raw="# Log\n\n## 14:16 Capture ^e-123abc\n> "+"A tentative claim. ".repeat(1000);
+    await writeFile(join(repo.path,path),raw);
+    const entrySearch=vi.fn(async()=>({entries:[{evidenceRef:ref,capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:1,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const revision=repo.currentRevision.bind(repo);let calls=0;
+      const spy=vi.spyOn(repo,"currentRevision").mockImplementation(async()=>{if(++calls===2)await writeFile(join(repo.path,path),raw+" Changed.");return revision();});
+      try{
+        const result=JSON.parse(await tools.searchEntries!({limit:1,exhaustive:true}));
+        expect(result.evidence[0].passage.body).toHaveLength(8000);expect(result.evidence[0].error).toBeTruthy();expect(result.coverage.failedReads).toContain(ref);
+        expect(result.evidence[0].passage.answerSupports.some((hint:any)=>hint.kind==="source_summary")).toBe(false);
+      }finally{spy.mockRestore();}
+      return {text:"",readPaths:[],supportSelections:[]};
+    };
+    const reply=await createEngine({repo,llm,state,entrySearch}).ask("Read the latest source");expect(reply.coverage?.status).toBe("partial");
   });
 
   it("keeps automatic catalog reads bounded across repeated searches and reports truncated passages", async () => {
@@ -1117,6 +1187,10 @@ describe("BrainEngine", () => {
       const result = await original(input);
       result.pages = [{ path: "Areas/Insurance.md", action: "update", title: "Insurance" }];
       if (exhausted || inputs.length === 1) result.topics![0]!.pages = [];
+      if(input.retryDecisions) result.topics = result.topics!.flatMap(topic=>{
+        const decision=input.retryDecisions!.find(item=>item.topic.topic===topic.topic);
+        return decision?[{...topic,retryId:decision.id}]:[];
+      });
       return result;
     });
     const e = engine();
@@ -1129,7 +1203,7 @@ describe("BrainEngine", () => {
     expect(result.topics!.find(topic => topic.topic === "Axa")!.status).toBe("filed");
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
     if (exhausted) {
-      expect(result.topics!.find(topic => topic.topic === "Insurance")!.reason).toBe("classification_unavailable");
+      expect(result.topics!.find(topic => topic.topic === "Insurance")!.reason).toContain("classification_topic_destination_missing");
       expect(result.pagesTouched).not.toContain("Areas/Insurance.md");
     }
     expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
@@ -1148,6 +1222,10 @@ describe("BrainEngine", () => {
           passageId: index === 0 && (exhausted || inputs.length === 1) ? input.sourcePassages!.at(-1)!.id : input.sourcePassages![0]!.id }];
         if (empty && index === 0 && (exhausted || inputs.length === 1)) topic.evidenceAssignments=[];
       });
+      if(input.retryDecisions) result.topics = result.topics!.flatMap(topic=>{
+        const decision=input.retryDecisions!.find(item=>item.topic.topic===topic.topic);
+        return decision?[{...topic,retryId:decision.id}]:[];
+      });
       return result;
     });
     const e = engine();
@@ -1162,6 +1240,105 @@ describe("BrainEngine", () => {
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
     if (exhausted) expect(result.pagesTouched).not.toContain("Areas/Insurance.md");
     expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("persists accepted classification siblings across malformed repair and a fresh-engine pending receipt retry", async () => {
+    const content="Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);
+    const original=llm.classify.bind(llm), inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      inputs.push(input);
+      if(inputs.length===2) throw new Error("classify: structured_output_invalid");
+      const result=await original(input);
+      if(inputs.length===1) result.topics![1]!.evidenceQuotes=["Source text that does not exist."];
+      if(input.retryDecisions){
+        // An attempted rewrite of the accepted sibling is not an owned target.
+        result.topics=result.topics!.flatMap(topic=>{
+          const decision=input.retryDecisions!.find(item=>item.topic.topic===topic.topic);
+          return decision?[{...topic,topic:"Renamed Axa idea",retryId:decision.id}]:[];
+        });
+      }
+      return result;
+    });
+    const e=engine(),captured=await e.captureEvidence!({content,source:"selftest"});
+    const input={content,source:"selftest",evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(input);
+    expect(first.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    const failed=first.topics!.find(t=>t.topic==="Axa")!;
+    expect(failed.status).toBe("pending");expect(failed.reason).toContain("classification_source_address_invalid");expect(failed.reason).toContain("structured_output_invalid");
+    expect(inputs[1]!.retryDecisions!.map(d=>d.topic.topic)).not.toContain("Insurance");
+    const insurance=await readFile(join(repo.path,"Areas/Insurance.md"),"utf8");
+    const second=await engine().enrichEvidence!(input);
+    expect(inputs).toHaveLength(3);expect(inputs[2]!.retryDecisions!.map(d=>d.topic.topic)).toEqual(["Axa"]);
+    expect(second.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    expect(second.topics!.find(t=>t.topic==="Renamed Axa idea")!.ideaId).toBe(failed.ideaId);
+    expect(second.topics!.find(t=>t.topic==="Renamed Axa idea")!.status).toBe("filed");
+    expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toBe(insurance);
+    expect(vi.mocked(llm.composePage).mock.calls.filter(([i])=>i.path==="Areas/Insurance.md")).toHaveLength(1);
+    const before=await repo.currentRevision(),calls=vi.mocked(llm.composePage).mock.calls.length;
+    await engine().enrichEvidence!(input);
+    expect(inputs).toHaveLength(3);expect(vi.mocked(llm.composePage).mock.calls).toHaveLength(calls);
+    expect(await repo.currentRevision()).toEqual(before);expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("resumes an old whole-window receipt with multiple new decisions and keeps the original capture",async()=>{
+    const content="Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);const original=llm.classify.bind(llm);
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      expect(input.retryDecisions).toHaveLength(1);expect(input.retryDecisions![0]!.scope).toBe("source_window");
+      const result=await original(input);result.topics=result.topics!.map(topic=>({...topic,retryId:input.retryDecisions![0]!.id}));return result;
+    });
+    const e=engine(),captured=await e.captureEvidence!({content,source:"selftest"});
+    const input={content,source:"selftest",evidenceRef:captured.evidenceRef};
+    const receipt=sealFilingReceipt({version:1,evidenceRef:captured.evidenceRef,inputFingerprint:filingInputFingerprint(input),phase:"ready",baseRevision:await repo.currentRevision(),files:{},
+      classification:{pages:[],confidence:0,summary:"pending",tags:[],topics:[{ideaId:"legacy",topic:"Unclassified segment 1",summary:"classification pending",evidenceQuotes:[content],sourceRange:{start:0,end:content.length},classificationFailed:true,pages:[],confidence:0,disposition:"needs_clarification"}]},
+      outcomes:[{ideaId:"legacy",topic:"Unclassified segment 1",evidenceRef:captured.evidenceRef,status:"pending",sourceSpans:[{start:0,end:content.length}],confidence:0,disposition:"needs_clarification",pages:[],filedPages:[],reason:"classification_unavailable"}]});
+    await writeFile(join(repo.path,filingReceiptPath(captured.evidenceRef)),renderFilingReceipt(receipt));await repo.commitAndPublish("old receipt");
+    const result=await engine().enrichEvidence!(input);expect(result.topics!.filter(t=>t.status==="filed")).toHaveLength(2);
+    expect(result.topics!.find(t=>t.topic==="Znot or Zenod?")!.status).toBe("uncertain");expect(llm.classify).toHaveBeenCalledTimes(1);
+    expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+    await engine().enrichEvidence!(input);expect(llm.classify).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains catalog safety and explicit missing coverage when corrective discovery fails",async()=>{
+    const content="Insurance update. " + "First context. ".repeat(130) + "\n\nAxa later update.";
+    const inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      inputs.push(input);if(inputs.length>1)throw new Error("classify: structured_output_invalid");
+      return {pages:[],summary:"mixed",confidence:.9,tags:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[
+        {topic:"Insurance",summary:"update",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.9,disposition:"append_compact_note" as const,pages:[{path:"Areas/Insurance",title:"Insurance",action:"update" as const}]},
+        {topic:"Unknown destination",summary:"uncertain",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.4,disposition:"needs_clarification" as const,pages:[{path:"Projects/Invented.md",title:"Invented",action:"create" as const}],question:"Which project?"}
+      ]};
+    });
+    const e=engine(),captured=await e.captureEvidence!({content,source:"selftest"});
+    const result=await e.enrichEvidence!({content,source:"selftest",evidenceRef:captured.evidenceRef});
+    expect(inputs).toHaveLength(2);expect(inputs[1]!.retryDecisions!.every(d=>d.scope==="source_window")).toBe(true);
+    expect(inputs[1]!.retryDecisions!.map(d=>d.topic.topic)).not.toContain("Insurance");
+    expect(result.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    expect(result.topics!.find(t=>t.topic==="Unknown destination")!.pages).toEqual([]);
+    expect(result.topics!.some(t=>t.reason?.includes("classification_assigned_passage_unsupported")&&t.status==="pending")).toBe(true);
+    expect(result.pagesTouched).not.toContain("Projects/Invented.md");
+    expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("an invalid optional catalog refinement cannot erase accepted or source-backed uncertain decisions",async()=>{
+    await Promise.all(Array.from({length:25},(_,i)=>writeFile(join(repo.path,`Notes/Extra ${i}.md`),`# Extra ${i}\n\nUnrelated catalog page.\n`)));
+    await repo.commitAndPublish("large catalog");
+    const content="Insurance update.\n\nAxa update.";const inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      inputs.push(input);
+      const base={pages:[],confidence:.9,summary:"mixed",tags:[]};
+      const good={topic:"Insurance",summary:"update",evidenceQuotes:["Insurance update."],confidence:.95,disposition:"append_compact_note" as const,pages:[{path:"Areas/Insurance.md",title:"Insurance",action:"update" as const}]};
+      const uncertain={topic:"Axa",summary:"uncertain route",evidenceQuotes:["Axa update."],confidence:.4,disposition:"needs_clarification" as const,pages:[],question:"Which project?"};
+      if(!input.retryDecisions)return {...base,topics:[good,uncertain]};
+      expect(input.retryDecisions.map(d=>d.topic.topic)).toEqual(["Axa"]);
+      return {...base,topics:[{...uncertain,evidenceQuotes:["Fabricated text"],retryId:input.retryDecisions[0]!.id},{...good,topic:"Rewrite accepted sibling",retryId:"unknown-id"}]};
+    });
+    const e=engine(),capture=await e.captureEvidence!({content,source:"selftest"});
+    const result=await e.enrichEvidence!({content,source:"selftest",evidenceRef:capture.evidenceRef});
+    expect(inputs).toHaveLength(2);expect(inputs[1]!.hints.join(" ")).toContain("fallback search");
+    expect(result.topics!.map(t=>[t.topic,t.status])).toEqual([["Insurance","filed"],["Axa","uncertain"]]);
+    expect(result.topics![1]!.reason).toBe("Which project?");
   });
 
   it("discovers a pending label across languages but requires the exact raw read for answer support", async () => {
@@ -1181,6 +1358,117 @@ describe("BrainEngine", () => {
       return {text:"ignored",readPaths:[capture.evidenceRef],supportSelections:[{id:read.answerSupports[0].id,mode:"raw_report"}]};
     };
     const answer=await e.ask("Is the library reading decided?");expect(answer.text).toContain(content);expect(answer.text).not.toContain("inputFingerprint");
+  });
+
+  it("passes the declared specific branch scope when shared emotions do not establish its subject",async()=>{
+    const path="Areas/Relatives.md",scope="Father, sister, inheritance and arrangements within the family.";
+    const raw=serializeNote({title:"Family arrangements",type:"area",tags:[],summary:scope,created:"2026-09-01",updated:"2026-09-01"},"# Family arrangements\nFinding peace is important.\n[[Index]]\n");
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("declared family scope");
+    const content="I may rent near a quiet studio because I want peace; I have not decided.";
+    llm.classify=vi.fn(async()=>({confidence:.95,summary:"Quiet studio",tags:[],pages:[],topics:[{topic:"Quiet studio",summary:content,evidenceQuotes:[content],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Family arrangements",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.branch).toEqual({title:"Family arrangements",scope});
+      expect(JSON.stringify({branch:request.branch,statements:request.statements}).length).toBeLessThanOrEqual(8000);
+      return [{kind:"clarify" as const,ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,sourceQuote:content,targetId:null,factKey:null,correctionQuote:null,reason:"The studio proposal does not establish a relationship to the declared relatives and inheritance subject."}];
+    });Object.assign(llm,{reconcile});
+    const result=await engine().store({content,source:"selftest"});
+    expect(reconcile).toHaveBeenCalledOnce();expect(result.topics![0]!.status).toBe("pending");
+    expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
+  });
+
+  it.each([false,true])("reconstructs owned ADD candidates across destinations and pending receipt retry without copying model quotes (sourceUnits=%s)",async sourceUnits=>{
+    const paths=["Projects/SharedA.md","Projects/SharedB.md"];
+    for(const path of paths)await writeFile(join(repo.path,path),`# Shared\nPreserved history.\n[[Index]]\n`);
+    await repo.commitAndPublish("seed shared destinations");
+    const quote="Only if approved, Mina checks the drain. No decision has been made.";
+    const content="This remains provisional. "+quote+" A separate option exists.";
+    const {classificationSourceUnits}=await import("../src/llm/classificationSourceUnits.js");
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Shared qualification",tags:[],pages:[],passageReviews:[{passageId:input.sourcePassages![0]!.id,status:"assigned" as const}],topics:paths.map(path=>({topic:path,summary:quote,evidenceQuotes:[],evidenceAssignments:sourceUnits?classificationSourceUnits(input.sourcePassages!,input.sourceRange).assignments(["u2","u3"]):[{passageId:input.sourcePassages![0]!.id,quote,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Shared",action:"update" as const}]}))}));
+    let rejectB=true;
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.ideas).toHaveLength(1);
+      expect(request.addCandidates).toHaveLength(1);
+      const candidate=request.addCandidates![0]!;
+      expect(candidate.text).toBe(quote);expect(candidate.ideaIds).toEqual([request.ideas[0]!.id]);
+      expect(candidate.start).toBe(content.indexOf(quote));
+      expect(request.sources.map(source=>source.text).join("")).toContain("No decision has been made.");
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[request.path===paths[1]&&rejectB?"missing":candidate.id],sourceQuote:"Mina checks the drain. Invented punctuation!",targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    });Object.assign(llm,{reconcile});
+    const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.topics!.map(topic=>topic.status)).toEqual(["filed","pending","uncertain"]);
+    expect(first.topics!.at(-1)!.reason).toBe("source_not_assigned");
+    expect(first.topics!.at(-1)!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("")).toBe("This remains provisional.  A separate option exists.");
+    const firstPage=await readFile(join(repo.path,paths[0]!),"utf8");expect(firstPage).toContain(quote);expect(firstPage).not.toContain("Invented punctuation");
+    rejectB=false;
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
+    const second=await reopened.enrichEvidence!(request);expect(second.filing).toBe("uncertain");expect(second.topics!.slice(0,2).map(topic=>topic.status)).toEqual(["filed","filed"]);expect(second.topics!.at(-1)!.reason).toBe("source_not_assigned");
+    expect(reconcile).toHaveBeenCalledTimes(3);expect(llm.classify).toHaveBeenCalledOnce();
+    expect(await readFile(join(repo.path,paths[0]!),"utf8")).toBe(firstPage);
+    expect((await readFile(join(repo.path,paths[1]!),"utf8")).split(quote)).toHaveLength(2);
+    await reopened.enrichEvidence!(request);expect(reconcile).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps a wholly source-incomplete reconciliation request pending without calling the model",async()=>{
+    const path="Projects/Readiness.md",raw="# Readiness\nExisting preserved context.\n[[Index]]\n";
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed readiness");
+    const quotes=Array.from({length:9},(_,i)=>`Condition ${i}: ${"This remains a conditional estimate. ".repeat(12)}`.trim());
+    const content=quotes.join("\n\n");
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Conditional estimates",tags:[],pages:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[{topic:"One grouped estimate",summary:"Conditional estimates",evidenceQuotes:[],evidenceAssignments:quotes.map(quote=>({passageId:input.sourcePassages!.find(p=>p.start<content.indexOf(quote)+quote.length&&p.end>content.indexOf(quote))!.id,quote,occurrence:0})),confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Readiness",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async()=>{throw new Error("No ready ideas must not reach the model");});Object.assign(llm,{reconcile});
+    const e=engine(),capture=await e.captureEvidence!({content,source:"whatsapp"});
+    const request={content,source:"whatsapp" as const,evidenceRef:capture.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.topics).toHaveLength(1);expect(first.topics![0]).toMatchObject({status:"pending",reason:"reconciliation_source_context_incomplete"});
+    expect(reconcile).not.toHaveBeenCalled();expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
+    const retry=await reopened.enrichEvidence!(request);expect(retry.topics![0]).toMatchObject({status:"pending",reason:"reconciliation_source_context_incomplete"});
+    expect(reconcile).not.toHaveBeenCalled();expect(llm.classify).toHaveBeenCalledOnce();expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
+  });
+
+  it("records unassigned clauses separately from filed identity spans and keeps completed replay stable",async()=>{
+    const path="Projects/ReceiptCoverage.md",raw="# Receipt coverage\nExisting history.\n[[Index]]\n";
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed receipt coverage");
+    const assigned="The rent option remains tentative.",unassigned="Salary covers the opening mortgage costs.",content=assigned+" "+unassigned;
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Rent option",tags:[],pages:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[{topic:"Rent option",summary:"Rent option",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:assigned,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Receipt coverage",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.sources.map(source=>source.text).join("")).toContain(unassigned);
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[request.addCandidates![0]!.id],sourceQuote:"-",targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    });Object.assign(llm,{reconcile});
+    const e=engine(),capture=await e.captureEvidence!({content,source:"whatsapp"}),request={content,source:"whatsapp" as const,evidenceRef:capture.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.topics!.find(topic=>topic.topic==="Rent option")!.status).toBe("filed");
+    const remainder=first.topics!.find(topic=>topic.reason==="source_not_assigned")!;expect(remainder.status).toBe("uncertain");expect(remainder.sourceSpans.map(span=>content.slice(span.start,span.end)).join("").trim()).toBe(unassigned);
+    const filed=await readFile(join(repo.path,path),"utf8");expect(filed).toContain(assigned);expect(filed).not.toContain(unassigned);
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});const replay=await reopened.enrichEvidence!(request);
+    expect(replay.commitSha).toBe(first.commitSha);expect(replay.topics).toEqual(first.topics);expect(llm.classify).toHaveBeenCalledOnce();expect(reconcile).toHaveBeenCalledOnce();expect(await readFile(join(repo.path,path),"utf8")).toBe(filed);
+  });
+
+  it("gives each destination its own bounded context instead of starving sibling branches",async()=>{
+    const names=["BranchA","BranchB","BranchC"];
+    const pages=names.map(name=>({path:`Projects/${name}.md`,title:name,action:"update" as const}));
+    for(const page of pages)await writeFile(join(repo.path,page.path),`# ${page.title}\n\n`+[0,1,2].map(n=>`## ${page.title} policy ${n}\n\n${page.title} baseline rule ${n}.\n`+`${page.title} supporting background.\n`.repeat(90)).join("\n")+"\n[[Index]]\n");
+    await repo.commitAndPublish("large independent branches");
+    const parts=pages.flatMap(page=>Array.from({length:8},(_,i)=>({page,text:`${page.title} topic ${i} adds a fact.`,topic:`${page.title} proposition ${i}`})));
+    const content=parts.map(part=>part.text).join("\n\n");
+    const snapshot=await scanVault(repo.path);
+    const queries=parts.map(part=>({topic:part.topic,query:part.text,paths:[part.page.path]}));
+    const aggregate=await branchContext(repo.path,snapshot,queries);
+    expect(aggregate.branches.length).toBeLessThan(3); // The former shared packet really loses targets.
+    for(const page of pages){
+      const packet=await branchContext(repo.path,snapshot,queries.filter(query=>query.paths[0]===page.path));
+      expect(packet.branches.map(branch=>branch.path)).toEqual([page.path]);
+      expect(JSON.stringify(packet).length).toBeLessThanOrEqual(BRANCH_CONTEXT_MAX_CHARS);
+    }
+    llm.classify=vi.fn(async()=>({pages:[],confidence:.95,summary:"Independent branches",tags:[],topics:parts.map(part=>({topic:part.topic,summary:part.topic,evidenceQuotes:[part.text],confidence:.95,disposition:"append_compact_note" as const,pages:[part.page]}))}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      const name=pages.find(page=>page.path===request.path)!.title;
+      expect(request.statements.some(statement=>statement.text===`${name} baseline rule 0.`)).toBe(true);
+      expect(request.statements.every(statement=>!names.filter(other=>other!==name).some(other=>statement.text.includes(other)))).toBe(true);
+      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:request.sources.find(source=>source.id===idea.sourceIds[0])!.text,targetId:null,factKey:null,correctionQuote:null,reason:null}));
+    });Object.assign(llm,{reconcile});
+    const result=await engine().store({content,source:"selftest"});
+    expect(reconcile).toHaveBeenCalledTimes(3);expect(llm.classify).toHaveBeenCalledTimes(1);
+    expect(result.topics).toHaveLength(24);expect(result.topics!.every(topic=>topic.status==="filed")).toBe(true);
+    expect(result.pagesTouched.sort()).toEqual(pages.map(page=>page.path).sort());
   });
 
   it("uses atomic reconciliation for legacy store and compact captured enrichment without page composition", async () => {
@@ -1243,7 +1531,7 @@ describe("BrainEngine", () => {
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       expect(request.sources).toHaveLength(1);
       expect(request.ideas).toHaveLength(2);
-      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:idea.topic==="Visitors"?first.trim():second.trim(),statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null}));
+      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:request.addCandidates!.filter(candidate=>candidate.ideaIds.includes(idea.id)).map(candidate=>candidate.id),sourceQuote:idea.topic==="Visitors"?first.trim():second.trim(),statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null}));
     });
     Object.assign(llm,{reconcile});const e=engine();const captured=await e.captureEvidence!({content,source:"whatsapp"});
     const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
@@ -1253,32 +1541,43 @@ describe("BrainEngine", () => {
   it("files a complete proposition crossing the host source chunk boundary",async()=>{
     const quote="Each visitor must receive a durable chart printed on waterproof paper before leaving.";
     const content="Background. ".repeat(131)+quote;
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Visitor chart",tags:[],pages:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:p.end>content.indexOf(quote)?"assigned" as const:"evidence_only" as const})),topics:[{topic:"Visitor chart",summary:quote,evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages!.find(p=>p.start<=content.indexOf(quote)&&p.end>content.indexOf(quote))!.id,quote,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path:"Areas/Insurance.md",title:"Insurance",action:"update" as const}]}]}));
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       expect(request.sources).toHaveLength(2);
       expect(request.sources.some(source=>source.text.includes(quote))).toBe(false);
-      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,sourceQuote:quote,statement:quote,targetId:null,factKey:null,correctionQuote:null,reason:null}];
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[request.addCandidates!.find(candidate=>candidate.text===quote)!.id],sourceQuote:"-",statement:quote,targetId:null,factKey:null,correctionQuote:null,reason:null}];
     });
     Object.assign(llm,{reconcile});const e=engine();
     const captured=await e.captureEvidence!({content,source:"whatsapp"});
     const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
-    expect(result.filing).toBe("filed");
+    expect(result.filing).toBe("uncertain");expect(result.topics![0]!.status).toBe("filed");
+    const remainder=result.topics!.find(topic=>topic.reason==="source_not_assigned")!;
+    expect(remainder.sourceSpans.map(span=>content.slice(span.start,span.end)).join("").replaceAll("Background.","").trim()).toBe("");
     expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toContain(quote);
   });
 
-  it("files a coarse idea as reinforcement plus a new condition and replays the completed receipt", async()=>{
+  it.each([false,true])("files a coarse idea as reinforcement plus a new condition and replays the completed receipt (legacy summary: %s)", async(longSummary)=>{
     const path="Projects/Garden.md",existing="Mina waters on Tuesday.",condition="If it rains, Mina checks the drain before watering.";
-    await writeFile(join(repo.path,path),`# Garden\n${existing}\n[[Index]]\n`);await repo.commitAndPublish("seed garden");
+    const oldSummary="Existing garden context. ".repeat(30).trim();
+    const body=`# Garden\n${existing}\n[[Index]]\n`;
+    const raw=longSummary?serializeNote({title:"Garden",type:"project",tags:[],created:"2026-09-01",updated:"2026-09-01",summary:oldSummary},body):body;
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed garden");
     const content=existing+" "+condition;
-    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Garden",tags:[],pages:[],topics:[{topic:"Watering assignment and new rain procedure",summary:content,evidenceQuotes:[content],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Garden",action:"update" as const}]}]}));
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Garden",tags:[],pages:[],topics:[{topic:"Watering assignment and new rain procedure",summary:content,evidenceQuotes:[existing,condition],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Garden",action:"update" as const}]}]}));
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       const common={ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,factKey:null,correctionQuote:null,reason:null};
-      return [{...common,kind:"link_source" as const,sourceQuote:existing,targetId:request.statements.find(s=>s.text===existing)!.id},{...common,kind:"add" as const,sourceQuote:condition,targetId:null}];
+      return [{...common,kind:"link_source" as const,sourceQuote:existing,targetId:request.statements.find(s=>s.text===existing)!.id},{...common,kind:"add" as const,sourceIds:[request.addCandidates!.find(candidate=>candidate.text===condition)!.id],sourceQuote:"ignored generated words",targetId:null}];
     });
     Object.assign(llm,{reconcile});const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
     const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
     const first=await e.enrichEvidence!(request);expect(first.filing).toBe("filed");
     expect(first.topics![0]!.appliedOperationIds).toHaveLength(2);
     const page=await readFile(join(repo.path,path),"utf8");expect(page.split(existing)).toHaveLength(2);expect(page.split(condition)).toHaveLength(2);
+    if(longSummary){
+      expect(String(parseNote(page).frontmatter!.summary).length).toBeLessThanOrEqual(480);
+      expect(page).toContain(`## Previous summary\n\n${oldSummary}`);
+      expect(page).toContain("[[Index]]");expect((await e.lint()).errors).toEqual([]);
+    }
     const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
     const replay=await reopened.enrichEvidence!(request);expect(replay.commitSha).toBe(first.commitSha);
     expect(await readFile(join(repo.path,path),"utf8")).toBe(page);expect(reconcile).toHaveBeenCalledOnce();expect(llm.classify).toHaveBeenCalledOnce();
@@ -1296,7 +1595,7 @@ describe("BrainEngine", () => {
       attempt++;
       const decision=(topic:string,kind:"add"|"link_source"|"supersede",quote:string,target:string|null=null,statement:string|null=null)=>{
         const idea=request.ideas.find(idea=>idea.topic===topic)!;
-        return {kind,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:quote,targetId:target,statement,factKey:null,correctionQuote:kind==="supersede"?parts[1]!:null,reason:null};
+        return {kind,ideaIds:[idea.id],sourceIds:kind==="add"&&quote==="Invented support."?["missing-candidate"]:idea.sourceIds,sourceQuote:quote,targetId:target,statement,factKey:null,correctionQuote:kind==="supersede"?parts[1]!:null,reason:null};
       };
       if(attempt===1) return [decision("Capacity","add",parts[0]!),decision("Capacity","link_source",":123:456",request.statements.find(s=>s.text===parts[0])!.id),decision("Opening","supersede","opening moves to 19",request.statements.find(s=>s.text==="Opening is on 12.")!.id,"Opening moves to 19."),decision("Tools","add","Invented support.")];
       expect(request.ideas.map(idea=>idea.topic)).toEqual(["Capacity","Tools"]);
@@ -1538,6 +1837,7 @@ describe("BrainEngine", () => {
       const quote = input.content.includes("MIDDLE_OUTAGE") ? "discutir presupuesto." : input.content.includes(beginning) ? beginning : tail;
       const passage = input.sourcePassages!.find(p => p.text.includes(quote))!;
       return { confidence: 0.9, summary: "known idea", tags: [], pages: [], topics: [{
+        ...(input.retryDecisions?{retryId:input.retryDecisions[0]!.id}:{}),
         topic: quote === beginning ? "Network education" : quote === tail ? "English caption release" : "Budget", summary: "known idea", confidence: 0.9,
         disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
         evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 0 }],
@@ -1574,9 +1874,10 @@ describe("BrainEngine", () => {
     }));
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(result.topics![0]!.sourceSpans.map(span => content.slice(span.start, span.end))).toEqual([quote]);
-    expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(!reviewed);
-    expect(result.filing).toBe(reviewed ? "filed" : "uncertain");
-    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(!reviewed);
+    expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(true);
+    expect(result.topics!.find(topic=>topic.reason==="source_not_assigned")!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("")).toBe(content.replace(quote,""));
+    expect(result.filing).toBe("uncertain");
+    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(true);
   });
 
   it("passes complete recipient and qualified reported propositions to reconciliation while unknown routing stays uncertain", async () => {
@@ -1588,7 +1889,7 @@ describe("BrainEngine", () => {
       return { confidence: 0.95, summary: "three independent ideas", tags: [], pages: [],
         passageReviews: [{ passageId: passage.id, status: "assigned" as const }],
         topics: [
-          ...[["Visitor delivery", "reusable waterproof guide"], ["Unconfirmed report", "reports Friday"]].map(([topic, quote]) => ({
+          ...[["Visitor delivery", delivery], ["Unconfirmed report", report]].map(([topic, quote]) => ({
             topic: topic!, summary: topic!, confidence: 0.95, disposition: "append_compact_note" as const,
             pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" as const }], evidenceQuotes: [],
             evidenceAssignments: [{ passageId: passage.id, quote: quote!, occurrence: 0 }],
@@ -1611,7 +1912,9 @@ describe("BrainEngine", () => {
     Object.assign(llm, { reconcile });
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(reconcile).toHaveBeenCalledTimes(1);
-    expect(result.topics!.map(topic => topic.status)).toEqual(["filed", "filed", "uncertain"]);
+    expect(result.topics!.map(topic => topic.status)).toEqual(["filed", "filed", "uncertain", "uncertain"]);
+    expect(result.topics!.at(-1)!.reason).toBe("source_not_assigned");
+    expect(result.topics!.at(-1)!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("").trim()).toBe(", but the project and change are unknown.");
     const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
     expect(page).toContain(delivery);
     expect(page).toContain(report);
@@ -1632,7 +1935,7 @@ describe("BrainEngine", () => {
     }));
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(result.topics!.filter(topic => topic.status === "filed")).toHaveLength(1);
-    expect(result.topics!.filter(topic => topic.reason === "classification_unavailable" && topic.status === "pending")).toHaveLength(malformed ? 1 : 0);
+    expect(result.topics!.filter(topic => topic.reason?.includes("classification_source_address_invalid") && topic.status === "pending")).toHaveLength(malformed ? 1 : 0);
     expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(false);
   });
 
@@ -1645,6 +1948,7 @@ describe("BrainEngine", () => {
       inputs.push(input);
       const result = await original(input);
       if (exhausted || inputs.length === 1) result.topics = [{ ...result.topics![0]!, evidenceQuotes: [], evidenceAssignments: [] }];
+      if(input.retryDecisions) result.topics=result.topics!.map((topic,index)=>({...topic,retryId:input.retryDecisions!.find(d=>index===0?d.scope==="decision":d.scope==="source_window")!.id}));
       return { ...result, passageReviews: input.sourcePassages!.map(passage => ({ passageId: passage.id, status: "assigned" as const })) };
     });
     const result = await engine().store({ content, source: "selftest", verbatim: true });
@@ -1674,7 +1978,9 @@ describe("BrainEngine", () => {
       return { confidence: 0.95, summary: "source review", tags: [], pages: [],
         passageReviews: owned.map(p => ({ passageId: p.id,
           status: tail && !repaired ? "assigned" as const : "evidence_only" as const })),
-        topics: [makeTopic(neighbor, "First owned idea"), ...(repaired ? [makeTopic(owned[0]!, "Tail owned idea")] : [])],
+        topics: input.retryDecisions
+          ? (repaired ? [{...makeTopic(owned[0]!, "Tail owned idea"),retryId:input.retryDecisions.find(d=>d.topic.retrySourceRange?.start===owned[0]!.start)!.id}] : [])
+          : [makeTopic(neighbor, "First owned idea")],
       };
     });
     const e = engine();
@@ -1698,7 +2004,9 @@ describe("BrainEngine", () => {
     ] }));
     const result = await engine().store({ content: "Actual source spelling is Znot.", source: "mcp" });
     expect(llm.composeCalls).toBe(0);
-    expect(result.topics!.map((topic) => topic.reason)).toEqual(["source_assignment_invalid", "source_not_assigned"]);
+    expect(result.topics![0]!.status).toBe("pending");
+    expect(result.topics![0]!.reason).toContain("classification_source_address_invalid");
+    expect(result.topics![1]!.reason).toBe("source_not_assigned");
   });
 
   it("joins a topic across exact segment boundaries and provides neighboring context without unrelated evidence", async () => {
@@ -1742,8 +2050,12 @@ describe("BrainEngine", () => {
     });
     const result = await engine().store({ content, source: "mcp" });
     expect(result.filing).toBe("pending");
-    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "pending"]);
+    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "pending", "uncertain"]);
     expect(result.topics![1]!.reason).toBe("classification_unavailable");
+    // An unclassified-window placeholder is not proof that the source was reviewed.
+    expect(result.topics![2]!.reason).toBe("source_not_assigned");
+    expect(result.topics![2]!.sourceSpans).toEqual(result.topics![1]!.sourceSpans);
+    expect(result.topics![2]!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("")).toContain("FAILED classification segment.");
     expect(result.pagesTouched).toContain("Areas/Insurance.md");
     expect(llm.composeCalls).toBe(1);
   });
@@ -1802,6 +2114,36 @@ describe("BrainEngine", () => {
     expect(stub).toContain("status: needs-filing");
     expect(stub).toContain("Which area does this belong to?");
     expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("returns an explicit retry response promptly when a writer holds the vault lock", async () => {
+    const e=engine();let release!:()=>void;let locked!:()=>void;
+    const ready=new Promise<void>(r=>{locked=r;});const hold=new Promise<void>(r=>{release=r;});
+    // Separate async chain: the read must not inherit the writer's ownership.
+    const writer=withVaultWriteLock(repo.path,async()=>{locked();await hold;});await ready;
+    llm.answerOverride=async (_input,tools)=>{
+      await expect(tools.readNote!("Areas/Insurance.md")).rejects.toThrow("filing_in_progress");
+      return {text:"Invented answer must not escape the busy guard",readPaths:[]};
+    };
+    try {
+      const answer=await Promise.race([e.ask("What does my insurance note say?"),new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("read blocked behind filing")),2000))]);
+      expect(answer.text).toBe("Memory filing is in progress. Please retry your question shortly.");expect(answer.sources).toEqual([]);
+    } finally {release();await writer;}
+  });
+
+  it.each(["classify: structured_output_invalid", "classify: provider_error"])("keeps the existing window/retry budget and compacts only malformed output (%s)", async error => {
+    const content="Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content); const original=llm.classify.bind(llm); const inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async input=>{inputs.push(input);if(inputs.length===1)throw new Error(error);return original(input);});
+    const e=engine();const capture=await e.captureEvidence!({content,source:"selftest"});
+    const result=await e.enrichEvidence!({content,source:"selftest",evidenceRef:capture.evidenceRef});
+    expect(inputs).toHaveLength(2);expect(inputs[1]!.content).toBe(inputs[0]!.content);
+    expect(inputs[1]!.sourcePassages).toEqual(inputs[0]!.sourcePassages);
+    expect(inputs[1]!.sourceRange).toEqual(inputs[0]!.sourceRange);
+    expect(inputs[0]!.hints.join(" ")).not.toContain("compact valid JSON");
+    expect(inputs[1]!.hints.join(" ").includes("compact valid JSON")).toBe(error.endsWith("structured_output_invalid"));
+    expect(result.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    expect((await e.getEntry(capture.evidenceRef)).content).toBe(content);
   });
 
   it("files a valid first result when optional catalog refinement fails without restarting classification", async () => {
