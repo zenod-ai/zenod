@@ -1,3 +1,5 @@
+import { branchContext, BRANCH_CONTEXT_MAX_CHARS } from "../src/engine/meaningNotes.js";
+import { scanVault } from "../src/vault/pages.js";
 import { withVaultWriteLock } from "../src/git/vaultWriteLock.js";
 import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath, filingInputFingerprint } from "../src/engine/filingReceipt.js";
 import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
@@ -1291,6 +1293,35 @@ describe("BrainEngine", () => {
     const answer=await e.ask("Is the library reading decided?");expect(answer.text).toContain(content);expect(answer.text).not.toContain("inputFingerprint");
   });
 
+  it("gives each destination its own bounded context instead of starving sibling branches",async()=>{
+    const names=["BranchA","BranchB","BranchC"];
+    const pages=names.map(name=>({path:`Projects/${name}.md`,title:name,action:"update" as const}));
+    for(const page of pages)await writeFile(join(repo.path,page.path),`# ${page.title}\n\n`+[0,1,2].map(n=>`## ${page.title} policy ${n}\n\n${page.title} baseline rule ${n}.\n`+`${page.title} supporting background.\n`.repeat(90)).join("\n")+"\n[[Index]]\n");
+    await repo.commitAndPublish("large independent branches");
+    const parts=pages.flatMap(page=>Array.from({length:8},(_,i)=>({page,text:`${page.title} topic ${i} adds a fact.`,topic:`${page.title} proposition ${i}`})));
+    const content=parts.map(part=>part.text).join("\n\n");
+    const snapshot=await scanVault(repo.path);
+    const queries=parts.map(part=>({topic:part.topic,query:part.text,paths:[part.page.path]}));
+    const aggregate=await branchContext(repo.path,snapshot,queries);
+    expect(aggregate.branches.length).toBeLessThan(3); // The former shared packet really loses targets.
+    for(const page of pages){
+      const packet=await branchContext(repo.path,snapshot,queries.filter(query=>query.paths[0]===page.path));
+      expect(packet.branches.map(branch=>branch.path)).toEqual([page.path]);
+      expect(JSON.stringify(packet).length).toBeLessThanOrEqual(BRANCH_CONTEXT_MAX_CHARS);
+    }
+    llm.classify=vi.fn(async()=>({pages:[],confidence:.95,summary:"Independent branches",tags:[],topics:parts.map(part=>({topic:part.topic,summary:part.topic,evidenceQuotes:[part.text],confidence:.95,disposition:"append_compact_note" as const,pages:[part.page]}))}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      const name=pages.find(page=>page.path===request.path)!.title;
+      expect(request.statements.some(statement=>statement.text===`${name} baseline rule 0.`)).toBe(true);
+      expect(request.statements.every(statement=>!names.filter(other=>other!==name).some(other=>statement.text.includes(other)))).toBe(true);
+      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:request.sources.find(source=>source.id===idea.sourceIds[0])!.text,targetId:null,factKey:null,correctionQuote:null,reason:null}));
+    });Object.assign(llm,{reconcile});
+    const result=await engine().store({content,source:"selftest"});
+    expect(reconcile).toHaveBeenCalledTimes(3);expect(llm.classify).toHaveBeenCalledTimes(1);
+    expect(result.topics).toHaveLength(24);expect(result.topics!.every(topic=>topic.status==="filed")).toBe(true);
+    expect(result.pagesTouched.sort()).toEqual(pages.map(page=>page.path).sort());
+  });
+
   it("uses atomic reconciliation for legacy store and compact captured enrichment without page composition", async () => {
     const path="Projects/Legacy.md"; const raw="# Legacy\n\nUnrelated preserved history.\n[[Index]]\n";
     await writeFile(join(repo.path,path),raw); await repo.commitAndPublish("seed plain legacy project");
@@ -1864,8 +1895,12 @@ describe("BrainEngine", () => {
     });
     const result = await engine().store({ content, source: "mcp" });
     expect(result.filing).toBe("pending");
-    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "pending"]);
+    expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "pending", "uncertain"]);
     expect(result.topics![1]!.reason).toBe("classification_unavailable");
+    // An unclassified-window placeholder is not proof that the source was reviewed.
+    expect(result.topics![2]!.reason).toBe("source_not_assigned");
+    expect(result.topics![2]!.sourceSpans).toEqual(result.topics![1]!.sourceSpans);
+    expect(result.topics![2]!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("")).toContain("FAILED classification segment.");
     expect(result.pagesTouched).toContain("Areas/Insurance.md");
     expect(llm.composeCalls).toBe(1);
   });

@@ -1640,9 +1640,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const touched: string[] = [];
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
     const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
-    const atomicContext = llm.reconcile ? await branchContext(vaultPath, snapshot, [...groups.entries()].flatMap(([path, group]) => group.outcomes.map(outcome => ({
-      topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
-    })))) : null;
     for (const [path, group] of groups) {
       if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) {
         for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "invalid_meaning_path"; }
@@ -1663,7 +1660,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
           summary: group.outcomes.map((outcome) => outcome.topic).join("; "), pages: [group.page],
           confidence: Math.min(...group.outcomes.map((outcome) => outcome.confidence)) };
         const linkHints = await relevantLinks(vaultPath, snapshot, path, assignedEvidence);
-        if (llm.reconcile && atomicContext) {
+        if (llm.reconcile) {
+          // Each existing per-page reconciliation gets its own bounded packet;
+          // unrelated destinations must not consume this target's context budget.
+          const atomicContext = await branchContext(vaultPath, snapshot, group.outcomes.map(outcome => ({
+            topic: outcome.topic, query: outcome.sourceSpans.map(span => content.slice(span.start,span.end)).join("\n"), paths:[path],
+          })));
           if (currentContent !== null && !atomicContext.branches.some(branch => branch.path === path)) throw new Error("branch_context_unavailable");
           // Adjacent ASR ideas can have overlapping complete context envelopes.
           // Union host ranges before chunking so the source table stays coherent;
