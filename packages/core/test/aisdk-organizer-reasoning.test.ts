@@ -7,13 +7,13 @@ vi.mock('ai',async importActual=>{
 import {createBrainLlm} from '../src/llm/aisdk.js';
 const classified={passageReviews:[],topics:[{topic:'Synthetic',facts:[],evidenceQuotes:['Synthetic proposition.'],evidenceAssignments:[],confidence:1,disposition:'evidence_only',pages:[],summary:'Synthetic',question:null}],disposition:'evidence_only',confidence:1,summary:'Synthetic',tags:[],pages:[],question:null};
 afterEach(()=>{control.signal=undefined;vi.unstubAllGlobals();});
-function transport(classificationResponse:unknown=classified) {
+function transport(classificationResponse:unknown=classified,reconciliationResponse:unknown={operations:[]}) {
  const requests:any[]=[];
  vi.stubGlobal('fetch',vi.fn(async(url:unknown,init:RequestInit)=>{
   expect(String(url)).toBe('https://openrouter.ai/api/v1/chat/completions');
   const request=JSON.parse(String(init.body));requests.push(request);
   const system=JSON.stringify(request.messages);
-  const content=system.includes('Classify an incoming memory')?JSON.stringify(classificationResponse):system.includes('incremental memory librarian')?JSON.stringify({operations:[]}):system.includes('backlog/action digester')?JSON.stringify({candidates:[]}):'Synthetic answer.';
+  const content=system.includes('Classify an incoming memory')?JSON.stringify(classificationResponse):system.includes('incremental memory librarian')?JSON.stringify(reconciliationResponse):system.includes('backlog/action digester')?JSON.stringify({candidates:[]}):'Synthetic answer.';
   return new Response(JSON.stringify({id:'offline',object:'chat.completion',created:0,model:request.model,choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  }));return requests;
 }
@@ -87,8 +87,8 @@ it('emits strict-compatible anyOf for mutually exclusive reconciliation kinds on
  const schema=requests[0].response_format.json_schema.schema;
  expect(JSON.stringify(schema)).not.toContain('"oneOf"');
  const branches=schema.properties.operations.items.anyOf;
- expect(branches).toHaveLength(5);
- expect(branches.map((branch:any)=>branch.properties.kind.const)).toEqual(['add','link_source','supersede','conflict','clarify']);
+ expect(branches).toHaveLength(4);
+ expect(branches.map((branch:any)=>branch.properties.kind.const)).toEqual(['link_source','supersede','conflict','clarify']);
  for(const branch of branches){expect(branch.additionalProperties).toBe(false);expect(branch.required.sort()).toEqual(Object.keys(branch.properties).sort());}
 });
 
@@ -101,3 +101,25 @@ it('requires explicit retry IDs only on corrective classification and preserves 
  expect(item.required).toContain('retryId');expect(item.additionalProperties).toBe(false);
  const prompt=JSON.stringify(requests[0].messages);expect(prompt).toContain('Accepted siblings are already retained');expect(prompt).toContain('scope=source_window');expect(prompt).toContain('owned-decision');
 });
+
+ it('constrains ADD to offered candidate IDs on the actual SDK wire and rejects old context selectors',async()=>{
+  const {prepareReconciliation,applyReconciliation}=await import('../src/engine/reconciliation.js');
+  const text='Only if approved, Mina checks the drain.';
+  const prepared=prepareReconciliation({path:'Notes/Test.md',raw:null,title:'Test',type:'note',today:'2026-09-15',sourceContent:text,
+   evidence:{content:text,evidenceRef:'Log/2026-09-15.md#^e-123abc'} as any,sources:[{id:'context',start:0,end:text.length,text}],ideas:[{id:'idea',topic:'Conditional check',sourceIds:['context']}],
+   addCandidates:[{id:'candidate',ideaIds:['idea'],start:0,end:text.length,text}],context:{branches:[],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0},links:[]});
+  const base={kind:'add',ideaIds:['idea'],sourceIds:['candidate'],sourceQuote:'-',targetId:null,factKey:null,correctionQuote:null,reason:null};
+  const requests=transport(classified,{operations:[base]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+  const result=await llm.reconcile!(prepared.request);
+  const schema=requests[0].response_format.json_schema.schema;
+  const branches=schema.properties.operations.items.anyOf,add=branches.find((b:any)=>b.properties.kind.const==='add');
+  expect(add.properties.sourceIds.items.enum).toEqual(['candidate']);expect(add.properties.sourceQuote.const).toBe('-');
+  expect(branches.find((b:any)=>b.properties.kind.const==='link_source').properties.sourceIds.items).toEqual({type:'string'});
+  expect(JSON.stringify(schema)).not.toContain('"oneOf"');
+  const applied=await applyReconciliation(prepared,result);expect(applied.pending).toEqual([]);expect(applied.content).toContain(text);
+  transport(classified,{operations:[{...base,sourceIds:['context'],sourceQuote:text}]});
+  await expect(llm.reconcile!(prepared.request)).rejects.toThrow('reconciliation_unavailable');
+  const empty=transport(classified,{operations:[{...base,kind:'clarify',sourceIds:['context'],sourceQuote:text,reason:'No complete candidate'}]});
+  await expect(llm.reconcile!({...prepared.request,addCandidates:[]})).resolves.toMatchObject([{kind:'clarify'}]);
+  expect(empty[0].response_format.json_schema.schema.properties.operations.items.anyOf.map((b:any)=>b.properties.kind.const)).not.toContain('add');
+ });

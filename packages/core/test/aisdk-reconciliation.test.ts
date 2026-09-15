@@ -24,12 +24,13 @@ it('uses one bounded structured classifier-model call with idea identity and rea
 
 it('enforces per-kind target requirements and exact-source fields at the provider schema',async()=>{
  const llm=createBrainLlm({provider:'openrouter',apiKey:'synthetic-unused'});
- await llm.reconcile!({path:'Projects/A.md',revision:'test',contextPartial:false,statements:[],sources:[],ideas:[]});
+ await llm.reconcile!({path:'Projects/A.md',revision:'test',contextPartial:false,statements:[],sources:[],ideas:[],addCandidates:[{id:'candidate',ideaIds:['i'],start:0,end:5,text:'Exact'}]});
  const call=vi.mocked(generateObject).mock.calls.at(-1)![0];
  const schema=call.schema as unknown as {safeParse:(value:unknown)=>{success:boolean}};
  const base={ideaIds:['i'],sourceIds:['s'],sourceQuote:'Exact source.',factKey:null,reason:null,correctionQuote:null};
  const accepts=(operation:unknown)=>schema.safeParse({operations:[operation]}).success;
- expect(accepts({...base,kind:'add',targetId:null})).toBe(true);
+ expect(accepts({...base,kind:'add',sourceIds:['candidate'],sourceQuote:'-',targetId:null})).toBe(true);
+ expect(accepts({...base,kind:'add',targetId:null})).toBe(false);
  expect(accepts({...base,kind:'add',targetId:'st-existing'})).toBe(false);
  expect(accepts({...base,kind:'link_source',targetId:null})).toBe(false);
  expect(accepts({...base,kind:'supersede',targetId:null,correctionQuote:'Correction.',replacementQuote:null})).toBe(false);
