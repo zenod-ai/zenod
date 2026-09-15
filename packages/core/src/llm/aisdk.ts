@@ -1050,7 +1050,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const submissionSchema = z.object({ supportSelections: z.array(z.object({
       id: z.string().regex(/^as_[a-f0-9]{24}$/),
       mode: z.enum(["current", "historical", "prior", "conflict", "raw_report"]),
-      summaryText: z.string().trim().min(1).max(1200).optional().describe("For a requested source summary, supply concise summaryText on raw_report passage support. Omit only for verbatim excerpts or canonical fact modes. Preserve attribution, alternatives, uncertainty, conditions, negation and ambiguous numbers without interpretation. No URLs or Markdown links; the host adds the verified citation."),
+      summaryText: z.string().trim().min(1).max(1200).nullable().describe("Always provide summaryText: write concise text for a requested source summary on raw_report passage support; choose null explicitly only for verbatim excerpts or canonical fact modes. Preserve attribution, alternatives, uncertainty, conditions, negation and ambiguous numbers without interpretation. No URLs or Markdown links; the host adds the verified citation."),
     }).strict()).max(24) }).strict();
     // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
@@ -1637,7 +1637,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const toolRounds = Math.max(1, this.maxSteps - 1);
     const budgetNote = input.answerSupportContract ? [
       `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; the final round allows submission or ordinary prose but no action tools. A completed authoritative action may return its receipt as prose."}`,
-      "Submission ends this turn immediately. For requested source summaries, the host renders your cited summaryText; id/mode alone renders verbatim evidence. Write the summary inside the submission, not as closing prose afterward.",
+      "Submission ends this turn immediately. For requested source summaries, the host renders your cited summaryText; summaryText:null deliberately renders verbatim evidence or canonical fact wording. Write the summary inside the submission, not as closing prose afterward.",
     ].join(" ") : [
       `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
       "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
@@ -1722,12 +1722,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       tools: {
         ...(input.answerSupportContract ? {
           submit_memory_answer: tool({
-            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a requested summary, write concise summaryText on raw_report passage selections; id/mode alone prints verbatim excerpts and does not summarize. Use complete relevant supports and preserve attribution, options, uncertainty, conditions and ambiguous numbers; other modes retain canonical wording. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
+            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a requested summary, write concise summaryText on raw_report passage selections; summaryText:null explicitly selects verbatim excerpts and does not summarize; always include this field. Use complete relevant supports and preserve attribution, options, uncertainty, conditions and ambiguous numbers; other modes retain canonical wording. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
             inputSchema: submissionSchema,
             execute: async (submission) => {
               if (!submissionAllowedThisStep || submittedAnswer) {
                 submittedAnswer = {text:"",readPaths:sourcePaths(),supportProtocolError:"invalid_submission"};
-              } else submittedAnswer = {text:"",readPaths:sourcePaths(),supportSelections:submission.supportSelections};
+              } else submittedAnswer = {text:"",readPaths:sourcePaths(),supportSelections:submission.supportSelections.map(({summaryText,...selection})=>({...selection,...(summaryText===null?{}:{summaryText})}))};
               return {submitted:true};
             },
           }),

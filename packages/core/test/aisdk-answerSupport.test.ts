@@ -24,7 +24,7 @@ function wire(replies:Reply[]) {
  return requests;
 }
 const read={name:"read_facts",input:{path:"Notes/Atlas.md"}};
-const submit={name:"submit_memory_answer",input:{supportSelections:[{id,mode:"current"}]}};
+const submit={name:"submit_memory_answer",input:{supportSelections:[{id,mode:"current",summaryText:null}]}};
 const input={question:"¿Cuándo empieza?",vaultBriefing:"",conversation:[],answerSupportContract:"v1" as const,answerSupportScope:"memory_only" as const};
 const llm=(maxSteps=5)=>createBrainLlm({provider:"openrouter",apiKey:"synthetic",askModel:"x-ai/grok-4.3",maxSteps});
 describe("typed terminal answer submission through actual SDK wire",()=>{
@@ -78,11 +78,11 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   expect(result).toEqual({text:"",readPaths:[],supportProtocolError:"missing_submission"});expect(requests).toHaveLength(2);expect(result.supportSelections).toBeUndefined();
  });
  it("passes well-shaped unknown IDs and wrong allowed modes to host validation, never inventing authority",async()=>{
-  const unknown="as_ffffffffffffffffffffffff";wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:unknown,mode:"prior"}]}}]}]);
+  const unknown="as_ffffffffffffffffffffffff";wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:unknown,mode:"prior",summaryText:null}]}}]}]);
   expect((await llm().answer(input,tools)).supportSelections).toEqual([{id:unknown,mode:"prior"}]);
  });
  it("fails protocol completion on schema-invalid submission at the budget limit without recovery",async()=>{
-  const requests=wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:"invented",mode:"current"}]}}]}]);
+  const requests=wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:"invented",mode:"current",summaryText:null}]}}]}]);
   const result=await llm(2).answer(input,tools);
   expect(result.supportProtocolError).toBe("missing_submission");expect(result.supportSelections).toBeUndefined();expect(requests).toHaveLength(2);
  });
@@ -124,7 +124,7 @@ it('advertises exclusive seek/continuation and completes a valid continuation wi
   if(options.cursor){expect(options.query).toBeUndefined();expect(options.cursor).toBe(cursor);return JSON.stringify({body:'Complete teaching proposition.',answerSupports:[{id,modes:['raw_report']}]})}
   return JSON.stringify({body:'# Daily log',queryMatched:false,nextCursor:cursor,answerSupports:[],readPartial:true});
  });
- const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report'}]}}]}]);
+ const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report',summaryText:null}]}}]}]);
  const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',listPages:async()=>'',readNote});
  expect(result.supportSelections).toEqual([{id,mode:'raw_report'}]);expect(requests).toHaveLength(3);expect(readNote).toHaveBeenCalledTimes(2);
  const advertised=requests[0].tools.find((t:any)=>t.function.name==='read_note').function;
@@ -155,18 +155,31 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  const system=JSON.stringify(requests[0].messages);
  expect(system).toContain("chronological order and count FIRST");
  expect(system).toContain("covering beginning, middle and end");
- expect(system).toContain("An id/mode pair without summaryText prints a verbatim excerpt; it does not summarize");
+ expect(system).toContain("Always include summaryText in the model submission");
  expect(system).toContain("Preserve ambiguous numbers as ambiguous");
  expect(system).toContain("Use a few complete relevant supports while retaining all requested subjects");
  const terminal=requests.at(-1).tools.find((t:any)=>t.function.name==="submit_memory_answer").function;
  expect(terminal.description).toContain("write concise summaryText");
  expect(terminal.description).toContain("does not summarize");
  const selection=terminal.parameters.properties.supportSelections.items;
- expect(selection.properties.summaryText.description).toContain("For a requested source summary, supply");
- // Backward compatibility: quote-only answers and canonical fact modes still
- // omit this field. The instruction makes summary intent explicit to the model.
- expect(selection.required).toEqual(["id","mode"]);
+ expect(selection.properties.summaryText.description).toContain("Always provide summaryText");
+ // The model must choose text or null; internal selections remain compatible.
+ expect(selection.required).toEqual(["id","mode","summaryText"]);
  const search=requests[0].tools.find((t:any)=>t.function.name==="search_entries").function;
  expect(search.description).toContain("identify it FIRST with contentType, order=newest and limit=1, without query");
  expect(search.parameters.properties.query.description).toContain("Omit when first identifying a referenced latest item");
+});
+
+it.each([undefined,"", " ", "x".repeat(1201)])('rejects an omitted or invalid model summary choice without another round: %s',async summaryText=>{
+ const selection={id,mode:'raw_report',...(summaryText===undefined?{}:{summaryText})};
+ const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[selection]}}]}]);
+ const result=await llm(2).answer(input,tools);
+ expect(result.supportProtocolError).toBe('missing_submission');expect(result.supportSelections).toBeUndefined();expect(requests).toHaveLength(2);
+});
+it.each([null,'The speaker may rent; this is not decided.'])('normalizes an explicit model summary choice at the adapter boundary: %s',async summaryText=>{
+ const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report',summaryText}]}}]}]);
+ const result=await llm(2).answer(input,tools);
+ expect(result.supportSelections).toEqual([{id,mode:'raw_report',...(summaryText===null?{}:{summaryText})}]);
+ const schema=requests[1].tools.find((t:any)=>t.function.name==='submit_memory_answer').function.parameters.properties.supportSelections.items;
+ expect(schema.required).toContain('summaryText');expect(schema.properties.summaryText.anyOf).toContainEqual({type:'null'});
 });
