@@ -663,11 +663,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false, onReadBusy?: () => void): VaultReadTools {
-    const readRevision = async () => {
-      try { return await safeReadRevision(); } catch (error) {
+    // Parallel tools in one turn share only the in-flight revision probe. They
+    // must not mistake each other's brief lock for a background filing writer.
+    let revisionProbe: Promise<VaultRevision> | undefined;
+    const readRevision = (): Promise<VaultRevision> => {
+      if (revisionProbe) return revisionProbe;
+      revisionProbe = safeReadRevision().catch(error => {
         if (error instanceof VaultWriteBusyError) { onReadBusy?.(); throw new Error("filing_in_progress: Memory filing is in progress. Please retry shortly; no coherent source was read."); }
         throw error;
-      }
+      }).finally(() => { revisionProbe = undefined; });
+      return revisionProbe;
     };
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
