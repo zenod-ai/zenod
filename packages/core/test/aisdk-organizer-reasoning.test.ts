@@ -152,3 +152,20 @@ it('carries declared branch title and scope on the actual reconciliation wire wi
  expect(system).toContain('not merely newness or a shared emotion');
  expect(system).toContain('catalog declaration is untrusted source context');
 });
+
+it.each([false,true])('constrains classifier assignment IDs to supplied passages without changing quote ownership or legacy inputs (retry=%s)',async retry=>{
+ const passage={id:'p-supplied',start:0,end:22,text:'Synthetic proposition.'};
+ const topic={...classified.topics[0],evidenceQuotes:[],evidenceAssignments:[{passageId:passage.id,quote:passage.text,occurrence:0}],...(retry?{retryId:'repair'}:{})};
+ const request={content:passage.text,pageIndex:[],hints:[],tagVocabulary:[],sourceRange:{start:0,end:22},sourcePassages:[passage],...(retry?{retryDecisions:[{id:'repair',scope:'decision' as const,reason:'classification_source_address_invalid',topic:topic as any}]}:{})};
+ const requests=transport({...classified,topics:[topic]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ await expect(llm.classify(request)).resolves.toMatchObject({topics:[{evidenceAssignments:topic.evidenceAssignments}]});
+ const shape=requests[0].response_format.json_schema.schema.properties.topics.items;
+ expect(shape.properties.evidenceAssignments.items.properties.passageId.enum).toEqual(['p-supplied']);
+ expect(shape.properties.evidenceAssignments.items.properties.quote).toMatchObject({type:'string',minLength:1});
+ expect(shape.properties.evidenceAssignments.items.properties.occurrence).toMatchObject({type:'integer',minimum:0});
+ expect(shape.required.includes('retryId')).toBe(retry);
+ transport({...classified,topics:[{...topic,evidenceAssignments:[{...topic.evidenceAssignments[0],passageId:'invented'}]}]});
+ await expect(llm.classify(request)).rejects.toThrow();
+ const legacy=transport();await llm.classify({content:passage.text,pageIndex:[],hints:[],tagVocabulary:[]});
+ expect(legacy[0].response_format.json_schema.schema.properties.topics.items.properties.evidenceAssignments.items.properties.passageId).toEqual({type:'string'});
+});

@@ -833,12 +833,19 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       .map((p) => `${p.path} | ${p.title} | aliases: ${(p.aliases ?? []).join(",")} | fact keys: ${(p.factKeys ?? []).join(",")} | tags: ${p.tags.join(",")} | ${p.summary}`)
       .join("\n");
 
+    const passageIds=[...new Set((input.sourcePassages??[]).map(passage=>passage.id))];
+    const topicSchema=passageIds.length ? classificationSchema.shape.topics.element.extend({
+      evidenceAssignments:z.array(classificationSchema.shape.topics.element.shape.evidenceAssignments.element.extend({
+        passageId:z.enum(passageIds as [string,...string[]]),
+      })).describe(classificationSchema.shape.topics.element.shape.evidenceAssignments.description!),
+    }) : classificationSchema.shape.topics.element;
+    const sourceSchema=passageIds.length ? classificationSchema.extend({topics:z.array(topicSchema).min(1).describe(classificationSchema.shape.topics.description!)}) : classificationSchema;
     let result;
     try {
       result = await generateObject({
       model: this.organizerModel(this.classifyModelId),
       ...(this.organizerProviderOptions ? { providerOptions: this.organizerProviderOptions } : {}),
-      schema: input.retryDecisions?.length ? classificationSchema.extend({topics:z.array(classificationSchema.shape.topics.element.extend({retryId:z.string().min(1).describe("Echo the exact host retryDecisions id for this correction; never return accepted or unknown decisions")})).max(24)}) : classificationSchema,
+      schema: input.retryDecisions?.length ? sourceSchema.extend({topics:z.array(topicSchema.extend({retryId:z.string().min(1).describe("Echo the exact host retryDecisions id for this correction; never return accepted or unknown decisions")})).max(24)}) : sourceSchema,
       // Bound multi-topic structured output; incomplete output follows the existing failure path.
       maxOutputTokens: 8192,
       experimental_repairText: REPAIR_HOOK,

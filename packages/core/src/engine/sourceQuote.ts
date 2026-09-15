@@ -1,8 +1,9 @@
 export interface SourceQuoteRun { start: number; text: string }
 export interface RawSourceQuote { start: number; end: number; quote: string }
 
-/** Collapse whitespace only, retaining the raw UTF-16 extent of every unit.
- * No case, punctuation, spelling, Unicode normalization or word deletion.
+/** Collapse whitespace, retaining the raw UTF-16 extent of every unit.
+ * Sentence punctuation may touch its following letter in ASR formatting. Never
+ * remove word-to-word space, numeric separators, punctuation or lexical bytes.
  */
 function whitespaceMap(text: string) {
   let normalized = "";
@@ -11,6 +12,13 @@ function whitespaceMap(text: string) {
     let end = start + 1;
     const whitespace = /\s/u.test(text[start]!);
     if (whitespace) while (end < text.length && /\s/u.test(text[end]!)) end++;
+    // Ignore only spacing after sentence punctuation before a letter. A
+    // preceding digit excludes decimal/list-number separators conservatively.
+    // All other whitespace still maps to a required single space.
+    if (whitespace && start > 0 && /[.!?]/u.test(text[start - 1]!)
+      && !/\p{N}/u.test(text[start - 2] ?? "") && /^\p{L}/u.test(text.slice(end))) {
+      start = end; continue;
+    }
     normalized += whitespace ? " " : text[start]!;
     starts.push(start); ends.push(end); start = end;
   }
@@ -18,7 +26,7 @@ function whitespaceMap(text: string) {
 }
 
 /** Caller supplies only validated, contiguous raw runs. Gaps stay separate.
- * Exact-match selection retains caller policy. Only a unique whitespace-only
+ * Exact-match selection retains caller policy. Only a unique formatting-only
  * fallback is accepted; occurrence numbering never disambiguates that fallback.
  */
 export function resolveRawSourceQuote(runs: readonly SourceQuoteRun[], quote: string, options: {
