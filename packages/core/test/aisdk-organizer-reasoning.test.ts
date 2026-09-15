@@ -157,15 +157,41 @@ it.each([false,true])('constrains classifier assignment IDs to supplied passages
  const passage={id:'p-supplied',start:0,end:22,text:'Synthetic proposition.'};
  const topic={...classified.topics[0],evidenceQuotes:[],evidenceAssignments:[{passageId:passage.id,quote:passage.text,occurrence:0}],...(retry?{retryId:'repair'}:{})};
  const request={content:passage.text,pageIndex:[],hints:[],tagVocabulary:[],sourceRange:{start:0,end:22},sourcePassages:[passage],...(retry?{retryDecisions:[{id:'repair',scope:'decision' as const,reason:'classification_source_address_invalid',topic:topic as any}]}:{})};
- const requests=transport({...classified,topics:[topic]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ const {evidenceQuotes:_q,evidenceAssignments:_a,...selectedTopic}=topic;
+ const requests=transport({...classified,topics:[{...selectedTopic,evidenceUnitIds:['u1']}]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
  await expect(llm.classify(request)).resolves.toMatchObject({topics:[{evidenceAssignments:topic.evidenceAssignments}]});
  const shape=requests[0].response_format.json_schema.schema.properties.topics.items;
- expect(shape.properties.evidenceAssignments.items.properties.passageId.enum).toEqual(['p-supplied']);
- expect(shape.properties.evidenceAssignments.items.properties.quote).toMatchObject({type:'string',minLength:1});
- expect(shape.properties.evidenceAssignments.items.properties.occurrence).toMatchObject({type:'integer',minimum:0});
+ expect(shape.properties.evidenceUnitIds.items.enum).toEqual(['u1']);
+ expect(shape.properties).not.toHaveProperty('evidenceAssignments');expect(shape.properties).not.toHaveProperty('evidenceQuotes');
  expect(shape.required.includes('retryId')).toBe(retry);
- transport({...classified,topics:[{...topic,evidenceAssignments:[{...topic.evidenceAssignments[0],passageId:'invented'}]}]});
+ transport({...classified,topics:[{...selectedTopic,evidenceUnitIds:['invented']}]});
  await expect(llm.classify(request)).rejects.toThrow();
  const legacy=transport();await llm.classify({content:passage.text,pageIndex:[],hints:[],tagVocabulary:[]});
  expect(legacy[0].response_format.json_schema.schema.properties.topics.items.properties.evidenceAssignments.items.properties.passageId).toEqual({type:'string'});
+});
+
+it('actual SDK selects adjacent canonical units without copying300k or losing its condition',async()=>{
+ const {classificationSourceUnits}=await import('../src/llm/classificationSourceUnits.js');
+ const {resolveTopicSpans}=await import('../src/engine/sourcePassages.js');
+ const raw='I could borrow300k. But only if paid interest stays affordable.';
+ const passages=[{id:'before',start:0,end:25,text:raw.slice(0,25)},{id:'after',start:25,end:raw.length,text:raw.slice(25)}];
+ const units=classificationSourceUnits(passages,{start:0,end:raw.length});
+ const {evidenceQuotes:_q,evidenceAssignments:_a,...topic}=classified.topics[0]!;
+ const requests=transport({...classified,topics:[{...topic,evidenceUnitIds:units.ids}]});
+ const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ const result=await llm.classify({content:raw,sourcePassages:passages,sourceRange:{start:0,end:raw.length},hints:[],pageIndex:[],tagVocabulary:[]});
+ expect(result.topics![0]!.evidenceAssignments).toEqual([{passageId:'before',quote:raw,occurrence:0}]);
+ expect(resolveTopicSpans(raw,{...result.topics![0]!,sourcePassages:passages,sourceRange:{start:0,end:raw.length}}).invalid).toBe(false);
+ expect(JSON.stringify(requests[0].messages).match(/borrow300k/g)).toHaveLength(1);
+ expect(result.topics![0]).not.toHaveProperty('evidenceUnitIds');
+ // Legacy free-copy output cannot accidentally satisfy the new selector contract.
+ transport({...classified,topics:[{...topic,evidenceQuotes:[raw.replace('300k','300K')],evidenceAssignments:[]}]});
+ await expect(llm.classify({content:raw,sourcePassages:passages,hints:[],pageIndex:[],tagVocabulary:[]})).rejects.toThrow();
+});
+it('actual SDK permits truthful empty selectors when all source units are context-only',async()=>{
+ const raw='x'.repeat(1800),{evidenceQuotes:_q,evidenceAssignments:_a,...topic}=classified.topics[0]!;
+ const requests=transport({...classified,topics:[{...topic,evidenceUnitIds:[]}]});
+ const result=await createBrainLlm({provider:'openrouter',apiKey:'offline-unused'}).classify({content:raw,sourcePassages:[{id:'p',start:0,end:raw.length,text:raw}],hints:[],pageIndex:[],tagVocabulary:[]});
+ expect(result.topics![0]!.evidenceAssignments).toEqual([]);
+ expect(requests[0].response_format.json_schema.schema.properties.topics.items.properties.evidenceUnitIds.maxItems).toBe(0);
 });

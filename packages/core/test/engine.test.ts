@@ -1321,13 +1321,14 @@ describe("BrainEngine", () => {
     expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
   });
 
-  it("reconstructs owned ADD candidates across destinations and pending receipt retry without copying model quotes",async()=>{
+  it.each([false,true])("reconstructs owned ADD candidates across destinations and pending receipt retry without copying model quotes (sourceUnits=%s)",async sourceUnits=>{
     const paths=["Projects/SharedA.md","Projects/SharedB.md"];
     for(const path of paths)await writeFile(join(repo.path,path),`# Shared\nPreserved history.\n[[Index]]\n`);
     await repo.commitAndPublish("seed shared destinations");
-    const quote="Only if approved, Mina checks the drain.";
-    const content="This remains provisional. "+quote+" No decision has been made.";
-    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Shared qualification",tags:[],pages:[],passageReviews:[{passageId:input.sourcePassages![0]!.id,status:"assigned" as const}],topics:paths.map(path=>({topic:path,summary:quote,evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Shared",action:"update" as const}]}))}));
+    const quote="Only if approved, Mina checks the drain. No decision has been made.";
+    const content="This remains provisional. "+quote+" A separate option exists.";
+    const {classificationSourceUnits}=await import("../src/llm/classificationSourceUnits.js");
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Shared qualification",tags:[],pages:[],passageReviews:[{passageId:input.sourcePassages![0]!.id,status:"assigned" as const}],topics:paths.map(path=>({topic:path,summary:quote,evidenceQuotes:[],evidenceAssignments:sourceUnits?classificationSourceUnits(input.sourcePassages!,input.sourceRange).assignments(["u2","u3"]):[{passageId:input.sourcePassages![0]!.id,quote,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Shared",action:"update" as const}]}))}));
     let rejectB=true;
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       expect(request.ideas).toHaveLength(1);
