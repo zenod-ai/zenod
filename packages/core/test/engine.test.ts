@@ -587,6 +587,18 @@ describe("BrainEngine", () => {
     expect(staleSelection.text).not.toContain(restriction);
   }, 15_000);
 
+  it("rejects a complete-source summary when its selected source changes before finalization",async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"An option remains tentative and requires inspection.",source:"selftest"});
+    llm.answerOverride=async (_input,tools)=>{
+      const read=JSON.parse(await tools.readNote!(capture.evidenceRef));
+      const support=read.answerSupports.find((hint:any)=>hint.kind==="source_summary");expect(support).toBeDefined();
+      const path=capture.evidenceRef.split("#")[0]!;
+      await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8"))+"\nChanged source snapshot.\n");
+      return {text:"",readPaths:[capture.evidenceRef],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The option remains tentative."}]};
+    };
+    const result=await e.ask("Summarize the source");expect(result.text).toContain("snapshot changed");expect(result.text).not.toContain("The option remains tentative.");
+  });
+
   it("preserves explicit protocol failure across ask, chat and tasking instead of projecting unrelated facts", async()=>{
     const e=engine();const capture=await e.captureEvidence!({content:"A complete source statement.",source:"selftest"});
     llm.answerOverride=async (input,tools)=>{

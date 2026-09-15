@@ -15,6 +15,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 import { decodeSupportedAnswer } from "./answerSupportProtocol.js";
+import { AnswerCursorAliases } from "./answerCursors.js";
 import { ANSWER_SUPPORT_INSTRUCTION } from "../engine/answerSupport.js";
 import { classificationDiagnostic } from "./classificationDiagnostic.js";
 import {
@@ -1049,6 +1050,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     driveTools?: DriveSourceTools,
     peerTools?: PeerTools,
   ): Promise<AnswerResult> {
+    const cursors=new AnswerCursorAliases();
     const readPaths = new Set<string>();
     let supportRead = input.answerSupportRead === true;
     let submittedAnswer: AnswerResult | undefined;
@@ -1775,9 +1777,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
               read_note: tool({
                 description:
-                  noteReadDescription,
+                  noteReadDescription + " In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
                 inputSchema: noteReadSchema,
                 execute: async ({ path, ...options }) => {
+                  if(options.cursor)options.cursor=cursors.resolve(options.cursor,cursors.readOwner(path,options.part));
+                  const present=(value:string)=>cursors.encode(value,cursors.readOwner(path,options.part));
                   const read = async (readOptions: typeof options) => {
                     const result = await tools.readNote!(path, readOptions);
                     supportRead ||= result.includes("answerSupports");
@@ -1789,10 +1793,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   // Daily logs start with a heading-only section. A model must not
                   // mistake that first passage for the file. Deliver a bounded batch
                   // of actual passages; the host tracks each read independently.
-                  if (!/^Log\/[^#]+\.md$/.test(path) || options.cursor || options.query || options.part === "frontmatter") return result;
+                  if (!/^Log\/[^#]+\.md$/.test(path) || options.cursor || options.query || options.part === "frontmatter") return present(result);
                   let first: import("../ops/passage.js").NotePassage;
-                  try { first = JSON.parse(result); } catch { return result; }
-                  if (!first.extent || typeof first.body !== "string") return result;
+                  try { first = JSON.parse(result); } catch { return present(result); }
+                  if (!first.extent || typeof first.body !== "string") return present(result);
                   const passages = [first];
                   const budget = options.maxChars ?? 8000;
                   let chars = first.body.length;
@@ -1802,9 +1806,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                       passages.push(next); chars += next.body.length;
                     } catch { break; } // Successful reads remain usable; failed reads remain host-tracked.
                   }
-                  if (passages.length === 1) return result;
-                  return JSON.stringify({ passages, nextCursor: passages.at(-1)!.nextCursor,
-                    instruction: "Bounded daily-log passages, not a whole-file absence check. Read each body. If nextCursor remains, continue with the same path/cursor and omit query, or seek with query and omit cursor; never send both. Unread entries may contain the answer." });
+                  if (passages.length === 1) return present(result);
+                  return present(JSON.stringify({ passages, nextCursor: passages.at(-1)!.nextCursor,
+                    instruction: "Bounded daily-log passages, not a whole-file absence check. Read each body. If nextCursor remains, continue with the same path/cursor and omit query, or seek with query and omit cursor; never send both. Unread entries may contain the answer." }));
                 },
               }),
               list_pages: tool({
@@ -1841,10 +1845,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               cursor: z.string().max(2048).optional(), exhaustive: z.boolean().optional(),
             }),
             execute: async (query) => {
+              if(query.cursor)query.cursor=cursors.resolve(query.cursor,cursors.searchOwner());
               const result = await tools.searchEntries!(Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined)) as import("../engine/entryPagination.js").EntrySearchInput);
               supportRead ||= result.includes("answerSupports");
               input.onReadAction?.("search_entries", query, result);
-              return result;
+              return cursors.encode(result,cursors.searchOwner());
             },
           }),
         } : {}),
