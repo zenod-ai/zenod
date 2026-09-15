@@ -1467,7 +1467,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...(lastError instanceof ClassificationDestinationError ? [DESTINATION_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceAddressError ? [SOURCE_ADDRESS_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceCoverageError ? [SOURCE_COVERAGE_CORRECTION_HINT] : []),
-          ...(captured ? ["This evidence is already durably captured. Spend full-page composition only when semantic integration is explicitly justified."] : []),
+          ...(captured ? ["Stage 2: raw capture is complete, but organizing this evidence is NOT complete. Extract and route every substantive proposition now, including repeated ideas. Capture status never justifies evidence_only; reconciliation decides whether to add or link its source."] : []),
           ...(segments.length > 1
             ? [`Long capture segment ${segmentIndex + 1}/${segments.length}; identify every subject in this segment.`]
             : []),

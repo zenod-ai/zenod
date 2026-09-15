@@ -163,3 +163,26 @@ it('treats leading whitespace before a clipped attribution as an unknown source 
  expect(hints.length).toBeGreaterThan(0);expect(hints.some(h=>h.excerpt?.includes('We repair batteries'))).toBe(false);
  expect(hints.some(h=>h.excerpt?.includes('complete separate statement'))).toBe(true);
 });
+
+describe("cited source summaries",()=>{
+  it("preserves uncertain bilingual meaning as a concise cited summary rather than a transcript dump",()=>{
+    const registry=new AnswerSupportRegistry();
+    const raw="Quizá alquile una casa. No he decidido comprar; primero debo revisar el presupuesto. "+"We are still considering alternatives. ".repeat(20);
+    const hints=registry.addPassage(passage(raw)).sort((a,b)=>Number(b.granularity === "paragraph")-Number(a.granularity === "paragraph"));
+    const summaryText="Está considerando alquilar, pero no ha decidido comprar y debe revisar el presupuesto.";
+    const decoded=decodeSupportedAnswer(JSON.stringify({supportSelections:[{id:hints[0]!.id,mode:"raw_report",summaryText}]}),[ref]);
+    const result=registry.render(decoded.supportSelections!);
+    expect(result.valid).toBe(true);expect(result.text).toContain(summaryText);expect(result.text).toContain(source.url);
+    expect(result.text).not.toContain("alternatives. We");expect(result.text).toContain("Source summary:");
+    expect(registry.render([{id:hints[0]!.id,mode:"raw_report"}]).text).toContain(raw.trim());
+  });
+  it("rejects missing/forged IDs, temporal summary overrides and model supplied citation links",()=>{
+    const registry=new AnswerSupportRegistry();const facts=registry.addFacts(view());
+    const hints=registry.addPassage(passage("This is an uncertain proposal."));
+    expect(decodeSupportedAnswer(JSON.stringify({supportSelections:[{mode:"raw_report",summaryText:"A claim"}]}),[]).supportProtocolError).toBe("invalid_submission");
+    expect(registry.render([{id:"as_"+"0".repeat(24),mode:"raw_report",summaryText:"A claim"}]).valid).toBe(false);
+    expect(registry.render([{id:facts[1]!.id,mode:"current",summaryText:"The old date is current"}]).valid).toBe(false);
+    expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:"Claim [source](https://evil.invalid)"}]).valid).toBe(false);
+    expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:" "}]).valid).toBe(false);
+  });
+});

@@ -10,9 +10,10 @@ export function decodeSupportedAnswer(text: string, readPaths: string[], require
     if (!value || !Array.isArray(value.supportSelections) || value.supportSelections.length>24) throw new Error("invalid selection");
     const supportSelections: AnswerSupportSelection[] = value.supportSelections.map((item: unknown) => {
       if (!item || typeof item !== "object") throw new Error("invalid selection");
-      const {id,mode}=item as Record<string,unknown>;
+      const {id,mode,summaryText}=item as Record<string,unknown>;
       if (typeof id!=="string" || !/^as_[a-f0-9]{24}$/.test(id) || typeof mode!=="string" || !modes.has(mode)) throw new Error("invalid selection");
-      return {id,mode:mode as AnswerSupportSelection["mode"]};
+      if (summaryText !== undefined && (typeof summaryText !== "string" || !summaryText.trim() || summaryText.length > 1200 || mode !== "raw_report")) throw new Error("invalid summary");
+      return {id,mode:mode as AnswerSupportSelection["mode"],...(summaryText !== undefined ? {summaryText:summaryText as string} : {})};
     });
     // Ignore all generated prose, even with a valid ID: the host owns wording.
     return {text:"",readPaths,supportSelections};

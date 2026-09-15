@@ -864,7 +864,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         `Tag vocabulary (use ONLY these): ${input.tagVocabulary.join(", ")}`,
         "Existing pages (path | title | tags | summary):",
         index || "(vault has no meaning pages yet)",
-        "Prefer updating an existing page over creating a near-duplicate. Confidence below 0.7 means: ask the user instead of guessing — then include a concrete question.",
+        "Prefer the narrowest supported existing page scope for each proposition. A related parent and child page are not by themselves ambiguous destinations: choose the scope that actually covers this proposition. An unresolved life decision or uncertain report can still have a clear filing destination. Do not ask the user to choose between scopes that the supplied catalog or excerpts resolve; keep needs_clarification when the subject or destination genuinely remains unsupported. Never invent a route. Prefer updating an existing page over creating a near-duplicate. Confidence below 0.7 means: ask the user instead of guessing — then include a concrete question.",
       ].join("\n"),
       prompt: [
         input.hints.length > 0 ? `Caller hints: ${input.hints.join("; ")}` : "",
@@ -914,7 +914,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       z.object({...common,kind:z.literal("supersede"),targetId:z.string().min(1),correctionQuote:z.string().min(1).max(2400),replacementQuote:z.null()}),
       z.object({...common,kind:z.literal("conflict"),targetId:z.string().min(1).nullable(),correctionQuote:z.null()}),
       z.object({...common,kind:z.literal("clarify"),targetId:z.null(),correctionQuote:z.null()}),
-    ])).max(24).describe("Exactly one complete decision per supplied ideaId; never repeat an ideaId across operations.")});
+    ])).max(24).describe("Return all justified operations, at most 24 total. Multiple operations may share ideaIds and are applied atomically as a connected group.")});
     try {
       const result = await generateObject({model: this.organizerModel(this.classifyModelId),
       ...(this.organizerProviderOptions ? { providerOptions: this.organizerProviderOptions } : {}), schema,
@@ -1045,6 +1045,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const submissionSchema = z.object({ supportSelections: z.array(z.object({
       id: z.string().regex(/^as_[a-f0-9]{24}$/),
       mode: z.enum(["current", "historical", "prior", "conflict", "raw_report"]),
+      summaryText: z.string().trim().min(1).max(1200).optional().describe("Optional concise summary only for raw_report passage support; preserve source uncertainty, negation and attribution. No URLs or Markdown links; the host adds the verified citation."),
     }).strict()).max(24) }).strict();
     // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
@@ -1642,7 +1643,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     // (read_note) — including the Log/ receipt when a fact seems missing from the
     // composed page — before answering, and ground the answer in what you read.
     const citationNote = [
-      ...(tools.searchEntries ? ["TYPED RETRIEVAL: use search_entries for chronological lists, content categories, dates, sources and memory inventories. Put category in contentType, chronological direction in order, and requested count in limit. query is only literal subject/transcript terms; omit it for category-only lists. Add date/source filters only when requested. The result includes bounded source passage reads alongside discovery entries. Answer from successful passage bodies and use catalog capturedAt as source time; Log headings record processing time. Read unread exact evidenceRefs and follow passage cursors when needed. Set exhaustive=true for complete inventories; the host enumerates within its declared budget. Echo the actual scope; complete lexical enumeration is not complete semantic recall. Pinned evidence is primary. Never treat conversation-history results as durable memory. If coverage is partial, say so and retain continuation; never claim an exhaustive answer or absence."] : []),
+      ...(tools.searchEntries ? ["TYPED RETRIEVAL: use search_entries for chronological lists, content categories, dates, sources and memory inventories. Resolve a referenced latest/most-recent item by category, chronological order and count FIRST: omit topical query until that exact item is identified, then inspect its evidenceRef. Do not replace the latest voice note with an older topic-matching note. Ordinary explicitly topic-filtered inventories still filter before sorting. Put category in contentType, chronological direction in order, and requested count in limit. query is only literal subject/transcript terms; omit it for category-only lists. Add date/source filters only when requested. The result includes bounded source passage reads alongside discovery entries. Answer from successful passage bodies and use catalog capturedAt as source time; Log headings record processing time. For a whole-note summary read from its beginning through nextCursor until the end, covering beginning, middle and end; if the bounded turn ends first, explicitly label summaryText as partial and identify unread coverage. Read unread exact evidenceRefs and follow passage cursors when needed. Set exhaustive=true for complete inventories; the host enumerates within its declared budget. Echo the actual scope; complete lexical enumeration is not complete semantic recall. Pinned evidence is primary. Never treat conversation-history results as durable memory. If coverage is partial, say so and retain continuation; never claim an exhaustive answer or absence."] : []),
       "GROUNDING: don't answer factual questions from search snippets alone — open the top hit(s) with read_note (and the Log/ evidence when a detail seems missing from a summary) before you conclude, then base your answer on what you read.",
       "ABSENCE GUARD: never say requested information is absent after only one empty, weak, or off-topic search. The search tool automatically performs one deterministic retry for a weak first result; consider both results and read relevant evidence before concluding unknown.",
       ...(tools.readFacts ? ["TEMPORAL FACTS: for current state, corrections, conflicting facts or a requested historical date, find the relevant meaning page then use read_facts (exact key when known). Set asOf to the explicitly requested YYYY-MM-DD for historical effective state; omit for latest reports. Do not substitute read_note prose for this projection. Its source-backed active/conflict/undated/unsupported states are authoritative only for the selected note/key. Explicit supersession differs from contradiction; unknown dates stay unknown. Use original evidence for legacy notes. Historical bug reports are reports at their evidence date, never fresh validation; absence of a fix record is not proof no fix exists. Synthetic facts stay labeled. Cite each material claim and state verification scope. The host renders selected support IDs, so choose the relevant answerSupports IDs/modes from the actual tool result; never invent a key or ID."] : []),
@@ -1716,7 +1717,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       tools: {
         ...(input.answerSupportContract ? {
           submit_memory_answer: tool({
-            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. No prose is accepted. This terminal tool ends the current turn without another completion.",
+            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a requested summary, supply summaryText on raw_report selections; other modes retain canonical wording. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
             inputSchema: submissionSchema,
             execute: async (submission) => {
               if (!submissionAllowedThisStep || submittedAnswer) {
