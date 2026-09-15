@@ -80,3 +80,14 @@ it('preserves SDK authorization/content headers and abort propagation through th
  await ready;controller.abort(new Error('synthetic cancellation'));await rejection;
  expect(received.aborted).toBe(true);expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+it('emits strict-compatible anyOf for mutually exclusive reconciliation kinds on the actual wire',async()=>{
+ const requests=transport();const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ await llm.reconcile!({path:'Notes/Test.md',revision:'test',contextPartial:false,statements:[],sources:[],ideas:[]});
+ const schema=requests[0].response_format.json_schema.schema;
+ expect(JSON.stringify(schema)).not.toContain('"oneOf"');
+ const branches=schema.properties.operations.items.anyOf;
+ expect(branches).toHaveLength(5);
+ expect(branches.map((branch:any)=>branch.properties.kind.const)).toEqual(['add','link_source','supersede','conflict','clarify']);
+ for(const branch of branches){expect(branch.additionalProperties).toBe(false);expect(branch.required.sort()).toEqual(Object.keys(branch.properties).sort());}
+});
