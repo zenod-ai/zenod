@@ -15,3 +15,16 @@ Jordi explicitly authorized normal public opening and rejected tester exceptions
 Four journey receipt checks are advisory rather than runtime blockers; they still appear as failed until real evidence exists. OAuth state/PKCE, session validation, payment entitlement/webhook signatures, and tenant isolation are unchanged. A completed Google registration, payment, portal and Drive journey has not been claimed; Jordi can now perform it through the normal production path.
 
 Start: https://cloud.zenod.dev/auth/google/start . Do not reuse a consumed callback URL.
+
+## Promotion-code entry enabled
+
+At the user's explicit request, production Zenod Checkout now sets `allow_promotion_codes: true`. Existing sessions must be replaced by starting a fresh checkout. No coupon, price, entitlement or other product was modified.
+
+- Deployed source: `212bb15729df4841972c02e784299c12b1d5d22d`.
+- Immutable image: `ghcr.io/zenod-ai/zenod@sha256:83e7203478257df3d6e023bbce2b11327621ded1dc61751b06b7465879666d87`.
+- Build and boot workflow passed: https://github.com/zenod-ai/zenod/actions/runs/35034144359 .
+- Server build and 39 customer-layer tests passed, including the checkout parameter assertion.
+- Health verified the exact source; deployed compiled customerBilling.js contains the Zenod-scoped promotion-code parameter.
+- Live readiness remains ready=true, publicPaidSignup=true, publicGoogleSignup=true, googleSignupReady=true; evidenceReady=false is unchanged.
+- Only GIT_SHA changed in the runtime environment. Desired configuration, exact image, mounts and preserved environment were checked after deployment. Prior configuration captured privately for rollback; the same recent verified recovery point applies.
+- No synthetic live customer/session or payment was created for verification. The user can validate the visible field in a new normal checkout.
