@@ -13,3 +13,11 @@ Primary legal references reviewed:
 Drafting and product-implementation work, not a guarantee of enforceability. Spanish counsel should review the final B2B exclusion/cap and consumer disclosures before relying on them in a dispute. No representation of legal-professional review is made.
 
 Validation: site build and 11 production-readiness tests pass; diff whitespace check passes. Current public site source has no remaining voluntary refund offer outside the deliberately archived previous Terms.
+
+## Production receipt
+
+Published to the public Zenod service; `/api/health` verifies source `4b0e08241e145711139ff98602f76ef1b683572d` and immutable image `ghcr.io/zenod-ai/zenod@sha256:780fd7f7025f64ee971213b74454d87d845cf7089d5fcd6dfe7e1ae94c08f647`. Build/boot workflow succeeded: https://github.com/zenod-ai/zenod/actions/runs/35031626174.
+
+Only GIT_SHA and ZENOD_LEGAL_VERSION changed in the runtime environment; image mounts, other configuration, private service, and closed signup flags were preserved. The immediately preceding verified backup/recovery point remains available outside the repository; original deployment configuration was captured before this switch.
+
+Live HTTP checks passed for the revised version, non-refundable policy, business direct/indirect exclusion, three-month fallback cap, consumer protections, and preserved previous Terms archive. Browser inspection confirmed the new version and refund policy render at the production URL. This receipt proves publication, not legal enforceability or general launch readiness.
