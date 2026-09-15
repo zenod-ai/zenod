@@ -169,7 +169,7 @@ export function ZenodOverview({
         </p>
         <h2 className="text-2xl font-semibold">Your Zenod</h2>
         <p className="text-sm text-muted-foreground">
-          {overview.tenant.name ?? overview.tenant.id} · one memory through MCP
+          One memory through MCP
           and supported channels.
         </p>
       </div>

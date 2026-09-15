@@ -1,3 +1,4 @@
+import { ZenodLogo } from "@/components/zenod-logo"
 import * as React from "react"
 import {
   ArrowLeftIcon,
@@ -188,9 +189,13 @@ export function Settings({
     <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <BrainIcon className="size-4.5" />
-          </div>
+          {isRing || isHerald || isPhylax ? (
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <BrainIcon className="size-4.5" />
+            </div>
+          ) : (
+            <ZenodLogo />
+          )}
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">
               {isRing
@@ -205,7 +210,7 @@ export function Settings({
               {overview
                 ? isRing || isHerald || isPhylax
                   ? `${overview.tenant.name ?? overview.tenant.id} · ${overview.usage?.units ?? 0} usage units`
-                  : `${overview.tenant.name ?? overview.tenant.id} · ${edition === "hosted" ? "Hosted" : "Self-hosted"}`
+                  : edition === "hosted" ? "Your hosted workspace" : "Your self-hosted workspace"
                 : isRing
                   ? "Your council — one chat, wired to all your agents"
                   : isHerald
