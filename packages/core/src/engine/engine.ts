@@ -547,7 +547,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   async function safeReadRevision(): Promise<VaultRevision> {
     assertVault(repo);
-    return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); });
+    return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); }, 0);
   }
 
   async function syncForRead(): Promise<void> {
@@ -662,7 +662,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return { text, estimatedTokens: estimateTokens(text), chars: text.length, sections };
   }
 
-  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false): VaultReadTools {
+  function readTools(pinnedRefs: readonly string[] = [], entrySearch?: AskOptions["entrySearch"], typedEntries = false, onSearchHits?: (hits: Hit[]) => Promise<string>, packSections = false, onReadBusy?: () => void): VaultReadTools {
+    const readRevision = async () => {
+      try { return await safeReadRevision(); } catch (error) {
+        if (error instanceof VaultWriteBusyError) { onReadBusy?.(); throw new Error("filing_in_progress: Memory filing is in progress. Please retry shortly; no coherent source was read."); }
+        throw error;
+      }
+    };
     // searchChats is state-backed (conversation history), not vault-backed — it
     // works in every mode, so it is the one read tool a vaultless agent keeps.
     const searchChats = async (query: string) => {
@@ -686,7 +692,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return {
       readFacts: async (input) => {
         const note = await getNote(vaultPath, input.path, sourceResolver);
-        const revision = await safeReadRevision();
+        const revision = await readRevision();
         return JSON.stringify(await projectFacts({ ...input, path: note.path }, note.frontmatter.memoryFacts, now(), async ref => {
           const [path, anchor] = ref.split("#^") as [string, string];
           await getNote(vaultPath, path, sourceResolver); // containment/symlink guard shared with ordinary reads
@@ -712,7 +718,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         } } satisfies EntrySearchResult);
       } } : {}),
       readNote: async (path: string, readOptions?: NoteReadOptions) => {
-        const revision = await safeReadRevision();
+        const revision = await readRevision();
         const anchors = path.includes("#") ? [] : pinnedRefs
           .filter((ref) => normalizeMarkdownNotePath(ref.split("#")[0]!) === normalizeMarkdownNotePath(path))
           .map((ref) => ref.split("#^")[1]!);
@@ -1668,6 +1674,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
               else if (outcome.uncertainPages?.length) outcome.reason="conflict_retained";
             }
           }
+          if (reconciled.content !== currentContent && reconciled.appliedOperationIds.length) {
+            reconciled.content = boundExistingSummary(reconciled.content);
+          }
           await prepareFile(path, currentContent, reconciled.content);
           // The model's awaited work cannot overwrite a page changed since context preparation.
           if ((await readFile(absolute,"utf8").catch(() => null)) !== currentContent) throw new Error("reconciliation_revision_changed");
@@ -2296,7 +2305,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const supportRegistry = new AnswerSupportRegistry();
     // Search discovers candidate paths. Only an actual note/fact read may
     // register source supports and enable typed answer submission.
-    const tools = readTools(contextRefs, entrySearch, true, undefined, true);
+    let readBusy = false;
+    const tools = readTools(contextRefs, entrySearch, true, undefined, true, () => { readBusy = true; });
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];
@@ -2468,9 +2478,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const answerSupports = supportRegistry.addPassage(passage);
         return { answerSupports, answerSupportPartial: supportRegistry.lastPassageSelectionPartial };
       },
-      required: (readPaths: string[]) => attempted || readPaths.length > 0 || coverageTracker.exhaustive
+      required: (readPaths: string[]) => readBusy || attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {
+        if (readBusy) return { text: "Memory filing is in progress. Please retry your question shortly.", sources: [] };
         // Projection and source evidence must still describe the same local snapshot.
         // An explicit key/date read supersedes the automatic page projection,
         // regardless of tool order. Never mix current auto facts into historical scope.

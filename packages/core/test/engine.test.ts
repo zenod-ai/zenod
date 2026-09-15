@@ -1,3 +1,4 @@
+import { withVaultWriteLock } from "../src/git/vaultWriteLock.js";
 import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath } from "../src/engine/filingReceipt.js";
 import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1265,9 +1266,12 @@ describe("BrainEngine", () => {
     expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toContain(quote);
   });
 
-  it("files a coarse idea as reinforcement plus a new condition and replays the completed receipt", async()=>{
+  it.each([false,true])("files a coarse idea as reinforcement plus a new condition and replays the completed receipt (legacy summary: %s)", async(longSummary)=>{
     const path="Projects/Garden.md",existing="Mina waters on Tuesday.",condition="If it rains, Mina checks the drain before watering.";
-    await writeFile(join(repo.path,path),`# Garden\n${existing}\n[[Index]]\n`);await repo.commitAndPublish("seed garden");
+    const oldSummary="Existing garden context. ".repeat(30).trim();
+    const body=`# Garden\n${existing}\n[[Index]]\n`;
+    const raw=longSummary?serializeNote({title:"Garden",type:"project",tags:[],created:"2026-09-01",updated:"2026-09-01",summary:oldSummary},body):body;
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed garden");
     const content=existing+" "+condition;
     llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Garden",tags:[],pages:[],topics:[{topic:"Watering assignment and new rain procedure",summary:content,evidenceQuotes:[content],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Garden",action:"update" as const}]}]}));
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
@@ -1279,6 +1283,11 @@ describe("BrainEngine", () => {
     const first=await e.enrichEvidence!(request);expect(first.filing).toBe("filed");
     expect(first.topics![0]!.appliedOperationIds).toHaveLength(2);
     const page=await readFile(join(repo.path,path),"utf8");expect(page.split(existing)).toHaveLength(2);expect(page.split(condition)).toHaveLength(2);
+    if(longSummary){
+      expect(String(parseNote(page).frontmatter!.summary).length).toBeLessThanOrEqual(480);
+      expect(page).toContain(`## Previous summary\n\n${oldSummary}`);
+      expect(page).toContain("[[Index]]");expect((await e.lint()).errors).toEqual([]);
+    }
     const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
     const replay=await reopened.enrichEvidence!(request);expect(replay.commitSha).toBe(first.commitSha);
     expect(await readFile(join(repo.path,path),"utf8")).toBe(page);expect(reconcile).toHaveBeenCalledOnce();expect(llm.classify).toHaveBeenCalledOnce();
@@ -1802,6 +1811,21 @@ describe("BrainEngine", () => {
     expect(stub).toContain("status: needs-filing");
     expect(stub).toContain("Which area does this belong to?");
     expect((await engine().lint()).errors).toEqual([]);
+  });
+
+  it("returns an explicit retry response promptly when a writer holds the vault lock", async () => {
+    const e=engine();let release!:()=>void;let locked!:()=>void;
+    const ready=new Promise<void>(r=>{locked=r;});const hold=new Promise<void>(r=>{release=r;});
+    // Separate async chain: the read must not inherit the writer's ownership.
+    const writer=withVaultWriteLock(repo.path,async()=>{locked();await hold;});await ready;
+    llm.answerOverride=async (_input,tools)=>{
+      await expect(tools.readNote!("Areas/Insurance.md")).rejects.toThrow("filing_in_progress");
+      return {text:"Invented answer must not escape the busy guard",readPaths:[]};
+    };
+    try {
+      const answer=await Promise.race([e.ask("What does my insurance note say?"),new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("read blocked behind filing")),2000))]);
+      expect(answer.text).toBe("Memory filing is in progress. Please retry your question shortly.");expect(answer.sources).toEqual([]);
+    } finally {release();await writer;}
   });
 
   it.each(["classify: structured_output_invalid", "classify: provider_error"])("keeps the existing window/retry budget and compacts only malformed output (%s)", async error => {
