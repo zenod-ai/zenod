@@ -36,6 +36,7 @@ class FakeDrive implements DriveVaultClient {
   failMovePhase: "before" | "after" | null = null;
   authorityRace: { targetName: string; phase: "before_patch" | "after_patch"; externalFileId: string; data: string } | null = null;
   tombstoneRaceFileId: string | null = null;
+  versionStep = 1;
   private nextId = 1;
 
   constructor() {
@@ -77,7 +78,7 @@ class FakeDrive implements DriveVaultClient {
   }
 
   private updateMetadata(file: Stored, contentChanged = false): void {
-    file.version = String(Number(file.version ?? "0") + 1);
+    file.version = String(Number(file.version ?? "0") + this.versionStep);
     file.modifiedTime = `2026-08-29T00:00:${String(this.mutationCount).padStart(2, "0")}.000Z`;
     file.md5Checksum = createHash("md5").update(file.data).digest("hex");
     if (contentChanged) {
@@ -983,6 +984,22 @@ describe("DriveVaultRepository", () => {
       await expect(open(drive, restarted)).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Areas/Home.md"] } });
     },
   );
+
+  it.each([false, true])("bootstraps, publishes, updates and reopens with non-consecutive Drive versions (lost acknowledgment: %s)", async (lostAcknowledgment) => {
+    const drive = new FakeDrive();
+    drive.versionStep = 3;
+    if (lostAcknowledgment) drive.failAt = { call: 7, phase: "after" };
+    const workdir = await temp("version-gaps");
+    const repo = await open(drive, workdir);
+    if (lostAcknowledgment) expect(drive.faultTriggered).toBe(true);
+    await writeVaultFile(workdir, "Notes/Version.md", "first\n");
+    await repo.commitAndPublish("create with version gaps");
+    await writeVaultFile(workdir, "Notes/Version.md", "second\n");
+    await repo.commitAndPublish("update with version gaps");
+    const fresh = await temp("version-gaps-reopen");
+    await open(drive, fresh);
+    expect(await readFile(join(fresh, "Notes/Version.md"), "utf8")).toBe("second\n");
+  });
 
   it.each(["before_patch", "after_patch"] as const)("fails closed when the durable journal races %s", async (phase) => {
     const drive = new FakeDrive();

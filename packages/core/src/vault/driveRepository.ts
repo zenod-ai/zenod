@@ -545,6 +545,9 @@ export class DriveVaultRepository implements VaultRepository {
   private async findBootstrapJournal(): Promise<{ file: DriveVaultFile; journal: DriveJournal } | null> {
     const found: Array<{ file: DriveVaultFile; journal: DriveJournal }> = [];
     for (const file of await this.options.client.listFiles({ folderId: this.transactionsFolderId, pageSize: 1000, allPages: true })) {
+      if (file.appProperties?.[OPERATION_PROPERTY]?.startsWith("journal-conflict-")) {
+        throw new VaultPublicationError({ code: "conflict", message: "Drive bootstrap has a preserved journal conflict requiring reconciliation", retryable: false, transactionId: file.appProperties[OPERATION_PROPERTY]!.slice("journal-conflict-".length), paths: [file.name] });
+      }
       if (!file.name.endsWith(".json")) throw new Error("Drive vault contains an invalid bootstrap journal file");
       const journal = await this.options.client.download(file.id)
         .then((data) => JSON.parse(data.toString("utf8")) as DriveJournal)
@@ -1386,7 +1389,7 @@ export class DriveVaultRepository implements VaultRepository {
         archivedName,
       );
       const archived = await this.options.client.getFile(mutation.fileId!);
-      if (!this.isExpectedSingleAdvance(mutation, archived) || !await this.remoteContentMatches(archived, mutation.expectedChecksum!)) {
+      if (!await this.isExpectedAdvance(mutation, archived) || !await this.remoteContentMatches(archived, mutation.expectedChecksum!)) {
         await this.captureInterleavingConflict(mutation, journal, journalFile, content, archived);
       }
       return archived;
@@ -1395,7 +1398,7 @@ export class DriveVaultRepository implements VaultRepository {
       const destinationParentId = await this.ensurePath(posix.dirname(mutation.destinationPath!) === "." ? "" : posix.dirname(mutation.destinationPath!));
       const current = await this.options.client.getFile(mutation.fileId!);
       if (current.parents?.includes(destinationParentId) && current.name === posix.basename(mutation.destinationPath!)) {
-        if (!this.isExpectedSingleAdvance(mutation, current) || !await this.remoteContentMatches(current, mutation.expectedChecksum!)) {
+        if (!await this.isExpectedAdvance(mutation, current) || !await this.remoteContentMatches(current, mutation.expectedChecksum!)) {
           throw new Error(`Drive move replay mismatch at ${mutation.path}`);
         }
         return current;
@@ -1406,7 +1409,7 @@ export class DriveVaultRepository implements VaultRepository {
       const moved = await this.options.client.moveFile(mutation.fileId!, destinationParentId, this.precondition(mutation), posix.basename(mutation.destinationPath!));
       const post = moved ?? await this.options.client.getFile(mutation.fileId!);
       const verified = await this.options.client.getFile(mutation.fileId!);
-      if (!this.isExpectedSingleAdvance(mutation, verified) || !await this.remoteContentMatches(verified, mutation.expectedChecksum!)) {
+      if (!await this.isExpectedAdvance(mutation, verified) || !await this.remoteContentMatches(verified, mutation.expectedChecksum!)) {
         await this.captureInterleavingConflict(mutation, journal, journalFile, content, verified);
       }
       return post;
@@ -1414,7 +1417,7 @@ export class DriveVaultRepository implements VaultRepository {
     const data = Buffer.from(mutation.contentBase64!, "base64");
     const current = await this.options.client.getFile(mutation.fileId!);
     if (await this.remoteContentMatches(current, mutation.checksum!)) {
-      if (!this.isExpectedSingleAdvance(mutation, current)) {
+      if (!await this.isExpectedAdvance(mutation, current)) {
         throw new Error(`Drive update replay version mismatch at ${mutation.path}`);
       }
       return current;
@@ -1426,7 +1429,7 @@ export class DriveVaultRepository implements VaultRepository {
       const updated = await this.options.client.updateFile(mutation.fileId!, mutation.mimeType!, data, this.precondition(mutation));
       const post = await this.options.client.getFile(mutation.fileId!);
       const postChecksum = sha256(await this.options.client.download(mutation.fileId!));
-      const expectedAdvance = this.isExpectedSingleAdvance(mutation, post) && post.version === updated.version;
+      const expectedAdvance = await this.isExpectedAdvance(mutation, post) && post.version === updated.version;
       if (!expectedAdvance || postChecksum !== mutation.checksum) {
         await this.captureInterleavingConflict(mutation, journal, journalFile, data, post);
       }
@@ -1435,7 +1438,7 @@ export class DriveVaultRepository implements VaultRepository {
       if (error instanceof VaultPublicationError) throw error;
       const recovered = await this.options.client.getFile(mutation.fileId!).catch(() => null);
       if (recovered && await this.remoteContentMatches(recovered, mutation.checksum!)) {
-        const expectedAdvance = this.isExpectedSingleAdvance(mutation, recovered);
+        const expectedAdvance = await this.isExpectedAdvance(mutation, recovered);
         if (!expectedAdvance) await this.captureInterleavingConflict(mutation, journal, journalFile, data, recovered);
         return recovered;
       }
@@ -1443,11 +1446,26 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private isExpectedSingleAdvance(mutation: JournalMutation, post: DriveVaultFile): boolean {
-    if (mutation.expectedVersion && /^\d+$/.test(mutation.expectedVersion) && /^\d+$/.test(post.version ?? "")) {
-      return BigInt(post.version!) === BigInt(mutation.expectedVersion) + 1n;
-    }
-    return Boolean(post.version);
+  // Drive versions increase monotonically, but metadata changes can skip numbers.
+  // Inspect blob revisions across a gap so an overwritten competing edit is still detected.
+  private async hasExpectedAdvance(
+    beforeVersion: string | undefined,
+    post: DriveVaultFile,
+    baselineRevisionIds: string[] | undefined,
+  ): Promise<boolean> {
+    if (!beforeVersion || !/^\d+$/.test(beforeVersion) || !/^\d+$/.test(post.version ?? "")) return false;
+    const advance = BigInt(post.version!) - BigInt(beforeVersion);
+    if (advance === 1n) return true;
+    if (advance < 1n || !baselineRevisionIds || !post.md5Checksum) return false;
+    const baseline = new Set(baselineRevisionIds);
+    const revisions = await this.options.client.listRevisions(post.id);
+    if (baselineRevisionIds.some((id) => !revisions.some((revision) => revision.id === id))) return false;
+    return revisions.filter((revision) => !baseline.has(revision.id))
+      .every((revision) => revision.md5Checksum === post.md5Checksum);
+  }
+
+  private async isExpectedAdvance(mutation: JournalMutation, post: DriveVaultFile): Promise<boolean> {
+    return this.hasExpectedAdvance(mutation.expectedVersion, post, mutation.baselineRevisionIds);
   }
 
   private async captureInterleavingConflict(
@@ -1646,9 +1664,7 @@ export class DriveVaultRepository implements VaultRepository {
       });
       const post = await this.options.client.getFile(file.id);
       const postData = await this.options.client.download(file.id);
-      const singleAdvance = current.version && /^\d+$/.test(current.version) && /^\d+$/.test(post.version ?? "")
-        ? BigInt(post.version!) === BigInt(current.version) + 1n
-        : Boolean(post.version);
+      const singleAdvance = await this.hasExpectedAdvance(current.version, post, baseline.map((revision) => revision.id));
       if (!singleAdvance || post.version !== updated.version || sha256(postData) !== sha256(data)) {
         await this.materializeJournalConflict(journal.transactionId, post, postData, baseline.map((revision) => revision.id), data);
         throw new VaultPublicationError({
@@ -1661,9 +1677,7 @@ export class DriveVaultRepository implements VaultRepository {
       if (error instanceof VaultPublicationError) throw error;
       const recovered = await this.options.client.getFile(file.id).catch(() => null);
       const recoveredData = recovered ? await this.options.client.download(file.id).catch(() => null) : null;
-      const singleAdvance = current.version && recovered?.version && /^\d+$/.test(current.version) && /^\d+$/.test(recovered.version)
-        ? BigInt(recovered.version) === BigInt(current.version) + 1n
-        : Boolean(recovered?.version);
+      const singleAdvance = recovered && await this.hasExpectedAdvance(current.version, recovered, baseline.map((revision) => revision.id));
       if (recovered && recoveredData && singleAdvance && sha256(recoveredData) === sha256(data)) {
         Object.assign(file, recovered);
         return;
