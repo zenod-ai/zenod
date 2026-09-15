@@ -1293,6 +1293,36 @@ describe("BrainEngine", () => {
     const answer=await e.ask("Is the library reading decided?");expect(answer.text).toContain(content);expect(answer.text).not.toContain("inputFingerprint");
   });
 
+  it("reconstructs owned ADD candidates across destinations and pending receipt retry without copying model quotes",async()=>{
+    const paths=["Projects/SharedA.md","Projects/SharedB.md"];
+    for(const path of paths)await writeFile(join(repo.path,path),`# Shared\nPreserved history.\n[[Index]]\n`);
+    await repo.commitAndPublish("seed shared destinations");
+    const quote="Only if approved, Mina checks the drain.";
+    const content="This remains provisional. "+quote+" No decision has been made.";
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Shared qualification",tags:[],pages:[],passageReviews:[{passageId:input.sourcePassages![0]!.id,status:"assigned" as const}],topics:paths.map(path=>({topic:path,summary:quote,evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Shared",action:"update" as const}]}))}));
+    let rejectB=true;
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.ideas).toHaveLength(1);
+      expect(request.addCandidates).toHaveLength(1);
+      const candidate=request.addCandidates![0]!;
+      expect(candidate.text).toBe(quote);expect(candidate.ideaIds).toEqual([request.ideas[0]!.id]);
+      expect(candidate.start).toBe(content.indexOf(quote));
+      expect(request.sources.map(source=>source.text).join("")).toContain("No decision has been made.");
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[request.path===paths[1]&&rejectB?"missing":candidate.id],sourceQuote:"Mina checks the drain. Invented punctuation!",targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    });Object.assign(llm,{reconcile});
+    const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
+    const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.topics!.map(topic=>topic.status)).toEqual(["filed","pending"]);
+    const firstPage=await readFile(join(repo.path,paths[0]!),"utf8");expect(firstPage).toContain(quote);expect(firstPage).not.toContain("Invented punctuation");
+    rejectB=false;
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
+    const second=await reopened.enrichEvidence!(request);expect(second.filing).toBe("filed");
+    expect(reconcile).toHaveBeenCalledTimes(3);expect(llm.classify).toHaveBeenCalledOnce();
+    expect(await readFile(join(repo.path,paths[0]!),"utf8")).toBe(firstPage);
+    expect((await readFile(join(repo.path,paths[1]!),"utf8")).split(quote)).toHaveLength(2);
+    await reopened.enrichEvidence!(request);expect(reconcile).toHaveBeenCalledTimes(3);
+  });
+
   it("gives each destination its own bounded context instead of starving sibling branches",async()=>{
     const names=["BranchA","BranchB","BranchC"];
     const pages=names.map(name=>({path:`Projects/${name}.md`,title:name,action:"update" as const}));
@@ -1411,10 +1441,10 @@ describe("BrainEngine", () => {
     const raw=longSummary?serializeNote({title:"Garden",type:"project",tags:[],created:"2026-09-01",updated:"2026-09-01",summary:oldSummary},body):body;
     await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed garden");
     const content=existing+" "+condition;
-    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Garden",tags:[],pages:[],topics:[{topic:"Watering assignment and new rain procedure",summary:content,evidenceQuotes:[content],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Garden",action:"update" as const}]}]}));
+    llm.classify=vi.fn(async()=>({confidence:0.95,summary:"Garden",tags:[],pages:[],topics:[{topic:"Watering assignment and new rain procedure",summary:content,evidenceQuotes:[existing,condition],confidence:0.95,disposition:"integrate_page" as const,pages:[{path,title:"Garden",action:"update" as const}]}]}));
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       const common={ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,factKey:null,correctionQuote:null,reason:null};
-      return [{...common,kind:"link_source" as const,sourceQuote:existing,targetId:request.statements.find(s=>s.text===existing)!.id},{...common,kind:"add" as const,sourceQuote:condition,targetId:null}];
+      return [{...common,kind:"link_source" as const,sourceQuote:existing,targetId:request.statements.find(s=>s.text===existing)!.id},{...common,kind:"add" as const,sourceIds:[request.addCandidates!.find(candidate=>candidate.text===condition)!.id],sourceQuote:"ignored generated words",targetId:null}];
     });
     Object.assign(llm,{reconcile});const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
     const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
@@ -1443,7 +1473,7 @@ describe("BrainEngine", () => {
       attempt++;
       const decision=(topic:string,kind:"add"|"link_source"|"supersede",quote:string,target:string|null=null,statement:string|null=null)=>{
         const idea=request.ideas.find(idea=>idea.topic===topic)!;
-        return {kind,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:quote,targetId:target,statement,factKey:null,correctionQuote:kind==="supersede"?parts[1]!:null,reason:null};
+        return {kind,ideaIds:[idea.id],sourceIds:kind==="add"&&quote==="Invented support."?["missing-candidate"]:idea.sourceIds,sourceQuote:quote,targetId:target,statement,factKey:null,correctionQuote:kind==="supersede"?parts[1]!:null,reason:null};
       };
       if(attempt===1) return [decision("Capacity","add",parts[0]!),decision("Capacity","link_source",":123:456",request.statements.find(s=>s.text===parts[0])!.id),decision("Opening","supersede","opening moves to 19",request.statements.find(s=>s.text==="Opening is on 12.")!.id,"Opening moves to 19."),decision("Tools","add","Invented support.")];
       expect(request.ideas.map(idea=>idea.topic)).toEqual(["Capacity","Tools"]);
@@ -1736,7 +1766,7 @@ describe("BrainEngine", () => {
       return { confidence: 0.95, summary: "three independent ideas", tags: [], pages: [],
         passageReviews: [{ passageId: passage.id, status: "assigned" as const }],
         topics: [
-          ...[["Visitor delivery", "reusable waterproof guide"], ["Unconfirmed report", "reports Friday"]].map(([topic, quote]) => ({
+          ...[["Visitor delivery", delivery], ["Unconfirmed report", report]].map(([topic, quote]) => ({
             topic: topic!, summary: topic!, confidence: 0.95, disposition: "append_compact_note" as const,
             pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" as const }], evidenceQuotes: [],
             evidenceAssignments: [{ passageId: passage.id, quote: quote!, occurrence: 0 }],

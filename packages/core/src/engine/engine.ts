@@ -1568,6 +1568,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     type Outcome = NonNullable<StoreResult["topics"]>[number];
     const outcomes: Outcome[] = [];
     const covered: Array<{ start: number; end: number }> = [];
+    const addCandidates=new Map<string,import("./reconciliation.js").ReconciliationAddCandidate>();
     const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] }>();
     for (const topic of classification.topics ?? []) {
       const { spans: identitySpans, supportSpans, invalid } = resolveTopicSpans(content, topic, {
@@ -1583,6 +1584,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const uncertain = invalid || !Number.isFinite(topic.confidence) || topic.confidence < config.confidenceThreshold
         || topic.disposition === "needs_clarification" || (topic.disposition !== "evidence_only" && !pages.length);
       topic.ideaId ??= reconciliationIdeaId(evidenceRef,(classification.topics??[]).indexOf(topic),topic.topic,identitySpans);
+      if(!invalid && !topic.classificationFailed && !topic.retryDiscovery)for(const span of identitySpans){
+        const id=`source:${span.start}:${span.end}`;
+        const candidate=addCandidates.get(id)??{id,start:span.start,end:span.end,text:content.slice(span.start,span.end),ideaIds:[]};
+        if(!candidate.ideaIds.includes(topic.ideaId))candidate.ideaIds.push(topic.ideaId);
+        addCandidates.set(id,candidate);
+      }
       const outcome: Outcome = {
         topic: topic.topic, ideaId:topic.ideaId,evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
         confidence: Number.isFinite(topic.confidence) ? Math.max(0, Math.min(1, topic.confidence)) : 0, disposition: topic.disposition, pages: pages.map((page) => page.path), filedPages: [],
@@ -1686,6 +1693,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             return chunks;
           });
           const prepared = prepareReconciliation({path,raw:currentContent,sourceContent:content,title:group.page.title,type:requiredType,today:todayString(now()),evidence:factEvidence,sources,facts:group.facts,context:atomicContext,links:linkHints,repositoryRevision:await repo.currentRevision(),
+            addCandidates:[...addCandidates.values()].map(candidate=>({...candidate,ideaIds:candidate.ideaIds.filter(id=>group.outcomes.some(outcome=>outcome.ideaId===id))})).filter(candidate=>candidate.ideaIds.length>0),
             completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
             ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
           reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");

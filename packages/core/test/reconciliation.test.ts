@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { prepareReconciliation, applyReconciliation } from '../src/engine/reconciliation.js';
+import { prepareReconciliation as prepareProductionReconciliation, applyReconciliation } from '../src/engine/reconciliation.js';
 import { pageRevision, catalogSections } from '../src/vault/pages.js';
 import { parseNote, serializeNote } from '../src/vault/frontmatter.js';
 import { appendMemoryFacts, parseMemoryFacts, projectFacts, renderFactViews } from "../src/engine/temporalFacts.js";
@@ -8,6 +8,15 @@ import { AnswerSupportRegistry } from '../src/engine/answerSupport.js';
 import type { MemoryEntry } from '../src/types.js';
 const ref = 'Log/2026-09-13.md#^e-000001';
 const evidence = (content: string): MemoryEntry => ({evidenceRef:ref, path:'Log/2026-09-13.md',anchor:'e-000001',title:'source',content,source:'mcp',verbatim:true,capturedAt:'2026-09-13T10:00:00Z',url:'https://example.invalid/source',provider:'github'});
+// These unit sources explicitly represent canonical classifier selections. Tests
+// for missing/ambiguous candidates call the production preparer directly.
+function prepareReconciliation(value:Parameters<typeof prepareProductionReconciliation>[0]) {
+  return prepareProductionReconciliation({...value,addCandidates:value.sources.map(source=>({...source,ideaIds:value.ideas?value.ideas.filter(idea=>idea.sourceIds.includes(source.id)).map(idea=>idea.id):[`idea-${source.id}`]}))});
+}
+function selected(value:Parameters<typeof prepareProductionReconciliation>[0], choices:Array<[string,string,string[]]>) {
+ const raw=value.sourceContent??value.evidence.content;
+ return prepareProductionReconciliation({...value,addCandidates:choices.map(([id,text,ideaIds])=>({id,text,ideaIds,start:raw.indexOf(text),end:raw.indexOf(text)+text.length}))});
+}
 function input(raw: string, source: string) {
   const body = parseNote(raw).body;
   const context = {branches:[{id:'page',path:'Projects/A.md',revision:pageRevision(raw),topics:['topic'],title:'A',scope:'A',sections:catalogSections('Projects/A.md',body).map(section => ({id:section.id,revision:section.revision,start:section.start,end:section.end,excerptStart:section.start,text:body.slice(section.start,section.end),truncated:false}))}],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0};
@@ -53,7 +62,7 @@ it('rejects real ASR noncontiguous stitching, ambiguity and normalized quotes ov
   const source='We will explain how to inspect the wheels and adjust the height of a bicycle seat.\n Visitors do not need to bring their own bicycle because the center has bicycles for the demonstration.\n The side entrance must remain clear because people also use it to reach the meeting room.\n This part concerns organization and access.\n A different intervening idea.\n The activity and the arrangements for entering the building remain the same.';
   const stitched=source.replace(' A different intervening idea.\n','').replace(/\s+/g,' ');
   for (const [raw,quote] of [[source,stitched],['Maya\n waters. Maya\t waters.','Maya waters.'],['Maya'+ '\n'.repeat(1600)+'waters.','Maya waters.']]) {
-    const result=await applyReconciliation(input('# A\n[[Index]]\n',raw!),[op('add',quote!)]);
+    const result=await applyReconciliation(input('# A\n[[Index]]\n',raw!),[op('conflict',quote!)]);
     expect(result.appliedOperationIds).toEqual([]);expect(result.pending.some(p=>p.reason==='source_support_invalid')).toBe(true);
   }
 });
@@ -82,7 +91,7 @@ it('links an exact existing thought without duplicate prose and rejects date/own
 });
 it('rejects unsupported quotes before any other decision for the same idea', async () => {
   const text='Video explains logarithms.'; const prepared=input('# A\n[[Index]]\n',text);
-  const result=await applyReconciliation(prepared,[op('add','Invented claim.'),op('add',text)]);
+  const result=await applyReconciliation(prepared,[{...op('add','Invented claim.'),sourceIds:['missing-candidate'],ideaIds:['idea-p1']},op('add',text)]);
   expect(result.content).not.toContain('Invented claim'); expect(result.content).not.toContain(text);
   expect(result.pending).toHaveLength(1); expect(result.appliedOperationIds).toHaveLength(0);
 });
@@ -170,10 +179,10 @@ it('keeps successive correction targets linked to the existing fact chain',async
 });
 
 it('keeps an idea pending when its later source associations or source text exceed the packet budget',async()=>{
-  for(const size of [30,1600]) {
-    const sources=Array.from({length:12},(_,i)=>({id:`s${i}`,start:i*size,end:(i+1)*size,text:(i===11?'Correction: latest decision differs.':'Early note.').padEnd(size,'x')}));
-    const prepared=input('# A\n[[Index]]\n',sources.map(source=>source.text).join(''));
+  for(const size of [40,1600]) {
+    const sources=Array.from({length:12},(_,i)=>({id:`s${i}`,start:24+i*size,end:24+(i+1)*size,text:(i===11?'Correction: latest decision differs.':'Early note.').padEnd(size,'x')}));
     const sibling={id:'clear',start:0,end:23,text:'Independent clear note.'};
+    const prepared=input('# A\n[[Index]]\n',sibling.text+' '+sources.map(source=>source.text).join(''));
     prepared.input.sources=[sibling,...sources];
     prepared.input.ideas=[{id:'recurring',topic:'One recurring idea',sourceIds:sources.map(source=>source.id)},{id:'clear-idea',topic:'Independent idea',sourceIds:['clear']}];
     const bounded=prepareReconciliation(prepared.input);
@@ -281,12 +290,12 @@ it('rejects all mixed decisions for one idea before writing while preserving a s
     const source='Capacity is 6. Correction: opening moves to 19. Tools are inspected.';
     const initial=input('# A\nCapacity is 6.\nOpening is on 12.\n[[Index]]\n',source);
     initial.input.ideas=[{id:'ambiguous',topic:'Capacity or opening',sourceIds:['p1']},{id:'tools',topic:'Tools',sourceIds:['p1']}];
-    const prepared=prepareReconciliation(initial.input);
+    const prepared=selected(initial.input,[['capacity','Capacity is 6.',['ambiguous']],['tools','Tools are inspected.',['tools']]]);
     const target=prepared.request.statements.find(s=>s.text===(secondKind==='link_source'?'Capacity is 6.':'Opening is on 12.'))!;
     const result=await applyReconciliation(prepared,[
-      {...op('add','Capacity is 6.'),ideaIds:['ambiguous']},
+      {...op('add','Capacity is 6.'),sourceIds:['capacity'],ideaIds:['ambiguous']},
       {...op(secondKind,':123:456',target.id),ideaIds:['ambiguous'],statement:'Opening moves to 19.',correctionQuote:'Correction: opening moves to 19.'},
-      {...op('add','Tools are inspected.'),ideaIds:['tools']},
+      {...op('add','Tools are inspected.'),sourceIds:['tools'],ideaIds:['tools']},
     ]);
     expect(result.appliedOperations.map(o=>o.ideaIds)).toEqual([['tools']]);
     expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['ambiguous'],reason:'source_support_invalid'}));
@@ -346,8 +355,9 @@ it.each(['add','supersede'] as const)('accepts an exact %s proposition across co
  seed.input.sourceContent=content;
  seed.input.sources=[{id:'left',start:0,end:1600,text:content.slice(0,1600)},{id:'right',start:1600,end:content.length,text:content.slice(1600)}];
  seed.input.ideas=[{id:'chart',topic:'Visitor chart',sourceIds:['left','right']}];
- const prepared=prepareReconciliation(seed.input);
- const result=await applyReconciliation(prepared,[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:['left','right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
+ const prepareSelected=(value:typeof seed.input)=>selected(value,[['chart-clause',clause,['chart']]]);
+ const prepared=prepareSelected(seed.input);
+ const result=await applyReconciliation(prepared,[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:kind==='add'?['chart-clause']:['left','right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
  expect(result.pending).toEqual([]);expect(result.appliedOperationIds).toHaveLength(1);
  for(const bad of ['gap','overlap','length','bytes','unknown'] as const) {
   const changed=structuredClone(seed.input);
@@ -355,7 +365,7 @@ it.each(['add','supersede'] as const)('accepts an exact %s proposition across co
   if(bad==='overlap') {changed.sources[1]!.start--;changed.sources[1]!.end--;}
   if(bad==='length') changed.sources[1]!.end++;
   if(bad==='bytes') changed.sources[1]!.text=changed.sources[1]!.text.replace('paper','metal');
-  const rejected=await applyReconciliation(prepareReconciliation(changed),[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:['left',bad==='unknown'?'missing':'right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
+  const rejected=await applyReconciliation(prepareSelected(changed),[{...op(kind,clause,kind==='supersede'?prepared.request.statements[0]!.id:null),sourceIds:kind==='add'?[bad==='unknown'?'missing':'chart-clause']:['left',bad==='unknown'?'missing':'right'],ideaIds:['chart'],statement:clause,correctionQuote:kind==='supersede'?correction:null}]);
   expect(rejected.content,bad).toBe(changed.raw);expect(rejected.pending.length,bad).toBeGreaterThan(0);
  }
 });
@@ -364,7 +374,8 @@ it('retains independently validated effective-date support around the compact cl
  const content=claim+' effective 2026-10-01';
  const prepared=input('# A\n[[Index]]\n',content);
  prepared.input.facts=[{key:'policy.helmets',statement:claim,effectiveDate:'2026-10-01',effectiveDateQuote:content,correctionQuote:null,supersedesQuotes:[],verificationQuote:null}];
- const result=await applyReconciliation(prepared,[{...op('add',claim),factKey:'policy.helmets'}]);
+ const candidate=selected(prepared.input,[['claim',claim,['idea-p1']]]);
+ const result=await applyReconciliation(candidate,[{...op('add',claim),sourceIds:['claim'],ideaIds:['idea-p1'],factKey:'policy.helmets'}]);
  expect(result.pending).toEqual([]);
  expect(parseMemoryFacts(parseNote(result.content).frontmatter!.memoryFacts)[0]!.effectiveDate).toBe('2026-10-01');
 });
@@ -514,12 +525,13 @@ it.each([
 
 it('preserves a new condition alongside reinforcement in one coarse idea',async()=>{
  const source='Mina checks on Tuesday. If it rains, Mina checks the drain before watering.';
- const prepared=input('# A\nMina checks on Tuesday.\n[[Index]]\n',source);
- const result=await applyReconciliation(prepared,[op('link_source','Mina checks on Tuesday.',prepared.request.statements[0]!.id),op('add','If it rains, Mina checks the drain before watering.')]);
+ const seed=input('# A\nMina checks on Tuesday.\n[[Index]]\n',source);
+ const prepared=selected(seed.input,[['condition','If it rains, Mina checks the drain before watering.',['idea-p1']]]);
+ const result=await applyReconciliation(prepared,[op('link_source','Mina checks on Tuesday.',prepared.request.statements[0]!.id),{...op('add','ignored'),sourceIds:['condition'],ideaIds:['idea-p1']}]);
  expect(result.pending).toEqual([]);expect(result.appliedOperationIds).toHaveLength(2);
  expect(result.content).toContain('Mina checks on Tuesday. [[2026-09-13#^e-000001]]');
  expect(result.content).toContain('If it rains, Mina checks the drain before watering.');
- const replay=await applyReconciliation(input(result.content,source),[op('link_source','Mina checks on Tuesday.',prepared.request.statements[0]!.id),op('add','If it rains, Mina checks the drain before watering.')]);
+ const replay=await applyReconciliation(selected(input(result.content,source).input,[['condition','If it rains, Mina checks the drain before watering.',['idea-p1']]]),[op('link_source','Mina checks on Tuesday.',prepared.request.statements[0]!.id),{...op('add','ignored'),sourceIds:['condition'],ideaIds:['idea-p1']}]);
  expect(replay.content).toBe(result.content);
 });
 it.each([false,true])('rolls back valid plus invalid group regardless of order (%s)',async reverse=>{
@@ -533,16 +545,16 @@ it.each([false,true])('rolls back valid plus invalid group regardless of order (
 it('rolls back transitive shared ideas including clarification, preserving independent groups',async()=>{
  const source='First procedure. Second procedure. Third procedure. Healthy procedure.';
  const seed=input('# A\n[[Index]]\n',source);seed.input.ideas=['A','B','C','D'].map(id=>({id,topic:id,sourceIds:['p1']}));
- const prepared=prepareReconciliation(seed.input);
- const result=await applyReconciliation(prepared,[{...op('add','First procedure.'),ideaIds:['A']},{...op('add','Second procedure.'),ideaIds:['A','B']},{...op('clarify','Third procedure.'),ideaIds:['B','C']},{...op('add','Healthy procedure.'),ideaIds:['D']}]);
+ const prepared=selected(seed.input,[['first','First procedure.',['A']],['second','Second procedure.',['A','B']],['healthy','Healthy procedure.',['D']]]);
+ const result=await applyReconciliation(prepared,[{...op('add','First procedure.'),sourceIds:['first'],ideaIds:['A']},{...op('add','Second procedure.'),sourceIds:['second'],ideaIds:['A','B']},{...op('clarify','Third procedure.'),ideaIds:['B','C']},{...op('add','Healthy procedure.'),sourceIds:['healthy'],ideaIds:['D']}]);
  expect(result.content).not.toContain('First procedure.');expect(result.content).not.toContain('Second procedure.');expect(result.content).toContain('Healthy procedure.');
  expect(result.appliedOperations.map(operation=>operation.ideaIds)).toEqual([['D']]);
  expect(result.pending.flatMap(item=>item.ideaIds).sort()).toEqual(['A','B','C']);
 });
 it('allows overlapping complete qualification contexts for separate claims',async()=>{
  const source='Only if approved: Mina checks the drain. Only if approved: Mina checks the drain. Omar records the result.';
- const prepared=input('# A\n[[Index]]\n',source);
- const result=await applyReconciliation(prepared,[op('add','Only if approved: Mina checks the drain.'),op('add','Only if approved: Mina checks the drain. Omar records the result.')]);
+ const prepared=selected(input('# A\n[[Index]]\n',source).input,[['first','Only if approved: Mina checks the drain.',['idea-p1']],['second','Only if approved: Mina checks the drain. Omar records the result.',['idea-p1']]]);
+ const result=await applyReconciliation(prepared,[{...op('add','ignored'),sourceIds:['first'],ideaIds:['idea-p1']},{...op('add','ignored'),sourceIds:['second'],ideaIds:['idea-p1']}]);
  expect(result.pending).toEqual([]);expect(result.appliedOperations).toHaveLength(2);
  expect(result.content).toContain('Only if approved: Mina checks the drain. Omar records the result.');
 });
@@ -582,7 +594,7 @@ it('keeps completed facets unchanged when an unfinished shared group fails',asyn
  const source='Existing condition. New condition.';const seed=input('# A\nExisting condition.\n[[Index]]\n',source);
  seed.input.ideas=['A','B'].map(id=>({id,topic:id,sourceIds:['p1']}));seed.input.completedIdeaIds=['A'];
  const prepared=prepareReconciliation(seed.input);
- const failed=await applyReconciliation(prepared,[{...op('add','New condition.'),ideaIds:['A','B']},{...op('add','Invented.'),ideaIds:['B']}]);
+ const failed=await applyReconciliation(prepared,[{...op('add','New condition.'),ideaIds:['A','B']},{...op('add','Invented.'),sourceIds:['missing'],ideaIds:['B']}]);
  expect(failed.content).toBe(seed.input.raw);expect(failed.pending.flatMap(p=>p.ideaIds)).toEqual(['B']);
  const valid=await applyReconciliation(prepared,[{...op('add','Invented.'),ideaIds:['A']},{...op('add','New condition.'),ideaIds:['A','B']}]);
  expect(valid.pending).toEqual([]);expect(valid.appliedOperations[0]!.ideaIds).toEqual(['B']);

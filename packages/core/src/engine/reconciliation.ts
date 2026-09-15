@@ -7,10 +7,13 @@ import { appendMemoryFacts, parseMemoryFacts, type FactProposal } from "./tempor
 import { resolveRawSourceQuote, type SourceQuoteRun } from "./sourceQuote.js";
 
 export interface ReconciliationSource { id: string; start: number; end: number; text: string }
+export interface ReconciliationAddCandidate extends ReconciliationSource { ideaIds:string[] }
 export interface ReconciliationStatement { id: string; text: string; sectionId: string; factKey: string | null }
-export interface ReconciliationIdea {id:string;topic:string;sourceIds:string[];sourcePartial?:boolean;omittedSourceCount?:number;priorFailure?:string}
+export interface ReconciliationIdea {id:string;topic:string;sourceIds:string[];sourcePartial?:boolean;omittedSourceCount?:number;priorFailure?:string;addCandidateFailure?:string}
 export interface ReconciliationInput {
   path: string; revision: string | null; contextPartial: boolean;
+  /** Exact classifier-selected quotes; ADD selects these IDs, not regenerated text. */
+  addCandidates?: ReconciliationAddCandidate[];
   statements: ReconciliationStatement[]; sources: ReconciliationSource[]; ideas:ReconciliationIdea[];
 }
 export interface ReconciliationOperation {
@@ -73,6 +76,7 @@ interface PrepareInput {
   /** Original host input, used only to verify chunk addresses; never sent to the model. */
   sourceContent?: string;
   facts?:FactProposal[];
+  addCandidates?:ReconciliationAddCandidate[];
   evidence: MemoryEntry; sources: ReconciliationSource[]; context: BranchContextPacket; links: string[];
 }
 export function prepareReconciliation(input: PrepareInput) {
@@ -98,20 +102,50 @@ export function prepareReconciliation(input: PrepareInput) {
   }
   const boundedStatements: ReconciliationStatement[] = [];
   for (const statement of statements) if (boundedStatements.length < 48 && JSON.stringify([...boundedStatements,statement]).length <= 8000) boundedStatements.push(statement);
-  const boundedSources: ReconciliationSource[] = [];
-  for (const source of input.sources) if (boundedSources.length < 24 && JSON.stringify([...boundedSources,source]).length <= 16000) boundedSources.push(source);
   const ideas: ReconciliationIdea[] = input.ideas ?? input.sources.map(source=>({id:`idea-${source.id}`,topic:source.text.slice(0,160),sourceIds:[source.id]}));
+  const boundedSources:ReconciliationSource[]=[];
+  const addCandidates:ReconciliationAddCandidate[]=[];
+  const omittedAddCandidatesByIdea=new Map<string,string>();
+  const validCandidates=(input.addCandidates??[]).filter(candidate=>{
+    const raw=input.sourceContent??input.evidence.content;
+    const unique=input.addCandidates!.filter(other=>other.id===candidate.id).length===1;
+    const covered=candidate.ideaIds.every(id=>{
+      const idea=ideas.find(idea=>idea.id===id);let end=candidate.start;
+      for(const source of input.sources.filter(source=>idea?.sourceIds.includes(source.id)).sort((a,b)=>a.start-b.start)){
+        if(source.end<=end)continue;if(source.start>end)break;
+        if(!Number.isSafeInteger(source.start)||!Number.isSafeInteger(source.end)||source.start<0||source.end-source.start!==source.text.length||source.text!==raw.slice(source.start,source.end))return false;
+        end=Math.max(end,source.end);if(end>=candidate.end)return true;
+      }return false;
+    });
+    const valid=Number.isSafeInteger(candidate.start)&&Number.isSafeInteger(candidate.end)&&candidate.start>=0&&candidate.end>candidate.start
+      &&raw.slice(candidate.start,candidate.end)===candidate.text&&candidate.text.length===candidate.end-candidate.start&&candidate.ideaIds.length>0&&covered;
+    const reason=!unique?'add_candidate_ambiguous':!valid?'add_candidate_invalid':candidate.text.length>1600?'add_candidate_too_long':null;
+    if(reason){candidate.ideaIds.forEach(id=>omittedAddCandidatesByIdea.set(id,reason));return false;}return true;
+  });
+  if(input.addCandidates){
+    // Pack each idea's exact candidates together with its full available qualifier
+    // context. A large early idea cannot consume the whole budget before any
+    // candidate is presented; smaller independent ideas can still fit afterward.
+    for(const idea of ideas.slice(0,24)){
+      const sources=input.sources.filter(source=>idea.sourceIds.includes(source.id)&&!boundedSources.some(existing=>existing.id===source.id));
+      const candidates=validCandidates.filter(candidate=>candidate.ideaIds.includes(idea.id)&&!addCandidates.some(existing=>existing.id===candidate.id));
+      if(boundedSources.length+sources.length<=24 && addCandidates.length+candidates.length<=24
+        && JSON.stringify([...boundedSources,...sources]).length+JSON.stringify([...addCandidates,...candidates]).length<=16000){boundedSources.push(...sources);addCandidates.push(...candidates);}
+    }
+  }else for(const source of input.sources)if(boundedSources.length<24&&JSON.stringify([...boundedSources,source]).length<=16000)boundedSources.push(source);
+  for(const candidate of validCandidates)if(!addCandidates.some(present=>present.id===candidate.id))candidate.ideaIds.forEach(id=>omittedAddCandidatesByIdea.set(id,'add_candidate_context_incomplete'));
   const omittedSourcesByIdea = new Map<string,string[]>();
   const boundedIdeas=ideas.slice(0,24).map(idea=>{
     const sourceIds=idea.sourceIds.filter(id=>boundedSources.some(source=>source.id===id)).slice(0,8);
     const omitted=idea.sourceIds.filter(id=>!sourceIds.includes(id));
     if(omitted.length) omittedSourcesByIdea.set(idea.id,omitted);
-    return {...idea,topic:idea.topic.slice(0,160),...(idea.priorFailure ? {priorFailure:idea.priorFailure.slice(0,240)} : {}),sourceIds,sourcePartial:omitted.length>0,omittedSourceCount:omitted.length};
+    return {...idea,topic:idea.topic.slice(0,160),...(idea.priorFailure ? {priorFailure:idea.priorFailure.slice(0,240)} : {}),sourceIds,sourcePartial:omitted.length>0,omittedSourceCount:omitted.length,
+      ...(omittedAddCandidatesByIdea.has(idea.id)?{addCandidateFailure:omittedAddCandidatesByIdea.get(idea.id)!}:{})};
   });
   for(const idea of ideas.slice(24)) omittedSourcesByIdea.set(idea.id,[...idea.sourceIds]);
-  const request: ReconciliationInput = {path: input.path, revision, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:boundedIdeas};
+  const request: ReconciliationInput = {path: input.path, revision, addCandidates, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:boundedIdeas};
   for (const id of targets.keys()) if (!boundedStatements.some(statement => statement.id === id)) targets.delete(id);
-  return {input, request, targets, ideas, omittedSourcesByIdea};
+  return {input, request, targets, ideas, omittedSourcesByIdea, omittedAddCandidatesByIdea};
 }
 export type PreparedReconciliation = ReturnType<typeof prepareReconciliation>;
 
@@ -136,11 +170,25 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
   // Components share idea completion or an exact target/claim resource. Each
   // component contributes buffered changes only after every operation validates.
   // Targets always refer to the original snapshot, never another operation's output.
-  const bounded = operations.slice(0,24);
+  // Resolve ADD to stored raw candidates before resource grouping and identity.
+  // Multiple candidates remain separate contributions in the same atomic group.
+  const addFailures=new Map<ReconciliationOperation,string>();
+  const expanded=operations.flatMap(operation=>{
+    if(operation.kind!=="add")return [operation];
+    const ideaIds=assignedIdeas(operation);
+    const selected=[...new Set(operation.sourceIds)].map(id=>prepared.request.addCandidates?.find(candidate=>candidate.id===id));
+    const failure=ideaIds.some(id=>prepared.omittedAddCandidatesByIdea.has(id))?prepared.omittedAddCandidatesByIdea.get(ideaIds.find(id=>prepared.omittedAddCandidatesByIdea.has(id))!)!
+      : !selected.length||selected.some(candidate=>!candidate)?'add_candidate_unavailable'
+      : !ideaIds.length||ideaIds.some(id=>!prepared.request.ideas.some(idea=>idea.id===id)||!selected.some(candidate=>candidate!.ideaIds.includes(id)))
+        ||selected.some(candidate=>!candidate!.ideaIds.some(id=>ideaIds.includes(id)))?'add_candidate_idea_mismatch':null;
+    if(failure){const rejected={...operation};addFailures.set(rejected,failure);return [rejected];}
+    return selected.map(candidate=>({...operation,ideaIds,sourceIds:[candidate!.id],sourceQuote:candidate!.text}));
+  });
+  const bounded = expanded.slice(0,24);
   const parents = bounded.map((_,i)=>i);
   const root = (i:number):number => parents[i]===i ? i : (parents[i]=root(parents[i]!));
   const claim = (operation:ReconciliationOperation) => {
-    const sources=operation.sourceIds.map(id=>prepared.request.sources.find(source=>source.id===id));
+    const sources=operation.sourceIds.map(id=>(operation.kind==="add"?prepared.request.addCandidates:prepared.request.sources)?.find(source=>source.id===id));
     return sources.some(source=>!source) ? null : canonicalSourceQuote(sources as ReconciliationSource[],operation.sourceQuote,1600,input.sourceContent);
   };
   const claims=bounded.map(claim);
@@ -152,7 +200,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
   }
   const groups=new Map<number,ReconciliationOperation[]>();
   bounded.forEach((operation,i)=>groups.set(root(i),[...(groups.get(root(i))??[]),operation]));
-  if(operations.length>24) {
+  if(operations.length>24 || expanded.length>24) {
     result.pending=prepared.ideas.filter(idea=>!completed.has(idea.id)).map(idea=>({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:"reconciliation_decision_budget_exceeded"}));
     return result;
   }
@@ -169,12 +217,13 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     const sourceIds = [...new Set(operation.sourceIds)];
     const ideaIds = assignedIdeas(operation).filter(id=>!completed.has(id));
     if (!ideaIds.length && assignedIdeas(operation).some(id=>completed.has(id))) continue;
-    const sources = sourceIds.map(id => prepared.request.sources.find(source => source.id === id));
+    const sources = sourceIds.map(id => (operation.kind==="add"?prepared.request.addCandidates:prepared.request.sources)?.find(source => source.id === id));
     const fail = (reason: string) => result.pending.push({sourceIds, ideaIds, reason});
     // Missing later evidence may negate/correct an earlier span of this idea.
     // Do not publish a provisional current claim from incomplete source support.
     if (ideaIds.some(id=>prepared.omittedSourcesByIdea.has(id))) { fail("reconciliation_source_context_incomplete"); continue; }
-    if (!ideaIds.length || ideaIds.some(id=>!prepared.request.ideas.some(idea=>idea.id===id && idea.sourceIds.some(sourceId=>sourceIds.includes(sourceId))))) { fail("idea_assignment_invalid"); continue; }
+    if(addFailures.has(proposed)){fail(addFailures.get(proposed)!);continue;}
+    if (!ideaIds.length || ideaIds.some(id=>!prepared.request.ideas.some(idea=>idea.id===id && (operation.kind==="add" || idea.sourceIds.some(sourceId=>sourceIds.includes(sourceId)))))) { fail("idea_assignment_invalid"); continue; }
     const canonical = (quote: string, limit = 1600) => canonicalSourceQuote(sources as ReconciliationSource[],quote,limit,input.sourceContent);
     const sourceQuote = sourceIds.length && !sources.some(source => !source) ? canonical(operation.sourceQuote) : null;
     if (!sourceQuote) { fail("source_support_invalid"); continue; }
@@ -243,8 +292,12 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
         ? {path:input.path,statement:target!.text,statementId:operation.targetId!,contentHash:pageRevision(input.raw),provider:input.repositoryRevision.provider,revision:input.repositoryRevision.id} : undefined;
       if (operation.kind === "supersede" && ((!knownKey && !legacy) || !factKey || !operation.correctionQuote)) { fail("correction_target_or_intent_unverified"); continue; }
       const classifiedFact=input.facts?.find(fact=>fact.key===factKey && canonical(fact.statement)===operation.sourceQuote);
-      const effectiveDateQuote=classifiedFact?.effectiveDateQuote ? canonical(classifiedFact.effectiveDateQuote,2400) : null;
-      const verificationQuote=classifiedFact?.verificationQuote ? canonical(classifiedFact.verificationQuote,2400) : null;
+      // ADD renders its exact candidate, but date/verification evidence may be
+      // elsewhere in the same independently validated, owned source context.
+      const factContext=operation.kind==="add" ? prepared.request.sources.filter(source=>prepared.request.ideas.some(idea=>ideaIds.includes(idea.id)&&idea.sourceIds.includes(source.id))) : sources as ReconciliationSource[];
+      const canonicalFactSupport=(quote:string)=>canonicalSourceQuote(factContext,quote,2400,input.sourceContent??input.evidence.content);
+      const effectiveDateQuote=classifiedFact?.effectiveDateQuote ? canonicalFactSupport(classifiedFact.effectiveDateQuote) : null;
+      const verificationQuote=classifiedFact?.verificationQuote ? canonicalFactSupport(classifiedFact.verificationQuote) : null;
       const proposal: FactProposal | null = factKey ? {key: factKey, statement, ...(operation.kind==="conflict" ? {reportedConflict:true} : {}), ...(legacy ? {legacySupersedes:legacy} : {}), effectiveDate: classifiedFact?.effectiveDate??null, effectiveDateQuote,
         correctionQuote: operation.kind === "supersede" ? operation.correctionQuote : null,
         supersedesQuotes: operation.kind === "supersede" ? [target!.text] : [],
