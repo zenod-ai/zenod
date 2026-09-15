@@ -40,3 +40,14 @@ User requested repair of the broken account logo and the payment-method requirem
 - Verified exact live health SHA, runtime/Dokploy image, unchanged mounts/environment except GIT_SHA, and signup readiness/flags true.
 - Downloaded live app bundle confirms inline Z in the account header. Deployed compiled billing module confirms if_required. No live subscription or payment created by the agent.
 - Current pre-release configuration and rollback script captured privately; same recent verified volume recovery point applies.
+
+## Post-checkout portal branding
+
+User confirmed successful checkout and requested the Z mark in the activated portal and removal of the internal usr_ identifier shown as a name. Account and portal now share the same inline Z component. Zenod portal subtitle is “Your hosted workspace” (or self-hosted equivalent); overview introductory text no longer prints the tenant identifier. Other products' branding is preserved.
+
+- Exact production source: `d428c1f659fd0103dc350f030bff00bc5adf5606`.
+- Immutable image: `ghcr.io/zenod-ai/zenod@sha256:770909970249c9a6e44a06a70a10eb2d5bcd1e08e1edd18ab6503c17caa4c2a8`.
+- Build/boot checks passed: https://github.com/zenod-ai/zenod/actions/runs/35036393925 .
+- Web build and five focused edition/overview tests passed.
+- Verified exact live health/source, image and preserved environment/mounts; public signup and checkout readiness remain enabled.
+- Live portal bundle contains the new subtitle and shared inline Z mark. No customer account, subscription or tenant identifier was changed.
