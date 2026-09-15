@@ -1238,7 +1238,7 @@ describe("BrainEngine", () => {
     const inputs:ClassifyInput[]=[];
     llm.classify=vi.fn(async(input:ClassifyInput)=>{
       inputs.push(input);if(inputs.length>1)throw new Error("classify: structured_output_invalid");
-      return {pages:[],summary:"mixed",confidence:.9,tags:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[
+      return {pages:[],summary:"mixed",confidence:.9,tags:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:p.end>content.indexOf(quote)?"assigned" as const:"evidence_only" as const})),topics:[
         {topic:"Insurance",summary:"update",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.9,disposition:"append_compact_note" as const,pages:[{path:"Areas/Insurance",title:"Insurance",action:"update" as const}]},
         {topic:"Unknown destination",summary:"uncertain",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.4,disposition:"needs_clarification" as const,pages:[{path:"Projects/Invented.md",title:"Invented",action:"create" as const}],question:"Which project?"}
       ]};
@@ -1412,7 +1412,7 @@ describe("BrainEngine", () => {
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       expect(request.sources).toHaveLength(1);
       expect(request.ideas).toHaveLength(2);
-      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:idea.sourceIds,sourceQuote:idea.topic==="Visitors"?first.trim():second.trim(),statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null}));
+      return request.ideas.map(idea=>({kind:"add" as const,ideaIds:[idea.id],sourceIds:request.addCandidates!.filter(candidate=>candidate.ideaIds.includes(idea.id)).map(candidate=>candidate.id),sourceQuote:idea.topic==="Visitors"?first.trim():second.trim(),statement:null,targetId:null,factKey:null,correctionQuote:null,reason:null}));
     });
     Object.assign(llm,{reconcile});const e=engine();const captured=await e.captureEvidence!({content,source:"whatsapp"});
     const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
@@ -1422,10 +1422,11 @@ describe("BrainEngine", () => {
   it("files a complete proposition crossing the host source chunk boundary",async()=>{
     const quote="Each visitor must receive a durable chart printed on waterproof paper before leaving.";
     const content="Background. ".repeat(131)+quote;
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Visitor chart",tags:[],pages:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:p.end>content.indexOf(quote)?"assigned" as const:"evidence_only" as const})),topics:[{topic:"Visitor chart",summary:quote,evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages!.find(p=>p.start<=content.indexOf(quote)&&p.end>content.indexOf(quote))!.id,quote,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path:"Areas/Insurance.md",title:"Insurance",action:"update" as const}]}]}));
     const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
       expect(request.sources).toHaveLength(2);
       expect(request.sources.some(source=>source.text.includes(quote))).toBe(false);
-      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,sourceQuote:quote,statement:quote,targetId:null,factKey:null,correctionQuote:null,reason:null}];
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[request.addCandidates!.find(candidate=>candidate.text===quote)!.id],sourceQuote:"-",statement:quote,targetId:null,factKey:null,correctionQuote:null,reason:null}];
     });
     Object.assign(llm,{reconcile});const e=engine();
     const captured=await e.captureEvidence!({content,source:"whatsapp"});

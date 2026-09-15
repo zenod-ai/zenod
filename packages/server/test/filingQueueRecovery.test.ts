@@ -23,15 +23,15 @@ describe("supported queue filing replay", () => {
     const paths = mixed ? ["Areas/Insurance.md", "Areas/Insurance.md"] : ["Areas/Insurance.md", "Notes/Axa.md"];
     const classify = vi.fn(async () => ({ confidence: 0.95, summary: "two ideas", tags: [], pages: [], topics: paths.map((path, index) => ({
       topic: `Idea ${index + 1}`, summary: `Idea ${index + 1}`, confidence: 0.95, disposition: "integrate_page" as const,
-      evidenceQuotes: [content], pages: [{ path, title: index ? "Axa" : "Insurance", action: "update" as const }],
+      evidenceQuotes: [index ? "Axa is the provider." : "Insurance renewal is in October."], pages: [{ path, title: index ? "Axa" : "Insurance", action: "update" as const }],
     })) }));
     let failedOnce = false;
     const reconcile = vi.fn(async (request: any) => {
       if (!mixed && !publicationFailure && request.path === paths[1] && !failedOnce) { failedOnce = true; throw new Error("synthetic transient provider outage"); }
-      const operations=request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id], sourceIds: idea.sourceIds,
+      const operations=request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id], sourceIds: request.addCandidates.filter((candidate:any)=>candidate.ideaIds.includes(idea.id)).map((candidate:any)=>candidate.id),
         sourceQuote: mixed ? (idea.topic==="Idea 1" ? "Insurance renewal is in October." : "Axa is the provider.") : request.sources.find((source: any) => source.id === idea.sourceIds[0]).text,
         statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null }));
-      if(mixed && !failedOnce) {failedOnce=true;return [...operations,{...operations[0],kind:"link_source",sourceQuote:":123:456",targetId:"missing"}];}
+      if(mixed && !failedOnce) {failedOnce=true;return [...operations,{...operations[0],kind:"link_source",sourceIds:request.ideas[0].sourceIds,sourceQuote:":123:456",targetId:"missing"}];}
       if(mixed) {
         expect(request.ideas.map((idea:any)=>idea.topic)).toEqual(["Idea 1"]);
         expect(request.ideas[0].priorFailure).toContain("source_support_invalid");

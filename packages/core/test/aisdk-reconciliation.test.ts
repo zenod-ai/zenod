@@ -24,7 +24,7 @@ it('uses one bounded structured classifier-model call with idea identity and rea
 
 it('enforces per-kind target requirements and exact-source fields at the provider schema',async()=>{
  const llm=createBrainLlm({provider:'openrouter',apiKey:'synthetic-unused'});
- await llm.reconcile!({path:'Projects/A.md',revision:'test',contextPartial:false,statements:[],sources:[],ideas:[],addCandidates:[{id:'candidate',ideaIds:['i'],start:0,end:5,text:'Exact'}]});
+ await llm.reconcile!({path:'Projects/A.md',revision:'test',contextPartial:false,statements:[],sources:[{id:'s',start:0,end:5,text:'Exact'}],ideas:[],addCandidates:[{id:'candidate',ideaIds:['i'],start:0,end:5,text:'Exact'}]});
  const call=vi.mocked(generateObject).mock.calls.at(-1)![0];
  const schema=call.schema as unknown as {safeParse:(value:unknown)=>{success:boolean}};
  const base={ideaIds:['i'],sourceIds:['s'],sourceQuote:'Exact source.',factKey:null,reason:null,correctionQuote:null};
