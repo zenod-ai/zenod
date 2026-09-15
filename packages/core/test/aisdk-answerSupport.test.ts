@@ -132,3 +132,27 @@ it('advertises exclusive seek/continuation and completes a valid continuation wi
  expect(advertised.parameters.properties.cursor.description).toContain('omit query');
  expect(advertised.parameters.properties.query.description).toContain('omit cursor');
 });
+
+it("submits a cited summary after reading beginning, middle and end of a long latest voice note",async()=>{
+ const ref="Log/2026-09-14.md#^e-123abc";
+ const raw="Quizá alquile; no he decidido.\n"+"We are considering alternatives. ".repeat(270)+"\nBudget remains unknown.\n"+"Todavía tengo dudas. ".repeat(400)+"\nI will inspect before deciding.";
+ expect(raw.length).toBeGreaterThan(17000);
+ const chunks=[raw.slice(0,6000),raw.slice(6000,12000),raw.slice(12000)];
+ const summaryText="Partial source summary: renting remains tentative; the budget is unknown and inspection precedes any decision.";
+ const requests=wire([
+  {calls:[{name:"read_note",input:{path:ref}}]},
+  {calls:[{name:"read_note",input:{path:ref,cursor:"middle"}}]},
+  {calls:[{name:"read_note",input:{path:ref,cursor:"end"}}]},
+  {calls:[{name:"submit_memory_answer",input:{supportSelections:[{id,mode:"raw_report",summaryText}]}}]},
+ ]);
+ const seen:string[]=[];
+ const result=await llm(5).answer({...input,question:"Summarize my latest voice note about the decision."},{searchChats:tools.searchChats,searchVault:async()=>"unused",readNote:async(_path:string,options:any={})=>{
+  const n=options.cursor==="middle"?1:options.cursor==="end"?2:0;seen.push(chunks[n]!);
+  return JSON.stringify({body:chunks[n],identity:ref,answerSupports:[{id,modes:["raw_report"]}],nextCursor:n===0?"middle":n===1?"end":null});
+ },searchEntries:async()=>JSON.stringify({entries:[]})});
+ expect(seen.join("")).toBe(raw);expect(requests).toHaveLength(4);
+ expect(result.supportSelections?.[0]?.summaryText).toBe(summaryText);
+ const system=JSON.stringify(requests[0].messages);
+ expect(system).toContain("chronological order and count FIRST");
+ expect(system).toContain("covering beginning, middle and end");
+});

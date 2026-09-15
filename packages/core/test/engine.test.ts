@@ -561,6 +561,15 @@ describe("BrainEngine", () => {
       return { text: "Unused model prose", readPaths: [], supportSelections: [{ id: pinned[0].answerSupports[0].id, mode: "raw_report" }] };
     };
     expect((await e.ask("Explain this pinned hypothesis", { contextRefs: [capture.evidenceRef] })).text).toContain(hypothesis);
+    llm.answerOverride = async input => {
+      const pinned = JSON.parse(input.vaultBriefing.split("Pinned source support IDs: ")[1]!);
+      return { text: "", readPaths: [], supportSelections: [{ id: pinned[0].answerSupports[0].id, mode: "raw_report", summaryText: "The workshop hypothesis remains unverified." }] };
+    };
+    const summary = await e.ask("Summarize this uncertain hypothesis", { contextRefs: [capture.evidenceRef] });
+    expect(summary.text).toContain("The workshop hypothesis remains unverified.");
+    expect(summary.text).toContain(capture.evidenceRef);
+    expect(summary.text).not.toContain(unrelated);
+
     llm.answerOverride = async (_input, tools) => {
       const first = JSON.parse(await tools.readNote!(page));
       const selected = first.factView.answerSupports.find((support: any) => support.key === "orchid.fact0");
@@ -1115,6 +1124,7 @@ describe("BrainEngine", () => {
     const result = await e.enrichEvidence!({ content, source: "selftest", evidenceRef: captured.evidenceRef });
     expect(inputs).toHaveLength(2);
     expect(inputs[0]!.hints.join(" ")).not.toContain("Structural correction:");
+    expect(inputs[0]!.hints.join(" ")).toContain("organizing this evidence is NOT complete");
     expect(inputs[1]!.hints.join(" ")).toContain("Top-level pages do not route topics");
     expect(result.topics!.find(topic => topic.topic === "Axa")!.status).toBe("filed");
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
@@ -1125,7 +1135,7 @@ describe("BrainEngine", () => {
     expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
   });
 
-  it.each([false, true])("retries wrong source addresses within the existing budget and preserves valid siblings (exhausted: %s)", async (exhausted) => {
+  it.each([{exhausted:false,empty:false},{exhausted:true,empty:false},{exhausted:false,empty:true},{exhausted:true,empty:true}])("retries wrong source addresses within the existing budget and preserves valid siblings ($exhausted/$empty)", async ({exhausted,empty}) => {
     const content = "Insurance update.\n\nAxa update.\n\nZnot uncertain. " + "Context filler. ".repeat(100).trimEnd();
     topicLlm(content);
     const original = llm.classify.bind(llm);
@@ -1136,6 +1146,7 @@ describe("BrainEngine", () => {
       result.topics!.forEach((topic, index) => {
         topic.evidenceAssignments = [{ quote: topic.evidenceQuotes[0]!, occurrence: 0,
           passageId: index === 0 && (exhausted || inputs.length === 1) ? input.sourcePassages!.at(-1)!.id : input.sourcePassages![0]!.id }];
+        if (empty && index === 0 && (exhausted || inputs.length === 1)) topic.evidenceAssignments=[];
       });
       return result;
     });
@@ -1145,6 +1156,7 @@ describe("BrainEngine", () => {
     expect(inputs).toHaveLength(2);
     expect(inputs[0]!.sourcePassages!.length).toBeGreaterThan(1);
     expect(inputs[0]!.hints.join(" ")).not.toContain("Structural correction:");
+    expect(inputs[0]!.hints.join(" ")).toContain("organizing this evidence is NOT complete");
     expect(inputs[1]!.hints.join(" ")).toContain("each evidence assignment must use a supplied passage ID");
     expect(result.topics!.find(topic => topic.topic === "Axa")!.status).toBe("filed");
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
@@ -1637,7 +1649,8 @@ describe("BrainEngine", () => {
     });
     const result = await engine().store({ content, source: "selftest", verbatim: true });
     expect(inputs).toHaveLength(2);
-    expect(inputs[1]!.hints.join(" ")).toContain("every owned passage marked assigned");
+    // Empty explicit addresses are rejected before the broader passage coverage check.
+    expect(inputs[1]!.hints.join(" ")).toContain("each evidence assignment must use a supplied passage ID");
     expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(exhausted);
     expect(result.pagesTouched.includes("Areas/Insurance.md")).toBe(!exhausted);
   });

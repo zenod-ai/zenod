@@ -37,7 +37,12 @@ export class ClassificationSourceAddressError extends Error {
 export function checkTopicSourceAddresses(result: Classification, content: string,
   host: Pick<ClassifyInput, "sourceRange" | "sourcePassages">, exhaustedRetry = false): Classification {
   const invalid = result.topics?.filter(topic => {
-    if (!topic.evidenceAssignments?.length) return false;
+    if (!topic.evidenceAssignments?.length) {
+      // Preserve legacy quote-only callers; an explicit empty assignment list on
+      // a returned topic cannot support even an evidence-only decision.
+      return Array.isArray(topic.evidenceAssignments) && !!host.sourcePassages?.length
+        && !!content.slice(host.sourceRange?.start ?? 0, host.sourceRange?.end ?? content.length).trim();
+    }
     const resolved = resolveTopicSpans(content, withHostSource(topic, host));
     return resolved.invalid && !resolved.nonOwnedContext;
   });

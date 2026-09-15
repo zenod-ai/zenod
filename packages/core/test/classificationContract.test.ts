@@ -102,3 +102,19 @@ describe("assigned passage coverage retry contract", () => {
     expect(checkAssignedPassageCoverage(legacy, content, host)).toBe(legacy);
   });
 });
+
+describe("captured content still needs source assignments",()=>{
+ it("retries unsupported evidence-only topics, preserves supported siblings and empty captures",()=>{
+  const content="Quizá cambie de casa. I have not decided.";
+  const host={sourceRange:{start:0,end:content.length},sourcePassages:[{id:"one",start:0,end:content.length,text:content}]};
+  const bad={...recorded.topics![0]!,disposition:"evidence_only" as const,pages:[],evidenceQuotes:[],evidenceAssignments:[]};
+  const good={...bad,topic:"Tentative move",evidenceAssignments:[{passageId:"one",quote:content,occurrence:0}]};
+  const result={...recorded,topics:[bad,good]};
+  expect(()=>checkTopicSourceAddresses(result,content,host)).toThrow(ClassificationSourceAddressError);
+  const final=checkTopicSourceAddresses(result,content,host,true);
+  expect(final.topics![0]!.classificationFailed).toBe(true);expect(final.topics![1]).toBe(good);
+  expect(checkTopicSourceAddresses({...result,topics:[]},content,host).topics).toEqual([]);
+  const empty={...result,topics:[bad]};
+  expect(checkTopicSourceAddresses(empty,"",{sourceRange:{start:0,end:0},sourcePassages:[]})).toBe(empty);
+ });
+});
