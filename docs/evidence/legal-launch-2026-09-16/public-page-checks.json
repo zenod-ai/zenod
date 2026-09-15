@@ -1,0 +1,52 @@
+[
+  {
+    "page": "terms",
+    "http_ok": true,
+    "version_ok": true,
+    "personal_email_absent": true,
+    "support_email": false,
+    "bytes": 7473,
+    "decoded_support_email_ok": true,
+    "only_support_email": true
+  },
+  {
+    "page": "privacy",
+    "http_ok": true,
+    "version_ok": true,
+    "personal_email_absent": true,
+    "support_email": false,
+    "bytes": 8575,
+    "decoded_support_email_ok": true,
+    "only_support_email": true
+  },
+  {
+    "page": "data-handling",
+    "http_ok": true,
+    "version_ok": true,
+    "personal_email_absent": true,
+    "support_email": false,
+    "bytes": 6014,
+    "decoded_support_email_ok": true,
+    "only_support_email": true
+  },
+  {
+    "page": "cookies",
+    "http_ok": true,
+    "version_ok": true,
+    "personal_email_absent": true,
+    "support_email": false,
+    "bytes": 2497,
+    "decoded_support_email_ok": true,
+    "only_support_email": true
+  },
+  {
+    "page": "legal-notice",
+    "http_ok": true,
+    "version_ok": true,
+    "personal_email_absent": true,
+    "support_email": false,
+    "bytes": 2010,
+    "decoded_support_email_ok": true,
+    "only_support_email": true
+  }
+]

@@ -18,7 +18,7 @@
 </head>
 <body>
 <h1>Data Handling</h1>
-<p><strong>Effective 30 August 2026 · Version 2026-08-30.</strong> This page explains, in plain
+<p><strong>Effective 16 September 2026 · Version 2026-09-16.</strong> This page explains, in plain
 terms, where your data lives and who touches it in hosted Zenod. It complements the
 <a href="/legal/privacy.html">Privacy Policy</a>.</p>
 
@@ -66,11 +66,23 @@ preceding 31 days.</p>
 MCP tokens and connected credentials and remove tenant runtime data according to the Privacy Policy.
 Deleting hosted data does not delete a repository in your GitHub account or an app-created vault in your Drive account.</p>
 
-<h2>Who processes your data</h2>
-<p>See the sub-processor list in the <a href="/legal/privacy.html">Privacy Policy</a> (model providers,
-Stripe for payments, our hosting provider). Each touches only the slice needed to run its part.</p>
+<h2 id="providers">Who processes your data</h2>
+<ul>
+<li><strong>Hetzner:</strong> hosted application infrastructure in the EU.</li>
+<li><strong>Google:</strong> optional sign-in and Drive vault storage; Google Workspace handles support email.</li>
+<li><strong>GitHub:</strong> optional sign-in and repository vault storage.</li>
+<li><strong>Stripe:</strong> checkout, subscriptions, payment records, invoices, and tax processing.</li>
+<li><strong>Groq:</strong> cloud audio transcription when selected; local transcription may be used as a fallback.</li>
+<li><strong>OpenRouter and configured model providers:</strong> relevant prompts and content for requested AI processing. The selected model and processing location can vary.</li>
+<li><strong>WhatsApp/Meta and Telegram:</strong> messaging and media delivery when you connect those channels.</li>
+</ul>
+<p>This describes provider categories, not a complete contractual sub-processor register. Contact
+<a href="mailto:support@zenod.dev">support@zenod.dev</a> for the current processing providers,
+locations, and transfer safeguards, or before using Zenod where a data-processing agreement is required.</p>
 
 <footer>
+  <a href="/">Zenod</a> · <a href="/legal/legal-notice.html">Legal notice</a> ·
+  <a href="/legal/cookies.html">Cookies</a> ·
   See also: <a href="/legal/terms.html">Terms of Service</a> ·
   <a href="/legal/privacy.html">Privacy Policy</a>.
 </footer>

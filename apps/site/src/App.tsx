@@ -712,6 +712,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
               </a>
               <a href={PRIVACY_URL}>Privacy</a>
               <a href={TERMS_URL}>Terms</a>
+              <a href="/legal/legal-notice.html">Legal notice</a>
+              <a href="/legal/cookies.html">Cookies</a>
               <a href={DATA_URL}>Data</a>
             </nav>
           </footer>

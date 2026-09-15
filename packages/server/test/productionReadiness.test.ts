@@ -60,7 +60,7 @@ describe("production readiness gate", () => {
       new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
       "utf8",
     );
-    expect(terms).toContain("Version 2026-08-30");
+    expect(terms).toContain(`Version ${ZENOD_LEGAL_VERSION}`);
     expect(terms).toContain("€9 per month plus applicable VAT");
     expect(terms).toContain("managed AI usage and WhatsApp access");
     expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i);
@@ -78,7 +78,7 @@ describe("production readiness gate", () => {
       "utf8",
     );
     for (const document of [terms, privacy, handling]) {
-      expect(document).toContain("Version 2026-08-30");
+      expect(document).toContain(document === terms ? `Version ${ZENOD_LEGAL_VERSION}` : "Version 2026-09-16");
       expect(document).toMatch(/GitHub/);
       expect(document).toMatch(/Google Drive|Drive vault/);
       expect(document).toMatch(/Markdown/);

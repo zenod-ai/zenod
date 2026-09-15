@@ -16,10 +16,10 @@
 </head>
 <body>
 <h1>Privacy Policy</h1>
-<p><strong>Effective 30 August 2026 · Version 2026-08-30.</strong> This policy explains how Alpha
+<p><strong>Effective 16 September 2026 · Version 2026-09-16.</strong> This policy explains how Alpha
 Analytics SL, trading as Zenod, processes personal data as the controller for hosted Zenod. Our
 business address is Aribau 168, 1º 1ª, 08036 Barcelona, Spain. Contact:
-<a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p>
+<a href="mailto:support@zenod.dev">support@zenod.dev</a>.</p>
 
 <h2>1. The short version</h2>
 <p>Your knowledge vault lives in a GitHub repository or app-created Google Drive folder you control.
@@ -28,7 +28,8 @@ account, tenant, credential, usage, and operational data needed to provide and s
 
 <h2>2. What we collect</h2>
 <ul>
-  <li><strong>Account &amp; billing:</strong> email, and payment records held by our processor Stripe
+  <li><strong>Account &amp; billing:</strong> provider account identifier, name, email, profile image when supplied, subscription status,
+  and payment records held by our processor Stripe
   (we do not store card numbers).</li>
   <li><strong>Connected-account credentials:</strong> scoped OAuth tokens or app installations for
   services you connect, stored in encrypted tenant-scoped custody and never written into the vault.</li>
@@ -38,6 +39,20 @@ account, tenant, credential, usage, and operational data needed to provide and s
   reliability, and the account dashboard.</li>
   <li><strong>Operational logs:</strong> limited technical logs for reliability and support.</li>
 </ul>
+
+<h2>Google sign-in and Google Drive access</h2>
+<p>Google sign-in provides your basic profile and verified email to create and secure your account.
+It does not give Zenod access to your whole Drive. If you choose a Drive vault, a separate permission
+request uses <code>drive.file</code> for files created by or specifically shared with Zenod. We use
+that access to read and write your chosen vault and maintain its history and recovery records.</p>
+<p>Zenod’s use and transfer of information received from Google APIs follows the
+<a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+including its Limited Use requirements. Google data is used to provide the features you request,
+not sold, used for advertising, or used to train general-purpose AI models. Relevant content may be
+sent to service providers to perform requested processing, subject to those restrictions.</p>
+<p>You can revoke Google access in your <a href="https://myaccount.google.com/connections">Google Account connections</a>.
+Revoking access stops dependent features but does not cancel billing or delete existing vault files.
+For account deletion, contact support using the process below.</p>
 
 <h2>3. Purposes and legal bases</h2>
 <p>We process account, tenant, vault, and usage data as necessary to perform the service contract;
@@ -50,7 +65,10 @@ content to train our models.</p>
 <p>Google and GitHub provide optional identity and customer-owned storage access; Stripe processes checkout, subscriptions, tax data,
 and invoices; Hetzner hosts the service; and configured model providers, including providers reached
 through OpenRouter, process prompts needed to generate responses. Providers may process data outside
-the EEA under their published transfer safeguards. Ask us for the current sub-processor list.</p>
+the EEA under their published transfer safeguards. See <a href="/legal/data-handling.html#providers">our service-provider categories</a>.
+You can request the current providers and applicable transfer safeguards from support.
+Optional WhatsApp and Telegram channels also involve their respective messaging providers.
+Support email is handled through Google Workspace.</p>
 
 <h2>5. Where data lives</h2>
 <p>The hosted service runs in the EU. Customer data is logically isolated by tenant inside the shared
@@ -70,19 +88,34 @@ operational logs are normally kept for up to 30 days unless needed to investigat
 <p>Depending on applicable law, you may request access, correction, deletion, restriction, portability,
 or object to processing, and may withdraw consent without affecting earlier processing. Because your
 vault consists of ordinary Markdown in storage you control, most content is already portable. Email us to exercise a right.
-You may also complain to the Spanish Data Protection Agency (AEPD) or your local supervisory authority.</p>
+We may request proportionate information to verify your identity before acting. We normally respond
+within one month; if an extension is permitted and needed, we explain it within that period.
+You may also complain to the <a href="https://www.aepd.es/">Spanish Data Protection Agency (AEPD)</a>
+or your local supervisory authority. We do not make solely automated decisions with legal or similarly
+significant effects about you. AI-generated memory and answers are product outputs for you to review.</p>
 
 <h2>8. Security, cookies, and children</h2>
 <p>We use encryption in transit, encrypted credential custody, tenant-scoped authorization, signed
 sessions, restricted tokens, and tested backups. No system is perfectly secure; report concerns to the
 contact below. Zenod uses essential sign-in and security cookies and does not use advertising cookies.
+See the <a href="/legal/cookies.html">Cookies and browser storage notice</a> for purposes and durations.
 The hosted Service is not directed to children under 18.</p>
 
+<h2>Providing data and business use</h2>
+<p>Account and billing information is needed to provide a paid account; without it we cannot provide
+those features. Storage and messaging connections are optional, but the corresponding features will
+not work without access. Do not submit personal data you are not entitled to share.</p>
+<p>This policy describes our account and service processing. If your organization needs Zenod to
+process personal data on its behalf, contact support to arrange the required data-processing terms
+before submitting that data. This Privacy Policy is not a substitute for a data-processing agreement.</p>
+
 <h2>9. Contact and changes</h2>
-<p>Privacy requests: <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>. We will post material policy
+<p>Privacy requests: <a href="mailto:support@zenod.dev">support@zenod.dev</a>. We will post material policy
 changes here and update the effective date.</p>
 
 <footer>
+  <a href="/">Zenod</a> · <a href="/legal/legal-notice.html">Legal notice</a> ·
+  <a href="/legal/cookies.html">Cookies</a> ·
   See also: <a href="/legal/terms.html">Terms of Service</a> ·
   <a href="/legal/data-handling.html">Data Handling</a>.
 </footer>

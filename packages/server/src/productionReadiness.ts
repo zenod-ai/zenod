@@ -1,4 +1,4 @@
-export const ZENOD_LEGAL_VERSION = "2026-08-30";
+export const ZENOD_LEGAL_VERSION = "2026-09-16.1";
 
 export interface ReadinessCheck {
   id: string;
