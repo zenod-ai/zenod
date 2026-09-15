@@ -28,3 +28,15 @@ At the user's explicit request, production Zenod Checkout now sets `allow_promot
 - Live readiness remains ready=true, publicPaidSignup=true, publicGoogleSignup=true, googleSignupReady=true; evidenceReady=false is unchanged.
 - Only GIT_SHA changed in the runtime environment. Desired configuration, exact image, mounts and preserved environment were checked after deployment. Prior configuration captured privately for rollback; the same recent verified recovery point applies.
 - No synthetic live customer/session or payment was created for verification. The user can validate the visible field in a new normal checkout.
+
+## Account logo and zero-total checkout
+
+User requested repair of the broken account logo and the payment-method requirement on a 100%-discounted checkout. Production now renders the site's Z mark inline in the account header and sets `payment_method_collection: "if_required"` for Zenod subscription checkout. Paid checkouts still collect payment details; existing sessions require a fresh checkout. Coupon terms were not modified.
+
+- Deployed source: `66d96469ffb88078459ccb728e74020cc47e52b0`.
+- Immutable image: `ghcr.io/zenod-ai/zenod@sha256:373c9ac16a84bac170d0b36354e93689a3ca67cb4a2fb247579622c935f96516`.
+- Build/boot workflow: https://github.com/zenod-ai/zenod/actions/runs/35035158691 — passed.
+- Web and server builds passed; 40 customer-layer tests passed, including account activation for both paid and no_payment_required completed sessions.
+- Verified exact live health SHA, runtime/Dokploy image, unchanged mounts/environment except GIT_SHA, and signup readiness/flags true.
+- Downloaded live app bundle confirms inline Z in the account header. Deployed compiled billing module confirms if_required. No live subscription or payment created by the agent.
+- Current pre-release configuration and rollback script captured privately; same recent verified volume recovery point applies.
