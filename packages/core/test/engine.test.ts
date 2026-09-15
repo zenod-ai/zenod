@@ -1396,11 +1396,13 @@ describe("BrainEngine", () => {
     });Object.assign(llm,{reconcile});
     const e=engine(),captured=await e.captureEvidence!({content,source:"whatsapp"});
     const request={content,source:"whatsapp" as const,evidenceRef:captured.evidenceRef};
-    const first=await e.enrichEvidence!(request);expect(first.topics!.map(topic=>topic.status)).toEqual(["filed","pending"]);
+    const first=await e.enrichEvidence!(request);expect(first.topics!.map(topic=>topic.status)).toEqual(["filed","pending","uncertain"]);
+    expect(first.topics!.at(-1)!.reason).toBe("source_not_assigned");
+    expect(first.topics!.at(-1)!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("")).toBe("This remains provisional.  A separate option exists.");
     const firstPage=await readFile(join(repo.path,paths[0]!),"utf8");expect(firstPage).toContain(quote);expect(firstPage).not.toContain("Invented punctuation");
     rejectB=false;
     const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
-    const second=await reopened.enrichEvidence!(request);expect(second.filing).toBe("filed");
+    const second=await reopened.enrichEvidence!(request);expect(second.filing).toBe("uncertain");expect(second.topics!.slice(0,2).map(topic=>topic.status)).toEqual(["filed","filed"]);expect(second.topics!.at(-1)!.reason).toBe("source_not_assigned");
     expect(reconcile).toHaveBeenCalledTimes(3);expect(llm.classify).toHaveBeenCalledOnce();
     expect(await readFile(join(repo.path,paths[0]!),"utf8")).toBe(firstPage);
     expect((await readFile(join(repo.path,paths[1]!),"utf8")).split(quote)).toHaveLength(2);
@@ -1421,6 +1423,23 @@ describe("BrainEngine", () => {
     const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
     const retry=await reopened.enrichEvidence!(request);expect(retry.topics![0]).toMatchObject({status:"pending",reason:"reconciliation_source_context_incomplete"});
     expect(reconcile).not.toHaveBeenCalled();expect(llm.classify).toHaveBeenCalledOnce();expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
+  });
+
+  it("records unassigned clauses separately from filed identity spans and keeps completed replay stable",async()=>{
+    const path="Projects/ReceiptCoverage.md",raw="# Receipt coverage\nExisting history.\n[[Index]]\n";
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed receipt coverage");
+    const assigned="The rent option remains tentative.",unassigned="Salary covers the opening mortgage costs.",content=assigned+" "+unassigned;
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Rent option",tags:[],pages:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[{topic:"Rent option",summary:"Rent option",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:assigned,occurrence:0}],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Receipt coverage",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.sources.map(source=>source.text).join("")).toContain(unassigned);
+      return [{kind:"add" as const,ideaIds:[request.ideas[0]!.id],sourceIds:[request.addCandidates![0]!.id],sourceQuote:"-",targetId:null,factKey:null,correctionQuote:null,reason:null}];
+    });Object.assign(llm,{reconcile});
+    const e=engine(),capture=await e.captureEvidence!({content,source:"whatsapp"}),request={content,source:"whatsapp" as const,evidenceRef:capture.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.topics!.find(topic=>topic.topic==="Rent option")!.status).toBe("filed");
+    const remainder=first.topics!.find(topic=>topic.reason==="source_not_assigned")!;expect(remainder.status).toBe("uncertain");expect(remainder.sourceSpans.map(span=>content.slice(span.start,span.end)).join("").trim()).toBe(unassigned);
+    const filed=await readFile(join(repo.path,path),"utf8");expect(filed).toContain(assigned);expect(filed).not.toContain(unassigned);
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});const replay=await reopened.enrichEvidence!(request);
+    expect(replay.commitSha).toBe(first.commitSha);expect(replay.topics).toEqual(first.topics);expect(llm.classify).toHaveBeenCalledOnce();expect(reconcile).toHaveBeenCalledOnce();expect(await readFile(join(repo.path,path),"utf8")).toBe(filed);
   });
 
   it("gives each destination its own bounded context instead of starving sibling branches",async()=>{
@@ -1531,7 +1550,9 @@ describe("BrainEngine", () => {
     Object.assign(llm,{reconcile});const e=engine();
     const captured=await e.captureEvidence!({content,source:"whatsapp"});
     const result=await e.enrichEvidence!({content,source:"whatsapp",evidenceRef:captured.evidenceRef});
-    expect(result.filing).toBe("filed");
+    expect(result.filing).toBe("uncertain");expect(result.topics![0]!.status).toBe("filed");
+    const remainder=result.topics!.find(topic=>topic.reason==="source_not_assigned")!;
+    expect(remainder.sourceSpans.map(span=>content.slice(span.start,span.end)).join("").replaceAll("Background.","").trim()).toBe("");
     expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toContain(quote);
   });
 
@@ -1853,9 +1874,10 @@ describe("BrainEngine", () => {
     }));
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(result.topics![0]!.sourceSpans.map(span => content.slice(span.start, span.end))).toEqual([quote]);
-    expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(!reviewed);
-    expect(result.filing).toBe(reviewed ? "filed" : "uncertain");
-    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(!reviewed);
+    expect(result.topics?.some(topic => topic.reason === "source_not_assigned")).toBe(true);
+    expect(result.topics!.find(topic=>topic.reason==="source_not_assigned")!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("")).toBe(content.replace(quote,""));
+    expect(result.filing).toBe("uncertain");
+    expect(result.pagesTouched.some(path => path.startsWith("Inbox/"))).toBe(true);
   });
 
   it("passes complete recipient and qualified reported propositions to reconciliation while unknown routing stays uncertain", async () => {
@@ -1890,7 +1912,9 @@ describe("BrainEngine", () => {
     Object.assign(llm, { reconcile });
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(reconcile).toHaveBeenCalledTimes(1);
-    expect(result.topics!.map(topic => topic.status)).toEqual(["filed", "filed", "uncertain"]);
+    expect(result.topics!.map(topic => topic.status)).toEqual(["filed", "filed", "uncertain", "uncertain"]);
+    expect(result.topics!.at(-1)!.reason).toBe("source_not_assigned");
+    expect(result.topics!.at(-1)!.sourceSpans.map(span=>content.slice(span.start,span.end)).join("").trim()).toBe(", but the project and change are unknown.");
     const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
     expect(page).toContain(delivery);
     expect(page).toContain(report);

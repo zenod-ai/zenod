@@ -1,3 +1,4 @@
+import {ownedFilingReviews,unassignedFilingSpans,mergeFilingReviews} from "./filingCoverage.js";
 import {safeCandidateClassification} from "./meaningNotes.js";
 import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
@@ -407,6 +408,7 @@ function mergeSegmentClassifications(classifications: Classification[]): Classif
   return {
     topics: classifications.flatMap((item) => item.topics ?? []),
     reviewedSourceSpans: classifications.flatMap(item => item.reviewedSourceSpans ?? []),
+    passageReviews: classifications.flatMap(item=>item.passageReviews??[]),
     confidence: Math.min(...classifications.map((item) => item.confidence)),
     summary: classifications.map((item) => item.summary).join("; ").slice(0, 240),
     tags: [...new Set(classifications.flatMap((item) => item.tags))],
@@ -1553,6 +1555,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           .filter(topic => !resolveTopicSpans(input.content, topic).nonOwnedContext);
       }
       classified.reviewedSourceSpans = reviewedSourceSpans(input.content, classified, windows[segmentIndex]!);
+      classified.passageReviews = ownedFilingReviews(classified,windows[segmentIndex]!);
       classifications.push(classified);
     }
     return mergeSegmentClassifications(classifications);
@@ -1567,7 +1570,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
     assertVault(repo);
     type Outcome = NonNullable<StoreResult["topics"]>[number];
     const outcomes: Outcome[] = [];
-    const covered: Array<{ start: number; end: number }> = [];
     const addCandidates=new Map<string,import("./reconciliation.js").ReconciliationAddCandidate>();
     const groups = new Map<string, { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] }>();
     for (const topic of classification.topics ?? []) {
@@ -1600,7 +1602,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (priorOutcome && !filingPlan?.prior?.classification.topics.find(previous=>previous.ideaId===topic.ideaId)?.classificationFailed) Object.assign(outcome, structuredClone(priorOutcome));
       else if (filingPlan && !uncertain && topic.disposition !== "evidence_only") { outcome.status = "pending"; outcome.reason = "filing_not_started"; }
       outcomes.push(outcome);
-      covered.push(...spans);
       if (uncertain || topic.disposition === "evidence_only" || priorOutcome?.status === "filed" || priorOutcome?.status === "uncertain") continue;
       for (const page of pages.filter(page => !outcome.filedPages.includes(page.path))) {
         const group = groups.get(page.path) ?? { page, outcomes: [], facts: [] };
@@ -1610,14 +1611,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         groups.set(page.path, group);
       }
     }
-    // Classifier omissions remain visible, even when it confidently assigns other topics.
-    const bounds = semanticBounds({ content, ...(semanticRange ? { semanticRange } : {}) });
-    let cursor = bounds.start;
-    const uncovered: Outcome["sourceSpans"] = [];
-    for (const span of [...(classification.reviewedSourceSpans ?? covered), { start: bounds.end, end: bounds.end }].sort((a, b) => a.start - b.start)) {
-      if (span.start > cursor && content.slice(cursor, span.start).trim()) uncovered.push({ start: cursor, end: span.start });
-      cursor = Math.max(cursor, span.end);
-    }
+    // Exact identity evidence, not broad passage discovery or qualifier envelopes,
+    // determines which original source remains visibly unassigned in the receipt.
+    const uncovered = unassignedFilingSpans(content,classification,semanticRange);
     if (uncovered.length) outcomes.push({ topic: "Unassigned source content", evidenceRef, sourceSpans: uncovered,
       confidence: 0, disposition: "needs_clarification", pages: [], filedPages: [], status: "uncertain", reason: "source_not_assigned" });
     let receipt: FilingReceipt | undefined;
@@ -1919,6 +1915,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
             const retried = await classifySource(snapshot, config, input, true, failures.map(topic => topic.sourceRange!), failures);
             classification.topics = [...classification.topics!.filter(topic => !failures.includes(topic)), ...(retried.topics ?? [])];
             classification.reviewedSourceSpans = [...(classification.reviewedSourceSpans ?? []), ...(retried.reviewedSourceSpans ?? [])];
+            const rediscovered=windows.filter(window=>failures.some(topic=>topic.sourceRange?.start===window.range.start&&topic.sourceRange.end===window.range.end
+              && (topic.retryDiscovery || (!topic.evidenceAssignments&&!topic.pages.length&&topic.evidenceQuotes.length===1&&topic.evidenceQuotes[0]===input.content.slice(window.range.start,window.range.end)))));
+            classification.passageReviews=mergeFilingReviews(classification,retried,rediscovered);
           }
         } else classification = await classifySource(snapshot, config, input, true);
       } catch (error) {

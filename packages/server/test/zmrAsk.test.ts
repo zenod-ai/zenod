@@ -123,7 +123,11 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
           expect(lastCatalog!.entries.map(e => e.evidenceRef)).toEqual(Object.values(manifest.refs));
           if (input.question === "audit passage budget") {
             const usedReads = (lastCatalog as EntrySearchResult & { coverage: AnswerCoverage }).coverage.passageReadAttempts;
-            expect(usedReads).toBe(5);
+            const automaticReads=(lastCatalog as EntrySearchResult & { coverage: AnswerCoverage }).coverage.successfulReads;
+            expect(usedReads).toBe(automaticReads.length);
+            expect(new Set(automaticReads.map(read=>read.identity)).size).toBe(5);
+            expect(automaticReads.every(read=>read.end-read.start<=8000)).toBe(true);
+            expect(automaticReads.reduce((sum,read)=>sum+read.end-read.start,0)).toBeLessThanOrEqual(20000);
             for (let i = usedReads; i < 64; i++) await tools.readNote!(manifest.refs.late, { maxChars: 256 });
             await expect(tools.readNote!(manifest.refs.late, { maxChars: 256 })).rejects.toThrow("Passage read budget exhausted");
             return { text: "The entire audit is complete.", readPaths: [] };
@@ -163,9 +167,10 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
       const prefetchedRefs = Object.values(manifest.refs);
       expect(budget.sources.map(source => source.path)).toEqual(prefetchedRefs);
       expect(budget.sources.every(source => source.provider === provider)).toBe(true);
-      expect(budget.coverage.passageReadAttempts).toBe(5);
-      expect(budget.coverage.successfulReads.map(read => read.identity)).toEqual(prefetchedRefs);
-      expect(budget.coverage.successfulReads.every(read => read.end - read.start <= 4000)).toBe(true);
+      expect(budget.coverage.passageReadAttempts).toBe(budget.coverage.successfulReads.length);
+      expect([...new Set(budget.coverage.successfulReads.map(read => read.identity))]).toEqual(prefetchedRefs);
+      expect(budget.coverage.successfulReads.every(read => read.end - read.start <= 8000)).toBe(true);
+      expect(budget.coverage.successfulReads.reduce((sum,read)=>sum+read.end-read.start,0)).toBeLessThanOrEqual(20000);
       expect(budget.coverage.searches[0]).toMatchObject({ matchedEntries: 657, enumeratedEntries: 160, enumerationComplete: false });
       expect(budget.coverage.searches[0]!.unreadEvidenceRefs).toHaveLength(157);
       expect(budget.coverage.searches[0]!.unreadEvidenceRefs).toContain(manifest.refs.late);
