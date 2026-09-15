@@ -908,7 +908,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       sourceIds:z.array(z.string()).min(1).max(8), sourceQuote:z.string().min(1).max(1600),
       factKey:z.string().max(160).nullable(), reason:z.string().max(240).nullable(),
     };
-    const schema = z.object({operations:z.array(z.discriminatedUnion("kind",[
+    const schema = z.object({operations:z.array(z.union([
       z.object({...common,kind:z.literal("add"),targetId:z.null(),correctionQuote:z.null()}),
       z.object({...common,kind:z.literal("link_source"),targetId:z.string().min(1),correctionQuote:z.null()}),
       z.object({...common,kind:z.literal("supersede"),targetId:z.string().min(1),correctionQuote:z.string().min(1).max(2400),replacementQuote:z.null()}),
