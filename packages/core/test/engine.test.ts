@@ -708,6 +708,61 @@ describe("BrainEngine", () => {
     expect(reply.coverage?.successfulReads).toHaveLength(1);
   });
 
+  it.each([17300,25000])("shares the automatic allowance with one exact entry and preserves complete/partial coverage (%s chars)",async chars=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    const raw="## 14:16 Capture ^e-123abc\n> "+"An option is tentative. ".repeat(Math.ceil(chars/24));
+    await writeFile(join(repo.path,path),"# Log\n\n"+raw+"\n\n## 14:17 Other ^e-456def\n> Neighbor must not leak.\n");
+    const {readNotePassage}=await import("../src/ops/passage.js");
+    const first=await readNotePassage(repo.path,ref,{maxChars:8000});
+    const exact=(await readFile(join(repo.path,path),"utf8")).slice(first.extent.sectionStart,first.extent.sectionEnd);
+    const entrySearch=vi.fn(async()=>({entries:[{evidenceRef:ref,capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:1,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const result=JSON.parse(await tools.searchEntries!({contentType:"voice_note",order:"newest",limit:1}));
+      const packet=result.evidence[0].passage,pieces=packet.passages;
+      expect(packet.readPath).toBe(ref);expect(pieces).toHaveLength(3);expect(pieces.every((piece:any)=>piece.body.length<=8000&&piece.identity===ref&&piece.version===first.version)).toBe(true);
+      const text=pieces.map((piece:any)=>piece.body).join("");expect(text.length).toBeLessThanOrEqual(20000);expect(text).toBe(exact.slice(0,text.length));expect(text).not.toContain("Neighbor must not leak");
+      const summary=pieces.flatMap((piece:any)=>piece.answerSupports).find((hint:any)=>hint.kind==="source_summary");
+      if(chars<20000){expect(text).toBe(exact);expect(packet.nextCursor).toBeNull();expect(packet.readPartial).toBe(false);expect(summary).toBeDefined();}
+      else {expect(text.length).toBe(20000);expect(packet.nextCursor).toBeTruthy();expect(packet.readPartial).toBe(true);expect(summary).toBeUndefined();}
+      const repeated=JSON.parse(await tools.searchEntries!({contentType:"voice_note",order:"newest",limit:1}));expect(repeated.evidence).toEqual(result.evidence);expect(repeated.coverage.passageReadAttempts).toBe(3);
+      return {text:"",readPaths:[],supportSelections:summary?[{id:summary.id,mode:"raw_report",summaryText:"The source repeatedly describes a tentative option."}]:[]};
+    };
+    const reply=await createEngine({repo,llm,state,entrySearch}).ask("Summarize the latest voice note");
+    if(chars<20000)expect(reply.text).toContain("The source repeatedly describes a tentative option.");
+    else expect(reply.coverage?.continuation).toContainEqual(expect.objectContaining({tool:"read_note",input:expect.objectContaining({path:ref})}));
+  });
+
+  it("does not multiply automatic character allowances across concurrent searches",async()=>{
+    const path="Log/2026-09-08.md",refs=[path+"#^e-123abc",path+"#^e-456def"];
+    await writeFile(join(repo.path,path),"# Log\n\n"+refs.map(ref=>`## 14:16 Capture ^${ref.split("#^")[1]}\n> ${"A complete report. ".repeat(1600)}\n\n`).join(""));
+    const entrySearch=vi.fn(async(input:any)=>({entries:[{evidenceRef:refs[input.query==="second"?1:0],capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:2,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const results=await Promise.all([tools.searchEntries!({query:"first",limit:1}),tools.searchEntries!({query:"second",limit:1})]);
+      const evidence=results.flatMap(value=>JSON.parse(value).evidence),pieces=evidence.flatMap((entry:any)=>entry.passage?.passages??(entry.passage?[entry.passage]:[]));
+      expect(pieces.reduce((sum:number,piece:any)=>sum+piece.body.length,0)).toBeLessThanOrEqual(20000);
+      const repeated=JSON.parse(await tools.searchEntries!({query:"second",limit:1}));expect(repeated.coverage.passageReadAttempts).toBe(3);expect(repeated.coverage.searches.some((search:any)=>search.unreadEvidenceRefs.includes(refs[1]))).toBe(true);
+      return {text:"",readPaths:[],supportSelections:[]};
+    };
+    await createEngine({repo,llm,state,entrySearch}).ask("Read selected recordings");
+  });
+
+  it("retains successful automatic pieces and failed coverage when continuation becomes stale",async()=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc",raw="# Log\n\n## 14:16 Capture ^e-123abc\n> "+"A tentative claim. ".repeat(1000);
+    await writeFile(join(repo.path,path),raw);
+    const entrySearch=vi.fn(async()=>({entries:[{evidenceRef:ref,capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:1,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const revision=repo.currentRevision.bind(repo);let calls=0;
+      const spy=vi.spyOn(repo,"currentRevision").mockImplementation(async()=>{if(++calls===2)await writeFile(join(repo.path,path),raw+" Changed.");return revision();});
+      try{
+        const result=JSON.parse(await tools.searchEntries!({limit:1,exhaustive:true}));
+        expect(result.evidence[0].passage.body).toHaveLength(8000);expect(result.evidence[0].error).toBeTruthy();expect(result.coverage.failedReads).toContain(ref);
+        expect(result.evidence[0].passage.answerSupports.some((hint:any)=>hint.kind==="source_summary")).toBe(false);
+      }finally{spy.mockRestore();}
+      return {text:"",readPaths:[],supportSelections:[]};
+    };
+    const reply=await createEngine({repo,llm,state,entrySearch}).ask("Read the latest source");expect(reply.coverage?.status).toBe("partial");
+  });
+
   it("keeps automatic catalog reads bounded across repeated searches and reports truncated passages", async () => {
     const path = "Log/2026-09-08.md";
     const refs = Array.from({ length: 6 }, (_, i) => `${path}#^e-${String(i + 1).padStart(6, "0")}`);

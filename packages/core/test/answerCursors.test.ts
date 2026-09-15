@@ -21,3 +21,12 @@ it('separates search pagination, embedded exact-entry reads and coverage continu
  expect(()=>c.resolve('cursor_2',c.searchOwner())).toThrow();
  expect(JSON.stringify(result)).not.toContain('-raw');
 });
+
+it('aliases an anchored multipiece search result using its read path and final real cursor',()=>{
+ const cursors=new AnswerCursorAliases(),path='Log/2026-09-15.md#^e-123abc';
+ const encoded=JSON.parse(cursors.encode(JSON.stringify({evidence:[{evidenceRef:path,passage:{readPath:path,part:'body',passages:[{readPath:path,part:'body',body:'first',nextCursor:'raw-middle'},{readPath:path,part:'body',body:'second',nextCursor:'raw-tail'}],nextCursor:'raw-tail'}}]}),cursors.searchOwner()));
+ const packet=encoded.evidence[0].passage;expect(packet.nextCursor).toBe(packet.passages[1].nextCursor);
+ expect(cursors.resolve(packet.nextCursor,cursors.readOwner(path))).toBe('raw-tail');
+ expect(()=>cursors.resolve(packet.nextCursor,cursors.searchOwner())).toThrow();
+ expect(packet.passages.map((p:any)=>p.body)).toEqual(['first','second']);
+});

@@ -2352,7 +2352,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const readPassages: NotePassage[] = [];
     const passageSources = new Map<string, VaultSourceRef>();
     const catalogEntries = new Map<string, EntrySearchResult["entries"][number]>();
-    const automaticEntryReads = new Map<string, { snapshot: string; result: Promise<{ passage?: NotePassage; error?: string }> }>();
+    const automaticEntryReads = new Map<string, { snapshot: string; result: Promise<{ passage?: NotePassage | NotePassagePacket; error?: string }> }>();
+    let automaticEntryCharsRemaining = 20_000;
     let catalogSnapshotValid = true;
     const conversationReadSpans: Array<{ path: string; text: string }> = [];
     let factReadAttempts = 0;
@@ -2435,15 +2436,38 @@ export function createEngine(options: EngineOptions): BrainEngine {
           nextInput = { ...nextInput, cursor: page.pagination.nextCursor };
         } while (true);
         const evidence = [];
+        const eligible = [...new Set(entries.map(entry=>entry.evidenceRef))]
+          .filter(ref=>!automaticEntryReads.has(ref)).slice(0,5-automaticEntryReads.size);
         for (const entry of entries) {
           catalogEntries.set(entry.evidenceRef, entry);
           // Reuse the ordinary tracked reader: exact anchors, budgets, failed reads,
           // source identity and continuation coverage obey the same contract.
           // Pinned follow-ups keep their explicit-read authority, as fact projection does.
-          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5) {
+          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5 && automaticEntryCharsRemaining >= 256) {
+            // Reserve this entry's share before awaiting any read. Concurrent and
+            // repeated searches share the same allowance; short entries refund it.
+            const remainingEntries=eligible.filter(ref=>!automaticEntryReads.has(ref)).length;
+            const allowance=Math.max(256,Math.floor(automaticEntryCharsRemaining/Math.max(1,remainingEntries)));
+            automaticEntryCharsRemaining-=allowance;
             automaticEntryReads.set(entry.evidenceRef, { snapshot: page!.pagination.snapshot, result: (async () => {
-              try { return { passage: JSON.parse(await groundedTools.readNote!(entry.evidenceRef, { maxChars: 4000 })) as NotePassage }; }
-              catch (error) { return { error: String(error) }; }
+              const pieces:NotePassage[]=[];let consumed=0,error:string|undefined;
+              try {
+                let cursor:string|undefined;
+                do {
+                  const piece=JSON.parse(await groundedTools.readNote!(entry.evidenceRef,{maxChars:Math.min(8000,allowance-consumed),...(cursor?{cursor}:{})})) as NotePassage;
+                  pieces.push(piece);consumed+=piece.body.length;
+                  cursor=piece.nextCursor??undefined;
+                  if(!piece.body.length)break;
+                }while(cursor&&allowance-consumed>=256);
+              }catch(cause){error=String(cause);}
+              finally{automaticEntryCharsRemaining+=Math.max(0,allowance-consumed);}
+              const first=pieces[0],last=pieces.at(-1);
+              const passage=pieces.length===1?first:first&&last?{
+                source:first.source,readPath:entry.evidenceRef,version:first.version,part:first.part,passages:pieces,
+                nextCursor:last.nextCursor,bodyChars:consumed,
+                readPartial:!!error||first.extent.start>first.extent.sectionStart||last.extent.end<last.extent.sectionEnd,
+              }:undefined;
+              return {...(passage?{passage}:{}),...(error?{error}:{})};
             })() });
           }
           const read = automaticEntryReads.get(entry.evidenceRef);
@@ -2459,7 +2483,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }
         return JSON.stringify({ entries, pagination: page!.pagination, evidence,
           coverage: coverageTracker.result(),
-          instruction: "Evidence contains actual exact-entry passage reads (up to 5 per answer, 4000 characters each). Use capture.capturedAt as the source time; raw Log headings are processing time. Synthesize only from successful passage bodies, not discovery snippets. Follow passage nextCursor or read unread exact refs when needed. Partial passages do not establish absence or complete coverage. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
+          instruction: "Evidence contains actual exact-entry passage reads (up to 5 entries and 20000 characters shared per answer). Use capture.capturedAt as the source time; raw Log headings are processing time. Synthesize only from successful passage bodies, not discovery snippets. Follow passage nextCursor or read unread exact refs when needed. Partial passages do not establish absence or complete coverage. Complete means only the echoed lexical/metadata scope, not all semantic matches or unsynced/deleted history." });
       } } : {}),
       ...(tools.readNote
         ? {
