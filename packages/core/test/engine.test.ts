@@ -1649,7 +1649,8 @@ describe("BrainEngine", () => {
     });
     const result = await engine().store({ content, source: "selftest", verbatim: true });
     expect(inputs).toHaveLength(2);
-    expect(inputs[1]!.hints.join(" ")).toContain("every owned passage marked assigned");
+    // Empty explicit addresses are rejected before the broader passage coverage check.
+    expect(inputs[1]!.hints.join(" ")).toContain("each evidence assignment must use a supplied passage ID");
     expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(exhausted);
     expect(result.pagesTouched.includes("Areas/Insurance.md")).toBe(!exhausted);
   });
