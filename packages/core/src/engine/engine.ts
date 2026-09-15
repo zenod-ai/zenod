@@ -1696,8 +1696,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
             addCandidates:[...addCandidates.values()].map(candidate=>({...candidate,ideaIds:candidate.ideaIds.filter(id=>group.outcomes.some(outcome=>outcome.ideaId===id))})).filter(candidate=>candidate.ideaIds.length>0),
             completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
             ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
-          reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
-          const operations = await llm.reconcile(prepared.request);
+          if(prepared.request.ideas.length)reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
+          const operations = prepared.request.ideas.length ? await llm.reconcile(prepared.request) : [];
           const reconciled = await applyReconciliation(prepared,operations);
           for (const outcome of group.outcomes) {
             const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);

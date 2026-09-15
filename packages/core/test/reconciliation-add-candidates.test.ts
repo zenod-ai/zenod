@@ -58,3 +58,25 @@ it('packs a candidate with its qualifier context and preserves a small sibling a
  const result=await applyReconciliation(prepared,[add(['s0'],['idea0']),add(['s1'],['idea1'])]);
  expect(result.appliedOperations.flatMap(o=>o.ideaIds)).toEqual(['idea1']);expect(result.pending[0]!.ideaIds).toEqual(['idea0']);
 });
+it('projects only ready idea targets while retaining original pending and clearing only obsolete readiness hints',async()=>{
+ const prepared=prepare(['x'.repeat(16000),'A complete conditional rule applies only on Tuesday.']);
+ const prior=prepared.input.ideas!.map(idea=>({...idea,priorFailure:'reconciliation_source_context_incomplete'}));
+ const bounded=prepareReconciliation({...prepared.input,ideas:prior});
+ expect(bounded.request.ideas.map(idea=>idea.id)).toEqual(['idea1']);expect(bounded.ideas).toEqual(prior);
+ expect(bounded.request.ideas[0]).not.toHaveProperty('priorFailure');
+ const result=await applyReconciliation(bounded,[add(['s1'],['idea1'])]);
+ expect(result.appliedOperations.flatMap(op=>op.ideaIds)).toEqual(['idea1']);expect(result.pending).toContainEqual(expect.objectContaining({ideaIds:['idea0'],reason:'reconciliation_source_context_incomplete'}));
+ for(const priorFailure of ['source_support_invalid','reconciliation_source_context_incomplete; source_support_invalid']){
+  const request=prepareReconciliation({...prepared.input,ideas:[{...prior[1]!,priorFailure}]}).request;
+  expect(request.ideas[0]!.priorFailure).toBe(priorFailure);
+ }
+ const complete=prepare(['The cost is12990, including paid interest; this is still an estimate.']);
+ const retry=prepareReconciliation({...complete.input,ideas:complete.ideas.map(idea=>({...idea,priorFailure:'reconciliation_source_context_incomplete'}))});
+ expect(retry.request.addCandidates![0]!.text).toBe(complete.input.sources[0]!.text);expect(retry.request.ideas[0]).not.toHaveProperty('priorFailure');
+ const filed=await applyReconciliation(retry,[add(['s0'],['idea0'])]);expect(filed.pending).toEqual([]);
+ const replay=await applyReconciliation(prepareReconciliation({...retry.input,raw:filed.content,completedIdeaIds:['idea0']}),[]);expect(replay.content).toBe(filed.content);expect(replay.pending).toEqual([]);
+});
+it('does not clear source-readiness history when the current canonical candidate remains invalid',()=>{
+ const seed=prepare(['x'.repeat(1601)]);const prepared=prepareReconciliation({...seed.input,ideas:seed.ideas.map(idea=>({...idea,priorFailure:'reconciliation_source_context_incomplete'}))});
+ expect(prepared.request.ideas[0]!.addCandidateFailure).toBe('add_candidate_too_long');expect(prepared.request.ideas[0]!.priorFailure).toBe('reconciliation_source_context_incomplete');
+});

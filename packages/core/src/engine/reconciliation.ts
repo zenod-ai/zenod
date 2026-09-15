@@ -143,11 +143,18 @@ export function prepareReconciliation(input: PrepareInput) {
     const sourceIds=idea.sourceIds.filter(id=>boundedSources.some(source=>source.id===id)).slice(0,8);
     const omitted=idea.sourceIds.filter(id=>!sourceIds.includes(id));
     if(omitted.length) omittedSourcesByIdea.set(idea.id,omitted);
-    return {...idea,topic:idea.topic.slice(0,160),...(idea.priorFailure ? {priorFailure:idea.priorFailure.slice(0,240)} : {}),sourceIds,sourcePartial:omitted.length>0,omittedSourceCount:omitted.length,
+    const {priorFailure,...currentIdea}=idea;
+    const ready=omitted.length===0&&!omittedAddCandidatesByIdea.has(idea.id);
+    const retainedFailure=ready&&priorFailure==="reconciliation_source_context_incomplete"?undefined:priorFailure;
+    return {...currentIdea,topic:idea.topic.slice(0,160),...(retainedFailure ? {priorFailure:retainedFailure.slice(0,240)} : {}),sourceIds,sourcePartial:omitted.length>0,omittedSourceCount:omitted.length,
       ...(omittedAddCandidatesByIdea.has(idea.id)?{addCandidateFailure:omittedAddCandidatesByIdea.get(idea.id)!}:{})};
   });
   for(const idea of ideas.slice(24)) omittedSourcesByIdea.set(idea.id,[...idea.sourceIds]);
-  const request: ReconciliationInput = {path: input.path, revision, ...(branchDescription?{branch:branchDescription}:{}), addCandidates, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:boundedIdeas};
+  // Packet omissions are host pending outcomes, not decisions the model can
+  // complete. Keep the original prepared ideas for apply/receipt accounting.
+  const readyIdeas=boundedIdeas.filter(idea=>!idea.sourcePartial&&idea.addCandidateFailure!=="add_candidate_context_incomplete");
+  const readyCandidates=addCandidates.map(candidate=>({...candidate,ideaIds:candidate.ideaIds.filter(id=>readyIdeas.some(idea=>idea.id===id))})).filter(candidate=>candidate.ideaIds.length>0);
+  const request: ReconciliationInput = {path: input.path, revision, ...(branchDescription?{branch:branchDescription}:{}), addCandidates:readyCandidates, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:readyIdeas};
   for (const id of targets.keys()) if (!boundedStatements.some(statement => statement.id === id)) targets.delete(id);
   return {input, request, targets, ideas, omittedSourcesByIdea, omittedAddCandidatesByIdea};
 }
@@ -348,7 +355,7 @@ export async function applyReconciliation(prepared: PreparedReconciliation, oper
     if (completed.has(idea.id)) continue;
     const omitted=prepared.omittedSourcesByIdea.get(idea.id);
     if (omitted?.length && !result.pending.some(item=>item.ideaIds.includes(idea.id))) result.pending.push({sourceIds:omitted,ideaIds:[idea.id],reason:"reconciliation_source_context_incomplete"});
-    else if (!covered.has(idea.id)) result.pending.push({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:"reconciliation_idea_unassigned"});
+    else if (!covered.has(idea.id)) result.pending.push({sourceIds:idea.sourceIds,ideaIds:[idea.id],reason:prepared.omittedAddCandidatesByIdea.get(idea.id)==="add_candidate_context_incomplete"?"add_candidate_context_incomplete":"reconciliation_idea_unassigned"});
   }
   if (!result.appliedOperationIds.length || (!edits.size && !additions.length)) return result;
   let body = parsed?.body ?? "";

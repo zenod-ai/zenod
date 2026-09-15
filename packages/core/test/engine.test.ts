@@ -1407,6 +1407,22 @@ describe("BrainEngine", () => {
     await reopened.enrichEvidence!(request);expect(reconcile).toHaveBeenCalledTimes(3);
   });
 
+  it("keeps a wholly source-incomplete reconciliation request pending without calling the model",async()=>{
+    const path="Projects/Readiness.md",raw="# Readiness\nExisting preserved context.\n[[Index]]\n";
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("seed readiness");
+    const quotes=Array.from({length:9},(_,i)=>`Condition ${i}: ${"This remains a conditional estimate. ".repeat(12)}`.trim());
+    const content=quotes.join("\n\n");
+    llm.classify=vi.fn(async(input:ClassifyInput)=>({confidence:.95,summary:"Conditional estimates",tags:[],pages:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[{topic:"One grouped estimate",summary:"Conditional estimates",evidenceQuotes:[],evidenceAssignments:quotes.map(quote=>({passageId:input.sourcePassages!.find(p=>p.start<content.indexOf(quote)+quote.length&&p.end>content.indexOf(quote))!.id,quote,occurrence:0})),confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Readiness",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async()=>{throw new Error("No ready ideas must not reach the model");});Object.assign(llm,{reconcile});
+    const e=engine(),capture=await e.captureEvidence!({content,source:"whatsapp"});
+    const request={content,source:"whatsapp" as const,evidenceRef:capture.evidenceRef};
+    const first=await e.enrichEvidence!(request);expect(first.topics).toHaveLength(1);expect(first.topics![0]).toMatchObject({status:"pending",reason:"reconciliation_source_context_incomplete"});
+    expect(reconcile).not.toHaveBeenCalled();expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
+    const reopened=createEngine({repo:await VaultRepo.open({workdir:repo.path}),state,llm,readSyncTtlMs:0});
+    const retry=await reopened.enrichEvidence!(request);expect(retry.topics![0]).toMatchObject({status:"pending",reason:"reconciliation_source_context_incomplete"});
+    expect(reconcile).not.toHaveBeenCalled();expect(llm.classify).toHaveBeenCalledOnce();expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
+  });
+
   it("gives each destination its own bounded context instead of starving sibling branches",async()=>{
     const names=["BranchA","BranchB","BranchC"];
     const pages=names.map(name=>({path:`Projects/${name}.md`,title:name,action:"update" as const}));
