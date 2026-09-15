@@ -759,6 +759,7 @@ describe("hosted customer layer", () => {
       tax_id_collection: { enabled: true },
       consent_collection: { terms_of_service: "required" },
       allow_promotion_codes: true,
+      payment_method_collection: "if_required",
       success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     });
 
@@ -864,7 +865,7 @@ describe("hosted customer layer", () => {
     tenants.close();
   });
 
-  it("lets a non-GitHub internal identity own checkout, account, Stripe metadata, and tenant records", async () => {
+  it.each(["paid", "no_payment_required"] as const)("lets a non-GitHub internal identity own checkout, account, Stripe metadata, and tenant records (%s)", async (paymentStatus) => {
     const principal: CustomerPrincipal = {
       user_id: customerUserId("google", "google-subject-ada"),
       provider: "google",
@@ -878,6 +879,7 @@ describe("hosted customer layer", () => {
     };
     const accountId = `user-${principal.user_id}`;
     session = checkoutSession({
+      payment_status: paymentStatus,
       client_reference_id: accountId,
       metadata: { product: "zenod", unit: "zenod", tier: "monthly", account_id: accountId },
     });
