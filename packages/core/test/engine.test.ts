@@ -1238,7 +1238,7 @@ describe("BrainEngine", () => {
     const inputs:ClassifyInput[]=[];
     llm.classify=vi.fn(async(input:ClassifyInput)=>{
       inputs.push(input);if(inputs.length>1)throw new Error("classify: structured_output_invalid");
-      return {pages:[],summary:"mixed",confidence:.9,tags:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:p.end>content.indexOf(quote)?"assigned" as const:"evidence_only" as const})),topics:[
+      return {pages:[],summary:"mixed",confidence:.9,tags:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[
         {topic:"Insurance",summary:"update",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.9,disposition:"append_compact_note" as const,pages:[{path:"Areas/Insurance",title:"Insurance",action:"update" as const}]},
         {topic:"Unknown destination",summary:"uncertain",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.4,disposition:"needs_clarification" as const,pages:[{path:"Projects/Invented.md",title:"Invented",action:"create" as const}],question:"Which project?"}
       ]};
@@ -1291,6 +1291,22 @@ describe("BrainEngine", () => {
       return {text:"ignored",readPaths:[capture.evidenceRef],supportSelections:[{id:read.answerSupports[0].id,mode:"raw_report"}]};
     };
     const answer=await e.ask("Is the library reading decided?");expect(answer.text).toContain(content);expect(answer.text).not.toContain("inputFingerprint");
+  });
+
+  it("passes the declared specific branch scope when shared emotions do not establish its subject",async()=>{
+    const path="Areas/Relatives.md",scope="Father, sister, inheritance and arrangements within the family.";
+    const raw=serializeNote({title:"Family arrangements",type:"area",tags:[],summary:scope,created:"2026-09-01",updated:"2026-09-01"},"# Family arrangements\nFinding peace is important.\n[[Index]]\n");
+    await writeFile(join(repo.path,path),raw);await repo.commitAndPublish("declared family scope");
+    const content="I may rent near a quiet studio because I want peace; I have not decided.";
+    llm.classify=vi.fn(async()=>({confidence:.95,summary:"Quiet studio",tags:[],pages:[],topics:[{topic:"Quiet studio",summary:content,evidenceQuotes:[content],confidence:.95,disposition:"integrate_page" as const,pages:[{path,title:"Family arrangements",action:"update" as const}]}]}));
+    const reconcile=vi.fn(async(request:import("../src/engine/reconciliation.js").ReconciliationInput)=>{
+      expect(request.branch).toEqual({title:"Family arrangements",scope});
+      expect(JSON.stringify({branch:request.branch,statements:request.statements}).length).toBeLessThanOrEqual(8000);
+      return [{kind:"clarify" as const,ideaIds:[request.ideas[0]!.id],sourceIds:request.ideas[0]!.sourceIds,sourceQuote:content,targetId:null,factKey:null,correctionQuote:null,reason:"The studio proposal does not establish a relationship to the declared relatives and inheritance subject."}];
+    });Object.assign(llm,{reconcile});
+    const result=await engine().store({content,source:"selftest"});
+    expect(reconcile).toHaveBeenCalledOnce();expect(result.topics![0]!.status).toBe("pending");
+    expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
   });
 
   it("reconstructs owned ADD candidates across destinations and pending receipt retry without copying model quotes",async()=>{

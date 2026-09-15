@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { MemoryEntry } from "../types.js";
 import { parseNote, serializeNote } from "../vault/frontmatter.js";
-import { pageRevision } from "../vault/pages.js";
+import { pageRevision, SUMMARY_MAX_CHARS } from "../vault/pages.js";
 import type { BranchContextPacket } from "./meaningNotes.js";
 import { appendMemoryFacts, parseMemoryFacts, type FactProposal } from "./temporalFacts.js";
 import { resolveRawSourceQuote, type SourceQuoteRun } from "./sourceQuote.js";
@@ -12,6 +12,8 @@ export interface ReconciliationStatement { id: string; text: string; sectionId: 
 export interface ReconciliationIdea {id:string;topic:string;sourceIds:string[];sourcePartial?:boolean;omittedSourceCount?:number;priorFailure?:string;addCandidateFailure?:string}
 export interface ReconciliationInput {
   path: string; revision: string | null; contextPartial: boolean;
+  /** Existing catalog declaration, untrusted context rather than filing authority. */
+  branch?: { title:string; scope:string };
   /** Exact classifier-selected quotes; ADD selects these IDs, not regenerated text. */
   addCandidates?: ReconciliationAddCandidate[];
   statements: ReconciliationStatement[]; sources: ReconciliationSource[]; ideas:ReconciliationIdea[];
@@ -100,8 +102,10 @@ export function prepareReconciliation(input: PrepareInput) {
       targets.set(id, {start, end, line: match[0], text});
     }
   }
+  const branchDescription=branch ? {title:branch.title.slice(0,120),scope:branch.scope.slice(0,SUMMARY_MAX_CHARS)} : undefined;
   const boundedStatements: ReconciliationStatement[] = [];
-  for (const statement of statements) if (boundedStatements.length < 48 && JSON.stringify([...boundedStatements,statement]).length <= 8000) boundedStatements.push(statement);
+  // Reserve the declared branch subject before filling its target excerpts.
+  for (const statement of statements) if (boundedStatements.length < 48 && JSON.stringify({branch:branchDescription,statements:[...boundedStatements,statement]}).length <= 8000) boundedStatements.push(statement);
   const ideas: ReconciliationIdea[] = input.ideas ?? input.sources.map(source=>({id:`idea-${source.id}`,topic:source.text.slice(0,160),sourceIds:[source.id]}));
   const boundedSources:ReconciliationSource[]=[];
   const addCandidates:ReconciliationAddCandidate[]=[];
@@ -143,7 +147,7 @@ export function prepareReconciliation(input: PrepareInput) {
       ...(omittedAddCandidatesByIdea.has(idea.id)?{addCandidateFailure:omittedAddCandidatesByIdea.get(idea.id)!}:{})};
   });
   for(const idea of ideas.slice(24)) omittedSourcesByIdea.set(idea.id,[...idea.sourceIds]);
-  const request: ReconciliationInput = {path: input.path, revision, addCandidates, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:boundedIdeas};
+  const request: ReconciliationInput = {path: input.path, revision, ...(branchDescription?{branch:branchDescription}:{}), addCandidates, contextPartial: input.context.partial || boundedStatements.length < statements.length || boundedSources.length < input.sources.length || ideas.length>24, statements: boundedStatements, sources: boundedSources,ideas:boundedIdeas};
   for (const id of targets.keys()) if (!boundedStatements.some(statement => statement.id === id)) targets.delete(id);
   return {input, request, targets, ideas, omittedSourcesByIdea, omittedAddCandidatesByIdea};
 }
