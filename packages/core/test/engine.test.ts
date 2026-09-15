@@ -1,5 +1,5 @@
 import { withVaultWriteLock } from "../src/git/vaultWriteLock.js";
-import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath } from "../src/engine/filingReceipt.js";
+import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath, filingInputFingerprint } from "../src/engine/filingReceipt.js";
 import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1118,6 +1118,10 @@ describe("BrainEngine", () => {
       const result = await original(input);
       result.pages = [{ path: "Areas/Insurance.md", action: "update", title: "Insurance" }];
       if (exhausted || inputs.length === 1) result.topics![0]!.pages = [];
+      if(input.retryDecisions) result.topics = result.topics!.flatMap(topic=>{
+        const decision=input.retryDecisions!.find(item=>item.topic.topic===topic.topic);
+        return decision?[{...topic,retryId:decision.id}]:[];
+      });
       return result;
     });
     const e = engine();
@@ -1130,7 +1134,7 @@ describe("BrainEngine", () => {
     expect(result.topics!.find(topic => topic.topic === "Axa")!.status).toBe("filed");
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
     if (exhausted) {
-      expect(result.topics!.find(topic => topic.topic === "Insurance")!.reason).toBe("classification_unavailable");
+      expect(result.topics!.find(topic => topic.topic === "Insurance")!.reason).toContain("classification_topic_destination_missing");
       expect(result.pagesTouched).not.toContain("Areas/Insurance.md");
     }
     expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
@@ -1149,6 +1153,10 @@ describe("BrainEngine", () => {
           passageId: index === 0 && (exhausted || inputs.length === 1) ? input.sourcePassages!.at(-1)!.id : input.sourcePassages![0]!.id }];
         if (empty && index === 0 && (exhausted || inputs.length === 1)) topic.evidenceAssignments=[];
       });
+      if(input.retryDecisions) result.topics = result.topics!.flatMap(topic=>{
+        const decision=input.retryDecisions!.find(item=>item.topic.topic===topic.topic);
+        return decision?[{...topic,retryId:decision.id}]:[];
+      });
       return result;
     });
     const e = engine();
@@ -1163,6 +1171,105 @@ describe("BrainEngine", () => {
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
     if (exhausted) expect(result.pagesTouched).not.toContain("Areas/Insurance.md");
     expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("persists accepted classification siblings across malformed repair and a fresh-engine pending receipt retry", async () => {
+    const content="Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);
+    const original=llm.classify.bind(llm), inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      inputs.push(input);
+      if(inputs.length===2) throw new Error("classify: structured_output_invalid");
+      const result=await original(input);
+      if(inputs.length===1) result.topics![1]!.evidenceQuotes=["Source text that does not exist."];
+      if(input.retryDecisions){
+        // An attempted rewrite of the accepted sibling is not an owned target.
+        result.topics=result.topics!.flatMap(topic=>{
+          const decision=input.retryDecisions!.find(item=>item.topic.topic===topic.topic);
+          return decision?[{...topic,topic:"Renamed Axa idea",retryId:decision.id}]:[];
+        });
+      }
+      return result;
+    });
+    const e=engine(),captured=await e.captureEvidence!({content,source:"selftest"});
+    const input={content,source:"selftest",evidenceRef:captured.evidenceRef};
+    const first=await e.enrichEvidence!(input);
+    expect(first.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    const failed=first.topics!.find(t=>t.topic==="Axa")!;
+    expect(failed.status).toBe("pending");expect(failed.reason).toContain("classification_source_address_invalid");expect(failed.reason).toContain("structured_output_invalid");
+    expect(inputs[1]!.retryDecisions!.map(d=>d.topic.topic)).not.toContain("Insurance");
+    const insurance=await readFile(join(repo.path,"Areas/Insurance.md"),"utf8");
+    const second=await engine().enrichEvidence!(input);
+    expect(inputs).toHaveLength(3);expect(inputs[2]!.retryDecisions!.map(d=>d.topic.topic)).toEqual(["Axa"]);
+    expect(second.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    expect(second.topics!.find(t=>t.topic==="Renamed Axa idea")!.ideaId).toBe(failed.ideaId);
+    expect(second.topics!.find(t=>t.topic==="Renamed Axa idea")!.status).toBe("filed");
+    expect(await readFile(join(repo.path,"Areas/Insurance.md"),"utf8")).toBe(insurance);
+    expect(vi.mocked(llm.composePage).mock.calls.filter(([i])=>i.path==="Areas/Insurance.md")).toHaveLength(1);
+    const before=await repo.currentRevision(),calls=vi.mocked(llm.composePage).mock.calls.length;
+    await engine().enrichEvidence!(input);
+    expect(inputs).toHaveLength(3);expect(vi.mocked(llm.composePage).mock.calls).toHaveLength(calls);
+    expect(await repo.currentRevision()).toEqual(before);expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("resumes an old whole-window receipt with multiple new decisions and keeps the original capture",async()=>{
+    const content="Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content);const original=llm.classify.bind(llm);
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      expect(input.retryDecisions).toHaveLength(1);expect(input.retryDecisions![0]!.scope).toBe("source_window");
+      const result=await original(input);result.topics=result.topics!.map(topic=>({...topic,retryId:input.retryDecisions![0]!.id}));return result;
+    });
+    const e=engine(),captured=await e.captureEvidence!({content,source:"selftest"});
+    const input={content,source:"selftest",evidenceRef:captured.evidenceRef};
+    const receipt=sealFilingReceipt({version:1,evidenceRef:captured.evidenceRef,inputFingerprint:filingInputFingerprint(input),phase:"ready",baseRevision:await repo.currentRevision(),files:{},
+      classification:{pages:[],confidence:0,summary:"pending",tags:[],topics:[{ideaId:"legacy",topic:"Unclassified segment 1",summary:"classification pending",evidenceQuotes:[content],sourceRange:{start:0,end:content.length},classificationFailed:true,pages:[],confidence:0,disposition:"needs_clarification"}]},
+      outcomes:[{ideaId:"legacy",topic:"Unclassified segment 1",evidenceRef:captured.evidenceRef,status:"pending",sourceSpans:[{start:0,end:content.length}],confidence:0,disposition:"needs_clarification",pages:[],filedPages:[],reason:"classification_unavailable"}]});
+    await writeFile(join(repo.path,filingReceiptPath(captured.evidenceRef)),renderFilingReceipt(receipt));await repo.commitAndPublish("old receipt");
+    const result=await engine().enrichEvidence!(input);expect(result.topics!.filter(t=>t.status==="filed")).toHaveLength(2);
+    expect(result.topics!.find(t=>t.topic==="Znot or Zenod?")!.status).toBe("uncertain");expect(llm.classify).toHaveBeenCalledTimes(1);
+    expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+    await engine().enrichEvidence!(input);expect(llm.classify).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains catalog safety and explicit missing coverage when corrective discovery fails",async()=>{
+    const content="Insurance update. " + "First context. ".repeat(130) + "\n\nAxa later update.";
+    const inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      inputs.push(input);if(inputs.length>1)throw new Error("classify: structured_output_invalid");
+      return {pages:[],summary:"mixed",confidence:.9,tags:[],passageReviews:input.sourcePassages!.map(p=>({passageId:p.id,status:"assigned" as const})),topics:[
+        {topic:"Insurance",summary:"update",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.9,disposition:"append_compact_note" as const,pages:[{path:"Areas/Insurance",title:"Insurance",action:"update" as const}]},
+        {topic:"Unknown destination",summary:"uncertain",evidenceQuotes:[],evidenceAssignments:[{passageId:input.sourcePassages![0]!.id,quote:"Insurance update.",occurrence:0}],confidence:.4,disposition:"needs_clarification" as const,pages:[{path:"Projects/Invented.md",title:"Invented",action:"create" as const}],question:"Which project?"}
+      ]};
+    });
+    const e=engine(),captured=await e.captureEvidence!({content,source:"selftest"});
+    const result=await e.enrichEvidence!({content,source:"selftest",evidenceRef:captured.evidenceRef});
+    expect(inputs).toHaveLength(2);expect(inputs[1]!.retryDecisions!.every(d=>d.scope==="source_window")).toBe(true);
+    expect(inputs[1]!.retryDecisions!.map(d=>d.topic.topic)).not.toContain("Insurance");
+    expect(result.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    expect(result.topics!.find(t=>t.topic==="Unknown destination")!.pages).toEqual([]);
+    expect(result.topics!.some(t=>t.reason?.includes("classification_assigned_passage_unsupported")&&t.status==="pending")).toBe(true);
+    expect(result.pagesTouched).not.toContain("Projects/Invented.md");
+    expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("an invalid optional catalog refinement cannot erase accepted or source-backed uncertain decisions",async()=>{
+    await Promise.all(Array.from({length:25},(_,i)=>writeFile(join(repo.path,`Notes/Extra ${i}.md`),`# Extra ${i}\n\nUnrelated catalog page.\n`)));
+    await repo.commitAndPublish("large catalog");
+    const content="Insurance update.\n\nAxa update.";const inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async(input:ClassifyInput)=>{
+      inputs.push(input);
+      const base={pages:[],confidence:.9,summary:"mixed",tags:[]};
+      const good={topic:"Insurance",summary:"update",evidenceQuotes:["Insurance update."],confidence:.95,disposition:"append_compact_note" as const,pages:[{path:"Areas/Insurance.md",title:"Insurance",action:"update" as const}]};
+      const uncertain={topic:"Axa",summary:"uncertain route",evidenceQuotes:["Axa update."],confidence:.4,disposition:"needs_clarification" as const,pages:[],question:"Which project?"};
+      if(!input.retryDecisions)return {...base,topics:[good,uncertain]};
+      expect(input.retryDecisions.map(d=>d.topic.topic)).toEqual(["Axa"]);
+      return {...base,topics:[{...uncertain,evidenceQuotes:["Fabricated text"],retryId:input.retryDecisions[0]!.id},{...good,topic:"Rewrite accepted sibling",retryId:"unknown-id"}]};
+    });
+    const e=engine(),capture=await e.captureEvidence!({content,source:"selftest"});
+    const result=await e.enrichEvidence!({content,source:"selftest",evidenceRef:capture.evidenceRef});
+    expect(inputs).toHaveLength(2);expect(inputs[1]!.hints.join(" ")).toContain("fallback search");
+    expect(result.topics!.map(t=>[t.topic,t.status])).toEqual([["Insurance","filed"],["Axa","uncertain"]]);
+    expect(result.topics![1]!.reason).toBe("Which project?");
   });
 
   it("discovers a pending label across languages but requires the exact raw read for answer support", async () => {
@@ -1547,6 +1654,7 @@ describe("BrainEngine", () => {
       const quote = input.content.includes("MIDDLE_OUTAGE") ? "discutir presupuesto." : input.content.includes(beginning) ? beginning : tail;
       const passage = input.sourcePassages!.find(p => p.text.includes(quote))!;
       return { confidence: 0.9, summary: "known idea", tags: [], pages: [], topics: [{
+        ...(input.retryDecisions?{retryId:input.retryDecisions[0]!.id}:{}),
         topic: quote === beginning ? "Network education" : quote === tail ? "English caption release" : "Budget", summary: "known idea", confidence: 0.9,
         disposition: "evidence_only" as const, pages: [], evidenceQuotes: [],
         evidenceAssignments: [{ passageId: passage.id, quote, occurrence: 0 }],
@@ -1641,7 +1749,7 @@ describe("BrainEngine", () => {
     }));
     const result = await engine().store({ content, source: "whatsapp", verbatim: true });
     expect(result.topics!.filter(topic => topic.status === "filed")).toHaveLength(1);
-    expect(result.topics!.filter(topic => topic.reason === "classification_unavailable" && topic.status === "pending")).toHaveLength(malformed ? 1 : 0);
+    expect(result.topics!.filter(topic => topic.reason?.includes("classification_source_address_invalid") && topic.status === "pending")).toHaveLength(malformed ? 1 : 0);
     expect(result.topics!.some(topic => topic.reason === "source_not_assigned")).toBe(false);
   });
 
@@ -1654,6 +1762,7 @@ describe("BrainEngine", () => {
       inputs.push(input);
       const result = await original(input);
       if (exhausted || inputs.length === 1) result.topics = [{ ...result.topics![0]!, evidenceQuotes: [], evidenceAssignments: [] }];
+      if(input.retryDecisions) result.topics=result.topics!.map((topic,index)=>({...topic,retryId:input.retryDecisions!.find(d=>index===0?d.scope==="decision":d.scope==="source_window")!.id}));
       return { ...result, passageReviews: input.sourcePassages!.map(passage => ({ passageId: passage.id, status: "assigned" as const })) };
     });
     const result = await engine().store({ content, source: "selftest", verbatim: true });
@@ -1683,7 +1792,9 @@ describe("BrainEngine", () => {
       return { confidence: 0.95, summary: "source review", tags: [], pages: [],
         passageReviews: owned.map(p => ({ passageId: p.id,
           status: tail && !repaired ? "assigned" as const : "evidence_only" as const })),
-        topics: [makeTopic(neighbor, "First owned idea"), ...(repaired ? [makeTopic(owned[0]!, "Tail owned idea")] : [])],
+        topics: input.retryDecisions
+          ? (repaired ? [{...makeTopic(owned[0]!, "Tail owned idea"),retryId:input.retryDecisions.find(d=>d.topic.retrySourceRange?.start===owned[0]!.start)!.id}] : [])
+          : [makeTopic(neighbor, "First owned idea")],
       };
     });
     const e = engine();
@@ -1707,7 +1818,9 @@ describe("BrainEngine", () => {
     ] }));
     const result = await engine().store({ content: "Actual source spelling is Znot.", source: "mcp" });
     expect(llm.composeCalls).toBe(0);
-    expect(result.topics!.map((topic) => topic.reason)).toEqual(["source_assignment_invalid", "source_not_assigned"]);
+    expect(result.topics![0]!.status).toBe("pending");
+    expect(result.topics![0]!.reason).toContain("classification_source_address_invalid");
+    expect(result.topics![1]!.reason).toBe("source_not_assigned");
   });
 
   it("joins a topic across exact segment boundaries and provides neighboring context without unrelated evidence", async () => {

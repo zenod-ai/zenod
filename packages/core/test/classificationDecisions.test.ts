@@ -25,3 +25,21 @@ it('rejects duplicate or missing retry IDs and keeps valid prior optional-refine
  expect(s.accept(result([{...topic('Invalid','invented'),retryId:id}])).topics).toEqual(first.topics);
  expect(s.accept(result([{...topic('A','Other idea.'),retryId:id},{...topic('B','Other idea.'),retryId:id}])).topics).toEqual(first.topics);
 });
+
+it('restores a legacy whole-window failure as discovery of multiple ideas, not one atomic replacement',()=>{
+ const legacy:ClassificationTopic={topic:'Unclassified segment 1',summary:'classification pending',evidenceQuotes:[content],sourceRange:host.sourceRange!,classificationFailed:true,pages:[],confidence:0,disposition:'needs_clarification',ideaId:'legacy-sentinel'};
+ const s=new ClassificationDecisions(content,host,[legacy]);const input=s.input(host);expect(input.retryDecisions![0]!.scope).toBe('source_window');
+ const id=input.retryDecisions![0]!.id;const result=s.accept({topics:[{...topic('Schedule','Mina waters on Tuesday.'),retryId:id},{...topic('Rain','If it rains, Mina checks the drain.'),retryId:id}],pages:[],summary:'',confidence:.9,tags:[]});
+ expect(result.topics).toHaveLength(2);expect(new Set(result.topics!.map(t=>t.retryId)).size).toBe(2);expect(result.topics!.every(t=>!t.classificationFailed&&!t.ideaId)).toBe(true);
+});
+it('does not admit unknown retry IDs or erase the original cause when a required decision is omitted',()=>{
+ const s=new ClassificationDecisions(content,host);s.accept(result([topic('Broken','not real')]));s.input(host);
+ const after=s.accept(result([{...topic('Unknown','Other idea.'),retryId:'not-owned'}]));
+ expect(after.topics).toHaveLength(1);expect(after.topics![0]!.topic).toBe('Broken');expect(after.topics![0]!.question).toContain('classification_source_address_invalid');expect(after.topics![0]!.question).toContain('classification_retry_decision_missing');
+});
+
+it('bounds corrective previews without dropping unrequested pending state or duplicating the full raw window',()=>{
+ const s=new ClassificationDecisions(content,host);s.accept(result(Array.from({length:40},(_,i)=>({...topic(`Pending ${i}`,'invalid'.repeat(300)),summary:'context'.repeat(1000)}))));
+ const input=s.input(host);expect(input.retryDecisions!.length).toBeGreaterThan(0);expect(input.retryDecisions!.length).toBeLessThanOrEqual(24);expect(JSON.stringify(input.retryDecisions).length).toBeLessThanOrEqual(12000);
+ expect(input.sourcePassages).toEqual(host.sourcePassages);expect(s.result()!.topics).toHaveLength(40);
+});

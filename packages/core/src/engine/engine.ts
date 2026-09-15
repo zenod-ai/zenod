@@ -1,3 +1,5 @@
+import {safeCandidateClassification} from "./meaningNotes.js";
+import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -1442,14 +1444,29 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
   }
 
-  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput, sourceContent: string, exhaustedRetry = false) {
-    return classifyCandidates({ classify: async (bounded: ClassifyInput) => {
+  async function classifyMeaning(snapshot: Awaited<ReturnType<typeof scanVault>>, input: ClassifyInput, sourceContent: string, exhaustedRetry = false, decisions?: ClassificationDecisions) {
+    const result = await classifyCandidates({ classify: async (bounded: ClassifyInput) => {
+      const classifyInput=decisions?decisions.input(bounded):bounded;
       reportTokenCost("classify", [bounded.sourcePassages ? JSON.stringify(bounded.sourcePassages) : bounded.content, bounded.sourcePassages ? "" : bounded.context ?? "", ...bounded.hints,
-        bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(",")], undefined, "bounded-candidates");
-      const routed = checkTopicDestinations(await llm.classify(bounded), exhaustedRetry);
+        bounded.pageIndex.map((page) => `${page.path} | ${page.title} | ${page.tags.join(",")} | ${page.summary}`).join("\n"), bounded.tagVocabulary.join(","),classifyInput.retryDecisions?JSON.stringify(classifyInput.retryDecisions):""], undefined, "bounded-candidates");
+      const raw = await llm.classify(classifyInput);
+      if (decisions && raw.topics) {
+        const retained = decisions.accept(raw);
+        try { checkAssignedPassageCoverage(retained, sourceContent, bounded, false); }
+        catch (error) {
+          if (!(error instanceof ClassificationSourceCoverageError)) throw error;
+          const reviewed = reviewedSourceSpans(sourceContent, retained, {range:bounded.sourceRange!,passages:bounded.sourcePassages!});
+          decisions.coveragePending(bounded.sourcePassages!.filter(passage=>passage.start>=bounded.sourceRange!.start && passage.end<=bounded.sourceRange!.end
+            && retained.passageReviews?.some(review=>review.passageId===passage.id && review.status==="assigned")
+            && !reviewed.some(span=>span.start===passage.start && span.end===passage.end)).map(passage=>passage.id));
+        }
+        return decisions.result()!;
+      }
+      const routed = checkTopicDestinations(raw, exhaustedRetry);
       const addressed = checkTopicSourceAddresses(routed, sourceContent, bounded, exhaustedRetry);
       return checkAssignedPassageCoverage(addressed, sourceContent, bounded, exhaustedRetry);
     } }, vaultPath, snapshot, input);
+    return decisions ? decisions.settled(result) : result;
   }
 
   async function composeMeaning(input: ComposePageInput) {
@@ -1462,7 +1479,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   /** Shared bounded classifier for synchronous stores and capture-first enrichment. */
   async function classifySource(snapshot: Awaited<ReturnType<typeof scanVault>>, config: Awaited<ReturnType<typeof loadBrainConfig>>,
-    input: StoreInput, captured: boolean, onlyRanges?: Array<{ start: number; end: number }>): Promise<Classification> {
+    input: StoreInput, captured: boolean, onlyRanges?: Array<{ start: number; end: number }>, retryTopics?: import("../llm/types.js").ClassificationTopic[]): Promise<Classification> {
     const windows = sourceWindows(input);
     const segments = windows.map(window => window.content);
     const entities = verbatimEntityCandidates(segments.join(""));
@@ -1472,6 +1489,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const segment = segments[segmentIndex]!;
       let classified: Classification | null = null;
       let lastError: unknown;
+      const host:ClassifyInput={content:segment,sourceRange:windows[segmentIndex]!.range,sourcePassages:windows[segmentIndex]!.passages,hints:[],pageIndex:snapshot.pages,tagVocabulary:config.tags};
+      const decisions=new ClassificationDecisions(input.content,host,retryTopics?.filter(topic=>topic.sourceRange?.start===host.sourceRange!.start&&topic.sourceRange?.end===host.sourceRange!.end));
       for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
         const hints = [
           ...(input.hints ?? []),
@@ -1496,16 +1515,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
             hints,
             pageIndex: snapshot.pages,
             tagVocabulary: config.tags,
-          }, input.content, attempt === CLASSIFY_RETRIES);
-          break;
+          }, input.content, attempt === CLASSIFY_RETRIES, decisions);
+          if (!decisions.failed || attempt === CLASSIFY_RETRIES) break;
+          lastError = classified.topics?.some(topic=>topic.question?.includes("classification_source_address_invalid")) ? new ClassificationSourceAddressError()
+            : classified.topics?.some(topic=>topic.question?.includes("classification_assigned_passage_unsupported")) ? new ClassificationSourceCoverageError() : new ClassificationDestinationError();
         } catch (error) {
           lastError = error;
+          decisions.unavailable(error);
+          classified = decisions.result();
         }
       }
+      if (classified) classified = safeCandidateClassification(classified,snapshot,!!lastError || !!snapshot.catalogCoverage?.unreadable.length);
       if (!classified && segments.length > 1) classified = {
         confidence: 0, summary: "classification pending", tags: [], pages: [], topics: [{
           topic: `Unclassified segment ${segmentIndex + 1}`, summary: "classification pending", evidenceQuotes: [segment],
-          confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true,
+          confidence: 0, disposition: "needs_clarification", pages: [], classificationFailed: true, retryDiscovery:true,
+          question:lastError instanceof Error && /^classify: [a-z_]+$/.test(lastError.message) ? lastError.message.replace("classify: ","classification_") : "classification_unavailable",
         }],
       };
       if (!classified) throw lastError ?? new Error("classification returned no result");
@@ -1562,10 +1587,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         topic: topic.topic, ideaId:topic.ideaId,evidenceRef, sourceSpans: spans.sort((a, b) => a.start - b.start),
         confidence: Number.isFinite(topic.confidence) ? Math.max(0, Math.min(1, topic.confidence)) : 0, disposition: topic.disposition, pages: pages.map((page) => page.path), filedPages: [],
         status: topic.classificationFailed ? "pending" : uncertain ? "uncertain" : "filed",
-        ...(topic.classificationFailed ? { reason: "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
+        ...(topic.classificationFailed ? { reason: topic.question ?? "classification_unavailable" } : uncertain ? { reason: invalid ? "source_assignment_invalid" : topic.question ?? "filing_needs_clarification" } : {}),
       };
       const priorOutcome = filingPlan?.prior?.outcomes.find(item => item.ideaId === topic.ideaId);
-      if (priorOutcome) Object.assign(outcome, structuredClone(priorOutcome));
+      if (priorOutcome && !filingPlan?.prior?.classification.topics.find(previous=>previous.ideaId===topic.ideaId)?.classificationFailed) Object.assign(outcome, structuredClone(priorOutcome));
       else if (filingPlan && !uncertain && topic.disposition !== "evidence_only") { outcome.status = "pending"; outcome.reason = "filing_not_started"; }
       outcomes.push(outcome);
       covered.push(...spans);
@@ -1881,7 +1906,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             sourcePassages: windows.find(window => window.range.start === topic.sourceRange?.start && window.range.end === topic.sourceRange?.end)?.passages ?? windows.flatMap(window => window.passages) })) };
           const failures = classification.topics!.filter(topic => topic.classificationFailed && topic.sourceRange);
           if (failures.length) {
-            const retried = await classifySource(snapshot, config, input, true, failures.map(topic => topic.sourceRange!));
+            const retried = await classifySource(snapshot, config, input, true, failures.map(topic => topic.sourceRange!), failures);
             classification.topics = [...classification.topics!.filter(topic => !failures.includes(topic)), ...(retried.topics ?? [])];
             classification.reviewedSourceSpans = [...(classification.reviewedSourceSpans ?? []), ...(retried.reviewedSourceSpans ?? [])];
           }

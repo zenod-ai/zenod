@@ -7,13 +7,13 @@ vi.mock('ai',async importActual=>{
 import {createBrainLlm} from '../src/llm/aisdk.js';
 const classified={passageReviews:[],topics:[{topic:'Synthetic',facts:[],evidenceQuotes:['Synthetic proposition.'],evidenceAssignments:[],confidence:1,disposition:'evidence_only',pages:[],summary:'Synthetic',question:null}],disposition:'evidence_only',confidence:1,summary:'Synthetic',tags:[],pages:[],question:null};
 afterEach(()=>{control.signal=undefined;vi.unstubAllGlobals();});
-function transport() {
+function transport(classificationResponse:unknown=classified) {
  const requests:any[]=[];
  vi.stubGlobal('fetch',vi.fn(async(url:unknown,init:RequestInit)=>{
   expect(String(url)).toBe('https://openrouter.ai/api/v1/chat/completions');
   const request=JSON.parse(String(init.body));requests.push(request);
   const system=JSON.stringify(request.messages);
-  const content=system.includes('Classify an incoming memory')?JSON.stringify(classified):system.includes('incremental memory librarian')?JSON.stringify({operations:[]}):system.includes('backlog/action digester')?JSON.stringify({candidates:[]}):'Synthetic answer.';
+  const content=system.includes('Classify an incoming memory')?JSON.stringify(classificationResponse):system.includes('incremental memory librarian')?JSON.stringify({operations:[]}):system.includes('backlog/action digester')?JSON.stringify({candidates:[]}):'Synthetic answer.';
   return new Response(JSON.stringify({id:'offline',object:'chat.completion',created:0,model:request.model,choices:[{index:0,message:{role:'assistant',content},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
  }));return requests;
 }
@@ -90,4 +90,14 @@ it('emits strict-compatible anyOf for mutually exclusive reconciliation kinds on
  expect(branches).toHaveLength(5);
  expect(branches.map((branch:any)=>branch.properties.kind.const)).toEqual(['add','link_source','supersede','conflict','clarify']);
  for(const branch of branches){expect(branch.additionalProperties).toBe(false);expect(branch.required.sort()).toEqual(Object.keys(branch.properties).sort());}
+});
+
+it('requires explicit retry IDs only on corrective classification and preserves the existing wire budget',async()=>{
+ const retryTopic={...classified.topics[0]!,retryId:'owned-decision'};
+ const requests=transport({...classified,topics:[retryTopic]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
+ const result=await llm.classify({content:'Synthetic proposition.',pageIndex:[],hints:[],tagVocabulary:[],retryDecisions:[{id:'owned-decision',scope:'decision',reason:'classification_source_address_invalid',topic:{...classified.topics[0]!,question:undefined} as any}]});
+ expect(result.topics![0]!.retryId).toBe('owned-decision');expect(requests).toHaveLength(1);expect(requests[0].max_tokens).toBe(8192);
+ const item=requests[0].response_format.json_schema.schema.properties.topics.items;
+ expect(item.required).toContain('retryId');expect(item.additionalProperties).toBe(false);
+ const prompt=JSON.stringify(requests[0].messages);expect(prompt).toContain('Accepted siblings are already retained');expect(prompt).toContain('scope=source_window');expect(prompt).toContain('owned-decision');
 });
