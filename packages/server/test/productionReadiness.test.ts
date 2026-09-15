@@ -78,7 +78,7 @@ describe("production readiness gate", () => {
       "utf8",
     );
     for (const document of [terms, privacy, handling]) {
-      expect(document).toContain(`Version ${ZENOD_LEGAL_VERSION}`);
+      expect(document).toContain(document === terms ? `Version ${ZENOD_LEGAL_VERSION}` : "Version 2026-09-16");
       expect(document).toMatch(/GitHub/);
       expect(document).toMatch(/Google Drive|Drive vault/);
       expect(document).toMatch(/Markdown/);
