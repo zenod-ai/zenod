@@ -1,4 +1,4 @@
-import { checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
+import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -1464,6 +1464,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       for (let attempt = 0; attempt <= CLASSIFY_RETRIES; attempt += 1) {
         const hints = [
           ...(input.hints ?? []),
+          ...(lastError instanceof Error && lastError.message === "classify: structured_output_invalid" ? [COMPACT_CLASSIFICATION_RETRY_HINT] : []),
           ...(lastError instanceof ClassificationDestinationError ? [DESTINATION_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceAddressError ? [SOURCE_ADDRESS_CORRECTION_HINT] : []),
           ...(lastError instanceof ClassificationSourceCoverageError ? [SOURCE_COVERAGE_CORRECTION_HINT] : []),

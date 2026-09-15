@@ -1804,6 +1804,21 @@ describe("BrainEngine", () => {
     expect((await engine().lint()).errors).toEqual([]);
   });
 
+  it.each(["classify: structured_output_invalid", "classify: provider_error"])("keeps the existing window/retry budget and compacts only malformed output (%s)", async error => {
+    const content="Insurance update.\n\nAxa update.\n\nZnot uncertain.";
+    topicLlm(content); const original=llm.classify.bind(llm); const inputs:ClassifyInput[]=[];
+    llm.classify=vi.fn(async input=>{inputs.push(input);if(inputs.length===1)throw new Error(error);return original(input);});
+    const e=engine();const capture=await e.captureEvidence!({content,source:"selftest"});
+    const result=await e.enrichEvidence!({content,source:"selftest",evidenceRef:capture.evidenceRef});
+    expect(inputs).toHaveLength(2);expect(inputs[1]!.content).toBe(inputs[0]!.content);
+    expect(inputs[1]!.sourcePassages).toEqual(inputs[0]!.sourcePassages);
+    expect(inputs[1]!.sourceRange).toEqual(inputs[0]!.sourceRange);
+    expect(inputs[0]!.hints.join(" ")).not.toContain("compact valid JSON");
+    expect(inputs[1]!.hints.join(" ").includes("compact valid JSON")).toBe(error.endsWith("structured_output_invalid"));
+    expect(result.topics!.find(t=>t.topic==="Insurance")!.status).toBe("filed");
+    expect((await e.getEntry(capture.evidenceRef)).content).toBe(content);
+  });
+
   it("files a valid first result when optional catalog refinement fails without restarting classification", async () => {
     const note = parseNote(await readFile(join(repo.path, "Areas/Insurance.md"), "utf8"));
     for (let n = 0; n < 26; n++) await writeFile(join(repo.path, `Notes/Extra${n}.md`), serializeNote({ ...note.frontmatter, title: `Extra${n}`, type: "note" }, "Other topic."));

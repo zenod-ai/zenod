@@ -85,3 +85,6 @@ export function checkAssignedPassageCoverage(result: Classification, content: st
   if (unsupported) throw new ClassificationSourceCoverageError();
   return result;
 }
+
+/** Trusted retry instruction only for malformed/truncated structured output. */
+export const COMPACT_CLASSIFICATION_RETRY_HINT = "The preceding structured output was malformed or exceeded its output budget. Retry this SAME source window with compact valid JSON: keep topic labels and summaries brief; when passage IDs exist leave legacy evidenceQuotes empty and put the shortest complete exact proposition only in evidenceAssignments. Keep optional facts metadata empty when unavailable; do not repeat source prose in summaries or questions. Preserve every independent idea, source address, negation, condition and uncertainty. Do not discard topics, merge distinct propositions, invent destinations, or choose evidence_only merely to fit. Return the complete schema, without commentary.";
