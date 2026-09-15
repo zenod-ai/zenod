@@ -155,7 +155,6 @@ export const MIN_MAX_STEPS = 2;
 export const MAX_MAX_STEPS = 20;
 export const MAX_WORK_STEPS = 12;
 export const MAX_ANSWER_OUTPUT_TOKENS = 4096;
-const MAX_LOW_CLASSIFY_OUTPUT_TOKENS = 16384;
 const COUNCIL_TOOL_SUFFIX_RE = /__[0-9a-f]{16}$/i;
 const READ_ONLY_STATUS_TEXT = "Read-only answer — no action was performed.";
 
@@ -841,7 +840,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       ...(this.organizerProviderOptions ? { providerOptions: this.organizerProviderOptions } : {}),
       schema: input.retryDecisions?.length ? classificationSchema.extend({topics:z.array(classificationSchema.shape.topics.element.extend({retryId:z.string().min(1).describe("Echo the exact host retryDecisions id for this correction; never return accepted or unknown decisions")})).max(24)}) : classificationSchema,
       // Bound multi-topic structured output; incomplete output follows the existing failure path.
-      maxOutputTokens: this.organizerProviderOptions?.openai.reasoningEffort === "low" ? MAX_LOW_CLASSIFY_OUTPUT_TOKENS : 8192,
+      maxOutputTokens: 8192,
       experimental_repairText: REPAIR_HOOK,
       system: [
         "You are the librarian of a personal knowledge vault. Classify an incoming memory:",
@@ -1051,7 +1050,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const submissionSchema = z.object({ supportSelections: z.array(z.object({
       id: z.string().regex(/^as_[a-f0-9]{24}$/),
       mode: z.enum(["current", "historical", "prior", "conflict", "raw_report"]),
-      summaryText: z.string().trim().min(1).max(1200).optional().describe("Optional concise summary only for raw_report passage support; preserve source uncertainty, negation and attribution. No URLs or Markdown links; the host adds the verified citation."),
+      summaryText: z.string().trim().min(1).max(1200).optional().describe("For a requested source summary, supply concise summaryText on raw_report passage support. Omit only for verbatim excerpts or canonical fact modes. Preserve attribution, alternatives, uncertainty, conditions, negation and ambiguous numbers without interpretation. No URLs or Markdown links; the host adds the verified citation."),
     }).strict()).max(24) }).strict();
     // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
@@ -1638,7 +1637,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const toolRounds = Math.max(1, this.maxSteps - 1);
     const budgetNote = input.answerSupportContract ? [
       `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; the final round allows submission or ordinary prose but no action tools. A completed authoritative action may return its receipt as prose."}`,
-      "Submission ends this turn immediately; the host renders the selected evidence. Do not produce a closing prose answer after submission.",
+      "Submission ends this turn immediately. For requested source summaries, the host renders your cited summaryText; id/mode alone renders verbatim evidence. Write the summary inside the submission, not as closing prose afterward.",
     ].join(" ") : [
       `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
       "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
@@ -1723,7 +1722,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       tools: {
         ...(input.answerSupportContract ? {
           submit_memory_answer: tool({
-            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a requested summary, supply summaryText on raw_report selections; other modes retain canonical wording. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
+            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a requested summary, write concise summaryText on raw_report passage selections; id/mode alone prints verbatim excerpts and does not summarize. Use complete relevant supports and preserve attribution, options, uncertainty, conditions and ambiguous numbers; other modes retain canonical wording. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
             inputSchema: submissionSchema,
             execute: async (submission) => {
               if (!submissionAllowedThisStep || submittedAnswer) {

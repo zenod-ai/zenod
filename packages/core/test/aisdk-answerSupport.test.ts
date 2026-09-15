@@ -155,6 +155,17 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  const system=JSON.stringify(requests[0].messages);
  expect(system).toContain("chronological order and count FIRST");
  expect(system).toContain("covering beginning, middle and end");
+ expect(system).toContain("An id/mode pair without summaryText prints a verbatim excerpt; it does not summarize");
+ expect(system).toContain("Preserve ambiguous numbers as ambiguous");
+ expect(system).toContain("Use a few complete relevant supports while retaining all requested subjects");
+ const terminal=requests.at(-1).tools.find((t:any)=>t.function.name==="submit_memory_answer").function;
+ expect(terminal.description).toContain("write concise summaryText");
+ expect(terminal.description).toContain("does not summarize");
+ const selection=terminal.parameters.properties.supportSelections.items;
+ expect(selection.properties.summaryText.description).toContain("For a requested source summary, supply");
+ // Backward compatibility: quote-only answers and canonical fact modes still
+ // omit this field. The instruction makes summary intent explicit to the model.
+ expect(selection.required).toEqual(["id","mode"]);
  const search=requests[0].tools.find((t:any)=>t.function.name==="search_entries").function;
  expect(search.description).toContain("identify it FIRST with contentType, order=newest and limit=1, without query");
  expect(search.parameters.properties.query.description).toContain("Omit when first identifying a referenced latest item");
