@@ -693,3 +693,7 @@ Fresh-manager command contract:
 - “Continue” means: open this spine, assume Zenod Alpha delivery-manager role, reconcile linked issues/PRs/current `main`, and execute the single `Next action` without changing product gates.
 - “Work on ZAL-N” means: bind one ticket worker to that linked issue using its recorded branch/base/reads/acceptance/handoff; remain the spine steward and delivery manager.
 - “What are we working on?” means: report Current State, active issue owners, blockers, human gates, and the next dispatchable item from this spine only.
+
+### 2026-09-16 — explicit public-opening authorization and dependency correction
+
+Jordi repeatedly authorized production opening and now explicitly requested full normal access to register a new Google user. Tester allowlisting was rejected. Remove the circular prerequisite of completed new-customer journeys before those journeys can start: keep receipt checks visible and truthful as advisory evidence while retaining runtime configuration, OAuth, webhook-signature, payment-entitlement and isolation safeguards. Open both existing public signup flags on the verified new image. This current instruction supersedes the historical signup-closed gate above. Public-opening proof must record exact deployed SHA and health; live billing/Drive acceptance remains outstanding until actually performed, not fabricated.
