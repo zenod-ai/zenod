@@ -758,6 +758,7 @@ describe("hosted customer layer", () => {
       billing_address_collection: "required",
       tax_id_collection: { enabled: true },
       consent_collection: { terms_of_service: "required" },
+      allow_promotion_codes: true,
       success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     });
 

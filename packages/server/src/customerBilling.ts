@@ -157,6 +157,7 @@ export async function createCustomerCheckout(
     billing_address_collection: "required",
     tax_id_collection: { enabled: true },
     consent_collection: { terms_of_service: "required" },
+    ...(product.product === "zenod" ? { allow_promotion_codes: true } : {}),
     ...(config.automaticTax ? { automatic_tax: { enabled: true } } : {}),
     success_url: `${config.domain}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${config.domain}/pricing?checkout=cancelled`,
