@@ -6,6 +6,8 @@ import { isFilingReceiptPath, listAttachmentFiles, listMarkdownFiles, tierOf } f
 import { scanVault } from "../vault/pages.js";
 import { vaultSourceRef, type VaultSourceContext } from "../vault/source.js";
 
+import { pendingTopicDiscovery } from "./pendingDiscovery.js";
+
 const MAX_HITS = 20;
 
 interface SearchScore {
@@ -99,6 +101,10 @@ export async function searchVault(vaultPath: string, query: string, location: Va
   const bodyHits = await grepBodies(vaultPath, grepTerms).catch(() => scanBodies(vaultPath, grepTerms));
   for (const hit of bodyHits) bump(hit.path, 1, hit.line.trim().slice(0, 200), hit.line);
 
+  for (const hint of await pendingTopicDiscovery(vaultPath, snapshot.files, label => terms.some(term => normalizePhrase(label).includes(term)))) {
+    bump(hint.ref, 3, `Pending topic discovery (read original evidence): ${hint.label}`, hint.label);
+  }
+
   const rankBand = Math.max(...[...scores.values()].map(({ score }) => score), 0) + 1;
   return [...scores.entries()]
     .map(([path, result]) => ({
@@ -119,7 +125,8 @@ export async function searchVault(vaultPath: string, query: string, location: Va
     .map(({ path, rankedScore, snippet }) => ({
       snippet,
       score: rankedScore,
-      ...vaultSourceRef(location, path),
+      ...vaultSourceRef(location, path.split("#^")[0]!, path.includes("#^") ? `^${path.split("#^")[1]}` : undefined),
+      path,
     }));
 }
 

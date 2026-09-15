@@ -58,11 +58,17 @@ export function renderFilingReceipt(receipt: FilingReceipt): string {
 }
 
 export function parseFilingReceipt(content: string, input: EnrichEvidenceInput): FilingReceipt | null {
+  const value = parseFilingReceiptEnvelope(content);
+  return value && value.evidenceRef === input.evidenceRef && value.inputFingerprint === filingInputFingerprint(input) ? value : null;
+}
+
+/** Structural integrity only; replay additionally requires the exact input fingerprint. */
+export function parseFilingReceiptEnvelope(content: string): FilingReceipt | null {
   const body = /\n```json\n([\s\S]*)\n```\n?$/.exec(content)?.[1];
   if (!body) return null;
   try {
     const value = JSON.parse(body) as FilingReceipt;
-    if (value.version !== 1 || value.evidenceRef !== input.evidenceRef || value.inputFingerprint !== filingInputFingerprint(input)
+    if (value.version !== 1 || typeof value.evidenceRef !== "string" || typeof value.inputFingerprint !== "string"
       || !["prepared", "ready"].includes(value.phase) || !Array.isArray(value.classification?.topics)
       || !Array.isArray(value.outcomes) || !value.files || typeof value.files !== "object") return null;
     const { filingRevision, ...payload } = value;

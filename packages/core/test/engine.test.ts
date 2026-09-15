@@ -1,3 +1,4 @@
+import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath } from "../src/engine/filingReceipt.js";
 import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1149,6 +1150,25 @@ describe("BrainEngine", () => {
     expect(result.topics!.find(topic => topic.topic === "Insurance")!.status).toBe(exhausted ? "pending" : "filed");
     if (exhausted) expect(result.pagesTouched).not.toContain("Areas/Insurance.md");
     expect((await e.getEntry(captured.evidenceRef)).content).toBe(content);
+  });
+
+  it("discovers a pending label across languages but requires the exact raw read for answer support", async () => {
+    const e = engine(), content = "La actividad sigue siendo provisional.";
+    const capture = await e.captureEvidence!({content, source:"selftest"});
+    const path=filingReceiptPath(capture.evidenceRef);
+    const receipt=sealFilingReceipt({version:1,evidenceRef:capture.evidenceRef,inputFingerprint:"discovery-only",phase:"ready",baseRevision:await repo.currentRevision(),files:{},
+      classification:{topics:[{ideaId:"pending",topic:"Library reading proposal",summary:"internal",evidenceQuotes:[content],evidenceAssignments:[],confidence:.9,disposition:"needs_clarification",pages:[]}]} as any,
+      outcomes:[{ideaId:"pending",topic:"Library reading proposal",evidenceRef:capture.evidenceRef,status:"uncertain",sourceSpans:[{start:0,end:content.length}]}] as any});
+    await writeFile(join(repo.path,path),renderFilingReceipt(receipt));await repo.commitAndPublish("pending fixture");
+    llm.answerOverride=async (_input,tools)=>{
+      const search=await tools.searchVault!("library reading");
+      expect(search).toContain(capture.evidenceRef);expect(search).toContain("Pending topic discovery");
+      expect(search).not.toContain("answerSupports");expect(search).not.toContain("Verified fact context");
+      const read=JSON.parse(await tools.readNote!(capture.evidenceRef));
+      expect(read.answerSupports.length).toBeGreaterThan(0);
+      return {text:"ignored",readPaths:[capture.evidenceRef],supportSelections:[{id:read.answerSupports[0].id,mode:"raw_report"}]};
+    };
+    const answer=await e.ask("Is the library reading decided?");expect(answer.text).toContain(content);expect(answer.text).not.toContain("inputFingerprint");
   });
 
   it("uses atomic reconciliation for legacy store and compact captured enrichment without page composition", async () => {
