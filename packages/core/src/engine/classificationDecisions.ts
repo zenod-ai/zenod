@@ -59,10 +59,11 @@ export class ClassificationDecisions {
       this.current={...raw,topics:raw.topics.map((topic,index)=>({...this.validate(topic),retryId:this.id(index)}))};
     }else{
       const offered=raw.topics;
+      const unowned=offered.some(topic=>!topic.retryId || !this.requested.has(topic.retryId));
       const topics=this.current.topics!.flatMap(previous=>{
         if(!this.requested.has(previous.retryId!))return previous;
         const candidates=offered.filter(topic=>topic.retryId===previous.retryId);
-        if(previous.retryDiscovery){
+        if(previous.retryDiscovery && !unowned){
           const range=previous.retrySourceRange??this.host.sourceRange;
           const owned=this.host.sourcePassages?.filter(p=>range && p.start>=range.start && p.end<=range.end)??[];
           const reviews=owned.flatMap(p=>{const rows=raw.passageReviews?.filter(r=>r.passageId===p.id)??[];return rows.length===1?rows:[];});
@@ -73,14 +74,13 @@ export class ClassificationDecisions {
           return candidates.map((candidate,index)=>{
             let validated=this.validate(candidate);
             const range=previous.retrySourceRange??this.host.sourceRange;
-            const {spans}=resolveTopicSpans(this.content,validated);
-            if(range && spans.some(span=>span.start<range.start||span.end>range.end)) validated={...validated,classificationFailed:true,confidence:0,disposition:'needs_clarification',question:'classification_retry_source_scope_invalid'};
+            if(!validated.classificationFailed && range && resolveTopicSpans(this.content,{...validated,sourceRange:range}).invalid) validated={...validated,classificationFailed:true,confidence:0,disposition:'needs_clarification',question:'classification_retry_source_scope_invalid'};
             return {...validated,retryId:`${previous.retryId}_${index}`,...(range?{retrySourceRange:range}:{})};
           });
         }
         if(candidates.length!==1)return previous.classificationFailed?{...previous,question:`${previous.question??'classification_unavailable'}; ${candidates.length?'classification_retry_id_duplicate':'classification_retry_decision_missing'}`} : previous;
         let replacement=this.validate(candidates[0]!);
-        if(previous.retrySourceRange && resolveTopicSpans(this.content,replacement).spans.some(span=>span.start<previous.retrySourceRange!.start||span.end>previous.retrySourceRange!.end)) replacement={...replacement,classificationFailed:true,confidence:0,disposition:'needs_clarification',question:'classification_retry_source_scope_invalid'};
+        if(!replacement.classificationFailed && previous.retrySourceRange && resolveTopicSpans(this.content,{...replacement,sourceRange:previous.retrySourceRange}).invalid) replacement={...replacement,classificationFailed:true,confidence:0,disposition:'needs_clarification',question:'classification_retry_source_scope_invalid'};
         // Optional refinement cannot replace a source-backed uncertain decision
         // with a technically invalid response. Technical failures remain precise.
         if(replacement.classificationFailed&&!previous.classificationFailed)return previous;

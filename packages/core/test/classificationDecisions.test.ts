@@ -43,3 +43,31 @@ it('bounds corrective previews without dropping unrequested pending state or dup
  const input=s.input(host);expect(input.retryDecisions!.length).toBeGreaterThan(0);expect(input.retryDecisions!.length).toBeLessThanOrEqual(24);expect(JSON.stringify(input.retryDecisions).length).toBeLessThanOrEqual(12000);
  expect(input.sourcePassages).toEqual(host.sourcePassages);expect(s.result()!.topics).toHaveLength(40);
 });
+
+it.each([true,false])('allows a supplied neighboring qualifier for an owned retry overlap (discovery=%s)',discovery=>{
+ const raw='A claim, but only if approved.';
+ const range={start:0,end:9};
+ const splitHost:ClassifyInput={...host,content:raw,sourceRange:{start:0,end:raw.length},sourcePassages:[{id:'p1',...range,text:raw.slice(0,9)},{id:'p2',start:9,end:raw.length,text:raw.slice(9)}]};
+ const pending:ClassificationTopic={...topic('Qualified claim','invalid'),classificationFailed:true,question:'classification_source_address_invalid',retrySourceRange:range,...(discovery?{retryDiscovery:true}:{}),sourceRange:splitHost.sourceRange!};
+ const s=new ClassificationDecisions(raw,splitHost,[pending]);const id=s.input(splitHost).retryDecisions![0]!.id;
+ const repaired=s.accept(result([{...topic('Qualified claim',raw),retryId:id,evidenceAssignments:[{passageId:'p1',quote:raw,occurrence:0}]}]));
+ expect(repaired.topics![0]!.classificationFailed).toBeUndefined();expect(repaired.topics![0]!.evidenceAssignments![0]!.quote).toBe(raw);
+});
+it.each([true,false])('rejects a quote wholly outside the requested retry scope (discovery=%s)',discovery=>{
+ const raw='A claim, but only if approved.';const range={start:0,end:9};
+ const splitHost:ClassifyInput={...host,content:raw,sourceRange:{start:0,end:raw.length},sourcePassages:[{id:'p1',...range,text:raw.slice(0,9)},{id:'p2',start:9,end:raw.length,text:raw.slice(9)}]};
+ const s=new ClassificationDecisions(raw,splitHost,[{...topic('Pending','invalid'),classificationFailed:true,retrySourceRange:range,...(discovery?{retryDiscovery:true}:{})}]);
+ const id=s.input(splitHost).retryDecisions![0]!.id;
+ const rejected=s.accept(result([{...topic('Neighbor',raw.slice(9)),retryId:id,evidenceAssignments:[{passageId:'p2',quote:raw.slice(9),occurrence:0}]}]));
+ expect(rejected.topics![0]!.classificationFailed).toBe(true);expect(rejected.topics![0]!.question).toContain('classification_retry_source_scope_invalid');
+});
+
+it.each([false,true])('accepts empty discovery reviews only without unowned proposed topics (unknown=%s)',unknown=>{
+ const pending:ClassificationTopic={...topic('Unclassified','invalid'),classificationFailed:true,question:'classification_assigned_passage_unsupported',retryDiscovery:true,retrySourceRange:host.sourceRange!};
+ const s=new ClassificationDecisions(content,host,[pending]);s.input(host);
+ const after=s.accept({...result(unknown?[{...topic('Unowned substantive idea','Other idea.'),retryId:'unknown'}]:[]),passageReviews:[{passageId:'p',status:'evidence_only'}]});
+ if(unknown){
+   expect(after.topics).toHaveLength(1);expect(after.topics![0]!.classificationFailed).toBe(true);expect(after.topics![0]!.question).toContain('classification_assigned_passage_unsupported');
+   expect(after.passageReviews?.some(review=>review.status==='evidence_only')??false).toBe(false);
+ }else{expect(after.topics).toEqual([]);expect(after.passageReviews).toEqual([{passageId:'p',status:'evidence_only'}]);}
+});
