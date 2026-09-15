@@ -155,4 +155,7 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  const system=JSON.stringify(requests[0].messages);
  expect(system).toContain("chronological order and count FIRST");
  expect(system).toContain("covering beginning, middle and end");
+ const search=requests[0].tools.find((t:any)=>t.function.name==="search_entries").function;
+ expect(search.description).toContain("identify it FIRST with contentType, order=newest and limit=1, without query");
+ expect(search.parameters.properties.query.description).toContain("Omit when first identifying a referenced latest item");
 });
