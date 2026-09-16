@@ -23,3 +23,13 @@ export function backgroundFilingTracker(){
   },
  };
 }
+
+/** Track only chat-enqueued durable jobs; terminal pending filing remains a real receipt. */
+export function chatEnrichmentTracker(enqueue,waitJob){
+ const ids=new Set(),jobs=new Map();
+ return {
+  enqueue(input,key){const job=enqueue('enrich_memory',{...input,notifyCaptureCompletion:true},key);ids.add(job.id);return job;},
+  get jobs(){return [...jobs.values()];},
+  async drain(){for(const id of ids){const job=await waitJob(id);jobs.set(id,job);if(job.status!=='done')throw new Error('evaluation_chat_filing_'+job.status);}},
+ };
+}

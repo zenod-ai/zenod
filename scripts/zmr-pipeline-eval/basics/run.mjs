@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Synthetic actual-engine baseline. No live mode without explicit candidate/config/key/caps. */
 import {parseArgs} from 'node:util';
-import {backgroundFilingTracker} from './background.mjs';
+import {backgroundFilingTracker,chatEnrichmentTracker} from './background.mjs';
 import {readFile,writeFile,mkdir,mkdtemp,readdir} from 'node:fs/promises';
 import {join,resolve,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -57,7 +57,7 @@ try{
   if(quota.terminal||run.budgetBlocks.length||unresolvedBackground||invalidFixture)break;
   const scenario=modelScenario(fixture.cases.find(c=>c.id===row.id)),start=performance.now(),firstRequest=ledger.rows.length;
   row.status='RUNNING';row.turns=[];row.operations=[];row.reads=[];row.captures=[];row.gates={isolation:false,rawCustody:false,inputPreserved:false,noDuplicateEffects:false,published:false};
-  const filing=backgroundFilingTracker();let queue,store,state,repo;const workspace=await mkdtemp(join(tmpdir(),'zenod-m2-'));row.workspace=workspace;
+  const filing=backgroundFilingTracker();let queue,store,state,repo,chatFiling;const workspace=await mkdtemp(join(tmpdir(),'zenod-m2-'));row.workspace=workspace;
   const caseDir=join(output,row.key.replace(':','-'));await mkdir(caseDir,{mode:0o700});
   const caseSave=(name,value)=>writeFile(join(caseDir,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
   try{
@@ -83,11 +83,12 @@ try{
     try{const result=await method.apply(target,params);op.result=JSON.parse(JSON.stringify(result??null));return result;}catch(error){op.errorClass=error.name;throw error;}
    };}});
    state=new SqliteStateStore(join(workspace,'state.sqlite'));
-   const create=()=>createEngine({repo,llm,state,readSyncTtlMs:0,persona:ZENOD_AGENT.persona,onFilingComplete:result=>filing.complete(result)});let engine=create();
+   const create=()=>createEngine({repo,llm,state,readSyncTtlMs:0,persona:ZENOD_AGENT.persona,onFilingComplete:result=>filing.complete(result),enqueueEnrichment:(input,key)=>chatFiling.enqueue(input,key)});let engine=create();
    store=new TaskJobStore(join(workspace,'jobs.sqlite'),'m2-synthetic');queue=new TaskJobQueue(store,async()=>engine);
    const inputs=[];
    const capture=async memory=>{const input={content:memory.content,source:'mcp',contentType:memory.contentType,capturedAt:memory.capturedAt,sourceId:`m2:${row.key}:${memory.id}`,verbatim:true};const captured=await engine.captureEvidence(input);const enrichment={...input,evidenceRef:captured.evidenceRef};inputs.push({memory,input,enrichment,captured});row.captures.push({input,captured});return enrichment;};
    const waitJob=async id=>{const deadline=Date.now()+15*60*1000;while(Date.now()<deadline){const job=store.get(id);if(['done','error','interrupted','cancelled'].includes(job?.status))return job;await new Promise(r=>setTimeout(r,25));}throw new Error('evaluation_job_timeout');};
+   chatFiling=chatEnrichmentTracker((...args)=>queue.enqueue(...args),waitJob);
    for(const memory of scenario.memories){stage=`${row.key}:seed`;const input=await capture(memory),job=queue.enqueue('enrich_memory',input,'enrich:'+input.sourceId);const terminal=await waitJob(job.id);row.captures.at(-1).job=terminal;if(terminal.status!=='done')throw new Error('evaluation_seed_filing_failed');}
    const ready=await snapshot(repo.path);await caseSave('pages-after-setup.json',ready);
    for(const turn of scenario.turns){
@@ -96,7 +97,7 @@ try{
      stage=`${row.key}:chat:${row.turns.length}`;const t0=performance.now();
      const result=await runSyntheticChat({request:{message:turn.message,surface:'mcp',conversationKey:`m2:${row.key}:${turn.thread}`,testRunId:row.key},defaultSurface:'mcp',getEngine:async()=>new Proxy(engine,{get(target,prop){if(prop!=='chat')return Reflect.get(target,prop);return async(...args)=>{const result=await target.chat(...args);row.chatCoverage??=[];row.chatCoverage.push(result.coverage??null);return result;};}}),recordAudit:a=>state.recordChatTestRun(a)});
      row.turns.push({message:turn.message,thread:turn.thread,result,latencyMs:performance.now()-t0});
-     await filing.drain();row.backgroundFilingReceipts=filing.receipts;
+     await filing.drain();await chatFiling.drain();row.chatEnrichmentJobs=chatFiling.jobs;row.backgroundFilingReceipts=filing.receipts;
      if(result.status==='error')throw new Error('evaluation_chat_error');
     }else{
      const input=await capture(turn.memory);inject=true;
@@ -136,7 +137,7 @@ try{
    row.readOnlyPagesUnchanged=['B01','B04','B05','B10'].includes(row.id)||equal(ready,after);row.gates.readOnlyPagesUnchanged=row.readOnlyPagesUnchanged;
    row.status='RECORDED';
   }catch(error){row.status=quota.terminal||run.budgetBlocks.length?'INCOMPLETE':'ERROR';row.errorClass=error.name;row.errorCode=/^evaluation_[a-z_]+$/.test(error.message)?error.message:'operation_failed';}
-  finally{await queue?.close();try{await filing.drain();}catch(error){unresolvedBackground=true;row.status='INCOMPLETE';row.errorCode=error.message;}row.backgroundFilingReceipts=filing.receipts;row.backgroundFilingPending=filing.pending;store?.close();state?.close();row.latencyMs=performance.now()-start;const requests=ledger.rows.slice(firstRequest);row.requestNumbers=requests.map(r=>r.request);row.cost={providerReportedCostUsd:requests.reduce((n,r)=>n+(r.actualCostUsd??0),0),unknownCostRequests:requests.filter(r=>r.actualCostUsd===null).length,retainedUnknownCostReservationsUsd:requests.filter(r=>r.actualCostUsd===null).reduce((n,r)=>n+r.reservedUsd,0)};row.tokens=requests.map(r=>({request:r.request,usage:r.wire?.usage??null}));await caseSave('outcome.json',row);await flush();}
+  finally{await queue?.close();try{await filing.drain();await chatFiling?.drain();}catch(error){unresolvedBackground=true;row.status='INCOMPLETE';row.errorCode=error.message;}row.backgroundFilingReceipts=filing.receipts;row.backgroundFilingPending=filing.pending;row.chatEnrichmentJobs=chatFiling?.jobs??[];store?.close();state?.close();row.latencyMs=performance.now()-start;const requests=ledger.rows.slice(firstRequest);row.requestNumbers=requests.map(r=>r.request);row.cost={providerReportedCostUsd:requests.reduce((n,r)=>n+(r.actualCostUsd??0),0),unknownCostRequests:requests.filter(r=>r.actualCostUsd===null).length,retainedUnknownCostReservationsUsd:requests.filter(r=>r.actualCostUsd===null).reduce((n,r)=>n+r.reservedUsd,0)};row.tokens=requests.map(r=>({request:r.request,usage:r.wire?.usage??null}));await caseSave('outcome.json',row);await flush();}
  }
  run.sourceUnchanged=equal(run.sourceHashes,await hashes())&&git(candidate,'rev-parse','HEAD')===run.candidateSha&&!git(candidate,'status','--porcelain');
  run.compiledUnchanged=true;for(const pkg of ['core','server','mcp-chassis'])if(!equal(run.compiledHashes[pkg],await hashTree(join(candidate,'packages',pkg,'dist'))))run.compiledUnchanged=false;

@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {backgroundFilingTracker} from './background.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {backgroundFilingTracker,chatEnrichmentTracker} from './background.mjs';
 test('queued capture cannot snapshot or start next case before actual filing callback',async()=>{
  const t=backgroundFilingTracker(),events=[];await t.wrapCapture(async()=>({queued:true}))();
  const drain=t.drain(1000).then(()=>events.push('snapshot/next-case'));
@@ -15,3 +15,9 @@ test('failed background without callback is incomplete rather than synthetic com
  const t=backgroundFilingTracker();await t.wrapCapture(async()=>({queued:true}))();await assert.rejects(t.drain(5),/unresolved/);assert.equal(t.pending,1);assert.deepEqual(t.receipts,[]);
 });
 test('capture rejection is not a phantom pending write',async()=>{const t=backgroundFilingTracker();await assert.rejects(t.wrapCapture(async()=>{throw Error('rejected');})());assert.equal(t.pending,0);await t.drain();});
+
+test('durable chat failure is recorded and rejects the snapshot boundary',async()=>{
+ const tracker=chatEnrichmentTracker((kind,input,key)=>{assert.equal(kind,'enrich_memory');assert.equal(input.notifyCaptureCompletion,true);assert.equal(key,'same');return {id:'job'};},async id=>({id,status:'error'}));
+ tracker.enqueue({content:'original'},'same');tracker.enqueue({content:'original'},'same');
+ await assert.rejects(tracker.drain(),/evaluation_chat_filing_error/);assert.deepEqual(tracker.jobs,[{id:'job',status:'error'}]);
+});
