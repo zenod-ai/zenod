@@ -977,3 +977,28 @@ describe("applyReplyGate — the runtime interception (iteration-6)", () => {
   });
 
 });
+
+
+describe("durable conversational capture receipts", () => {
+  const receipt = {
+    evidenceRef: "Log/2026-09-16.md#^e-abc123", pagesTouched: [], filing: "pending",
+    revision: { provider: "github", id: "a".repeat(40), committedAt: "2026-09-16T01:00:00Z", urls: [] },
+    organization: { status: "queued", jobId: "job-123" },
+  };
+  it("retains the queued status alongside successful reads", () => {
+    const out = applyReplyGate("Filed everything", [action("read_note", "a note"), { ...action("capture", JSON.stringify(receipt)), mutationAttempt: true }]);
+    expect(out.text).toContain("Saved the original note. Organization is queued.");
+    expect(out.text).not.toContain("Filed everything");
+    expect(out.text).toContain(receipt.evidenceRef);
+  });
+  it.each(["enqueue_failed", "queue_unavailable"])("does not erase successful raw capture for %s", reason => {
+    const out = applyReplyGate("Everything filed", [{ ...action("capture", JSON.stringify({ ...receipt, organization: { status: "not_queued", reason } })), mutationAttempt: true }]);
+    expect(out.kind).toBe("verified_receipt");
+    expect(out.text).toContain("Saved the original note.");
+    expect(out.text).not.toContain("Everything filed");
+  });
+  it("does not mint a queued status from a peer or a placeholder", () => {
+    expect(applyReplyGate("saved", [{ ...{ ...action("capture", JSON.stringify(receipt)), mutationAttempt: true }, peerAction: true }]).text).not.toContain("Organization is queued");
+    expect(applyReplyGate("saved", [{ ...action("capture", JSON.stringify({ evidenceRef: "(queued)", organization: receipt.organization })), mutationAttempt: true }]).text).not.toContain("Saved the original note");
+  });
+});

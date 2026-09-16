@@ -1,4 +1,4 @@
-import { VaultPublicationError, type BrainEngine } from "zenod";
+import { VaultPublicationError, type BrainEngine, type StoreResult } from "zenod";
 import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchive.js";
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
@@ -35,6 +35,7 @@ export class TaskJobQueue {
     private readonly store: TaskJobStore,
     private readonly getEngine: () => Promise<BrainEngine>,
     private readonly settings?: Settings,
+    private readonly onCaptureComplete?: (result: StoreResult) => Promise<unknown> | void,
   ) {}
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
@@ -196,6 +197,10 @@ export class TaskJobQueue {
         });
         assertDurableStoreReceipt(result);
         completed = this.store.resumePending(job, result) || this.store.updateClaimed(job, { status: "done", result });
+        if (completed && job.input.notifyCaptureCompletion && this.store.get(job.id)?.status === "done") {
+          try { await this.onCaptureComplete?.(result); }
+          catch { console.warn("[task-job] Capture completion notification failed after durable completion"); }
+        }
       } else {
         const engine = await this.getEngine();
         const result = await engine.work({
