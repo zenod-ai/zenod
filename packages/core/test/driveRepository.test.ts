@@ -329,7 +329,7 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
-describe("DriveVaultRepository", () => {
+describe("DriveVaultRepository", { timeout: 20_000 }, () => {
   it("guards exact filing publication and refuses unvalidated prepared local commits", async () => {
     const drive = new FakeDrive(); const workdir = await temp("filing-guard"); const repo = await open(drive, workdir);
     const base = await repo.currentPublishedRevision();

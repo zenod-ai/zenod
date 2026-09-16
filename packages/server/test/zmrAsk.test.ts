@@ -81,7 +81,7 @@ describe.each(["github", "google_drive"] as const)("ZMR-4 public typed Q&A: %s",
             return { text: `The payroll provider is Invented-999 (${manifest.refs.historical}).`, readPaths: [manifest.refs.historical] };
           }
           if (input.question === "citation-only") {
-            await tools.searchVault!("ORCHID");
+            // No source read: a bare listed citation is never supporting evidence.
             return { text: `The coordinator owns a yacht (${manifest.refs.historical}).`, readPaths: [manifest.refs.historical] };
           }
           if (input.question === "failed-read") {

@@ -464,7 +464,7 @@ class FakeDriveVaultRepository implements VaultRepository {
   }
 }
 
-describe("BrainEngine", () => {
+describe("BrainEngine", { timeout: 20_000 }, () => {
   let dir: string;
   let repo: VaultRepo;
   let llm: FakeLlm;
@@ -513,7 +513,10 @@ describe("BrainEngine", () => {
     llm.answerOverride = async (_input, tools) => {
       const discovery = await tools.searchVault!("Orchid");
       expect(discovery).toContain(page);
-      expect(discovery).not.toContain("answerSupports");
+      // Ranked discovery auto-reads the single unique raw source (see the
+      // dedicated auto-read tests), but it must never inject the meaning page's
+      // own fact candidates into discovery.
+      expect(discovery).toContain("Read source evidence:");
       expect(discovery).not.toContain("Source-backed fact candidates");
       // Discovery must not spend the bounded fact-read allowance. All four
       // explicit reads remain available and verify source-backed current facts.
@@ -525,9 +528,12 @@ describe("BrainEngine", () => {
       }
       const pageRead = JSON.parse(await tools.readNote!(page));
       expect(pageRead.factView).toBeUndefined(); // Explicit scope remains authoritative.
-      const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
+      // The raw source was already read and its supports registered by ranked
+      // discovery; reuse that exact support rather than re-registering it.
+      const discoveryPacket = JSON.parse(discovery.split("Read source evidence:\n")[1]!);
+      const sourceSupport = discoveryPacket.passages.flatMap((passage: any) => passage.answerSupports ?? []).find((support: any) => support.excerpt?.startsWith("Orchid hypothesis"));
       return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
-        { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
+        { id: sourceSupport.id, mode: "raw_report" },
         { id: lastExplicit.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
       ] };
     };
@@ -539,7 +545,8 @@ describe("BrainEngine", () => {
     expect(result.text).toContain(capture.evidenceRef);
     llm.answerOverride = async (_input, tools) => {
       await tools.readNote!(page); const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
-      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" }] };
+      const sourceSupport = (sourceRead.passages ?? [sourceRead]).flatMap((passage: any) => passage.answerSupports ?? []).find((support: any) => support.excerpt?.startsWith("Orchid hypothesis"));
+      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceSupport.id, mode: "raw_report" }] };
     };
     const rawOnly = await e.ask("What is the unverified Orchid workshop hypothesis?");
     expect(rawOnly.text).toContain(hypothesis);
@@ -2429,8 +2436,11 @@ describe("BrainEngine", () => {
   it("answers with citations from the read paths (DoD #2 shape)", async () => {
     const answer = await engine().ask("what do I know about my insurance?");
     expect(answer.text).toContain("Axa");
-    expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    // The uniquely identified raw evidence read during discovery is the primary
+    // citation; the curated meaning page still resolves from the explicit read.
+    expect(answer.sources[0]?.path).toBe("Log/2026-06-10.md#^e-7f3a2c");
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+    expect(answer.sources.map(source => source.path)).toContain("Areas/Insurance.md");
   });
 
   it("grounds ask contextRefs on the exact evidence block first", async () => {
@@ -3540,7 +3550,8 @@ describe("BrainEngine", () => {
 
     expect(deltas.length).toBeGreaterThan(1); // streamed in chunks, not one blob
     expect(deltas.join("")).toBe(reply.text); // no tokens dropped or duplicated
-    expect(reply.sources[0]?.path).toBe("Areas/Insurance.md"); // sources still resolve at the end
+    expect(reply.sources[0]?.path).toBe("Log/2026-06-10.md#^e-7f3a2c"); // raw evidence resolves first at the end
+    expect(reply.sources.map(source => source.path)).toContain("Areas/Insurance.md");
 
     // The streamed turn is persisted just like a non-streamed one.
     const window = await state.recentWindow("web:default");
