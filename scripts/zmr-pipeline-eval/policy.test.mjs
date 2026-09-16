@@ -60,3 +60,10 @@ test('unfinished or failed ASR enrichment cannot enter replay/recall',()=>{
   assert.throws(()=>requireCompletedEnrichment({status:'done',input:{},result:null}));
   assert.doesNotThrow(()=>requireCompletedEnrichment({status:'done',input:{},result:{}}));
 });
+test('comment-leading SSE with event metadata, CRLF and final usage settles actual cost',()=>{
+ const body=': OPENROUTER PROCESSING\r\n\r\nevent: message\r\ndata: {"model":"luna","choices":[]}\r\n\r\n: keepalive\r\n\r\ndata:{"model":"luna",\r\ndata: "usage":{"prompt_tokens":10,"completion_tokens":20,"cost":0.00656965}}\r\n\r\ndata: [DONE]\r\n\r\n';
+ const parsed=parseWireUsage(body);assert.equal(parsed.model,'luna');assert.equal(parsed.usage.cost,0.00656965);
+ const ledger=budgetLedger({budgetUsd:1,maxRequests:2,prices:{luna:{inputUsdPerMillion:1,outputUsdPerMillion:1,maxOutputTokens:100}}});
+ const row=ledger.reserve({model:'luna',max_tokens:100});ledger.complete(row,parsed,'succeeded');assert.equal(row.actualCostUsd,0.00656965);assert.equal(ledger.exposureUsd,0.00656965);
+});
+test('SSE comments without usage retain unknown and plain JSON remains supported',()=>{assert.equal(parseWireUsage(': ping\n\ndata: [DONE]\n\n').usage,null);assert.equal(parseWireUsage('{"usage":{"cost":0.2}}').usage.cost,0.2);});

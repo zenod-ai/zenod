@@ -35,3 +35,9 @@ M2_CANDIDATE_REPO=/absolute/built/candidate node --test scripts/zmr-pipeline-eva
 ```
 
 Seam test uses a deterministic offline responder solely to prove real engine conversation retention/isolation; it is never a semantic trial. Report source/candidate/version hashes and keep red baselines alongside subsequent candidate reports. This is isolated engine.chat proof only; production MCP and actual WhatsApp acceptance are separate manager-owned gates.
+
+### Background filing boundary and archived cost correction
+
+Conversational `capture_note` can start an engine-local background store outside TaskJobQueue. The runner observes its real queued result, waits for the existing `onFilingComplete` callback before the next turn/case and before snapshot/cost finalization, and records those receipts. Missing completion after the bounded wait stops the run as incomplete; it is never synthesized as success. Remaining writes cannot regain unrestricted network access after that stop. The offline seam test exercises this exact real-engine callback with delayed deterministic classification.
+
+The shared wire parser accepts SSE comments/metadata before `data:` and multiline CRLF events. Historical evidence stays immutable: corrections to previously unknown provider costs belong in a separate reconciliation report containing original run/response hashes. Recovered usage does not retroactively erase a budget stop, repair contaminated stage attribution, or authorize a new run.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Synthetic actual-engine baseline. No live mode without explicit candidate/config/key/caps. */
 import {parseArgs} from 'node:util';
+import {backgroundFilingTracker} from './background.mjs';
 import {readFile,writeFile,mkdir,mkdtemp,readdir} from 'node:fs/promises';
 import {join,resolve,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -31,7 +32,7 @@ const ledger=budgetLedger({budgetUsd:Number(a['budget-usd']),maxRequests:Number(
 const sourcePaths=git(candidate,'ls-files','packages/core/src','packages/server/src','packages/mcp-chassis/src').split('\n').filter(Boolean);
 const hashes=async()=>Object.fromEntries(await Promise.all(sourcePaths.map(async p=>[p,sha256(await readFile(join(candidate,p)))])));
 const run={suite:fixture.version,candidateSha:a['candidate-sha'],observedDeployedSha:a['deployed-sha'],deploymentIdentity:'operator-supplied; this isolated runner does not verify live health',mode:a.live?'ACTUAL_ENGINE_CHAT':'OFFLINE_PREFLIGHT',fixtureSha256:sha256(fixtureBytes),rubricSha256:sha256(rubricBytes),pricingSha256:sha256(pricingBytes),models,startedAt:new Date().toISOString(),limits:{budgetUsd:Number(a['budget-usd']),maxRequests:Number(a['max-requests']),requestDeadlineMs:120000,plannedOutcomes:36},selected:selected.map(r=>r.key),outcomes:rows,rubricCheckCounts:Object.fromEntries(rubric.cases.map(c=>[c.id,c.checks.length])),requests:ledger.rows,budgetBlocks:[],externalCalls:0,usage:[],sourceHashes:await hashes(),harnessHashes:{},compiledHashes:{},status:'RUNNING'};
-for(const rel of ['run.mjs','policy.mjs','report.mjs','fixture.json','rubric.json','../policy.mjs','../models.mjs'])run.harnessHashes[rel]=sha256(await readFile(new URL(rel,import.meta.url)));
+for(const rel of ['run.mjs','policy.mjs','background.mjs','report.mjs','fixture.json','rubric.json','../policy.mjs','../models.mjs'])run.harnessHashes[rel]=sha256(await readFile(new URL(rel,import.meta.url)));
 await save('run.json',run);await writeFile(join(output,'fixture.json'),fixtureBytes,{mode:0o600});await writeFile(join(output,'rubric.json'),rubricBytes,{mode:0o600});await writeFile(join(output,'prices.json'),pricingBytes,{mode:0o600});
 const hashTree=async path=>{const result={};async function walk(root,rel=''){for(const e of(await readdir(root,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){if(e.isSymbolicLink())throw new Error('Symlink in evaluated tree');const p=join(root,e.name),r=rel+e.name;if(e.isDirectory())await walk(p,r+'/');else result[r]=sha256(await readFile(p));}}await walk(path);return result;};
 // Builds before network activation, with evaluation credentials absent from environment.
@@ -45,17 +46,17 @@ const {TaskJobQueue}=await load('packages/server/dist/taskJobQueue.js');
 const {runSyntheticChat}=await load('packages/server/dist/testHarness.js');
 const {ZENOD_AGENT}=await load('packages/server/dist/agent.js');
 run.surface={kind:'isolated-memory-engine.chat',personaSha256:sha256(ZENOD_AGENT.persona),localVaultTaskTools:true,externalTaskTools:false,driveTools:false,peerTools:false,tenantProjectRegistry:false,productionPromptParity:false};
-const originalFetch=globalThis.fetch;let stage='setup';
+const originalFetch=globalThis.fetch;let stage='setup';let unresolvedBackground=false;
 const flush=async()=>{run.cost={...evaluationCostSummary(ledger),unknownCostRequests:ledger.rows.filter(r=>r.actualCostUsd===null).length};await save('run.json',run);};
-globalThis.fetch=a.preflight?async()=>{throw new Error('Preflight forbids network');}:evaluationFetch({ledger,quota,stage:()=>stage,onBudgetBlock:row=>run.budgetBlocks.push(row),onRequest:(row,body)=>save(`wire-request-${row.request}.json`,body),onResponse:(row,body)=>writeFile(join(output,`wire-response-${row.request}.txt`),body,{mode:0o600}),onFinish:flush,fetchImpl:async request=>{run.externalCalls++;return originalFetch(request);}});
+globalThis.fetch=a.preflight?async()=>{throw new Error('Preflight forbids network');}:evaluationFetch({ledger,quota,stage:()=>stage,onBudgetBlock:row=>run.budgetBlocks.push(row),onRequest:(row,body)=>save(`wire-request-${row.request}.json`,body),onResponse:(row,body)=>writeFile(join(output,`wire-response-${row.request}.txt`),body,{mode:0o600}),onFinish:flush,fetchImpl:async request=>{if(unresolvedBackground)throw new Error('evaluation_background_filing_unresolved');run.externalCalls++;return originalFetch(request);}});
 const snapshot=async root=>{const result={};async function walk(dir,rel=''){for(const e of await readdir(dir,{withFileTypes:true})){if(e.name==='.git')continue;if(e.isSymbolicLink())throw new Error('Unexpected vault symlink');const p=join(dir,e.name),r=rel+e.name;if(e.isDirectory())await walk(p,r+'/');else if(e.name.endsWith('.md'))result[r]=await readFile(p,'utf8');}}await walk(root);return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b)));};
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 try{
  for(const row of selected){
-  if(quota.terminal||run.budgetBlocks.length)break;
+  if(quota.terminal||run.budgetBlocks.length||unresolvedBackground)break;
   const scenario=modelScenario(fixture.cases.find(c=>c.id===row.id)),start=performance.now(),firstRequest=ledger.rows.length;
   row.status='RUNNING';row.turns=[];row.operations=[];row.reads=[];row.captures=[];row.gates={isolation:false,rawCustody:false,inputPreserved:false,noDuplicateEffects:false,published:false};
-  let queue,store,state,repo;const workspace=await mkdtemp(join(tmpdir(),'zenod-m2-'));row.workspace=workspace;
+  const filing=backgroundFilingTracker();let queue,store,state,repo;const workspace=await mkdtemp(join(tmpdir(),'zenod-m2-'));row.workspace=workspace;
   const caseDir=join(output,row.key.replace(':','-'));await mkdir(caseDir,{mode:0o700});
   const caseSave=(name,value)=>writeFile(join(caseDir,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
   try{
@@ -71,15 +72,16 @@ try{
    let reconcileCalls=0,inject=false,injected=false;
    const raw=createBrainLlm({provider:'openrouter',apiKey:key,...models,onUsage:usage=>run.usage.push({case:row.key,stage,...usage})});
    const llm=new Proxy(raw,{get(target,prop){const method=Reflect.get(target,prop);if(typeof method!=='function')return method;return async(...params)=>{
-    quota.assertActive();if(run.budgetBlocks.length)throw new Error('evaluation_budget_latched');
+    quota.assertActive();if(unresolvedBackground)throw new Error('evaluation_background_filing_unresolved');if(run.budgetBlocks.length)throw new Error('evaluation_budget_latched');
     stage=`${row.key}:${String(prop)}`;
     if(prop==='reconcile'&&inject&&++reconcileCalls===2){injected=true;row.injectedFailure={boundary:'before-second-reconcile',realModelOutputFabricated:false};throw new Error('evaluation_injected_page_interruption');}
     const op={method:String(prop),input:JSON.parse(JSON.stringify(params[0]??null))};row.operations.push(op);
+    if(prop==='answer'&&params[2]?.captureNote){params[2]={...params[2],captureNote:filing.wrapCapture(params[2].captureNote.bind(params[2]))};}
     if(prop==='answer'){const prior=params[0].onReadAction;params[0]={...params[0],onReadAction:(tool,input,result)=>{row.reads.push({turn:row.turns.length,tool,input,result});prior?.(tool,input,result);}};}
     try{const result=await method.apply(target,params);op.result=JSON.parse(JSON.stringify(result??null));return result;}catch(error){op.errorClass=error.name;throw error;}
    };}});
    state=new SqliteStateStore(join(workspace,'state.sqlite'));
-   const create=()=>createEngine({repo,llm,state,readSyncTtlMs:0,persona:ZENOD_AGENT.persona});let engine=create();
+   const create=()=>createEngine({repo,llm,state,readSyncTtlMs:0,persona:ZENOD_AGENT.persona,onFilingComplete:result=>filing.complete(result)});let engine=create();
    store=new TaskJobStore(join(workspace,'jobs.sqlite'),'m2-synthetic');queue=new TaskJobQueue(store,async()=>engine);
    const inputs=[];
    const capture=async memory=>{const input={content:memory.content,source:'mcp',contentType:memory.contentType,capturedAt:memory.capturedAt,sourceId:`m2:${row.key}:${memory.id}`,verbatim:true};const captured=await engine.captureEvidence(input);const enrichment={...input,evidenceRef:captured.evidenceRef};inputs.push({memory,input,enrichment,captured});row.captures.push({input,captured});return enrichment;};
@@ -87,11 +89,12 @@ try{
    for(const memory of scenario.memories){stage=`${row.key}:seed`;const input=await capture(memory),job=queue.enqueue('enrich_memory',input,'enrich:'+input.sourceId);const terminal=await waitJob(job.id);row.captures.at(-1).job=terminal;if(terminal.status!=='done')throw new Error('evaluation_seed_filing_failed');}
    const ready=await snapshot(repo.path);await caseSave('pages-after-setup.json',ready);
    for(const turn of scenario.turns){
-    quota.assertActive();if(run.budgetBlocks.length)throw new Error('evaluation_budget_latched');
+    quota.assertActive();if(unresolvedBackground)throw new Error('evaluation_background_filing_unresolved');if(run.budgetBlocks.length)throw new Error('evaluation_budget_latched');
     if(turn.kind==='chat'){
      stage=`${row.key}:chat:${row.turns.length}`;const t0=performance.now();
      const result=await runSyntheticChat({request:{message:turn.message,surface:'mcp',conversationKey:`m2:${row.key}:${turn.thread}`,testRunId:row.key},defaultSurface:'mcp',getEngine:async()=>new Proxy(engine,{get(target,prop){if(prop!=='chat')return Reflect.get(target,prop);return async(...args)=>{const result=await target.chat(...args);row.chatCoverage??=[];row.chatCoverage.push(result.coverage??null);return result;};}}),recordAudit:a=>state.recordChatTestRun(a)});
      row.turns.push({message:turn.message,thread:turn.thread,result,latencyMs:performance.now()-t0});
+     await filing.drain();row.backgroundFilingReceipts=filing.receipts;
      if(result.status==='error')throw new Error('evaluation_chat_error');
     }else{
      const input=await capture(turn.memory);inject=true;
@@ -131,11 +134,11 @@ try{
    row.readOnlyPagesUnchanged=['B01','B04','B05','B10'].includes(row.id)||equal(ready,after);row.gates.readOnlyPagesUnchanged=row.readOnlyPagesUnchanged;
    row.status='RECORDED';
   }catch(error){row.status=quota.terminal||run.budgetBlocks.length?'INCOMPLETE':'ERROR';row.errorClass=error.name;row.errorCode=/^evaluation_[a-z_]+$/.test(error.message)?error.message:'operation_failed';}
-  finally{await queue?.close();store?.close();state?.close();row.latencyMs=performance.now()-start;const requests=ledger.rows.slice(firstRequest);row.requestNumbers=requests.map(r=>r.request);row.cost={providerReportedCostUsd:requests.reduce((n,r)=>n+(r.actualCostUsd??0),0),unknownCostRequests:requests.filter(r=>r.actualCostUsd===null).length,retainedUnknownCostReservationsUsd:requests.filter(r=>r.actualCostUsd===null).reduce((n,r)=>n+r.reservedUsd,0)};row.tokens=requests.map(r=>({request:r.request,usage:r.wire?.usage??null}));await caseSave('outcome.json',row);await flush();}
+  finally{await queue?.close();try{await filing.drain();}catch(error){unresolvedBackground=true;row.status='INCOMPLETE';row.errorCode=error.message;}row.backgroundFilingReceipts=filing.receipts;row.backgroundFilingPending=filing.pending;store?.close();state?.close();row.latencyMs=performance.now()-start;const requests=ledger.rows.slice(firstRequest);row.requestNumbers=requests.map(r=>r.request);row.cost={providerReportedCostUsd:requests.reduce((n,r)=>n+(r.actualCostUsd??0),0),unknownCostRequests:requests.filter(r=>r.actualCostUsd===null).length,retainedUnknownCostReservationsUsd:requests.filter(r=>r.actualCostUsd===null).reduce((n,r)=>n+r.reservedUsd,0)};row.tokens=requests.map(r=>({request:r.request,usage:r.wire?.usage??null}));await caseSave('outcome.json',row);await flush();}
  }
  run.sourceUnchanged=equal(run.sourceHashes,await hashes())&&git(candidate,'rev-parse','HEAD')===run.candidateSha&&!git(candidate,'status','--porcelain');
  run.compiledUnchanged=true;for(const pkg of ['core','server','mcp-chassis'])if(!equal(run.compiledHashes[pkg],await hashTree(join(candidate,'packages',pkg,'dist'))))run.compiledUnchanged=false;
- run.status=a.preflight?'PREFLIGHT_ONLY':quota.terminal?.status??(run.budgetBlocks.length?'INCOMPLETE_BUDGET':'AWAITING_SEMANTIC_REVIEW');
+ run.status=a.preflight?'PREFLIGHT_ONLY':unresolvedBackground?'INCOMPLETE_BACKGROUND_FILING':quota.terminal?.status??(run.budgetBlocks.length?'INCOMPLETE_BUDGET':'AWAITING_SEMANTIC_REVIEW');
 }catch(error){run.status='RUN_FAILED';run.errorClass=error.name;}
-finally{globalThis.fetch=originalFetch;run.finishedAt=new Date().toISOString();run.terminal=quota.terminal;await flush();await save('review-template.json',reviewTemplate(run));await save('report.json',summarize(run));console.log(JSON.stringify({status:run.status,output,denominator:36,recorded:run.outcomes.filter(r=>r.status==='RECORDED').length,...run.cost}));}
-if(quota.terminal?.status==='INCOMPLETE_PROVIDER_DEADLINE')process.exit(1);
+finally{if(!unresolvedBackground)globalThis.fetch=originalFetch;run.finishedAt=new Date().toISOString();run.terminal=quota.terminal;await flush();await save('review-template.json',reviewTemplate(run));await save('report.json',summarize(run));console.log(JSON.stringify({status:run.status,output,denominator:36,recorded:run.outcomes.filter(r=>r.status==='RECORDED').length,...run.cost}));}
+if(unresolvedBackground||quota.terminal?.status==='INCOMPLETE_PROVIDER_DEADLINE')process.exit(1);

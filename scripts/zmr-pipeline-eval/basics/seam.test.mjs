@@ -14,3 +14,19 @@ test('real engine.chat + synthetic seam retain same-thread turns and isolate ano
   const fresh=new SqliteStateStore(':memory:');try{assert.deepEqual(await fresh.recentWindow('mcp:main'),[]);}finally{fresh.close();}
  }finally{state.close();}
 });
+test('actual engine background capture finishes through onFilingComplete before harness drain',{skip:!candidate},async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {execFileSync}=await import('node:child_process');const {backgroundFilingTracker}=await import('./background.mjs');
+ const load=p=>import(pathToFileURL(join(candidate,p)).href);const {createEngine,VaultRepo}=await load('packages/core/dist/index.js');const {SqliteStateStore}=await load('packages/core/dist/state/sqlite.js');
+ const root=await mkdtemp(join(tmpdir(),'m2-offline-drain-')),git=(cwd,...args)=>execFileSync('git',args,{cwd,stdio:'pipe',encoding:'utf8'}).trim(),bare=join(root,'origin.git'),seed=join(root,'seed');
+ let state;
+ try{
+  git(root,'init','--bare','--initial-branch=main',bare);git(root,'clone',bare,seed);git(seed,'config','user.name','Offline test');git(seed,'config','user.email','test@example.invalid');
+  await mkdir(join(seed,'.brain'));await writeFile(join(seed,'.brain/config.yml'),'schema_version: 1\ntags: []\nconfidence_threshold: 0.7\n');await writeFile(join(seed,'Index.md'),'# Synthetic offline test\n');git(seed,'add','.');git(seed,'commit','-m','seed');git(seed,'push','origin','main');
+  const repo=await VaultRepo.open({workdir:join(root,'work'),remoteUrl:bare});state=new SqliteStateStore(':memory:');const tracker=backgroundFilingTracker();let release,entered;const started=new Promise(r=>{entered=r;}),gate=new Promise(r=>{release=r;});
+  const llm={answer:async(_input,_read,task)=>{await tracker.wrapCapture(task.captureNote.bind(task))('The synthetic room is blue.');return {text:'Queued for filing.',readPaths:[]};},classify:async input=>{entered();await gate;return {disposition:'evidence_only',confidence:1,summary:'Synthetic room report',tags:[],pages:[],topics:[],passageReviews:input.sourcePassages.map(p=>({passageId:p.id,status:'evidence_only'}))};}};
+  const engine=createEngine({repo,state,llm,readSyncTtlMs:0,onFilingComplete:result=>tracker.complete(result)});
+  await engine.chat('File this synthetic room report.','mcp',{conversationKey:'drain-proof'});await started;
+  assert.equal(tracker.pending,1);let drained=false;const completion=tracker.drain(2000).then(()=>{drained=true;});await Promise.resolve();assert.equal(drained,false);
+  release();await completion;assert.equal(tracker.pending,0);assert.equal(tracker.receipts.length,1);assert.ok(tracker.receipts[0].evidenceRef.startsWith('Log/'));assert.equal(git(repo.path,'rev-parse','HEAD'),git(root,'--git-dir',bare,'rev-parse','main'));
+ }finally{state?.close();await rm(root,{recursive:true,force:true});}
+});

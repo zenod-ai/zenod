@@ -26,9 +26,18 @@ export function utf16Range(fixture, idea) {
   return {start: points.slice(0, idea.start).join('').length, end: points.slice(0, idea.end).join('').length};
 }
 export function parseWireUsage(text) {
-  const frames = text.trim().startsWith('data:')
-    ? text.split('\n').filter(line => line.startsWith('data: ') && line !== 'data: [DONE]').flatMap(line => {try {return [JSON.parse(line.slice(6))];} catch {return [];}})
-    : (() => {try {return [JSON.parse(text)];} catch {return [];}})();
+  // SSE may start with comments/keepalives and metadata, not a data frame.
+  // Parse complete events (including multiline data) before finding final usage.
+  let frames;
+  try { frames = [JSON.parse(text)]; }
+  catch {
+    frames = text.replace(/\r\n/g, '\n').split(/\n\n/).flatMap(event => {
+      const data = event.split('\n').filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).replace(/^ /, '')).join('\n');
+      if (!data || data.trim() === '[DONE]') return [];
+      try { return [JSON.parse(data)]; } catch { return []; }
+    });
+  }
   const last = [...frames].reverse().find(frame => frame.usage);
   return {model: last?.model ?? frames.find(frame => frame.model)?.model ?? null,
     provider: last?.provider ?? frames.find(frame => frame.provider)?.provider ?? null,
