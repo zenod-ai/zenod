@@ -587,6 +587,51 @@ describe("BrainEngine", () => {
     expect(staleSelection.text).not.toContain(restriction);
   }, 15_000);
 
+  it("ranked search reads one unique raw source despite associated meaning hits",async()=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    await writeFile(join(repo.path,path),"# Log\n\n## Garden valve inspection ^e-123abc\n> Garden valve inspection is tentative. "+"The workspace is documented. ".repeat(600)+"Attendance depends on shift timing.\n");
+    await writeFile(join(repo.path,"Areas/Garden.md"),"---\ntitle: Garden valve inspection\nsummary: Garden valve inspection plans\n---\nRelated meaning page.\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const result=await tools.searchVault!("Garden valve inspection");
+      expect(result).toContain("Areas/Garden.md");
+      expect(await tools.searchVault!("Garden valve inspection")).toBe(result);
+      const packet=JSON.parse(result.split("Read source evidence:\n")[1]!);
+      expect(packet.readPath).toBe(ref);expect(packet.readPartial).toBe(false);
+      expect(packet.passages.at(-1).body).toContain("depends on shift timing");
+      const support=packet.passages.flatMap((p:any)=>p.answerSupports).find((h:any)=>h.kind==="source_summary");
+      // No subsequent model read is needed: the search tool actually read it.
+      return {text:"",readPaths:[],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"Attendance depends on shift timing."}]};
+    };
+    const answer=await engine().ask("Garden valve inspection");
+    expect(answer.text).toContain("depends on shift timing");expect(answer.sources.map(s=>s.path)).toContain(ref);
+  });
+
+  it.each(["multiple raw hits","duplicate anchors","unmatched snippet","no hits"])("ranked search leaves uncertain discovery nonauthoritative: %s",async mode=>{
+    const path="Log/2026-09-08.md";
+    const body=mode==="unmatched snippet"?"# Garden valve inspection\n\n## Different topic ^e-123abc\n> Other content.\n":"# Log\n\n## Garden valve inspection ^e-123abc\n> Garden valve inspection is tentative.\n";
+    await writeFile(join(repo.path,path),body+(mode==="duplicate anchors"?"\n## Separate entry ^e-123abc\n> Other content.\n":""));
+    if(mode==="multiple raw hits")await writeFile(join(repo.path,"Log/2026-09-09.md"),body.replaceAll("e-123abc","e-456def"));
+    llm.answerOverride=async(_input,tools)=>{
+      const result=await tools.searchVault!(mode==="no hits"?"zzzzabsenttoken":"Garden valve inspection");
+      expect(result).not.toContain("Read source evidence:");expect(result).not.toContain('"answerSupports"');
+      return {text:"Unsupported conclusion",readPaths:[]};
+    };
+    expect((await engine().ask("Garden valve inspection")).text).not.toContain("Unsupported conclusion");
+  });
+
+  it("search-triggered source support still rejects a changed snapshot",async()=>{
+    const path="Log/2026-09-08.md";
+    await writeFile(join(repo.path,path),"# Log\n\n## Garden valve inspection ^e-123abc\n> The inspection remains tentative.\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const result=await tools.searchVault!("Garden valve inspection");
+      const packet=JSON.parse(result.split("Read source evidence:\n")[1]!);
+      const support=packet.passages.flatMap((p:any)=>p.answerSupports).find((h:any)=>h.kind==="source_summary");
+      await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8"))+"Changed snapshot.\n");
+      return {text:"",readPaths:[],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The inspection remains tentative."}]};
+    };
+    expect((await engine().ask("Garden valve inspection")).text).toContain("snapshot changed");
+  });
+
   it.each([17300, 25000])("whole-source opt-in reads exact contiguous evidence with shared bounds (%s)", async chars => {
     const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
     const raw="## 14:16 Capture ^e-123abc\n> Beginning: repair is preferred but undecided. "+"The studio layout is documented. ".repeat(Math.ceil(chars/32))+" Middle: the estimate is provisional. Ending: confirm access before arranging delivery.\n";

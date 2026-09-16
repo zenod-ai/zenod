@@ -2323,7 +2323,23 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // Search discovers candidate paths. Only an actual note/fact read may
     // register source supports and enable typed answer submission.
     let readBusy = false;
-    const tools = readTools(contextRefs, entrySearch, true, undefined, true, () => { readBusy = true; });
+    const tools = readTools(contextRefs, entrySearch, true, async hits => {
+      if (contextRefs.length) return ""; // Pinned evidence already owns this scope.
+      const rawHits = hits.filter(hit => /^Log\/[^#]+\.md$/.test(hit.path));
+      if (rawHits.length !== 1) return "";
+      try {
+        const hit = rawHits[0]!;
+        if (!hit.snippet.trim()) return "";
+        const note = await getNote(vaultPath, hit.path, sourceResolver);
+        const ref = uniqueEvidenceRef(note.path, note.body, hit.snippet);
+        if (!ref) return "";
+        // Search text only locates an entry; actual tracked reads establish support.
+        const evidence = await groundedTools.readNote!(ref, { completeSource: true });
+        return `Read source evidence:\n${evidence}`;
+      } catch {
+        return "Automatic source read unavailable; discovery alone is not supporting evidence.";
+      }
+    }, true, () => { readBusy = true; });
     const coverageTracker = new RetrievalCoverage(question, contextRefs);
     const readSpans = new Map<string, string>();
     const readPassages: NotePassage[] = [];

@@ -300,3 +300,11 @@ it("does not force an invented source read after empty discovery",async()=>{
  await llm(3).answer(mixed,{...tools,searchVault:async()=>"no results",readNote:async()=>"unused"});
  expect(requests).toHaveLength(2);expect(requests[1].tool_choice??"auto").toBe("auto");
 });
+
+it("can submit immediately after search returns actual read support without another read call",async()=>{
+ const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[submit]}]);
+ const readNote=vi.fn(async()=>{throw new Error("No extra provider-directed read expected");});
+ const result=await llm().answer(input,{...tools,readNote,searchVault:async()=>`Notes/Atlas.md (score 9) — plan\n\nRead source evidence:\n${JSON.stringify({answerSupports:[{id,modes:["current"]}]})}`});
+ expect(requests).toHaveLength(2);expect(requests[1].tools.map((t:any)=>t.function.name)).toContain("submit_memory_answer");
+ expect(result.supportSelections).toEqual([{id,mode:"current"}]);expect(readNote).not.toHaveBeenCalled();
+});
