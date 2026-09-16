@@ -164,17 +164,20 @@ export class AnswerSupportRegistry {
     for (const selection of selections) {
       const support=selection && this.supports.get(selection.id);
       if (!support || !support.hint.modes.includes(selection.mode)) return {text:"The answer selected unknown, unavailable or temporally incompatible support. Repeat the relevant source/fact reads; current state is not established by this selection.",valid:false};
-      if ("summaryOnly" in support && support.summaryOnly && (typeof selection.summaryText!=="string"||!selection.summaryText.trim())) return {text:"A complete-source summary requires nonempty summaryText; raw excerpts are unavailable for this handle.",valid:false};
-      if (selection.summaryText !== undefined && (typeof selection.summaryText !== "string" || !selection.summaryText.trim()
-        || support.hint.granularity === "sentence"
-        || selection.summaryText.length > 1200 || selection.mode !== "raw_report" || !("passage" in support)
-        || /https?:\/\/|\]\(|\[\[|<[^>]*>/i.test(selection.summaryText))) {
+      // Narrow and canonical handles never lend authority to model-authored wording.
+      // Preserve their verified host rendering even when the model supplies extra text.
+      const summaryText = "passage" in support && selection.mode === "raw_report" && support.hint.granularity !== "sentence"
+        ? selection.summaryText : undefined;
+      if ("summaryOnly" in support && support.summaryOnly && (typeof summaryText!=="string"||!summaryText.trim())) return {text:"A complete-source summary requires nonempty summaryText; raw excerpts are unavailable for this handle.",valid:false};
+      if (summaryText !== undefined && (typeof summaryText !== "string" || !summaryText.trim()
+        || summaryText.length > 1200 || selection.mode !== "raw_report" || !("passage" in support)
+        || /https?:\/\/|\]\(|\[\[|<[^>]*>/i.test(summaryText))) {
         return {text:"The source summary has invalid support or formatting. Repeat the supported source selection.",valid:false};
       }
       if (seen.has(selection.id)) continue; seen.add(selection.id);
       if ("passage" in support) {
         const ref=support.passage.identity, url=support.passage.source.url;
-        if (selection.summaryText !== undefined) lines.push(`Source summary:\n${selection.summaryText.trim()}\n[${ref}](${url})`);
+        if (summaryText !== undefined) lines.push(`Source summary:\n${summaryText.trim()}\n[${ref}](${url})`);
         else lines.push(`${support.hint.granularity === "sentence" ? "Raw source excerpt (selected sentences; surrounding qualifications may be omitted)" : "Raw source report"} (not independently verified current state):\n${support.text}\n[${ref}](${url})`);
       } else if (support.priorId) {
         const prior=support.view.priorStatements!.find(p=>p.statementId===support.priorId)!;

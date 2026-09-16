@@ -193,20 +193,34 @@ describe("cited source summaries",()=>{
     const hints=registry.addPassage(passage("This is an uncertain proposal."));
     expect(decodeSupportedAnswer(JSON.stringify({supportSelections:[{mode:"raw_report",summaryText:"A claim"}]}),[]).supportProtocolError).toBe("invalid_submission");
     expect(registry.render([{id:"as_"+"0".repeat(24),mode:"raw_report",summaryText:"A claim"}]).valid).toBe(false);
-    expect(registry.render([{id:facts[1]!.id,mode:"current",summaryText:"The old date is current"}]).valid).toBe(false);
+    const canonical=registry.render([{id:facts[1]!.id,mode:"current",summaryText:"The old date is current"}]);
+    expect(canonical.valid).toBe(true);expect(canonical.text).not.toContain("The old date is current");expect(canonical.text).toContain("19 de octubre");
     expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:"Claim [source](https://evil.invalid)"}]).valid).toBe(false);
     expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:" "}]).valid).toBe(false);
   });
 });
 
- it("rejects paraphrases on sentence handles while preserving verbatim and parent summaries",()=>{
+ it("drops paraphrases on sentence handles while preserving verbatim and parent summaries",()=>{
   const registry=new AnswerSupportRegistry();
   const hints=registry.addPassage(passage("The room has a shelf. The repair estimate is tentative, pending inspection."));
   const sentence=hints.find(h=>h.granularity==="sentence")!;const parent=hints.find(h=>h.granularity==="paragraph")!;
   expect(sentence).toBeDefined();expect(parent).toBeDefined();
   const summaryText="The repair estimate remains conditional on inspection.";
-  const rejected=registry.render([{id:sentence.id,mode:"raw_report",summaryText}],"An assessment must not bypass invalid premises.");
-  expect(rejected.valid).toBe(false);expect(rejected.text).not.toContain(summaryText);expect(rejected.text).not.toContain("An assessment");
+  const canonical=registry.render([{id:sentence.id,mode:"raw_report",summaryText}]);
+  expect(canonical.valid).toBe(true);expect(canonical.text).not.toContain(summaryText);expect(canonical.text).toContain("The room has a shelf.");
+  expect(registry.render([{id:sentence.id,mode:"raw_report",summaryText},{id:parent.id,mode:"raw_report",summaryText}]).valid).toBe(true);
   expect(registry.render([{id:sentence.id,mode:"raw_report"}]).text).toContain("The room has a shelf.");
   expect(registry.render([{id:parent.id,mode:"raw_report",summaryText}]).valid).toBe(true);
  });
+
+it("drops model wording on prior/current handles without accepting forged identity or temporal modes",()=>{
+ const registry=new AnswerSupportRegistry();const hints=registry.addFacts(view());
+ for(const mode of ["prior","current"] as const){
+  const hint=hints.find(h=>h.modes.includes(mode))!;const text="Invented https://untrusted.invalid claim";
+  const rendered=registry.render([{id:hint.id,mode,summaryText:text}]);
+  expect(rendered.valid).toBe(true);expect(rendered.text).not.toContain(text);
+ }
+ expect(registry.render([{id:"as_"+"0".repeat(24),mode:"current",summaryText:"ignored"}]).valid).toBe(false);
+ const prior=hints.find(h=>h.modes.includes("prior"))!;
+ expect(registry.render([{id:prior.id,mode:"current",summaryText:"ignored"}]).valid).toBe(false);
+});
