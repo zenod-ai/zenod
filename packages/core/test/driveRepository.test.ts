@@ -990,6 +990,18 @@ describe("DriveVaultRepository", () => {
     },
   );
 
+  it("recovers an acknowledged manifest with an unfinished bootstrap journal across two restarts", async () => {
+    const drive = new FakeDrive();
+    drive.versionStep = 3;
+    drive.failAt = { call: 10, phase: "after" };
+    await expect(open(drive, await temp("manifest-lost-response"))).rejects.toThrow();
+    drive.failAt = null;
+    const first = await open(drive, await temp("manifest-recovery-first"));
+    const second = await open(drive, await temp("manifest-recovery-second"));
+    expect((await second.currentRevision()).id).toBe((await first.currentRevision()).id);
+    expect(readBootstrapJournal(drive).manifest).toBeDefined();
+  });
+
   it.each([false, true])("bootstraps, publishes, updates and reopens with non-consecutive Drive versions (lost acknowledgment: %s)", async (lostAcknowledgment) => {
     const drive = new FakeDrive();
     drive.versionStep = 3;

@@ -2057,6 +2057,7 @@ export class DriveVaultRepository implements VaultRepository {
           bundleMutation.state = "applied";
           manifestMutation.resultingFile = this.manifestFile;
           manifestMutation.state = "applied";
+          journal.manifest = this.manifest;
           journal.state = "committed";
           journal.committedAt = this.manifest.committedAt;
           journal.updatedAt = this.now().toISOString();
