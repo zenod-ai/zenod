@@ -1778,10 +1778,11 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
               read_note: tool({
                 description:
-                  noteReadDescription + " Raw-source body reads default to completing one uniquely identified exact evidence source within the shared 20000-character automatic allowance, using up to8000-character tracked chunks even if maxChars is smaller. Use an exact evidenceRef, or a literal query matching only one entry. Ambiguous daily logs stay bounded; select an exact ref. For an explicit excerpt use completeSource=false with maxChars. Cursor continuations and frontmatter remain narrow. Longer sources retain continuation. In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
-                inputSchema: noteReadSchema.extend({ maxChars: noteReadSchema.shape.maxChars.describe("Character cap for an explicit excerpt (completeSource=false) or cursor continuation. First raw-source reads otherwise use bounded complete-source mode."), completeSource: z.boolean().optional().describe("Raw-source first body reads default to true. Set false explicitly for a narrow excerpt with maxChars; cursors/frontmatter retain narrow scope. True explicitly requests bounded complete-source reading.") }),
-                execute: async ({ path, ...options }) => {
-                  if (options.completeSource === undefined && !options.cursor && options.part !== "frontmatter" && /^Log\//.test(path)) {
+                  noteReadDescription + " Initial raw-source body reads always complete one uniquely identified exact evidence source within the shared 20000-character automatic allowance, using up to8000-character tracked chunks even if maxChars is smaller. Use an exact evidenceRef, or a literal query matching only one entry. Ambiguous daily logs stay bounded; select an exact ref. There is no model opt-out for an initial raw-source body read. maxChars applies to cursor continuation, frontmatter and ordinary meaning-page reads, which remain narrow. Longer sources retain continuation. In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
+                inputSchema: noteReadSchema.extend({ maxChars: noteReadSchema.shape.maxChars.describe("Character cap for cursor continuation, frontmatter or ordinary meaning pages. Initial raw-source body reads always use bounded complete-source mode instead.") }),
+                execute: async ({ path, ...requested }) => {
+                  const options: typeof requested & { completeSource?: boolean } = { ...requested };
+                  if (!options.cursor && options.part !== "frontmatter" && /^Log\//.test(path)) {
                     options.completeSource = true;
                     delete options.maxChars; // In default whole-source mode use the established bounded chunks.
                   }
