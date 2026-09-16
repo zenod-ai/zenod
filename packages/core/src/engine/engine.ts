@@ -50,7 +50,7 @@ import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
-import { readNotePassage, readNotePacket, notePassageVersion, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
+import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
@@ -2485,13 +2485,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
                   let exactPath = path;
                   try {
                     if (!/^Log\/.+\.md#\^e-[0-9a-f]{6}$/i.test(exactPath)) {
-                      const probe = JSON.parse(await groundedTools.readNote!(path, { ...readOptions, completeSource: false, maxChars: 256 })) as NotePassage;
-                      consumed += probe.body?.length ?? 0;
-                      if (probe.queryMatched === false || allowance-consumed < 256) return JSON.stringify({ ...probe, readPartial: true, instruction: "Source lookup or automatic allowance is incomplete. Continue ordinary bounded reads before a whole-source summary." });
-                      if (!/^Log\/.+\.md#\^e-[0-9a-f]{6}$/i.test(probe.identity ?? "")) {
-                        return JSON.stringify({ ...probe, readPartial: true, instruction: "Select an exact evidenceRef before requesting a whole-source summary; this read did not establish complete source coverage." });
+                      // Resolve exactly one entry using the reader's structural and
+                      // literal-query rules. Metadata lookup is not answer support;
+                      // the anchored chunks below must still be read and validated.
+                      const note = await getNote(vaultPath, path, sourceResolver);
+                      const resolved = uniqueEvidenceRef(note.path, note.body, readOptions.query);
+                      if (!resolved) {
+                        const bounded = JSON.parse(await groundedTools.readNote!(path, { ...readOptions, completeSource: false, maxChars: Math.min(8000, readOptions.maxChars ?? 8000, allowance) }));
+                        consumed += "passages" in bounded ? bounded.passages.reduce((sum: number, piece: NotePassage) => sum + piece.body.length, 0) : bounded.body?.length ?? 0;
+                        return JSON.stringify({ ...bounded, readPartial: true, instruction: "No unique exact source was identified. Select one evidenceRef before a whole-source summary; these bounded excerpts do not establish whole-log coverage." });
                       }
-                      exactPath = probe.identity;
+                      exactPath = resolved;
                     }
                     let cursor: string | undefined;
                     do {

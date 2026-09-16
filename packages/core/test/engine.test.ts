@@ -612,6 +612,19 @@ describe("BrainEngine", () => {
     else expect(reply.coverage?.continuation).toContainEqual(expect.objectContaining({tool:"read_note",input:expect.objectContaining({path:ref})}));
   });
 
+  it.each([undefined,"shared phrase"])("ambiguous daily logs never become one automatic whole source (query: %s)",async query=>{
+    const path="Log/2026-09-08.md";
+    await writeFile(join(repo.path,path),"# Log\n\n## 14:16 First ^e-123abc\n> shared phrase. "+"First source. ".repeat(800)+"\n\n## 14:17 Second ^e-456def\n> shared phrase. "+"Second source. ".repeat(800)+"\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(path,{completeSource:true,...(query?{query}:{})}));
+      expect(packet.readPartial).toBe(true);expect(packet.instruction).toContain("No unique exact source");
+      expect(packet.bodyChars??packet.body.length).toBeLessThanOrEqual(8000);
+      const pieces=packet.passages??[packet];expect(pieces.flatMap((piece:any)=>piece.answerSupports??[]).some((hint:any)=>hint.kind==="source_summary")).toBe(false);
+      return {text:"",readPaths:[path],supportSelections:[]};
+    };
+    await engine().ask("Summarize the note");
+  });
+
   it("whole-source and catalog automation share one concurrent allowance",async()=>{
     const path="Log/2026-09-08.md",refs=[path+"#^e-123abc",path+"#^e-456def"];
     await writeFile(join(repo.path,path),"# Log\n\n"+refs.map(ref=>`## 14:16 Capture ^${ref.split("#^")[1]}\n> ${"A complete report. ".repeat(1600)}\n\n`).join(""));

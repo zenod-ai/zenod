@@ -1778,9 +1778,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
               read_note: tool({
                 description:
-                  noteReadDescription + " For a whole-source summary set completeSource=true: read the identified exact evidence source from its beginning to its end within the existing shared 20000-character automatic allowance, using tracked chunks. Use an exact evidenceRef, or query to locate one. Longer sources retain continuation; ordinary chunk requests omit this flag. In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
-                inputSchema: noteReadSchema.extend({ completeSource: z.boolean().optional().describe("Opt in to complete reading of the identified exact source for a summary; omit for a single chunk or narrow excerpt.") }),
+                  noteReadDescription + " Raw-source body reads default to completing one uniquely identified exact evidence source within the shared 20000-character automatic allowance, using up to8000-character tracked chunks even if maxChars is smaller. Use an exact evidenceRef, or a literal query matching only one entry. Ambiguous daily logs stay bounded; select an exact ref. For an explicit excerpt use completeSource=false with maxChars. Cursor continuations and frontmatter remain narrow. Longer sources retain continuation. In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
+                inputSchema: noteReadSchema.extend({ maxChars: noteReadSchema.shape.maxChars.describe("Character cap for an explicit excerpt (completeSource=false) or cursor continuation. First raw-source reads otherwise use bounded complete-source mode."), completeSource: z.boolean().optional().describe("Raw-source first body reads default to true. Set false explicitly for a narrow excerpt with maxChars; cursors/frontmatter retain narrow scope. True explicitly requests bounded complete-source reading.") }),
                 execute: async ({ path, ...options }) => {
+                  if (options.completeSource === undefined && !options.cursor && options.part !== "frontmatter" && /^Log\//.test(path)) {
+                    options.completeSource = true;
+                    delete options.maxChars; // In default whole-source mode use the established bounded chunks.
+                  }
                   if(options.cursor)options.cursor=cursors.resolve(options.cursor,cursors.readOwner(path,options.part));
                   const present=(value:string)=>cursors.encode(value,cursors.readOwner(path,options.part));
                   const read = async (readOptions: typeof options) => {

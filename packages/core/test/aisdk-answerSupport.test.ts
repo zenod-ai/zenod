@@ -249,3 +249,22 @@ it("continues a partial whole-source packet using its exact returned readPath an
  expect(result.supportSelections?.[0]?.summaryText).toBe("A concise source summary.");expect(readNote).toHaveBeenCalledTimes(2);expect(requests).toHaveLength(3);
  expect(JSON.stringify(requests)).not.toContain("private-exact-source-cursor");
 });
+
+
+it.each([undefined,2000])("defaults a first raw query to complete-source mode despite maxChars=%s",async maxChars=>{
+ const ref="Log/2026-09-15.md#^e-123abc",daily=ref.split("#")[0]!;
+ const readNote=vi.fn(async(path:string,options:any)=>{
+  expect(path).toBe(daily);expect(options).toMatchObject({query:"Planning note",completeSource:true});expect(options.maxChars).toBeUndefined();
+  return JSON.stringify({readPath:ref,readPartial:false,passages:[{body:"Beginning: undecided. Middle: provisional cost. Ending: confirm access.",answerSupports:[{id,modes:["raw_report"],kind:"source_summary",summaryOnly:true}]}],nextCursor:null});
+ });
+ const requests=wire([{calls:[{name:"read_note",input:{path:daily,query:"Planning note",...(maxChars===undefined?{}:{maxChars})}}]},
+  {calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:"Undecided, provisional cost, and access confirmation required."}]}}]}]);
+ const result=await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(requests).toHaveLength(2);expect(readNote).toHaveBeenCalledTimes(1);
+ expect(JSON.stringify(requests[1].messages)).toContain("Ending: confirm access");expect(result.supportSelections?.[0]?.summaryText).toContain("access confirmation");
+});
+it("explicit false preserves a 2000-character excerpt request",async()=>{
+ const ref="Log/2026-09-15.md#^e-123abc";
+ const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({completeSource:false,maxChars:2000});return JSON.stringify({body:"A narrow excerpt.",answerSupports:[{id,modes:["raw_report"]}]});});
+ wire([{calls:[{name:"read_note",input:{path:ref,completeSource:false,maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:null}]}}]}]);
+ await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(readNote).toHaveBeenCalledTimes(1);
+});
