@@ -39,6 +39,7 @@ class FakeDrive implements DriveVaultClient {
   versionStep = 1;
   journalMetadataOnRead = false;
   journalPreconditionRace = false;
+  uploadMetadataDelay = false;
   private nextId = 1;
 
   constructor() {
@@ -145,12 +146,16 @@ class FakeDrive implements DriveVaultClient {
       const file: Stored = { id, name, mimeType, data: Buffer.from(data), parents: [parentFolderId], appProperties: options.appProperties ?? {}, webViewLink: `https://drive.google.test/file/${id}`, version: "0" };
       this.updateMetadata(file, true);
       this.files.set(id, file);
-      return this.clone(file);
+      const response = this.clone(file);
+      if (this.uploadMetadataDelay) this.updateMetadata(file);
+      return response;
     });
   }
 
   private assertPrecondition(file: Stored, precondition: DriveVaultPrecondition): void {
-    if (precondition.expectedVersion && file.version !== precondition.expectedVersion) throw new Error(`Drive file conflict: version changed for ${file.id}`);
+    if (precondition.expectedVersion && file.version !== precondition.expectedVersion
+      && !(precondition.expectedChecksum && precondition.expectedModifiedTime
+        && BigInt(file.version!) > BigInt(precondition.expectedVersion))) throw new Error(`Drive file conflict: version changed for ${file.id}`);
     if (precondition.expectedModifiedTime && file.modifiedTime !== precondition.expectedModifiedTime) throw new Error(`Drive file conflict: modified time changed for ${file.id}`);
     if (precondition.expectedChecksum && createHash("sha256").update(file.data).digest("hex") !== precondition.expectedChecksum) throw new Error(`Drive file conflict: checksum changed for ${file.id}`);
   }
@@ -1010,6 +1015,7 @@ describe("DriveVaultRepository", () => {
   it.each([false, true])("bootstraps, publishes, updates and reopens with non-consecutive Drive versions (lost acknowledgment: %s)", async (lostAcknowledgment) => {
     const drive = new FakeDrive();
     drive.versionStep = 3;
+    drive.uploadMetadataDelay = true;
     drive.journalMetadataOnRead = true;
     drive.journalPreconditionRace = true;
     if (lostAcknowledgment) drive.failAt = { call: 7, phase: "after" };

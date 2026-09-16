@@ -480,7 +480,11 @@ export class DriveClient {
   private async assertFilePrecondition(fileId: string, precondition: DriveFilePrecondition): Promise<DriveFile> {
     const current = await this.getFile(fileId);
     if (precondition.expectedVersion && current.version !== precondition.expectedVersion) {
-      throw new Error(`Drive file conflict: version changed for ${fileId}`);
+      const metadataOnlyCandidate = precondition.expectedChecksum && precondition.expectedModifiedTime
+        && /^\d+$/.test(precondition.expectedVersion) && /^\d+$/.test(current.version ?? "")
+        && BigInt(current.version!) > BigInt(precondition.expectedVersion);
+      if (!metadataOnlyCandidate) throw new Error(`Drive file conflict: version changed for ${fileId}`);
+      // The unchanged timestamp and exact body checksum below remain mandatory.
     }
     if (precondition.expectedModifiedTime && current.modifiedTime !== precondition.expectedModifiedTime) {
       throw new Error(`Drive file conflict: modified time changed for ${fileId}`);

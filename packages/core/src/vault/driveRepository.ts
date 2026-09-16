@@ -244,8 +244,14 @@ function isAuthorization(error: unknown): boolean {
   return /\b401\b|\b403\b|authorization|invalid_grant|revoked/i.test((error as Error)?.message ?? "");
 }
 
-function samePrecondition(file: DriveVaultFile, mutation: JournalMutation): boolean {
-  if (mutation.expectedVersion && file.version !== mutation.expectedVersion) return false;
+function samePrecondition(file: DriveVaultFile, mutation: Partial<JournalMutation>): boolean {
+  if (mutation.expectedVersion && file.version !== mutation.expectedVersion) {
+    // Callers must also verify expectedChecksum before writing. Drive may finish
+    // metadata bookkeeping after the response without changing content or mtime.
+    if (!mutation.expectedChecksum || !mutation.expectedModifiedTime
+      || !/^\d+$/.test(mutation.expectedVersion) || !/^\d+$/.test(file.version ?? "")
+      || BigInt(file.version!) <= BigInt(mutation.expectedVersion)) return false;
+  }
   if (mutation.expectedModifiedTime && file.modifiedTime !== mutation.expectedModifiedTime) return false;
   return Boolean(mutation.expectedVersion || mutation.expectedModifiedTime || mutation.expectedChecksum);
 }
@@ -1314,8 +1320,7 @@ export class DriveVaultRepository implements VaultRepository {
     for (const path of paths) {
       const actual = snapshot[path];
       const entry = expected.files[path];
-      if (!actual || !entry || actual.file.id !== entry.fileId || actual.file.version !== entry.version
-        || actual.file.modifiedTime !== entry.modifiedTime || sha256(actual.data) !== entry.checksum) conflicts.push(path);
+      if (!actual || !entry || actual.file.id !== entry.fileId || !samePrecondition(actual.file, { ...(entry.version ? { expectedVersion: entry.version } : {}), ...(entry.modifiedTime ? { expectedModifiedTime: entry.modifiedTime } : {}), expectedChecksum: entry.checksum }) || sha256(actual.data) !== entry.checksum) conflicts.push(path);
     }
     for (const [path, tombstones] of Object.entries(expected.tombstones ?? {})) {
       for (const tombstone of tombstones) {
@@ -1422,7 +1427,7 @@ export class DriveVaultRepository implements VaultRepository {
       }
       return current;
     }
-    if (!samePrecondition(current, mutation)) throw new Error(`Drive update conflict at ${mutation.path}`);
+    if (!samePrecondition(current, mutation) || !await this.remoteContentMatches(current, mutation.expectedChecksum!)) throw new Error(`Drive update conflict at ${mutation.path}`);
     const revisionsBefore = await this.options.client.listRevisions(mutation.fileId!);
     mutation.baselineRevisionIds = revisionsBefore.map((revision) => revision.id);
     try {
@@ -1880,8 +1885,7 @@ export class DriveVaultRepository implements VaultRepository {
       if (normalizePath(path) !== path || ids.has(entry.fileId)) throw new Error(`Drive import snapshot identity is invalid at ${path}`);
       ids.add(entry.fileId);
       const actual = snapshot[path];
-      if (!actual || actual.file.id !== entry.fileId || actual.file.version !== entry.version
-        || actual.file.modifiedTime !== entry.modifiedTime || sha256(actual.data) !== entry.checksum) {
+      if (!actual || actual.file.id !== entry.fileId || !samePrecondition(actual.file, { ...(entry.version ? { expectedVersion: entry.version } : {}), ...(entry.modifiedTime ? { expectedModifiedTime: entry.modifiedTime } : {}), expectedChecksum: entry.checksum }) || sha256(actual.data) !== entry.checksum) {
         conflicts.push(path);
       }
     }

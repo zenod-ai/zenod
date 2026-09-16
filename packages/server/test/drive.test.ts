@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -272,6 +272,27 @@ describe("drive client", () => {
 
     await expect(client.listFiles()).rejects.toThrow(/Drive API/);
     expect(revoked).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("allows a version-only increment with exact content and timestamp but rejects changed content or time", async () => {
+    let content = "old";
+    let modifiedTime = FILES[0]!.modifiedTime;
+    const patches: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PATCH") { patches.push(url); return Response.json({ ...FILES[0], version: "4" }); }
+      if (url.includes("alt=media")) return new Response(content);
+      return Response.json({ ...FILES[0], version: "2", modifiedTime });
+    }));
+    const client = new DriveClient({ kind: "oauth", clientId: "id", clientSecret: "secret", refreshToken: "refresh" }, { accessToken: "token" });
+    const precondition = { expectedVersion: "1", expectedModifiedTime: FILES[0]!.modifiedTime, expectedChecksum: createHash("sha256").update("old").digest("hex") };
+    await client.updateFile("file-1", "text/plain", Buffer.from("new"), precondition);
+    content = "external change";
+    await expect(client.updateFile("file-1", "text/plain", Buffer.from("new"), precondition)).rejects.toThrow(/checksum changed/);
+    content = "old"; modifiedTime = "2026-09-16T00:00:00Z";
+    await expect(client.updateFile("file-1", "text/plain", Buffer.from("new"), precondition)).rejects.toThrow(/modified time changed/);
+    expect(patches).toHaveLength(1);
     vi.unstubAllGlobals();
   });
 
