@@ -587,6 +587,87 @@ describe("BrainEngine", () => {
     expect(staleSelection.text).not.toContain(restriction);
   }, 15_000);
 
+  it.each([17300, 25000])("whole-source opt-in reads exact contiguous evidence with shared bounds (%s)", async chars => {
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    const raw="## 14:16 Capture ^e-123abc\n> Beginning: repair is preferred but undecided. "+"The studio layout is documented. ".repeat(Math.ceil(chars/32))+" Middle: the estimate is provisional. Ending: confirm access before arranging delivery.\n";
+    await writeFile(join(repo.path,path),"# Log\n\n"+raw+"\n## 14:17 Other ^e-456def\n> Neighbor must not leak.\n");
+    const {readNotePassage}=await import("../src/ops/passage.js");
+    const first=await readNotePassage(repo.path,ref,{maxChars:8000});
+    const exact=(await readFile(join(repo.path,path),"utf8")).slice(first.extent.sectionStart,first.extent.sectionEnd);
+    llm.answerOverride=async (_input,tools)=>{
+      const narrow=JSON.parse(await tools.readNote!(ref,{maxChars:256}));
+      expect(narrow.body.length).toBe(256);expect(narrow.passages).toBeUndefined();
+      const packet=JSON.parse(await tools.readNote!(path,{query:"Beginning: repair",completeSource:true}));
+      expect(packet.readPath).toBe(ref);expect(packet.passages.every((p:any)=>p.identity===ref&&p.version===first.version&&p.body.length<=8000)).toBe(true);
+      const text=packet.passages.map((p:any)=>p.body).join("");expect(text).toBe(exact.slice(0,text.length));expect(text).not.toContain("Neighbor must not leak");
+      expect(packet.bodyChars).toBeLessThanOrEqual(20000);
+      const repeat=JSON.parse(await tools.readNote!(path,{query:"Beginning: repair",completeSource:true}));expect(repeat).toEqual(packet);
+      const summary=packet.passages.flatMap((p:any)=>p.answerSupports).find((hint:any)=>hint.kind==="source_summary");
+      if(chars<20000){expect(text).toBe(exact);expect(packet.readPartial).toBe(false);expect(summary).toBeDefined();expect(text).toContain("Ending: confirm access");}
+      else{expect(packet.readPartial).toBe(true);expect(packet.nextCursor).toBeTruthy();expect(summary).toBeUndefined();}
+      return {text:"",readPaths:[ref],supportSelections:summary?[{id:summary.id,mode:"raw_report",summaryText:"Repair is preferred, not decided; the estimate is provisional and access must be confirmed before delivery."}]:[]};
+    };
+    const reply=await engine().ask("Summarize the complete planning note");
+    if(chars<20000)expect(reply.text).toContain("access must be confirmed");
+    else expect(reply.coverage?.continuation).toContainEqual(expect.objectContaining({tool:"read_note",input:expect.objectContaining({path:ref})}));
+  });
+
+  it("whole-source and catalog automation share one concurrent allowance",async()=>{
+    const path="Log/2026-09-08.md",refs=[path+"#^e-123abc",path+"#^e-456def"];
+    await writeFile(join(repo.path,path),"# Log\n\n"+refs.map(ref=>`## 14:16 Capture ^${ref.split("#^")[1]}\n> ${"A complete report. ".repeat(1600)}\n\n`).join(""));
+    const entrySearch=vi.fn(async()=>({entries:[{evidenceRef:refs[1],capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:2,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const [whole,catalog]=await Promise.all([tools.readNote!(refs[0]!,{completeSource:true}),tools.searchEntries!({limit:1})]);
+      const a=JSON.parse(whole),b=JSON.parse(catalog);expect(a.bodyChars).toBe(20000);expect(b.evidence).toEqual([]);expect(a.readPartial).toBe(true);
+      await expect(tools.readNote!(refs[1]!,{completeSource:true})).rejects.toThrow("allowance exhausted");
+      return {text:"",readPaths:[refs[0]!],supportSelections:[]};
+    };
+    await createEngine({repo,llm,state,entrySearch}).ask("Summarize the sources");
+  });
+
+  it("whole-source completion retains partial evidence and refuses a handle across a changed snapshot",async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"An undecided option. ".repeat(1000),source:"selftest"});
+    llm.answerOverride=async(_input,tools)=>{
+      const revision=repo.currentRevision.bind(repo);let reads=0;
+      const probe=vi.spyOn(repo,"currentRevision").mockImplementation(async()=>{
+        if(++reads===2){const path=capture.evidenceRef.split("#")[0]!;await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8")).replace("An undecided option.","A changed tentative option."));}
+        return revision();
+      });
+      try {
+        const packet=JSON.parse(await tools.readNote!(capture.evidenceRef,{completeSource:true}));
+        expect(packet.readPartial).toBe(true);expect(packet.error).toMatch(/changed|stale|version/i);expect(packet.nextCursor).toBeTruthy();
+        expect(packet.passages).toHaveLength(1);expect(packet.passages.flatMap((p:any)=>p.answerSupports).some((hint:any)=>hint.kind==="source_summary")).toBe(false);
+        return {text:"",readPaths:[capture.evidenceRef],supportSelections:[],analysisText:"This advice must not appear."};
+      } finally {probe.mockRestore();}
+    };
+    const reply=await e.ask("Summarize the source");expect(reply.text).not.toContain("This advice must not appear.");
+  });
+
+  it.each([false,true])("grounds a labelled assessment and rejects stale premises (stale: %s)",async stale=>{
+    const e=engine();const raw="Repair costs 90 euros; replacement costs 600 euros. Feasibility is unconfirmed and no decision is made.";
+    const capture=await e.captureEvidence!({content:raw,source:"selftest"});
+    const analysis="I would confirm feasibility before committing; repair is cheaper only if technically feasible.";
+    llm.answerOverride=async(_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(capture.evidenceRef,{completeSource:true}));
+      const summary=packet.passages.flatMap((p:any)=>p.answerSupports).find((hint:any)=>hint.kind==="source_summary");
+      if(stale){const path=capture.evidenceRef.split("#")[0]!;await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8"))+"\nChanged snapshot.\n");}
+      return {text:"unsupported closing prose",readPaths:[capture.evidenceRef],supportSelections:[{id:summary.id,mode:"raw_report",summaryText:raw}],analysisText:analysis};
+    };
+    const reply=await e.chat("What do you think about the repair option?","web");
+    if(stale){expect(reply.text).toContain("snapshot changed");expect(reply.text).not.toContain(analysis);}
+    else {expect(reply.text).toContain("My assessment (inference");expect(reply.text).toContain(analysis);expect(reply.text).toContain(raw);expect(reply.text).toContain(capture.evidenceRef);}
+  });
+
+  it("a grounded assessment cannot bypass the same-turn mutation guard",async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"The option remains undecided.",source:"selftest"});
+    llm.answerOverride=async(_input,tools)=>{
+      const read=JSON.parse(await tools.readNote!(capture.evidenceRef));
+      const support=read.answerSupports.find((hint:any)=>hint.kind==="source_summary");
+      return {text:"",readPaths:[capture.evidenceRef],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The source records an undecided option."}],analysisText:"I saved your final decision."};
+    };
+    const reply=await e.chat("What do you think?","web");expect(reply.text).toContain("no verified same-turn mutation receipt");expect(reply.text).not.toContain("I saved your final decision.");
+  });
+
   it("rejects a complete-source summary when its selected source changes before finalization",async()=>{
     const e=engine();const capture=await e.captureEvidence!({content:"An option remains tentative and requires inspection.",source:"selftest"});
     llm.answerOverride=async (_input,tools)=>{
