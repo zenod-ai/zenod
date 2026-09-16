@@ -23,7 +23,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Field, FieldContent, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -244,69 +249,93 @@ export function DashboardOverview({
                 <CopyButton value={mcpUrl} label="Copy" />
               </div>
             </Field>
-            {(!hosted || showAdvanced) && (
-              <Field orientation="vertical">
-                <FieldContent>
-                  <FieldLabel htmlFor="dashboard-mcp-token">
-                    Bearer token
-                  </FieldLabel>
-                </FieldContent>
-                <div className="flex gap-2">
-                  <Input
-                    id="dashboard-mcp-token"
-                    className="min-w-0 font-mono text-xs"
-                    type={showToken ? "text" : "password"}
-                    value={mcpAccess.token}
-                    readOnly
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={() => setShowToken((visible) => !visible)}
-                    aria-label={
-                      showToken ? "Hide bearer token" : "Show bearer token"
-                    }
-                    title={
-                      showToken ? "Hide bearer token" : "Show bearer token"
-                    }
-                  >
-                    {showToken ? <EyeOffIcon /> : <EyeIcon />}
-                  </Button>
-                  <CopyButton value={mcpAccess.token} label="Copy" />
-                </div>
-              </Field>
-            )}
+            <Field orientation="vertical">
+              <FieldContent>
+                <FieldLabel htmlFor="dashboard-mcp-token">
+                  Access token (manual setup)
+                </FieldLabel>
+              </FieldContent>
+              <div className="flex gap-2">
+                <Input
+                  id="dashboard-mcp-token"
+                  className="min-w-0 font-mono text-xs"
+                  type={showToken ? "text" : "password"}
+                  value={mcpAccess.token}
+                  readOnly
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setShowToken((visible) => !visible)}
+                  aria-label={
+                    showToken ? "Hide access token" : "Show access token"
+                  }
+                  title={showToken ? "Hide access token" : "Show access token"}
+                >
+                  {showToken ? <EyeOffIcon /> : <EyeIcon />}
+                </Button>
+                <CopyButton value={mcpAccess.token} label="Copy token" />
+              </div>
+              <FieldDescription>
+                Also called a bearer token or tenant token. Use it only when
+                your agent asks for a token; browser sign-in does not need it.
+              </FieldDescription>
+            </Field>
           </div>
 
           {hosted && (
             <div className="flex flex-col items-start gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 aria-expanded={showAdvanced}
-                aria-controls="dashboard-mcp-token"
+                aria-controls="dashboard-manual-instructions"
                 onClick={() => setShowAdvanced((visible) => !visible)}
               >
                 {showAdvanced
-                  ? "Hide advanced token setup"
-                  : "Advanced token setup"}
+                  ? "Hide manual token instructions"
+                  : "Manual token instructions"}
               </Button>
               {showAdvanced && (
-                <p className="text-sm text-muted-foreground">
-                  For clients without browser sign-in, use the same URL and
-                  configure the bearer token separately.
-                </p>
+                <div
+                  id="dashboard-manual-instructions"
+                  className="flex w-full flex-col gap-3"
+                >
+                  <p className="text-sm text-muted-foreground">
+                    For clients without browser sign-in, copy the access token
+                    above and replace YOUR_ACCESS_TOKEN below. Use the same MCP
+                    URL.
+                  </p>
+                  <p className="text-sm font-medium">Codex with a token</p>
+                  <CodeSnippet
+                    code={`export ZENOD_MCP_TOKEN='YOUR_ACCESS_TOKEN'\ncodex mcp add zenod --url ${mcpUrl} --bearer-token-env-var ZENOD_MCP_TOKEN`}
+                  />
+                  <p className="text-sm font-medium">
+                    Claude Code with a token
+                  </p>
+                  <CodeSnippet
+                    code={`claude mcp add --transport http zenod ${mcpUrl} --header "Authorization: Bearer YOUR_ACCESS_TOKEN"`}
+                  />
+                  <p className="text-sm font-medium">Any HTTP MCP client</p>
+                  <CodeSnippet code="Authorization: Bearer YOUR_ACCESS_TOKEN" />
+                </div>
               )}
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             <div className="flex min-w-0 flex-col gap-2">
               <p className="flex items-center gap-2 text-sm font-medium">
                 <TerminalIcon className="size-4" />
-                Claude Code
+                Claude / Claude Code
               </p>
+              {hosted && (
+                <p className="text-sm text-muted-foreground">
+                  In Claude, add a custom connector using the MCP URL above and
+                  approve in your browser. For Claude Code, run:
+                </p>
+              )}
               <CodeSnippet code={snippets.claude} className="h-full" />
             </div>
             <div className="flex min-w-0 flex-col gap-2">
@@ -314,7 +343,28 @@ export function DashboardOverview({
                 <SquareTerminalIcon className="size-4" />
                 Codex
               </p>
+              {hosted && (
+                <p className="text-sm text-muted-foreground">
+                  Add the MCP URL in the app and follow browser sign-in, or use
+                  these CLI commands:
+                </p>
+              )}
               <CodeSnippet code={snippets.codex} className="h-full" />
+            </div>
+            <div className="flex min-w-0 flex-col gap-2">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <PlugZapIcon className="size-4" />
+                Any MCP agent
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Add an HTTP MCP server named Zenod with the URL above.{" "}
+                {hosted
+                  ? "Choose OAuth or browser sign-in, then click Allow in Zenod. Client registration is automatic."
+                  : "Use the access token above when authentication is requested."}
+              </p>
+              <CodeSnippet
+                code={`Connect to Zenod using ${mcpUrl}${hosted ? " and browser sign-in." : "."}`}
+              />
             </div>
           </div>
         </CardContent>

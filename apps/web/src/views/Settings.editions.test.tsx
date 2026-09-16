@@ -29,7 +29,7 @@ function overview() {
 }
 
 describe("Zenod edition portal", () => {
-  it("makes browser sign-in the hosted MCP default and keeps tokens behind advanced setup", async () => {
+  it("makes browser sign-in the hosted MCP default and keeps manual tokens discoverable", async () => {
     mocks.api.mockImplementation(async (path: string) => {
       if (path === "/api/overview") return overview()
       if (path === "/api/connections")
@@ -53,14 +53,29 @@ describe("Zenod edition portal", () => {
     expect((endpoint as HTMLInputElement).value).toBe(
       "https://cloud.zenod.dev/mcp"
     )
-    expect(screen.queryByLabelText("Bearer token")).toBeNull()
+    const token = screen.getByLabelText(
+      "Access token (manual setup)"
+    ) as HTMLInputElement
+    expect(token.type).toBe("password")
     expect(screen.getByText(/No token copying required/)).not.toBeNull()
     await userEvent.click(
-      screen.getByRole("button", { name: "Advanced token setup" })
+      screen.getByRole("button", { name: "Manual token instructions" })
     )
     expect(
-      ((await screen.findByLabelText("Bearer token")) as HTMLInputElement).value
+      (
+        (await screen.findByLabelText(
+          "Access token (manual setup)"
+        )) as HTMLInputElement
+      ).value
     ).toBe("private-secret")
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show access token" })
+    )
+    expect(token.type).toBe("text")
+    expect(screen.getByText("Any MCP agent")).not.toBeNull()
+    expect(
+      screen.getByText(/--bearer-token-env-var ZENOD_MCP_TOKEN/)
+    ).not.toBeNull()
   })
   it("renders only the approved Hosted sections", async () => {
     mocks.api.mockResolvedValue(overview())
