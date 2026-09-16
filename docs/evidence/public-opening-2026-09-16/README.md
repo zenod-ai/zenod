@@ -51,3 +51,12 @@ User confirmed successful checkout and requested the Z mark in the activated por
 - Web build and five focused edition/overview tests passed.
 - Verified exact live health/source, image and preserved environment/mounts; public signup and checkout readiness remain enabled.
 - Live portal bundle contains the new subtitle and shared inline Z mark. No customer account, subscription or tenant identifier was changed.
+
+## Drive setup recovery
+
+- Public production source verified by live health: `2a4ff6623fc6efa48355c5e697dd38c9c4833f67`; build/boot workflow https://github.com/zenod-ai/zenod/actions/runs/35040840125 passed.
+- Google Drive version metadata caused false publication conflicts. The affected real account's six intended files (four starter files, Git bundle, manifest) were independently downloaded and matched to their intended SHA-256 checksums; manifest binding, transaction and Git commit identity also matched.
+- Reconciled the fully applied publication journal to committed, retaining its original revision and private before-state snapshots. No customer files were deleted.
+- Normal repository open and a second open from an empty cache succeeded with the same revision; starter schema was complete. Only after these checks was the existing account binding marked ready.
+- This proves recovery of the affected account, not completion of all product journeys or a new write journey. Additional unshipped validation changes were set aside at the user's request to minimize scope.
+- Continue through https://cloud.zenod.dev/app#vault without the stale setup-error query parameter.
