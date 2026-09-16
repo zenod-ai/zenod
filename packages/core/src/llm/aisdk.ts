@@ -116,6 +116,9 @@ export interface AiLlmOptions {
   /** Optional OpenAI/OpenRouter effort for classify, reconcile and backlog extraction only.
    * Omitted preserves provider defaults. Select an effort supported by the route. */
   organizerReasoningEffort?: "none" | "low";
+  /** Optional OpenAI/OpenRouter reasoning effort for the ask/answer path (ask, compose,
+   * work and answer turns). Omitted preserves provider defaults. */
+  askReasoningEffort?: "none" | "low";
   /** Explicit OpenRouter organizer route; only these ordered base providers are eligible. */
   organizerProviderOrder?: string[];
   /**
@@ -624,6 +627,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
   private readonly askModelId: string;
   private readonly classifyModelId: string;
   private readonly organizerProviderOptions?: { openai: { reasoningEffort: "none" | "low" } };
+  private readonly askProviderOptions?: { openai: { reasoningEffort: "none" | "low" } };
   private readonly visionModelId: string;
   private readonly maxSteps: number;
   private readonly provider: Provider;
@@ -648,6 +652,12 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         throw new Error("Organizer reasoning effort requires OpenAI/OpenRouter and a supported none/low value");
       }
       this.organizerProviderOptions = { openai: { reasoningEffort: options.organizerReasoningEffort } };
+    }
+    if (options.askReasoningEffort !== undefined) {
+      if (!["openai", "openrouter"].includes(options.provider) || !["none", "low"].includes(options.askReasoningEffort)) {
+        throw new Error("Ask reasoning effort requires OpenAI/OpenRouter and a supported none/low value");
+      }
+      this.askProviderOptions = { openai: { reasoningEffort: options.askReasoningEffort } };
     }
     this.visionModelId = options.visionModel || defaults.vision;
     this.maxSteps = clampMaxSteps(options.maxSteps);
@@ -785,6 +795,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         model: this.model(this.askModelId),
         maxRetries: 0,
         schema: turnPlanModelSchema,
+        ...(this.askProviderOptions ? { providerOptions: this.askProviderOptions } : {}),
         experimental_repairText: REPAIR_HOOK,
         system: [
           "Compile the current user turn into one strict provider-independent TurnPlan.",
@@ -970,6 +981,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
 
     const { text, usage, providerMetadata } = await generateText({
       model: this.model(this.askModelId),
+      ...(this.askProviderOptions ? { providerOptions: this.askProviderOptions } : {}),
       system: [
         input.focusedUpdate
           ? "Produce a frontmatter plus focused section update. The supplied current content is ONE section, not the whole note. Preserve every existing line in order; add only the new cited knowledge. If empty, emit one descriptive ## topic section. Never reconstruct unseen sections."
@@ -1700,6 +1712,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const config = {
       model: this.model(this.askModelId),
       maxOutputTokens: MAX_ANSWER_OUTPUT_TOKENS,
+      ...(this.askProviderOptions ? { providerOptions: this.askProviderOptions } : {}),
       // System prefix as a cached message rather than top-level `system`, so the
       // (large, stable) vault briefing is reused across turns instead of re-billed.
       messages: [
@@ -2077,6 +2090,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const result = await generateText({
       model: this.model(this.askModelId),
       maxOutputTokens: MAX_WORK_OUTPUT_TOKENS,
+      ...(this.askProviderOptions ? { providerOptions: this.askProviderOptions } : {}),
       // Cache the briefing-laden system prefix: propose and execute (plus any
       // execute retries) run back-to-back with the same briefing → cache reads.
       messages: [

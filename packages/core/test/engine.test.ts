@@ -759,6 +759,23 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     const result=await e.ask("Summarize the source");expect(result.text).toContain("snapshot changed");expect(result.text).not.toContain("The option remains tentative.");
   });
 
+  it("answers a screenshot question from the ingested image description and sanitizes a model link in the summary",async()=>{
+    const e=engine();
+    const imageContent='Screenshot/image "aqr-inflation.png" ingested through Zenod media seam.\nRaw artifact: archive://aqr-inflation.png\nMedia type: image/png\nExtracted by vision model.\n\nA chart titled Inflation Redux: core inflation is rebounding. The poster cited https://www.aqr.com/report.pdf';
+    const capture=await e.captureEvidence!({content:imageContent,source:"selftest"});
+    llm.answerOverride=async (_input,tools)=>{
+      const read=JSON.parse(await tools.readNote!(capture.evidenceRef));
+      const support=read.answerSupports.find((hint:any)=>hint.kind==="source_summary");expect(support).toBeDefined();
+      return {text:"",readPaths:[capture.evidenceRef],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The screenshot shows a chart titled Inflation Redux: core inflation is rebounding. Source https://www.aqr.com/report.pdf"}]};
+    };
+    const answer=await e.ask("What was the screenshot about?");
+    expect(answer.text).toContain("core inflation is rebounding");
+    expect(answer.text).not.toContain("invalid support");
+    expect(answer.text).not.toContain("couldn't verify");
+    expect(answer.text).not.toContain("aqr.com");
+    expect(answer.sources.map(source=>source.path)).toContain(capture.evidenceRef);
+  });
+
   it("preserves explicit protocol failure across ask, chat and tasking instead of projecting unrelated facts", async()=>{
     const e=engine();const capture=await e.captureEvidence!({content:"A complete source statement.",source:"selftest"});
     llm.answerOverride=async (input,tools)=>{

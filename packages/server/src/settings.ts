@@ -31,6 +31,7 @@ export const SETTING_KEYS = [
   "openai_api_key",
   "openrouter_api_key",
   "model_ask",
+  "model_ask_reasoning_effort",
   "model_classify",
   "model_classify_reasoning_effort",
   "model_classify_provider_order",
@@ -162,6 +163,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   openai_api_key: "OPENAI_API_KEY",
   openrouter_api_key: "OPENROUTER_API_KEY",
   model_ask: "ZENOD_MODEL_ASK",
+  model_ask_reasoning_effort: "ZENOD_MODEL_ASK_REASONING_EFFORT",
   model_classify: "ZENOD_MODEL_CLASSIFY",
   model_classify_reasoning_effort: "ZENOD_MODEL_CLASSIFY_REASONING_EFFORT",
   model_classify_provider_order: "ZENOD_MODEL_CLASSIFY_PROVIDER_ORDER",
@@ -251,6 +253,7 @@ export class Settings {
     provider?: string
     api_key?: string
     model_ask?: string
+    model_ask_reasoning_effort?: string
     model_classify?: string
     model_classify_reasoning_effort?: string
     model_classify_provider_order?: string
@@ -270,7 +273,7 @@ export class Settings {
     if (input.session_secret) this.store.setSetting("session_secret", input.session_secret);
     if (input.provider) this.store.setSetting("provider", input.provider);
     if (input.provider && input.api_key) this.set(PROVIDER_KEY[input.provider as Provider], input.api_key);
-    for (const k of ["model_ask", "model_classify", "model_classify_reasoning_effort", "model_classify_provider_order", "vault_repo", "vault_branch", "backlog_repo"] as const) {
+    for (const k of ["model_ask", "model_ask_reasoning_effort", "model_classify", "model_classify_reasoning_effort", "model_classify_provider_order", "vault_repo", "vault_branch", "backlog_repo"] as const) {
       if (input[k]) this.setRaw(k, input[k]!);
     }
     for (const k of ["github_app_id", "github_app_private_key", "github_app_installation_id", "github_app_slug", "github_token"] as const) {
@@ -612,6 +615,14 @@ export class Settings {
     const value = this.get("model_classify_reasoning_effort");
     if (!value) return undefined;
     if (value !== "low" && value !== "none") throw new Error("model_classify_reasoning_effort must be none, low or unset");
+    return value;
+  }
+
+  /** Explicit answer-side reasoning; absent preserves provider defaults. */
+  askReasoningEffort(): "none" | "low" | undefined {
+    const value = this.get("model_ask_reasoning_effort");
+    if (!value) return undefined;
+    if (value !== "low" && value !== "none") throw new Error("model_ask_reasoning_effort must be none, low or unset");
     return value;
   }
 

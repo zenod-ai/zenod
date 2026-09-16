@@ -200,6 +200,7 @@ describe("PhylaxChannelsOrgan", () => {
       routes,
       discoverDownstream,
       captureForegroundDeadlineMs: 10,
+      chatForegroundDeadlineMs: 10,
       capturePollIntervalMs: 1,
       callDownstream,
     });

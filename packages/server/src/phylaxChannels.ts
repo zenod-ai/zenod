@@ -469,6 +469,9 @@ function handoffEnvelope(handoff: PhylaxDownstreamCall["handoff"], text: string)
 // a truthful pending acknowledgement quickly and let the existing durable
 // capture poller deliver the terminal receipt when it is ready.
 const DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS = 8_000;
+// Chats commonly finish in tens of seconds; a longer foreground window avoids a
+// confusing "still working" acknowledgement immediately followed by the answer.
+const DEFAULT_CHAT_FOREGROUND_DEADLINE_MS = 45_000;
 const DEFAULT_CAPTURE_POLL_INTERVAL_MS = 1_000;
 const MAX_CHANNEL_TRANSCRIPTION_SECONDS = 2 * 60 * 60;
 const CAPTURE_PENDING_REPLY = "I’m still filing this memory — I’ll confirm here when it is saved.";
@@ -1080,6 +1083,7 @@ export class PhylaxChannelsOrgan {
       transcriptionDeadlineMs?: number;
       voiceJobDeadlineMs?: number;
       captureForegroundDeadlineMs?: number;
+      chatForegroundDeadlineMs?: number;
       capturePollIntervalMs?: number;
       sleep?: (milliseconds: number) => Promise<void>;
       recordInboundUsage?: (input: {
@@ -1287,6 +1291,14 @@ export class PhylaxChannelsOrgan {
     }
     const properties = objectValue(schema.properties);
     return { supportsIdempotencyKey: Boolean(properties?.idempotencyKey) };
+  }
+
+  /** Foreground wait before returning a truthful pending acknowledgement. */
+  private foregroundDeadlineMs(tool: string): number {
+    const configured = tool === "chat_with_zenod"
+      ? this.options.chatForegroundDeadlineMs ?? DEFAULT_CHAT_FOREGROUND_DEADLINE_MS
+      : this.options.captureForegroundDeadlineMs ?? DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS;
+    return Math.max(1, configured);
   }
 
   private async pollCapture(
@@ -1956,10 +1968,7 @@ export class PhylaxChannelsOrgan {
           },
         };
       } else if (existing) {
-        const deadline = Date.now() + Math.max(
-          1,
-          this.options.captureForegroundDeadlineMs ?? DEFAULT_CAPTURE_FOREGROUND_DEADLINE_MS,
-        );
+        const deadline = Date.now() + this.foregroundDeadlineMs(call.tool);
         const completed = await this.pollCapture(existing, route, handoff, deadline);
         if (completed?.receipt) {
           downstream = {

@@ -1834,6 +1834,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (!stored) {
       const provision: Record<string, string> = { token, provider: settings.provider(), api_key: apiKey };
       if (settings.get("model_ask")) provision.model_ask = settings.get("model_ask")!;
+      if (settings.get("model_ask_reasoning_effort")) provision.model_ask_reasoning_effort = settings.get("model_ask_reasoning_effort")!;
       if (settings.get("model_classify")) provision.model_classify = settings.get("model_classify")!;
       if (settings.get("model_classify_provider_order")) provision.model_classify_provider_order = settings.get("model_classify_provider_order")!;
       if (settings.get("model_classify_reasoning_effort")) provision.model_classify_reasoning_effort = settings.get("model_classify_reasoning_effort")!;
