@@ -1,0 +1,285 @@
+{
+  "suite": "m2-basics-v1.1",
+  "candidateSha": "c2f81007ca581f1daf304072a057cac1ef2e911e",
+  "observedDeployedSha": "dcc5ef2af649c0e99dbb2e64401c5c9a5ce74128",
+  "mode": "ACTUAL_ENGINE_CHAT",
+  "fixtureSha256": "e3fea3e0596c93a56b2ee94b4f10cca16f9ebc1029ab16b10e1fe3e2d480783c",
+  "rubricSha256": "dcc8d7cc13acdeca163fe269fb7c5dc9df1a08025d0dbd64f051587768dc2a1a",
+  "pricingSha256": "3167aa42a7013e08b83f485650da338b172faca0933f135ef7485a0288cd64e2",
+  "models": {
+    "classifyModel": "openai/gpt-5.6-luna",
+    "askModel": "x-ai/grok-4.3",
+    "organizerReasoningEffort": "low"
+  },
+  "startedAt": "2026-09-16T02:43:33.558Z",
+  "limits": {
+    "budgetUsd": 1,
+    "maxRequests": 60,
+    "requestDeadlineMs": 120000,
+    "plannedOutcomes": 36
+  },
+  "selected": [
+    "B06:1",
+    "B06:2",
+    "B06:3"
+  ],
+  "status": "AWAITING_SEMANTIC_REVIEW",
+  "surface": {
+    "kind": "isolated-memory-engine.chat",
+    "personaSha256": "13150d5f6a8821f90c44856ce11f7dddeee00ac65c68a6d3357bcc21b0936d47",
+    "localVaultTaskTools": true,
+    "externalTaskTools": false,
+    "driveTools": false,
+    "peerTools": false,
+    "tenantProjectRegistry": false,
+    "productionPromptParity": false
+  },
+  "harnessHashes": {
+    "run.mjs": "7ff7d860144b2e31da48c9685700d316bc2f36438750d81131fbe5ff15c4a6e2",
+    "policy.mjs": "3c351a91cbdbfa9e22a519768d2514a42740f10b27042146c958272271109077",
+    "background.mjs": "78dd4a6d752620cc6fe6f36cddf59932046e487df1fcbf4be34d7e6b7d195b89",
+    "report.mjs": "d57dc74df4c6edeae47dc8f84a400364618bee197f240347eb3b45dd58eac9ec",
+    "fixture.json": "e3fea3e0596c93a56b2ee94b4f10cca16f9ebc1029ab16b10e1fe3e2d480783c",
+    "rubric.json": "dcc8d7cc13acdeca163fe269fb7c5dc9df1a08025d0dbd64f051587768dc2a1a",
+    "../policy.mjs": "b45b36267b5e0bbd7efa62a8c09717ff86cd55f98c1744951c97be538c022e30",
+    "../models.mjs": "8776992bfc805b739b4a91f6e62be1b74543333f9819058c2ad35a6a668aed25"
+  },
+  "batch": "final-summary-1",
+  "harnessCommit": "9a671b2ef44db77011577f695e95a2e51080265d",
+  "score": {
+    "denominator": 36,
+    "passed": 1,
+    "verdict": "NOT_PASSED",
+    "rows": [
+      {
+        "key": "B01:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "85377b7cf3fc2240f75715f82af1fdac6197e0a589b88d433bea236559c792bf",
+        "latencyMs": null
+      },
+      {
+        "key": "B02:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "a1acf7e300ff2843fd1a8c156023cd18fe9fe5fa044c90fbba7681d71444d3a5",
+        "latencyMs": null
+      },
+      {
+        "key": "B03:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "9ffd22d114253f448ae541e71ef2c2fd4cdc90a03322843d5caa57fa1b75efce",
+        "latencyMs": null
+      },
+      {
+        "key": "B04:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "8894356c6adecbfbf93dc88db80a12eafa04f152e088c5b36e03e767e2798503",
+        "latencyMs": null
+      },
+      {
+        "key": "B05:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "930482d8598277e61ac14610b6d261489a7030f657f842eaebc45ced34692f17",
+        "latencyMs": null
+      },
+      {
+        "key": "B06:1",
+        "verdict": "FAIL",
+        "evidenceSha256": "52ae4cc8e3c7ef68538706310a63bc968f507b2427b805d1ee90c57a30a15196",
+        "latencyMs": 112413.46341699999
+      },
+      {
+        "key": "B07:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "c79e752b6a87a5cc31acaf89c62e1264e9984a298987b53b248168857bff9919",
+        "latencyMs": null
+      },
+      {
+        "key": "B08:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "527838b5a3d22a11891b73e411139369df8335a9d075e50e6fa2addeaa3013c9",
+        "latencyMs": null
+      },
+      {
+        "key": "B09:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "34086b3e730932e5b803235d26c4177c9a4bf409e687882971ccf9cd575e20ad",
+        "latencyMs": null
+      },
+      {
+        "key": "B10:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "5561c954b7ecd9864c1fd5606917a4f427e5e5d434b2f7c620755a35df0ade1f",
+        "latencyMs": null
+      },
+      {
+        "key": "B11:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "8e8b2523edaf00c7bc3ab2ec60ddbb772d909b7e55b90d5c19edd3d19b67a2c7",
+        "latencyMs": null
+      },
+      {
+        "key": "B12:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "4dffd51e2305603b79dad3f5280c420227193a6dcb1d241026b914cba1c7517a",
+        "latencyMs": null
+      },
+      {
+        "key": "B01:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "a3f67fcfda04afa5302c18723e0cd41cfa75f6cfd3e22ec567ba08f78c338a39",
+        "latencyMs": null
+      },
+      {
+        "key": "B02:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "14b1479f33f2d7e0c21a028ba0f973ea52628ec513e74172ec1f851720ffaf21",
+        "latencyMs": null
+      },
+      {
+        "key": "B03:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "573cee87f1c015673fd290afe11229b801f0e87abc3014f1c918ca28546a960c",
+        "latencyMs": null
+      },
+      {
+        "key": "B04:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "4b4b0f73ddf740eace7d239c3111fcef426a5d793872ae76c146ecab2760a9d7",
+        "latencyMs": null
+      },
+      {
+        "key": "B05:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "7bc559bb93c05374b78780685e254f62cad67334e737100d21b538b685fb9b2a",
+        "latencyMs": null
+      },
+      {
+        "key": "B06:2",
+        "verdict": "PASS",
+        "evidenceSha256": "7cc4e8bba2ada62abdd96ba508aee3707a11f2420ed11df387e587ffe228d45d",
+        "latencyMs": 44133.80875000001
+      },
+      {
+        "key": "B07:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "f3a02c93b63125077fdf0e3d4b2b36396b4f38d8685cc14501bfcf13682f0ab4",
+        "latencyMs": null
+      },
+      {
+        "key": "B08:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "695f7b0ca96b79b8da23f29b357d3a0374c1f3f473a1e8f55b116659dd92cc53",
+        "latencyMs": null
+      },
+      {
+        "key": "B09:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "bf3fa9ff5f64c1a5cb8d474a253521202b3e5916791bf082dfef3469547b9042",
+        "latencyMs": null
+      },
+      {
+        "key": "B10:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "b046d3f675d8e72077b92ab9650a2380093cb871478dedaa18c56a919dbd0a7b",
+        "latencyMs": null
+      },
+      {
+        "key": "B11:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "0f94a8d713ad71e236ddd93d3c4a2527b3be076ede68eab6e9ea7f271a9a338d",
+        "latencyMs": null
+      },
+      {
+        "key": "B12:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "4876937414d4ab74895c490fffa572b0a8027901e287ad0b82ed3f6d6ff238ce",
+        "latencyMs": null
+      },
+      {
+        "key": "B01:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "1100d8fe7d691a6582c0a5be72b44b3a7391e7edbe7c42368f8d5f467ab058ee",
+        "latencyMs": null
+      },
+      {
+        "key": "B02:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "0fceb971305e64150ff5e920ec9ee02901acd8e7cd38d7b2adbee0fb4191bef3",
+        "latencyMs": null
+      },
+      {
+        "key": "B03:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "8fe473b1cf176aac330af2b21d501348235627032001d2d2a8210f561ae82855",
+        "latencyMs": null
+      },
+      {
+        "key": "B04:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "06b3fb98938af761308249694470c2ac8319b6e072585351a696768b03463865",
+        "latencyMs": null
+      },
+      {
+        "key": "B05:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "3ee577e4f25049d585864a7547547b5b128f3342e57f838521b92c099df8311f",
+        "latencyMs": null
+      },
+      {
+        "key": "B06:3",
+        "verdict": "FAIL",
+        "evidenceSha256": "824b91833455b9e8c347afc104ac39081a3c8b0b675d6954f87c38c2453602dd",
+        "latencyMs": 71467.67287499999
+      },
+      {
+        "key": "B07:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "1d15a10b6dc8079940997b872d4a113f130466923f7e542c74b0ba2f04039f7e",
+        "latencyMs": null
+      },
+      {
+        "key": "B08:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "acfb731fe2b4de88ccb9f582ffbaa8d3626f5f6eee191a7d907d0c7c5cdd0e7b",
+        "latencyMs": null
+      },
+      {
+        "key": "B09:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "05d5088e9b688c5d4c8f2ceb2e96dd4c8f0f2cd5ed1f243aefb92ad6e85eec5b",
+        "latencyMs": null
+      },
+      {
+        "key": "B10:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "cbafef85025fcf00d34973ba0fe06c38f5f179ab2b59a9dc6ed5a51c49ad472d",
+        "latencyMs": null
+      },
+      {
+        "key": "B11:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "770bd6ae21f463fe0dda25930e48a9dad9dff9b1cff5d782c40c726577a6f9a9",
+        "latencyMs": null
+      },
+      {
+        "key": "B12:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "cd3d13707b91196afe313f5a7e2dfb457307bbdef487e07193f5dfbc9139fb35",
+        "latencyMs": null
+      }
+    ],
+    "cost": {
+      "providerReportedCostUsd": 0.13622806,
+      "retainedUnknownCostReservationsUsd": 0,
+      "exposureUsd": 0.13622805999999998,
+      "unknownCostRequests": 0
+    },
+    "costPerPassedScenario": 0.13622806,
+    "limitation": "Finite synthetic engine.chat evidence; not production MCP, WhatsApp delivery or universal reliability."
+  },
+  "artifacts": {
+    "run.json": "0040851a5ee0a494f800bd9da1f290910eb68609bf1b4a7bf5c143646cecf19a",
+    "independent-review.json": "6d93246b0301edc24dc0b142ca5d7327be1e0288c0cdadf1f38c0cea7ade00ae",
+    "independent-report.json": "62d2a60f311f0e4b2b279c7d29992c75583d2b10038afeeff7a09141ebacd49b"
+  }
+}
