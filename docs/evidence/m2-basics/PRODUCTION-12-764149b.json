@@ -1,0 +1,587 @@
+{
+  "suite": "m2-basics-v1.1",
+  "mode": "PRODUCTION_MCP",
+  "scope": "PRODUCTION_MCP_12x1",
+  "candidateSha": "764149ba0bb2a14b580917e102ba44b852efe579",
+  "imageDigest": "sha256:a3e801bb2f04e9f3328bb5e69aee93b2e97cfe4d2e4c604d94ab95ca0626e787",
+  "origin": "https://cloud.zenod.dev",
+  "reviewer": "opencode agent (independent of in-container operator)",
+  "reviewedAt": "2026-09-16T21:50:45.342013+00:00",
+  "cellsRecorded": 12,
+  "semanticPass": 11,
+  "semanticPartial": [
+    "B05:1"
+  ],
+  "semanticFail": [],
+  "allCustodyGatesPass": true,
+  "reservedExposureUsd": 7.75,
+  "providerReportedCostUsd": null,
+  "cells": [
+    {
+      "key": "B01:1",
+      "caseId": "B01",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Durable source includes reservation date, time and code unchanged.",
+          "status": "PASS"
+        },
+        {
+          "text": "Acknowledgement truthfully states actual saved/pending outcome; no false completion.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Exact 140-char source retained once; ack 'Saved the original note. Organization is queued.' truthful; filed Areas/Studio.md.",
+      "reservedExposureUsd": 0.25,
+      "turns": [
+        {
+          "message": "Please save this memory: My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "answer": "Saved the original note. Organization is queued.\n\nEvidence:\n- Evidence: <https://github.com/AlfaBlok/m2-b01-20260916-p02/blob/93130e2498188efe35f20dc0665effc59394e519/Log/2026-09-16.md#L3>\n- Evidence: <https://github.com/AlfaBlok/m2-b01-20260916-p02/blob/main/Log/2026-09-16.md>\n- Reference: `Log/2026-09-16.md#^e-cc41eb`\n- Receipt: `93130e2498188efe35f20dc0665effc59394e519`\n- Commit: `93130e2498188efe35f20dc0665effc59394e519`\n- Ticket: `522c8378-9d54-4352-b853-aac61c14cc4e`"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-16-e-cc41eb.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "4e184160b8ad2cd34281c407a417eebf9662fc2442dd0813b429bc323a31eade"
+    },
+    {
+      "key": "B02:1",
+      "caseId": "B02",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "18 November 2026, 14:30 and KILN-47 all answered.",
+          "status": "PASS"
+        },
+        {
+          "text": "Citation resolves to actually read relevant evidence.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "18 Nov 2026, 14:30 and KILN-47 all present; citation resolves to read raw evidence Log/2026-09-16.md#^e-46651a.",
+      "reservedExposureUsd": 0.5,
+      "turns": [
+        {
+          "message": "When is my Northbridge Studio kiln reservation, and what is its code?",
+          "answer": "Source summary:\nMy ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.\n[Log/2026-09-16.md#^e-46651a](https://github.com/AlfaBlok/m2-b02-20260916-r02/blob/f2f3ef1c8a8cfb045385ad3ff4acf7cc10bcb863/Log/2026-09-16.md)\n\nRaw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):\nMy ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30.\n[Log/2026-09-16.md#^e-46651a](https://github.com/AlfaBlok/m2-b02-20260916-r02/blob/f2f3ef1c8a8cfb045385ad3ff4acf7cc10bcb863/Log/2026-09-16.md)\n\nRaw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):\nThe reservation code is KILN-47.\n[Log/2026-09-16.md#^e-46651a](https://github.com/AlfaBlok/m2-b02-20260916-r02/blob/f2f3ef1c8a8cfb045385ad3ff4acf7cc10bcb863/Log/2026-09-16.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "cc077346e6401621d47be341d962a01f4fd2f874298e06d797180a405754b3bb"
+    },
+    {
+      "key": "B03:1",
+      "caseId": "B03",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Paraphrase finds the same18 November2026 14:30 KILN-47 fact without hidden source refs.",
+          "status": "PASS"
+        },
+        {
+          "text": "No invented alternative booking.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Paraphrase recovered the same kiln fact; no hidden refs supplied; no invented booking.",
+      "reservedExposureUsd": 0.5,
+      "turns": [
+        {
+          "message": "What time did I book the pottery firing space, and which booking reference should I bring?",
+          "answer": "Source summary:\nMy ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.\n[Log/2026-09-16.md#^e-43c20b](https://github.com/AlfaBlok/m2-b03-20260916-r03/blob/44804ae0ad950aea0a62cb136efac8c4b91d60c9/Log/2026-09-16.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "51a261d52bff42dd67ca4419d3f961a51a35a9dca21883f854fe96fb8dc982d1"
+    },
+    {
+      "key": "B04:1",
+      "caseId": "B04",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Kiln booking, conditional garden attendance and Icelandic goal all preserved.",
+          "status": "PASS"
+        },
+        {
+          "text": "Each idea filed correctly or explicitly unresolved for a genuine missing destination/ambiguity; generic failure is not acceptable.",
+          "status": "PASS"
+        },
+        {
+          "text": "No certainty promotion or cross-topic conflation.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "All three ideas preserved and filed to Areas/Studio.md, Areas/Garden.md, Notes/Language Study.md; no conflation.",
+      "reservedExposureUsd": 0.25,
+      "turns": [
+        {
+          "message": "Please save these three separate updates: Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.",
+          "answer": "Saved the original note. Organization is queued.\n\nEvidence:\n- Evidence: <https://github.com/AlfaBlok/m2-b04-20260916-r04/blob/3d27fc891c93edb531673188b190fdf5c91aad43/Log/2026-09-16.md#L3>\n- Evidence: <https://github.com/AlfaBlok/m2-b04-20260916-r04/blob/main/Log/2026-09-16.md>\n- Reference: `Log/2026-09-16.md#^e-e75221`\n- Receipt: `3d27fc891c93edb531673188b190fdf5c91aad43`\n- Commit: `3d27fc891c93edb531673188b190fdf5c91aad43`\n- Ticket: `347b9dc2-ebbb-4a89-aeac-0dcde2d20b65`"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Areas/Garden.md",
+          "Notes/Language Study.md",
+          "Inbox/filing-2026-09-16-e-e75221.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "d0452bbbdd42269742459674368fc3898041cf645624cd6a730e9bdb3f8e091a"
+    },
+    {
+      "key": "B05:1",
+      "caseId": "B05",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PARTIAL",
+      "checks": [
+        {
+          "text": "A real forced boundary failure leaves at least one completed sibling and another pending.",
+          "status": "UNMEASURED"
+        },
+        {
+          "text": "Retry preserves completed operation IDs/text/citations, input and raw identity.",
+          "status": "PASS"
+        },
+        {
+          "text": "Repeated capture and same idempotency key produce no duplicate evidence/job; completed replay adds no duplicate effects.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Production supports the duplicate-replay leg only: same job, same result, unchanged pages; no forced-fault sibling/pending proof (isolated-only).",
+      "reservedExposureUsd": 0.5,
+      "turns": [],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Areas/Garden.md",
+          "Notes/Language Study.md"
+        ]
+      ],
+      "duplicateReplay": {
+        "sameJob": true,
+        "sameResult": true,
+        "unchangedPages": true
+      },
+      "receiptSha256": "f9adcf3bdeaff0b524efddbbfc70394f622622fbe4a9fd21993d65934f2dff37"
+    },
+    {
+      "key": "B06:1",
+      "caseId": "B06",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Repair preference is not a purchase decision.",
+          "status": "PASS"
+        },
+        {
+          "text": "280 euro estimate remains unconfirmed.",
+          "status": "PASS"
+        },
+        {
+          "text": "Two free trainee-teacher places,27 November2026 deadline and grant-approval condition all covered.",
+          "status": "PASS"
+        },
+        {
+          "text": "Answer is a useful summary, not transcript dump; required source scope read.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Summary distinguishes preference vs decision, marks 280 euro unconfirmed, covers two trainee places + 27 Nov deadline + grant condition.",
+      "reservedExposureUsd": 0.5,
+      "turns": [
+        {
+          "message": "Summarize my Northbridge studio planning voice note. Include the beginning, cost estimate and closing arrangements; distinguish decisions from preferences and conditions.",
+          "answer": "Source summary:\nBeginning: \"This is my synthetic Northbridge studio planning note.\" Preference: \"I prefer repairing my current wheel before buying another, but I have not made a purchase decision.\" Cost estimate: \"The electrician estimated 280 euros for the kiln socket inspection; this is an unconfirmed estimate, not an agreed invoice.\" Closing arrangements: \"two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.\" Repeated documentation of working-room layout (labelled shelf, drying rack, shared sink, noticeboard) is for the studio record. No purchase decision made; estimate unconfirmed; free places conditional on grant approval.\n[Log/2026-09-16.md#^e-363874](https://github.com/AlfaBlok/m2-b06-20260916-r06/blob/85e17fdccdde40d49d6cebe492714282577ae63d/Log/2026-09-16.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-16-e-363874.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "12bbcb9232aff768d92863beda938a9218952f7f2c65ebea3e088bf7a5ad9fad"
+    },
+    {
+      "key": "B07:1",
+      "caseId": "B07",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Latest voice_note selected by capturedAt, not processing order or topical distractor.",
+          "status": "PASS"
+        },
+        {
+          "text": "Repair existing blue wheel first; replacement remains undecided.",
+          "status": "PASS"
+        },
+        {
+          "text": "Does not substitute newer ordinary audio/text or old red-wheel note.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Correct latest voice note selected (blue wheel repair first; replacement undecided); no distractor/old red-wheel substitution.",
+      "reservedExposureUsd": 1.25,
+      "turns": [
+        {
+          "message": "What did I say in my latest voice note about the studio equipment?",
+          "answer": "Raw source report (not independently verified current state):\nMy latest voice note: I will repair the existing blue wheel first. I have not decided whether to replace it.\n[Log/2026-09-16.md#^e-b73a63](https://github.com/AlfaBlok/m2-b07-20260916-x07/blob/a50cd619b5a491a39617fac3b1ab62e7d0ac21e3/Log/2026-09-16.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Inbox/filing-2026-09-16-e-b73a63.md"
+        ],
+        [
+          "Areas/Studio.md"
+        ],
+        [
+          "Inbox/filing-2026-09-16-e-f1f630.md"
+        ],
+        [
+          "Inbox/filing-2026-09-16-e-62bd28.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "77e7da53b5799cbeadcfd3a482aaaea7a9eda78d0ccf372ea72a0ca51bb03838"
+    },
+    {
+      "key": "B08:1",
+      "caseId": "B08",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "First turn is a meaningful qualified summary.",
+          "status": "PASS"
+        },
+        {
+          "text": "Follow-up resolves same note: two trainee-teacher places,27 November deadline, conditional grant.",
+          "status": "PASS"
+        },
+        {
+          "text": "Reads/retains tail support rather than stating absent or guaranteed.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Turn 1 meaningful qualified summary; follow-up resolves tail: two trainee places, 27 Nov, conditional grant.",
+      "reservedExposureUsd": 0.75,
+      "turns": [
+        {
+          "message": "Summarize my Northbridge studio planning voice note.",
+          "answer": "Source summary:\nSynthetic voice note on Northbridge studio planning. Speaker prefers repairing current wheel over buying new (no purchase decision made). Working room layout: labelled shelf, drying rack, shared sink, noticeboard; documenting for studio record. Electrician gave unconfirmed 280 euro estimate for kiln socket inspection. Two free workshop places for trainee teachers reserved only if grant approved; applications close 27 Nov 2026; no promise if grant rejected.\n[Log/2026-09-16.md#^e-5c3d29](https://github.com/AlfaBlok/m2-b08-20260916-x08/blob/65ee3775ab92f94db2a0cb29c0eeb20bc59f055d/Log/2026-09-16.md)"
+        },
+        {
+          "message": "What about the free places mentioned at the end\u2014who are they for, what is the deadline, and are they guaranteed?",
+          "answer": "Source summary:\nTwo workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.\n[Log/2026-09-16.md#^e-5c3d29](https://github.com/AlfaBlok/m2-b08-20260916-x08/blob/65ee3775ab92f94db2a0cb29c0eeb20bc59f055d/Log/2026-09-16.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-16-e-5c3d29.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "32982f3f80541b4515b900ed13cbd10ce3510e36d5ad95d7c967123045c46aa7"
+    },
+    {
+      "key": "B09:1",
+      "caseId": "B09",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Final answer concerns garden on21 November2026 with shift-before-noon condition.",
+          "status": "PASS"
+        },
+        {
+          "text": "Does not answer kiln or import isolated violin-thread details.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Final answer concerns Riverside Garden 21 Nov with shift-before-noon condition; no kiln or violin-thread bleed.",
+      "reservedExposureUsd": 1.5,
+      "turns": [
+        {
+          "message": "Tell me about my kiln reservation.",
+          "answer": "Source summary:\nYour ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.\n[Log/2026-09-16.md#^e-0e8dcf](https://github.com/AlfaBlok/m2-b09-20260916-x09/blob/17e3615ffbe17bcbb2af7cce644754e16871506a/Log/2026-09-16.md)"
+        },
+        {
+          "message": "Now tell me about the Riverside Garden pump inspection.",
+          "answer": "Source summary:\nRiverside Garden pump inspection is on 21 November 2026. Attendance is conditional on shift ending before noon.\n[Log/2026-09-16.md#^e-05092a](https://github.com/AlfaBlok/m2-b09-20260916-x09/blob/17e3615ffbe17bcbb2af7cce644754e16871506a/Log/2026-09-16.md)\n\nSource summary:\nRiverside Garden pump inspection is on 21 November 2026. I will attend only if my shift ends before noon.\n[Log/2026-09-16.md#^e-05092a](https://github.com/AlfaBlok/m2-b09-20260916-x09/blob/17e3615ffbe17bcbb2af7cce644754e16871506a/Log/2026-09-16.md)"
+        },
+        {
+          "message": "My unrelated private conversation is about a violin rehearsal on 3 December.",
+          "answer": "Got it\u2014violin rehearsal on 3 December. Anything specific you'd like me to note or help with?"
+        },
+        {
+          "message": "For the second thing we discussed, when is it and what condition did I put on attending?",
+          "answer": "21 November 2026, attend only if shift ends before noon."
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ],
+        [
+          "Areas/Garden.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "89b4f82db1cc9e359fc4235d31b3b4328a35924c3de435080ce0ce9644de959a"
+    },
+    {
+      "key": "B10:1",
+      "caseId": "B10",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Opinion resolves wheel choice and uses90 vs600 and unconfirmed repair feasibility as sourced premises.",
+          "status": "PASS"
+        },
+        {
+          "text": "Provides useful conditional advice explicitly distinguished from stored decision.",
+          "status": "PASS"
+        },
+        {
+          "text": "No blanket refusal, fabricated decision or raw-excerpt-only answer.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Grounded assessment uses 90 vs 600 and unconfirmed feasibility, labelled as inference, no blanket refusal or fabricated decision.",
+      "reservedExposureUsd": 0.5,
+      "turns": [
+        {
+          "message": "Remember this thought: For Northbridge Studio, I prefer repairing my current wheel because the repair estimate is 90 euros; a new wheel would cost 600 euros. The technician has not confirmed that repair is possible. I have not decided.",
+          "answer": "Saved the original note. Organization is queued.\n\nEvidence:\n- Evidence: <https://github.com/AlfaBlok/m2-b10-20260916-r10/blob/3745c539db3bd3d206f8c60bd4f4c62ed7caaf2f/Log/2026-09-16.md#L3>\n- Evidence: <https://github.com/AlfaBlok/m2-b10-20260916-r10/blob/main/Log/2026-09-16.md>\n- Reference: `Log/2026-09-16.md#^e-555770`\n- Receipt: `3745c539db3bd3d206f8c60bd4f4c62ed7caaf2f`\n- Commit: `3745c539db3bd3d206f8c60bd4f4c62ed7caaf2f`\n- Ticket: `8428b4bb-7d20-4aae-9ed7-9ec0aacebd63`"
+        },
+        {
+          "message": "What do you think about it?",
+          "answer": "Repairing at \u20ac90 is the clear cost winner if the technician can confirm it's feasible. Since confirmation is still pending, the practical next step is to get that yes/no before weighing the 600\u20ac replacement or other options. No decision needed until the repair feasibility is settled."
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-16-e-555770.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "c368d8da18e83bad6d508f12b9237b1ab81a15dfb49a0b6f8b09aa422e53f2ef"
+    },
+    {
+      "key": "B11:1",
+      "caseId": "B11",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "Current19 distinguished from prior incorrect12.",
+          "status": "PASS"
+        },
+        {
+          "text": "Correction/history and source provenance retained; no unresolved-current conflation.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "Current 19 distinguished from prior 12 with correction provenance retained.",
+      "reservedExposureUsd": 0.75,
+      "turns": [
+        {
+          "message": "How many workshop places does Northbridge Studio have now, and what number did I report before correcting it?",
+          "answer": "Latest supported memory reports as of 2026-09-16 (Areas/Studio.md):\n- Recorded correction report \u2014 User report: \"Correction to my earlier Northbridge Studio capacity report: not 12 places, but 19 places. The earlier figure was wrong.\" [Log/2026-09-16.md#^e-7dd381](https://github.com/AlfaBlok/m2-b11-20260916-x11/blob/6d174e710201cb7e0aaaaddb3c227a5a6fdd2629/Log/2026-09-16.md#%5Ee-7dd381). Effective: unknown; evidence captured: 2026-09-15T11:00:00.000Z. Verification scope: unknown.\n- Prior note statement (superseded; original evidence/date unknown): \"Northbridge Studio has 12 workshop places.\" \u2014 Areas/Studio.md, github revision 8611105c91e98605355555fae2fcf4315a49e103; correction evidence Log/2026-09-16.md#^e-7dd381.\nPrior legacy statements are preserved from the recorded repository revision/content hash. Their original Log evidence and effective dates are unknown; they are note history, not independently verified historical facts.\nMemory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.\n\nPrior note statement (superseded; original evidence/date unknown): Northbridge Studio has 12 workshop places.\nAreas/Studio.md, github revision 8611105c91e98605355555fae2fcf4315a49e103; correction evidence Log/2026-09-16.md#^e-7dd381."
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ],
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "155364646050326f11565e2c40efb1d8d1df73b58236edc55dee94d3672efa6a"
+    },
+    {
+      "key": "B12:1",
+      "caseId": "B12",
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "text": "280 euros labelled estimate/unconfirmed.",
+          "status": "PASS"
+        },
+        {
+          "text": "Appointment date explicitly unknown/not agreed, without invention.",
+          "status": "PASS"
+        }
+      ],
+      "rationale": "280 euro labelled unconfirmed estimate; appointment date explicitly not agreed, no invention.",
+      "reservedExposureUsd": 0.5,
+      "turns": [
+        {
+          "message": "What will the kiln socket inspection cost, and on what date is the electrician booked?",
+          "answer": "Raw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):\nThe electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed.\n[Log/2026-09-16.md#^e-1b2c2a](https://github.com/AlfaBlok/m2-b12-20260916-r12/blob/6c9ffc89290412fb4c4654d5c22d6fdb0548b66d/Log/2026-09-16.md)\n\nRaw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):\nNo appointment date was agreed.\n[Log/2026-09-16.md#^e-1b2c2a](https://github.com/AlfaBlok/m2-b12-20260916-r12/blob/6c9ffc89290412fb4c4654d5c22d6fdb0548b66d/Log/2026-09-16.md)\n\nSource summary:\nThe electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed. No appointment date was agreed.\n[Log/2026-09-16.md#^e-1b2c2a](https://github.com/AlfaBlok/m2-b12-20260916-r12/blob/6c9ffc89290412fb4c4654d5c22d6fdb0548b66d/Log/2026-09-16.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "receiptSha256": "b205c4713e07c108cee965cd5f8e74b04e9d5f51448c1d537817c1aa56e1be48"
+    }
+  ],
+  "limitations": [
+    "One trial per case (12 cells), not the full 36-cell matrix.",
+    "B05 forced-fault interruption is isolated-only by frozen contract.",
+    "Provider-billed cost not reconciled; reservations are exposure, not billing.",
+    "MCP transport only; not ASR/WhatsApp delivery."
+  ],
+  "deployment": {
+    "provider": "Dokploy",
+    "deploymentId": "eULZa7c9gvvuYpFaMdya2",
+    "title": "ZMR deploy 764149b",
+    "createdAt": "2026-09-16T21:02:11.747Z",
+    "status": "done",
+    "applicationId": "2dkayH_eAur427leH64MT",
+    "service": "zenod-mt-fxpzoo",
+    "publicUrl": "https://cloud.zenod.dev",
+    "health": {
+      "status": "ok",
+      "sha": "764149ba0bb2a14b580917e102ba44b852efe579"
+    }
+  },
+  "models": {
+    "organizer_classify": "openai/gpt-5.6-luna",
+    "organizer_reasoning_effort": "low",
+    "answer_ask": "x-ai/grok-4.3",
+    "provider": "openrouter"
+  },
+  "reportGeneratedAt": "2026-09-16T22:06:32.676833+00:00"
+}
