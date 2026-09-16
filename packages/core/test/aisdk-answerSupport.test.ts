@@ -262,9 +262,17 @@ it.each([undefined,2000])("defaults a first raw query to complete-source mode de
  const result=await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(requests).toHaveLength(2);expect(readNote).toHaveBeenCalledTimes(1);
  expect(JSON.stringify(requests[1].messages)).toContain("Ending: confirm access");expect(result.supportSelections?.[0]?.summaryText).toContain("access confirmation");
 });
-it("explicit false preserves a 2000-character excerpt request",async()=>{
+it("an obsolete explicit false cannot opt out of the atomic raw-source read",async()=>{
  const ref="Log/2026-09-15.md#^e-123abc";
- const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({completeSource:false,maxChars:2000});return JSON.stringify({body:"A narrow excerpt.",answerSupports:[{id,modes:["raw_report"]}]});});
- wire([{calls:[{name:"read_note",input:{path:ref,completeSource:false,maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:null}]}}]}]);
+ const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({completeSource:true});return JSON.stringify({body:"A narrow excerpt.",answerSupports:[{id,modes:["raw_report"]}]});});
+ const requests=wire([{calls:[{name:"read_note",input:{path:ref,completeSource:false,maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:null}]}}]}]);
+ await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(readNote).toHaveBeenCalledTimes(1);
+ expect(requests[0].tools.find((tool:any)=>tool.function.name==="read_note").function.parameters.properties).not.toHaveProperty("completeSource");
+});
+
+it("frontmatter inspection remains narrow and does not receive the host complete-source hint",async()=>{
+ const ref="Log/2026-09-15.md";
+ const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({part:"frontmatter",maxChars:2000});return JSON.stringify({body:"metadata",answerSupports:[]});});
+ wire([{calls:[{name:"read_note",input:{path:ref,part:"frontmatter",maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[]}}]}]);
  await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(readNote).toHaveBeenCalledTimes(1);
 });
