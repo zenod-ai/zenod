@@ -201,5 +201,6 @@ it("resolves only a unique anchored source with the existing literal query seman
  expect(uniqueEvidenceRef(path,first+second,"STUDIO (PLAN)")).toBe(path+"#^e-123abc");
  expect(uniqueEvidenceRef(path,first+second,"tentative")).toBeUndefined();
  expect(uniqueEvidenceRef(path,first+second,"missing")).toBeUndefined();
+ expect(uniqueEvidenceRef(path,first+second.replace("e-456def","e-123abc"),"Garden")).toBeUndefined();
  expect(uniqueEvidenceRef("Notes/Other.md",first,"Repair")).toBeUndefined();
 });

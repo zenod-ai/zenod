@@ -61,9 +61,11 @@ function sections(body: string, evidence: boolean): Section[] {
 export function uniqueEvidenceRef(path: string, body: string, query?: string): string | undefined {
   if (!/^Log\/[^#]+\.md$/.test(path)) return undefined;
   const literal = query?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const matches = sections(body, true).filter(section => section.anchor &&
+  const entries = sections(body, true).filter(section => section.anchor);
+  const matches = entries.filter(section =>
     (!literal || new RegExp(literal, "iu").test(body.slice(section.start, section.end))));
-  return matches.length === 1 ? `${path}#^${matches[0]!.anchor}` : undefined;
+  return matches.length === 1 && entries.filter(section => section.anchor === matches[0]!.anchor).length === 1
+    ? `${path}#^${matches[0]!.anchor}` : undefined;
 }
 
 function boundary(text: string, offset: number): number {
