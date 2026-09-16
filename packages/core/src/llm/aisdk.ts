@@ -1059,6 +1059,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const cursors=new AnswerCursorAliases();
     const readPaths = new Set<string>();
     let supportRead = input.answerSupportRead === true;
+    let sourceDiscovered = false;
     let submittedAnswer: AnswerResult | undefined;
     let submissionAllowedThisStep = supportRead;
     let finalAnswerStep = false;
@@ -1727,6 +1728,10 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           }
           return { activeTools, toolChoice: "required" as const };
         }
+        if (input.answerSupportContract && sourceDiscovered && !supportRead && !authoritativePeerResult && !finalAnswerStep) {
+          const reads = [tools.readNote && "read_note", tools.readFacts && "read_facts", tools.searchEntries && "search_entries"].filter(Boolean) as string[];
+          if (reads.length) return {activeTools:reads,toolChoice:"required" as const};
+        }
         return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(stepNumber >= this.maxSteps-1 ? {toolChoice:"none" as const} : {}) };
       },
       tools: {
@@ -1757,6 +1762,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 execute: async ({ query }) => {
                   const recordSearch = (searchQuery: string, result: string): void => {
                     supportRead ||= result.includes("answerSupports");
+                    // A ranked vault path is discovery, never evidence. Require an
+                    // existing read step before prose can end a memory lookup.
+                    sourceDiscovered ||= /^.+\.md(?:#[^\s]+)? \(score [^\n]+/m.test(result);
                     input.onReadAction?.("search_vault", { query: searchQuery }, result);
                   };
                   const result = await tools.searchVault!(query);

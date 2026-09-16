@@ -285,3 +285,18 @@ it("advertises whole-source coverage and sentence-only verbatim submission contr
  expect(terminal.description).toContain("every explicitly requested facet and qualifier");
  expect(terminal.parameters.properties.supportSelections.items.properties.summaryText.description).toContain("sentence-granularity handles require null");
 });
+
+it("requires a source read after ranked discovery in mixed chat without adding rounds",async()=>{
+ const {answerSupportScope:_,...mixed}=input;
+ const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[read]},{calls:[submit]}]);
+ await llm(3).answer(mixed,{...tools,searchVault:async()=>"Notes/Atlas.md (score 9) — teaching plan",readNote:async()=>"unused"});
+ expect(requests).toHaveLength(3);expect(requests[1].tool_choice).toBe("required");
+ expect(requests[1].tools.map((t:any)=>t.function.name).sort()).toEqual(["read_facts","read_note"]);
+ expect(requests[2].tools.map((t:any)=>t.function.name)).toEqual(["submit_memory_answer"]);
+});
+it("does not force an invented source read after empty discovery",async()=>{
+ const {answerSupportScope:_,...mixed}=input;
+ const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{text:"No matching source found."}]);
+ await llm(3).answer(mixed,{...tools,searchVault:async()=>"no results",readNote:async()=>"unused"});
+ expect(requests).toHaveLength(2);expect(requests[1].tool_choice??"auto").toBe("auto");
+});
