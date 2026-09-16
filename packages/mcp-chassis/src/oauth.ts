@@ -91,6 +91,31 @@ export interface OAuthStore {
 
 export interface OAuthServerOptions {
   enabled?: boolean;
+  /** Authenticate consent with the product's browser session, never an MCP credential. */
+  browserAuth?: OAuthBrowserAuth;
+}
+
+export interface OAuthBrowserIdentity {
+  subject: string;
+  label: string;
+  tenant: TenantContext;
+}
+
+export interface OAuthBrowserAuth {
+  resolve(c: Context): Promise<OAuthBrowserIdentity | Response | null> | OAuthBrowserIdentity | Response | null;
+  signInUrl(returnTo: string): string;
+}
+
+interface BrowserConsent {
+  subject: string;
+  tenantId: string;
+  request: string;
+  expiresAt: number;
+}
+
+interface BrowserAuthorization {
+  auth: OAuthBrowserAuth;
+  pending: Map<string, BrowserConsent>;
 }
 
 export interface OAuthClientFrameworkOptions {
@@ -107,6 +132,7 @@ export interface ResolvedOAuthKit {
   store: OAuthStore;
   serverEnabled: boolean;
   providers: Map<string, OAuthProvider>;
+  browserAuth?: OAuthBrowserAuth;
 }
 
 export class MemoryOAuthStore implements OAuthStore {
@@ -192,7 +218,10 @@ export function resolveOAuthKit(options: OAuthKitOptions | undefined): ResolvedO
     providers.set(id, { ...provider, id });
   }
   if (!serverEnabled && providers.size === 0) return null;
-  return { store: options.store ?? new MemoryOAuthStore(), serverEnabled, providers };
+  return {
+    store: options.store ?? new MemoryOAuthStore(), serverEnabled, providers,
+    browserAuth: typeof options.server === "object" ? options.server.browserAuth : undefined,
+  };
 }
 
 export function publicBaseUrl(c: Context): string {
@@ -239,13 +268,22 @@ export function installOAuthRoutes(
   },
 ): void {
   if (options.kit.serverEnabled) {
+    const browser: BrowserAuthorization | undefined = options.kit.browserAuth
+      ? { auth: options.kit.browserAuth, pending: new Map() }
+      : undefined;
+    app.use("/oauth/*", async (c, next) => {
+      await next();
+      c.header("Cache-Control", "no-store");
+      c.header("Referrer-Policy", "no-referrer");
+      c.header("X-Frame-Options", "DENY");
+    });
     app.get("/.well-known/oauth-protected-resource", (c) => c.json(protectedResourceMetadata(publicBaseUrl(c))));
     app.get("/.well-known/oauth-protected-resource/mcp", (c) => c.json(protectedResourceMetadata(publicBaseUrl(c))));
     app.get("/.well-known/oauth-authorization-server", (c) => c.json(authServerMetadata(publicBaseUrl(c))));
     app.get("/.well-known/oauth-authorization-server/mcp", (c) => c.json(authServerMetadata(publicBaseUrl(c))));
     app.post("/oauth/register", (c) => handleRegister(c, options.kit.store));
-    app.get("/oauth/authorize", (c) => handleAuthorizeGet(c, options.kit.store));
-    app.post("/oauth/authorize/decision", (c) => handleAuthorizeDecision(c, options.kit.store, options.tenantStore));
+    app.get("/oauth/authorize", (c) => handleAuthorizeGet(c, options.kit.store, browser));
+    app.post("/oauth/authorize/decision", (c) => handleAuthorizeDecision(c, options.kit.store, options.tenantStore, browser));
     app.post("/oauth/token", (c) => handleToken(c, options.kit.store));
   }
 
@@ -267,6 +305,9 @@ async function handleRegister(c: Context, store: OAuthStore): Promise<Response> 
   if (!body || !Array.isArray(body.redirect_uris) || body.redirect_uris.length === 0) {
     return c.json({ error: "invalid_client_metadata", error_description: "redirect_uris is required" }, 400);
   }
+  if (!body.redirect_uris.every(validRedirectUri)) {
+    return c.json({ error: "invalid_redirect_uri", error_description: "Use an HTTPS callback or an HTTP loopback callback without credentials or a fragment." }, 400);
+  }
 
   const clientId = `zc_${randomBytes(16).toString("hex")}`;
   const clientName = body.client_name?.slice(0, 200) || "MCP client";
@@ -285,17 +326,39 @@ async function handleRegister(c: Context, store: OAuthStore): Promise<Response> 
   );
 }
 
-function handleAuthorizeGet(c: Context, store: OAuthStore): Response {
+async function handleAuthorizeGet(c: Context, store: OAuthStore, browser?: BrowserAuthorization): Promise<Response> {
   const url = new URL(c.req.url);
   const p = readAuthorizeParams(url.searchParams);
   const err = validateAuthorize(store, p);
   if (err) return c.html(errorPage(err), 400);
   const client = store.getClient(p.clientId)!;
+  // Browsers apply form-action to redirects too. Permit only this registered
+  // callback origin in addition to the local consent POST.
+  c.header("Content-Security-Policy", `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${new URL(p.redirectUri).origin}; base-uri 'none'; frame-ancestors 'none'`);
+  if (browser) {
+    const identity = await browser.auth.resolve(c);
+    if (identity instanceof Response) return identity;
+    if (!identity) return c.redirect(browser.auth.signInUrl(`${url.pathname}${url.search}`));
+    for (const [key, value] of browser.pending) {
+      if (value.expiresAt <= Date.now()) browser.pending.delete(key);
+    }
+    // Bound transient consent state; a restart or expired form simply requires reopening consent.
+    if (browser.pending.size >= 1000) browser.pending.delete(browser.pending.keys().next().value!);
+    const nonce = opaqueToken();
+    browser.pending.set(nonce, {
+      subject: identity.subject,
+      tenantId: identity.tenant.id,
+      request: `${publicBaseUrl(c)}:${JSON.stringify(p)}`,
+      expiresAt: Date.now() + CODE_TTL_MS,
+    });
+    return c.html(consentPage({ clientName: client.clientName, params: p, error: null, identity, nonce }));
+  }
   return c.html(consentPage({ clientName: client.clientName, params: p, error: null }));
 }
 
-async function handleAuthorizeDecision(c: Context, store: OAuthStore, tenants: TenantTokenStore): Promise<Response> {
-  const form = await c.req.formData();
+async function handleAuthorizeDecision(c: Context, store: OAuthStore, tenants: TenantTokenStore, browser?: BrowserAuthorization): Promise<Response> {
+  const form = await c.req.formData().catch(() => null);
+  if (!form) return c.html(errorPage("Invalid authorization form. Reopen the connection from your agent."), 400);
   const p = readAuthorizeParams(formParams(form));
   const decision = String(form.get("decision") ?? "");
   const token = String(form.get("token") ?? "").trim();
@@ -304,9 +367,28 @@ async function handleAuthorizeDecision(c: Context, store: OAuthStore, tenants: T
   if (err) return c.html(errorPage(err), 400);
   const client = store.getClient(p.clientId)!;
 
-  const record = token ? await tenants.resolveTokenHash(hashToken(token)) : null;
-  if (!record || record.profile?.trim() || !tenantRecordActive(record)) {
-    return c.html(consentPage({ clientName: client.clientName, params: p, error: "That tenant token did not match." }), 401);
+  let tenant: TenantContext;
+  if (browser) {
+    const identity = await browser.auth.resolve(c);
+    if (identity instanceof Response) return identity;
+    if (!identity) return c.html(errorPage("Your sign-in expired. Reopen the connection from your agent to sign in again."), 401);
+    const nonce = String(form.get("consent") ?? "");
+    const consent = browser.pending.get(nonce);
+    const origin = c.req.header("origin");
+    if (
+      !consent || consent.expiresAt <= Date.now() ||
+      consent.subject !== identity.subject || consent.tenantId !== identity.tenant.id ||
+      consent.request !== `${publicBaseUrl(c)}:${JSON.stringify(p)}` ||
+      (origin && origin !== publicBaseUrl(c))
+    ) return c.html(errorPage("This authorization form is invalid or expired. Reopen the connection from your agent."), 403);
+    browser.pending.delete(nonce);
+    tenant = identity.tenant;
+  } else {
+    const record = token ? await tenants.resolveTokenHash(hashToken(token)) : null;
+    if (!record || record.profile?.trim() || !tenantRecordActive(record)) {
+      return c.html(consentPage({ clientName: client.clientName, params: p, error: "That tenant token did not match." }), 401);
+    }
+    tenant = record.tenant;
   }
 
   const baseUrl = publicBaseUrl(c);
@@ -322,7 +404,7 @@ async function handleAuthorizeDecision(c: Context, store: OAuthStore, tenants: T
     codeChallenge: p.codeChallenge,
     resource: p.resource || canonicalResource(baseUrl),
     scope: p.scope,
-    tenant: record.tenant,
+    tenant,
     expiresAt: Date.now() + CODE_TTL_MS,
   });
   return c.redirect(redirectWith(p.redirectUri, { code, state: p.state, iss: baseUrl }));
@@ -473,7 +555,20 @@ function validateAuthorize(store: OAuthStore, p: AuthorizeParams): string | null
   const client = store.getClient(p.clientId);
   if (!client) return "unknown client_id";
   if (!client.redirectUris.includes(p.redirectUri)) return "redirect_uri not registered for this client";
+  if (!validRedirectUri(p.redirectUri)) return "invalid redirect_uri";
   return null;
+}
+
+function validRedirectUri(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return !url.username && !url.password && !url.hash &&
+      (url.protocol === "https:" ||
+        (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)));
+  } catch {
+    return false;
+  }
 }
 
 function pkceMatches(verifier: string, challenge: string): boolean {
@@ -561,18 +656,18 @@ input[type=password]{width:100%;box-sizing:border-box;padding:10px 12px;backgrou
 </style></head><body><div class="card">${body}</div></body></html>`;
 }
 
-function consentPage(opts: { clientName: string; params: AuthorizeParams; error: string | null }): string {
+function consentPage(opts: { clientName: string; params: AuthorizeParams; error: string | null; identity?: OAuthBrowserIdentity; nonce?: string }): string {
   return shell(`
-<h1>Authorize MCP Client</h1>
-<p><span class="client">${esc(opts.clientName)}</span> wants to connect to this tenant's MCP endpoint.</p>
+<h1>Connect your agent</h1>
+<p><span class="client">${esc(opts.clientName)}</span> wants to access your workspace through MCP.</p>
+${opts.identity ? `<p>Signed in as <span class="client">${esc(opts.identity.label)}</span><br>Workspace: <span class="client">${esc(opts.identity.tenant.name ?? opts.identity.tenant.id)}</span></p><p>Allow this app to read and write workspace content and use your workspace tools. Usage is charged to this workspace.</p>` : ""}
 ${opts.error ? `<p class="err">${esc(opts.error)}</p>` : ""}
 <form method="post" action="/oauth/authorize/decision">
   ${hidden(opts.params)}
-  <label for="token">Tenant token</label>
-  <input id="token" type="password" name="token" autofocus autocomplete="off" placeholder="paste tenant token">
+  ${opts.identity ? `<input type="hidden" name="consent" value="${esc(opts.nonce!)}">` : `<label for="token">Tenant token</label><input id="token" type="password" name="token" autofocus autocomplete="off" placeholder="paste tenant token">`}
   <div class="row">
     <button class="deny" type="submit" name="decision" value="deny">Deny</button>
-    <button class="approve" type="submit" name="decision" value="approve">Connect</button>
+    <button class="approve" type="submit" name="decision" value="approve">${opts.identity ? "Allow" : "Connect"}</button>
   </div>
 </form>`);
 }

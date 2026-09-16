@@ -67,7 +67,8 @@ describe.each(["github", "google_drive"] as const)("ZMR-7 temporal memory public
             const results = await Promise.all(Array.from({ length: 5 }, () => tools.searchVault!("Orchid")));
             expect(results[0]).toContain("Notes/Orchid.md");
             for (const result of results) {
-              expect(result).not.toContain("answerSupports");
+              // Ranked discovery auto-reads the single unique raw source, so its
+              // support IDs may appear; the meaning page's fact candidates must not.
               expect(result).not.toContain("Source-backed fact candidates");
             }
             // Discovery does not read facts. Traverse the discovered page before

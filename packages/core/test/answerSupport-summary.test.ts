@@ -9,6 +9,7 @@ it('issues a summary-only whole-source handle after all17k actually read with bo
  expect(body.length).toBeGreaterThan(17000);const r=new AnswerSupportRegistry();let hints:any[]=[];
  for(const [i,p]of pieces.entries()){hints=r.addPassage(p);if(i<pieces.length-1)expect(hints.some(h=>h.kind==='source_summary')).toBe(false);}
  const summary=hints.find(h=>h.kind==='source_summary');expect(summary).toMatchObject({summaryOnly:true,modes:['raw_report']});
+ expect(summary).not.toHaveProperty('excerpt'); // No host instructions masquerading as source text.
  expect(JSON.stringify(summary).length).toBeLessThan(400);expect(hints.length).toBeLessThanOrEqual(32);
  for(const summaryText of [undefined,null,'',' ', 'x'.repeat(1201)])expect(r.render([{id:summary.id,mode:'raw_report',summaryText} as any]).valid).toBe(false);
  const rendered=r.render([{id:summary.id,mode:'raw_report',summaryText:'The speaker is considering a proposal, not reporting a decision.'}]);expect(rendered.valid).toBe(true);expect(rendered.text).toContain(ref);expect(rendered.text).not.toContain(body);
@@ -24,4 +25,17 @@ it('reserves a global support slot and an emitted hint slot for a completed sour
  for(let i=0;i<12;i++)r.addPassage({...pieces[0]!,identity:`Notes/${i}.md#section-0`,source:{...pieces[0]!.source,path:`Notes/${i}.md`},body:Array.from({length:40},(_,j)=>`- Requirement ${i}.${j}.`).join('\n')});
  let hints:any[]=[];for(const p of pieces.slice(1))hints=r.addPassage(p,1);
  expect(hints).toHaveLength(1);expect(hints[0].kind).toBe('source_summary');
+});
+
+
+it('renders assessment separately only after actual nonempty support validates',()=>{
+ const registry=new AnswerSupportRegistry();const hints=pieces.flatMap(p=>registry.addPassage(p));
+ const summary=hints.find(h=>h.kind==='source_summary')!;
+ const selection={id:summary.id,mode:'raw_report' as const,summaryText:'The speaker describes an option as tentative.'};
+ const analysis='I would seek confirmation before deciding.';
+ const valid=registry.render([selection],analysis);expect(valid.valid).toBe(true);expect(valid.text).toContain('My assessment (inference');expect(valid.text).toContain('Source premises:');expect(valid.text).toContain(ref);
+ for(const selections of [[],[{...selection,id:'as_'+'0'.repeat(24)}],[{...selection,mode:'current' as const}],[{...selection,summaryText:undefined}]]){
+  const failed=registry.render(selections,analysis);expect(failed.valid).toBe(false);expect(failed.text).not.toContain(analysis);
+ }
+ for(const text of ['', ' ', 'x'.repeat(1601), 'See https://invented.invalid', '[premise](https://invalid.test)'])expect(registry.render([selection],text).valid).toBe(false);
 });

@@ -87,6 +87,21 @@ export function HostedLogin({
             Drive for your vault, Zenod asks for that separate permission after
             checkout. GitHub repository access is also connected separately.
           </p>
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Read our{" "}
+            <a className="underline" href="https://zenod.dev/legal/terms.html">
+              Terms of Service
+            </a>{" "}
+            and{" "}
+            <a
+              className="underline"
+              href="https://zenod.dev/legal/privacy.html"
+            >
+              Privacy Policy
+            </a>
+            . Sign-in does not start a paid subscription; you review and accept
+            the paid terms at checkout.
+          </p>
           <a
             href="https://zenod.dev"
             className="mt-6 inline-block text-xs text-muted-foreground underline hover:text-foreground"

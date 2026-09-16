@@ -1,4 +1,4 @@
-export const ZENOD_LEGAL_VERSION = "2026-08-30";
+export const ZENOD_LEGAL_VERSION = "2026-09-16.1";
 
 export interface ReadinessCheck {
   id: string;
@@ -8,11 +8,19 @@ export interface ReadinessCheck {
 
 export interface ProductionReadinessReport {
   ready: boolean;
+  evidenceReady: boolean;
+  advisoryChecks: string[];
   publicPaidSignup: boolean;
   publicGoogleSignup: boolean;
   googleSignupReady: boolean;
   checks: ReadinessCheck[];
 }
+
+// Operator acceptance records describe observed journeys, not runtime authorization.
+// Requiring a paid/new-user journey before opening that journey is circular.
+const ADVISORY_CHECKS = new Set([
+  "stripe_webhook", "billing_portal", "live_billing_journey", "google_drive_vault_acceptance",
+]);
 
 function publicHttpsUrl(value: string | undefined): boolean {
   if (!value) return false;
@@ -119,6 +127,13 @@ export function productionReadinessReport(
       detail: env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "Live Stripe key is configured" : "Live Stripe key is missing",
     },
     {
+      id: "stripe_webhook_secret",
+      ok: Boolean(env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")),
+      detail: env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")
+        ? "Stripe webhook signature verification secret is configured"
+        : "Stripe webhook signature verification secret is missing",
+    },
+    {
       id: "stripe_webhook",
       ok:
         Boolean(env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")) &&
@@ -189,10 +204,12 @@ export function productionReadinessReport(
     },
     ...(publicGoogleSignup ? googleChecks : []),
   ];
-  const googleSignupReady = googleChecks.every((check) => check.ok) &&
+  const googleSignupReady = googleChecks.filter((check) => !ADVISORY_CHECKS.has(check.id)).every((check) => check.ok) &&
     env.ZENOD_LEGAL_VERSION === ZENOD_LEGAL_VERSION;
   return {
-    ready: checks.every((check) => check.ok),
+    ready: checks.filter((check) => !ADVISORY_CHECKS.has(check.id)).every((check) => check.ok),
+    evidenceReady: checks.every((check) => check.ok),
+    advisoryChecks: checks.filter((check) => ADVISORY_CHECKS.has(check.id)).map((check) => check.id),
     publicPaidSignup: env.ZENOD_PUBLIC_PAID_SIGNUP === "1",
     publicGoogleSignup,
     googleSignupReady,
@@ -260,7 +277,7 @@ export function assertPublicSignupIsReady(env: NodeJS.ProcessEnv = process.env):
   }
   if (env.ZENOD_PUBLIC_PAID_SIGNUP !== "1") return;
   if (!report.ready) {
-    const failed = report.checks.filter((check) => !check.ok).map((check) => check.id).join(", ");
+    const failed = report.checks.filter((check) => !check.ok && !ADVISORY_CHECKS.has(check.id)).map((check) => check.id).join(", ");
     throw new Error(`ZENOD_PUBLIC_PAID_SIGNUP=1 but production readiness checks failed: ${failed}`);
   }
 }

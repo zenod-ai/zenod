@@ -1,0 +1,318 @@
+{
+  "suite": "m2-basics-v1.1",
+  "candidateSha": "2a4ff6623fc6efa48355c5e697dd38c9c4833f67",
+  "observedDeployedSha": "2a4ff6623fc6efa48355c5e697dd38c9c4833f67",
+  "mode": "ACTUAL_ENGINE_CHAT",
+  "fixtureSha256": "e3fea3e0596c93a56b2ee94b4f10cca16f9ebc1029ab16b10e1fe3e2d480783c",
+  "rubricSha256": "dcc8d7cc13acdeca163fe269fb7c5dc9df1a08025d0dbd64f051587768dc2a1a",
+  "pricingSha256": "3167aa42a7013e08b83f485650da338b172faca0933f135ef7485a0288cd64e2",
+  "models": {
+    "classifyModel": "openai/gpt-5.6-luna",
+    "askModel": "x-ai/grok-4.3",
+    "organizerReasoningEffort": "low"
+  },
+  "startedAt": "2026-09-16T01:59:56.282Z",
+  "limits": {
+    "budgetUsd": 0.89,
+    "maxRequests": 80,
+    "requestDeadlineMs": 120000,
+    "plannedOutcomes": 36
+  },
+  "selected": [
+    "B01:1",
+    "B02:1",
+    "B03:1",
+    "B04:1",
+    "B05:1",
+    "B06:1",
+    "B07:1",
+    "B08:1",
+    "B09:1",
+    "B10:1",
+    "B11:1",
+    "B12:1",
+    "B01:2",
+    "B02:2",
+    "B03:2",
+    "B04:2",
+    "B05:2",
+    "B06:2",
+    "B07:2",
+    "B08:2",
+    "B09:2",
+    "B10:2",
+    "B11:2",
+    "B12:2",
+    "B01:3",
+    "B02:3",
+    "B03:3",
+    "B04:3",
+    "B05:3",
+    "B06:3",
+    "B07:3",
+    "B08:3",
+    "B09:3",
+    "B10:3",
+    "B11:3",
+    "B12:3"
+  ],
+  "status": "INCOMPLETE_BUDGET",
+  "surface": {
+    "kind": "isolated-memory-engine.chat",
+    "personaSha256": "13150d5f6a8821f90c44856ce11f7dddeee00ac65c68a6d3357bcc21b0936d47",
+    "localVaultTaskTools": true,
+    "externalTaskTools": false,
+    "driveTools": false,
+    "peerTools": false,
+    "tenantProjectRegistry": false,
+    "productionPromptParity": false
+  },
+  "harnessHashes": {
+    "run.mjs": "5ac7afec5296840226fb248e9ab63642e6141c55d80b9461e245ee9d0e7d7af6",
+    "policy.mjs": "3c351a91cbdbfa9e22a519768d2514a42740f10b27042146c958272271109077",
+    "background.mjs": "f3c8103359d03259f73340971d761fcedcc21c44bd6050fcad83b73e2baf0f97",
+    "report.mjs": "d57dc74df4c6edeae47dc8f84a400364618bee197f240347eb3b45dd58eac9ec",
+    "fixture.json": "e3fea3e0596c93a56b2ee94b4f10cca16f9ebc1029ab16b10e1fe3e2d480783c",
+    "rubric.json": "dcc8d7cc13acdeca163fe269fb7c5dc9df1a08025d0dbd64f051587768dc2a1a",
+    "../policy.mjs": "b45b36267b5e0bbd7efa62a8c09717ff86cd55f98c1744951c97be538c022e30",
+    "../models.mjs": "8776992bfc805b739b4a91f6e62be1b74543333f9819058c2ad35a6a668aed25"
+  },
+  "batch": "baseline-3",
+  "harnessCommit": "eebc1704192ad1898a7cfa7f52b178277ce3b779",
+  "score": {
+    "denominator": 36,
+    "passed": 6,
+    "verdict": "NOT_PASSED",
+    "rows": [
+      {
+        "key": "B01:1",
+        "verdict": "FAIL",
+        "evidenceSha256": "5207119d99f266fc505c63696712bac6ef2d89a883cb0dff44e85ed48a32a1cd",
+        "latencyMs": 19139.570125
+      },
+      {
+        "key": "B02:1",
+        "verdict": "PASS",
+        "evidenceSha256": "58f6dfa472ba4e94d97e294c8f63d0f9a80d631c3af37ed473f6ffe22f8a4caa",
+        "latencyMs": 18098.504875000002
+      },
+      {
+        "key": "B03:1",
+        "verdict": "PASS",
+        "evidenceSha256": "140a1d29c99d597e25894f9de5a3af3c4b582e2dc5b3c24445c5e9da8d82e5b9",
+        "latencyMs": 16778.573624999997
+      },
+      {
+        "key": "B04:1",
+        "verdict": "FAIL",
+        "evidenceSha256": "acb0957335957ee222f9e1a8493885f9d59debc5217cbeb21a3e9a6a57805fde",
+        "latencyMs": 32826.096083000004
+      },
+      {
+        "key": "B05:1",
+        "verdict": "PASS",
+        "evidenceSha256": "2a459f789f81e1bd0d8656c912cd455e073f045ccf9a72149ee6ba94f6175ec8",
+        "latencyMs": 17466.97475000001
+      },
+      {
+        "key": "B06:1",
+        "verdict": "FAIL",
+        "evidenceSha256": "6d97b57200edb674e93f3ecbff23f2f36634f8f65cbc65a8619295b522f335bf",
+        "latencyMs": 90710.438541
+      },
+      {
+        "key": "B07:1",
+        "verdict": "PASS",
+        "evidenceSha256": "13f9f653148eccdb49bc2508f4c102187c620ff42a33c14fff3571cfd268e88c",
+        "latencyMs": 49294.11025
+      },
+      {
+        "key": "B08:1",
+        "verdict": "PASS",
+        "evidenceSha256": "5d78acdc0f4361bcb52cf82db2210e01bbc6e834dd0033175e7f8405411148f1",
+        "latencyMs": 62472.005999999994
+      },
+      {
+        "key": "B09:1",
+        "verdict": "PASS",
+        "evidenceSha256": "78f6deedded2b5a8b2f7ea80134528a761459c7ba2223c3a2fb527719abd0e62",
+        "latencyMs": 58366.00449999998
+      },
+      {
+        "key": "B10:1",
+        "verdict": "FAIL",
+        "evidenceSha256": "fb9b91c613a41994f1bd20b809dfddea2b30fdca6a7ef884d8c1863760bad4eb",
+        "latencyMs": 42892.65520799998
+      },
+      {
+        "key": "B11:1",
+        "verdict": "INCOMPLETE",
+        "evidenceSha256": "aded6dc8b41bd14e9cbd6483009efffbcf870ea4673daf71455c5c3ae7ace432",
+        "latencyMs": 9684.57379200001
+      },
+      {
+        "key": "B12:1",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "4dffd51e2305603b79dad3f5280c420227193a6dcb1d241026b914cba1c7517a",
+        "latencyMs": null
+      },
+      {
+        "key": "B01:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "a3f67fcfda04afa5302c18723e0cd41cfa75f6cfd3e22ec567ba08f78c338a39",
+        "latencyMs": null
+      },
+      {
+        "key": "B02:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "14b1479f33f2d7e0c21a028ba0f973ea52628ec513e74172ec1f851720ffaf21",
+        "latencyMs": null
+      },
+      {
+        "key": "B03:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "573cee87f1c015673fd290afe11229b801f0e87abc3014f1c918ca28546a960c",
+        "latencyMs": null
+      },
+      {
+        "key": "B04:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "4b4b0f73ddf740eace7d239c3111fcef426a5d793872ae76c146ecab2760a9d7",
+        "latencyMs": null
+      },
+      {
+        "key": "B05:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "7bc559bb93c05374b78780685e254f62cad67334e737100d21b538b685fb9b2a",
+        "latencyMs": null
+      },
+      {
+        "key": "B06:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "6dd86b3dbb72efa39adb7fc33a204e384512c410339fc4ce54a67080c45b15e8",
+        "latencyMs": null
+      },
+      {
+        "key": "B07:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "f3a02c93b63125077fdf0e3d4b2b36396b4f38d8685cc14501bfcf13682f0ab4",
+        "latencyMs": null
+      },
+      {
+        "key": "B08:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "695f7b0ca96b79b8da23f29b357d3a0374c1f3f473a1e8f55b116659dd92cc53",
+        "latencyMs": null
+      },
+      {
+        "key": "B09:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "bf3fa9ff5f64c1a5cb8d474a253521202b3e5916791bf082dfef3469547b9042",
+        "latencyMs": null
+      },
+      {
+        "key": "B10:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "b046d3f675d8e72077b92ab9650a2380093cb871478dedaa18c56a919dbd0a7b",
+        "latencyMs": null
+      },
+      {
+        "key": "B11:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "0f94a8d713ad71e236ddd93d3c4a2527b3be076ede68eab6e9ea7f271a9a338d",
+        "latencyMs": null
+      },
+      {
+        "key": "B12:2",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "4876937414d4ab74895c490fffa572b0a8027901e287ad0b82ed3f6d6ff238ce",
+        "latencyMs": null
+      },
+      {
+        "key": "B01:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "1100d8fe7d691a6582c0a5be72b44b3a7391e7edbe7c42368f8d5f467ab058ee",
+        "latencyMs": null
+      },
+      {
+        "key": "B02:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "0fceb971305e64150ff5e920ec9ee02901acd8e7cd38d7b2adbee0fb4191bef3",
+        "latencyMs": null
+      },
+      {
+        "key": "B03:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "8fe473b1cf176aac330af2b21d501348235627032001d2d2a8210f561ae82855",
+        "latencyMs": null
+      },
+      {
+        "key": "B04:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "06b3fb98938af761308249694470c2ac8319b6e072585351a696768b03463865",
+        "latencyMs": null
+      },
+      {
+        "key": "B05:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "3ee577e4f25049d585864a7547547b5b128f3342e57f838521b92c099df8311f",
+        "latencyMs": null
+      },
+      {
+        "key": "B06:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "0a48c435f75f70c467f0d3a35d32c2ed7b43fcd13eeb9b66a3691ef1e2c4af87",
+        "latencyMs": null
+      },
+      {
+        "key": "B07:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "1d15a10b6dc8079940997b872d4a113f130466923f7e542c74b0ba2f04039f7e",
+        "latencyMs": null
+      },
+      {
+        "key": "B08:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "acfb731fe2b4de88ccb9f582ffbaa8d3626f5f6eee191a7d907d0c7c5cdd0e7b",
+        "latencyMs": null
+      },
+      {
+        "key": "B09:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "05d5088e9b688c5d4c8f2ceb2e96dd4c8f0f2cd5ed1f243aefb92ad6e85eec5b",
+        "latencyMs": null
+      },
+      {
+        "key": "B10:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "cbafef85025fcf00d34973ba0fe06c38f5f179ab2b59a9dc6ed5a51c49ad472d",
+        "latencyMs": null
+      },
+      {
+        "key": "B11:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "770bd6ae21f463fe0dda25930e48a9dad9dff9b1cff5d782c40c726577a6f9a9",
+        "latencyMs": null
+      },
+      {
+        "key": "B12:3",
+        "verdict": "UNMEASURED",
+        "evidenceSha256": "cd3d13707b91196afe313f5a7e2dfb457307bbdef487e07193f5dfbc9139fb35",
+        "latencyMs": null
+      }
+    ],
+    "cost": {
+      "providerReportedCostUsd": 0.26551404,
+      "retainedUnknownCostReservationsUsd": 0,
+      "exposureUsd": 0.2655140400000003,
+      "unknownCostRequests": 0
+    },
+    "costPerPassedScenario": 0.04425234,
+    "limitation": "Finite synthetic engine.chat evidence; not production MCP, WhatsApp delivery or universal reliability."
+  },
+  "artifacts": {
+    "run.json": "aca55a4ccf6c22cc15f79cc1d58ce585d20794ce86225e6a12909c10af04db90",
+    "independent-review.json": "00895c595812c6bdbe1bae56d49c3306dac21e5c2255b6c08d780a5fcd4afc87",
+    "independent-report.json": "b83d73786feb835e20c4a3059dd3798c25a9e5cad26b2873624a613bc8547fe4"
+  }
+}

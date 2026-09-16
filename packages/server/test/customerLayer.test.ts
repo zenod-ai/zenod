@@ -758,6 +758,8 @@ describe("hosted customer layer", () => {
       billing_address_collection: "required",
       tax_id_collection: { enabled: true },
       consent_collection: { terms_of_service: "required" },
+      allow_promotion_codes: true,
+      payment_method_collection: "if_required",
       success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     });
 
@@ -846,7 +848,7 @@ describe("hosted customer layer", () => {
     expect(account).not.toHaveProperty("balance");
     expect(account).not.toHaveProperty("ledger");
     expect(account.token).toMatch(/^zenod_[a-f0-9]{48}$/);
-    expect(account.mcp_url).toBe(`${DESTINATION}/mcp/${account.token}`);
+    expect(account.mcp_url).toBe(`${DESTINATION}/mcp`);
     const accountJson = await readFile(join(dir, "customer-accounts.json"), "utf8");
     const tokenVaultJson = await readFile(join(dir, "customer-token-bindings.json"), "utf8");
     expect(accountJson).not.toContain(account.token);
@@ -863,7 +865,7 @@ describe("hosted customer layer", () => {
     tenants.close();
   });
 
-  it("lets a non-GitHub internal identity own checkout, account, Stripe metadata, and tenant records", async () => {
+  it.each(["paid", "no_payment_required"] as const)("lets a non-GitHub internal identity own checkout, account, Stripe metadata, and tenant records (%s)", async (paymentStatus) => {
     const principal: CustomerPrincipal = {
       user_id: customerUserId("google", "google-subject-ada"),
       provider: "google",
@@ -877,6 +879,7 @@ describe("hosted customer layer", () => {
     };
     const accountId = `user-${principal.user_id}`;
     session = checkoutSession({
+      payment_status: paymentStatus,
       client_reference_id: accountId,
       metadata: { product: "zenod", unit: "zenod", tier: "monthly", account_id: accountId },
     });
@@ -1837,7 +1840,7 @@ describe("hosted customer layer", () => {
       });
       expect(await account.json()).toMatchObject({
         token: reconciledToken,
-        mcp_url: `${DESTINATION}/mcp/${reconciledToken}`,
+        mcp_url: `${DESTINATION}/mcp`,
       });
     } finally {
       await reconciled.close();

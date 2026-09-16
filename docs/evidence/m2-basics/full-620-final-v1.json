@@ -1,0 +1,283 @@
+{
+  "receiptVersion": 1,
+  "suite": "m2-basics-v1.1",
+  "mode": "ACTUAL_ENGINE_CHAT",
+  "candidateSha": "620716fcc8ed547fec937d90ad4e9090ba9588d3",
+  "harnessCommit": "9a671b2ef44db77011577f695e95a2e51080265d",
+  "fixtureSha256": "e3fea3e0596c93a56b2ee94b4f10cca16f9ebc1029ab16b10e1fe3e2d480783c",
+  "rubricSha256": "dcc8d7cc13acdeca163fe269fb7c5dc9df1a08025d0dbd64f051587768dc2a1a",
+  "pricingSha256": "3167aa42a7013e08b83f485650da338b172faca0933f135ef7485a0288cd64e2",
+  "models": {
+    "classifyModel": "openai/gpt-5.6-luna",
+    "askModel": "x-ai/grok-4.3",
+    "organizerReasoningEffort": "low"
+  },
+  "score": {
+    "passed": 36,
+    "denominator": 36,
+    "failed": 0,
+    "caseTrials": "12 cases \u00d7 3 independent trials",
+    "verdict": "PASS_ISOLATED_SUITE"
+  },
+  "cost": {
+    "scoredCostUsd": 0.75945611,
+    "incompleteAttemptCostUsd": 0.00931346,
+    "allAttemptCostUsd": 0.76876957,
+    "scoredRequests": 230,
+    "incompleteAttemptRequests": 5,
+    "allAttemptRequests": 235,
+    "unknownCostRequests": 0
+  },
+  "retainedIncompleteAttempts": [
+    {
+      "batch": "full-620-b3",
+      "key": "B06:2",
+      "status": "INCOMPLETE",
+      "cost": 0.00931346,
+      "requests": 5
+    }
+  ],
+  "rows": {
+    "B01:1": {
+      "batch": "full-620-b1",
+      "verdict": "PASS",
+      "evidenceSha256": "2d5290240dc3fb60c8f1fed8a78c989a71163188c6a49c46e53776a17a43e2e7"
+    },
+    "B02:1": {
+      "batch": "full-620-b1",
+      "verdict": "PASS",
+      "evidenceSha256": "59d2df821e969c63fd4a338c884a8cb60f079dd293d486a3d4e0075ef204bff9"
+    },
+    "B03:1": {
+      "batch": "full-620-b1",
+      "verdict": "PASS",
+      "evidenceSha256": "7f8bd32556c3858cfbe6b5ee590fdc09fdd6b0e8467799fba99d134515f87f44"
+    },
+    "B04:1": {
+      "batch": "full-620-b1",
+      "verdict": "PASS",
+      "evidenceSha256": "eb3ef535483d37cdc74e71ca2f138f141d475bb4941f548207f888e9898a7b5c"
+    },
+    "B05:1": {
+      "batch": "full-620-b1",
+      "verdict": "PASS",
+      "evidenceSha256": "1dd7ba260cabb074f42f304a2966fb656ee3707c84b2e14e4e997ba21347f658"
+    },
+    "B06:1": {
+      "batch": "full-620-b1",
+      "verdict": "PASS",
+      "evidenceSha256": "f2995f27b3e0cb2aaee1ceb42642e2bf2512794aa461fb4b2803dda7bcaa69a0"
+    },
+    "B07:1": {
+      "batch": "full-620-b2",
+      "verdict": "PASS",
+      "evidenceSha256": "80896878328e9e0b17f4ec746d56e88f4ba34405982e31bf0f032fe68d869cd3"
+    },
+    "B08:1": {
+      "batch": "full-620-b2",
+      "verdict": "PASS",
+      "evidenceSha256": "fc74d56f15dc2e3e95f4bc36eb98f892ca1334ffa5f4f8c98b1de09b4381e8a0"
+    },
+    "B09:1": {
+      "batch": "full-620-b2",
+      "verdict": "PASS",
+      "evidenceSha256": "70214190822cdcdecfc9ec16b24cee8f604f758827d7b03ec93a9d73321af5c4"
+    },
+    "B10:1": {
+      "batch": "full-620-b2",
+      "verdict": "PASS",
+      "evidenceSha256": "0b5ded13275192dad37daf756320c73158c19868388050abee2a6e0f4dc009e2"
+    },
+    "B11:1": {
+      "batch": "full-620-b2",
+      "verdict": "PASS",
+      "evidenceSha256": "45adf4929f80f4bdc734f3c23a348bde5f7bc705bc7f3a1c78b77708216a776e"
+    },
+    "B12:1": {
+      "batch": "full-620-b2",
+      "verdict": "PASS",
+      "evidenceSha256": "270c9b2a19254a9d7c9c202ea8abeac33bea68486b499e6a6ac248ced891b8c9"
+    },
+    "B01:2": {
+      "batch": "full-620-b3",
+      "verdict": "PASS",
+      "evidenceSha256": "74ba5e679542ff3b81c182a127fa212190ccbeac46043fcfd71be5e2e8b00823"
+    },
+    "B02:2": {
+      "batch": "full-620-b3",
+      "verdict": "PASS",
+      "evidenceSha256": "c47812067e539fd5411b86c02779a6477118e0426ad3a9d94f098ee7f3973712"
+    },
+    "B03:2": {
+      "batch": "full-620-b3",
+      "verdict": "PASS",
+      "evidenceSha256": "8bba1f56c9bea0a2213152956fa387ece7fdf1fec4bd003285fa60c11eaf951a"
+    },
+    "B04:2": {
+      "batch": "full-620-b3",
+      "verdict": "PASS",
+      "evidenceSha256": "5572d08bfc9f92108a4445162b92ec8ddead8ee8d95bb917b1f855e58b192e27"
+    },
+    "B05:2": {
+      "batch": "full-620-b3",
+      "verdict": "PASS",
+      "evidenceSha256": "57b7f8a6ad9330ae4ab0b22f5ccf873e074c27d4019bb693c4d049e51b121f18"
+    },
+    "B06:2": {
+      "batch": "full-620-b4",
+      "verdict": "PASS",
+      "evidenceSha256": "85a76a2609f317add8d4ede952afd435e5719280d6ebf8a4030aa493c1c17f2f"
+    },
+    "B07:2": {
+      "batch": "full-620-b4",
+      "verdict": "PASS",
+      "evidenceSha256": "8cabba52c84b2b34c1f9c50832b7c8bc251ea22d4a897befc5d4812cf947d926"
+    },
+    "B08:2": {
+      "batch": "full-620-b4",
+      "verdict": "PASS",
+      "evidenceSha256": "7d640d023f33fe20ff1bf280d70cfe0d756d36bf7322e72eefa15101c2375124"
+    },
+    "B09:2": {
+      "batch": "full-620-b4",
+      "verdict": "PASS",
+      "evidenceSha256": "87b1373ca1de0159c2188250502f00d4535bbc0ba3a139548ef66e8f307d8438"
+    },
+    "B10:2": {
+      "batch": "full-620-b4",
+      "verdict": "PASS",
+      "evidenceSha256": "3abb80f0dbb8f0da4bfb9f01fef780f18b4258c1b08510d1ea5002faefa1122a"
+    },
+    "B11:2": {
+      "batch": "full-620-b5",
+      "verdict": "PASS",
+      "evidenceSha256": "04434276acfaf5bbf50b5f46da4dceddae89684ba730c9fbdb36a5e6916ee930"
+    },
+    "B12:2": {
+      "batch": "full-620-b5",
+      "verdict": "PASS",
+      "evidenceSha256": "9e6fbbe164278f1d40d09011a93f88a98ce40fd44df8f7b9689fab929e082ec9"
+    },
+    "B01:3": {
+      "batch": "full-620-b5",
+      "verdict": "PASS",
+      "evidenceSha256": "6403838cc9aeabf0a40f119ccbf055cfc015e75883206238f2193350f834dca1"
+    },
+    "B02:3": {
+      "batch": "full-620-b5",
+      "verdict": "PASS",
+      "evidenceSha256": "8e6a8dac744e601c7dbecfbc2f664e7ee0ecf1396260b9939c4cf1089b602dd7"
+    },
+    "B03:3": {
+      "batch": "full-620-b5",
+      "verdict": "PASS",
+      "evidenceSha256": "c9627bd0ba7e268b09219218a43f024d328ef006a1cbf3a3eb95b3d252da02dd"
+    },
+    "B04:3": {
+      "batch": "full-620-b5",
+      "verdict": "PASS",
+      "evidenceSha256": "5291a9b3cb81c691fdc229fbdacd6c45ea7d20e67d7cb87031307d1ff046b5aa"
+    },
+    "B05:3": {
+      "batch": "full-620-b6",
+      "verdict": "PASS",
+      "evidenceSha256": "0e0c433d799a4ac747494d225943c2167c08e49b4fa484e32cc2233fb55c8460"
+    },
+    "B06:3": {
+      "batch": "full-620-b6",
+      "verdict": "PASS",
+      "evidenceSha256": "d99b5b77ab6b64d23d2366793d6ecb0e744f1b636454c57aa355068ca7a73bf6"
+    },
+    "B07:3": {
+      "batch": "full-620-b6",
+      "verdict": "PASS",
+      "evidenceSha256": "263b770b15a5edd8b3f59a0cea0b096131f9ec9ae6d3785ebc49401e51cef33e"
+    },
+    "B08:3": {
+      "batch": "full-620-b6",
+      "verdict": "PASS",
+      "evidenceSha256": "96c7c71761086414f26308f4cc4a627daea359c2dd477ee8268e24f7b6a16a8f"
+    },
+    "B09:3": {
+      "batch": "full-620-b7",
+      "verdict": "PASS",
+      "evidenceSha256": "5eb8b908e3d4f2edcf4264b14293b889b491b88ea74b30fefa789fe149c33e1a"
+    },
+    "B10:3": {
+      "batch": "full-620-b7",
+      "verdict": "PASS",
+      "evidenceSha256": "fdb7f682673cb091ed7de272657d972b5d8446ac554eefa7d1fb9647d4b95338"
+    },
+    "B11:3": {
+      "batch": "full-620-b7",
+      "verdict": "PASS",
+      "evidenceSha256": "65191fd8ffeea37580df7abce79b8e617327f78bdbf25cd8b9becce90e8195b1"
+    },
+    "B12:3": {
+      "batch": "full-620-b7",
+      "verdict": "PASS",
+      "evidenceSha256": "faa97a710ae2c81c430789c441d3b703f3a56af63e3e9e54a90ab3498a0e4a8b"
+    }
+  },
+  "batchHashes": {
+    "full-620-b1": {
+      "runSha256": "03ab31aa0a4c413c067978600ae2329e9048512684d8548db7f5baf5ab1e955c",
+      "reviewSha256": "1497f4e6ede8483a8233e31090d5b05e4b09ddaceb3b8d74cf8cababc19ff98f"
+    },
+    "full-620-b2": {
+      "runSha256": "e1c4a4bfb8a72d4181f99af9ef0870015901d7e194b273b9836bef1fe6b98b87",
+      "reviewSha256": "e3ae59ebf4622987590eda0d3d990ec4ab4fe25b4ad8db5994d5bee257775421"
+    },
+    "full-620-b3": {
+      "runSha256": "16ada7628dc2b84e659e1ab44f35d957ef72be3f25ace7782e4ac745847d2a9f",
+      "reviewSha256": "44f620f5da1776042a86874dd9457062a7241434e6e92975cc8ae65a3c722592"
+    },
+    "full-620-b4": {
+      "runSha256": "811bdf803ce8bf71e8e09ef2e451afabc7b89f1412a37dcb590223f065679beb",
+      "reviewSha256": "f1c253ac8cf02c5afdce6f68d34fa49ad1c2bb7c3dc5adefc2666bdc407fd8ca"
+    },
+    "full-620-b5": {
+      "runSha256": "bcab0b7bfe8d266d5eeba06ca7787751efde2a9dccb4eaad22cc6c146520dcac",
+      "reviewSha256": "5efe2ae8f2b6a228d208326c8409171573b5cf6cae45e228de78b09a084c52a3"
+    },
+    "full-620-b6": {
+      "runSha256": "15d924d8e5ce1ac6c6452dfd3da0c581b9e9462fd58fdd9b826910dd36140621",
+      "reviewSha256": "a26964663d143b7918f7ecdad13686c68a4f0928830740d1eb7e62fe2c43f5d6"
+    },
+    "full-620-b7": {
+      "runSha256": "33c00b1d70df83f71fff95bf7b6d2e393a6b0b8f6dae06bdce779e3a839d00e1",
+      "reviewSha256": "6614f964a399d06fc76f4e8aa174c620462719d05213bb263e9bd50d5ec22d9b"
+    }
+  },
+  "independentConsolidatedReviewSha256": "de948e8686c6ce82c06381bba62c81d740de4990e6dafb5e61a0443823ed8f06",
+  "production": {
+    "sourceSha": "620716fcc8ed547fec937d90ad4e9090ba9588d3",
+    "image": "ghcr.io/zenod-ai/zenod@sha256:5358d9eca1dcaa4527484dffb903384f132aacf5c524332ee2389ea829559ed4",
+    "observedAt": "2026-09-16T04:22:00Z",
+    "health": "exact source SHA verified",
+    "replicas": 1,
+    "mountPreserved": true,
+    "nonGitShaEnvironmentPreserved": true,
+    "queueEmpty": true,
+    "postflightSha256": "a15070800f9d38d5d6662a1c03d9c4d7efaedc69d1f687954a5574632246e54f",
+    "backupArchiveSha256": "278abfb0869ebf25ffa141f7b7132afd7b00b6dca5532a9555f92c70892352f6",
+    "restoreProof": {
+      "at": "2026-09-16T04:19:25Z",
+      "ok": true,
+      "files": 958,
+      "jsonFiles": 40,
+      "sqliteFiles": 79
+    },
+    "productionMcpAcceptance": "PENDING",
+    "B01": {
+      "status": "PENDING",
+      "resultReceipt": null
+    }
+  },
+  "limitations": [
+    "Finite isolated synthetic engine.chat evidence; not universal reliability, production MCP or WhatsApp acceptance.",
+    "B06:2 is scored from full-620-b4; its earlier incomplete full-620-b3 attempt remains in cost.",
+    "Earlier failed versions and targeted diagnostics remain historical evidence; they are not included in this seven-batch final-suite cost.",
+    "Production health/deployment/restore proof is operational only; production semantic acceptance remains pending."
+  ]
+}

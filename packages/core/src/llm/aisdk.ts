@@ -1059,14 +1059,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const cursors=new AnswerCursorAliases();
     const readPaths = new Set<string>();
     let supportRead = input.answerSupportRead === true;
+    let sourceDiscovered = false;
     let submittedAnswer: AnswerResult | undefined;
     let submissionAllowedThisStep = supportRead;
     let finalAnswerStep = false;
     const submissionSchema = z.object({ supportSelections: z.array(z.object({
       id: z.string().regex(/^as_[a-f0-9]{24}$/),
       mode: z.enum(["current", "historical", "prior", "conflict", "raw_report"]),
-      summaryText: z.string().trim().min(1).max(1200).nullable().describe("Always provide summaryText: write concise text for a requested source summary on raw_report passage support; choose null explicitly only for verbatim excerpts or canonical fact modes. Preserve attribution, alternatives, uncertainty, conditions, negation and ambiguous numbers without interpretation. No URLs or Markdown links; the host adds the verified citation."),
-    }).strict()).max(24) }).strict();
+      summaryText: z.string().trim().min(1).max(1200).nullable().describe("Always provide summaryText: write concise text for a requested source summary on paragraph or source_summary raw_report support; sentence-granularity handles require null; choose null explicitly only for verbatim excerpts or canonical fact modes. Preserve attribution, alternatives, uncertainty, conditions, negation and ambiguous numbers without interpretation. No URLs or Markdown links; the host adds the verified citation."),
+    }).strict()).max(24), analysisText: z.string().trim().min(1).max(1600).nullable().describe("For a requested opinion or recommendation, a concise assessment inferred only from the selected source premises; distinguish your advice from recorded statements and preserve uncertainty/conditions. The host labels it as inference, never a stored fact. No URLs or Markdown links. Use null for source-only answers.") }).strict();
     // A discovery hit is not a successful read or factual support.
     // An empty or off-topic first search gets one deterministic retry inside
     // the tool execution. This does not consume another model/tool round.
@@ -1647,7 +1648,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     const toolRounds = Math.max(1, this.maxSteps - 1);
     const budgetNote = input.answerSupportContract ? [
       `TOOL BUDGET: at most ${this.maxSteps} model rounds. Search and read early. ${input.answerSupportScope === "memory_only" ? "After source supports are available, use bounded read tools or submit_memory_answer. The final round permits only submission; select supported content or an empty selection if insufficient." : "Authorized action tools remain available before the final round. For a memory answer use submit_memory_answer, including the final round; the final round allows submission or ordinary prose but no action tools. A completed authoritative action may return its receipt as prose."}`,
-      "Submission ends this turn immediately. For requested source summaries, the host renders your cited summaryText; summaryText:null deliberately renders verbatim evidence or canonical fact wording. Write the summary inside the submission, not as closing prose afterward.",
+      "Submission ends this turn immediately. For opinions or recommendations, submit analysisText plus the actual source premises; outside prose is discarded. Use null for source-only answers. For requested source summaries, the host renders your cited summaryText; summaryText:null deliberately renders verbatim evidence or canonical fact wording. Write the summary inside the submission, not as closing prose afterward.",
     ].join(" ") : [
       `TOOL BUDGET: you have at most ${toolRounds} round${toolRounds === 1 ? "" : "s"} of tool calls this turn, then you MUST write your final answer.`,
       "Plan accordingly: search and read early, ask for everything you need up front rather than one tool at a time, and never spend your last round on a tool call.",
@@ -1727,17 +1728,21 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           }
           return { activeTools, toolChoice: "required" as const };
         }
+        if (input.answerSupportContract && sourceDiscovered && !supportRead && !authoritativePeerResult && !finalAnswerStep) {
+          const reads = [tools.readNote && "read_note", tools.readFacts && "read_facts", tools.searchEntries && "search_entries"].filter(Boolean) as string[];
+          if (reads.length) return {activeTools:reads,toolChoice:"required" as const};
+        }
         return { ...(input.answerSupportContract ? {activeTools:ordinaryAnswerTools} : {}), ...(stepNumber >= this.maxSteps-1 ? {toolChoice:"none" as const} : {}) };
       },
       tools: {
         ...(input.answerSupportContract ? {
           submit_memory_answer: tool({
-            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a requested summary, write concise summaryText on raw_report passage selections; summaryText:null explicitly selects verbatim excerpts and does not summarize; always include this field. Use complete relevant supports and preserve attribution, options, uncertainty, conditions and ambiguous numbers; other modes retain canonical wording. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
+            description: "Finish this memory answer by selecting actual answerSupports IDs and allowed modes. Select all requested subjects and necessary source qualifications. For a whole-note summary choose one source_summary handle and write one coherent summaryText of at most 1200 characters covering every explicitly requested facet and qualifier, avoiding repetitive filler. Read completeness does not validate semantic coverage or correctness. For other paraphrases use parent paragraph support, never sentence-granularity handles; summaryText:null explicitly selects verbatim excerpts and does not summarize; always include this field. Use complete relevant supports and preserve attribution, options, uncertainty, conditions and ambiguous numbers; other modes retain canonical wording. For a requested assessment, include analysisText grounded in these selected premises; null for source-only answers. No final prose outside this tool is accepted. This terminal tool ends the current turn without another completion.",
             inputSchema: submissionSchema,
             execute: async (submission) => {
               if (!submissionAllowedThisStep || submittedAnswer) {
                 submittedAnswer = {text:"",readPaths:sourcePaths(),supportProtocolError:"invalid_submission"};
-              } else submittedAnswer = {text:"",readPaths:sourcePaths(),supportSelections:submission.supportSelections.map(({summaryText,...selection})=>({...selection,...(summaryText===null?{}:{summaryText})}))};
+              } else submittedAnswer = {text:"",readPaths:sourcePaths(),supportSelections:submission.supportSelections.map(({summaryText,...selection})=>({...selection,...(summaryText===null?{}:{summaryText})})),...(submission.analysisText===null?{}:{analysisText:submission.analysisText})};
               return {submitted:true};
             },
           }),
@@ -1757,6 +1762,9 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                 execute: async ({ query }) => {
                   const recordSearch = (searchQuery: string, result: string): void => {
                     supportRead ||= result.includes("answerSupports");
+                    // A ranked vault path is discovery, never evidence. Require an
+                    // existing read step before prose can end a memory lookup.
+                    sourceDiscovered ||= /^.+\.md(?:#[^\s]+)? \(score [^\n]+/m.test(result);
                     input.onReadAction?.("search_vault", { query: searchQuery }, result);
                   };
                   const result = await tools.searchVault!(query);
@@ -1778,9 +1786,14 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
               }),
               read_note: tool({
                 description:
-                  noteReadDescription + " In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
-                inputSchema: noteReadSchema,
-                execute: async ({ path, ...options }) => {
+                  noteReadDescription + " Initial raw-source body reads always complete one uniquely identified exact evidence source within the shared 20000-character automatic allowance, using up to8000-character tracked chunks even if maxChars is smaller. Use an exact evidenceRef, or a literal query matching only one entry. Ambiguous daily logs stay bounded; select an exact ref. There is no model opt-out for an initial raw-source body read. maxChars applies to cursor continuation, frontmatter and ordinary meaning-page reads, which remain narrow. Longer sources retain continuation. In this answer, nextCursor is a short turn-local alias. Copy it exactly; never reconstruct the underlying cursor.",
+                inputSchema: noteReadSchema.extend({ maxChars: noteReadSchema.shape.maxChars.describe("Character cap for cursor continuation, frontmatter or ordinary meaning pages. Initial raw-source body reads always use bounded complete-source mode instead.") }),
+                execute: async ({ path, ...requested }) => {
+                  const options: typeof requested & { completeSource?: boolean } = { ...requested };
+                  if (!options.cursor && options.part !== "frontmatter" && /^Log\//.test(path)) {
+                    options.completeSource = true;
+                    delete options.maxChars; // In default whole-source mode use the established bounded chunks.
+                  }
                   if(options.cursor)options.cursor=cursors.resolve(options.cursor,cursors.readOwner(path,options.part));
                   const present=(value:string)=>cursors.encode(value,cursors.readOwner(path,options.part));
                   const read = async (readOptions: typeof options) => {
@@ -1794,7 +1807,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
                   // Daily logs start with a heading-only section. A model must not
                   // mistake that first passage for the file. Deliver a bounded batch
                   // of actual passages; the host tracks each read independently.
-                  if (!/^Log\/[^#]+\.md$/.test(path) || options.cursor || options.query || options.part === "frontmatter") return present(result);
+                  if (options.completeSource || !/^Log\/[^#]+\.md$/.test(path) || options.cursor || options.query || options.part === "frontmatter") return present(result);
                   let first: import("../ops/passage.js").NotePassage;
                   try { first = JSON.parse(result); } catch { return present(result); }
                   if (!first.extent || typeof first.body !== "string") return present(result);

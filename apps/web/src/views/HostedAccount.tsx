@@ -1,3 +1,4 @@
+import { ZenodLogo } from "@/components/zenod-logo"
 import * as React from "react"
 import {
   CopyIcon,
@@ -162,6 +163,23 @@ export function HostedAccount() {
             </Button>
           </AlertDescription>
         </Alert>
+        <footer className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <a className="underline" href="https://zenod.dev/legal/terms.html">
+            Terms of Service
+          </a>
+          <a className="underline" href="https://zenod.dev/legal/privacy.html">
+            Privacy Policy
+          </a>
+          <a
+            className="underline"
+            href="https://zenod.dev/legal/legal-notice.html"
+          >
+            Legal notice
+          </a>
+          <a className="underline" href="mailto:support@zenod.dev">
+            Support
+          </a>
+        </footer>
       </main>
     )
   }
@@ -179,6 +197,23 @@ export function HostedAccount() {
             </Button>
           </AlertDescription>
         </Alert>
+        <footer className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <a className="underline" href="https://zenod.dev/legal/terms.html">
+            Terms of Service
+          </a>
+          <a className="underline" href="https://zenod.dev/legal/privacy.html">
+            Privacy Policy
+          </a>
+          <a
+            className="underline"
+            href="https://zenod.dev/legal/legal-notice.html"
+          >
+            Legal notice
+          </a>
+          <a className="underline" href="mailto:support@zenod.dev">
+            Support
+          </a>
+        </footer>
       </main>
     )
   }
@@ -186,12 +221,11 @@ export function HostedAccount() {
   if (!me) return null
 
   const endpoint = account?.mcp_url ?? ""
-  const token = account?.token ?? "<your token>"
   const codex = endpoint
-    ? `codex mcp add zenod --url ${endpoint} --bearer ${token}`
+    ? `codex mcp add zenod --url ${endpoint}\ncodex mcp login zenod`
     : ""
   const claude = endpoint
-    ? `claude mcp add --transport http zenod ${endpoint} --header "Authorization: Bearer ${token}"`
+    ? `claude mcp add --transport http zenod ${endpoint}\n# In Claude Code: /mcp → Authenticate`
     : ""
   const legacyGithubVault = Boolean(
     vault?.provider === null && account?.vault_repo
@@ -227,11 +261,7 @@ export function HostedAccount() {
     <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-5 p-6">
       <header className="flex items-center justify-between gap-4 border-b border-border pb-4">
         <div className="flex min-w-0 items-center gap-3">
-          <img
-            src="/plates/zenod-plate-charcoal.jpg"
-            alt=""
-            className="size-10 border border-border object-cover"
-          />
+          <ZenodLogo />
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">Zenod account</h1>
             <p className="truncate text-sm text-muted-foreground">
@@ -317,7 +347,7 @@ export function HostedAccount() {
             <Card className="rounded-none">
               <CardHeader>
                 <CardTitle>Your MCP endpoint</CardTitle>
-                <CardDescription>Owner-only account session</CardDescription>
+                <CardDescription>Add this URL in your agent, then sign in to Zenod and click Allow.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -398,6 +428,23 @@ export function HostedAccount() {
           </Card>
         </>
       )}
+      <footer className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+        <a className="underline" href="https://zenod.dev/legal/terms.html">
+          Terms of Service
+        </a>
+        <a className="underline" href="https://zenod.dev/legal/privacy.html">
+          Privacy Policy
+        </a>
+        <a
+          className="underline"
+          href="https://zenod.dev/legal/legal-notice.html"
+        >
+          Legal notice
+        </a>
+        <a className="underline" href="mailto:support@zenod.dev">
+          Support
+        </a>
+      </footer>
     </main>
   )
 }

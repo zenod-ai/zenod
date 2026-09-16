@@ -45,6 +45,27 @@ const googleReadyEnv: NodeJS.ProcessEnv = {
 };
 
 describe("production readiness gate", () => {
+
+  it("opens ordinary public registration and live checkout before the first customer journey", () => {
+    const env = { ...googleReadyEnv,
+      ZENOD_STRIPE_WEBHOOK_VERIFIED_AT: undefined,
+      ZENOD_STRIPE_PORTAL_VERIFIED_AT: undefined,
+      ZENOD_LIVE_BILLING_VERIFIED_AT: undefined,
+      ZENOD_GDV_ACCEPTANCE_SHA: undefined,
+      ZENOD_GDV_ACCEPTANCE_VERIFIED_AT: undefined,
+    };
+    const report = productionReadinessReport(env);
+    expect(report).toMatchObject({ ready: true, evidenceReady: false, googleSignupReady: true });
+    expect(report.checks.find(c => c.id === "live_billing_journey")?.ok).toBe(false);
+    expect(report.checks.find(c => c.id === "google_drive_vault_acceptance")?.ok).toBe(false);
+    expect(() => assertPublicSignupIsReady(env)).not.toThrow();
+    expect(checkoutEnabledForOwner({ user_id: "brand_new_customer", provider: "google", email: "new@example.com", email_verified: true }, env)).toBe(true);
+    expect(checkoutEnabled({ ...env, STRIPE_WEBHOOK_SECRET: undefined })).toBe(false);
+    expect(() => assertPublicSignupIsReady({ ...env, STRIPE_WEBHOOK_SECRET: undefined })).toThrow(/stripe_webhook_secret/);
+    expect(() => assertPublicSignupIsReady({ ...env, GOOGLE_OIDC_CLIENT_SECRET: undefined })).toThrow(/google_identity_oauth/);
+    expect(checkoutEnabled({ ...env, ZENOD_PUBLIC_PAID_SIGNUP: "0", ZENOD_PUBLIC_GOOGLE_SIGNUP: "0" })).toBe(false);
+  });
+
   beforeEach(() => {
     // Readiness wrappers use the system clock; keep it aligned with the fixtures.
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -60,7 +81,7 @@ describe("production readiness gate", () => {
       new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
       "utf8",
     );
-    expect(terms).toContain("Version 2026-08-30");
+    expect(terms).toContain(`Version ${ZENOD_LEGAL_VERSION}`);
     expect(terms).toContain("€9 per month plus applicable VAT");
     expect(terms).toContain("managed AI usage and WhatsApp access");
     expect(terms).not.toMatch(/€5|€50|monthly and yearly|annual plan/i);
@@ -78,7 +99,7 @@ describe("production readiness gate", () => {
       "utf8",
     );
     for (const document of [terms, privacy, handling]) {
-      expect(document).toContain("Version 2026-08-30");
+      expect(document).toContain(document === terms ? `Version ${ZENOD_LEGAL_VERSION}` : "Version 2026-09-16");
       expect(document).toMatch(/GitHub/);
       expect(document).toMatch(/Google Drive|Drive vault/);
       expect(document).toMatch(/Markdown/);
@@ -118,7 +139,7 @@ describe("production readiness gate", () => {
     expect(checkoutOwnerAllowlisted({ ...owner, provider: "github" }, env)).toBe(false);
   });
 
-  it("opens Google signup only with OAuth/config/legal and exact-commit acceptance evidence", () => {
+  it("requires Google OAuth/config/legal while reporting acceptance evidence separately", () => {
     const now = new Date("2026-08-13T00:00:00.000Z");
     expect(productionReadinessReport(googleReadyEnv, now)).toMatchObject({
       ready: true,
@@ -158,7 +179,7 @@ describe("production readiness gate", () => {
     expect(wrongDriveCallback.checks.find((check) => check.id === "google_drive_vault_oauth")?.ok).toBe(false);
   });
 
-  it("opens paid signup only when every live requirement is evidenced", () => {
+  it("opens paid signup when runtime requirements are valid", () => {
     const now = new Date("2026-08-13T00:00:00.000Z");
     expect(productionReadinessReport(readyEnv, now)).toMatchObject({ ready: true, publicPaidSignup: true });
     expect(checkoutEnabled(readyEnv)).toBe(true);
@@ -174,7 +195,7 @@ describe("production readiness gate", () => {
     vi.setSystemTime(new Date("2026-09-13T00:00:00.000Z"));
     expect(checkoutEnabled(readyEnv)).toBe(false);
     expect(() => assertPublicSignupIsReady(readyEnv)).toThrow(/backup_restore/);
-    expect(() => assertPublicSignupIsReady(googleReadyEnv)).toThrow(/google_drive_vault_acceptance/);
+    expect(() => assertPublicSignupIsReady(googleReadyEnv)).toThrow(/backup_restore/);
   });
 
   it("does not accept a legacy yearly price in place of the monthly Hosted price", () => {

@@ -246,3 +246,11 @@ To close sales, set signup closed and clear tester checkout. To roll back code:
 5. restore data only for proven corruption, into a new volume, retaining the original.
 
 Never roll back by deleting/recreating a volume, resetting WhatsApp, rotating tenant tokens, clearing queues or removing legacy functionality.
+
+## 2026-09-16 — owner-authorized public opening
+
+Jordi explicitly requested normal public access and rejected tester-specific exceptions. Runtime signup readiness now requires valid operational configuration, legal acknowledgement, profile review, and backup/restore evidence. Completed new-customer billing/portal/webhook and exact-build Google/Drive journey receipts are advisory: requiring them before allowing the same journey caused a circular release dependency.
+
+`ready` controls startup/checkout and public availability. `evidenceReady` remains false until every recorded check passes, and `advisoryChecks` identifies the four receipt checks that do not block signup. Individual failed checks stay visible. No verification timestamp is invented. A separate `stripe_webhook_secret` requirement retains fail-closed signature-verification configuration. OAuth, session, payment entitlement, tenant isolation and Stripe event signature enforcement are unchanged.
+
+This supersedes the earlier rule in this document that all historical acceptance receipts must be green before enabling normal public signup. The existing public flags remain the operator's opening/closing controls; no new bypass flag or tester exception was added.

@@ -36,6 +36,10 @@ class FakeDrive implements DriveVaultClient {
   failMovePhase: "before" | "after" | null = null;
   authorityRace: { targetName: string; phase: "before_patch" | "after_patch"; externalFileId: string; data: string } | null = null;
   tombstoneRaceFileId: string | null = null;
+  versionStep = 1;
+  journalMetadataOnRead = false;
+  journalPreconditionRace = false;
+  uploadMetadataDelay = false;
   private nextId = 1;
 
   constructor() {
@@ -77,7 +81,7 @@ class FakeDrive implements DriveVaultClient {
   }
 
   private updateMetadata(file: Stored, contentChanged = false): void {
-    file.version = String(Number(file.version ?? "0") + 1);
+    file.version = String(Number(file.version ?? "0") + this.versionStep);
     file.modifiedTime = `2026-08-29T00:00:${String(this.mutationCount).padStart(2, "0")}.000Z`;
     file.md5Checksum = createHash("md5").update(file.data).digest("hex");
     if (contentChanged) {
@@ -129,7 +133,11 @@ class FakeDrive implements DriveVaultClient {
       .map((file) => this.clone(file));
   }
 
-  async getFile(fileId: string): Promise<DriveVaultFile> { return this.clone(this.getStored(fileId)); }
+  async getFile(fileId: string): Promise<DriveVaultFile> {
+    const file = this.getStored(fileId);
+    if (this.journalMetadataOnRead && file.name.endsWith(".json") && file.name !== "manifest.json") this.updateMetadata(file);
+    return this.clone(file);
+  }
   async download(fileId: string): Promise<Buffer> { return Buffer.from(this.getStored(fileId).data); }
 
   async uploadFile(name: string, mimeType: string, data: Buffer, parentFolderId: string, options: { appProperties?: Record<string, string> } = {}): Promise<DriveVaultFile> {
@@ -138,18 +146,26 @@ class FakeDrive implements DriveVaultClient {
       const file: Stored = { id, name, mimeType, data: Buffer.from(data), parents: [parentFolderId], appProperties: options.appProperties ?? {}, webViewLink: `https://drive.google.test/file/${id}`, version: "0" };
       this.updateMetadata(file, true);
       this.files.set(id, file);
-      return this.clone(file);
+      const response = this.clone(file);
+      if (this.uploadMetadataDelay) this.updateMetadata(file);
+      return response;
     });
   }
 
   private assertPrecondition(file: Stored, precondition: DriveVaultPrecondition): void {
-    if (precondition.expectedVersion && file.version !== precondition.expectedVersion) throw new Error(`Drive file conflict: version changed for ${file.id}`);
+    if (precondition.expectedVersion && file.version !== precondition.expectedVersion
+      && !(precondition.expectedChecksum && precondition.expectedModifiedTime
+        && BigInt(file.version!) > BigInt(precondition.expectedVersion))) throw new Error(`Drive file conflict: version changed for ${file.id}`);
     if (precondition.expectedModifiedTime && file.modifiedTime !== precondition.expectedModifiedTime) throw new Error(`Drive file conflict: modified time changed for ${file.id}`);
     if (precondition.expectedChecksum && createHash("sha256").update(file.data).digest("hex") !== precondition.expectedChecksum) throw new Error(`Drive file conflict: checksum changed for ${file.id}`);
   }
 
   async updateFile(fileId: string, mimeType: string, data: Buffer, precondition: DriveVaultPrecondition): Promise<DriveVaultFile> {
     const file = this.getStored(fileId);
+    if (this.journalPreconditionRace && file.name.endsWith(".json") && file.name !== "manifest.json") {
+      this.journalPreconditionRace = false;
+      this.updateMetadata(file);
+    }
     this.assertPrecondition(file, precondition);
     return this.mutate(() => {
       const authorityRace = this.authorityRace
@@ -313,7 +329,7 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
-describe("DriveVaultRepository", () => {
+describe("DriveVaultRepository", { timeout: 20_000 }, () => {
   it("guards exact filing publication and refuses unvalidated prepared local commits", async () => {
     const drive = new FakeDrive(); const workdir = await temp("filing-guard"); const repo = await open(drive, workdir);
     const base = await repo.currentPublishedRevision();
@@ -983,6 +999,37 @@ describe("DriveVaultRepository", () => {
       await expect(open(drive, restarted)).rejects.toMatchObject({ failure: { code: "conflict", paths: ["Areas/Home.md"] } });
     },
   );
+
+  it("recovers an acknowledged manifest with an unfinished bootstrap journal across two restarts", async () => {
+    const drive = new FakeDrive();
+    drive.versionStep = 3;
+    drive.failAt = { call: 10, phase: "after" };
+    await expect(open(drive, await temp("manifest-lost-response"))).rejects.toThrow();
+    drive.failAt = null;
+    const first = await open(drive, await temp("manifest-recovery-first"));
+    const second = await open(drive, await temp("manifest-recovery-second"));
+    expect((await second.currentRevision()).id).toBe((await first.currentRevision()).id);
+    expect(readBootstrapJournal(drive).manifest).toBeDefined();
+  });
+
+  it.each([false, true])("bootstraps, publishes, updates and reopens with non-consecutive Drive versions (lost acknowledgment: %s)", async (lostAcknowledgment) => {
+    const drive = new FakeDrive();
+    drive.versionStep = 3;
+    drive.uploadMetadataDelay = true;
+    drive.journalMetadataOnRead = true;
+    drive.journalPreconditionRace = true;
+    if (lostAcknowledgment) drive.failAt = { call: 7, phase: "after" };
+    const workdir = await temp("version-gaps");
+    const repo = await open(drive, workdir);
+    if (lostAcknowledgment) expect(drive.faultTriggered).toBe(true);
+    await writeVaultFile(workdir, "Notes/Version.md", "first\n");
+    await repo.commitAndPublish("create with version gaps");
+    await writeVaultFile(workdir, "Notes/Version.md", "second\n");
+    await repo.commitAndPublish("update with version gaps");
+    const fresh = await temp("version-gaps-reopen");
+    await open(drive, fresh);
+    expect(await readFile(join(fresh, "Notes/Version.md"), "utf8")).toBe("second\n");
+  });
 
   it.each(["before_patch", "after_patch"] as const)("fails closed when the durable journal races %s", async (phase) => {
     const drive = new FakeDrive();

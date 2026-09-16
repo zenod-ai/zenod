@@ -71,6 +71,24 @@ describe("Zenod dashboard navigation", () => {
 })
 
 describe("MCP access details", () => {
+  it("uses one public URL for hosted accounts, including older token-bearing account responses", () => {
+    expect(resolveMcpAccess("private", null, true).url).toBe(
+      "https://cloud.zenod.dev/mcp"
+    )
+    expect(
+      resolveMcpAccess(
+        "",
+        { token: "private", mcp_url: "https://cloud.zenod.dev/mcp/private" },
+        true
+      )
+    ).toEqual({
+      token: "private",
+      url: "https://cloud.zenod.dev/mcp",
+    })
+    expect(
+      mcpClientSnippets("https://cloud.zenod.dev/mcp", "zenod", true).codex
+    ).toContain("codex mcp login zenod")
+  })
   it("builds a tokened endpoint on the canonical customer host", () => {
     expect(mcpUrlForToken("acme-token")).toBe(
       "https://cloud.zenod.dev/mcp/acme-token"

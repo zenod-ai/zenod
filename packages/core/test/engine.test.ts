@@ -464,7 +464,7 @@ class FakeDriveVaultRepository implements VaultRepository {
   }
 }
 
-describe("BrainEngine", () => {
+describe("BrainEngine", { timeout: 20_000 }, () => {
   let dir: string;
   let repo: VaultRepo;
   let llm: FakeLlm;
@@ -513,7 +513,10 @@ describe("BrainEngine", () => {
     llm.answerOverride = async (_input, tools) => {
       const discovery = await tools.searchVault!("Orchid");
       expect(discovery).toContain(page);
-      expect(discovery).not.toContain("answerSupports");
+      // Ranked discovery auto-reads the single unique raw source (see the
+      // dedicated auto-read tests), but it must never inject the meaning page's
+      // own fact candidates into discovery.
+      expect(discovery).toContain("Read source evidence:");
       expect(discovery).not.toContain("Source-backed fact candidates");
       // Discovery must not spend the bounded fact-read allowance. All four
       // explicit reads remain available and verify source-backed current facts.
@@ -525,9 +528,12 @@ describe("BrainEngine", () => {
       }
       const pageRead = JSON.parse(await tools.readNote!(page));
       expect(pageRead.factView).toBeUndefined(); // Explicit scope remains authoritative.
-      const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
+      // The raw source was already read and its supports registered by ranked
+      // discovery; reuse that exact support rather than re-registering it.
+      const discoveryPacket = JSON.parse(discovery.split("Read source evidence:\n")[1]!);
+      const sourceSupport = discoveryPacket.passages.flatMap((passage: any) => passage.answerSupports ?? []).find((support: any) => support.excerpt?.startsWith("Orchid hypothesis"));
       return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
-        { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
+        { id: sourceSupport.id, mode: "raw_report" },
         { id: lastExplicit.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
       ] };
     };
@@ -539,7 +545,8 @@ describe("BrainEngine", () => {
     expect(result.text).toContain(capture.evidenceRef);
     llm.answerOverride = async (_input, tools) => {
       await tools.readNote!(page); const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
-      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" }] };
+      const sourceSupport = (sourceRead.passages ?? [sourceRead]).flatMap((passage: any) => passage.answerSupports ?? []).find((support: any) => support.excerpt?.startsWith("Orchid hypothesis"));
+      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceSupport.id, mode: "raw_report" }] };
     };
     const rawOnly = await e.ask("What is the unverified Orchid workshop hypothesis?");
     expect(rawOnly.text).toContain(hypothesis);
@@ -586,6 +593,159 @@ describe("BrainEngine", () => {
     expect(staleSelection.text).toContain("snapshot changed");
     expect(staleSelection.text).not.toContain(restriction);
   }, 15_000);
+
+  it("ranked search reads one unique raw source despite associated meaning hits",async()=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    await writeFile(join(repo.path,path),"# Log\n\n## Garden valve inspection ^e-123abc\n> Garden valve inspection is tentative. "+"The workspace is documented. ".repeat(600)+"Attendance depends on shift timing.\n");
+    await writeFile(join(repo.path,"Areas/Garden.md"),"---\ntitle: Garden valve inspection\nsummary: Garden valve inspection plans\n---\nRelated meaning page.\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const result=await tools.searchVault!("Garden valve inspection");
+      expect(result).toContain("Areas/Garden.md");
+      expect(await tools.searchVault!("Garden valve inspection")).toBe(result);
+      const packet=JSON.parse(result.split("Read source evidence:\n")[1]!);
+      expect(packet.readPath).toBe(ref);expect(packet.readPartial).toBe(false);
+      expect(packet.passages.at(-1).body).toContain("depends on shift timing");
+      const support=packet.passages.flatMap((p:any)=>p.answerSupports).find((h:any)=>h.kind==="source_summary");
+      // No subsequent model read is needed: the search tool actually read it.
+      return {text:"",readPaths:[],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"Attendance depends on shift timing."}]};
+    };
+    const answer=await engine().ask("Garden valve inspection");
+    expect(answer.text).toContain("depends on shift timing");expect(answer.sources.map(s=>s.path)).toContain(ref);
+  });
+
+  it.each(["multiple raw hits","duplicate anchors","unmatched snippet","no hits"])("ranked search leaves uncertain discovery nonauthoritative: %s",async mode=>{
+    const path="Log/2026-09-08.md";
+    const body=mode==="unmatched snippet"?"# Garden valve inspection\n\n## Different topic ^e-123abc\n> Other content.\n":"# Log\n\n## Garden valve inspection ^e-123abc\n> Garden valve inspection is tentative.\n";
+    await writeFile(join(repo.path,path),body+(mode==="duplicate anchors"?"\n## Separate entry ^e-123abc\n> Other content.\n":""));
+    if(mode==="multiple raw hits")await writeFile(join(repo.path,"Log/2026-09-09.md"),body.replaceAll("e-123abc","e-456def"));
+    llm.answerOverride=async(_input,tools)=>{
+      const result=await tools.searchVault!(mode==="no hits"?"zzzzabsenttoken":"Garden valve inspection");
+      expect(result).not.toContain("Read source evidence:");expect(result).not.toContain('"answerSupports"');
+      return {text:"Unsupported conclusion",readPaths:[]};
+    };
+    expect((await engine().ask("Garden valve inspection")).text).not.toContain("Unsupported conclusion");
+  });
+
+  it("search-triggered source support still rejects a changed snapshot",async()=>{
+    const path="Log/2026-09-08.md";
+    await writeFile(join(repo.path,path),"# Log\n\n## Garden valve inspection ^e-123abc\n> The inspection remains tentative.\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const result=await tools.searchVault!("Garden valve inspection");
+      const packet=JSON.parse(result.split("Read source evidence:\n")[1]!);
+      const support=packet.passages.flatMap((p:any)=>p.answerSupports).find((h:any)=>h.kind==="source_summary");
+      await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8"))+"Changed snapshot.\n");
+      return {text:"",readPaths:[],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The inspection remains tentative."}]};
+    };
+    expect((await engine().ask("Garden valve inspection")).text).toContain("snapshot changed");
+  });
+
+  it.each([17300, 25000])("whole-source opt-in reads exact contiguous evidence with shared bounds (%s)", async chars => {
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    const raw="## 14:16 Capture ^e-123abc\n> Beginning: repair is preferred but undecided. "+"The studio layout is documented. ".repeat(Math.ceil(chars/32))+" Middle: the estimate is provisional. Ending: confirm access before arranging delivery.\n";
+    await writeFile(join(repo.path,path),"# Log\n\n"+raw+"\n## 14:17 Other ^e-456def\n> Neighbor must not leak.\n");
+    const {readNotePassage}=await import("../src/ops/passage.js");
+    const first=await readNotePassage(repo.path,ref,{maxChars:8000});
+    const exact=(await readFile(join(repo.path,path),"utf8")).slice(first.extent.sectionStart,first.extent.sectionEnd);
+    llm.answerOverride=async (_input,tools)=>{
+      const narrow=JSON.parse(await tools.readNote!(ref,{maxChars:256}));
+      expect(narrow.body.length).toBe(256);expect(narrow.passages).toBeUndefined();
+      const packet=JSON.parse(await tools.readNote!(path,{query:"Beginning: repair",completeSource:true}));
+      expect(packet.readPath).toBe(ref);expect(packet.passages.every((p:any)=>p.identity===ref&&p.version===first.version&&p.body.length<=8000)).toBe(true);
+      const text=packet.passages.map((p:any)=>p.body).join("");expect(text).toBe(exact.slice(0,text.length));expect(text).not.toContain("Neighbor must not leak");
+      expect(packet.bodyChars).toBeLessThanOrEqual(20000);
+      const repeat=JSON.parse(await tools.readNote!(path,{query:"Beginning: repair",completeSource:true}));expect(repeat).toEqual(packet);
+      const summary=packet.passages.flatMap((p:any)=>p.answerSupports).find((hint:any)=>hint.kind==="source_summary");
+      if(chars<20000){expect(text).toBe(exact);expect(packet.readPartial).toBe(false);expect(summary).toBeDefined();expect(text).toContain("Ending: confirm access");}
+      else{expect(packet.readPartial).toBe(true);expect(packet.nextCursor).toBeTruthy();expect(summary).toBeUndefined();}
+      return {text:"",readPaths:[ref],supportSelections:summary?[{id:summary.id,mode:"raw_report",summaryText:"Repair is preferred, not decided; the estimate is provisional and access must be confirmed before delivery."}]:[]};
+    };
+    const reply=await engine().ask("Summarize the complete planning note");
+    if(chars<20000)expect(reply.text).toContain("access must be confirmed");
+    else expect(reply.coverage?.continuation).toContainEqual(expect.objectContaining({tool:"read_note",input:expect.objectContaining({path:ref})}));
+  });
+
+  it.each([undefined,"shared phrase","a paraphrase absent from either source"])("ambiguous daily logs never become one automatic whole source (query: %s)",async query=>{
+    const path="Log/2026-09-08.md";
+    await writeFile(join(repo.path,path),"# Log\n\n## 14:16 First ^e-123abc\n> shared phrase. "+"First source. ".repeat(800)+"\n\n## 14:17 Second ^e-456def\n> shared phrase. "+"Second source. ".repeat(800)+"\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(path,{completeSource:true,...(query?{query}:{})}));
+      expect(packet.readPartial).toBe(true);expect(packet.instruction).toContain("No unique exact source");
+      expect(packet.bodyChars??packet.body.length).toBeLessThanOrEqual(8000);
+      const pieces=packet.passages??[packet];expect(pieces.flatMap((piece:any)=>piece.answerSupports??[]).some((hint:any)=>hint.kind==="source_summary")).toBe(false);
+      return {text:"",readPaths:[path],supportSelections:[]};
+    };
+    await engine().ask("Summarize the note");
+  });
+
+  it("completes a structurally unique source when a paraphrased locator does not match",async()=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    await writeFile(join(repo.path,path),"# Log\n\n## 14:16 Capture ^e-123abc\n> "+"The room has shelves. ".repeat(750)+"The final arrangement is conditional on approval.\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(path,{completeSource:true,query:"Paraphrased text not literally present"}));
+      expect(packet.readPartial).toBe(false);expect(packet.readPath).toBe(ref);
+      expect(packet.passages.at(-1).body).toContain("conditional on approval");
+      const support=packet.passages.flatMap((p:any)=>p.answerSupports).find((h:any)=>h.kind==="source_summary");
+      expect(support).toBeDefined();
+      return {text:"",readPaths:[ref],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The final arrangement needs approval."}]};
+    };
+    expect((await engine().ask("Explain the closing arrangement")).text).toContain("needs approval");
+  });
+
+  it("whole-source and catalog automation share one concurrent allowance",async()=>{
+    const path="Log/2026-09-08.md",refs=[path+"#^e-123abc",path+"#^e-456def"];
+    await writeFile(join(repo.path,path),"# Log\n\n"+refs.map(ref=>`## 14:16 Capture ^${ref.split("#^")[1]}\n> ${"A complete report. ".repeat(1600)}\n\n`).join(""));
+    const entrySearch=vi.fn(async()=>({entries:[{evidenceRef:refs[1],capturedAt:"2026-09-08T14:15:00Z",contentType:"voice_note",source:"whatsapp"}],pagination:{hasMore:false,nextCursor:null,snapshot:"stable",matchedEntries:1,scannedEntries:1,scannedVaultEntries:2,scannedReceiptJobs:0,receiptEnrichmentAvailable:false,scope:"test"}} as any));
+    llm.answerOverride=async(_input,tools)=>{
+      const [whole,catalog]=await Promise.all([tools.readNote!(refs[0]!,{completeSource:true}),tools.searchEntries!({limit:1})]);
+      const a=JSON.parse(whole),b=JSON.parse(catalog);expect(a.bodyChars).toBe(20000);expect(b.evidence).toEqual([]);expect(a.readPartial).toBe(true);
+      await expect(tools.readNote!(refs[1]!,{completeSource:true})).rejects.toThrow("allowance exhausted");
+      return {text:"",readPaths:[refs[0]!],supportSelections:[]};
+    };
+    await createEngine({repo,llm,state,entrySearch}).ask("Summarize the sources");
+  });
+
+  it("whole-source completion retains partial evidence and refuses a handle across a changed snapshot",async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"An undecided option. ".repeat(1000),source:"selftest"});
+    llm.answerOverride=async(_input,tools)=>{
+      const revision=repo.currentRevision.bind(repo);let reads=0;
+      const probe=vi.spyOn(repo,"currentRevision").mockImplementation(async()=>{
+        if(++reads===2){const path=capture.evidenceRef.split("#")[0]!;await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8")).replace("An undecided option.","A changed tentative option."));}
+        return revision();
+      });
+      try {
+        const packet=JSON.parse(await tools.readNote!(capture.evidenceRef,{completeSource:true}));
+        expect(packet.readPartial).toBe(true);expect(packet.error).toMatch(/changed|stale|version/i);expect(packet.nextCursor).toBeTruthy();
+        expect(packet.passages).toHaveLength(1);expect(packet.passages.flatMap((p:any)=>p.answerSupports).some((hint:any)=>hint.kind==="source_summary")).toBe(false);
+        return {text:"",readPaths:[capture.evidenceRef],supportSelections:[],analysisText:"This advice must not appear."};
+      } finally {probe.mockRestore();}
+    };
+    const reply=await e.ask("Summarize the source");expect(reply.text).not.toContain("This advice must not appear.");
+  });
+
+  it.each([false,true])("grounds a labelled assessment and rejects stale premises (stale: %s)",async stale=>{
+    const e=engine();const raw="Repair costs 90 euros; replacement costs 600 euros. Feasibility is unconfirmed and no decision is made.";
+    const capture=await e.captureEvidence!({content:raw,source:"selftest"});
+    const analysis="I would confirm feasibility before committing; repair is cheaper only if technically feasible.";
+    llm.answerOverride=async(_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(capture.evidenceRef,{completeSource:true}));
+      const summary=packet.passages.flatMap((p:any)=>p.answerSupports).find((hint:any)=>hint.kind==="source_summary");
+      if(stale){const path=capture.evidenceRef.split("#")[0]!;await writeFile(join(repo.path,path),(await readFile(join(repo.path,path),"utf8"))+"\nChanged snapshot.\n");}
+      return {text:"unsupported closing prose",readPaths:[capture.evidenceRef],supportSelections:[{id:summary.id,mode:"raw_report",summaryText:raw}],analysisText:analysis};
+    };
+    const reply=await e.chat("What do you think about the repair option?","web");
+    if(stale){expect(reply.text).toContain("snapshot changed");expect(reply.text).not.toContain(analysis);}
+    else {expect(reply.text).toContain("My assessment (inference");expect(reply.text).toContain(analysis);expect(reply.text).toContain(raw);expect(reply.text).toContain(capture.evidenceRef);}
+  });
+
+  it("a grounded assessment cannot bypass the same-turn mutation guard",async()=>{
+    const e=engine();const capture=await e.captureEvidence!({content:"The option remains undecided.",source:"selftest"});
+    llm.answerOverride=async(_input,tools)=>{
+      const read=JSON.parse(await tools.readNote!(capture.evidenceRef));
+      const support=read.answerSupports.find((hint:any)=>hint.kind==="source_summary");
+      return {text:"",readPaths:[capture.evidenceRef],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The source records an undecided option."}],analysisText:"I saved your final decision."};
+    };
+    const reply=await e.chat("What do you think?","web");expect(reply.text).toContain("no verified same-turn mutation receipt");expect(reply.text).not.toContain("I saved your final decision.");
+  });
 
   it("rejects a complete-source summary when its selected source changes before finalization",async()=>{
     const e=engine();const capture=await e.captureEvidence!({content:"An option remains tentative and requires inspection.",source:"selftest"});
@@ -2276,8 +2436,11 @@ describe("BrainEngine", () => {
   it("answers with citations from the read paths (DoD #2 shape)", async () => {
     const answer = await engine().ask("what do I know about my insurance?");
     expect(answer.text).toContain("Axa");
-    expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
+    // The uniquely identified raw evidence read during discovery is the primary
+    // citation; the curated meaning page still resolves from the explicit read.
+    expect(answer.sources[0]?.path).toBe("Log/2026-06-10.md#^e-7f3a2c");
     expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+    expect(answer.sources.map(source => source.path)).toContain("Areas/Insurance.md");
   });
 
   it("grounds ask contextRefs on the exact evidence block first", async () => {
@@ -3387,7 +3550,8 @@ describe("BrainEngine", () => {
 
     expect(deltas.length).toBeGreaterThan(1); // streamed in chunks, not one blob
     expect(deltas.join("")).toBe(reply.text); // no tokens dropped or duplicated
-    expect(reply.sources[0]?.path).toBe("Areas/Insurance.md"); // sources still resolve at the end
+    expect(reply.sources[0]?.path).toBe("Log/2026-06-10.md#^e-7f3a2c"); // raw evidence resolves first at the end
+    expect(reply.sources.map(source => source.path)).toContain("Areas/Insurance.md");
 
     // The streamed turn is persisted just like a non-streamed one.
     const window = await state.recentWindow("web:default");

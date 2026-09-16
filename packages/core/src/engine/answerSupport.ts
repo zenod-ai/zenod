@@ -8,7 +8,7 @@ export interface AnswerSupportHint { id: string; modes: AnswerSupportMode[]; kin
 type Support = { hint: AnswerSupportHint; view: FactView; factId?: string; priorId?: string }
   | { hint: AnswerSupportHint; passage: NotePassage; text: string; summaryOnly?:true };
 const digest = (value: unknown) => `as_${createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24)}`;
-export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. Do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. For a requested source summary, write the concise answer in summaryText (at most 1200 characters) on each selected raw_report passage. Always include summaryText in the model submission. Choose null explicitly only for a verbatim excerpt or canonical fact mode; null does not summarize. Use a few complete relevant supports while retaining all requested subjects and necessary qualifications. Synthesize only the selected source, preserving speaker attribution, options, doubt, negation and conditions. Preserve ambiguous numbers as ambiguous; do not infer their unit, meaning or a corrected value. The host supplies citations; do not put links or URLs in summaryText. For a whole-note summary prefer the source_summary handle when available: it proves the complete exact source was read and requires nonempty summaryText; null is forbidden for that handle. It does not establish semantic truth. Otherwise read the whole requested note through its cursors, or explicitly label the summary partial with unread coverage. For other modes the host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue with nextCursor and omit query, or seek with a literal query and omit cursor. Never send query and cursor together. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Prefer the smallest complete relevant support; use the parent paragraph when qualifications cannot be preserved by the selected children. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. Ordinary conversation or completed non-memory actions may use normal prose.";
+export const ANSWER_SUPPORT_INSTRUCTION = "For a factual memory answer select the relevant answerSupports IDs and their allowed modes. Finish by calling submit_memory_answer with supportSelections containing exact id/mode pairs copied from these answerSupports. Choose mode only from that ID's modes array; raw_report is not current. Do not emit prose or JSON as final text. Select all requested subjects, including raw-only hypotheses and prior/conflicting reports. For a concise source-grounded answer or requested source summary, write the answer in summaryText (at most 1200 characters) on each selected raw_report passage. Always include summaryText in the model submission. Choose null explicitly only for a verbatim excerpt or canonical fact mode; null does not summarize. Use a few complete relevant supports while retaining all requested subjects and necessary qualifications. Synthesize only the selected source, preserving speaker attribution, options, doubt, negation and conditions. Preserve ambiguous numbers as ambiguous; do not infer their unit, meaning or a corrected value. The host supplies citations; do not put links or URLs in summaryText. For a whole-note summary choose one source_summary handle and write one coherent summaryText of at most 1200 characters covering every explicitly requested facet and qualifier before submitting; avoid repetitive filler. The handle proves read completeness, not semantic coverage or correctness: it proves the complete exact source was read and requires nonempty summaryText; null is forbidden for that handle. It does not establish semantic truth. Initial raw-source body reads automatically read the uniquely identified exact source within the shared automatic allowance. Cursor continuations, frontmatter and ordinary meaning-page reads retain their bounded scope. Otherwise read the whole requested note through its cursors, or explicitly label the summary partial with unread coverage. For other modes the host renders canonical source wording and citations; do not invent IDs or keys. Check relevance before selecting: an available source-backed fact may answer a different question. readPartial/nextCursor describes unread source scope, separately from answerSupportPartial. If readPartial is true and requested information is missing, continue with nextCursor and omit query, or seek with a literal query and omit cursor. Never send query and cursor together. If answerSupportPartial is true, some source edges or selection metadata remain unavailable; continue bounded reads or seek the relevant passage. Sentence IDs permit verbatim excerpts only: use summaryText:null; paraphrases require parent paragraph or source_summary support. Sentence IDs are exact raw excerpts, not complete reports: select every sentence needed to preserve attribution, negation, uncertainty and corrections visible in the surrounding source. Prefer the smallest complete relevant support; use the parent paragraph when qualifications cannot be preserved by the selected children. Earlier IDs remain valid in this turn. Read missing evidence or broader read_facts scope if the requested key is absent. No matching support means an empty selection, not proof of absence. For a requested opinion, recommendation or interpretation, put your concise assessment in analysisText and select the source premises supporting it. Distinguish your inference from what the speaker reported; preserve uncertainty, conditions and current/prior/conflict status. Do not claim the assessment is stored or independently verified. Use analysisText:null for source-only answers. Ordinary conversation or completed non-memory actions may use normal prose.";
 
 // Intl may split a newline-delimited attribution from the following sentence.
 // Keep that prefix attached instead of issuing an unqualified child handle.
@@ -144,8 +144,8 @@ export class AnswerSupportRegistry {
       }
     }
     if(offerSummary){
-      const hint:AnswerSupportHint={id:summaryId,kind:"source_summary",modes:["raw_report"],summaryOnly:true,
-        excerpt:"Complete exact source read. Summarize its full content with attribution and qualifications; nonempty summaryText required."};
+      // Excerpts contain source text only; summary protocol belongs in the instruction.
+      const hint:AnswerSupportHint={id:summaryId,kind:"source_summary",modes:["raw_report"],summaryOnly:true};
       this.supports.set(summaryId,{hint,passage,text:"",summaryOnly:true});hints.push(hint);
     }else if(complete&&!this.supports.has(summaryId))this.lastPassageSelectionPartial=true;
     return hints;
@@ -158,22 +158,26 @@ export class AnswerSupportRegistry {
     if (!Array.isArray(selections) || selections.length > 24) return [];
     return [...new Map(selections.flatMap(selection => { const support=selection && this.supports.get(selection.id); return support && "passage" in support ? [[`${support.passage.identity}:${support.passage.version}`, support.passage] as const] : []; })).values()];
   }
-  render(selections: AnswerSupportSelection[]): { text: string; valid: boolean } {
+  render(selections: AnswerSupportSelection[], analysisText?: string): { text: string; valid: boolean } {
     if (!Array.isArray(selections) || selections.length>24) return {text:"The selected answer support is invalid. Repeat the source reads before answering.",valid:false};
     const lines: string[]=[]; const seen=new Set<string>();
     for (const selection of selections) {
       const support=selection && this.supports.get(selection.id);
       if (!support || !support.hint.modes.includes(selection.mode)) return {text:"The answer selected unknown, unavailable or temporally incompatible support. Repeat the relevant source/fact reads; current state is not established by this selection.",valid:false};
-      if ("summaryOnly" in support && support.summaryOnly && (typeof selection.summaryText!=="string"||!selection.summaryText.trim())) return {text:"A complete-source summary requires nonempty summaryText; raw excerpts are unavailable for this handle.",valid:false};
-      if (selection.summaryText !== undefined && (typeof selection.summaryText !== "string" || !selection.summaryText.trim()
-        || selection.summaryText.length > 1200 || selection.mode !== "raw_report" || !("passage" in support)
-        || /https?:\/\/|\]\(|\[\[|<[^>]*>/i.test(selection.summaryText))) {
+      // Narrow and canonical handles never lend authority to model-authored wording.
+      // Preserve their verified host rendering even when the model supplies extra text.
+      const summaryText = "passage" in support && selection.mode === "raw_report" && support.hint.granularity !== "sentence"
+        ? selection.summaryText : undefined;
+      if ("summaryOnly" in support && support.summaryOnly && (typeof summaryText!=="string"||!summaryText.trim())) return {text:"A complete-source summary requires nonempty summaryText; raw excerpts are unavailable for this handle.",valid:false};
+      if (summaryText !== undefined && (typeof summaryText !== "string" || !summaryText.trim()
+        || summaryText.length > 1200 || selection.mode !== "raw_report" || !("passage" in support)
+        || /https?:\/\/|\]\(|\[\[|<[^>]*>/i.test(summaryText))) {
         return {text:"The source summary has invalid support or formatting. Repeat the supported source selection.",valid:false};
       }
       if (seen.has(selection.id)) continue; seen.add(selection.id);
       if ("passage" in support) {
         const ref=support.passage.identity, url=support.passage.source.url;
-        if (selection.summaryText !== undefined) lines.push(`Source summary:\n${selection.summaryText.trim()}\n[${ref}](${url})`);
+        if (summaryText !== undefined) lines.push(`Source summary:\n${summaryText.trim()}\n[${ref}](${url})`);
         else lines.push(`${support.hint.granularity === "sentence" ? "Raw source excerpt (selected sentences; surrounding qualifications may be omitted)" : "Raw source report"} (not independently verified current state):\n${support.text}\n[${ref}](${url})`);
       } else if (support.priorId) {
         const prior=support.view.priorStatements!.find(p=>p.statementId===support.priorId)!;
@@ -186,6 +190,13 @@ export class AnswerSupportRegistry {
         if(selection.mode==="prior") lines.push(`Prior source report (superseded): ${fact.statement}\n[${fact.evidenceRef}](${fact.source!.url})`);
         else lines.push(renderFactViews([scoped]));
       }
+    }
+    if (analysisText !== undefined) {
+      if (typeof analysisText !== "string" || !analysisText.trim() || analysisText.length > 1600 || !seen.size
+        || /https?:\/\/|\]\(|\[\[|<[^>]*>/i.test(analysisText)) {
+        return { text: "An assessment requires valid nonempty source support and bounded plain text. Repeat the supported source selection.", valid: false };
+      }
+      lines.unshift(`My assessment (inference from the cited premises, not an established fact):\n${analysisText.trim()}\n\nSource premises:`);
     }
     return {text:[...new Set(lines)].join("\n\n") || "No supported answer was selected from the sources read. This is not proof of absence; read the relevant evidence or fact scope.",valid:true};
   }

@@ -57,6 +57,17 @@ function sections(body: string, evidence: boolean): Section[] {
   return starts.map((section, index) => ({ ...section, end: starts[index + 1]?.start ?? body.length }));
 }
 
+/** Resolve identity only, never supply answer evidence. Ambiguous daily logs need an exact ref. */
+export function uniqueEvidenceRef(path: string, body: string, query?: string): string | undefined {
+  if (!/^Log\/[^#]+\.md$/.test(path)) return undefined;
+  const literal = query?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const entries = sections(body, true).filter(section => section.anchor);
+  const matches = entries.filter(section =>
+    (!literal || new RegExp(literal, "iu").test(body.slice(section.start, section.end))));
+  return matches.length === 1 && entries.filter(section => section.anchor === matches[0]!.anchor).length === 1
+    ? `${path}#^${matches[0]!.anchor}` : undefined;
+}
+
 function boundary(text: string, offset: number): number {
   // Keep surrogate pairs intact, while preserving offsets in the original body.
   const code = text.charCodeAt(offset);

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readNotePassage, readNotePacket } from "../src/ops/passage.js";
+import { readNotePassage, readNotePacket, uniqueEvidenceRef } from "../src/ops/passage.js";
 import { AnswerSupportRegistry } from "../src/engine/answerSupport.js";
 import { getNote } from "../src/ops/get.js";
 
@@ -192,4 +192,15 @@ describe("substantive section packets", () => {
     } while(cursor);
     expect(actual).toBe(text);
   });
+});
+
+it("resolves only a unique anchored source with the existing literal query semantics",()=>{
+ const path="Log/2026-01-01.md",first="## 12:00 Studio (plan) ^e-123abc\n> Repair is tentative.\n",second="## 13:00 Garden ^e-456def\n> Watering is tentative.\n";
+ expect(uniqueEvidenceRef(path,first)).toBe(path+"#^e-123abc");
+ expect(uniqueEvidenceRef(path,first+second)).toBeUndefined();
+ expect(uniqueEvidenceRef(path,first+second,"STUDIO (PLAN)")).toBe(path+"#^e-123abc");
+ expect(uniqueEvidenceRef(path,first+second,"tentative")).toBeUndefined();
+ expect(uniqueEvidenceRef(path,first+second,"missing")).toBeUndefined();
+ expect(uniqueEvidenceRef(path,first+second.replace("e-456def","e-123abc"),"Garden")).toBeUndefined();
+ expect(uniqueEvidenceRef("Notes/Other.md",first,"Repair")).toBeUndefined();
 });

@@ -26,7 +26,7 @@ function wire(replies:Array<Reply|(()=>Reply)>) {
  return requests;
 }
 const read={name:"read_facts",input:{path:"Notes/Atlas.md"}};
-const submit={name:"submit_memory_answer",input:{supportSelections:[{id,mode:"current",summaryText:null}]}};
+const submit={name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"current",summaryText:null}]}};
 const input={question:"¿Cuándo empieza?",vaultBriefing:"",conversation:[],answerSupportContract:"v1" as const,answerSupportScope:"memory_only" as const};
 const llm=(maxSteps=5)=>createBrainLlm({provider:"openrouter",apiKey:"synthetic",askModel:"x-ai/grok-4.3",maxSteps});
 describe("typed terminal answer submission through actual SDK wire",()=>{
@@ -50,7 +50,7 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   expect(result.supportSelections).toEqual([{id,mode:"current"}]);
  });
  it("rejects an unadvertised early empty submission after discovery only",async()=>{
-  const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[{name:"submit_memory_answer",input:{supportSelections:[]}}]}]);
+  const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[]}}]}]);
   const result=await llm(8).answer(input,{...tools,searchVault:async()=>"Notes/Atlas.md (score 9) — Atlas",readNote:async()=>"unused"});
   expect(requests[1].tools.map((t:any)=>t.function.name)).not.toContain("submit_memory_answer");
   expect(result.supportProtocolError).toBe("invalid_submission");
@@ -80,11 +80,11 @@ describe("typed terminal answer submission through actual SDK wire",()=>{
   expect(result).toEqual({text:"",readPaths:[],supportProtocolError:"missing_submission"});expect(requests).toHaveLength(2);expect(result.supportSelections).toBeUndefined();
  });
  it("passes well-shaped unknown IDs and wrong allowed modes to host validation, never inventing authority",async()=>{
-  const unknown="as_ffffffffffffffffffffffff";wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:unknown,mode:"prior",summaryText:null}]}}]}]);
+  const unknown="as_ffffffffffffffffffffffff";wire([{calls:[read]},{calls:[{...submit,input:{analysisText:null,supportSelections:[{id:unknown,mode:"prior",summaryText:null}]}}]}]);
   expect((await llm().answer(input,tools)).supportSelections).toEqual([{id:unknown,mode:"prior"}]);
  });
  it("fails protocol completion on schema-invalid submission at the budget limit without recovery",async()=>{
-  const requests=wire([{calls:[read]},{calls:[{...submit,input:{supportSelections:[{id:"invented",mode:"current",summaryText:null}]}}]}]);
+  const requests=wire([{calls:[read]},{calls:[{...submit,input:{analysisText:null,supportSelections:[{id:"invented",mode:"current",summaryText:null}]}}]}]);
   const result=await llm(2).answer(input,tools);
   expect(result.supportProtocolError).toBe("missing_submission");expect(result.supportSelections).toBeUndefined();expect(requests).toHaveLength(2);
  });
@@ -126,7 +126,7 @@ it('advertises exclusive seek/continuation and completes a valid continuation wi
   if(options.cursor){expect(options.query).toBeUndefined();expect(options.cursor).toBe(cursor);return JSON.stringify({body:'Complete teaching proposition.',answerSupports:[{id,modes:['raw_report']}]})}
   return JSON.stringify({body:'# Daily log',queryMatched:false,nextCursor:cursor,answerSupports:[],readPartial:true});
  });
- const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor:'cursor_1'}}]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report',summaryText:null}]}}]}]);
+ const requests=wire([{calls:[{name:'read_note',input:{path,query:'nonliteral terms'}}]},{calls:[{name:'read_note',input:{path,cursor:'cursor_1'}}]},{calls:[{name:'submit_memory_answer',input:{analysisText:null,supportSelections:[{id,mode:'raw_report',summaryText:null}]}}]}]);
  const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',listPages:async()=>'',readNote});
  expect(result.supportSelections).toEqual([{id,mode:'raw_report'}]);expect(requests).toHaveLength(3);expect(readNote).toHaveBeenCalledTimes(2);
  const advertised=requests[0].tools.find((t:any)=>t.function.name==='read_note').function;
@@ -145,7 +145,7 @@ it("submits a cited summary after reading beginning, middle and end of a long la
   {calls:[{name:"read_note",input:{path:ref}}]},
   {calls:[{name:"read_note",input:{path:ref,cursor:"cursor_1"}}]},
   {calls:[{name:"read_note",input:{path:ref,cursor:"cursor_2"}}]},
-  {calls:[{name:"submit_memory_answer",input:{supportSelections:[{id,mode:"raw_report",summaryText}]}}]},
+  {calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText}]}}]},
  ]);
  const seen:string[]=[];
  const result=await llm(5).answer({...input,question:"Summarize my latest voice note about the decision."},{searchChats:tools.searchChats,searchVault:async()=>"unused",readNote:async(_path:string,options:any={})=>{
@@ -161,7 +161,7 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  expect(system).toContain("Preserve ambiguous numbers as ambiguous");
  expect(system).toContain("Use a few complete relevant supports while retaining all requested subjects");
  const terminal=requests.at(-1).tools.find((t:any)=>t.function.name==="submit_memory_answer").function;
- expect(terminal.description).toContain("write concise summaryText");
+ expect(terminal.description).toContain("write one coherent summaryText");
  expect(terminal.description).toContain("does not summarize");
  const selection=terminal.parameters.properties.supportSelections.items;
  expect(selection.properties.summaryText.description).toContain("Always provide summaryText");
@@ -174,12 +174,12 @@ it("submits a cited summary after reading beginning, middle and end of a long la
 
 it.each([undefined,"", " ", "x".repeat(1201)])('rejects an omitted or invalid model summary choice without another round: %s',async summaryText=>{
  const selection={id,mode:'raw_report',...(summaryText===undefined?{}:{summaryText})};
- const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[selection]}}]}]);
+ const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{analysisText:null,supportSelections:[selection]}}]}]);
  const result=await llm(2).answer(input,tools);
  expect(result.supportProtocolError).toBe('missing_submission');expect(result.supportSelections).toBeUndefined();expect(requests).toHaveLength(2);
 });
 it.each([null,'The speaker may rent; this is not decided.'])('normalizes an explicit model summary choice at the adapter boundary: %s',async summaryText=>{
- const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{supportSelections:[{id,mode:'raw_report',summaryText}]}}]}]);
+ const requests=wire([{calls:[read]},{calls:[{name:'submit_memory_answer',input:{analysisText:null,supportSelections:[{id,mode:'raw_report',summaryText}]}}]}]);
  const result=await llm(2).answer(input,tools);
  expect(result.supportSelections).toEqual([{id,mode:'raw_report',...(summaryText===null?{}:{summaryText})}]);
  const schema=requests[1].tools.find((t:any)=>t.function.name==='submit_memory_answer').function.parameters.properties.supportSelections.items;
@@ -191,7 +191,7 @@ it("reads an entire17k source through short aliases before selecting its summary
  const raw="## Capture ^e-123abc\n\n> "+"A tentative option remains conditional on inspection. ".repeat(340);
  const count=Math.ceil(raw.length/4000);let summaryId="";const seen:string[]=[];
  const replies: Array<Reply|(()=>Reply)>=Array.from({length:count},(_,i)=>({calls:[{name:"read_note",input:{path:ref,...(i?{cursor:`cursor_${i}`}:{})}}]}));
- replies.push(()=>({calls:[{name:"submit_memory_answer",input:{supportSelections:[{id:summaryId,mode:"raw_report",summaryText:"The speaker is considering an option conditional on inspection."}]}}]}));
+ replies.push(()=>({calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id:summaryId,mode:"raw_report",summaryText:"The speaker is considering an option conditional on inspection."}]}}]}));
  const requests=wire(replies);
  const result=await llm(8).answer(input,{searchChats:async()=>"",searchVault:async()=>"",readNote:async(path,options:any={})=>{
   expect(path).toBe(ref);const start=options.cursor?Number(options.cursor.slice("private-cursor-".length)):0,end=Math.min(start+4000,raw.length);seen.push(raw.slice(start,end));
@@ -213,8 +213,98 @@ it.each(['unknown','wrong-source','stale'])('keeps cursor scope/version failures
  });
  const requests=wire([{calls:[{name:'read_note',input:{path:ref}}]},
   {calls:[{name:'read_note',input:{path:failure==='wrong-source'?'Log/2026-09-15.md#^e-abcdef':ref,cursor:failure==='unknown'?'cursor_99':'cursor_1'}}]},
-  {calls:[{name:'submit_memory_answer',input:{supportSelections:[]}}]}]);
+  {calls:[{name:'submit_memory_answer',input:{analysisText:null,supportSelections:[]}}]}]);
  const result=await llm(3).answer(input,{searchChats:async()=>'',searchVault:async()=>'',readNote});
  expect(readNote).toHaveBeenCalledTimes(failure==='stale'?2:1);expect(result.supportSelections).toEqual([]);expect(requests).toHaveLength(3);
  expect(JSON.stringify(requests.at(-1).messages)).toContain(failure==='stale'?'Source snapshot changed':'Unknown cursor');
+});
+
+
+it("submits bounded grounded analysis as a distinct field through the real SDK",async()=>{
+ const analysisText="I would first confirm repair feasibility; the quoted cost favors repair only if the technician can do it.";
+ const requests=wire([{calls:[read]},{calls:[{name:"submit_memory_answer",input:{analysisText,supportSelections:[{id,mode:"current",summaryText:null}]}}]}]);
+ const result=await llm().answer(input,tools);
+ expect(result.analysisText).toBe(analysisText);expect(result.supportSelections).toEqual([{id,mode:"current"}]);
+ const schema=requests[1].tools.find((t:any)=>t.function.name==="submit_memory_answer").function.parameters;
+ expect(schema.required).toContain("analysisText");expect(schema.properties.analysisText.anyOf).toContainEqual({type:"null"});
+ expect(requests).toHaveLength(2);
+});
+it.each(["", " ", "x".repeat(1601)])("rejects invalid assessment text without extra completion",async analysisText=>{
+ const requests=wire([{calls:[read]},{calls:[{name:"submit_memory_answer",input:{analysisText,supportSelections:[{id,mode:"current",summaryText:null}]}}]}]);
+ const result=await llm(2).answer(input,tools);expect(result.supportProtocolError).toBe("missing_submission");expect(result.analysisText).toBeUndefined();expect(requests).toHaveLength(2);
+});
+
+
+it("continues a partial whole-source packet using its exact returned readPath and aliased cursor",async()=>{
+ const daily="Log/2026-09-15.md",ref=daily+"#^e-123abc";
+ const readNote=vi.fn(async(path:string,options:any={})=>{
+  if(options.completeSource){expect(path).toBe(daily);expect(options.query).toBe("source locator");return JSON.stringify({readPath:ref,identity:ref,part:"body",readPartial:true,passages:[{readPath:ref,body:"Beginning",answerSupports:[{id,modes:["raw_report"]}]}],nextCursor:"private-exact-source-cursor"});}
+  expect(path).toBe(ref);expect(options.cursor).toBe("private-exact-source-cursor");expect(options.completeSource).toBeUndefined();
+  return JSON.stringify({readPath:ref,body:"Ending",nextCursor:null,answerSupports:[{id,modes:["raw_report"]}]});
+ });
+ const requests=wire([{calls:[{name:"read_note",input:{path:daily,query:"source locator",completeSource:true}}]},
+  {calls:[{name:"read_note",input:{path:ref,cursor:"cursor_1"}}]},
+  {calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:"A concise source summary."}]}}]}]);
+ const result=await llm().answer(input,{...tools,searchVault:async()=>"",readNote});
+ expect(result.supportSelections?.[0]?.summaryText).toBe("A concise source summary.");expect(readNote).toHaveBeenCalledTimes(2);expect(requests).toHaveLength(3);
+ expect(JSON.stringify(requests)).not.toContain("private-exact-source-cursor");
+});
+
+
+it.each([undefined,2000])("defaults a first raw query to complete-source mode despite maxChars=%s",async maxChars=>{
+ const ref="Log/2026-09-15.md#^e-123abc",daily=ref.split("#")[0]!;
+ const readNote=vi.fn(async(path:string,options:any)=>{
+  expect(path).toBe(daily);expect(options).toMatchObject({query:"Planning note",completeSource:true});expect(options.maxChars).toBeUndefined();
+  return JSON.stringify({readPath:ref,readPartial:false,passages:[{body:"Beginning: undecided. Middle: provisional cost. Ending: confirm access.",answerSupports:[{id,modes:["raw_report"],kind:"source_summary",summaryOnly:true}]}],nextCursor:null});
+ });
+ const requests=wire([{calls:[{name:"read_note",input:{path:daily,query:"Planning note",...(maxChars===undefined?{}:{maxChars})}}]},
+  {calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:"Undecided, provisional cost, and access confirmation required."}]}}]}]);
+ const result=await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(requests).toHaveLength(2);expect(readNote).toHaveBeenCalledTimes(1);
+ expect(JSON.stringify(requests[1].messages)).toContain("Ending: confirm access");expect(result.supportSelections?.[0]?.summaryText).toContain("access confirmation");
+});
+it("an obsolete explicit false cannot opt out of the atomic raw-source read",async()=>{
+ const ref="Log/2026-09-15.md#^e-123abc";
+ const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({completeSource:true});return JSON.stringify({body:"A narrow excerpt.",answerSupports:[{id,modes:["raw_report"]}]});});
+ const requests=wire([{calls:[{name:"read_note",input:{path:ref,completeSource:false,maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[{id,mode:"raw_report",summaryText:null}]}}]}]);
+ await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(readNote).toHaveBeenCalledTimes(1);
+ expect(requests[0].tools.find((tool:any)=>tool.function.name==="read_note").function.parameters.properties).not.toHaveProperty("completeSource");
+});
+
+it("frontmatter inspection remains narrow and does not receive the host complete-source hint",async()=>{
+ const ref="Log/2026-09-15.md";
+ const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({part:"frontmatter",maxChars:2000});return JSON.stringify({body:"metadata",answerSupports:[]});});
+ wire([{calls:[{name:"read_note",input:{path:ref,part:"frontmatter",maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[]}}]}]);
+ await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(readNote).toHaveBeenCalledTimes(1);
+});
+
+it("advertises whole-source coverage and sentence-only verbatim submission contracts",async()=>{
+ const requests=wire([{calls:[read]},{calls:[submit]}]);
+ await llm().answer(input,tools);
+ const terminal=requests[1].tools.find((tool:any)=>tool.function.name==="submit_memory_answer").function;
+ expect(terminal.description).toContain("one source_summary handle");
+ expect(terminal.description).toContain("every explicitly requested facet and qualifier");
+ expect(terminal.parameters.properties.supportSelections.items.properties.summaryText.description).toContain("sentence-granularity handles require null");
+});
+
+it("requires a source read after ranked discovery in mixed chat without adding rounds",async()=>{
+ const {answerSupportScope:_,...mixed}=input;
+ const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[read]},{calls:[submit]}]);
+ await llm(3).answer(mixed,{...tools,searchVault:async()=>"Notes/Atlas.md (score 9) — teaching plan",readNote:async()=>"unused"});
+ expect(requests).toHaveLength(3);expect(requests[1].tool_choice).toBe("required");
+ expect(requests[1].tools.map((t:any)=>t.function.name).sort()).toEqual(["read_facts","read_note"]);
+ expect(requests[2].tools.map((t:any)=>t.function.name)).toEqual(["submit_memory_answer"]);
+});
+it("does not force an invented source read after empty discovery",async()=>{
+ const {answerSupportScope:_,...mixed}=input;
+ const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{text:"No matching source found."}]);
+ await llm(3).answer(mixed,{...tools,searchVault:async()=>"no results",readNote:async()=>"unused"});
+ expect(requests).toHaveLength(2);expect(requests[1].tool_choice??"auto").toBe("auto");
+});
+
+it("can submit immediately after search returns actual read support without another read call",async()=>{
+ const requests=wire([{calls:[{name:"search_vault",input:{query:"Atlas"}}]},{calls:[submit]}]);
+ const readNote=vi.fn(async()=>{throw new Error("No extra provider-directed read expected");});
+ const result=await llm().answer(input,{...tools,readNote,searchVault:async()=>`Notes/Atlas.md (score 9) — plan\n\nRead source evidence:\n${JSON.stringify({answerSupports:[{id,modes:["current"]}]})}`});
+ expect(requests).toHaveLength(2);expect(requests[1].tools.map((t:any)=>t.function.name)).toContain("submit_memory_answer");
+ expect(result.supportSelections).toEqual([{id,mode:"current"}]);expect(readNote).not.toHaveBeenCalled();
 });

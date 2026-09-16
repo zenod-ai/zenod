@@ -235,7 +235,7 @@ export interface VaultReadTools {
   readFacts?(input: import("../engine/temporalFacts.js").FactReadInput): Promise<string>;
   searchVault?(query: string): Promise<string>;
   searchEntries?(input: import("../engine/entryPagination.js").EntrySearchInput): Promise<string>;
-  readNote?(path: string, options?: NoteReadOptions): Promise<string>;
+  readNote?(path: string, options?: NoteReadOptions & { completeSource?: boolean | undefined }): Promise<string>;
   listPages?(): Promise<string>;
   /** Search the user's past conversations across every channel (WhatsApp, web, …). */
   searchChats(query: string): Promise<string>;
@@ -377,6 +377,8 @@ export interface AnswerResult {
   supportProtocolError?: "missing_submission" | "invalid_submission";
   /** Host resolves these turn-local IDs; model text never supplies canonical facts. */
   supportSelections?: import("../engine/answerSupport.js").AnswerSupportSelection[];
+  /** Explicitly labelled assessment, never canonical memory or a stored fact. */
+  analysisText?: string;
   text: string;
   /** Vault-relative paths the loop actually opened — provenance for citations. */
   readPaths: string[];

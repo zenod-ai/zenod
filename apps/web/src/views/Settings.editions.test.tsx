@@ -2,6 +2,7 @@
 // @vitest-environment-options {"url":"https://cloud.zenod.dev/app"}
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ api: vi.fn() }))
@@ -28,6 +29,54 @@ function overview() {
 }
 
 describe("Zenod edition portal", () => {
+  it("makes browser sign-in the hosted MCP default and keeps manual tokens discoverable", async () => {
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === "/api/overview") return overview()
+      if (path === "/api/connections")
+        return { token: "", mcpPath: "/mcp", clients: [], grants: [] }
+      if (path === "/api/console/account")
+        return {
+          token: "private-secret",
+          mcp_url: "https://cloud.zenod.dev/mcp/private-secret",
+        }
+      throw new Error(`Unexpected API call: ${path}`)
+    })
+    render(
+      <Settings
+        edition="hosted"
+        initialTab="connect"
+        initialSettings={{ provider: "openrouter" } as SettingsValues}
+        onLoggedOut={() => undefined}
+      />
+    )
+    const endpoint = await screen.findByLabelText("MCP URL")
+    expect((endpoint as HTMLInputElement).value).toBe(
+      "https://cloud.zenod.dev/mcp"
+    )
+    const token = screen.getByLabelText(
+      "Access token (manual setup)"
+    ) as HTMLInputElement
+    expect(token.type).toBe("password")
+    expect(screen.getByText(/No token copying required/)).not.toBeNull()
+    await userEvent.click(
+      screen.getByRole("button", { name: "Manual token instructions" })
+    )
+    expect(
+      (
+        (await screen.findByLabelText(
+          "Access token (manual setup)"
+        )) as HTMLInputElement
+      ).value
+    ).toBe("private-secret")
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show access token" })
+    )
+    expect(token.type).toBe("text")
+    expect(screen.getByText("Any MCP agent")).not.toBeNull()
+    expect(
+      screen.getByText(/--bearer-token-env-var ZENOD_MCP_TOKEN/)
+    ).not.toBeNull()
+  })
   it("renders only the approved Hosted sections", async () => {
     mocks.api.mockResolvedValue(overview())
 

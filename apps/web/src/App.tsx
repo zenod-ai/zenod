@@ -137,7 +137,10 @@ function CustomerApp() {
             : null
           const [vault, vaultStatusResponse] = await Promise.all([
             fetch("/api/vault/provider").catch(() => null),
-            fetch("/api/vault").catch(() => null),
+            // Drive verification can be slow; let the workspace show its vault panel.
+            fetch("/api/vault", { signal: AbortSignal.timeout(5000) }).catch(
+              () => null
+            ),
           ])
           if (vault?.status === 401 || vaultStatusResponse?.status === 401) {
             setView({ kind: "hosted-login", methods: signInMethods })
