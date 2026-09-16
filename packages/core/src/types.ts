@@ -98,6 +98,8 @@ export interface StoreResult {
    * self-reports to the logs. Callers must not narrate the note as committed.
    */
   queued?: boolean;
+  /** Conversational capture is durable independently of later organization. */
+  organization?: { status: "queued"; jobId: string } | { status: "not_queued"; reason: "queue_unavailable" | "enqueue_failed" };
 }
 
 export interface EnrichEvidenceInput extends StoreInput {

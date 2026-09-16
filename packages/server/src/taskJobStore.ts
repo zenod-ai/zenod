@@ -32,6 +32,8 @@ const MAX_FILING_RESUME_ATTEMPTS = 1;
 export const TASK_JOB_LEASE_MS = 4 * 60_000;
 
 export interface TaskJobInput {
+  /** Only conversational capture jobs request the existing filing notification. */
+  notifyCaptureCompletion?: boolean;
   /** chat/task: the instruction sent through the shared conversational/tasking loop. */
   text?: string;
   /** chat/task: correlation/thread key; defaults to "mcp". */

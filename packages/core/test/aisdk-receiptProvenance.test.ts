@@ -211,3 +211,17 @@ describe("AI SDK peer mutation provenance", () => {
     }));
   });
 });
+
+
+describe("capture adapter compatibility", () => {
+  it.each([false, true])("preserves queued legacy placeholders and typed durable receipts (%s)", async modern => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k" });
+    const result = modern ? { evidenceRef: "Log/2026-09-16.md#^e-abc123", pagesTouched: [], organization: { status: "not_queued", reason: "enqueue_failed" } }
+      : { evidenceRef: "(queued)", pagesTouched: [], queued: true };
+    await llm.answer({ question: "save this", conversationId: "capture-adapter", vaultBriefing: "", conversation: [] }, readTools,
+      { captureNote: async () => result } as any);
+    const text = await captured.config.tools.capture_note.execute({ content: "note", hints: null });
+    if (modern) expect(JSON.parse(text)).toEqual(result);
+    else { expect(text).toContain("queued"); expect(text).not.toContain("Filed:"); }
+  });
+});

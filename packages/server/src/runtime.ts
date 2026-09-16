@@ -376,7 +376,12 @@ export class Runtime {
     // constructor marks any job left mid-flight by a restart as "interrupted";
     // resume() then drains anything still queued.
     this.taskJobStore = new TaskJobStore(join(dataDir, "tasks.sqlite"), options.tenantId ?? "standalone");
-    this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine(), this.settings);
+    this.taskJobQueue = new TaskJobQueue(this.taskJobStore, () => this.getEngine(), this.settings, (result) => this.notificationBus.notify({
+      eventType: "filing.receipt",
+      text: formatFilingReceipt(result),
+      severity: "info",
+      dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
+    }));
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
@@ -683,16 +688,7 @@ export class Runtime {
         : {}),
       ...(Object.keys(peerTools).length ? { peerTools } : {}),
       ...(process.env.ZENOD_LLM_COST_LOG === "1" ? { onTokenCost: logTokenCost } : {}),
-      // M-5 — a background filing that lands gets a real completion receipt through
-      // the normal notification path (the Phylax pipe), not just a console.info.
-      onFilingComplete: (result) => {
-        void this.notificationBus.notify({
-          eventType: "filing.receipt",
-          text: formatFilingReceipt(result),
-          severity: "info",
-          dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
-        });
-      },
+      enqueueEnrichment: (input, idempotencyKey) => this.taskJobQueue.enqueue("enrich_memory", { ...input, notifyCaptureCompletion: true }, idempotencyKey),
     });
     this.engine = {
       ...engine,

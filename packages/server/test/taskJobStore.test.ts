@@ -375,6 +375,23 @@ describe("TaskJobStore restart durability (C-27 / #580)", () => {
     store.close();
   });
 
+  it.each([{ notify: false, pending: false }, { notify: true, pending: false }, { notify: true, pending: true }])("notifies only conversational completion once, including retry and duplicate enqueue (%j)", async ({ notify: notifyCaptureCompletion, pending }) => {
+    const store = new TaskJobStore(tmpDb(), "tenant-alpha");
+    const result = { evidenceRef: "Log/2026-09-16.md#^e-abc123", pagesTouched: [], commitSha: "e".repeat(40), githubUrls: [], filing: "filed" as const };
+    const enrichEvidence = vi.fn(async () => result);
+    if (pending) enrichEvidence.mockResolvedValueOnce({ ...result, filing: "pending" as any });
+    const notified = vi.fn(async () => { expect(store.recent()[0]?.status).toBe("done"); });
+    const queue = new TaskJobQueue(store, async () => ({ enrichEvidence }) as unknown as BrainEngine, undefined, notified);
+    const input = { evidenceRef: result.evidenceRef, content: "original", ...(notifyCaptureCompletion ? { notifyCaptureCompletion } : {}) };
+    const first = queue.enqueue("enrich_memory", input, "capture-key");
+    await vi.waitFor(() => expect(store.get(first.id)?.status).toBe("done"));
+    expect(queue.enqueue("enrich_memory", input, "capture-key").id).toBe(first.id);
+    await queue.close();
+    expect(enrichEvidence).toHaveBeenCalledTimes(pending ? 2 : 1);
+    expect(notified).toHaveBeenCalledTimes(notifyCaptureCompletion ? 1 : 0);
+    store.close();
+  });
+
   it.each(["filed", "uncertain", "pending"] as const)("resumes pending enrichment once through the supported queue boundary: %s", async (filing) => {
     const store = new TaskJobStore(tmpDb(), "tenant-alpha");
     const enrichEvidence = vi.fn(async () => ({ evidenceRef: "Log/2026-09-13.md#^e-resume", pagesTouched: [],
