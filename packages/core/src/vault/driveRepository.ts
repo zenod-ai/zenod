@@ -1655,7 +1655,7 @@ export class DriveVaultRepository implements VaultRepository {
     }
   }
 
-  private async updateRemoteJournal(file: DriveVaultFile, journal: DriveJournal): Promise<void> {
+  private async updateRemoteJournal(file: DriveVaultFile, journal: DriveJournal, metadataRetries = 0): Promise<void> {
     this.assertJournalContract(journal);
     const data = Buffer.from(JSON.stringify(journal, null, 2));
     const current = await this.options.client.getFile(file.id);
@@ -1695,6 +1695,14 @@ export class DriveVaultRepository implements VaultRepository {
       if (recovered && recoveredData && singleAdvance && sha256(recoveredData) === sha256(data)) {
         Object.assign(file, recovered);
         return;
+      }
+      // The client can observe a metadata-only version bump between our read and
+      // its optimistic precondition check. Retry against the verified unchanged body.
+      if (recovered && recoveredData && sha256(recoveredData) === expectedChecksum
+        && await this.isMetadataOnlyAdvance(current, recovered)) {
+        if (metadataRetries >= 3) throw error;
+        Object.assign(file, recovered);
+        return this.updateRemoteJournal(file, journal, metadataRetries + 1);
       }
       if (recovered && recoveredData && recovered.version === current.version
         && recovered.modifiedTime === current.modifiedTime && sha256(recoveredData) === expectedChecksum) {

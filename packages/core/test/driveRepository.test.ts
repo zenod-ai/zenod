@@ -38,6 +38,7 @@ class FakeDrive implements DriveVaultClient {
   tombstoneRaceFileId: string | null = null;
   versionStep = 1;
   journalMetadataOnRead = false;
+  journalPreconditionRace = false;
   private nextId = 1;
 
   constructor() {
@@ -156,6 +157,10 @@ class FakeDrive implements DriveVaultClient {
 
   async updateFile(fileId: string, mimeType: string, data: Buffer, precondition: DriveVaultPrecondition): Promise<DriveVaultFile> {
     const file = this.getStored(fileId);
+    if (this.journalPreconditionRace && file.name.endsWith(".json") && file.name !== "manifest.json") {
+      this.journalPreconditionRace = false;
+      this.updateMetadata(file);
+    }
     this.assertPrecondition(file, precondition);
     return this.mutate(() => {
       const authorityRace = this.authorityRace
@@ -1006,6 +1011,7 @@ describe("DriveVaultRepository", () => {
     const drive = new FakeDrive();
     drive.versionStep = 3;
     drive.journalMetadataOnRead = true;
+    drive.journalPreconditionRace = true;
     if (lostAcknowledgment) drive.failAt = { call: 7, phase: "after" };
     const workdir = await temp("version-gaps");
     const repo = await open(drive, workdir);
