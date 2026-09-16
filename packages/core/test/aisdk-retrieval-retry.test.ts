@@ -15,7 +15,7 @@ vi.mock("ai", async (importActual) => {
 import { createBrainLlm } from "../src/llm/aisdk.js";
 
 describe("ask_brain deterministic retrieval retry", () => {
-  it("reads past a daily-log heading into saved entries within a bounded answer-tool batch", async () => {
+  it("delegates initial raw reads to host completeness and preserves exact-entry boundaries", async () => {
     const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
@@ -32,22 +32,26 @@ describe("ask_brain deterministic retrieval retry", () => {
         searchVault: async () => path, readNote, listPages: async () => "", searchChats: async () => "no results",
       });
       const result = JSON.parse(await captured.config.tools.read_note.execute({ path }));
-      expect(result.passages).toHaveLength(3);
-      expect(result.passages[2].body).toContain("undo easy");
-      expect(result.passages[2].identity).toBe(path + "#^e-000002");
-      expect(result.nextCursor).toBeNull();
-      expect(onReadAction).toHaveBeenCalledTimes(3);
-      expect(result.passages.reduce((n: number, p: {body: string}) => n + p.body.length, 0)).toBeLessThanOrEqual(8000);
+      // This direct ops fake does not implement the engine's completeness helper.
+      // The adapter delegates once; ambiguous-log resolution is tested in engine.test.
+      expect(readNote).toHaveBeenCalledWith(path, { completeSource: true });
+      expect(readNote).toHaveBeenCalledTimes(1);
+      expect(result.body).toContain("Daily log");
+      expect(result.body).not.toContain("undo easy");
+      expect(result.nextCursor).toBeTruthy();
+      expect(onReadAction).toHaveBeenCalledTimes(1);
       readNote.mockClear();
       const exact = JSON.parse(await captured.config.tools.read_note.execute({ path: path + "#^e-000002" }));
       expect(exact.body).toContain("undo easy");
       expect(exact.body).not.toContain("Earlier unrelated");
       expect(readNote).toHaveBeenCalledTimes(1);
+      expect(readNote).toHaveBeenCalledWith(path + "#^e-000002", { completeSource: true });
       await writeFile(join(root, path), "# Daily log\n\n" + Array.from({ length: 12 }, (_, i) => `## 11:00 Entry ^e-${i.toString(16).padStart(6, "0")}\n> ${"x".repeat(1200)}\n`).join(""));
       readNote.mockClear();
       const bounded = JSON.parse(await captured.config.tools.read_note.execute({ path }));
-      expect(bounded.passages.length).toBeLessThanOrEqual(8);
-      expect(bounded.passages.reduce((n: number, p: {body: string}) => n + p.body.length, 0)).toBeLessThanOrEqual(8000);
+      expect(readNote).toHaveBeenCalledTimes(1);
+      expect(readNote).toHaveBeenCalledWith(path, { completeSource: true });
+      expect(bounded.body.length).toBeLessThanOrEqual(8000);
       expect(bounded.nextCursor).toBeTruthy();
     } finally { await rm(root, { recursive: true, force: true }); }
   });
@@ -75,7 +79,7 @@ describe("ask_brain deterministic retrieval retry", () => {
     const args = { path: "Log/2026-01-01.md#^e-000001", query: "late fact", maxChars: 512 };
     const initial = JSON.parse(await captured.config.tools.read_note.execute(args));
     expect(initial.nextCursor).toMatch(/^cursor_/);
-    expect(readNote).toHaveBeenCalledWith(args.path, { query: "late fact", maxChars: 512 });
+    expect(readNote).toHaveBeenCalledWith(args.path, { query: "late fact", completeSource: true });
     await captured.config.tools.read_note.execute({ path: args.path, cursor: initial.nextCursor });
     expect(readNote).toHaveBeenLastCalledWith(args.path, { cursor: "next" });
     expect(captured.config.tools.read_note.description).toContain("not proof of absence");
