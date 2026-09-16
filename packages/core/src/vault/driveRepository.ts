@@ -1429,7 +1429,7 @@ export class DriveVaultRepository implements VaultRepository {
       const updated = await this.options.client.updateFile(mutation.fileId!, mutation.mimeType!, data, this.precondition(mutation));
       const post = await this.options.client.getFile(mutation.fileId!);
       const postChecksum = sha256(await this.options.client.download(mutation.fileId!));
-      const expectedAdvance = await this.isExpectedAdvance(mutation, post) && post.version === updated.version;
+      const expectedAdvance = await this.isExpectedAdvance(mutation, post) && await this.isMetadataOnlyAdvance(updated, post);
       if (!expectedAdvance || postChecksum !== mutation.checksum) {
         await this.captureInterleavingConflict(mutation, journal, journalFile, data, post);
       }
@@ -1462,6 +1462,20 @@ export class DriveVaultRepository implements VaultRepository {
     if (baselineRevisionIds.some((id) => !revisions.some((revision) => revision.id === id))) return false;
     return revisions.filter((revision) => !baseline.has(revision.id))
       .every((revision) => revision.md5Checksum === post.md5Checksum);
+  }
+
+  private async isMetadataOnlyAdvance(before: DriveVaultFile, after: DriveVaultFile): Promise<boolean> {
+    if (before.id !== after.id || before.name !== after.name || before.mimeType !== after.mimeType
+      || JSON.stringify(before.parents) !== JSON.stringify(after.parents)
+      || JSON.stringify(before.appProperties ?? {}) !== JSON.stringify(after.appProperties ?? {})) return false;
+    if (before.version === after.version && before.modifiedTime === after.modifiedTime) return true;
+    if (!before.version || !after.version || !/^\d+$/.test(before.version) || !/^\d+$/.test(after.version)
+      || BigInt(after.version) < BigInt(before.version) || !before.md5Checksum
+      || before.md5Checksum !== after.md5Checksum || !before.headRevisionId || !after.headRevisionId) return false;
+    const history = await this.options.client.listRevisions(after.id);
+    const anchor = history.findIndex((revision) => revision.id === before.headRevisionId);
+    return anchor >= 0 && history.some((revision) => revision.id === after.headRevisionId)
+      && history.slice(anchor).every((revision) => revision.md5Checksum === before.md5Checksum);
   }
 
   private async isExpectedAdvance(mutation: JournalMutation, post: DriveVaultFile): Promise<boolean> {
@@ -1647,14 +1661,14 @@ export class DriveVaultRepository implements VaultRepository {
     const current = await this.options.client.getFile(file.id);
     const currentData = await this.options.client.download(file.id);
     const expectedChecksum = sha256(currentData);
-    if ((file.version && current.version !== file.version) || (file.modifiedTime && current.modifiedTime !== file.modifiedTime)) {
+    if (!await this.isMetadataOnlyAdvance(file, current)) {
       await this.materializeJournalConflict(journal.transactionId, current, currentData, []);
       throw new VaultPublicationError({
         code: "conflict", message: `Drive transaction journal changed externally: ${journal.transactionId}`,
         retryable: false, transactionId: journal.transactionId, paths: [`${CONTROL_FOLDER}/${TRANSACTIONS_FOLDER}/${file.name}`],
       });
     }
-    if (expectedChecksum === sha256(data)) return;
+    if (expectedChecksum === sha256(data)) { Object.assign(file, current); return; }
     const baseline = await this.options.client.listRevisions(file.id);
     try {
       const updated = await this.options.client.updateFile(file.id, "application/json", data, {
@@ -1665,7 +1679,7 @@ export class DriveVaultRepository implements VaultRepository {
       const post = await this.options.client.getFile(file.id);
       const postData = await this.options.client.download(file.id);
       const singleAdvance = await this.hasExpectedAdvance(current.version, post, baseline.map((revision) => revision.id));
-      if (!singleAdvance || post.version !== updated.version || sha256(postData) !== sha256(data)) {
+      if (!singleAdvance || !await this.isMetadataOnlyAdvance(updated, post) || sha256(postData) !== sha256(data)) {
         await this.materializeJournalConflict(journal.transactionId, post, postData, baseline.map((revision) => revision.id), data);
         throw new VaultPublicationError({
           code: "conflict", message: `Drive transaction journal interleaving detected: ${journal.transactionId}`,

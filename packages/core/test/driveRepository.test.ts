@@ -37,6 +37,7 @@ class FakeDrive implements DriveVaultClient {
   authorityRace: { targetName: string; phase: "before_patch" | "after_patch"; externalFileId: string; data: string } | null = null;
   tombstoneRaceFileId: string | null = null;
   versionStep = 1;
+  journalMetadataOnRead = false;
   private nextId = 1;
 
   constructor() {
@@ -130,7 +131,11 @@ class FakeDrive implements DriveVaultClient {
       .map((file) => this.clone(file));
   }
 
-  async getFile(fileId: string): Promise<DriveVaultFile> { return this.clone(this.getStored(fileId)); }
+  async getFile(fileId: string): Promise<DriveVaultFile> {
+    const file = this.getStored(fileId);
+    if (this.journalMetadataOnRead && file.name.endsWith(".json") && file.name !== "manifest.json") this.updateMetadata(file);
+    return this.clone(file);
+  }
   async download(fileId: string): Promise<Buffer> { return Buffer.from(this.getStored(fileId).data); }
 
   async uploadFile(name: string, mimeType: string, data: Buffer, parentFolderId: string, options: { appProperties?: Record<string, string> } = {}): Promise<DriveVaultFile> {
@@ -988,6 +993,7 @@ describe("DriveVaultRepository", () => {
   it.each([false, true])("bootstraps, publishes, updates and reopens with non-consecutive Drive versions (lost acknowledgment: %s)", async (lostAcknowledgment) => {
     const drive = new FakeDrive();
     drive.versionStep = 3;
+    drive.journalMetadataOnRead = true;
     if (lostAcknowledgment) drive.failAt = { call: 7, phase: "after" };
     const workdir = await temp("version-gaps");
     const repo = await open(drive, workdir);
