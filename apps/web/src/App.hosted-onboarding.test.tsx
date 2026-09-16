@@ -79,6 +79,56 @@ describe("Hosted vault onboarding boot", () => {
     expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
   })
 
+  it("opens the workspace when the Drive verification request stalls", async () => {
+    mocks.api.mockImplementation((path: string) => {
+      if (path === "/api/auth/status")
+        return Promise.resolve({
+          needsSetup: false,
+          configured: true,
+          hostedMode: null,
+          customerAuth: true,
+          authMethod: "github",
+          signInMethods: ["google", "github"],
+        })
+      if (path === "/api/settings")
+        return Promise.resolve({ settings: { provider: "openrouter" } })
+      if (path === "/api/overview")
+        return Promise.resolve({
+          unit: { name: "zenod" },
+          tenant: { id: "tenant-1", name: "Ada's memory" },
+          usage: null,
+        })
+      return Promise.reject(new Error(`Unexpected API call: ${path}`))
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input)
+        if (path === "/api/me")
+          return Response.json({ provider: "google", providers: ["google"] })
+        if (path === "/api/console/account")
+          return Response.json({ account_id: "account-1" })
+        if (path === "/api/vault/provider")
+          return Response.json({
+            ready: false,
+            provider: null,
+            blocker: "vault_not_selected",
+          })
+        if (path === "/api/vault")
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+          })
+        throw new Error(`Unexpected fetch: ${path}`)
+      })
+    )
+
+    render(<App />)
+
+    const vaultTab = await screen.findByRole("tab", { name: "Vault & sources" }, { timeout: 7000 })
+    expect(vaultTab.getAttribute("data-state")).toBe("active")
+    expect(screen.getByText("Authoritative vault chooser")).not.toBeNull()
+  }, 10000)
+
   it("returns an expired Hosted session to configured customer sign-in choices", async () => {
     mocks.api.mockImplementation((path: string) => {
       if (path === "/api/auth/status")
