@@ -1,6 +1,6 @@
-# #1320: first production scenario using existing tenant/MCP lifecycle
+# #1320: production scenarios using existing tenant/MCP lifecycle
 
-This is **B01 only**, one selected trial per separately approved disposable pair. Other35 outcomes remain UNRUN. It is not full M2 implementation or acceptance. No model judge, fixture/expected-answer changes, provisioning API, reset engine or product patch. Root provisions and operates after exact release review. Existing B05 fault injection remains isolated; no production kill/CAS is provided.
+One selected frozen scenario/trial runs per separately approved disposable pair, using the existing fixture memories and chat/interrupted_filing action types. Other35 outcomes remain UNRUN in that receipt; root consolidates unique row keys across the fixed36 ledger. This is executable test preparation, not production acceptance. No model judge, fixture/expected-answer changes, provisioning API, reset engine or product patch. Root provisions and operates after exact release review. Existing B05 fault injection remains isolated; no production kill/CAS is provided.
 
 ## Existing seams reused
 
@@ -27,7 +27,7 @@ Required public manifest fields:
 ```
 version: 1
 origin: https://cloud.zenod.dev
-key: B01:1                         # or :2/:3; all other cases refused
+key: B01:1                         # B01..B12, trial1..3
 candidateSha: <exact40hex>
 imageDigest: sha256:<64hex>
 observedRelease: {sourceSha, imageDigest, checkedAt:<epoch ms within5min>}
@@ -47,11 +47,11 @@ exclusiveUntil: <epochms>
 noOtherTargetRequests: true
 maxToolCalls: 40                   # hard tool limit; five minimum
 maxExposureUsd: <parent-approved amount>
-reservedTurnExposureUsd: <conservative reviewed B01 full pipeline allowance>
+reservedTurnExposureUsd: <conservative reviewed allowance per store/chat (including background filing)>
 costBoundRationale: <known turn/round/token/provider prices and automatic retry bounds>
 ```
 
-The parent must approve the conservative reservation before dispatch; it is **not** a server-side hard dollar limit or provider-request counter. Existing tenant tool quota cannot establish a token/dollar cap. This runner authorizes one chat turn, bounds40 MCP calls/12 polls per job and operator window, and never retries a chat after a timeout. It does not obtain private provider usage or report zeros: actual cost and provider request count remain null until root reconciles real usage evidence; reservation remains. Keep all runs in the parent aggregate ledger; a new manifest is not a budget reset. No dedicated provider key or key-management workflow is required.
+The parent must approve the conservative reservation before dispatch; it is **not** a server-side hard dollar limit or provider-request counter. Existing tenant tool quota cannot establish a token/dollar cap. This runner reserves before each frozen store/chat action (including the duplicate store request), stops if their summed reservations exceed maxExposureUsd, bounds40 MCP calls/12 polls per job and operator window, and never retries a chat after a timeout. It does not obtain private provider usage or report zeros: actual cost and provider request count remain null until root reconciles real usage evidence; reservation remains. Keep all runs in the parent aggregate ledger; a new manifest is not a budget reset. No dedicated provider key or key-management workflow is required.
 
 Protected stdin JSON has ONLY `{tenantToken, githubToken}`. Existing protected operator plumbing supplies it; never print it. Run inside the exact public container:
 
@@ -60,7 +60,7 @@ node /private/reviewed/scripts/zmr-pipeline-eval/production/operator.mjs /privat
 node /private/reviewed/scripts/zmr-pipeline-eval/production/operator.mjs /private/manifest.json --dispatch
 ```
 
-Default check-only reads SQLite/GitHub, validates exact seed/lint/ownership, sends no MCP/model calls and makes no configuration mutations. Dispatch refuses an existing receipt. One durable chat result must include `stored.organization.jobId`; the runner waits for enrichment before raw readback. It records full receipts and fixed36 rows for existing semantic review templates; RECORDED does not mean PASS. Custody gates verify raw input, one capture/enrichment and published revision; semantic review must still examine filed effects and truthful acknowledgement.
+Default check-only reads SQLite/GitHub, validates exact seed/lint/ownership, sends no MCP/model calls and makes no configuration mutations. Dispatch refuses an existing receipt. When a durable chat result captured a note, `stored.organization.jobId` is required and drained before raw readback/next turn. Seed memories use store_memory with exact content/contentType/capturedAt, stable sourceId/idempotencyKey and verbatim:true. Fresh conversational recall still uses chat, never ask_brain. It records full receipts and fixed36 rows for existing semantic review templates; RECORDED does not mean PASS. Custody gates verify exact raw inputs, capture/job counts, unique evidence references, published revision and unchanged read-only-case pages; semantic review must still examine filed effects and truthful acknowledgement.
 
 ## Cleanup / interruption
 
@@ -72,10 +72,12 @@ node /private/reviewed/scripts/zmr-pipeline-eval/production/operator.mjs /privat
 
 Root first inspects and removes ONLY this receipt's stale lock after proving prior operator terminated. Recovery uses the identical manifest binding. If its observedRelease timestamp expired, supply `--release-proof /private/fresh-release.json` containing a fresh independently reviewed {sourceSha,imageDigest,checkedAt}; only observation freshness changes. Source/image must still match the original manifest, and actual runtime SHA/module hashes are verified. No target, settings, fixture or budget rebinding is permitted. Partial provisioning can use cleanup-only without a test receipt; only manifest-owned returned objects are eligible, absent objects are tolerated. No chat ever runs in cleanup-only.
 
-Cleanup clears only this new tenant's OpenRouter/GitHub credential settings, sets its status deleted, archives exact repo, verifies bearer401. Tenant state/jobs/audit and archived repository remain retained; deletion of access does not erase data. Cleanup is idempotent for already-deleted tenant/already-archived repo. No shared credential is revoked. Failed ownership/drain/revocation remains attention; never claim full cleanup.
+Cleanup clears only this new tenant's OpenRouter/GitHub credential settings, sets its status deleted, archives exact repo, verifies bearer401. Tenant state/jobs/audit and archived repository remain retained; deletion of access does not erase data. Cleanup is idempotent for already-deleted tenant/already-archived repo. If a deleted tenant still has either credential setting, cleanup remains pending and explicitly unverified: this helper does not bypass authentication with direct secret-row deletion. No shared credential is revoked. Failed ownership/drain/revocation remains attention; never claim full cleanup.
 
 ## Offline checks and limits
 
 `node --test scripts/zmr-pipeline-eval/production/*.test.mjs`
 
-Mocks test operator boundaries, not model semantics or live provisioning. Concrete adapter test uses a temporary actual SQLite DB plus mocked HTTP and checks repeated archive/changed-owner refusal. Existing candidate/library runtime compatibility still requires manager read-only preflight; no successful live run is implied. Remaining cases and full aggregation of multiple production rows are the next bounded extension, not implemented by this B01 checkpoint.
+Mocks test operator boundaries, not model semantics or live provisioning. Concrete adapter test uses a temporary actual SQLite DB plus mocked HTTP and checks repeated archive/changed-owner refusal. Existing candidate/library runtime compatibility still requires manager read-only preflight; no successful live run is implied. All12 frozen action sequences have offline dispatcher coverage. Production B05 performs same-key replay and records its interruption proof as ISOLATED_CANDIDATE_REQUIRED / UNMEASURED. Root must link matching isolated fault evidence rather than grade this as full B05 production proof. Full aggregate reporting must use the same36 keys and preserve all earlier failed/unfinished receipts; the existing isolated report cannot magically declare production acceptance from a single receipt.
+
+Known-token echo protection: durable serialization refuses either in-memory credential anywhere in returned data before writing; no raw exception text is printed. Last planned receipt/lock remains recoverable. Missing/noninteger release timestamps fail closed.
