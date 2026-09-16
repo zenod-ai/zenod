@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod M2 production MCP eval — 764149b</title>
+<style>
+:root{--bg:#0b0f17;--card:#141b26;--fg:#e8eef7;--mut:#93a2b8;--pass:#39d98a;--partial:#ffc453;--fail:#ff6b6b;--acc:#6aa8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:34px 0 12px;color:var(--acc)}
+.sub{color:var(--mut);margin-bottom:20px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid #1f2a3a;border-radius:12px;padding:14px 16px}
+.card .k{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.card .v{font-size:24px;font-weight:700;margin-top:6px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px 24px;background:var(--card);border:1px solid #1f2a3a;border-radius:12px;padding:16px 18px}
+.meta div{display:flex;gap:8px} .meta b{color:var(--mut);font-weight:600;min-width:130px;display:inline-block}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid #1f2a3a;border-radius:12px;overflow:hidden}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #1f2a3a}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+td.num{font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}
+.pass{color:var(--pass);font-weight:700}.partial{color:var(--partial);font-weight:700}.fail{color:var(--fail);font-weight:700}
+details{background:var(--card);border:1px solid #1f2a3a;border-radius:10px;padding:10px 14px;margin:8px 0}
+summary{cursor:pointer;font-weight:600}ul.checks{list-style:none;padding-left:0}ul.checks li{margin:4px 0}
+.rationale{color:var(--mut)}.pages{color:var(--mut)}.qa{border-top:1px dashed #243044;padding:8px 0}
+.q{color:var(--acc);font-weight:600}.a{white-space:pre-wrap;color:#d8e2f0;background:#0e1420;border-radius:8px;padding:8px 10px;margin-top:4px}
+code{background:#0e1420;padding:2px 6px;border-radius:6px}
+footer{color:var(--mut);margin-top:40px;font-size:13px}
+</style></head><body><div class="wrap">
+<h1>Zenod Memory — production MCP evaluation</h1>
+<div class="sub">Frozen basic-memory batch (B01–B12, trial 1) executed against the live deployed agent through production MCP.</div>
+
+<div class="cards">
+  <div class="card"><div class="k">Cells recorded</div><div class="v">12/12</div></div>
+  <div class="card"><div class="k">Semantic PASS</div><div class="v pass">11</div></div>
+  <div class="card"><div class="k">Partial</div><div class="v partial">1</div></div>
+  <div class="card"><div class="k">Fail</div><div class="v fail">0</div></div>
+  <div class="card"><div class="k">Custody gates</div><div class="v pass">ALL PASS</div></div>
+  <div class="card"><div class="k">Reserved exposure</div><div class="v">$7.75</div></div>
+</div>
+
+<h2>Deployment &amp; model</h2>
+<div class="meta">
+  <div><b>Candidate SHA</b><span><code>764149ba0bb2a14b580917e102ba44b852efe579</code></span></div>
+  <div><b>Image digest</b><span><code>sha256:a3e801bb2f04e9f3328bb5e69aee93b2e97cfe4d2e4c604d94ab95ca0626e787</code></span></div>
+  <div><b>Deployment</b><span>Dokploy <code>eULZa7c9gvvuYpFaMdya2</code></span></div>
+  <div><b>Deploy title</b><span>ZMR deploy 764149b</span></div>
+  <div><b>Deployed at</b><span>2026-09-16T21:02:11.747Z (done)</span></div>
+  <div><b>Service</b><span>zenod-mt-fxpzoo · https://cloud.zenod.dev</span></div>
+  <div><b>Organizer model</b><span>openai/gpt-5.6-luna (reasoning low)</span></div>
+  <div><b>Answer model</b><span>x-ai/grok-4.3</span></div>
+  <div><b>Provider</b><span>openrouter</span></div>
+  <div><b>Reviewer</b><span>opencode agent (independent of in-container operator)</span></div>
+  <div><b>Reviewed at</b><span>2026-09-16T21:50:45.342013+00:00</span></div>
+  <div><b>Scope</b><span>PRODUCTION_MCP_12x1 · suite m2-basics-v1.1</span></div>
+</div>
+
+<h2>Cost &amp; outcome per cell</h2>
+<table><thead><tr><th>Cell</th><th>Recorded status</th><th>Reserved exposure</th><th>Verdict</th></tr></thead>
+<tbody><tr><td>B01:1</td><td>RECORDED</td><td class='num'>$0.25</td><td class='pass'>PASS</td></tr><tr><td>B02:1</td><td>RECORDED</td><td class='num'>$0.50</td><td class='pass'>PASS</td></tr><tr><td>B03:1</td><td>RECORDED</td><td class='num'>$0.50</td><td class='pass'>PASS</td></tr><tr><td>B04:1</td><td>RECORDED</td><td class='num'>$0.25</td><td class='pass'>PASS</td></tr><tr><td>B05:1</td><td>RECORDED</td><td class='num'>$0.50</td><td class='partial'>PARTIAL</td></tr><tr><td>B06:1</td><td>RECORDED</td><td class='num'>$0.50</td><td class='pass'>PASS</td></tr><tr><td>B07:1</td><td>RECORDED</td><td class='num'>$1.25</td><td class='pass'>PASS</td></tr><tr><td>B08:1</td><td>RECORDED</td><td class='num'>$0.75</td><td class='pass'>PASS</td></tr><tr><td>B09:1</td><td>RECORDED</td><td class='num'>$1.50</td><td class='pass'>PASS</td></tr><tr><td>B10:1</td><td>RECORDED</td><td class='num'>$0.50</td><td class='pass'>PASS</td></tr><tr><td>B11:1</td><td>RECORDED</td><td class='num'>$0.75</td><td class='pass'>PASS</td></tr><tr><td>B12:1</td><td>RECORDED</td><td class='num'>$0.50</td><td class='pass'>PASS</td></tr>
+<tr><td><b>Total</b></td><td></td><td class="num"><b>$7.75</b></td><td></td></tr></tbody></table>
+<p class="sub">Reserved exposure is the operator's stop-gate reservation, not provider billing. Provider-reported cost is reconciled separately and remains <code>null</code> here.</p>
+
+<h2>Result detail</h2>
+<details><summary>B01:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Exact 140-char source retained once; ack &#x27;Saved the original note. Organization is queued.&#x27; truthful; filed Areas/Studio.md.</p><ul class='checks'><li><span class='pass'>PASS</span> Durable source includes reservation date, time and code unchanged.</li><li><span class='pass'>PASS</span> Acknowledgement truthfully states actual saved/pending outcome; no false completion.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;, &#x27;Inbox/filing-2026-09-16-e-cc41eb.md&#x27;]]</p><div class='qa'><div class='q'>Please save this memory: My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.</div><div class='a'>Saved the original note. Organization is queued.
+
+Evidence:
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b01-20260916-p02/blob/93130e2498188efe35f20dc0665effc59394e519/Log/2026-09-16.md#L3&gt;
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b01-20260916-p02/blob/main/Log/2026-09-16.md&gt;
+- Reference: `Log/2026-09-16.md#^e-cc41eb`
+- Receipt: `93130e2498188efe35f20dc0665effc59394e519`
+- Commit: `93130e2498188efe35f20dc0665effc59394e519`
+- Ticket: `522c8378-9d54-4352-b853-aac61c14cc4e`</div></div></details><details><summary>B02:1 — <span class='pass'>PASS</span></summary><p class='rationale'>18 Nov 2026, 14:30 and KILN-47 all present; citation resolves to read raw evidence Log/2026-09-16.md#^e-46651a.</p><ul class='checks'><li><span class='pass'>PASS</span> 18 November 2026, 14:30 and KILN-47 all answered.</li><li><span class='pass'>PASS</span> Citation resolves to actually read relevant evidence.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;]]</p><div class='qa'><div class='q'>When is my Northbridge Studio kiln reservation, and what is its code?</div><div class='a'>Source summary:
+My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.
+[Log/2026-09-16.md#^e-46651a](https://github.com/AlfaBlok/m2-b02-20260916-r02/blob/f2f3ef1c8a8cfb045385ad3ff4acf7cc10bcb863/Log/2026-09-16.md)
+
+Raw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):
+My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30.
+[Log/2026-09-16.md#^e-46651a](https://github.com/AlfaBlok/m2-b02-20260916-r02/blob/f2f3ef1c8a8cfb045385ad3ff4acf7cc10bcb863/Log/2026-09-16.md)
+
+Raw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):
+The reservation code is KILN-47.
+[Log/2026-09-16.md#^e-46651a](https://github.com/AlfaBlok/m2-b02-20260916-r02/blob/f2f3ef1c8a8cfb045385ad3ff4acf7cc10bcb863/Log/2026-09-16.md)</div></div></details><details><summary>B03:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Paraphrase recovered the same kiln fact; no hidden refs supplied; no invented booking.</p><ul class='checks'><li><span class='pass'>PASS</span> Paraphrase finds the same18 November2026 14:30 KILN-47 fact without hidden source refs.</li><li><span class='pass'>PASS</span> No invented alternative booking.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;]]</p><div class='qa'><div class='q'>What time did I book the pottery firing space, and which booking reference should I bring?</div><div class='a'>Source summary:
+My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.
+[Log/2026-09-16.md#^e-43c20b](https://github.com/AlfaBlok/m2-b03-20260916-r03/blob/44804ae0ad950aea0a62cb136efac8c4b91d60c9/Log/2026-09-16.md)</div></div></details><details><summary>B04:1 — <span class='pass'>PASS</span></summary><p class='rationale'>All three ideas preserved and filed to Areas/Studio.md, Areas/Garden.md, Notes/Language Study.md; no conflation.</p><ul class='checks'><li><span class='pass'>PASS</span> Kiln booking, conditional garden attendance and Icelandic goal all preserved.</li><li><span class='pass'>PASS</span> Each idea filed correctly or explicitly unresolved for a genuine missing destination/ambiguity; generic failure is not acceptable.</li><li><span class='pass'>PASS</span> No certainty promotion or cross-topic conflation.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;, &#x27;Areas/Garden.md&#x27;, &#x27;Notes/Language Study.md&#x27;, &#x27;Inbox/filing-2026-09-16-e-e75221.md&#x27;]]</p><div class='qa'><div class='q'>Please save these three separate updates: Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.</div><div class='a'>Saved the original note. Organization is queued.
+
+Evidence:
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b04-20260916-r04/blob/3d27fc891c93edb531673188b190fdf5c91aad43/Log/2026-09-16.md#L3&gt;
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b04-20260916-r04/blob/main/Log/2026-09-16.md&gt;
+- Reference: `Log/2026-09-16.md#^e-e75221`
+- Receipt: `3d27fc891c93edb531673188b190fdf5c91aad43`
+- Commit: `3d27fc891c93edb531673188b190fdf5c91aad43`
+- Ticket: `347b9dc2-ebbb-4a89-aeac-0dcde2d20b65`</div></div></details><details><summary>B05:1 — <span class='partial'>PARTIAL</span></summary><p class='rationale'>Production supports the duplicate-replay leg only: same job, same result, unchanged pages; no forced-fault sibling/pending proof (isolated-only).</p><ul class='checks'><li><span class='partial'>UNMEASURED</span> A real forced boundary failure leaves at least one completed sibling and another pending.</li><li><span class='pass'>PASS</span> Retry preserves completed operation IDs/text/citations, input and raw identity.</li><li><span class='pass'>PASS</span> Repeated capture and same idempotency key produce no duplicate evidence/job; completed replay adds no duplicate effects.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;, &#x27;Areas/Garden.md&#x27;, &#x27;Notes/Language Study.md&#x27;]]</p><div class='qa'><div class='q'>duplicate replay</div><div class='a'>{&quot;sameJob&quot;: true, &quot;sameResult&quot;: true, &quot;unchangedPages&quot;: true}</div></div></details><details><summary>B06:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Summary distinguishes preference vs decision, marks 280 euro unconfirmed, covers two trainee places + 27 Nov deadline + grant condition.</p><ul class='checks'><li><span class='pass'>PASS</span> Repair preference is not a purchase decision.</li><li><span class='pass'>PASS</span> 280 euro estimate remains unconfirmed.</li><li><span class='pass'>PASS</span> Two free trainee-teacher places,27 November2026 deadline and grant-approval condition all covered.</li><li><span class='pass'>PASS</span> Answer is a useful summary, not transcript dump; required source scope read.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;, &#x27;Inbox/filing-2026-09-16-e-363874.md&#x27;]]</p><div class='qa'><div class='q'>Summarize my Northbridge studio planning voice note. Include the beginning, cost estimate and closing arrangements; distinguish decisions from preferences and conditions.</div><div class='a'>Source summary:
+Beginning: &quot;This is my synthetic Northbridge studio planning note.&quot; Preference: &quot;I prefer repairing my current wheel before buying another, but I have not made a purchase decision.&quot; Cost estimate: &quot;The electrician estimated 280 euros for the kiln socket inspection; this is an unconfirmed estimate, not an agreed invoice.&quot; Closing arrangements: &quot;two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.&quot; Repeated documentation of working-room layout (labelled shelf, drying rack, shared sink, noticeboard) is for the studio record. No purchase decision made; estimate unconfirmed; free places conditional on grant approval.
+[Log/2026-09-16.md#^e-363874](https://github.com/AlfaBlok/m2-b06-20260916-r06/blob/85e17fdccdde40d49d6cebe492714282577ae63d/Log/2026-09-16.md)</div></div></details><details><summary>B07:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Correct latest voice note selected (blue wheel repair first; replacement undecided); no distractor/old red-wheel substitution.</p><ul class='checks'><li><span class='pass'>PASS</span> Latest voice_note selected by capturedAt, not processing order or topical distractor.</li><li><span class='pass'>PASS</span> Repair existing blue wheel first; replacement remains undecided.</li><li><span class='pass'>PASS</span> Does not substitute newer ordinary audio/text or old red-wheel note.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Inbox/filing-2026-09-16-e-b73a63.md&#x27;], [&#x27;Areas/Studio.md&#x27;], [&#x27;Inbox/filing-2026-09-16-e-f1f630.md&#x27;], [&#x27;Inbox/filing-2026-09-16-e-62bd28.md&#x27;]]</p><div class='qa'><div class='q'>What did I say in my latest voice note about the studio equipment?</div><div class='a'>Raw source report (not independently verified current state):
+My latest voice note: I will repair the existing blue wheel first. I have not decided whether to replace it.
+[Log/2026-09-16.md#^e-b73a63](https://github.com/AlfaBlok/m2-b07-20260916-x07/blob/a50cd619b5a491a39617fac3b1ab62e7d0ac21e3/Log/2026-09-16.md)</div></div></details><details><summary>B08:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Turn 1 meaningful qualified summary; follow-up resolves tail: two trainee places, 27 Nov, conditional grant.</p><ul class='checks'><li><span class='pass'>PASS</span> First turn is a meaningful qualified summary.</li><li><span class='pass'>PASS</span> Follow-up resolves same note: two trainee-teacher places,27 November deadline, conditional grant.</li><li><span class='pass'>PASS</span> Reads/retains tail support rather than stating absent or guaranteed.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;, &#x27;Inbox/filing-2026-09-16-e-5c3d29.md&#x27;]]</p><div class='qa'><div class='q'>Summarize my Northbridge studio planning voice note.</div><div class='a'>Source summary:
+Synthetic voice note on Northbridge studio planning. Speaker prefers repairing current wheel over buying new (no purchase decision made). Working room layout: labelled shelf, drying rack, shared sink, noticeboard; documenting for studio record. Electrician gave unconfirmed 280 euro estimate for kiln socket inspection. Two free workshop places for trainee teachers reserved only if grant approved; applications close 27 Nov 2026; no promise if grant rejected.
+[Log/2026-09-16.md#^e-5c3d29](https://github.com/AlfaBlok/m2-b08-20260916-x08/blob/65ee3775ab92f94db2a0cb29c0eeb20bc59f055d/Log/2026-09-16.md)</div></div><div class='qa'><div class='q'>What about the free places mentioned at the end—who are they for, what is the deadline, and are they guaranteed?</div><div class='a'>Source summary:
+Two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.
+[Log/2026-09-16.md#^e-5c3d29](https://github.com/AlfaBlok/m2-b08-20260916-x08/blob/65ee3775ab92f94db2a0cb29c0eeb20bc59f055d/Log/2026-09-16.md)</div></div></details><details><summary>B09:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Final answer concerns Riverside Garden 21 Nov with shift-before-noon condition; no kiln or violin-thread bleed.</p><ul class='checks'><li><span class='pass'>PASS</span> Final answer concerns garden on21 November2026 with shift-before-noon condition.</li><li><span class='pass'>PASS</span> Does not answer kiln or import isolated violin-thread details.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;], [&#x27;Areas/Garden.md&#x27;]]</p><div class='qa'><div class='q'>Tell me about my kiln reservation.</div><div class='a'>Source summary:
+Your ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.
+[Log/2026-09-16.md#^e-0e8dcf](https://github.com/AlfaBlok/m2-b09-20260916-x09/blob/17e3615ffbe17bcbb2af7cce644754e16871506a/Log/2026-09-16.md)</div></div><div class='qa'><div class='q'>Now tell me about the Riverside Garden pump inspection.</div><div class='a'>Source summary:
+Riverside Garden pump inspection is on 21 November 2026. Attendance is conditional on shift ending before noon.
+[Log/2026-09-16.md#^e-05092a](https://github.com/AlfaBlok/m2-b09-20260916-x09/blob/17e3615ffbe17bcbb2af7cce644754e16871506a/Log/2026-09-16.md)
+
+Source summary:
+Riverside Garden pump inspection is on 21 November 2026. I will attend only if my shift ends before noon.
+[Log/2026-09-16.md#^e-05092a](https://github.com/AlfaBlok/m2-b09-20260916-x09/blob/17e3615ffbe17bcbb2af7cce644754e16871506a/Log/2026-09-16.md)</div></div><div class='qa'><div class='q'>My unrelated private conversation is about a violin rehearsal on 3 December.</div><div class='a'>Got it—violin rehearsal on 3 December. Anything specific you&#x27;d like me to note or help with?</div></div><div class='qa'><div class='q'>For the second thing we discussed, when is it and what condition did I put on attending?</div><div class='a'>21 November 2026, attend only if shift ends before noon.</div></div></details><details><summary>B10:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Grounded assessment uses 90 vs 600 and unconfirmed feasibility, labelled as inference, no blanket refusal or fabricated decision.</p><ul class='checks'><li><span class='pass'>PASS</span> Opinion resolves wheel choice and uses90 vs600 and unconfirmed repair feasibility as sourced premises.</li><li><span class='pass'>PASS</span> Provides useful conditional advice explicitly distinguished from stored decision.</li><li><span class='pass'>PASS</span> No blanket refusal, fabricated decision or raw-excerpt-only answer.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;, &#x27;Inbox/filing-2026-09-16-e-555770.md&#x27;]]</p><div class='qa'><div class='q'>Remember this thought: For Northbridge Studio, I prefer repairing my current wheel because the repair estimate is 90 euros; a new wheel would cost 600 euros. The technician has not confirmed that repair is possible. I have not decided.</div><div class='a'>Saved the original note. Organization is queued.
+
+Evidence:
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b10-20260916-r10/blob/3745c539db3bd3d206f8c60bd4f4c62ed7caaf2f/Log/2026-09-16.md#L3&gt;
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b10-20260916-r10/blob/main/Log/2026-09-16.md&gt;
+- Reference: `Log/2026-09-16.md#^e-555770`
+- Receipt: `3745c539db3bd3d206f8c60bd4f4c62ed7caaf2f`
+- Commit: `3745c539db3bd3d206f8c60bd4f4c62ed7caaf2f`
+- Ticket: `8428b4bb-7d20-4aae-9ed7-9ec0aacebd63`</div></div><div class='qa'><div class='q'>What do you think about it?</div><div class='a'>Repairing at €90 is the clear cost winner if the technician can confirm it&#x27;s feasible. Since confirmation is still pending, the practical next step is to get that yes/no before weighing the 600€ replacement or other options. No decision needed until the repair feasibility is settled.</div></div></details><details><summary>B11:1 — <span class='pass'>PASS</span></summary><p class='rationale'>Current 19 distinguished from prior 12 with correction provenance retained.</p><ul class='checks'><li><span class='pass'>PASS</span> Current19 distinguished from prior incorrect12.</li><li><span class='pass'>PASS</span> Correction/history and source provenance retained; no unresolved-current conflation.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;], [&#x27;Areas/Studio.md&#x27;]]</p><div class='qa'><div class='q'>How many workshop places does Northbridge Studio have now, and what number did I report before correcting it?</div><div class='a'>Latest supported memory reports as of 2026-09-16 (Areas/Studio.md):
+- Recorded correction report — User report: &quot;Correction to my earlier Northbridge Studio capacity report: not 12 places, but 19 places. The earlier figure was wrong.&quot; [Log/2026-09-16.md#^e-7dd381](https://github.com/AlfaBlok/m2-b11-20260916-x11/blob/6d174e710201cb7e0aaaaddb3c227a5a6fdd2629/Log/2026-09-16.md#%5Ee-7dd381). Effective: unknown; evidence captured: 2026-09-15T11:00:00.000Z. Verification scope: unknown.
+- Prior note statement (superseded; original evidence/date unknown): &quot;Northbridge Studio has 12 workshop places.&quot; — Areas/Studio.md, github revision 8611105c91e98605355555fae2fcf4315a49e103; correction evidence Log/2026-09-16.md#^e-7dd381.
+Prior legacy statements are preserved from the recorded repository revision/content hash. Their original Log evidence and effective dates are unknown; they are note history, not independently verified historical facts.
+Memory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.
+
+Prior note statement (superseded; original evidence/date unknown): Northbridge Studio has 12 workshop places.
+Areas/Studio.md, github revision 8611105c91e98605355555fae2fcf4315a49e103; correction evidence Log/2026-09-16.md#^e-7dd381.</div></div></details><details><summary>B12:1 — <span class='pass'>PASS</span></summary><p class='rationale'>280 euro labelled unconfirmed estimate; appointment date explicitly not agreed, no invention.</p><ul class='checks'><li><span class='pass'>PASS</span> 280 euros labelled estimate/unconfirmed.</li><li><span class='pass'>PASS</span> Appointment date explicitly unknown/not agreed, without invention.</li></ul><p class='pages'><b>Filed:</b> [[&#x27;Areas/Studio.md&#x27;]]</p><div class='qa'><div class='q'>What will the kiln socket inspection cost, and on what date is the electrician booked?</div><div class='a'>Raw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):
+The electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed.
+[Log/2026-09-16.md#^e-1b2c2a](https://github.com/AlfaBlok/m2-b12-20260916-r12/blob/6c9ffc89290412fb4c4654d5c22d6fdb0548b66d/Log/2026-09-16.md)
+
+Raw source excerpt (selected sentences; surrounding qualifications may be omitted) (not independently verified current state):
+No appointment date was agreed.
+[Log/2026-09-16.md#^e-1b2c2a](https://github.com/AlfaBlok/m2-b12-20260916-r12/blob/6c9ffc89290412fb4c4654d5c22d6fdb0548b66d/Log/2026-09-16.md)
+
+Source summary:
+The electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed. No appointment date was agreed.
+[Log/2026-09-16.md#^e-1b2c2a](https://github.com/AlfaBlok/m2-b12-20260916-r12/blob/6c9ffc89290412fb4c4654d5c22d6fdb0548b66d/Log/2026-09-16.md)</div></div></details>
+
+<h2>Limitations</h2>
+<ul><li>One trial per case (12 cells), not the full 36-cell matrix.</li><li>B05 forced-fault interruption is isolated-only by frozen contract.</li><li>Provider-billed cost not reconciled; reservations are exposure, not billing.</li><li>MCP transport only; not ASR/WhatsApp delivery.</li></ul>
+<footer>Generated 2026-09-16T22:06:32.676833+00:00 · Zenod Memory Reliability (ZMR) · evidence receipt: <code>docs/evidence/m2-basics/PRODUCTION-12-764149b.json</code></footer>
+</div></body></html>
