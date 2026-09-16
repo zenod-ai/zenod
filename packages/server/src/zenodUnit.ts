@@ -1127,7 +1127,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       c.req.path === "/oauth/authorize" ||
       c.req.path === "/oauth/authorize/decision";
     const formActionPolicy = isMcpOAuthBrowserRoute
-      ? "form-action 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*"
+      ? "form-action 'self' https: http://127.0.0.1:* http://[::1]:* http://localhost:*"
       : "form-action 'self' https://checkout.stripe.com";
     const routeContentSecurityPolicy = `${contentSecurityPolicy}; ${formActionPolicy}`;
     c.header(

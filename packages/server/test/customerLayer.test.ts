@@ -1840,7 +1840,7 @@ describe("hosted customer layer", () => {
       });
       expect(await account.json()).toMatchObject({
         token: reconciledToken,
-        mcp_url: `${DESTINATION}/mcp/${reconciledToken}`,
+        mcp_url: `${DESTINATION}/mcp`,
       });
     } finally {
       await reconciled.close();

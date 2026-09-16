@@ -131,9 +131,11 @@ describe("hosted MCP browser authorization", () => {
     const response = await request(authorization);
     expect(response.status).toBe(302);
     const signinUrl = new URL(response.headers.get("location")!, ORIGIN);
-    expect(signinUrl.pathname).toBe("/auth/signin");
+    expect(signinUrl.pathname).toBe("/auth/mcp/signin");
     expect(signinUrl.searchParams.get("return_to")).toBe(authorization);
-    const login = await request(signinUrl.toString());
+    const choice = await request(signinUrl.toString());
+    expect(await choice.text()).toContain("Continue with GitHub");
+    const login = await request(`/auth/github/start?${new URLSearchParams({ return_to: authorization })}`);
     const state = new URL(login.headers.get("location")!).searchParams.get("state")!;
     const callbackPath = `/auth/github/callback?${new URLSearchParams({ code: "owner", state })}`;
     expect((await request(callbackPath)).status).toBe(400);
