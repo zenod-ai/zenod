@@ -11,3 +11,6 @@ test('tool budget stops before next request and retains incomplete outcome',asyn
 test('seed materializer preserves exact frozen fixture and refuses an existing directory',async()=>{
  const {mkdtemp,readFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{seed,seedFiles}=await import('./seed.mjs');const root=await mkdtemp(join(tmpdir(),'m2-seed-test-')),target=join(root,'new');try{await seed(target);for(const [p,text]of Object.entries(seedFiles(JSON.parse(fixture))))assert.equal(await readFile(join(target,p),'utf8'),text);await assert.rejects(seed(target));}finally{await rm(root,{recursive:true,force:true});}
 });
+test('final saved review hashes include latency on completion and cleanup failure',async()=>{
+ for(const cleanupFails of [false,true]){const m=manifest(),io=fake(m);if(cleanupFails)io.verifyCleanup=async()=>false;const r=await runProductionCase(m,fixture,rubric,io,{dispatch:true}),saved=io.saved.at(-1);assert.equal(saved.phase,cleanupFails?'cleanup_pending':'complete');const row=saved.run.outcomes.find(v=>v.key===m.key);assert.equal(typeof row.latencyMs,'number');assert.equal(saved.run.review.outcomes.find(v=>v.key===m.key).evidenceSha256,hash(JSON.stringify(row)));assert.deepEqual(saved.run.review,r.run.review);}
+});

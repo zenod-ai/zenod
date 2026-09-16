@@ -9,8 +9,13 @@ for(const original of fixture.cases)test(`unchanged ${original.id} action dispat
   jobs.set(id,{jobId:id,status:'done',result});return {jobId:id};};
  await executeScenario({tenant:{id:'m2-fixture'},key:original.id+':1'},scenario,{call,wait:async id=>jobs.get(id),reserve:async()=>reservations++,snapshot:async()=>({})},row);
  assert.deepEqual(calls.filter(c=>c.name==='chat_with_zenod').map(c=>c.args.message),scenario.turns.filter(t=>t.kind==='chat').map(t=>t.message));
- const stores=calls.filter(c=>c.name==='store_memory');for(const [i,memory]of scenario.memories.entries()){assert.equal(stores[i].args.content,memory.content);assert.equal(stores[i].args.capturedAt,memory.capturedAt);assert.equal(stores[i].args.contentType,memory.contentType);assert.equal(stores[i].args.verbatim,true);}
+ const stores=calls.filter(c=>c.name==='store_memory');for(const [i,memory]of scenario.memories.entries()){assert.equal(stores[i].args.content,memory.content);assert.equal(stores[i].args.capturedAt,memory.capturedAt);assert.equal(stores[i].args.contentType,memory.contentType);assert.equal(stores[i].args.verbatim,true);assert.deepEqual(row.captures[i].expectedMetadata,{source:'mcp',sourceId:stores[i].args.sourceId,contentType:memory.contentType,capturedAt:memory.capturedAt});}
  const chats=calls.filter(c=>c.name==='chat_with_zenod');for(const [i,turn]of scenario.turns.filter(t=>t.kind==='chat').entries())assert.equal(chats[i].args.conversationKey,`m2-fixture:${original.id}:1:${turn.thread}`);
  if(original.id==='B05'){assert.equal(stores.length,2);assert.deepEqual(stores[0].args,stores[1].args);assert.equal(row.completedReplayStatus,'UNMEASURED');assert.deepEqual(row.duplicateReplay,{sameJob:true,sameResult:true,unchangedPages:true});}
  assert.equal(reservations,calls.filter(c=>['store_memory','chat_with_zenod'].includes(c.name)).length);
+});
+test('raw custody rejects dropped or changed seed chronology/category/identity, chat has no invented timestamp',async()=>{
+ const {validRawCapture}=await import('./scenario.mjs');const expectedMetadata={source:'mcp',sourceId:'unique-seed',contentType:'voice_note',capturedAt:'2026-09-15T10:00:00.000Z'},c={message:'unchanged source',capture:{evidenceRef:'Log/a#^e-123abc'},expectedMetadata,raw:{entry:{content:'unchanged source',evidenceRef:'Log/a#^e-123abc',...expectedMetadata}}};assert.equal(validRawCapture(c),true);
+ for(const key of Object.keys(expectedMetadata)){const dropped=structuredClone(c);delete dropped.raw.entry[key];assert.equal(validRawCapture(dropped),false);const changed=structuredClone(c);changed.raw.entry[key]='different';assert.equal(validRawCapture(changed),false);}
+ const chat=structuredClone(c);delete chat.expectedMetadata;delete chat.raw.entry.capturedAt;assert.equal(validRawCapture(chat),true);
 });

@@ -1,15 +1,15 @@
 /** Existing frozen memories + chat/interrupted_filing actions, without rubric inputs. */
 export async function executeScenario(m,scenario,{call,wait,reserve,snapshot},row){
  row.turns=[];row.captures=[];row.chatEnrichmentJobs=[];
- const readCapture=async(result,message,job)=>{
+ const readCapture=async(result,message,job,expectedMetadata)=>{
   if(!result?.evidenceRef)throw Error('capture_missing');
   let enriched=job;
   if(result.organization){if(result.organization.status!=='queued'||!result.organization.jobId)throw Error('capture_job_missing');enriched=await wait(result.organization.jobId);row.chatEnrichmentJobs.push(enriched);}
-  const raw=await call('get_memory',{path:result.evidenceRef});row.captures.push({message,capture:result,enriched,raw});return row.captures.at(-1);
+  const raw=await call('get_memory',{path:result.evidenceRef});row.captures.push({message,capture:result,enriched,raw,...(expectedMetadata?{expectedMetadata}:{})});return row.captures.at(-1);
  };
  const store=async memory=>{
   const args={content:memory.content,source:'mcp',contentType:memory.contentType,capturedAt:memory.capturedAt,sourceId:`${m.tenant.id}:${m.key}:${memory.id}`,idempotencyKey:`${m.tenant.id}:${m.key}:store:${memory.id}`,verbatim:true};
-  await reserve();const queued=await call('store_memory',args),id=queued.jobId??queued.ticket_id;if(!id)throw Error('store_job_missing');const terminal=await wait(id);await readCapture(terminal.result,memory.content,terminal);return {args,id,terminal};
+  await reserve();const queued=await call('store_memory',args),id=queued.jobId??queued.ticket_id;if(!id)throw Error('store_job_missing');const terminal=await wait(id);await readCapture(terminal.result,memory.content,terminal,{source:args.source,contentType:args.contentType,capturedAt:args.capturedAt,sourceId:args.sourceId});return {args,id,terminal};
  };
  for(const memory of scenario.memories)await store(memory);
  row.pagesAfterSetup=await snapshot();
@@ -29,3 +29,5 @@ export async function executeScenario(m,scenario,{call,wait,reserve,snapshot},ro
  }
  row.pagesAfter=await snapshot();
 }
+
+export function validRawCapture(c){return c.raw.entry?.content===c.message&&c.raw.entry?.evidenceRef===c.capture.evidenceRef&&Object.entries(c.expectedMetadata??{}).every(([k,v])=>c.raw.entry?.[k]===v);}

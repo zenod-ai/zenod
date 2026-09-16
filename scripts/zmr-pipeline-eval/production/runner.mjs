@@ -18,7 +18,7 @@ export async function runProductionCase(m,fixtureBytes,rubricBytes,io,{dispatch=
  if(recovery&&(recovery.binding!==binding||recovery.version!==1))fail('recovery_target_mismatch');
  const r=recovery?structuredClone(recovery):{version:1,binding,phase:'planned',calls:[],cost:{providerReportedCostUsd:null,unknownCostRequests:null,reservedExposureUsd:0,hardDollarCap:false},run:{mode:'PRODUCTION_MCP',candidateSha:m.candidateSha,fixtureSha256:m.fixtureSha256,rubricSha256:m.rubricSha256,outcomes:plannedRows(fixture),rubricCheckCounts:Object.fromEntries(rubric.cases.map(c=>[c.id,c.checks.length]))}};
  r.run.cost=r.cost;r.run.models=m.models;r.run.operatorHashes=io.codeHashes??null;
- const save=async phase=>{r.phase=phase;await io.save(r);};
+ const save=async phase=>{r.phase=phase;if(['complete','cleanup_pending'].includes(phase))r.run.review=reviewTemplate(r.run);await io.save(r);};
  const assertOwned=async()=>{const s=await io.inspect();if(s.tenantId!==m.tenant.id||s.tenantCreatedAt!==m.tenant.createdAt||s.repoId!==m.repo.id||s.repoFullName!==`${m.repo.owner}/${m.repo.name}`||s.repoPrivate!==true||!s.releaseVerified||!s.exclusive)fail('ownership_or_release_mismatch');return s;};
  const before=await assertOwned();
  if(!dispatch)return {status:'check_only',ready:before.drained&&before.seedMatches,manifestBinding:binding};
@@ -31,13 +31,13 @@ export async function runProductionCase(m,fixtureBytes,rubricBytes,io,{dispatch=
    const wait=async id=>{for(let n=0;n<12;n++){if(n)await io.sleep(15000);const j=await call('get_task_result',{jobId:id});if(j.status==='done')return j;if(!['queued','running'].includes(j.status))fail('job_failed');}fail('job_unresolved');};
    const reserve=async()=>{if(r.cost.reservedExposureUsd+m.reservedTurnExposureUsd>m.maxExposureUsd)fail('exposure_limit');r.cost.reservedExposureUsd+=m.reservedTurnExposureUsd;await save('turn_reserved');};
    await executeScenario(m,scenario,{call,wait,reserve,snapshot:()=>io.snapshot()},row);
-   row.gates=await io.verifyScenario(row);row.status='RECORDED';r.run.review=reviewTemplate(r.run);await save('recorded');
+   row.gates=await io.verifyScenario(row);row.status='RECORDED';await save('recorded');
   }
  }catch{row.status='INCOMPLETE';r.error='test_incomplete';await save('test_incomplete');}
  finally{
   // Recovery is cleanup-only: never sends another chat or changes its idempotency key.
   try{await io.closeClient();if(!await io.drain())fail('drain_pending');await assertOwned();await save('cleanup_planned');await io.disableOwnedTenant();await io.archiveOwnedRepo();if(!await io.verifyCleanup())fail('cleanup_unverified');row.latencyMs=Date.now()-started;await save('complete');}
-  catch{r.cleanupError='cleanup_pending';await save('cleanup_pending');}
+  catch{r.cleanupError='cleanup_pending';row.latencyMs=Date.now()-started;await save('cleanup_pending');}
  }
  return r;
 }

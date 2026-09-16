@@ -8,6 +8,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {runProductionCase,validateManifest} from './runner.mjs';
 import {seedFiles} from './seed.mjs';
+import {validRawCapture} from './scenario.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const fail=()=>{throw Error('operator_preflight_or_request_failed');};
 function protectedJson(p){if(realpathSync(p)!==resolve(p)||(statSync(p).mode&0o077)!==0)fail();return JSON.parse(readFileSync(p));}
@@ -22,9 +23,11 @@ export async function createOperator(m,secrets,{dispatch=false,cleanupOnly=false
  const tenant=()=>db.prepare('SELECT tenant_id,created_at,token_hash,status FROM tenants WHERE tenant_id=?').get(m.tenant.id);
  const root=join(m.dataDir,m.tenant.id),work=join(root,'vault');
  const openState=filename=>existsSync(join(root,filename))?new DatabaseSync(join(root,filename),{readOnly:true}):null;
- const state=openState('zenod.sqlite'),jobs=openState('tasks.sqlite');
- const settings=()=>Object.fromEntries(state?.prepare('SELECT key,value FROM settings').all().map(r=>[r.key,r.value])??[]);
- const active=()=>Number(jobs?.prepare("SELECT COUNT(*) AS n FROM task_jobs WHERE status IN ('queued','running')").get().n??0);
+ let state=openState('zenod.sqlite'),jobs=openState('tasks.sqlite');
+ if(!cleanupOnly&&(!state||!jobs)){state?.close();jobs?.close();db.close();fail();}
+ const jobDb=()=>{jobs??=openState('tasks.sqlite');if(!jobs&&!cleanupOnly)fail();return jobs;};
+ const settings=()=>{state??=openState('zenod.sqlite');if(!state&&!cleanupOnly)fail();return Object.fromEntries(state?.prepare('SELECT key,value FROM settings').all().map(r=>[r.key,r.value])??[]);};
+ const active=()=>Number(jobDb()?.prepare("SELECT COUNT(*) AS n FROM task_jobs WHERE status IN ('queued','running')").get().n??0);
  let uncertain=false,client,store,cleanup=false;
  const request=async(url,token,method='GET',body)=>{try{const r=await fetchImpl(url,{method,headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:AbortSignal.timeout(30000)});return {status:r.status,body:await r.json().catch(()=>null)};}catch{uncertain=true;fail();}};
  const repoUrl=`https://api.github.com/repos/${m.repo.owner}/${m.repo.name}`;
@@ -38,7 +41,7 @@ export async function createOperator(m,secrets,{dispatch=false,cleanupOnly=false
   async inspect(){const t=owned(),repo=await getRepo(),s=settings();if(!cleanupOnly&&(!t||t.status!=='active'||s.vault_repo!==`${m.repo.owner}/${m.repo.name}`||['google_drive','drive'].includes(s.vault_provider)))fail();
    if(!cleanupOnly&&(s.google_drive_client_id||s.google_drive_refresh_token||s.phone_number))fail();
    if(!cleanupOnly&&Object.entries(m.models??{}).some(([k,v])=>s[k]!==v))fail();
-   let seedMatches=false;if(!cleanupOnly){const fixture=JSON.parse(readFileSync(new URL('../basics/fixture.json',import.meta.url)));seedMatches=git('rev-parse','HEAD')===m.seedCommit&&git('status','--porcelain')===''&&Object.entries(seedFiles(fixture)).every(([p,text])=>realpathSync(join(work,p))===resolve(work,p)&&readFileSync(join(work,p),'utf8')===text)&&!git('ls-files','Log/','.brain/filing/').trim()&&Number(jobs?.prepare('SELECT COUNT(*) AS n FROM task_jobs').get().n??0)===0;}
+   let seedMatches=false;if(!cleanupOnly){const fixture=JSON.parse(readFileSync(new URL('../basics/fixture.json',import.meta.url)));seedMatches=git('rev-parse','HEAD')===m.seedCommit&&git('status','--porcelain')===''&&Object.entries(seedFiles(fixture)).every(([p,text])=>realpathSync(join(work,p))===resolve(work,p)&&readFileSync(join(work,p),'utf8')===text)&&!git('ls-files','Log/','.brain/filing/').trim()&&Number(jobDb()?.prepare('SELECT COUNT(*) AS n FROM task_jobs').get().n??0)===0;}
    if(!cleanupOnly&&seedMatches){const {lintVault}=await import(pathToFileURL(join(m.runtimeRoot,'packages/core/dist/vault/lint.js')));if(!(await lintVault(work)).ok)fail();}
    return {tenantId:m.tenant.id,tenantCreatedAt:t?.created_at??m.tenant.createdAt,repoId:repo?.id??m.repo.id,repoFullName:repo?.full_name??`${m.repo.owner}/${m.repo.name}`,repoPrivate:repo?.private??true,releaseVerified:true,exclusive:m.noOtherTargetRequests===true,drained:active()===0&&!uncertain,seedMatches};},
   async callTool(name,args){if(!dispatch||cleanup||Date.now()>=m.exclusiveUntil||!['chat_with_zenod','store_memory','get_task_result','get_memory'].includes(name))fail();owned();
@@ -52,10 +55,10 @@ export async function createOperator(m,secrets,{dispatch=false,cleanupOnly=false
    const captures=row.captures,refs=captures.map(c=>c.capture.evidenceRef);
    const logs=Object.entries(row.pagesAfter).filter(([p])=>p.startsWith('Log/')).map(([,v])=>v).join('\n');
    const rawCount=[...logs.matchAll(/\^(e-[a-f0-9]{6})\b/g)].length;
-   const count=Number(jobs.prepare("SELECT COUNT(*) AS n FROM task_jobs WHERE kind IN ('enrich_memory','store')").get().n);
+   const count=Number(jobDb().prepare("SELECT COUNT(*) AS n FROM task_jobs WHERE kind IN ('enrich_memory','store')").get().n);
    const head=await request(repoUrl+'/commits/main',secrets.githubToken);
    const last=captures.at(-1)?.enriched.result?.revision?.id;
-   return {isolation:true,rawCustody:captures.every(c=>c.raw.entry?.content===c.message&&c.raw.entry?.evidenceRef===c.capture.evidenceRef),inputPreserved:captures.every(c=>JSON.parse(jobs.prepare('SELECT input_json FROM task_jobs WHERE id=?').get(c.enriched.jobId)?.input_json??'{}').content===c.message),noDuplicateEffects:count===captures.length&&rawCount===refs.length&&new Set(refs).size===refs.length&&(!row.duplicateReplay||Object.values(row.duplicateReplay).every(v=>v===true)),published:head.status===200&&head.body.sha===(last??m.seedCommit),readOnlyPagesUnchanged:['B01','B04','B05','B10'].includes(row.id)||JSON.stringify(row.pagesAfterSetup)===JSON.stringify(row.pagesAfter)};
+   return {isolation:true,rawCustody:captures.every(validRawCapture),inputPreserved:captures.every(c=>JSON.parse(jobDb().prepare('SELECT input_json FROM task_jobs WHERE id=?').get(c.enriched.jobId)?.input_json??'{}').content===c.message),noDuplicateEffects:count===captures.length&&rawCount===refs.length&&new Set(refs).size===refs.length&&(!row.duplicateReplay||Object.values(row.duplicateReplay).every(v=>v===true)),published:head.status===200&&head.body.sha===(last??m.seedCommit),readOnlyPagesUnchanged:['B01','B04','B05','B10'].includes(row.id)||JSON.stringify(row.pagesAfterSetup)===JSON.stringify(row.pagesAfter)};
   },
   async disableOwnedTenant(){if(!dispatch||!cleanup||uncertain||active())fail();const t=owned();if(!t)return;
    if(t.status==='deleted'&&(settings().openrouter_api_key||settings().github_token))fail();
