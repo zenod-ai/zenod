@@ -1,7 +1,7 @@
 import {sha256} from '../policy.mjs';
 export const TOTAL_OUTCOMES=36;
 export function validateSuite(fixture,rubric){
- if(fixture.version!=='m2-basics-v1'||fixture.synthetic!==true||fixture.trials!==3||fixture.cases?.length!==12||rubric.plannedOutcomes!==TOTAL_OUTCOMES)throw new Error('Invalid fixed suite');
+ if(fixture.version!=='m2-basics-v1.1'||fixture.synthetic!==true||fixture.trials!==3||fixture.cases?.length!==12||rubric.plannedOutcomes!==TOTAL_OUTCOMES)throw new Error('Invalid fixed suite');
  const ids=Array.from({length:12},(_,i)=>'B'+String(i+1).padStart(2,'0'));
  if(JSON.stringify(fixture.cases.map(c=>c.id))!==JSON.stringify(ids)||JSON.stringify(rubric.cases.map(c=>c.id))!==JSON.stringify(ids))throw new Error('Missing or reordered scenario');
  if(fixture.cases.some(c=>!c.turns?.length||c.turns.some(t=>!['chat','interrupted_filing'].includes(t.kind))))throw new Error('Invalid scenario turns');
@@ -56,4 +56,10 @@ export function preservedMarkedLines(beforePages,afterPages,completedOutcomes){
   const before=beforePages[path].split('\n'),after=afterPages[path].split('\n');
   return [...new Set(before.filter(line=>line.includes('<!-- zenod-op:')))].every(line=>before.filter(v=>v===line).length===after.filter(v=>v===line).length);
  });
+}
+
+export async function lintSeedVault(lintVault,path){
+ const report=await lintVault(path);
+ if(!report.ok){const error=new Error('evaluation_invalid_seed');error.lintReport=report;throw error;}
+ return report;
 }

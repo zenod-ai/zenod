@@ -41,3 +41,9 @@ Seam test uses a deterministic offline responder solely to prove real engine con
 Conversational `capture_note` can start an engine-local background store outside TaskJobQueue. The runner observes its real queued result, waits for the existing `onFilingComplete` callback before the next turn/case and before snapshot/cost finalization, and records those receipts. Missing completion after the bounded wait stops the run as incomplete; it is never synthesized as success. Remaining writes cannot regain unrestricted network access after that stop. The offline seam test exercises this exact real-engine callback with delayed deterministic classification.
 
 The shared wire parser accepts SSE comments/metadata before `data:` and multiline CRLF events. Historical evidence stays immutable: corrections to previously unknown provider costs belong in a separate reconciliation report containing original run/response hashes. Recovered usage does not retroactively erase a budget stop, repair contaminated stage attribution, or authorize a new run.
+
+### Fixture v1.1 — valid seed envelopes
+
+Fixture v1.1 adds only required `type`, `created`, `updated` metadata and a neutral `[[Index]]` link to each seed meaning page. All scenario content, prompts and rubric v1 expectations remain unchanged. Its changed fixture hash identifies a **new baseline**, not a continuation or passing reinterpretation of v1. The two earlier runs remain archived, including their costs and separately valid product findings.
+
+Every setup now runs the exact candidate's `lintVault` before constructing a model adapter or making any model request. Invalid seeds stop the whole run as `INVALID_FIXTURE`; subsequent cases remain unrun. Offline candidate tests reproduce v1's missing-field/orphan failures, prove the call boundary remains untouched, and lint all four v1.1 Markdown files successfully.

@@ -9,7 +9,7 @@ import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {sha256,budgetLedger,terminalProviderGuard,evaluationFetch,evaluationCostSummary,prepareAsrEnvironment} from '../policy.mjs';
 import {evaluationModels} from '../models.mjs';
-import {validateSuite,plannedRows,selectRows,modelScenario,reviewTemplate,summarize,preservedEffects,preservedMarkedLines} from './policy.mjs';
+import {validateSuite,plannedRows,selectRows,modelScenario,reviewTemplate,summarize,preservedEffects,preservedMarkedLines,lintSeedVault} from './policy.mjs';
 const {values:a}=parseArgs({options:{live:{type:'boolean',default:false},'preflight':{type:'boolean',default:false},'candidate-repo':{type:'string'},'candidate-sha':{type:'string'},'deployed-sha':{type:'string'},out:{type:'string'},prices:{type:'string'},'classify-model':{type:'string'},'ask-model':{type:'string'},'organizer-reasoning-effort':{type:'string'},'organizer-provider-order':{type:'string'},'budget-usd':{type:'string',default:'1'},'max-requests':{type:'string',default:'80'},select:{type:'string'}}});
 const fixtureBytes=await readFile(new URL('fixture.json',import.meta.url)),rubricBytes=await readFile(new URL('rubric.json',import.meta.url));
 const fixture=validateSuite(JSON.parse(fixtureBytes),JSON.parse(rubricBytes)),rubric=JSON.parse(rubricBytes);
@@ -40,20 +40,21 @@ await writeFile(join(output,'build.log'),execFileSync('npm',['run','build'],{cwd
 for(const pkg of ['core','server','mcp-chassis'])run.compiledHashes[pkg]=await hashTree(join(candidate,'packages',pkg,'dist'));
 const load=p=>import(pathToFileURL(join(candidate,p)).href);
 const {createEngine,createBrainLlm,VaultRepo}=await load('packages/core/dist/index.js');
+const {lintVault}=await load('packages/core/dist/vault/lint.js');
 const {SqliteStateStore}=await load('packages/core/dist/state/sqlite.js');
 const {TaskJobStore}=await load('packages/server/dist/taskJobStore.js');
 const {TaskJobQueue}=await load('packages/server/dist/taskJobQueue.js');
 const {runSyntheticChat}=await load('packages/server/dist/testHarness.js');
 const {ZENOD_AGENT}=await load('packages/server/dist/agent.js');
 run.surface={kind:'isolated-memory-engine.chat',personaSha256:sha256(ZENOD_AGENT.persona),localVaultTaskTools:true,externalTaskTools:false,driveTools:false,peerTools:false,tenantProjectRegistry:false,productionPromptParity:false};
-const originalFetch=globalThis.fetch;let stage='setup';let unresolvedBackground=false;
+const originalFetch=globalThis.fetch;let stage='setup';let unresolvedBackground=false,invalidFixture=false;
 const flush=async()=>{run.cost={...evaluationCostSummary(ledger),unknownCostRequests:ledger.rows.filter(r=>r.actualCostUsd===null).length};await save('run.json',run);};
 globalThis.fetch=a.preflight?async()=>{throw new Error('Preflight forbids network');}:evaluationFetch({ledger,quota,stage:()=>stage,onBudgetBlock:row=>run.budgetBlocks.push(row),onRequest:(row,body)=>save(`wire-request-${row.request}.json`,body),onResponse:(row,body)=>writeFile(join(output,`wire-response-${row.request}.txt`),body,{mode:0o600}),onFinish:flush,fetchImpl:async request=>{if(unresolvedBackground)throw new Error('evaluation_background_filing_unresolved');run.externalCalls++;return originalFetch(request);}});
 const snapshot=async root=>{const result={};async function walk(dir,rel=''){for(const e of await readdir(dir,{withFileTypes:true})){if(e.name==='.git')continue;if(e.isSymbolicLink())throw new Error('Unexpected vault symlink');const p=join(dir,e.name),r=rel+e.name;if(e.isDirectory())await walk(p,r+'/');else if(e.name.endsWith('.md'))result[r]=await readFile(p,'utf8');}}await walk(root);return Object.fromEntries(Object.entries(result).sort(([a],[b])=>a.localeCompare(b)));};
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 try{
  for(const row of selected){
-  if(quota.terminal||run.budgetBlocks.length||unresolvedBackground)break;
+  if(quota.terminal||run.budgetBlocks.length||unresolvedBackground||invalidFixture)break;
   const scenario=modelScenario(fixture.cases.find(c=>c.id===row.id)),start=performance.now(),firstRequest=ledger.rows.length;
   row.status='RUNNING';row.turns=[];row.operations=[];row.reads=[];row.captures=[];row.gates={isolation:false,rawCustody:false,inputPreserved:false,noDuplicateEffects:false,published:false};
   const filing=backgroundFilingTracker();let queue,store,state,repo;const workspace=await mkdtemp(join(tmpdir(),'zenod-m2-'));row.workspace=workspace;
@@ -67,6 +68,7 @@ try{
    git(seed,'add','.');git(seed,'commit','-m','M2 frozen synthetic baseline');git(seed,'push','origin','main');
    repo=await VaultRepo.open({workdir:join(workspace,'work'),remoteUrl:bare});
    row.gates.isolation=git(repo.path,'remote','get-url','origin')===bare;
+   try{row.seedLint=await lintSeedVault(lintVault,repo.path);}catch(error){row.seedLint=error.lintReport;invalidFixture=true;throw error;}
    const before=await snapshot(repo.path);await caseSave('pages-before.json',before);
    if(a.preflight){row.status='PREFLIGHT_ONLY';row.gates={isolation:row.gates.isolation};continue;}
    let reconcileCalls=0,inject=false,injected=false;
@@ -138,7 +140,7 @@ try{
  }
  run.sourceUnchanged=equal(run.sourceHashes,await hashes())&&git(candidate,'rev-parse','HEAD')===run.candidateSha&&!git(candidate,'status','--porcelain');
  run.compiledUnchanged=true;for(const pkg of ['core','server','mcp-chassis'])if(!equal(run.compiledHashes[pkg],await hashTree(join(candidate,'packages',pkg,'dist'))))run.compiledUnchanged=false;
- run.status=a.preflight?'PREFLIGHT_ONLY':unresolvedBackground?'INCOMPLETE_BACKGROUND_FILING':quota.terminal?.status??(run.budgetBlocks.length?'INCOMPLETE_BUDGET':'AWAITING_SEMANTIC_REVIEW');
+ run.status=invalidFixture?'INVALID_FIXTURE':a.preflight?'PREFLIGHT_ONLY':unresolvedBackground?'INCOMPLETE_BACKGROUND_FILING':quota.terminal?.status??(run.budgetBlocks.length?'INCOMPLETE_BUDGET':'AWAITING_SEMANTIC_REVIEW');
 }catch(error){run.status='RUN_FAILED';run.errorClass=error.name;}
 finally{if(!unresolvedBackground)globalThis.fetch=originalFetch;run.finishedAt=new Date().toISOString();run.terminal=quota.terminal;await flush();await save('review-template.json',reviewTemplate(run));await save('report.json',summarize(run));console.log(JSON.stringify({status:run.status,output,denominator:36,recorded:run.outcomes.filter(r=>r.status==='RECORDED').length,...run.cost}));}
 if(unresolvedBackground||quota.terminal?.status==='INCOMPLETE_PROVIDER_DEADLINE')process.exit(1);

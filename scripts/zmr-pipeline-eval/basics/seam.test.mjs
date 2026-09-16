@@ -30,3 +30,14 @@ test('actual engine background capture finishes through onFilingComplete before 
   release();await completion;assert.equal(tracker.pending,0);assert.equal(tracker.receipts.length,1);assert.ok(tracker.receipts[0].evidenceRef.startsWith('Log/'));assert.equal(git(repo.path,'rev-parse','HEAD'),git(root,'--git-dir',bare,'rev-parse','main'));
  }finally{state?.close();await rm(root,{recursive:true,force:true});}
 });
+test('candidate lint rejects original malformed seed before calls and accepts v1.1',{skip:!candidate},async()=>{
+ const {readFile,mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {dirname}=await import('node:path');const {lintSeedVault}=await import('./policy.mjs');
+ const {lintVault}=await import(pathToFileURL(join(candidate,'packages/core/dist/vault/lint.js')).href),fixture=JSON.parse(await readFile(new URL('fixture.json',import.meta.url))),root=await mkdtemp(join(tmpdir(),'m2-seed-lint-'));
+ try{
+  await mkdir(join(root,'.brain'));await writeFile(join(root,'.brain/config.yml'),'schema_version: 1\ntags: []\nconfidence_threshold: 0.7\n');await writeFile(join(root,'Index.md'),'# M2\n');
+  for(const [path,text] of Object.entries(fixture.seedPages)){await mkdir(dirname(join(root,path)),{recursive:true});await writeFile(join(root,path),text.replace(/^(type|created|updated):.*\n/gm,'').replace('\n[[Index]]\n',''));}
+  let calls=0;await assert.rejects(async()=>{await lintSeedVault(lintVault,root);calls++;},error=>error.message==='evaluation_invalid_seed'&&error.lintReport.errors.some(e=>e.rule==='frontmatter/field')&&error.lintReport.errors.some(e=>e.rule==='links/orphan'));assert.equal(calls,0);
+  for(const [path,text] of Object.entries(fixture.seedPages))await writeFile(join(root,path),text);
+  const valid=await lintSeedVault(lintVault,root);assert.equal(valid.ok,true);assert.equal(valid.checkedFiles,4);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

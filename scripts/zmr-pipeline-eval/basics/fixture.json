@@ -1,11 +1,11 @@
 {
-  "version": "m2-basics-v1",
+  "version": "m2-basics-v1.1",
   "synthetic": true,
   "trials": 3,
   "seedPages": {
-    "Areas/Studio.md": "---\ntitle: Northbridge Studio\nsummary: Ceramics, kiln reservations, studio equipment and workshop planning.\ntags: []\n---\n\n# Northbridge Studio\n\n## Scope\n\nCeramics, kiln reservations, studio equipment and workshop planning.\n\n## Sources\n",
-    "Areas/Garden.md": "---\ntitle: Riverside Garden\nsummary: Shared garden maintenance, pump inspections and volunteer schedules.\ntags: []\n---\n\n# Riverside Garden\n\n## Scope\n\nShared garden maintenance, pump inspections and volunteer schedules.\n\n## Sources\n",
-    "Notes/Language Study.md": "---\ntitle: Language Study\nsummary: Independent language learning goals and course choices.\ntags: []\n---\n\n# Language Study\n\n## Scope\n\nIndependent language learning goals and course choices.\n\n## Sources\n"
+    "Areas/Studio.md": "---\ntitle: Northbridge Studio\nsummary: Ceramics, kiln reservations, studio equipment and workshop planning.\ntags: []\ntype: area\ncreated: 2026-09-15\nupdated: 2026-09-15\n---\n\n# Northbridge Studio\n\n## Scope\n\nCeramics, kiln reservations, studio equipment and workshop planning.\n\n## Sources\n\n[[Index]]\n",
+    "Areas/Garden.md": "---\ntitle: Riverside Garden\nsummary: Shared garden maintenance, pump inspections and volunteer schedules.\ntags: []\ntype: area\ncreated: 2026-09-15\nupdated: 2026-09-15\n---\n\n# Riverside Garden\n\n## Scope\n\nShared garden maintenance, pump inspections and volunteer schedules.\n\n## Sources\n\n[[Index]]\n",
+    "Notes/Language Study.md": "---\ntitle: Language Study\nsummary: Independent language learning goals and course choices.\ntags: []\ntype: note\ncreated: 2026-09-15\nupdated: 2026-09-15\n---\n\n# Language Study\n\n## Scope\n\nIndependent language learning goals and course choices.\n\n## Sources\n\n[[Index]]\n"
   },
   "cases": [
     {
