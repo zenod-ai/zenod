@@ -161,7 +161,7 @@ it("submits a cited summary after reading beginning, middle and end of a long la
  expect(system).toContain("Preserve ambiguous numbers as ambiguous");
  expect(system).toContain("Use a few complete relevant supports while retaining all requested subjects");
  const terminal=requests.at(-1).tools.find((t:any)=>t.function.name==="submit_memory_answer").function;
- expect(terminal.description).toContain("write concise summaryText");
+ expect(terminal.description).toContain("write one coherent summaryText");
  expect(terminal.description).toContain("does not summarize");
  const selection=terminal.parameters.properties.supportSelections.items;
  expect(selection.properties.summaryText.description).toContain("Always provide summaryText");
@@ -275,4 +275,13 @@ it("frontmatter inspection remains narrow and does not receive the host complete
  const readNote=vi.fn(async(path:string,options:any)=>{expect(path).toBe(ref);expect(options).toEqual({part:"frontmatter",maxChars:2000});return JSON.stringify({body:"metadata",answerSupports:[]});});
  wire([{calls:[{name:"read_note",input:{path:ref,part:"frontmatter",maxChars:2000}}]},{calls:[{name:"submit_memory_answer",input:{analysisText:null,supportSelections:[]}}]}]);
  await llm().answer(input,{...tools,searchVault:async()=>"",readNote});expect(readNote).toHaveBeenCalledTimes(1);
+});
+
+it("advertises whole-source coverage and sentence-only verbatim submission contracts",async()=>{
+ const requests=wire([{calls:[read]},{calls:[submit]}]);
+ await llm().answer(input,tools);
+ const terminal=requests[1].tools.find((tool:any)=>tool.function.name==="submit_memory_answer").function;
+ expect(terminal.description).toContain("one source_summary handle");
+ expect(terminal.description).toContain("every explicitly requested facet and qualifier");
+ expect(terminal.parameters.properties.supportSelections.items.properties.summaryText.description).toContain("sentence-granularity handles require null");
 });

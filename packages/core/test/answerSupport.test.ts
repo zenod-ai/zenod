@@ -198,3 +198,15 @@ describe("cited source summaries",()=>{
     expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:" "}]).valid).toBe(false);
   });
 });
+
+ it("rejects paraphrases on sentence handles while preserving verbatim and parent summaries",()=>{
+  const registry=new AnswerSupportRegistry();
+  const hints=registry.addPassage(passage("The room has a shelf. The repair estimate is tentative, pending inspection."));
+  const sentence=hints.find(h=>h.granularity==="sentence")!;const parent=hints.find(h=>h.granularity==="paragraph")!;
+  expect(sentence).toBeDefined();expect(parent).toBeDefined();
+  const summaryText="The repair estimate remains conditional on inspection.";
+  const rejected=registry.render([{id:sentence.id,mode:"raw_report",summaryText}],"An assessment must not bypass invalid premises.");
+  expect(rejected.valid).toBe(false);expect(rejected.text).not.toContain(summaryText);expect(rejected.text).not.toContain("An assessment");
+  expect(registry.render([{id:sentence.id,mode:"raw_report"}]).text).toContain("The room has a shelf.");
+  expect(registry.render([{id:parent.id,mode:"raw_report",summaryText}]).valid).toBe(true);
+ });
