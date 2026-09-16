@@ -364,12 +364,9 @@ export interface EngineOptions {
    * tokenizers may differ, but the briefing share is measured consistently.
    */
   onTokenCost?: (measurement: TokenCostMeasurement) => void;
-  /**
-   * M-5 — fired when a background captureNote filing actually lands (the commit is
-   * real, not just queued). The engine only console.info's this today; the server
-   * wires it to the normal notification path so a background filing gets a real
-   * completion receipt instead of a silent log line.
-   */
+  /** Durably enqueue organization of already-published evidence; never recapture it. */
+  enqueueEnrichment?: (input: EnrichEvidenceInput, idempotencyKey: string) => Promise<{ id: string }> | { id: string };
+  /** @deprecated Completion notifications belong to the durable queue consumer. */
   onFilingComplete?: (result: StoreResult) => void;
 }
 
@@ -1005,6 +1002,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
 
   function buildTaskTools(surface: Surface, record?: (action: TaskingAction) => void, rawEvidence?: TaskingInput["rawEvidence"]): VaultTaskTools {
     const sameTurnMutations = new Map<string, Promise<string>>();
+    let capture: Promise<StoreResult> | undefined;
     const recordAction = (
       tool: string,
       input: Record<string, unknown>,
@@ -1047,59 +1045,39 @@ export function createEngine(options: EngineOptions): BrainEngine {
     };
     return {
       githubAvailable: Boolean(options.taskingTools),
-      captureNote: async (content: string, hints?: string[]) => {
-        if (!repo) {
-          return {
-            evidenceRef: "(no vault)",
-            pagesTouched: [],
-            filing: "pending",
-            queued: false,
+      captureNote: (content: string, hints?: string[]) => {
+        // A single inbound turn has one immutable original, even if the model
+        // repeats the tool with different summaries or invokes it concurrently.
+        if (capture) return capture;
+        capture = (async () => {
+          const input: StoreInput = {
+            content: rawEvidence?.content ?? content, source: surface, verbatim: true,
+            hints: [...(hints ?? []), ...(rawEvidence?.hints ?? [])],
           };
-        }
-        const storeContent = rawEvidence?.content ?? content;
-        const storeHints = [...(hints ?? []), ...(rawEvidence?.hints ?? [])];
-        const storeVerbatim = rawEvidence ? true : undefined;
-        // The librarian pipeline (classify → compose → digest → durable save) must
-        // never sit on the hot reply line: on a slow model it adds minutes
-        // (a real WhatsApp turn took ~4 min, ~2:20 of it filing — see
-        // docs/SESSION-LOG-FORENSICS.md). Kick it off in the background through
-        // the same write queue (so writes still serialize) and return at once;
-        // the reply confirms the note is *queued*, not yet durably saved. The filing
-        // self-reports to the logs when it lands.
-        void store(
-          {
-            content: storeContent,
-            source: surface,
-            ...(storeHints.length ? { hints: storeHints } : {}),
-            ...(storeVerbatim !== undefined ? { verbatim: storeVerbatim } : {}),
-          },
-          "background",
-        )
-          .then((result) => {
-            console.info(
-              `[librarian] background filing complete: ${result.evidenceRef}` +
-                (result.pagesTouched.length ? ` → ${result.pagesTouched.join(", ")}` : " → (inbox)") +
-                ` @ ${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? "unknown"}`,
-            );
-            options.onFilingComplete?.(result);
-          })
-          .catch((err) => console.error(`[librarian] background filing failed: ${(err as Error).message}`));
-        recordAction(
-          "capture",
-          {
-            content: storeContent,
-            ...(storeHints.length ? { hints: storeHints } : {}),
-            ...(storeVerbatim !== undefined ? { verbatim: storeVerbatim } : {}),
-          },
-          "Queued: filing this note to the vault in the background (not yet durably saved).",
-          true,
-        );
-        return {
-          evidenceRef: "(queued)",
-          pagesTouched: [],
-          filing: "pending",
-          queued: true,
-        };
+          let saved: StoreResult;
+          try {
+            saved = await captureEvidence(input);
+          } catch (error) {
+            recordAction("capture", {}, "ERROR: Durable evidence capture was not confirmed.", true);
+            throw error;
+          }
+          let organization: NonNullable<StoreResult["organization"]> = { status: "not_queued", reason: "queue_unavailable" };
+          if (options.enqueueEnrichment) {
+            try {
+              const job = await options.enqueueEnrichment({ ...input, evidenceRef: saved.evidenceRef }, `enrich:${saved.evidenceRef}`);
+              if (!job.id?.trim()) throw new Error("missing_enrichment_job");
+              organization = { status: "queued", jobId: job.id };
+            } catch {
+              // Raw custody succeeded. Never turn a queue failure into a false
+              // 'nothing changed' reply, or launch an untracked fallback write.
+              organization = { status: "not_queued", reason: "enqueue_failed" };
+            }
+          }
+          const result = { ...saved, organization };
+          recordAction("capture", {}, JSON.stringify(result), true);
+          return result;
+        })();
+        return capture;
       },
       proposeTask: async (objective: string) => {
         if (!repo) return "Vault tasks are unavailable on this agent (it has no vault).";
@@ -2733,17 +2711,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const captureContext = await state.recentCaptureTickets?.(cid);
     await state.appendMessage(cid, "user", message, surface);
 
-    const wantsStore = /\b(remember|store|save|capture|log) (this|that|it)\b/i.test(message);
     let stored: StoreResult | undefined;
-    if (wantsStore && repo) {
-      stored = await store({ content: message, source: surface });
-    }
 
     const actions: TaskingAction[] = [];
     // Task tools when there's a vault (capture/propose) OR external tasking tools
     // (a backlog agent: GitHub issues without a vault). Plain chat otherwise.
     const taskTools =
-      repo || options.taskingTools ? buildTaskTools(surface, (action) => actions.push(action)) : undefined;
+      repo || options.taskingTools ? buildTaskTools(surface, (action) => {
+        actions.push(action);
+        if (action.tool === "capture" && !action.result.startsWith("ERROR:")) stored = JSON.parse(action.result) as StoreResult;
+      }, { content: message }) : undefined;
     const briefing = await vaultBriefing();
     const question = chatOptions.contextNote
       ? `${chatOptions.contextNote}\n\nOriginal user message:\n${message}`
@@ -2888,7 +2865,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const memorySession = memoryAnswerSession(question);
     const readToolSet = memorySession.tools;
     const answerTaskTools = repo || options.taskingTools
-      ? buildTaskTools(input.surface, (action) => actions.push(action), input.rawEvidence)
+      ? buildTaskTools(input.surface, (action) => actions.push(action), input.rawEvidence ?? { content: input.text })
       : undefined;
     let result = await llm.answer(
       answerInput,

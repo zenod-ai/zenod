@@ -3043,72 +3043,73 @@ describe("BrainEngine", () => {
     ]);
   });
 
-  it("captureNote files in the background — never blocks the tasking reply", async () => {
-    const e = engine();
-    // Poll the ORIGIN bare repo: it only gains the commit once the background
-    // push has fully landed, so awaiting it also rules out a teardown race.
-    const originMemoryCommits = async () =>
-      (await simpleGit(join(dir, "origin.git")).log()).all.filter((c) => c.message.startsWith("memory:")).length;
-    expect(await originMemoryCommits()).toBe(0);
-
-    const reply = await e.handleTasking({
-      text: "CAPTURE: I just got travel insurance with Axa, policy ends March 2027",
-      surface: "whatsapp",
-      conversationKey: "cap",
-    });
-
-    // The reply comes back queued — the librarian pipeline did NOT run on the
-    // hot path, so nothing is committed yet and the reply claims no commit.
-    const capture = reply.actions.find((action) => action.tool === "capture");
-    expect(capture?.result).toMatch(/^Queued:/);
-    expect(reply.text).not.toMatch(/Filed:|Commit:/);
-
-    // ...but the note is still filed, just in the background.
-    await vi.waitFor(async () => expect(await originMemoryCommits()).toBe(1), { timeout: 5000, interval: 50 });
-    expect((await engine().lint()).errors).toEqual([]);
-  });
-
-  it("queued and vaultless capture placeholders omit durable and Git-only provenance", async () => {
-    const placeholders: unknown[] = [];
+  it("conversational capture publishes original evidence once before durably queuing organization", async () => {
+    const jobs: Array<{ input: Parameters<ReturnType<typeof createEngine>["enrichEvidence"]>[0]; key: string }> = [];
+    const returned: unknown[] = [];
+    const original = "Please save these three updates: insurance renewed; kiln reserved; garden pump repaired.";
     llm.answerOverride = async (_input, _tools, taskTools) => {
-      placeholders.push(await taskTools!.captureNote("queued placeholder"));
-      return { text: "queued", readPaths: [] };
+      returned.push(...await Promise.all(["insurance", "kiln", "garden"].map(text => taskTools!.captureNote(text))));
+      return { text: "Nothing was changed", readPaths: [] };
     };
-    const filed = new Promise<void>((resolve) => {
-      void createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" }, onFilingComplete: () => resolve() })
-        .handleTasking({ text: "queue it", surface: "web", conversationKey: "placeholder-queued" });
-    });
-    await vi.waitFor(() => expect(placeholders).toHaveLength(1));
-    expect(placeholders[0]).toMatchObject({ evidenceRef: "(queued)", queued: true, filing: "pending" });
-    expect(placeholders[0]).not.toHaveProperty("revision");
-    expect(placeholders[0]).not.toHaveProperty("commitSha");
-    expect(placeholders[0]).not.toHaveProperty("githubUrls");
-    await filed;
-
-    llm.answerOverride = async () => {
-      return { text: "unavailable", readPaths: [] };
-    };
-    const vaultless = await createEngine({ llm, state }).handleTasking({ text: "save it", surface: "web", conversationKey: "placeholder-vaultless" });
-    expect(vaultless.actions).toEqual([]);
-    expect(JSON.stringify(vaultless)).not.toMatch(/commitSha|githubUrls|revision/);
+    const e = createEngine({ repo, llm, state, enqueueEnrichment: async (input, key) => {
+      expect((await simpleGit(join(dir, "origin.git")).log()).all.some(c => c.message.startsWith("memory:"))).toBe(true);
+      expect(llm.classifyCalls).toBe(0);
+      jobs.push({ input, key });
+      return { id: "job-capture-1" };
+    } });
+    const reply = await e.chat(original, "web");
+    expect(jobs).toHaveLength(1);
+    expect(returned[0]).toBe(returned[1]);
+    expect(returned[1]).toBe(returned[2]);
+    expect(reply.stored).toMatchObject({ filing: "pending", organization: { status: "queued", jobId: "job-capture-1" }, pagesTouched: [] });
+    expect(reply.text).toContain("Saved the original note. Organization is queued.");
+    expect(reply.text).not.toContain("Nothing was changed");
+    expect(jobs[0]!.input.content).toBe(original);
+    expect(jobs[0]!.key).toBe(`enrich:${reply.stored!.evidenceRef}`);
+    expect((await e.getEntry(reply.stored!.evidenceRef)).content).toBe(original);
+    expect(await e.searchEntries({})).toHaveLength(2); // One pre-existing fixture entry plus this capture.
+    expect(llm.classifyCalls).toBe(0);
   });
 
-  it("M-5: fires onFilingComplete with the real StoreResult once the background filing lands", async () => {
+  it.each([false, true])("capture truthfully reports unqueued organization (enqueue failure: %s)", async (fail) => {
+    const e = createEngine({ repo, llm, state, ...(fail ? { enqueueEnrichment: () => { throw new Error("queue unavailable"); } } : {}) });
+    const reply = await e.handleTasking({ text: "CAPTURE: save original insurance evidence", surface: "web", conversationKey: "capture-no-queue" });
+    const receipt = JSON.parse(reply.actions.find(action => action.tool === "capture")!.result);
+    expect(receipt).toMatchObject({ filing: "pending", organization: { status: "not_queued", reason: fail ? "enqueue_failed" : "queue_unavailable" } });
+    expect(receipt.revision.id).toBeTruthy();
+    expect(reply.text).toContain("Saved the original note.");
+    expect(reply.text).toContain(fail ? "could not be confirmed as queued" : "not queued");
+    expect(llm.classifyCalls).toBe(0);
+    expect(await e.searchEntries({})).toHaveLength(2); // One pre-existing fixture entry plus this capture.
+  });
+
+  it("capture publication failure never queues or claims success, including repeated calls", async () => {
+    const enqueue = vi.fn(() => ({ id: "must-not-queue" }));
+    vi.spyOn(repo, "commitAndPublish").mockRejectedValue(new Error("publication unavailable"));
+    llm.answerOverride = async (_input, _tools, taskTools) => {
+      await Promise.allSettled([taskTools!.captureNote("first"), taskTools!.captureNote("second")]);
+      return { text: "Saved successfully", readPaths: [] };
+    };
+    const e = createEngine({ repo, llm, state, enqueueEnrichment: enqueue });
+    const reply = await e.chat("Please save this original", "web");
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(repo.commitAndPublish).toHaveBeenCalledTimes(1);
+    expect(reply.stored).toBeUndefined();
+    expect(reply.text).toContain("no verified same-turn mutation receipt");
+  });
+
+  it("raw transcript override survives model rewrites and enrichment reuses the same evidence", async () => {
+    const jobs: Array<Parameters<ReturnType<typeof createEngine>["enrichEvidence"]>[0]> = [];
     const filed: unknown[] = [];
-    const e = createEngine({ repo, llm, state, location: { repo: "zenod-ai/fixture" }, onFilingComplete: (result) => filed.push(result) });
-
-    await e.handleTasking({
-      text: "CAPTURE: I just got home insurance with Axa, policy ends March 2028",
-      surface: "whatsapp",
-      conversationKey: "cap-onfilingcomplete",
-    });
-
-    await vi.waitFor(() => expect(filed).toHaveLength(1), { timeout: 5000, interval: 50 });
-    expect(filed[0]).toMatchObject({
-      pagesTouched: expect.arrayContaining([expect.any(String)]),
-      commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
-      evidenceRef: expect.stringMatching(/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]{6}$/),
-    });
+    const e = createEngine({ repo, llm, state, enqueueEnrichment: input => { jobs.push(input); return { id: "job-raw" }; }, onFilingComplete: result => { filed.push(result); } });
+    const raw = "I just got home insurance with Axa, policy ends March 2028";
+    await e.handleTasking({ text: "CAPTURE: model summary", rawEvidence: { content: raw }, surface: "whatsapp", conversationKey: "raw" });
+    expect(jobs[0]!.content).toBe(raw);
+    expect(filed).toEqual([]);
+    const result = await e.enrichEvidence(jobs[0]!);
+    expect(filed).toEqual([]); // Queue owns notification; ordinary enrichment does not notify.
+    expect(result.pagesTouched.length).toBeGreaterThan(0);
+    expect(await e.searchEntries({})).toHaveLength(2); // One pre-existing fixture entry plus this capture.
   });
 
   it("never returns an empty WhatsApp reply — falls back to the real tool results", async () => {
@@ -3349,6 +3350,10 @@ describe("BrainEngine", () => {
   });
 
   it("chat persists the conversation window and can trigger a store", async () => {
+    llm.answerOverride = async (_input, _tools, taskTools) => {
+      await taskTools!.captureNote("rewritten by model");
+      return { text: "saved", readPaths: [] };
+    };
     const e = engine();
     const reply = await e.chat("please remember this: I renewed my insurance today", "web");
     expect(reply.stored).toBeDefined();

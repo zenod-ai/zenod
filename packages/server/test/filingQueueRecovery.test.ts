@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -117,3 +117,53 @@ it("exhausts the shared provider retry budget truthfully without fabricating a d
     expect(enrichEvidence).toHaveBeenCalledTimes(2);
   } finally { await queue.close(); jobs.close(); }
 });
+
+
+it("queued conversational capture keeps one original and files three topics without blocking its chat job", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zenod-chat-capture-")); roots.push(root);
+  const bare = join(root, "origin.git"); await mkdir(bare); await simpleGit(bare).init(true, { "--initial-branch": "main" });
+  const repo = await VaultRepo.open({ workdir: join(root, "vault"), remoteUrl: bare });
+  await cp(fileURLToPath(new URL("../../core/test/fixtures/vault", import.meta.url)), repo.path, { recursive: true });
+  for (const title of ["Kiln", "Garden"]) await writeFile(join(repo.path, `Notes/${title}.md`), `---\ntitle: ${title}\ntype: note\ntags: []\ncreated: 2026-09-16\nupdated: 2026-09-16\nsummary: ${title} notes.\n---\n\n# ${title}\n`);
+  await repo.commitAndPublish("fixture");
+  const quotes = ["Insurance renewal is in October.", "Kiln reservation is on Tuesday.", "Garden pump was repaired."];
+  const paths = ["Areas/Insurance.md", "Notes/Kiln.md", "Notes/Garden.md"];
+  const original = `Please save these three updates: ${quotes.join(" ")}`;
+  const classify = vi.fn(async () => ({ confidence: 0.95, summary: "three ideas", tags: [], pages: [], topics: paths.map((path, i) => ({
+    topic: `Idea ${i}`, summary: `Idea ${i}`, confidence: 0.95, disposition: "integrate_page", evidenceQuotes: [quotes[i]], pages: [{ path, title: `Idea ${i}`, action: "update" }],
+  })) }));
+  const reconcile = vi.fn(async (request: any) => request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id],
+    sourceIds: request.addCandidates.filter((candidate: any) => candidate.ideaIds.includes(idea.id)).map((candidate: any) => candidate.id),
+    sourceQuote: request.sources.find((source: any) => source.id === idea.sourceIds[0]).text,
+    statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));
+  const state = new SqliteStateStore(join(root, "state.sqlite"));
+  const jobs = new TaskJobStore(join(root, "jobs.sqlite"), "tenant-chat");
+  let queue: TaskJobQueue;
+  const answer = vi.fn(async (_input: unknown, _reads: unknown, tools: any) => {
+    const results = await Promise.all(quotes.map(content => tools.captureNote(content)));
+    expect(results[0]).toBe(results[1]); expect(results[1]).toBe(results[2]);
+    return { text: "Nothing was changed", readPaths: [] };
+  });
+  const engine = createEngine({ repo, state, llm: { classify, reconcile, answer } as unknown as BrainLlm,
+    enqueueEnrichment: (input, key) => queue.enqueue("enrich_memory", { ...input, notifyCaptureCompletion: true }, key) });
+  const notified = vi.fn();
+  queue = new TaskJobQueue(jobs, async () => engine, undefined, notified);
+  try {
+    const chat = queue.enqueue("chat", { text: original, source: "web", conversationKey: "capture" }, "chat-one");
+    await vi.waitFor(() => expect(jobs.get(chat.id)?.status).toBe("done"), { timeout: 10000 });
+    expect((jobs.get(chat.id)?.result as any).text).toContain("Saved the original note. Organization is queued.");
+    await vi.waitFor(() => expect(jobs.recent().filter(job => job.kind === "enrich_memory")[0]?.status).toBe("done"), { timeout: 10000 });
+    expect(jobs.recent()).toHaveLength(2);
+    const enriched = jobs.recent().find(job => job.kind === "enrich_memory")!;
+    expect(enriched.input.content).toBe(original);
+    expect((enriched.result as any).topics.filter((topic: any) => topic.status === "filed"), JSON.stringify(enriched.result)).toHaveLength(3);
+    // The capture instruction prefix remains explicit unassigned evidence; do not pretend all raw bytes were filed.
+    expect((enriched.result as any).topics.filter((topic: any) => topic.reason === "source_not_assigned")).toHaveLength(1);
+    expect((enriched.result as any).pagesTouched).toEqual(expect.arrayContaining(paths));
+    expect((enriched.result as any).pagesTouched.filter((path: string) => path.startsWith("Inbox/filing-"))).toHaveLength(1);
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect((await engine.getEntry(enriched.input.evidenceRef!)).content).toBe(original);
+    expect(await engine.searchEntries({})).toHaveLength(2); // Fixture plus one inbound original.
+    expect(classify).toHaveBeenCalledTimes(1);
+  } finally { await queue.close(); jobs.close(); state.close(); }
+}, 20000);

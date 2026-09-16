@@ -465,6 +465,7 @@ type ActionOutcome = Pick<ReplyGateOutcome, "kind" | "text">;
 function renderActionTurnReply(actionResults: readonly TaskingAction[]): ActionOutcome {
   const verifiedEvidence: MutationReceiptEvidence[] = [];
   const approvalRequired: TaskingAction[] = [];
+  const captureStates: string[] = [];
   let nothingPendingCount = 0;
   let verifiedCount = 0;
   let unverifiedCount = 0;
@@ -484,6 +485,21 @@ function renderActionTurnReply(actionResults: readonly TaskingAction[]): ActionO
     const receipt = validateMutationReceipt(action.tool, action.result);
     if (receipt.verified) {
       verifiedCount += 1;
+      // Only the local capture tool can describe its separate organization step.
+      // Receipt evidence is validated above; peer/model prose cannot mint this state.
+      if (action.tool === "capture" && !action.peerAction) {
+        const captured = parsedPeerResult(action.result) as { organization?: { status?: string; jobId?: string; reason?: string }; revision?: { provider?: string; id?: string; committedAt?: string; urls?: unknown }; evidenceRef?: string; filing?: string; pagesTouched?: unknown } | undefined;
+        if (captured?.filing === "pending" && Array.isArray(captured.pagesTouched) && captured.pagesTouched.length === 0
+          && ["github", "google_drive"].includes(captured.revision?.provider ?? "")
+          && typeof captured.revision?.id === "string" && captured.revision.id.trim()
+          && typeof captured.revision.committedAt === "string" && Number.isFinite(Date.parse(captured.revision.committedAt))
+          && Array.isArray(captured.revision.urls) && /^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[a-f0-9]{6}$/.test(captured.evidenceRef ?? "")) {
+          if (captured.organization?.status === "queued" && typeof captured.organization.jobId === "string" && captured.organization.jobId.trim()) captureStates.push("Saved the original note. Organization is queued.");
+          else if (captured.organization?.status === "not_queued" && ["enqueue_failed", "queue_unavailable"].includes(captured.organization.reason ?? "")) captureStates.push(captured.organization.reason === "enqueue_failed"
+            ? "Saved the original note. Organization could not be confirmed as queued; check its status before retrying."
+            : "Saved the original note. Organization is not queued because this instance has no durable filing queue.");
+        }
+      }
       for (const evidence of receipt.evidence) {
         if (!verifiedEvidence.some((entry) => entry.kind === evidence.kind && entry.value === evidence.value)) {
           verifiedEvidence.push(evidence);
@@ -503,7 +519,9 @@ function renderActionTurnReply(actionResults: readonly TaskingAction[]): ActionO
     }
     return {
       kind: "verified_receipt",
-      text: renderVerifiedMutationReceipt("", verifiedEvidence),
+      text: captureStates.length === actionResults.length
+        ? renderVerifiedMutationReceipt("", verifiedEvidence).replace("Done — the change was verified.", [...new Set(captureStates)].join("\n"))
+        : renderVerifiedMutationReceipt("", verifiedEvidence),
     };
   }
   if (approvalRequired.length === 1 && unverifiedCount === 0 && nothingPendingCount === 0) {

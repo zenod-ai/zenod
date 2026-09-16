@@ -1102,20 +1102,15 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       ? Object.fromEntries(Object.entries({
           capture_note: tool({
             description:
-              "Capture/file an inbound note through the librarian store pipeline. Use when the user asks to file, capture, save, remember, or log a note/message. Returns evidence, touched pages, commit, and URLs.",
+              "Save the original inbound message as durable evidence once. Use when the user asks to capture, save, remember, or log it. Organization is a separate queued step; report its returned status, never claim meaning pages are already filed.",
             inputSchema: z.object({
               content: z.string().describe("the note text to file"),
               hints: z.array(z.string()).nullable().describe("optional filing hints; null for none"),
             }),
             execute: async ({ content, hints }) => {
               const result = await taskTools.captureNote(content, hints ?? undefined);
-              if (result.queued) {
-                // Filing runs in the background and is NOT committed yet. Capturing
-                // is a side-effect — the model must still reply to the user's actual
-                // message, never answer with only a capture/queue acknowledgment
-                // (that produced the "Queued for filing." non-replies on voice notes).
-                return "Captured in the background (filing to the vault, not yet durably saved — do not claim it is already filed). This is a side-effect: now reply to the user's actual message. Do NOT reply with only a capture/queue acknowledgment.";
-              }
+              if (result.organization) return JSON.stringify(result);
+              if (result.queued) return "Capture is queued; durable filing is not yet confirmed.";
               return [
                 `Filed: ${result.evidenceRef}`,
                 ...(result.pagesTouched.length > 0 ? [`Pages: ${result.pagesTouched.join(", ")}`] : []),
