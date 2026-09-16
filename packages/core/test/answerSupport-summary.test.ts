@@ -37,5 +37,17 @@ it('renders assessment separately only after actual nonempty support validates',
  for(const selections of [[],[{...selection,id:'as_'+'0'.repeat(24)}],[{...selection,mode:'current' as const}],[{...selection,summaryText:undefined}]]){
   const failed=registry.render(selections,analysis);expect(failed.valid).toBe(false);expect(failed.text).not.toContain(analysis);
  }
- for(const text of ['', ' ', 'x'.repeat(1601), 'See https://invented.invalid', '[premise](https://invalid.test)'])expect(registry.render([selection],text).valid).toBe(false);
+  for(const text of ['', ' ', 'x'.repeat(1601), 'https://invented.invalid'])expect(registry.render([selection],text).valid).toBe(false);
+  const sanitized=registry.render([selection],'See https://invented.invalid for the premise [report](https://invalid.test)');
+  expect(sanitized.valid).toBe(true);expect(sanitized.text).toContain('My assessment');expect(sanitized.text).not.toContain('invented.invalid');expect(sanitized.text).not.toContain('invalid.test');
+});
+
+it('sanitizes links and URLs in a whole-source summary instead of rejecting the answer',()=>{
+ const registry=new AnswerSupportRegistry();const hints=pieces.flatMap(p=>registry.addPassage(p));
+ const summary=hints.find(h=>h.kind==='source_summary')!;
+ const rendered=registry.render([{id:summary.id,mode:'raw_report',summaryText:'The proposal is tentative. Source https://www.aqr.com/report.pdf see [paper](https://x.test/p) and [[Notes/Studio|<b>studio</b>]].'}]);
+ expect(rendered.valid).toBe(true);
+ expect(rendered.text).not.toContain('aqr.com');expect(rendered.text).not.toContain('x.test');expect(rendered.text).not.toContain('Notes/Studio');expect(rendered.text).not.toContain('<b>');
+ expect(rendered.text).toContain('The proposal is tentative.');
+ expect(registry.render([{id:summary.id,mode:'raw_report',summaryText:'https://only.invalid'}]).valid).toBe(false);
 });

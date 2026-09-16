@@ -195,7 +195,8 @@ describe("cited source summaries",()=>{
     expect(registry.render([{id:"as_"+"0".repeat(24),mode:"raw_report",summaryText:"A claim"}]).valid).toBe(false);
     const canonical=registry.render([{id:facts[1]!.id,mode:"current",summaryText:"The old date is current"}]);
     expect(canonical.valid).toBe(true);expect(canonical.text).not.toContain("The old date is current");expect(canonical.text).toContain("19 de octubre");
-    expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:"Claim [source](https://evil.invalid)"}]).valid).toBe(false);
+    const sanitizedLink=registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:"Claim [source](https://evil.invalid)"}]);
+    expect(sanitizedLink.valid).toBe(true);expect(sanitizedLink.text).toContain("Claim source");expect(sanitizedLink.text).not.toContain("evil.invalid");
     expect(registry.render([{id:hints[0]!.id,mode:"raw_report",summaryText:" "}]).valid).toBe(false);
   });
 });
