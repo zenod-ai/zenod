@@ -34,6 +34,18 @@ describe("explicit source selection contract",()=>{
     const historical=registry.addFacts({...view(),mode:"historical"});
     expect(registry.render([{id:historical[1]!.id,mode:"historical"}]).text).toContain("Historical effective state");
   });
+  it("an assessment preserves canonical current, prior, historical and conflict premises",()=>{
+    const registry=new AnswerSupportRegistry();const hints=registry.addFacts(view());
+    for(const selection of [{id:hints[1]!.id,mode:"current" as const},{id:hints[0]!.id,mode:"prior" as const}]){
+      const canonical=registry.render([selection]);const assessed=registry.render([selection],"Confirm the date before making arrangements.");
+      expect(assessed.valid).toBe(true);expect(assessed.text).toContain(canonical.text);
+    }
+    const conflicting=view();conflicting.facts.forEach(f=>f.status="conflict");const conflict=registry.addFacts(conflicting)[0]!;
+    const historical=registry.addFacts({...view(),mode:"historical"})[1]!;
+    for(const selection of [{id:conflict.id,mode:"conflict" as const},{id:historical.id,mode:"historical" as const}]){
+      expect(registry.render([selection],"Confirm the conflicting or historical report.").text).toContain(registry.render([selection]).text);
+    }
+  });
   it("retains a complete raw qualification and never upgrades it to current state",()=>{
     const registry=new AnswerSupportRegistry();const text="Rejected claim:\nWe repair batteries. This is only an unverified hypothesis.";
     const hints=registry.addPassage(passage(text));const parent=hints.find(h=>h.granularity==="paragraph")!;

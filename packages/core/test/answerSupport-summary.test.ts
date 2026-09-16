@@ -25,3 +25,16 @@ it('reserves a global support slot and an emitted hint slot for a completed sour
  let hints:any[]=[];for(const p of pieces.slice(1))hints=r.addPassage(p,1);
  expect(hints).toHaveLength(1);expect(hints[0].kind).toBe('source_summary');
 });
+
+
+it('renders assessment separately only after actual nonempty support validates',()=>{
+ const registry=new AnswerSupportRegistry();const hints=pieces.flatMap(p=>registry.addPassage(p));
+ const summary=hints.find(h=>h.kind==='source_summary')!;
+ const selection={id:summary.id,mode:'raw_report' as const,summaryText:'The speaker describes an option as tentative.'};
+ const analysis='I would seek confirmation before deciding.';
+ const valid=registry.render([selection],analysis);expect(valid.valid).toBe(true);expect(valid.text).toContain('My assessment (inference');expect(valid.text).toContain('Source premises:');expect(valid.text).toContain(ref);
+ for(const selections of [[],[{...selection,id:'as_'+'0'.repeat(24)}],[{...selection,mode:'current' as const}],[{...selection,summaryText:undefined}]]){
+  const failed=registry.render(selections,analysis);expect(failed.valid).toBe(false);expect(failed.text).not.toContain(analysis);
+ }
+ for(const text of ['', ' ', 'x'.repeat(1601), 'See https://invented.invalid', '[premise](https://invalid.test)'])expect(registry.render([selection],text).valid).toBe(false);
+});

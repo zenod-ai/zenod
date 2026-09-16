@@ -2331,6 +2331,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const catalogEntries = new Map<string, EntrySearchResult["entries"][number]>();
     const automaticEntryReads = new Map<string, { snapshot: string; result: Promise<{ passage?: NotePassage | NotePassagePacket; error?: string }> }>();
     let automaticEntryCharsRemaining = 20_000;
+    const completeSourceReads = new Map<string, Promise<string>>();
     let catalogSnapshotValid = true;
     const conversationReadSpans: Array<{ path: string; text: string }> = [];
     let factReadAttempts = 0;
@@ -2414,13 +2415,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
         } while (true);
         const evidence = [];
         const eligible = [...new Set(entries.map(entry=>entry.evidenceRef))]
-          .filter(ref=>!automaticEntryReads.has(ref)).slice(0,5-automaticEntryReads.size);
+          .filter(ref=>!automaticEntryReads.has(ref)).slice(0,Math.max(0,5-automaticEntryReads.size-completeSourceReads.size));
         for (const entry of entries) {
           catalogEntries.set(entry.evidenceRef, entry);
           // Reuse the ordinary tracked reader: exact anchors, budgets, failed reads,
           // source identity and continuation coverage obey the same contract.
           // Pinned follow-ups keep their explicit-read authority, as fact projection does.
-          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size < 5 && automaticEntryCharsRemaining >= 256) {
+          if (contextRefs.length === 0 && !automaticEntryReads.has(entry.evidenceRef) && automaticEntryReads.size + completeSourceReads.size < 5 && automaticEntryCharsRemaining >= 256) {
             // Reserve this entry's share before awaiting any read. Concurrent and
             // repeated searches share the same allowance; short entries refund it.
             const remainingEntries=eligible.filter(ref=>!automaticEntryReads.has(ref)).length;
@@ -2464,7 +2465,58 @@ export function createEngine(options: EngineOptions): BrainEngine {
       } } : {}),
       ...(tools.readNote
         ? {
-            readNote: async (path: string, readOptions?: NoteReadOptions) => {
+            readNote: async (path: string, readOptions?: NoteReadOptions & { completeSource?: boolean | undefined }) => {
+              if (readOptions?.completeSource) {
+                if (readOptions.part === "frontmatter" || readOptions.cursor) throw new Error("Complete-source reads start at the beginning of body scope. Continue an existing cursor with an ordinary bounded read instead.");
+                const key = JSON.stringify([path, readOptions]);
+                const cached = completeSourceReads.get(key);
+                if (cached) return cached;
+                if (completeSourceReads.size + automaticEntryReads.size >= 5 || automaticEntryCharsRemaining < 256) {
+                  throw new Error("Automatic source allowance exhausted; continue with ordinary bounded source reads and report partial coverage.");
+                }
+                // Reserve before any await; whole-source and catalog reads
+                // share the same existing automatic allowance, not a second budget.
+                const allowance = automaticEntryCharsRemaining;
+                automaticEntryCharsRemaining -= allowance;
+                const result = (async () => {
+                  const pieces: Array<NotePassage & { answerSupports?: import("./answerSupport.js").AnswerSupportHint[] }> = [];
+                  let consumed = 0;
+                  let error: string | undefined;
+                  let exactPath = path;
+                  try {
+                    if (!/^Log\/.+\.md#\^e-[0-9a-f]{6}$/i.test(exactPath)) {
+                      const probe = JSON.parse(await groundedTools.readNote!(path, { ...readOptions, completeSource: false, maxChars: 256 })) as NotePassage;
+                      consumed += probe.body?.length ?? 0;
+                      if (probe.queryMatched === false || allowance-consumed < 256) return JSON.stringify({ ...probe, readPartial: true, instruction: "Source lookup or automatic allowance is incomplete. Continue ordinary bounded reads before a whole-source summary." });
+                      if (!/^Log\/.+\.md#\^e-[0-9a-f]{6}$/i.test(probe.identity ?? "")) {
+                        return JSON.stringify({ ...probe, readPartial: true, instruction: "Select an exact evidenceRef before requesting a whole-source summary; this read did not establish complete source coverage." });
+                      }
+                      exactPath = probe.identity;
+                    }
+                    let cursor: string | undefined;
+                    do {
+                      const piece = JSON.parse(await groundedTools.readNote!(exactPath, {
+                        maxChars: Math.min(8000, readOptions.maxChars ?? 8000, allowance-consumed), ...(cursor ? { cursor } : {}),
+                      })) as typeof pieces[number];
+                      consumed += piece.body.length;
+                      const first = pieces[0];
+                      if (piece.identity !== exactPath || (first && piece.version !== first.version)) throw new Error("Source snapshot changed during complete reading; repeat its reads.");
+                      pieces.push(piece);
+                      cursor = piece.nextCursor ?? undefined;
+                      if (!piece.body.length) break;
+                    } while (cursor && allowance-consumed >= 256);
+                  } catch (cause) { error = String(cause); }
+                  finally { automaticEntryCharsRemaining += Math.max(0, allowance-consumed); }
+                  if (!pieces.length) throw new Error(error ?? "No source passage could be read within the automatic allowance.");
+                  const first = pieces[0]!, last = pieces.at(-1)!;
+                  return JSON.stringify({ source: first.source, readPath: exactPath, identity: first.identity, version: first.version, part: first.part,
+                    passages: pieces, nextCursor: last.nextCursor, bodyChars: consumed,
+                    readPartial: !!error || first.extent.start > first.extent.sectionStart || last.extent.end < last.extent.sectionEnd,
+                    ...(error ? { error } : {}), answerInstruction: ANSWER_SUPPORT_INSTRUCTION });
+                })();
+                completeSourceReads.set(key, result);
+                return result;
+              }
               const normalizedPath = normalizeMarkdownNotePath(path.split("#")[0]!);
               const pinnedForPath = pinnedSpans.filter(
                 (span) => normalizeMarkdownNotePath(span.path) === normalizedPath,
@@ -2599,7 +2651,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             try { if ((JSON.parse(await tools.readNote!(passage.readPath, { maxChars: 256 })) as NotePassage).version !== passage.version) selectedSnapshotChanged = true; }
             catch { selectedSnapshotChanged = true; }
           }
-          text = selectedSnapshotChanged ? "The selected source snapshot changed during this question. Repeat its source/fact reads before answering." : supportRegistry.render(result.supportSelections).text;
+          text = selectedSnapshotChanged ? "The selected source snapshot changed during this question. Repeat its source/fact reads before answering." : supportRegistry.render(result.supportSelections, result.analysisText).text;
         } else if (useFactAnswer) {
           text = factSnapshotChanged ? "The fact or evidence snapshot changed during this question. I cannot establish current or historical state from mixed snapshots. Repeat the same note/key/date read against the new snapshot."
             : [finalFactViews.length ? renderFactViews(finalFactViews) : "No structured current fact was selected for this question. Raw quotations describe reports, not established current state.", ...new Set(finalFactWarnings)].filter(Boolean).join("\n\n");
