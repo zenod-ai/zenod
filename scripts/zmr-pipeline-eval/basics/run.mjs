@@ -43,6 +43,8 @@ const {SqliteStateStore}=await load('packages/core/dist/state/sqlite.js');
 const {TaskJobStore}=await load('packages/server/dist/taskJobStore.js');
 const {TaskJobQueue}=await load('packages/server/dist/taskJobQueue.js');
 const {runSyntheticChat}=await load('packages/server/dist/testHarness.js');
+const {ZENOD_AGENT}=await load('packages/server/dist/agent.js');
+run.surface={kind:'isolated-memory-engine.chat',personaSha256:sha256(ZENOD_AGENT.persona),localVaultTaskTools:true,externalTaskTools:false,driveTools:false,peerTools:false,tenantProjectRegistry:false,productionPromptParity:false};
 const originalFetch=globalThis.fetch;let stage='setup';
 const flush=async()=>{run.cost={...evaluationCostSummary(ledger),unknownCostRequests:ledger.rows.filter(r=>r.actualCostUsd===null).length};await save('run.json',run);};
 globalThis.fetch=a.preflight?async()=>{throw new Error('Preflight forbids network');}:evaluationFetch({ledger,quota,stage:()=>stage,onBudgetBlock:row=>run.budgetBlocks.push(row),onRequest:(row,body)=>save(`wire-request-${row.request}.json`,body),onResponse:(row,body)=>writeFile(join(output,`wire-response-${row.request}.txt`),body,{mode:0o600}),onFinish:flush,fetchImpl:async request=>{run.externalCalls++;return originalFetch(request);}});
@@ -77,7 +79,7 @@ try{
     try{const result=await method.apply(target,params);op.result=JSON.parse(JSON.stringify(result??null));return result;}catch(error){op.errorClass=error.name;throw error;}
    };}});
    state=new SqliteStateStore(join(workspace,'state.sqlite'));
-   const create=()=>createEngine({repo,llm,state,readSyncTtlMs:0});let engine=create();
+   const create=()=>createEngine({repo,llm,state,readSyncTtlMs:0,persona:ZENOD_AGENT.persona});let engine=create();
    store=new TaskJobStore(join(workspace,'jobs.sqlite'),'m2-synthetic');queue=new TaskJobQueue(store,async()=>engine);
    const inputs=[];
    const capture=async memory=>{const input={content:memory.content,source:'mcp',contentType:memory.contentType,capturedAt:memory.capturedAt,sourceId:`m2:${row.key}:${memory.id}`,verbatim:true};const captured=await engine.captureEvidence(input);const enrichment={...input,evidenceRef:captured.evidenceRef};inputs.push({memory,input,enrichment,captured});row.captures.push({input,captured});return enrichment;};
