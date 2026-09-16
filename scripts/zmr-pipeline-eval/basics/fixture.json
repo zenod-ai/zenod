@@ -1,0 +1,271 @@
+{
+  "version": "m2-basics-v1",
+  "synthetic": true,
+  "trials": 3,
+  "seedPages": {
+    "Areas/Studio.md": "---\ntitle: Northbridge Studio\nsummary: Ceramics, kiln reservations, studio equipment and workshop planning.\ntags: []\n---\n\n# Northbridge Studio\n\n## Scope\n\nCeramics, kiln reservations, studio equipment and workshop planning.\n\n## Sources\n",
+    "Areas/Garden.md": "---\ntitle: Riverside Garden\nsummary: Shared garden maintenance, pump inspections and volunteer schedules.\ntags: []\n---\n\n# Riverside Garden\n\n## Scope\n\nShared garden maintenance, pump inspections and volunteer schedules.\n\n## Sources\n",
+    "Notes/Language Study.md": "---\ntitle: Language Study\nsummary: Independent language learning goals and course choices.\ntags: []\n---\n\n# Language Study\n\n## Scope\n\nIndependent language learning goals and course choices.\n\n## Sources\n"
+  },
+  "cases": [
+    {
+      "id": "B01",
+      "name": "Short durable store",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Please save this memory: My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B02",
+      "name": "Fresh exact recall",
+      "memories": [
+        {
+          "id": "kiln",
+          "content": "My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "When is my Northbridge Studio kiln reservation, and what is its code?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B03",
+      "name": "Paraphrased recall",
+      "memories": [
+        {
+          "id": "kiln",
+          "content": "My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "What time did I book the pottery firing space, and which booking reference should I bring?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B04",
+      "name": "Three independent ideas",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Please save these three separate updates: Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B05",
+      "name": "Interrupted filing and duplicate safety",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "interrupted_filing",
+          "memory": {
+            "id": "three",
+            "content": "Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.",
+            "contentType": "text",
+            "capturedAt": "2026-09-15T10:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B06",
+      "name": "Long-note summary",
+      "memories": [
+        {
+          "id": "long",
+          "content": "This is my synthetic Northbridge studio planning note. I prefer repairing my current wheel before buying another, but I have not made a purchase decision. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The electrician estimated 280 euros for the kiln socket inspection; this is an unconfirmed estimate, not an agreed invoice. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. At the end of this plan: two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Summarize my Northbridge studio planning voice note. Include the beginning, cost estimate and closing arrangements; distinguish decisions from preferences and conditions.",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B07",
+      "name": "Latest voice note",
+      "memories": [
+        {
+          "id": "latest",
+          "content": "My latest voice note: I will repair the existing blue wheel first. I have not decided whether to replace it.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-15T11:00:00.000Z"
+        },
+        {
+          "id": "old",
+          "content": "The old Northbridge studio voice note proposed buying a red wheel. This proposal is obsolete.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-10T10:00:00.000Z"
+        },
+        {
+          "id": "audio",
+          "content": "Ordinary audio recording: a green wheel demonstration.",
+          "contentType": "audio",
+          "capturedAt": "2026-09-15T12:00:00.000Z"
+        },
+        {
+          "id": "text",
+          "content": "Studio text update: the door is painted yellow.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T13:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "What did I say in my latest voice note about the studio equipment?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B08",
+      "name": "Summary tail follow-up",
+      "memories": [
+        {
+          "id": "long",
+          "content": "This is my synthetic Northbridge studio planning note. I prefer repairing my current wheel before buying another, but I have not made a purchase decision. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The electrician estimated 280 euros for the kiln socket inspection; this is an unconfirmed estimate, not an agreed invoice. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. At the end of this plan: two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Summarize my Northbridge studio planning voice note.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "What about the free places mentioned at the end\u2014who are they for, what is the deadline, and are they guaranteed?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B09",
+      "name": "Second subject and thread isolation",
+      "memories": [
+        {
+          "id": "kiln",
+          "content": "My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "garden",
+          "content": "Riverside Garden pump inspection is on 21 November 2026. I will attend only if my shift ends before noon.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Tell me about my kiln reservation.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "Now tell me about the Riverside Garden pump inspection.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "My unrelated private conversation is about a violin rehearsal on 3 December.",
+          "thread": "other"
+        },
+        {
+          "kind": "chat",
+          "message": "For the second thing we discussed, when is it and what condition did I put on attending?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B10",
+      "name": "Grounded opinion",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Remember this thought: For Northbridge Studio, I prefer repairing my current wheel because the repair estimate is 90 euros; a new wheel would cost 600 euros. The technician has not confirmed that repair is possible. I have not decided.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "What do you think about it?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B11",
+      "name": "Correction and history",
+      "memories": [
+        {
+          "id": "old",
+          "content": "Northbridge Studio has 12 workshop places.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "correction",
+          "content": "Correction to my earlier Northbridge Studio capacity report: not 12 places, but 19 places. The earlier figure was wrong.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T11:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "How many workshop places does Northbridge Studio have now, and what number did I report before correcting it?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B12",
+      "name": "Uncertain and unknown",
+      "memories": [
+        {
+          "id": "estimate",
+          "content": "The electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed. No appointment date was agreed.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "What will the kiln socket inspection cost, and on what date is the electrician booked?",
+          "thread": "main"
+        }
+      ]
+    }
+  ]
+}
