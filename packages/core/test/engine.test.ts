@@ -612,7 +612,7 @@ describe("BrainEngine", () => {
     else expect(reply.coverage?.continuation).toContainEqual(expect.objectContaining({tool:"read_note",input:expect.objectContaining({path:ref})}));
   });
 
-  it.each([undefined,"shared phrase"])("ambiguous daily logs never become one automatic whole source (query: %s)",async query=>{
+  it.each([undefined,"shared phrase","a paraphrase absent from either source"])("ambiguous daily logs never become one automatic whole source (query: %s)",async query=>{
     const path="Log/2026-09-08.md";
     await writeFile(join(repo.path,path),"# Log\n\n## 14:16 First ^e-123abc\n> shared phrase. "+"First source. ".repeat(800)+"\n\n## 14:17 Second ^e-456def\n> shared phrase. "+"Second source. ".repeat(800)+"\n");
     llm.answerOverride=async(_input,tools)=>{
@@ -623,6 +623,20 @@ describe("BrainEngine", () => {
       return {text:"",readPaths:[path],supportSelections:[]};
     };
     await engine().ask("Summarize the note");
+  });
+
+  it("completes a structurally unique source when a paraphrased locator does not match",async()=>{
+    const path="Log/2026-09-08.md",ref=path+"#^e-123abc";
+    await writeFile(join(repo.path,path),"# Log\n\n## 14:16 Capture ^e-123abc\n> "+"The room has shelves. ".repeat(750)+"The final arrangement is conditional on approval.\n");
+    llm.answerOverride=async(_input,tools)=>{
+      const packet=JSON.parse(await tools.readNote!(path,{completeSource:true,query:"Paraphrased text not literally present"}));
+      expect(packet.readPartial).toBe(false);expect(packet.readPath).toBe(ref);
+      expect(packet.passages.at(-1).body).toContain("conditional on approval");
+      const support=packet.passages.flatMap((p:any)=>p.answerSupports).find((h:any)=>h.kind==="source_summary");
+      expect(support).toBeDefined();
+      return {text:"",readPaths:[ref],supportSelections:[{id:support.id,mode:"raw_report",summaryText:"The final arrangement needs approval."}]};
+    };
+    expect((await engine().ask("Explain the closing arrangement")).text).toContain("needs approval");
   });
 
   it("whole-source and catalog automation share one concurrent allowance",async()=>{

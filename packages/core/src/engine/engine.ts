@@ -2489,7 +2489,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
                       // literal-query rules. Metadata lookup is not answer support;
                       // the anchored chunks below must still be read and validated.
                       const note = await getNote(vaultPath, path, sourceResolver);
-                      const resolved = uniqueEvidenceRef(note.path, note.body, readOptions.query);
+                      const resolved = uniqueEvidenceRef(note.path, note.body, readOptions.query)
+                        // An unmatched locator cannot make a structurally unique
+                        // source ambiguous. Never widen to a multi-entry daily log.
+                        ?? uniqueEvidenceRef(note.path, note.body);
                       if (!resolved) {
                         const bounded = JSON.parse(await groundedTools.readNote!(path, { ...readOptions, completeSource: false, maxChars: Math.min(8000, readOptions.maxChars ?? 8000, allowance) }));
                         consumed += "passages" in bounded ? bounded.passages.reduce((sum: number, piece: NotePassage) => sum + piece.body.length, 0) : bounded.body?.length ?? 0;
