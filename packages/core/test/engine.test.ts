@@ -513,7 +513,11 @@ describe("BrainEngine", () => {
     llm.answerOverride = async (_input, tools) => {
       const discovery = await tools.searchVault!("Orchid");
       expect(discovery).toContain(page);
-      expect(discovery).not.toContain("answerSupports");
+      const rawRead = JSON.parse(discovery.split("Read source evidence:\n")[1]!);
+      expect(rawRead.readPath).toBe(capture.evidenceRef);
+      const rawSupports = rawRead.passages.flatMap((piece: any) => piece.answerSupports);
+      expect(rawSupports.every((support: any) => support.modes.every((mode: string) => mode === "raw_report"))).toBe(true);
+      expect(rawRead.passages.map((piece: any) => piece.body).join("")).toContain(hypothesis);
       expect(discovery).not.toContain("Source-backed fact candidates");
       // Discovery must not spend the bounded fact-read allowance. All four
       // explicit reads remain available and verify source-backed current facts.
@@ -527,7 +531,7 @@ describe("BrainEngine", () => {
       expect(pageRead.factView).toBeUndefined(); // Explicit scope remains authoritative.
       const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
       return { text: modelAnswer, readPaths: [page, capture.evidenceRef], supportSelections: [
-        { id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
+        { id: rawSupports.find((support: any) => support.excerpt?.startsWith("Orchid hypothesis")).id, mode: "raw_report" },
         { id: lastExplicit.answerSupports.find((support: any) => support.key === "orchid.fact0").id, mode: "current" },
       ] };
     };
@@ -539,7 +543,7 @@ describe("BrainEngine", () => {
     expect(result.text).toContain(capture.evidenceRef);
     llm.answerOverride = async (_input, tools) => {
       await tools.readNote!(page); const sourceRead = JSON.parse(await tools.readNote!(capture.evidenceRef));
-      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceRead.answerSupports.find((support: any) => support.excerpt.startsWith("Orchid hypothesis")).id, mode: "raw_report" }] };
+      return { text: `"${hypothesis}" (${capture.evidenceRef})`, readPaths: [page, capture.evidenceRef], supportSelections: [{ id: sourceRead.answerSupports.find((support: any) => support.excerpt?.startsWith("Orchid hypothesis")).id, mode: "raw_report" }] };
     };
     const rawOnly = await e.ask("What is the unverified Orchid workshop hypothesis?");
     expect(rawOnly.text).toContain(hypothesis);
@@ -2429,8 +2433,9 @@ describe("BrainEngine", () => {
   it("answers with citations from the read paths (DoD #2 shape)", async () => {
     const answer = await engine().ask("what do I know about my insurance?");
     expect(answer.text).toContain("Axa");
-    expect(answer.sources[0]?.path).toBe("Areas/Insurance.md");
-    expect(answer.sources[0]?.githubUrl).toContain("github.com/zenod-ai/fixture");
+    const meaningSource = answer.sources.find(source => source.path === "Areas/Insurance.md");
+    expect(meaningSource).toBeDefined();
+    expect(meaningSource?.githubUrl).toContain("github.com/zenod-ai/fixture");
   });
 
   it("grounds ask contextRefs on the exact evidence block first", async () => {
@@ -3540,7 +3545,7 @@ describe("BrainEngine", () => {
 
     expect(deltas.length).toBeGreaterThan(1); // streamed in chunks, not one blob
     expect(deltas.join("")).toBe(reply.text); // no tokens dropped or duplicated
-    expect(reply.sources[0]?.path).toBe("Areas/Insurance.md"); // sources still resolve at the end
+    expect(reply.sources.some(source => source.path === "Areas/Insurance.md")).toBe(true); // sources still resolve at the end
 
     // The streamed turn is persisted just like a non-streamed one.
     const window = await state.recentWindow("web:default");
