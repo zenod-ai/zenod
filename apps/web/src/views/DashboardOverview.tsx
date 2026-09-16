@@ -119,10 +119,13 @@ function CreditSummary({
 export function DashboardOverview({
   overview,
   showSupportCards = true,
+  hosted = false,
 }: {
   overview: DashboardOverviewData | null
   showSupportCards?: boolean
+  hosted?: boolean
 }) {
+  const [showAdvanced, setShowAdvanced] = React.useState(false)
   const [connections, setConnections] =
     React.useState<ConnectionsResponse | null>(null)
   const [account, setAccount] = React.useState<CustomerAccount | null>(null)
@@ -182,14 +185,15 @@ export function DashboardOverview({
     )
   }
 
-  const mcpAccess = resolveMcpAccess(connections.token, account)
+  const mcpAccess = resolveMcpAccess(connections.token, account, hosted)
   const mcpUrl = mcpAccess.url
   const isRing = overview?.unit?.name === "ring"
   const isHerald = overview?.unit?.name === "herald"
   const isCouncilUnit = isRing || isHerald
   const snippets = mcpClientSnippets(
     mcpUrl,
-    isHerald ? "herald" : isRing ? "ring" : "zenod"
+    isHerald ? "herald" : isRing ? "ring" : "zenod",
+    hosted
   )
 
   return (
@@ -209,13 +213,19 @@ export function DashboardOverview({
             {isHerald ? "Connect to Herald" : "Connect your agent"}
           </CardTitle>
           <CardDescription>
-            {isHerald ? (
-              "Use Herald's"
+            {hosted ? (
+              "Add this URL in your agent, sign in to Zenod if needed, and click Allow. No token copying required."
             ) : (
-              <>Use this {isRing ? "Ring Council" : "Zenod"}</>
-            )}{" "}
-            endpoint and bearer token from Claude Code, Codex, or any HTTP MCP
-            client.
+              <>
+                {isHerald ? (
+                  "Use Herald's"
+                ) : (
+                  <>Use this {isRing ? "Ring Council" : "Zenod"}</>
+                )}{" "}
+                endpoint and bearer token from Claude Code, Codex, or any HTTP
+                MCP client.
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
@@ -234,36 +244,62 @@ export function DashboardOverview({
                 <CopyButton value={mcpUrl} label="Copy" />
               </div>
             </Field>
-            <Field orientation="vertical">
-              <FieldContent>
-                <FieldLabel htmlFor="dashboard-mcp-token">
-                  Bearer token
-                </FieldLabel>
-              </FieldContent>
-              <div className="flex gap-2">
-                <Input
-                  id="dashboard-mcp-token"
-                  className="min-w-0 font-mono text-xs"
-                  type={showToken ? "text" : "password"}
-                  value={mcpAccess.token}
-                  readOnly
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={() => setShowToken((visible) => !visible)}
-                  aria-label={
-                    showToken ? "Hide bearer token" : "Show bearer token"
-                  }
-                  title={showToken ? "Hide bearer token" : "Show bearer token"}
-                >
-                  {showToken ? <EyeOffIcon /> : <EyeIcon />}
-                </Button>
-                <CopyButton value={mcpAccess.token} label="Copy" />
-              </div>
-            </Field>
+            {(!hosted || showAdvanced) && (
+              <Field orientation="vertical">
+                <FieldContent>
+                  <FieldLabel htmlFor="dashboard-mcp-token">
+                    Bearer token
+                  </FieldLabel>
+                </FieldContent>
+                <div className="flex gap-2">
+                  <Input
+                    id="dashboard-mcp-token"
+                    className="min-w-0 font-mono text-xs"
+                    type={showToken ? "text" : "password"}
+                    value={mcpAccess.token}
+                    readOnly
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => setShowToken((visible) => !visible)}
+                    aria-label={
+                      showToken ? "Hide bearer token" : "Show bearer token"
+                    }
+                    title={
+                      showToken ? "Hide bearer token" : "Show bearer token"
+                    }
+                  >
+                    {showToken ? <EyeOffIcon /> : <EyeIcon />}
+                  </Button>
+                  <CopyButton value={mcpAccess.token} label="Copy" />
+                </div>
+              </Field>
+            )}
           </div>
+
+          {hosted && (
+            <div className="flex flex-col items-start gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-expanded={showAdvanced}
+                aria-controls="dashboard-mcp-token"
+                onClick={() => setShowAdvanced((visible) => !visible)}
+              >
+                {showAdvanced
+                  ? "Hide advanced token setup"
+                  : "Advanced token setup"}
+              </Button>
+              {showAdvanced && (
+                <p className="text-sm text-muted-foreground">
+                  For clients without browser sign-in, use the same URL and
+                  configure the bearer token separately.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="flex min-w-0 flex-col gap-2">

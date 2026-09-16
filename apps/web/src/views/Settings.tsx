@@ -323,7 +323,7 @@ export function Settings({
             />
           </TabsContent>
           <TabsContent value="connect" className="mt-4">
-            <DashboardOverview overview={overview} showSupportCards={false} />
+            <DashboardOverview overview={overview} showSupportCards={false} hosted={edition === "hosted"} />
           </TabsContent>
           <TabsContent value="channels" className="mt-4">
             {edition === "hosted" ? (

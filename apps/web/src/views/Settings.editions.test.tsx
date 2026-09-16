@@ -2,6 +2,7 @@
 // @vitest-environment-options {"url":"https://cloud.zenod.dev/app"}
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ api: vi.fn() }))
@@ -28,6 +29,39 @@ function overview() {
 }
 
 describe("Zenod edition portal", () => {
+  it("makes browser sign-in the hosted MCP default and keeps tokens behind advanced setup", async () => {
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === "/api/overview") return overview()
+      if (path === "/api/connections")
+        return { token: "", mcpPath: "/mcp", clients: [], grants: [] }
+      if (path === "/api/console/account")
+        return {
+          token: "private-secret",
+          mcp_url: "https://cloud.zenod.dev/mcp/private-secret",
+        }
+      throw new Error(`Unexpected API call: ${path}`)
+    })
+    render(
+      <Settings
+        edition="hosted"
+        initialTab="connect"
+        initialSettings={{ provider: "openrouter" } as SettingsValues}
+        onLoggedOut={() => undefined}
+      />
+    )
+    const endpoint = await screen.findByLabelText("MCP URL")
+    expect((endpoint as HTMLInputElement).value).toBe(
+      "https://cloud.zenod.dev/mcp"
+    )
+    expect(screen.queryByLabelText("Bearer token")).toBeNull()
+    expect(screen.getByText(/No token copying required/)).not.toBeNull()
+    await userEvent.click(
+      screen.getByRole("button", { name: "Advanced token setup" })
+    )
+    expect(
+      ((await screen.findByLabelText("Bearer token")) as HTMLInputElement).value
+    ).toBe("private-secret")
+  })
   it("renders only the approved Hosted sections", async () => {
     mocks.api.mockResolvedValue(overview())
 

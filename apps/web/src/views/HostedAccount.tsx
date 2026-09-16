@@ -221,12 +221,11 @@ export function HostedAccount() {
   if (!me) return null
 
   const endpoint = account?.mcp_url ?? ""
-  const token = account?.token ?? "<your token>"
   const codex = endpoint
-    ? `codex mcp add zenod --url ${endpoint} --bearer ${token}`
+    ? `codex mcp add zenod --url ${endpoint}\ncodex mcp login zenod`
     : ""
   const claude = endpoint
-    ? `claude mcp add --transport http zenod ${endpoint} --header "Authorization: Bearer ${token}"`
+    ? `claude mcp add --transport http zenod ${endpoint}\n# In Claude Code: /mcp → Authenticate`
     : ""
   const legacyGithubVault = Boolean(
     vault?.provider === null && account?.vault_repo
@@ -348,7 +347,7 @@ export function HostedAccount() {
             <Card className="rounded-none">
               <CardHeader>
                 <CardTitle>Your MCP endpoint</CardTitle>
-                <CardDescription>Owner-only account session</CardDescription>
+                <CardDescription>Add this URL in your agent, then sign in to Zenod and click Allow.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">

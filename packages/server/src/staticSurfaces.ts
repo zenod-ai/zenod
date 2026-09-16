@@ -28,8 +28,14 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
 
   if (!options.siteDist) {
     if (options.webDist) {
-      app.use("/*", staticFile({ root: options.webDist, ...noCache }));
-      app.get("*", staticFile({ root: options.webDist, path: "index.html", ...noCache }));
+      // Protocol/auth requests must reach their handlers, including the MCP 401
+      // discovery challenge, rather than receive a successful SPA HTML response.
+      const webOnly = (handler: MiddlewareHandler<ServerEnv>): MiddlewareHandler<ServerEnv> =>
+        (c, next) => /^\/(?:api|auth|oauth|mcp|internal|\.well-known)(?:\/|$)/.test(c.req.path)
+          ? next()
+          : handler(c, next);
+      app.use("/*", webOnly(staticFile({ root: options.webDist, ...noCache })));
+      app.get("*", webOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
     }
     return;
   }

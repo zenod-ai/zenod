@@ -848,7 +848,7 @@ describe("hosted customer layer", () => {
     expect(account).not.toHaveProperty("balance");
     expect(account).not.toHaveProperty("ledger");
     expect(account.token).toMatch(/^zenod_[a-f0-9]{48}$/);
-    expect(account.mcp_url).toBe(`${DESTINATION}/mcp/${account.token}`);
+    expect(account.mcp_url).toBe(`${DESTINATION}/mcp`);
     const accountJson = await readFile(join(dir, "customer-accounts.json"), "utf8");
     const tokenVaultJson = await readFile(join(dir, "customer-token-bindings.json"), "utf8");
     expect(accountJson).not.toContain(account.token);

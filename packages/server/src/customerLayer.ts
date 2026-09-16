@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
@@ -236,6 +236,25 @@ function clearGoogleDriveVaultFlowCookie(c: Context, env: NodeJS.ProcessEnv): vo
     path: "/api/vault/drive/oauth/callback",
     secure: env.NODE_ENV === "production",
   });
+}
+
+function mcpConsentReturnPath(value: string | undefined): string | null {
+  if (!value || !value.startsWith("/oauth/authorize") || /[\\\r\n]/.test(value)) return null;
+  try {
+    const url = new URL(value, "https://local.invalid");
+    return url.origin === "https://local.invalid" && url.pathname === "/oauth/authorize" && !url.hash
+      ? `${url.pathname}${url.search}`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const MCP_SIGNIN_COOKIE = "zenod_mcp_signin";
+
+function mcpSignInCookieOptions(env: NodeJS.ProcessEnv) {
+  const domain = env.ZC_COOKIE_DOMAIN || (env.NODE_ENV === "production" ? ".zenod.dev" : undefined);
+  return { httpOnly: true, secure: env.NODE_ENV === "production", sameSite: "Lax" as const, path: "/auth", ...(domain ? { domain } : {}) };
 }
 
 function signedReturnDestination(
@@ -534,11 +553,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (mode === "link_identity" && !session) return c.json({ error: "unauthorized" }, 401);
     if (session) principalForSession(session);
     const requestedHost = trustedReturnHost(c.req.header("x-forwarded-host") || c.req.header("host"));
+    const returnTo = mode === "signin" ? mcpConsentReturnPath(c.req.query("return_to")) : null;
+    const browserNonce = returnTo ? randomBytes(32).toString("base64url") : undefined;
+    if (browserNonce) setCookie(c, MCP_SIGNIN_COOKIE, browserNonce, { ...mcpSignInCookieOptions(env), maxAge: 600 });
     const flow = randomBytes(24).toString("base64url");
     const statePayload: StatePayload = {
       mode,
       provider,
       flow,
+      ...(returnTo ? { rt: returnTo, browserNonce } : {}),
       ...(mode === "signin" && requestedHost ? { rh: requestedHost } : {}),
       ...(session ? { uid: session.user_id } : {}),
     };
@@ -570,6 +593,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       (!legacyGithubSignin && (state.provider !== provider || !state.flow))
     ) {
       return c.text("Invalid or expired sign-in. Please retry.", 400);
+    }
+    if (state.rt) {
+      const expected = Buffer.from(state.browserNonce ?? "");
+      const actual = Buffer.from(getCookie(c, MCP_SIGNIN_COOKIE) ?? "");
+      if (!expected.length || expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+        return c.text("This sign-in was started in another browser or has expired. Reopen the connection from your agent.", 400);
+      }
+      deleteCookie(c, MCP_SIGNIN_COOKIE, mcpSignInCookieOptions(env));
     }
     let nonce: string | undefined;
     let codeVerifier: string | undefined;
@@ -643,7 +674,9 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       }
       const principal = identities.resolveOrCreate(identityInput);
       issueCustomerSession(c, principal, env);
-      return c.redirect(signedReturnDestination(state.rh, env, product), 302);
+      const destination = signedReturnDestination(state.rh, env, product);
+      const returnTo = mcpConsentReturnPath(state.rt);
+      return c.redirect(returnTo ? new URL(returnTo, destination).toString() : destination, 302);
     } catch (error) {
       console.error(`${provider} callback failed:`, error);
       const errorMessage = error instanceof Error ? error.message : "";
@@ -660,6 +693,15 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       );
     }
   };
+
+  app.get("/auth/mcp/signin", (c) => {
+    const returnTo = mcpConsentReturnPath(c.req.query("return_to"));
+    if (!returnTo) return c.text("Invalid connection request. Reopen Zenod from your agent.", 400);
+    const buttons = (["github", "google"] as const).filter((provider) => identityProviders[provider]).map((provider) =>
+      `<a href="/auth/${provider}/start?return_to=${encodeURIComponent(returnTo)}">Continue with ${provider === "github" ? "GitHub" : "Google"}</a>`).join("");
+    if (!buttons) return c.text("Sign-in is not configured.", 503);
+    return c.html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in to Zenod</title><style>:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#fafafa;font:16px system-ui}.card{max-width:420px;padding:28px;background:#141414;border:1px solid #303030;border-radius:12px}h1{font-size:24px}p{color:#aaa}a{display:block;margin-top:16px;padding:12px;background:#fafafa;color:#111;text-align:center;text-decoration:none;border-radius:8px}</style></head><body><main class="card"><h1>Sign in to Zenod</h1><p>Sign in to choose your workspace and approve your agent's connection.</p>${buttons}</main></body></html>`);
+  });
 
   // Preserve the established GitHub entry point while exposing provider-specific starts.
   app.get("/auth/signin", (c) => startIdentityFlow(c, "github", "signin"));
@@ -1290,7 +1332,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       current_period_end: account.current_period_end,
       tenant_id: account.tenant_id,
       slug: account.tenant_slug,
-      mcp_url: hasAccess && token ? `${billing.domain}/mcp/${token}` : null,
+      mcp_url: hasAccess ? `${billing.domain}/mcp` : null,
       token: hasAccess ? token : null,
       token_hint: hasAccess && token ? token.slice(-4) : null,
       vault_repo: account.vault_repo ?? runtime?.settings.get("vault_repo") ?? null,
@@ -1342,8 +1384,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     tokenVault.put(account.account_id, rotated.token);
     return c.json({
       token: rotated.token,
-      mcpPath: `/mcp/${rotated.token}`,
-      mcp_url: `${billing.domain}/mcp/${rotated.token}`,
+      mcpPath: "/mcp",
+      mcp_url: `${billing.domain}/mcp`,
     });
   });
 

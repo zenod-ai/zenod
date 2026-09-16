@@ -53,18 +53,25 @@ export function mcpUrlForToken(
 
 export function resolveMcpAccess(
   connectionToken: string,
-  account?: { token?: string | null; mcp_url?: string | null } | null
+  account?: { token?: string | null; mcp_url?: string | null } | null,
+  hosted = false
 ): { token: string; url: string } {
   const token = account?.token || connectionToken
   return {
     token,
-    url: account?.mcp_url || mcpUrlForToken(token),
+    url: hosted
+      ? new URL("/mcp", account?.mcp_url || CANONICAL_MCP_ORIGIN).toString()
+      : account?.mcp_url || mcpUrlForToken(token),
   }
 }
 
-export function mcpClientSnippets(mcpUrl: string, name = "zenod") {
+export function mcpClientSnippets(
+  mcpUrl: string,
+  name = "zenod",
+  oauth = false
+) {
   return {
-    claude: `claude mcp add --transport http ${name} ${mcpUrl}`,
-    codex: `codex mcp add ${name} --url ${mcpUrl}`,
+    claude: `claude mcp add --transport http ${name} ${mcpUrl}${oauth ? "\n# In Claude Code: /mcp → Authenticate" : ""}`,
+    codex: `codex mcp add ${name} --url ${mcpUrl}${oauth ? `\ncodex mcp login ${name}` : ""}`,
   }
 }

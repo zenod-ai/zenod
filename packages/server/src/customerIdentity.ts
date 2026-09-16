@@ -48,6 +48,8 @@ export interface StatePayload {
   nonce?: string;
   verifier?: string;
   rh?: string;
+  rt?: string;
+  browserNonce?: string;
   uid?: string;
   aid?: string;
   sid?: string;

@@ -2557,7 +2557,7 @@ describe("Zenod chassis unit", () => {
       expect(rotated.status).toBe(200);
       const body = await rotated.json() as { token: string; mcp_url: string };
       expect(body.token).not.toBe("old-token");
-      expect(body.mcp_url).toBe(`https://cloud.zenod.dev/mcp/${body.token}`);
+      expect(body.mcp_url).toBe("https://cloud.zenod.dev/mcp");
       expect(tenants.resolveTokenHash(hashToken("old-token"))).toBeNull();
       expect(tenants.resolveTokenHash(hashToken(body.token))).toMatchObject({ tenant: { id: "github-42" } });
       const accountJson = await readFile(join(dataDir, "customer-accounts.json"), "utf8");

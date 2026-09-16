@@ -37,7 +37,7 @@ import type {
 } from "./settings.js";
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
-import { createCustomerLayer, type CustomerLayerOptions } from "./customerLayer.js";
+import { createCustomerLayer, customerAuthEnabled, type CustomerLayerOptions } from "./customerLayer.js";
 import type { VaultBindingStatus, VaultProviderBindingRecord } from "./googleDriveVaultContract.js";
 import type {
   ManagedAiAdmissionJob,
@@ -697,6 +697,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     (tenantId) => vaultProviderBindingForTenant(tenantId),
     (tenantId, input) => onVaultBindingUpdateForTenant(tenantId, input),
   );
+  const oauthStore = createSqliteOAuthStore({ dataDir: storage.dataDir });
   const unit = createUnit({
     name: unitName,
     version: VERSION,
@@ -720,8 +721,32 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     // tokens survive redeploys (the default in-memory store would strand every
     // connected client on each deploy).
     oauth: {
-      server: true,
-      store: createSqliteOAuthStore({ dataDir: storage.dataDir }),
+      server: {
+        enabled: true,
+        ...(customerAuthEnabled(env) || (options.customer?.identity || options.customer?.identityProviders) ? {
+          browserAuth: {
+            signInUrl: (returnTo: string) => `/auth/mcp/signin?return_to=${encodeURIComponent(returnTo)}`,
+            async resolve(c) {
+              const session = readCustomerSession(c, env);
+              if (!session) return null;
+              customer.principalForSession(session);
+              const account = customer.accounts.resolveActiveTenantForUser(session.user_id);
+              const token = account ? customer.tokenVault.get(account.account_id) : null;
+              const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
+              const expiresAt = record?.expiresAt == null ? Infinity : new Date(record.expiresAt).getTime();
+              if (
+                !account?.tenant_id || !record || record.profile?.trim() ||
+                record.tenant.id !== account.tenant_id ||
+                (record.status ?? "active") !== "active" ||
+                !(expiresAt > Date.now()) ||
+                (account.subscription_status !== "active" && account.subscription_status !== "past_due")
+              ) return c.text("Your Zenod account does not have an active workspace available for this connection. Open your Zenod account to check access, then reconnect your agent.", 403);
+              return { subject: String(session.user_id), label: session.login, tenant: record.tenant };
+            },
+          },
+        } : {}),
+      },
+      store: oauthStore,
     },
     controlPlane: {
       ...options.controlPlane,
@@ -1102,7 +1127,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       c.req.path === "/oauth/authorize" ||
       c.req.path === "/oauth/authorize/decision";
     const formActionPolicy = isMcpOAuthBrowserRoute
-      ? "form-action 'self' https: http://127.0.0.1:* http://[::1]:*"
+      ? "form-action 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*"
       : "form-action 'self' https://checkout.stripe.com";
     const routeContentSecurityPolicy = `${contentSecurityPolicy}; ${formActionPolicy}`;
     c.header(
@@ -1252,6 +1277,13 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     }
   }
   app.route("/", customer.app);
+  // Consent needs the original browser session; the API bridge below deliberately
+  // strips cookies. Mount discovery and OAuth before any SPA catch-all as well.
+  app.all("/oauth/*", (c) => unit.app.fetch(c.req.raw, c.env));
+  app.get("/.well-known/oauth-protected-resource", (c) => unit.app.fetch(c.req.raw, c.env));
+  app.get("/.well-known/oauth-protected-resource/*", (c) => unit.app.fetch(c.req.raw, c.env));
+  app.get("/.well-known/oauth-authorization-server", (c) => unit.app.fetch(c.req.raw, c.env));
+  app.get("/.well-known/oauth-authorization-server/*", (c) => unit.app.fetch(c.req.raw, c.env));
   const publicSiteHost = (options.customerProduct ?? options.customer?.product)?.defaultDomain;
   mountStaticSurfaces(app, {
     webDist: options.webDist,
@@ -1267,9 +1299,27 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const pathToken = c.req.path.startsWith("/mcp/")
       ? decodeURIComponent(c.req.path.slice("/mcp/".length).split("/")[0] ?? "")
       : null;
-    const bearerRecord = directToken
+    let bearerRecord = directToken
       ? await tenantStore.resolveTokenHash(hashToken(directToken))
       : null;
+    // OAuth clients must pass through the same hosted entitlement, capability and
+    // usage controls as manually configured clients. Resolve the current account
+    // binding rather than relying only on the tenant snapshot in an OAuth grant.
+    if (!bearerRecord && directToken) {
+      const grant = oauthStore.resolveOAuthAccessToken(directToken);
+      const account = grant ? customer.accounts.resolveForTenantId(grant.tenant.id) : null;
+      if (account) {
+        const token = customer.tokenVault.get(account.account_id);
+        const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
+        const expiresAt = record?.expiresAt == null ? Infinity : new Date(record.expiresAt).getTime();
+        if (
+          !record || record.profile?.trim() || record.tenant.id !== grant!.tenant.id ||
+          (record.status ?? "active") !== "active" || !(expiresAt > Date.now()) ||
+          (account.subscription_status !== "active" && account.subscription_status !== "past_due")
+        ) return c.json({ error: "unauthorized" }, 401);
+        bearerRecord = record;
+      }
+    }
     const pathRecord = pathToken
       ? await tenantStore.resolveTokenHash(hashToken(pathToken))
       : null;
