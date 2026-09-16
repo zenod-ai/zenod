@@ -144,8 +144,8 @@ export class AnswerSupportRegistry {
       }
     }
     if(offerSummary){
-      const hint:AnswerSupportHint={id:summaryId,kind:"source_summary",modes:["raw_report"],summaryOnly:true,
-        excerpt:"Complete exact source read. Summarize its full content with attribution and qualifications; nonempty summaryText required."};
+      // Excerpts contain source text only; summary protocol belongs in the instruction.
+      const hint:AnswerSupportHint={id:summaryId,kind:"source_summary",modes:["raw_report"],summaryOnly:true};
       this.supports.set(summaryId,{hint,passage,text:"",summaryOnly:true});hints.push(hint);
     }else if(complete&&!this.supports.has(summaryId))this.lastPassageSelectionPartial=true;
     return hints;

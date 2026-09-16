@@ -9,6 +9,7 @@ it('issues a summary-only whole-source handle after all17k actually read with bo
  expect(body.length).toBeGreaterThan(17000);const r=new AnswerSupportRegistry();let hints:any[]=[];
  for(const [i,p]of pieces.entries()){hints=r.addPassage(p);if(i<pieces.length-1)expect(hints.some(h=>h.kind==='source_summary')).toBe(false);}
  const summary=hints.find(h=>h.kind==='source_summary');expect(summary).toMatchObject({summaryOnly:true,modes:['raw_report']});
+ expect(summary).not.toHaveProperty('excerpt'); // No host instructions masquerading as source text.
  expect(JSON.stringify(summary).length).toBeLessThan(400);expect(hints.length).toBeLessThanOrEqual(32);
  for(const summaryText of [undefined,null,'',' ', 'x'.repeat(1201)])expect(r.render([{id:summary.id,mode:'raw_report',summaryText} as any]).valid).toBe(false);
  const rendered=r.render([{id:summary.id,mode:'raw_report',summaryText:'The speaker is considering a proposal, not reporting a decision.'}]);expect(rendered.valid).toBe(true);expect(rendered.text).toContain(ref);expect(rendered.text).not.toContain(body);
