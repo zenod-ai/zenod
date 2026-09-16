@@ -36,7 +36,7 @@ repo: {id:<returned numericID>, owner, name:<m2-name>, private:true, createdAt:<
 fixtureSha256: <exact bytes of basics/fixture.json>
 rubricSha256: <exact bytes of basics/rubric.json>
 seedCommit: <actual published seed SHA>
-models: {model_classify, model_ask, model_classify_reasoning_effort}
+models: {model_classify, model_classify_reasoning_effort, model_ask, [model_ask_reasoning_effort], [model_classify_provider_order]}
 runtimeRoot: /app
 dataDir: /data
 receiptPath: /private/new-receipt.json
@@ -50,6 +50,8 @@ maxExposureUsd: <parent-approved amount>
 reservedTurnExposureUsd: <conservative reviewed allowance per store/chat (including background filing)>
 costBoundRationale: <known turn/round/token/provider prices and automatic retry bounds>
 ```
+
+**Deployed-snapshot binding.** A cell is graded only if its `candidateSha`/`imageDigest`/`observedRelease` and its `models` all match the deployed snapshot. Capture `models` from the live owner settings with `modelSnapshot()` in `snapshot.mjs` (the `model_*` keys actually set) and configure the disposable tenant to the same values; `operator.mjs` fails closed when any manifest model differs from the tenant's settings, so a cell can never silently run a different model configuration than production. Unset keys are omitted, not defaulted.
 
 The parent must approve the conservative reservation before dispatch; it is **not** a server-side hard dollar limit or provider-request counter. Existing tenant tool quota cannot establish a token/dollar cap. This runner reserves before each frozen store/chat action (including the duplicate store request), stops if their summed reservations exceed maxExposureUsd, bounds40 MCP calls/12 polls per job and operator window, and never retries a chat after a timeout. It does not obtain private provider usage or report zeros: actual cost and provider request count remain null until root reconciles real usage evidence; reservation remains. Keep all runs in the parent aggregate ledger; a new manifest is not a budget reset. No dedicated provider key or key-management workflow is required.
 
