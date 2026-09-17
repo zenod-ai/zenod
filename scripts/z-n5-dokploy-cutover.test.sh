@@ -86,7 +86,7 @@ output="$(PATH="$FAKE_BIN:$PATH" Z_N5_FAKE_LOG="$FAKE_LOG" DOKPLOY_API_KEY=test-
 
 grep -Fq 'PLAN 1/8' <<<"$output"
 grep -Fq 'PLAN 8/8' <<<"$output"
-grep -Fq 'DRY_RUN target env keys: CHASSIS_VAULT_MASTER_KEY,CONTROL_PLANE_TOKEN,CUSTOMER_APP_URL,DOMAIN,GITHUB_OAUTH_CALLBACK_URL,GITHUB_OAUTH_CLIENT_ID,GITHUB_OAUTH_CLIENT_SECRET,NODE_ENV,PORT,PRICE_MONTHLY,PRICE_YEARLY,STRIPE_MODE,STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET,ZC_COOKIE_DOMAIN,ZENOD_DATA_DIR,ZENOD_JEV_ENABLED,ZENOD_PUBLIC_SITE_HOST' <<<"$output"
+grep -Fq 'DRY_RUN target env keys: CHASSIS_VAULT_MASTER_KEY,CONTROL_PLANE_TOKEN,CUSTOMER_APP_URL,DOMAIN,GITHUB_OAUTH_CALLBACK_URL,GITHUB_OAUTH_CLIENT_ID,GITHUB_OAUTH_CLIENT_SECRET,NODE_ENV,PORT,PRICE_MONTHLY,PRICE_YEARLY,STRIPE_MODE,STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET,ZC_COOKIE_DOMAIN,ZENOD_DATA_DIR,ZENOD_PUBLIC_SITE_HOST' <<<"$output"
 grep -Fq 'detach zenod.dev' <<<"$output"
 grep -Fq 'detach cloud.zenod.dev' <<<"$output"
 grep -Fq 'detach cloud-test.zenod.dev' <<<"$output"
@@ -107,35 +107,5 @@ env Z_N5_SOURCE_ONLY=1 MODE=apply DRY_RUN=0 CUTOVER_APPROVED=1 APPROVAL_REF=test
   HEALTH_TIMEOUT_SECONDS=1 HEALTH_POLL_SECONDS=1 \
   bash -c 'source "$1"; curl() { printf "%s\n" '\''{"status":"ok","sha":"abcdef0123456789"}'\''; }; wait_for_deploy' \
   _ "$SCRIPT"
-
-# --- Jev classify env allowlist -------------------------------------------------
-# Off is written explicitly (never left absent), and the API key is only ever
-# carried when it was actually provided, so a deploy cannot half-enable the path.
-jev_off="$(Z_N5_SOURCE_ONLY=1 DOKPLOY_API_KEY=test-only IMAGE=ghcr.io/zenod-ai/zenod:sha-abcdef0 \
-  STATE_DIR="$TMP/source-state" bash -c '
-    source "$1"
-    build_target_env "{\"env\":\"NODE_ENV=production\"}" "{\"env\":\"NODE_ENV=production\"}"
-  ' _ "$SCRIPT")"
-grep -Fq 'ZENOD_JEV_ENABLED=0' <<<"$jev_off"
-! grep -Fq 'TYPESAFE_API_KEY=' <<<"$jev_off"
-[[ "$(grep -c '^ZENOD_JEV_ENABLED=' <<<"$jev_off")" == "1" ]]
-
-jev_on="$(TYPESAFE_API_KEY=apikey_test_only ZENOD_JEV_ENABLED=1 ZENOD_JEV_MODEL=jev-latest \
-  ZENOD_JEV_CONFIDENCE_THRESHOLD=0.8 \
-  Z_N5_SOURCE_ONLY=1 DOKPLOY_API_KEY=test-only IMAGE=ghcr.io/zenod-ai/zenod:sha-abcdef0 \
-  STATE_DIR="$TMP/source-state" bash -c '
-    source "$1"
-    build_target_env "{\"env\":\"NODE_ENV=production\"}" "{\"env\":\"NODE_ENV=production\"}"
-  ' _ "$SCRIPT")"
-grep -Fq 'ZENOD_JEV_ENABLED=1' <<<"$jev_on"
-grep -Fq 'ZENOD_JEV_MODEL=jev-latest' <<<"$jev_on"
-grep -Fq 'ZENOD_JEV_CONFIDENCE_THRESHOLD=0.8' <<<"$jev_on"
-grep -Fq 'TYPESAFE_API_KEY=apikey_test_only' <<<"$jev_on"
-
-# Enabling the fast path without a key must fail closed, before any mutation, so a
-# deploy can never ship a candidate that silently falls back while the eval
-# believes it is measuring Jev.
-expect_failure "TYPESAFE_API_KEY is empty" env ZENOD_JEV_ENABLED=1 DOKPLOY_API_KEY=x \
-  IMAGE=ghcr.io/zenod-ai/zenod:sha-abcdef0 bash "$SCRIPT"
 
 printf 'Z-N5 cutover contract tests passed\n'
