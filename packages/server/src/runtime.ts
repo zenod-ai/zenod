@@ -897,9 +897,11 @@ export class Runtime {
       console.warn("[jev] enabled but no typesafe_api_key configured; using the primary classifier");
       return llm;
     }
+    const model = this.settings.jevModel();
+    const threshold = this.settings.jevConfidenceThreshold();
     return withJevClassify(llm, {
-      client: new JevClient({ apiKey, model: this.settings.jevModel() }),
-      confidenceThreshold: this.settings.jevConfidenceThreshold(),
+      client: new JevClient({ apiKey, ...(model ? { model } : {}) }),
+      ...(threshold !== undefined ? { confidenceThreshold: threshold } : {}),
       onOutcome: (outcome) => {
         if (outcome.route === "jev") {
           console.log(`[jev] classified via jev in ${outcome.latencyMs}ms confidence=${outcome.confidence.toFixed(2)} destination=${outcome.destination}`);

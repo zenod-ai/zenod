@@ -17,7 +17,6 @@ import type { PeerConfig } from "./peerClient.js";
 import type { RingConnectedServer, RingRelayPolicy, RingRouteLogEntry } from "./ringRouter.js";
 import { isCredentialHandle, type CredentialVault } from "./credentialVault.js";
 import type { VaultProviderBindingRecord } from "./googleDriveVaultContract.js";
-import { JEV_DEFAULT_CONFIDENCE_THRESHOLD, JEV_DEFAULT_MODEL } from "zenod";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -659,15 +658,15 @@ export class Settings {
     return value === "1" || value === "true";
   }
 
-  /** Jev model id; absent uses the TypeSafe default. */
-  jevModel(): string {
-    return this.get("jev_model") ?? JEV_DEFAULT_MODEL;
+  /** Jev model id; undefined lets the core client apply its own default. */
+  jevModel(): string | undefined {
+    return this.get("jev_model") ?? undefined;
   }
 
   /** Below this routing confidence the primary classifier decides instead. */
-  jevConfidenceThreshold(): number {
+  jevConfidenceThreshold(): number | undefined {
     const value = this.get("jev_confidence_threshold");
-    if (!value) return JEV_DEFAULT_CONFIDENCE_THRESHOLD;
+    if (!value) return undefined;
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new Error("jev_confidence_threshold must be a number between 0 and 1");
     return parsed;
