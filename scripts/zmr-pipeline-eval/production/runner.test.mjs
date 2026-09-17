@@ -14,3 +14,9 @@ test('seed materializer preserves exact frozen fixture and refuses an existing d
 test('final saved review hashes include latency on completion and cleanup failure',async()=>{
  for(const cleanupFails of [false,true]){const m=manifest(),io=fake(m);if(cleanupFails)io.verifyCleanup=async()=>false;const r=await runProductionCase(m,fixture,rubric,io,{dispatch:true}),saved=io.saved.at(-1);assert.equal(saved.phase,cleanupFails?'cleanup_pending':'complete');const row=saved.run.outcomes.find(v=>v.key===m.key);assert.equal(typeof row.latencyMs,'number');assert.equal(saved.run.review.outcomes.find(v=>v.key===m.key).evidenceSha256,hash(JSON.stringify(row)));assert.deepEqual(saved.run.review,r.run.review);}
 });
+test('accepts a snapshot-bound model set with ask-side effort and rejects unknown model keys',()=>{
+ const base=manifest();
+ assert.doesNotThrow(()=>validateManifest({...base,models:{...base.models,model_ask_reasoning_effort:'low'}},fixture,rubric));
+ assert.throws(()=>validateManifest({...base,models:{...base.models,model_vision:'v'}},fixture,rubric),/invalid_models/);
+ assert.throws(()=>validateManifest({...base,models:{model_classify:'a',model_ask:'b',model_classify_reasoning_effort:'low',model_ask_reasoning_effort:''}},fixture,rubric),/invalid_models/);
+});
