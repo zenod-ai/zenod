@@ -92,3 +92,19 @@ Promoted `main` to production after the 36/36 isolated suite and the 6-cell smok
 Ran the fixed basic-memory batch **through production MCP**, one trial per case (B01–B12 × trial 1), against disposable tenant/private-repo pairs: **12/12 RECORDED, all custody gates PASS, 11 PASS / 0 FAIL / 1 PARTIAL**. The partial is B05, whose duplicate-replay/idempotency leg passed (same job, same result, unchanged pages) while the forced-fault interruption check remains isolated-only by the frozen contract. Reserved exposure **$7.75** (provider billing reconciled separately, `null` here).
 
 [HTML report](zenod-production-eval-764149b.html) · [Durable receipt](../evidence/m2-basics/PRODUCTION-12-764149b.json). Reviewer: independent agent review of each actual answer and persisted effect. This is one trial per case (12 cells), not the full 36-cell matrix; ASR/WhatsApp delivery remains out of scope.
+
+## 2026-09-17 — snapshot-bound production MCP run with cost/tokens/time
+
+First run where the eval harness is **bound to the deployed snapshot** (candidate SHA, image digest, and the live model snapshot) and captures per-element cost, tokens and time from the disposable tenant's durable usage ledger. Live deployment `fee95a77` (Dokploy `gV_BHTLYSTmINQE_vEgGJ`), models `openai/gpt-5.6-luna` (low) on **both** organizing and answering. 12 cells (B01–B12, trial 1).
+
+| | 764149b (baseline, grok answer) | fee95a7 (Luna both) |
+|---|---|---|
+| Actual cost | $0.9392 | $0.9728 |
+| LLM calls | 58 | 57 |
+| Input / output / cached tokens | 531,487 / 33,824 / 112,489 | 536,434 / 26,457 / 301,246 |
+| Semantic score | 11 PASS · 1 partial · 0 FAIL | **10 PASS · 1 partial · 1 FAIL** |
+| Reserved exposure | $7.75 | $7.75 |
+
+Per-cell actual cost ranged **$0.029–$0.179**. Luna caches ~2.7× more and emits ~22% fewer output tokens at ~3.6% higher cost. **Regression**: B11 (correction/history) — the Luna-both run reported the prior 12 but did **not** surface the correcting memory ("not 12, but 19"), where the grok run passed. B05's forced-fault leg remains isolated-only by contract.
+
+[Comparison report](zenod-production-eval-comparison.html) · [Luna run](../evidence/m2-basics/run-fee95a7-luna.json) · [grok baseline](../evidence/m2-basics/run-764149b-grok.json). Scored by independent agent review of each literal answer and persisted effect; not a provider invoice (MCP path returns no billed cost; the ledger is server pricing × tokens).
