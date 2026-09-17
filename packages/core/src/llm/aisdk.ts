@@ -126,6 +126,22 @@ export interface AiLlmOptions {
   /** Explicit OpenRouter organizer route; only these ordered base providers are eligible. */
   organizerProviderOrder?: string[];
   /**
+   * Optional OpenAI-compatible base URL override (e.g. a self-hosted gateway or
+   * an evaluation route). Absent, the provider's published base URL is used.
+   */
+  baseUrl?: string;
+  /**
+   * Optional extra request headers for the base-URL override. Some gateways
+   * require a routing or session header that the provider SDK does not send.
+   */
+  headers?: Record<string, string>;
+  /**
+   * Which OpenAI-compatible surface to use. Some gateways serve a model only on
+   * the Responses API (`/responses`) and error on chat completions. Defaults to
+   * "chat", which is what every existing provider uses.
+   */
+  apiFormat?: "chat" | "responses";
+  /**
    * Vision model for image description. Must support image content blocks.
    * Defaults to a provider-specific model known to support vision — separate
    * from askModel because users often configure a text-only ask model.
@@ -395,7 +411,7 @@ function captureStreamUsage(response: Response, recordedModel: string, sink: (u:
  * call; streams are teed (the final usage chunk arrives before the stream ends).
  * The same seam also adds the optional organizer routing envelope.
  */
-function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[], onProviderUsage?: (u: ProviderCallUsage) => void): ModelFactory {
+function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[], onProviderUsage?: (u: ProviderCallUsage) => void, baseUrl?: string, headers?: Record<string, string>, apiFormat?: "chat" | "responses"): ModelFactory {
   const wantsSeam = provider === "openrouter" && (Boolean(providerOrder) || Boolean(onProviderUsage));
   const seam: typeof globalThis.fetch | undefined = wantsSeam ? async (input, init) => {
     const request = new Request(input, init);
@@ -422,11 +438,17 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
     }
     return response;
   } : undefined;
-  if (provider === "anthropic") return createAnthropic({ apiKey });
-  if (provider === "openai") return createOpenAI({ apiKey });
-  const baseURL = OPENAI_COMPATIBLE_BASE_URLS[provider];
-  const compatible = createOpenAI({... (baseURL ? { apiKey, baseURL } : { apiKey }), ...(seam ? {fetch: seam} : {})});
-  return (id: string) => compatible.chat(id);
+  if (provider === "anthropic") return createAnthropic({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}), ...(headers ? { headers } : {}) });
+  if (provider === "openai") {
+    const openai = createOpenAI({ apiKey, ...(baseUrl ? { baseURL: baseUrl } : {}), ...(headers ? { headers } : {}) });
+    return apiFormat === "responses" ? (id: string) => openai.responses(id) : openai;
+  }
+  // An explicit base URL redirects to any OpenAI-compatible gateway (a
+  // self-hosted proxy, or an evaluation route) without changing the provider
+  // enum. Absent, the provider's published base URL is used.
+  const baseURL = baseUrl ?? OPENAI_COMPATIBLE_BASE_URLS[provider];
+  const compatible = createOpenAI({... (baseURL ? { apiKey, baseURL } : { apiKey }), ...(headers ? { headers } : {}), ...(seam ? {fetch: seam} : {})});
+  return apiFormat === "responses" ? (id: string) => compatible.responses(id) : (id: string) => compatible.chat(id);
 }
 
 /** Tool callbacks may fail (bad path, immutable tier); surface the error to the model instead of aborting the loop. */
@@ -747,13 +769,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.maxSteps = clampMaxSteps(options.maxSteps);
     this.provider = options.provider;
     this.onUsage = options.onUsage;
-    this.model = createModelFactory(options.provider, options.apiKey, undefined, (u) => this.providerUsage.push(u));
+    this.model = createModelFactory(options.provider, options.apiKey, undefined, (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat);
     const order = options.organizerProviderOrder;
     if (order !== undefined && (options.provider !== "openrouter" || !Array.isArray(order) || order.length < 1 || order.length > 3
       || new Set(order).size !== order.length || order.some(slug => typeof slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)))) {
       throw new Error("Organizer provider order requires OpenRouter and 1–3 unique base provider slugs");
     }
-    this.organizerModel = order ? createModelFactory(options.provider, options.apiKey, [...order], (u) => this.providerUsage.push(u)) : this.model;
+    this.organizerModel = order ? createModelFactory(options.provider, options.apiKey, [...order], (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat) : this.model;
   }
 
   /**

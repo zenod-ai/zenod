@@ -36,6 +36,7 @@ export const SETTING_KEYS = [
   "model_classify",
   "model_classify_reasoning_effort",
   "model_classify_provider_order",
+  "llm_base_url",
   "typesafe_api_key",
   "jev_enabled",
   "jev_model",
@@ -173,6 +174,7 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   model_classify: "ZENOD_MODEL_CLASSIFY",
   model_classify_reasoning_effort: "ZENOD_MODEL_CLASSIFY_REASONING_EFFORT",
   model_classify_provider_order: "ZENOD_MODEL_CLASSIFY_PROVIDER_ORDER",
+  llm_base_url: "ZENOD_LLM_BASE_URL",
   typesafe_api_key: "TYPESAFE_API_KEY",
   jev_enabled: "ZENOD_JEV_ENABLED",
   jev_model: "ZENOD_JEV_MODEL",
@@ -643,6 +645,12 @@ export class Settings {
     const order = value.split(",");
     if (order.length > 3 || new Set(order).size !== order.length || order.some(slug => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug))) throw new Error("model_classify_provider_order requires 1–3 unique comma-separated base provider slugs");
     return order;
+  }
+
+  /** Optional OpenAI-compatible base URL override (self-hosted gateway or eval route). */
+  llmBaseUrl(): string | undefined {
+    const value = this.get("llm_base_url");
+    return value ? value : undefined;
   }
 
   /** TypeSafe (Jev) classifier fast path. Off unless explicitly enabled. */

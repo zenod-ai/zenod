@@ -635,6 +635,7 @@ export class Runtime {
       ...(organizerReasoningEffort ? { organizerReasoningEffort } : {}),
       ...(organizerProviderOrder ? { organizerProviderOrder } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
+      ...(this.settings.llmBaseUrl() ? { baseUrl: this.settings.llmBaseUrl()! } : {}),
       ...(this.settings.get("model_vision") ? { visionModel: this.settings.get("model_vision")! } : {}),
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
       // Always persist real per-call token usage for cost analytics (GET
