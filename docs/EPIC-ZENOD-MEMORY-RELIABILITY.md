@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-09-06
-Updated: 2026-09-14
+Updated: 2026-09-17
 Repository: zenod-ai/zenod
 Primary document: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md
 Spine ID: ZMR
@@ -14,7 +14,7 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
-Last reconciled commit: 411aba520a7a901f82d56394d5ebf4bb89769b86; reviewed961793 tree deployed, Luna configured, original live recovery running
+Last reconciled commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17). Live production source is `620716fcc8ed547fec937d90ad4e9090ba9588d3` (image `ghcr.io/zenod-ai/zenod@sha256:5358d9eca1dcaa4527484dffb903384f132aacf5c524332ee2389ea829559ed4`); it is an ancestor of `main`, so the running build is not divergent.
 Planner: Jordi + ZMR-release-planner
 Worker: ZMR-24–25 and terminal-provider repair complete; /root retains delivery management
 Tester: /root owns production verification; provider research deferred
@@ -106,8 +106,8 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: M2 dependable basic store, recall and recent-context conversation is implemented and deployed. Exact candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` passed the frozen isolated suite 36/36 and a representative production MCP smoke 6/6. The bounded reliability milestone is complete; broader transport and presentation work stays separate.
-Last verified: 2026-09-16 Europe/Paris.
+Phase: M2 dependable basic store, recall and recent-context conversation is implemented and deployed. Exact candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` passed the frozen isolated suite 36/36 and a representative production MCP smoke 6/6. The bounded reliability milestone is complete; broader transport and presentation work stays separate. M2 evaluation and cost reports (#1324–#1331), the production MCP evaluation harness (#1323/#1320) and the M2 main reconcile (#1322) are integrated on `main` `3b950253abd8e2422369839225740ca945f7b493`, which is 31 commits ahead of the deployed `620716f`; the deployed build remains an ancestor of `main`, so there is no divergence and the newer `main` commits are not yet a production change.
+Last verified: 2026-09-17 Europe/Paris.
 Production source, public health and OCI revision match `620716fcc8ed547fec937d90ad4e9090ba9588d3`; immutable image `ghcr.io/zenod-ai/zenod@sha256:5358d9eca1dcaa4527484dffb903384f132aacf5c524332ee2389ea829559ed4`. The existing one-replica service, `zenod-mt-data:/data` mount and every non-`GIT_SHA` environment value were preserved. Verified pre-deploy restore covered 958 files, 40 JSON files and 79 SQLite databases.
 Owner: /root, sole ZMR spine steward/delivery manager. Harness #1313 is frozen; capture #1316 and answer #1318 are in the release candidate; isolated production adapter #1320 produced the production receipts. [Scorecard](planning/zenod-recall-scorecard.md) and [HTML results](planning/zenod-basics-test-results.html) retain costs, hashes and scope limits.
 Next action: hold this release stable and observe ordinary use. Treat repetitive source/history excerpts in B10–B12 as a bounded presentation follow-up. Keep ASR/WhatsApp delivery, B05 production fault injection and the 30 unrun production cells outside this completed basic-memory milestone unless a new measured incident justifies reopening it.
@@ -144,6 +144,14 @@ Blockers: none for the bounded upgrade. Full original release benchmarks and hum
 Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0414121a6912ace825f3cdf07fc5f508944afc3cafec7352660db32a83042, actual task/OCI/health verified after update completed 2026-09-07 00:17:23 UTC. All three fresh boundary recalls passed and cited the current saved evidence. Filing had passed on c5da66f and remains included. [Exact final evidence](evidence/zmr-live-29ddb62/README.md). Original rollback and verified backup retained; no storage migration.
 
 ## Execution Cursor
+
+### M2 evaluation report wave — 2026-09-17
+
+Last verified: 2026-09-17 Europe/Paris.
+Execution status: M2 dependable basics delivered and deployed at `620716f`; the M2 evaluation and cost reports (#1324–#1331) plus the production MCP evaluation harness (#1323/#1320) and the M2 main reconcile (#1322) are integrated on `main` `3b95025`. `main` is 31 commits ahead of the deployed `620716f`, which remains an ancestor of `main` (no divergence). Deploying newer `main` is a separate authorized gate.
+Waiting on: nothing for the completed milestone; ordinary-use observation.
+Approved work: bounded presentation follow-up only on a measured incident.
+Next action: hold the deployed M2 milestone stable; do not claim the 31 undeployed `main` commits as a production change without a separate deploy gate.
 
 Last verified: 2026-09-16; live health still reports `2a4ff6623fc6efa48355c5e697dd38c9c4833f67`.
 Baseline v1.1 (`baseline-3`, harness eebc170): 6 PASS, 4 FAIL, 1 incomplete and 25 unrun across the fixed36 planned trials. Stopped at80 requests; actual cost $0.26551404, unknown0. Earlier diagnostic attempts cost $0.10040743 and remain archived; invalid-fixture filing results are excluded from quality comparisons. [HTML results slide](planning/zenod-basics-test-results.html).

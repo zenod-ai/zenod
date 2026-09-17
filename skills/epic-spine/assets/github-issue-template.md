@@ -9,6 +9,9 @@ Depends on: <issue links or none>
 Bound spine: <same as EpicSpine unless explicitly different>
 Dedicated branch: <branch name>
 Worktree: <path when concurrent, or n/a>
+Wave: <number>
+Method: PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (verified absent everywhere)
+Budget: 90 min
 Base commit: <SHA>
 Latest commit: <SHA or same as base>
 Integration target: main
@@ -21,6 +24,8 @@ Describe the ticket outcome in one short paragraph.
 Terminal state: review | testing | accepted | blocked with required input | planner decision required
 
 ## Context
+
+FIRST ACTION: `git worktree add ../wt-<ticket> -b <branch> <base-commit>` and work only there. Never run `git checkout` or `git switch` in the shared clone.
 
 - Spine section: <heading or anchor>
 - Required reads: <links copied from the Bootstrap Map>
@@ -35,6 +40,7 @@ Delegated spine section: <section + authority, or none>
 ## Acceptance Criteria
 
 - [ ] <observable ticket-level criterion>
+- [ ] If PORT/DUPLICATE: source inspected first; code moved wholesale and only imports/config adapted; scratch duplication fails review
 - [ ] <observable ticket-level criterion>
 
 ## Validation
