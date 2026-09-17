@@ -25,11 +25,12 @@ const num = (n) => (n ?? 0).toLocaleString('en-US');
 const secs = (ms) => `${((ms ?? 0) / 1000).toFixed(1)}s`;
 const verdictClass = (v) => (v === 'PASS' ? 'pass' : v === 'PARTIAL' ? 'partial' : v === 'FAIL' ? 'fail' : 'unscored');
 const modelList = (models) => Object.entries(models ?? {}).map(([k, v]) => `${esc(k.replace(/^model_/, ''))}=${esc(v)}`).join(' · ');
+const realCost = (totals) => (totals?.providerCostUsd > 0 ? totals.providerCostUsd : (totals?.costUsd ?? 0));
 
 function usageRows(cell) {
   const ops = cell.usage?.byOperation ?? [];
-  if (!ops.length) return '<tr><td colspan="6" class="mut">usage unavailable</td></tr>';
-  return ops.map((o) => `<tr><td>${esc(o.operation)}</td><td>${esc(o.model)}</td><td class="num">${num(o.calls)}</td><td class="num">${num(o.inputTokens)} / ${num(o.outputTokens)}</td><td class="num">${num(o.cachedInputTokens)}</td><td class="num">${usd(o.costUsd)}</td></tr>`).join('');
+  if (!ops.length) return '<tr><td colspan="7" class="mut">usage unavailable</td></tr>';
+  return ops.map((o) => `<tr><td>${esc(o.operation)}</td><td>${esc(o.model)}</td><td class="num">${num(o.calls)}</td><td class="num">${num(o.inputTokens)} / ${num(o.outputTokens)}</td><td class="num">${num(o.cachedInputTokens)}</td><td class="num">${usd(o.costUsd)}</td><td class="num">${usd(o.providerCostUsd)}</td></tr>`).join('');
 }
 
 function cellHtml(cell) {
@@ -45,7 +46,7 @@ function cellHtml(cell) {
   return `
   <details class="cell">
     <summary><b>${esc(cell.key)}</b> ${esc(expectations.cases[cell.caseId]?.name ?? '')} — <span class="${verdictClass(cell.semanticVerdict)}">${esc(cell.semanticVerdict ?? 'UNSCORED')}</span>
-      <span class="mut">· ${usd(cell.usage?.totals?.costUsd)} actual · ${secs(cell.timing?.wallMs)} · ${num(cell.usage?.totals?.inputTokens)}/${num(cell.usage?.totals?.outputTokens)} tok</span></summary>
+      <span class="mut">· ${usd(realCost(cell.usage?.totals))} gateway · ${usd(cell.usage?.totals?.costUsd)} est · ${secs(cell.timing?.wallMs)} · ${num(cell.usage?.totals?.inputTokens)}/${num(cell.usage?.totals?.outputTokens)} tok</span></summary>
     <div class="grid">
       <div><h4>Expected</h4>
         <div class="labels">Facts: ${facts}</div>
@@ -58,7 +59,7 @@ function cellHtml(cell) {
     <h4>Manual review${cell.rationale ? ` — <span class="mut">${esc(cell.rationale)}</span>` : ''}</h4>
     ${reviewChecks}
     <h4>Cost · tokens · time</h4>
-    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>cost</th></tr></thead><tbody>${usageRows(cell)}</tbody></table>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody>${usageRows(cell)}</tbody></table>
     <div class="mut">wall ${secs(cell.timing?.wallMs)} · mcp calls ${num(cell.timing?.mcpCalls)} (${secs(cell.timing?.mcpMs)}): ${timingCalls || '—'} · reserved ${usd(cell.cost?.reservedExposureUsd)}</div>
     <div class="mut">models: ${modelList(cell.models)}</div>
   </details>`;
@@ -69,7 +70,8 @@ function runCards(run) {
   return `<div class="cards">
     <div class="card"><div class="k">Cells</div><div class="v">${run.cells.length}</div></div>
     <div class="card"><div class="k">PASS / partial / fail</div><div class="v"><span class="pass">${t.pass}</span> / <span class="partial">${t.partial}</span> / <span class="fail">${t.fail}</span></div></div>
-    <div class="card"><div class="k">Actual cost</div><div class="v">${usd(t.actualUsd)}</div></div>
+    <div class="card"><div class="k">Gateway cost (real)</div><div class="v">${usd(t.providerUsd ?? 0)}</div></div>
+    <div class="card"><div class="k">Cost estimate</div><div class="v">${usd(t.actualUsd)}</div></div>
     <div class="card"><div class="k">Reserved (stop-gate)</div><div class="v">${usd(t.reservedUsd)}</div></div>
     <div class="card"><div class="k">Tokens in / out</div><div class="v">${num(t.inputTokens)} / ${num(t.outputTokens)}</div></div>
     <div class="card"><div class="k">Cached input</div><div class="v">${num(t.cachedInputTokens)}</div></div>
@@ -94,20 +96,20 @@ function opBreakdown(run) {
   const agg = new Map();
   for (const c of run.cells) for (const o of c.usage?.byOperation ?? []) {
     const k = `${o.operation}\u0000${o.model}`;
-    const prev = agg.get(k) ?? {operation: o.operation, model: o.model, calls: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0};
-    prev.calls += o.calls; prev.inputTokens += o.inputTokens ?? 0; prev.outputTokens += o.outputTokens ?? 0; prev.cachedInputTokens += o.cachedInputTokens ?? 0; prev.costUsd += o.costUsd ?? 0;
+    const prev = agg.get(k) ?? {operation: o.operation, model: o.model, calls: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0, providerCostUsd: 0};
+    prev.calls += o.calls; prev.inputTokens += o.inputTokens ?? 0; prev.outputTokens += o.outputTokens ?? 0; prev.cachedInputTokens += o.cachedInputTokens ?? 0; prev.costUsd += o.costUsd ?? 0; prev.providerCostUsd += o.providerCostUsd ?? 0;
     agg.set(k, prev);
   }
-  const rows = [...agg.values()].sort((a, b) => b.costUsd - a.costUsd)
-    .map((o) => `<tr><td>${esc(o.operation)}</td><td>${esc(o.model)}</td><td class="num">${num(o.calls)}</td><td class="num">${num(o.inputTokens)} / ${num(o.outputTokens)}</td><td class="num">${usd(o.costUsd)}</td></tr>`).join('');
-  return `<table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cost</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const rows = [...agg.values()].sort((a, b) => (b.providerCostUsd || b.costUsd) - (a.providerCostUsd || a.costUsd))
+    .map((o) => `<tr><td>${esc(o.operation)}</td><td>${esc(o.model)}</td><td class="num">${num(o.calls)}</td><td class="num">${num(o.inputTokens)} / ${num(o.outputTokens)}</td><td class="num">${usd(o.costUsd)}</td><td class="num">${usd(o.providerCostUsd)}</td></tr>`).join('');
+  return `<table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>estimate</th><th>gateway $</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function compareTable(baseline, current) {
   const b = new Map(baseline.cells.map((c) => [c.key, c]));
   const rows = current.cells.map((c) => {
     const p = b.get(c.key);
-    const dCost = (c.usage?.totals?.costUsd ?? 0) - (p?.usage?.totals?.costUsd ?? 0);
+    const dCost = realCost(c.usage?.totals) - realCost(p?.usage?.totals);
     const dTok = (c.usage?.totals?.inputTokens ?? 0) - (p?.usage?.totals?.inputTokens ?? 0);
     const dTime = (c.timing?.wallMs ?? 0) - (p?.timing?.wallMs ?? 0);
     return `<tr><td>${esc(c.key)}</td><td>${esc(p?.semanticVerdict ?? '—')}</td><td>${esc(c.semanticVerdict ?? '—')}</td>
@@ -117,10 +119,10 @@ function compareTable(baseline, current) {
   }).join('');
   const dt = current.totals, db = baseline.totals;
   const dtotals = `<tr class="total"><td>ALL</td><td>${db.pass}P/${db.partial}~/${db.fail}F</td><td>${dt.pass}P/${dt.partial}~/${dt.fail}F</td>
-    <td class="num">${dt.actualUsd - db.actualUsd >= 0 ? '+' : ''}${usd(dt.actualUsd - db.actualUsd)}</td>
+    <td class="num">${realCost(dt) - realCost(db) >= 0 ? '+' : ''}${usd(realCost(dt) - realCost(db))}</td>
     <td class="num">${dt.inputTokens - db.inputTokens >= 0 ? '+' : ''}${num(dt.inputTokens - db.inputTokens)}</td>
     <td class="num">${dt.wallMs - db.wallMs >= 0 ? '+' : ''}${secs(dt.wallMs - db.wallMs)}</td></tr>`;
-  return `<table><thead><tr><th>cell</th><th>baseline verdict</th><th>current verdict</th><th>Δ cost</th><th>Δ input tokens</th><th>Δ wall</th></tr></thead><tbody>${rows}${dtotals}</tbody></table>
+  return `<table><thead><tr><th>cell</th><th>baseline verdict</th><th>current verdict</th><th>Δ cost (gateway)</th><th>Δ input tokens</th><th>Δ wall</th></tr></thead><tbody>${rows}${dtotals}</tbody></table>
   <p class="mut">Baseline: <code>${esc(baseline.source?.candidateSha)}</code> (${modelList(baseline.source?.models)}). Current: <code>${esc(current.source?.candidateSha)}</code> (${modelList(current.source?.models)}).</p>`;
 }
 

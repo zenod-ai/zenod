@@ -23,8 +23,8 @@ test('collect then report renders expected-vs-actual, cost, tokens and score', (
     }));
     writeFileSync(join(cellDir, 'manifest.json'), JSON.stringify({models}));
     writeFileSync(join(cellDir, 'usage.json'), JSON.stringify({available: true,
-      byOperation: [{operation: 'answer', model: 'openai/gpt-5.6-luna', calls: 1, inputTokens: 1000, outputTokens: 100, cachedInputTokens: 0, costUsd: 0.012345}],
-      calls: [], totals: {calls: 1, inputTokens: 1000, outputTokens: 100, cachedInputTokens: 0, costUsd: 0.012345}}));
+      byOperation: [{operation: 'answer', model: 'openai/gpt-5.6-luna', calls: 1, inputTokens: 1000, outputTokens: 100, cachedInputTokens: 0, costUsd: 0.012345, providerCostUsd: 0.00789}],
+      calls: [], totals: {calls: 1, inputTokens: 1000, outputTokens: 100, cachedInputTokens: 0, costUsd: 0.012345, providerCostUsd: 0.00789}}));
 
     const meta = join(root, 'meta.json');
     writeFileSync(meta, JSON.stringify({runId: 'test-run', candidateSha: 'a'.repeat(40), imageDigest: 'sha256:' + 'b'.repeat(64), models, deployment: {provider: 'Dokploy', deploymentId: 'dep-1', title: 'test'}}));
@@ -40,7 +40,7 @@ test('collect then report renders expected-vs-actual, cost, tokens and score', (
     const htmlOut = join(root, 'report.html');
     execFileSync('node', [report, '--runs', runOut, '--out', htmlOut]);
     const html = readFileSync(htmlOut, 'utf8');
-    for (const needle of ['B01:1', '18 November 2026', 'KILN-47', '$0.012345', 'openai/gpt-5.6-luna', 'Saved the original note', 'PASS', 'Durable source unchanged']) {
+    for (const needle of ['B01:1', '18 November 2026', 'KILN-47', '$0.012345', '$0.007890', 'Gateway cost (real)', 'openai/gpt-5.6-luna', 'Saved the original note', 'PASS', 'Durable source unchanged']) {
       assert.ok(html.includes(needle), `report missing: ${needle}`);
     }
   } finally {
