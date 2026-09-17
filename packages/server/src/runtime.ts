@@ -891,7 +891,7 @@ export class Runtime {
    */
   private withJevClassification(llm: BrainLlm): BrainLlm {
     if (!this.settings.jevEnabled()) return llm;
-    const apiKey = this.settings.get("typesafe_api_key");
+    const apiKey = this.settings.getRaw("typesafe_api_key");
     if (!apiKey) {
       // Enabled without a credential is a misconfiguration, not a silent no-op.
       console.warn("[jev] enabled but no typesafe_api_key configured; using the primary classifier");

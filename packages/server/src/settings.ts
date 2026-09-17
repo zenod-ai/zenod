@@ -201,6 +201,20 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   composio_user_id: "COMPOSIO_USER_ID",
 };
 
+/**
+ * Host-wide Jev configuration for tenant runtimes. Hosted tenants are built with
+ * `seedFromEnv: false` (their settings live in their own SQLite row), so without
+ * this fallback an env-configured fast path would be invisible to every tenant.
+ */
+export function jevSettingFallbacks(env: NodeJS.ProcessEnv): Readonly<Record<string, string>> {
+  const out: Record<string, string> = {};
+  if (env.ZENOD_JEV_ENABLED) out.jev_enabled = env.ZENOD_JEV_ENABLED;
+  if (env.ZENOD_JEV_MODEL) out.jev_model = env.ZENOD_JEV_MODEL;
+  if (env.ZENOD_JEV_CONFIDENCE_THRESHOLD) out.jev_confidence_threshold = env.ZENOD_JEV_CONFIDENCE_THRESHOLD;
+  if (env.TYPESAFE_API_KEY) out.typesafe_api_key = env.TYPESAFE_API_KEY;
+  return out;
+}
+
 export class Settings {
   constructor(
     private readonly store: SqliteStateStore,
@@ -652,20 +666,23 @@ export class Settings {
     return value ? value : undefined;
   }
 
-  /** TypeSafe (Jev) classifier fast path. Off unless explicitly enabled. */
+  /** TypeSafe (Jev) classifier fast path. Off unless explicitly enabled.
+   * Read through getRaw so a host-provided fallback applies: hosted tenant
+   * runtimes never seed settings from env, so an env-only flag would leave every
+   * tenant silently on the primary classifier. */
   jevEnabled(): boolean {
-    const value = this.get("jev_enabled");
+    const value = this.getRaw("jev_enabled");
     return value === "1" || value === "true";
   }
 
   /** Jev model id; undefined lets the core client apply its own default. */
   jevModel(): string | undefined {
-    return this.get("jev_model") ?? undefined;
+    return this.getRaw("jev_model") ?? undefined;
   }
 
   /** Below this routing confidence the primary classifier decides instead. */
   jevConfidenceThreshold(): number | undefined {
-    const value = this.get("jev_confidence_threshold");
+    const value = this.getRaw("jev_confidence_threshold");
     if (!value) return undefined;
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new Error("jev_confidence_threshold must be a number between 0 and 1");
