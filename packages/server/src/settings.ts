@@ -17,6 +17,7 @@ import type { PeerConfig } from "./peerClient.js";
 import type { RingConnectedServer, RingRelayPolicy, RingRouteLogEntry } from "./ringRouter.js";
 import { isCredentialHandle, type CredentialVault } from "./credentialVault.js";
 import type { VaultProviderBindingRecord } from "./googleDriveVaultContract.js";
+import { JEV_DEFAULT_CONFIDENCE_THRESHOLD, JEV_DEFAULT_MODEL } from "zenod";
 
 /** Runtime settings persisted in SQLite; env vars seed them on first boot. */
 export const SETTING_KEYS = [
@@ -35,6 +36,10 @@ export const SETTING_KEYS = [
   "model_classify",
   "model_classify_reasoning_effort",
   "model_classify_provider_order",
+  "typesafe_api_key",
+  "jev_enabled",
+  "jev_model",
+  "jev_confidence_threshold",
   "model_vision",
   "model_max_steps",
   "google_service_account_json",
@@ -135,6 +140,7 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "anthropic_api_key",
   "openai_api_key",
   "openrouter_api_key",
+  "typesafe_api_key",
   "google_service_account_json",
   "google_oauth_client_secret",
   "groq_api_key",
@@ -167,6 +173,10 @@ const ENV_SEEDS: Record<SettingKey, string> = {
   model_classify: "ZENOD_MODEL_CLASSIFY",
   model_classify_reasoning_effort: "ZENOD_MODEL_CLASSIFY_REASONING_EFFORT",
   model_classify_provider_order: "ZENOD_MODEL_CLASSIFY_PROVIDER_ORDER",
+  typesafe_api_key: "TYPESAFE_API_KEY",
+  jev_enabled: "ZENOD_JEV_ENABLED",
+  jev_model: "ZENOD_JEV_MODEL",
+  jev_confidence_threshold: "ZENOD_JEV_CONFIDENCE_THRESHOLD",
   model_vision: "ZENOD_MODEL_VISION",
   model_max_steps: "ZENOD_MODEL_MAX_STEPS",
   google_service_account_json: "GOOGLE_SERVICE_ACCOUNT_JSON",
@@ -633,6 +643,26 @@ export class Settings {
     const order = value.split(",");
     if (order.length > 3 || new Set(order).size !== order.length || order.some(slug => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug))) throw new Error("model_classify_provider_order requires 1–3 unique comma-separated base provider slugs");
     return order;
+  }
+
+  /** TypeSafe (Jev) classifier fast path. Off unless explicitly enabled. */
+  jevEnabled(): boolean {
+    const value = this.get("jev_enabled");
+    return value === "1" || value === "true";
+  }
+
+  /** Jev model id; absent uses the TypeSafe default. */
+  jevModel(): string {
+    return this.get("jev_model") ?? JEV_DEFAULT_MODEL;
+  }
+
+  /** Below this routing confidence the primary classifier decides instead. */
+  jevConfidenceThreshold(): number {
+    const value = this.get("jev_confidence_threshold");
+    if (!value) return JEV_DEFAULT_CONFIDENCE_THRESHOLD;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new Error("jev_confidence_threshold must be a number between 0 and 1");
+    return parsed;
   }
 
   /** Configured tool-step budget per reply; undefined = engine default. */
