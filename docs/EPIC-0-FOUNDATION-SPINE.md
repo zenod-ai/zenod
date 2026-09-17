@@ -13,7 +13,7 @@ Additional root rationale: n/a
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17); live production runs source `620716fcc8ed547fec937d90ad4e9090ba9588d3`, which is an ancestor of `main`. The ZAL-22 production receipt remains the historical rollback/behavior baseline
+Last reconciled commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17); live production (verified via `https://cloud.zenod.dev/api/health`) runs source `22440b4151289900370b1ed375edc1b7aeaca1a1` (deployed 2026-09-17 ~14:44 CEST). The ZAL-22 production receipt remains the historical rollback/behavior baseline
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -92,19 +92,19 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 Phase: ZMR M2 dependable memory basics delivered and deployed; M2 evaluation and cost reports integrated on `main`. The Phylax integrated-independent push remains active but is no longer the current thrust.
 Last verified: 2026-09-17 Europe/Paris.
 Integration target: `main`
-Fresh base commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17 15:28 CEST). Live production runs source `620716fcc8ed547fec937d90ad4e9090ba9588d3` (image `ghcr.io/zenod-ai/zenod@sha256:5358d9eca1dcaa4527484dffb903384f132aacf5c524332ee2389ea829559ed4`); it is an ancestor of `main`, so `main` is 31 commits ahead of the running build. Those 31 commits are the production MCP evaluation harness and reports plus three runtime memory fixes: durable capture of each conversational original once; model-summary link sanitization + ask-side reasoning effort; and OpenRouter real per-call cost capture in the usage ledger. There is no production divergence.
+Fresh base commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17 15:28 CEST). Live production runs source `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified directly against `https://cloud.zenod.dev/api/health` (2026-09-17). `main` is 4 commits ahead of the running build, and those 4 commits are documentation only — the M2 evaluation cost report and full report (`#1330`, `#1331`). Every runtime change is already live. There is no production divergence and no pending functional deploy.
 Active child spine: `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md` (ZMR) for the current memory thrust; `docs/EPIC-P-PHYLAX-SPRINT.md` remains the active delivery surface for the integrated-independent push and is not superseded.
 Next action: hold the deployed M2 milestone stable and observe ordinary use. Route the bounded presentation follow-up (repetitive B10–B12 source/history excerpts) as a small ZMR ticket only if a measured incident justifies it. Do not treat the 31 undeployed `main` commits as a production change without a separate authorized deploy gate.
 Blockers: none for the completed M2 basic-memory milestone. Production deployment of newer `main`, real channel sends, live billing, public signup and destructive migrations remain named later human gates. Public signup stays closed.
 
 ## Execution Cursor
 
-Last attempted: reconciled this root spine and the ZMR child spine to current `main` `3b950253abd8e2422369839225740ca945f7b493` and the live production source `620716fcc8ed547fec937d90ad4e9090ba9588d3`, and synced the vendored `skills/epic-spine` to its canonical source (2026-09-17).
-Result: root and ZMR spines updated and validated; `main` is 31 commits ahead of the deployed build with no divergence. Evidence: [ZMR spine](EPIC-ZENOD-MEMORY-RELIABILITY.md) and the 2026-09-17 handoff below.
-Execution status: done — M2 milestone delivered and deployed; nothing active.
+Last attempted: verified the live production version from `https://cloud.zenod.dev/api/health` and reconciled this root spine and the ZMR child spine to it (2026-09-17).
+Result: live production reports `22440b4151289900370b1ed375edc1b7aeaca1a1`; `main` `3b95025` is 4 documentation-only commits ahead (eval reports #1330/#1331). Nothing needs deploying for behavior. Evidence: the live health response and [ZMR spine](EPIC-ZENOD-MEMORY-RELIABILITY.md).
+Execution status: done — M2 milestone delivered and deployed; live is effectively current.
 Waiting on: nothing. Ordinary-use observation; no human permission wait.
-Approved work: the bounded B10–B12 presentation follow-up, and any newer-`main` deployment, remain behind a separate authorized gate.
-Next action: hold the deployed M2 milestone stable; open a bounded presentation ticket only if a measured incident justifies it.
+Approved work: the bounded B10–B12 presentation follow-up remains behind a separate authorized gate. Deploying newer `main` is unnecessary for behavior and would only add the eval report documents to the image.
+Next action: hold stable; open a bounded presentation ticket only if a measured incident justifies it.
 
 ## Spine Map
 
@@ -195,7 +195,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | D19 | 2026-08-26 | accepted | Do not deploy the locally proved candidate until its legacy €5/month and €50/year contract is corrected. | Read-only preflight showed code/product/legal/readiness drift despite the functional candidate passing local acceptance. A code-only correction is safer than deploying twice or misrepresenting the approved offer. | n/a | [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061), [PR #1089](https://github.com/zenod-ai/zenod/pull/1089), and [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) | n/a |
 | D20 | 2026-08-27 | accepted | Lock Zenod/PM plus Phylax as integrated UX over independent services. | Product backends own customer identity, subscription and memory; Phylax independently owns WhatsApp/Telegram transport, raw staging, STT, delivery and its own cost ledger. A narrow tenant-scoped control/data seam lets one browser experience manage both without moving credentials or sessions. Standalone Phylax reuses the same core with a different allowance issuer. | n/a | `docs/EPIC-P-PHYLAX-SPRINT.md` and `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` | n/a |
 | D21 | 2026-08-27 | accepted | Treat tenant credentials and direct MCP tokens as durable data, never deployment state. | Code/image/config rollout must not rotate, migrate, reinterpret or replace customer tokens, Google credentials or channel sessions. The ZAL-22 rollout preserved them and proved the pre-existing direct MCP URL and Google/WhatsApp connections after both restarts. | n/a | [PR #1098](https://github.com/zenod-ai/zenod/pull/1098) and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md` | n/a |
-| D25 | 2026-09-17 | accepted | Treat M2 dependable memory basics as delivered and deployed; do not auto-deploy newer `main`. | The deployed `620716f` passed the frozen isolated suite 36/36 and production MCP smoke 6/6; `main` is 31 commits ahead with reports/harness/docs and is not a production change. | n/a | `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md`, PRs #1322–#1331 | Reopen only if a measured memory incident justifies a new deploy. |
+| D25 | 2026-09-17 | accepted | Verify live production via its health endpoint, not the spine's stored record. | Live production reported `22440b4` while the spine still said `620716f`; `main` `3b95025` is 4 documentation-only commits ahead, so there is no pending functional deploy. | n/a | `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md`, live health `https://cloud.zenod.dev/api/health` | Revisit if live health changes or a measured memory incident justifies a new deploy. |
 
 ## Issue Ledger
 
@@ -284,15 +284,15 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ### 2026-09-17 - Epic 0 worker - ZMR M2 delivered and deployed; root spine reconciled to current main
 
-Action: reconciled the root spine to current `main` `3b95025` and the live production source `620716f`. Recorded the ZMR M2 milestone as delivered and deployed (frozen isolated suite 36/36, production MCP smoke 6/6) and integrated the M2 evaluation and cost reports (#1324–#1331), the production MCP evaluation harness (#1323/#1320), and the M2 main reconcile (#1322). Confirmed `620716f` is an ancestor of `main`, so the running build is not divergent; `main` is 31 commits ahead (evaluation harness/reports plus three runtime memory fixes: durable conversational-original capture, summary-link sanitization + ask-side reasoning effort, and OpenRouter real per-call cost capture). These are merged but **not deployed**; deploying newer `main` is a separate authorized gate.
+Action: verified live production source directly (`https://cloud.zenod.dev/api/health`) as `22440b4151289900370b1ed375edc1b7aeaca1a1` (deployed 2026-09-17 ~14:44 CEST) and reconciled the root spine to it. Recorded the ZMR M2 milestone as delivered and deployed (frozen isolated suite 36/36, production MCP smoke 6/6) and integrated the M2 evaluation and cost reports (#1324–#1331). `main` `3b95025` is 4 commits ahead of the live build, and those 4 commits are documentation only (#1330/#1331 reports); all runtime changes — including durable conversational-original capture, summary-link sanitization + ask-side reasoning effort, and OpenRouter real per-call cost capture — are already live. No production divergence and nothing pending to deploy functionally.
 
 Evidence: [M2 contract](./planning/zenod-basics-m2.md), [recall scorecard](./planning/zenod-recall-scorecard.md), [HTML results slide](./planning/zenod-basics-test-results.html), PRs [#1322](https://github.com/zenod-ai/zenod/pull/1322)–[#1331](https://github.com/zenod-ai/zenod/pull/1331), and [#1313](https://github.com/zenod-ai/zenod/issues/1313).
 
-Next action: hold the deployed M2 milestone stable and observe ordinary use. Keep any newer `main` deployment, ASR/WhatsApp delivery, B05 fault injection and the 30 unrun production cells behind a separate authorized gate. Open a bounded presentation ticket only if a measured incident justifies it.
+Next action: hold the deployed M2 milestone stable and observe ordinary use. No functional deploy is pending; deploying newer `main` would only add the eval report documents. Keep ASR/WhatsApp delivery, B05 fault injection and the 30 unrun production cells behind a separate authorized gate.
 
 Assignment identity: Epic 0 Foundation planner and ZMR delivery manager (`Jordi + current bound task`)
 
-Branch / latest commit: `main` `3b950253abd8e2422369839225740ca945f7b493`; production source `620716fcc8ed547fec937d90ad4e9090ba9588d3`
+Branch / latest commit: `main` `3b950253abd8e2422369839225740ca945f7b493`; live production source `22440b4151289900370b1ed375edc1b7aeaca1a1`
 
 Last verified: 2026-09-17 Europe/Paris
 
