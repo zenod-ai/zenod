@@ -4,6 +4,47 @@ EpicSpine is a document-centered operating system for AI-assisted software deliv
 
 The core idea is simple: every serious body of work gets a living epic document that preserves the intent, context, current state, acceptance target, issue ledger, decisions, and handoffs. GitHub issues remain the execution board, while the spine remains authoritative for intent and coordination.
 
+This repository is the single development home for the skill. Any other copy of `skill/epic-spine/` is a snapshot; read [SYNC.md](SYNC.md) before editing one.
+
+## Get Started
+
+From this checkout's root, use Python 3.10+; no Python packages are required. Copy the **complete** skill into your user skills directory. This refuses an existing destination rather than overwriting it:
+
+```sh
+python3 - <<'PYTHON'
+from pathlib import Path
+import shutil
+
+source = Path("skill/epic-spine")
+destination = Path.home() / ".agents/skills/epic-spine"
+try:
+    shutil.copytree(source, destination)
+except FileExistsError:
+    raise SystemExit(f"Already exists; left unchanged: {destination}")
+print(f"Installed: {destination}")
+PYTHON
+```
+
+The user skills directory and explicit invocation follow [OpenAI's skill documentation](https://developers.openai.com/codex/skills/). If the skill does not appear, restart Codex. To try this checkout without installing, ask Codex to read `skill/epic-spine/SKILL.md` directly.
+
+Open the [populated CLI example](examples/EPIC-0-CLI-EXAMPLE.md), then invoke the skill with this read-only orientation prompt in Codex:
+
+```text
+Use $epic-spine.
+Identity: observer
+Bound spine: examples/EPIC-0-CLI-EXAMPLE.md
+Goal: explain the next action and acceptance journey. This is an illustrative example; do not dispatch or edit.
+```
+
+Validate the example and run the regression suite:
+
+```sh
+python3 skill/epic-spine/scripts/validate_spine.py --strict --graph examples/EPIC-0-CLI-EXAMPLE.md
+python3 -B -m unittest discover -s tests -v
+```
+
+Expect `OK` for the example and a passing suite. The example is fully populated but its sample delivery remains unaccepted; validation proves document structure, not that a product shipped. For actual work in this repository, start at the [audit delivery spine](docs/EPIC-0-AUDIT-REMEDIATION.md).
+
 Open the deck: [index.html](index.html)
 
 When published with GitHub Pages, the deck lives at:
@@ -40,26 +81,35 @@ Epic 0 is the root concept and barebones operating context for the project. It h
 An **Epic 0 worker** is bound to that root spine. Their job is to read the child spines, keep the whole picture coherent, spin out new child EpicSpines, and bind other agents to those child spines.
 
 ```mermaid
-flowchart TD
-    E0["Epic 0 spine<br/>root intent, thrust, project state"]
-    EW0["Epic 0 worker<br/>keeps full picture"]
-    E23["Child EpicSpine<br/>Epic 2.3"]
-    E24["Child EpicSpine<br/>Epic 2.4"]
-    E25["Child EpicSpine<br/>Epic 2.5"]
-    W23["Epic worker<br/>delivers 2.3"]
-    W24["Epic worker<br/>delivers 2.4"]
-    W25["Epic worker<br/>delivers 2.5"]
+flowchart LR
+    subgraph Docs["EpicSpine documents<br/>durable project memory"]
+        direction TB
+        E0["Epic 0 spine<br/>root intent, thrust, project state"]
+        E23["Child EpicSpine<br/>Epic 2.3"]
+        E24["Child EpicSpine<br/>Epic 2.4"]
+        E25["Child EpicSpine<br/>Epic 2.5"]
 
-    EW0 --> E0
-    E0 --> E23
-    E0 --> E24
-    E0 --> E25
-    EW0 --> W23
-    EW0 --> W24
-    EW0 --> W25
-    W23 --> E23
-    W24 --> E24
-    W25 --> E25
+        E0 -->|defines child scope| E23
+        E0 -->|defines child scope| E24
+        E0 -->|defines child scope| E25
+    end
+
+    subgraph Workers["Workers<br/>temporary agents bound to documents"]
+        direction TB
+        EW0["Epic 0 worker<br/>keeps full picture"]
+        W23["Epic worker<br/>delivers 2.3"]
+        W24["Epic worker<br/>delivers 2.4"]
+        W25["Epic worker<br/>delivers 2.5"]
+
+        EW0 -->|binds worker| W23
+        EW0 -->|binds worker| W24
+        EW0 -->|binds worker| W25
+    end
+
+    EW0 -.->|stewards| E0
+    W23 -.->|works from / updates| E23
+    W24 -.->|works from / updates| E24
+    W25 -.->|works from / updates| E25
 ```
 
 ## Spine Versus GitHub Issues
@@ -87,6 +137,27 @@ Use GitHub issues for:
 - detailed validation notes.
 
 The compression rule: if a detail helps only the current ticket worker, keep it in the issue; if it changes how future agents understand the epic, summarize it in the spine.
+
+## The Book Companion
+
+Some projects also declare a **Book**: a durable, navigable HTML tree for the knowledge produced by the work.
+
+- The spine owns development: objectives, state, backlog, decisions, gates, and acceptance.
+- The Book owns understanding: insights, explanations, research, comparisons, conclusions, and—when useful—one canonical structured collection or shortlist.
+- The Book root stays shallow, chapters index durable domains, and leaves carry the substantive argument or result.
+- Every leaf links back to its chapter and root, and its chapter links down to it.
+
+The Book is opt-in per repository. Once its local contract is active, binding an agent to an EpicSpine also binds it as a Book author. Material research or user-facing synthesis then lands in an existing or new leaf by default; the user does not have to ask for the artifact separately. Quick answers, ticket logs, and transient status remain in chat or issues.
+
+The two systems run side by side:
+
+```mermaid
+flowchart LR
+    O["Objective"] --> I["Issue"] --> C["Code / data"] --> V["Validation"] --> S["Spine state"]
+    E["Evidence"] --> R["Registry delta<br/>when applicable"] --> L["Book leaf"] --> H["Chapter index"] --> B["Book root"]
+    S -.->|produces user knowledge| L
+    L -.->|reveals needed work| I
+```
 
 ```mermaid
 flowchart LR
@@ -173,10 +244,10 @@ EpicSpine agents work toward terminal states:
 
 ## Branch And Integration Discipline
 
-Parallel agents need isolated execution and a fresh shared base.
+Dispatched workers and testers need isolated execution and a fresh shared base.
 
-- One ticket worker uses one dedicated branch by default.
-- Concurrent workers use separate worktrees so each branch has isolated filesystem state; the worktree does not replace the branch.
+- Every dispatched worker/tester uses a dedicated branch and worktree, for serial as well as parallel execution.
+- Create the worktree from the pinned base before editing; never switch the shared checkout.
 - Every dispatch records branch, base commit, integration target, owner, and latest verified time.
 - Protected `main` is the default integration and deployment base unless the spine declares another branch.
 - Merge small changes after review and required checks pass, and integrate frequently.
@@ -186,8 +257,8 @@ Parallel agents need isolated execution and a fresh shared base.
 ```mermaid
 flowchart LR
     Main["main<br/>fresh integration base"]
-    W1["worker branch<br/>issue 1"]
-    W2["worker branch<br/>issue 2"]
+    W1["worker branch + worktree<br/>issue 1"]
+    W2["worker branch + worktree<br/>issue 2"]
     W3["worker branch + worktree<br/>issue 3"]
     Test["human/tester validates<br/>exact commit on named surface"]
 
@@ -234,9 +305,12 @@ skill/
     SKILL.md
     agents/openai.yaml
     assets/
+      book-companion-contract.md
+      dispatch-prompt-preamble.md
       epic-spine-template.md
       github-issue-template.md
     references/
+      book-companion.md
       operating-model.md
     scripts/
       validate_spine.py
@@ -245,8 +319,7 @@ skill/
 To use it manually in an existing Codex session:
 
 ```text
-Use $epic-spine from ./skill/epic-spine.
-Re-read SKILL.md before continuing.
+Read skill/epic-spine/SKILL.md and apply its workflow.
 Identity: Epic 0 worker
 Bound spine: <path to root spine>
 ```
@@ -257,4 +330,17 @@ Validate a project spine after creating or materially restructuring it:
 python3 skill/epic-spine/scripts/validate_spine.py --strict path/to/EPIC.md
 ```
 
-The validator checks local document structure and recorded evidence. It does not claim to verify remote GitHub state.
+The validator checks local document structure and recorded evidence. It does not verify remote GitHub state, execute acceptance steps, or prove that recorded evidence is true.
+
+- `--dialect auto` (default) uses `Spine dialect: v1` or `v2`; an undeclared dialect defaults to v1.
+- `--dialect v1` or `--dialect v2` overrides a supported declaration for that run without editing the document. An unsupported or empty declared dialect remains an error, even with an override.
+- `--strict` makes unresolved fields and selected-dialect warnings fail validation. It does not upgrade v1 to v2. Without it, warnings are printed but only errors cause failure.
+- `--graph` additionally checks local root/parent links, reciprocal registration, IDs, cycles and multiple-root rationale across the supplied files. Pass every local spine in the family; it does not fetch remote spines.
+
+New sprint spines declare v2 and one acceptance surface: `browser`, `cli`, `library`, `infrastructure`, or `documentation`. Issues and dispatches inherit the bound spine's dialect and surface. Browser work retains a personally executed live-browser journey and per-step screenshots; other surfaces use appropriate observable commands or artifact checks. Discovery defaults to 15 minutes in the current and named relevant repositories/services, recording evidence and uncertainty.
+
+See all options with:
+
+```sh
+python3 skill/epic-spine/scripts/validate_spine.py --help
+```

@@ -1,0 +1,8 @@
+source: https://github.com/AlfaBlok/epicspine-skill
+path: skill/epic-spine
+commit: c8c89fc8bb78c159145c0d93727ba898b27865b2
+manifest: skills/epic-spine.manifest.sha256
+
+This directory is a vendored snapshot of the EpicSpine skill.
+Do not edit it here. Edit the canonical source, then re-sync and refresh the
+manifest with: bash scripts/ci/check-epicspine-vendored.sh --write

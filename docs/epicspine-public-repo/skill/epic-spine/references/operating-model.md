@@ -5,10 +5,11 @@ Read this when creating a new EpicSpine from scratch, repairing an inconsistent 
 ## Contents
 
 - Prior art and artifact authority
+- Connected hierarchy, creation, registration, and rollups
 - Spine, issue, and write-scope boundaries
 - Role binding and goal-seeking persistence
 - GitHub issue board and integration flow
-- Human gates, recovery, and takeover
+- Execution cursor, decision memory, human gates, recovery, and takeover
 - Document health, status, drift, and handoffs
 
 ## Prior Art
@@ -22,6 +23,75 @@ EpicSpine combines several established practices:
 - Issue-tracked execution: use GitHub issues for bounded implementation and validation tickets.
 
 The distinctive rule is that the epic document remains the clean bootstrap artifact and durable memory. Issues are synchronized execution records where deep ticket-specific detail can live.
+
+## Connected Spine Hierarchy
+
+An EpicSpine system is a canonical ownership tree with an optional wider knowledge graph:
+
+- A repository or coherent project should normally expose one canonical root spine.
+- Additional roots are permitted when they represent genuinely independent ambitions or integration authorities. The canonical root uses `Additional root rationale: n/a`; each additional root records why it cannot be represented as a branch. Unexplained roots are structural drift.
+- Every non-root spine has exactly one canonical parent, exactly one inherited root, and any number of children. Nesting depth is arbitrary.
+- Parent and root links define ownership and rollup. Related-spine links may connect siblings, roadmaps, memories, or architectures, but they never create a second canonical parent.
+- Every spine has a stable Spine ID so that renames and moves do not silently change identity.
+
+This produces a rooted tree in the normal case and an explicitly justified forest when multiple roots exist. Do not call an unregistered document a child merely because it links to another spine.
+
+### Cold Start And Navigation
+
+The repository should provide a small start-here pointer, often in `AGENTS.md`, that sends an agent to the canonical root. That router is not a second project-state document.
+
+Cold-start order:
+
+1. Read the root spine.
+2. Read its direct-child rollups and follow the active or relevant branch.
+3. Repeat until the work's bound spine is reached.
+4. Read the bound spine's Current State, Execution Cursor, Decisions, Issue Ledger, and required bootstrap links.
+5. Reconcile GitHub and the integration branch before execution.
+
+This is the formal version of a useful resume instruction such as `continue`: the word itself contains no hidden project context; it means resume from the recorded cursor after verifying current execution reality.
+
+## Spine Creation And Registration
+
+Create a branch spine when a durable ambition needs its own acceptance boundary, steward, backlog, decision memory, and execution cursor. A large ticket alone is not enough.
+
+Creation protocol:
+
+1. Search from the root through existing Spine Maps. Select the narrowest parent whose mission contains the proposed work.
+2. Prefer a branch. If creating another root, record an Additional Root Rationale.
+3. Assign a stable Spine ID and declare type, root, parent, steward, repository, integration target, mission, and acceptance.
+4. Initialize Spine Map, Current State, Execution Cursor, Decisions, Issue Ledger, and required authority/write-scope sections.
+5. Add the branch to its direct parent's Spine Map.
+6. Land both directions together when the creator may write both spines. Otherwise leave the child `draft`, record `registration pending`, and send the parent steward an exact proposed Spine Map row.
+7. Validate the child locally and validate the affected family as a graph.
+
+Registration is complete only when the child points to the parent and the parent lists the child. Until then, the document is a pending branch proposal, not a connected operational spine.
+
+## Rollup Model
+
+Every spine owns local truth for its mission, acceptance, execution cursor, issue ledger, decisions, and validation. Every parent owns compact direct-child rollups.
+
+Required direct-child rollup fields:
+
+| Field | Meaning |
+|---|---|
+| Spine ID / link | Stable child identity and navigation target |
+| Purpose | One sentence describing the ambition owned by the child |
+| Status | Child phase using the shared vocabulary |
+| Health / Blocker | Healthy, or the exact blocking dependency/decision |
+| Latest Evidence | Freshest proof supporting status |
+| Last Rolled Up | Absolute reconciliation time |
+| Next Action | One concrete action that advances or unblocks the child |
+
+Roll up one level at a time. A root summarizes its direct children, including branch children that themselves summarize deeper descendants. This keeps the root navigable without duplicating entire descendant issue ledgers.
+
+Rollup rules:
+
+- The child is authoritative for its detailed state.
+- The child steward publishes the rollup or sends a structured update to the parent steward.
+- The parent steward reconciles the parent's row; normal aggregation does not grant authority to rewrite child detail.
+- Update a rollup when phase, health, blocker, latest evidence, or next action changes.
+- Never roll up `done` without child acceptance evidence.
+- When parent and child disagree, mark drift and reconcile; do not silently choose the more optimistic status.
 
 ## Authority By Artifact
 
@@ -68,7 +138,7 @@ An agent must know which spine it is bound to before editing anything.
 - **Referenced spine:** any linked parent, child, sibling, portfolio, roadmap, or meta-spine used for context.
 - **Portfolio spine:** a parent/meta-spine that rolls up multiple epics and owns cross-epic health, dependencies, and decisions.
 - **Epic 0 spine:** the root/project spine. It holds the full project context, thrust, child-spine map, cross-epic state, and desired operating behavior.
-- **Child spine:** an epic-specific spine that owns its implementation state, ticket ledger, validation evidence, and local decisions.
+- **Branch spine:** any non-root spine at any nesting depth. It owns its local mission, execution state, ticket ledger, validation evidence, and decisions.
 - **Spine steward:** the one active agent responsible for reconciling and committing a spine at a given time.
 
 Use one active steward per spine:
@@ -92,7 +162,7 @@ Default permissions:
 | Tester | Write issue evidence and structured handoff; write validation section only if delegated | Read only |
 | Reviewer | Read unless explicitly delegated | Read only |
 
-When a parent spine references child spines, do not let the parent agent directly mutate child detail by default. It should record a proposed child-spine update and route it to the child spine's planner.
+When a parent spine references child spines, do not let the parent agent directly mutate child detail by default. It should record a proposed child-spine update and route it to the child spine's steward. Reciprocal registration during authorized spine creation is the narrow exception.
 
 ## Role-Binding Model
 
@@ -172,6 +242,8 @@ Do not use tester self-fix for product decisions, broad refactors, architecture 
 
 ## GitHub Issue Board Flow
 
+GitHub is the default backend. Explicit `Ticket backend: local` instead binds a bounded `Ticket root` and a reference/dependency-only ledger; each local ticket file owns its stable ID, status, owner and evidence. Do not synchronize a second mutable status table. The [ticket backend contract](ticket-backends.md) defines paths, uncertainty and the normalized reader API. The GitHub-specific flow below applies to github mode; use the same authority and handoff discipline with the declared local files in local mode.
+
 Use GitHub issues as the board for executable work. The spine remains the authoritative coordination record for the epic.
 
 Default location contract:
@@ -186,12 +258,12 @@ An epic worker may create and dispatch tickets inside already accepted scope. Th
 
 ## Branch, Worktree, And Integration Model
 
-Use dedicated branches plus worktree isolation for parallel workers, and keep the integration line fresh.
+Use dedicated branches and worktrees for every dispatched worker/tester, whether serial or parallel, and keep the integration line fresh.
 
-- **One ticket worker = one issue = one dedicated branch** by default.
+- **Every dispatched worker/tester uses one dedicated branch and worktree**. The worker's first action is `git worktree add ../wt-<ticket> -b <branch> <pinned-base>`; record the absolute path. The primary clone stays pinned to integration and read-only. Checkout/switch there is a branch-ransom defect.
 - Use branch names that identify the issue or role, for example `epic-2.4/c-3-checkout` or `issue-671-cloud-checkout`.
-- Use a separate worktree for each concurrent agent that needs independent filesystem state. A worktree normally checks out the dedicated issue branch; it does not replace the branch.
-- Record branch, worktree when used, base commit SHA, integration target, owner, and latest verified time at dispatch.
+- Create the separate worktree even for serial execution; it checks out the dedicated issue branch and does not replace that branch. If creation fails, report to the steward before editing; never fall back to the shared checkout.
+- Record branch, absolute worktree path, base commit SHA, integration target, owner, and latest verified time at dispatch.
 - Protected `main` is the default integration and deployment base unless the spine declares another branch.
 - Merge small work frequently after required review and automated checks pass. New agents should bootstrap from the freshest validated integration base, not a stale long-lived branch.
 - If work cannot merge, keep the issue ledger and GitHub issue explicit: branch, PR, blocker, owner, and next action.
@@ -224,6 +296,48 @@ Planner flow:
 
 Planners dispatch the initial plan. Epic workers may dispatch or re-dispatch parallel batches inside accepted scope; they must return scope or acceptance changes to the planner.
 
+## Execution Cursor
+
+For a compact active spine, `Current State` is the single authoritative resume point. Required labels and the normalized API are in [Compact state](compact-state.md). Use one `Waiting on` value for the actual blocker/wait, with explicit `none` when clear; Phase is optional. Role queues and handoff summaries link to state or are labeled generated projections. Completed handoffs move to linked historical records; preserve rejected decisions, source evidence and stable navigation.
+
+The following two-section shape describes legacy full spines. Keep overlaps consistent while awaiting a steward-reviewed migration; the validator reports disagreements instead of choosing a source.
+
+Current State is the compact phase snapshot. The Execution Cursor is the durable resume point for the next execution cycle. Update it whenever work is attempted, execution stops, ownership changes, or a gate is reached.
+
+The cursor must answer:
+
+| Field | Question |
+|---|---|
+| Last attempted | What concrete action did the previous cycle try? |
+| Result | What actually happened, and where is the evidence? |
+| Execution status | Is work not-started, ready, active, blocked, in review, testing, or done? |
+| Waiting on | Which person, decision, dependency, check, or event must move? |
+| Approved work | What may proceed without another process-design or planning conversation? |
+| Next action | What exact action should a new bound agent take first? |
+
+The cursor is not a prose work log. Preserve only the latest durable resume state and link to the issue or handoff containing detail. Append historical consequences to Decisions or Handoff Journal when they matter beyond the next cycle.
+
+At the end of an execution cycle, report the same shape to the user: what worked, what is stuck, what is waiting, what remains approved, and what happens next.
+
+## Decision Memory And Rejected Paths
+
+Decisions prevent future agents from repeatedly reopening settled paths. Before proposing a familiar approach, search the bound spine and relevant ancestors for `rejected` and `superseded` entries.
+
+Use these outcomes:
+
+- `accepted`: current operating choice;
+- `rejected`: tried or evaluated and deliberately declined;
+- `superseded`: once valid but replaced by a later choice.
+
+A rejected or superseded entry contains:
+
+- the approach or claim in a searchable phrase;
+- a compact durable reason;
+- a link to detailed evidence such as an issue, PR, ADR, experiment, or source memory;
+- the condition that would justify reconsideration, or `never`.
+
+Keep the anti-repetition fact in the spine even after linked implementation detail becomes historical. Do not paste the full investigation into the spine.
+
 ## Human Gates
 
 Declare which actions require human approval. At minimum, consider:
@@ -235,6 +349,18 @@ Declare which actions require human approval. At minimum, consider:
 - irreversible external actions;
 - final experiential acceptance that automation cannot prove.
 
+When blocked, report `BLOCKED ON <owner>: <exact required input>` with evidence and stop dependent work. Use existing user authorization without asking again. Defaults and absence rules apply only to reversible choices inside approved scope; silence never supplies required approval or authorizes scope expansion. Record unresolved required input in Open Questions and Human Gates, and continue only independent authorized work.
+
+## Sprint Dialect v2
+
+New sprint spines use bounded, observable increments. Declare `Spine dialect: v2` and `Acceptance surface: browser|cli|library|infrastructure|documentation` (choose one value). Use the primary surface and explicitly list any additional surfaces required by acceptance. Undeclared spines default to v1; strict validation enforces the selected dialect without imposing v2 contracts on legacy spines.
+
+Use exactly two DoD tiers: a 5–12 step SHIP journey and deferred HARDEN. The epic worker personally executes the journey, dispatches a scoped fix at the first failure, prepares the updated surface, and restarts until a clean pass. Browser work requires a REAL browser on the LIVE deployment with per-step screenshots. CLI work records exact commands, inputs, exit codes and outputs; library work executes a consumer example and behavior checks; infrastructure work records authorized health/state probes; documentation work follows instructions and checks rendered artifacts, links and examples as applicable. Hand off exact commit, environment and evidence that the human can reproduce. Deploy only when required and authorized. Run appropriate checks and repeat when changes or failures warrant it.
+
+Search the current repository and explicitly named relevant repositories/services, with a default 15-minute search budget. Record scope, queries/paths, findings, elapsed time, and inaccessible or unsearched areas. Expand only for a concrete dependency within authorized scope; record any revised budget. At expiry, choose a justified method with uncertainty recorded, or escalate if the missing evidence blocks safe progress. Never infer absence outside the searched scope. `PORT from <repo/path>` moves an existing implementation; `DUPLICATE from <working unit>` copies a proven unit; `BUILD (no suitable source found in recorded scope)` records a bounded search outcome. Inspect sources before authoring. Adapt beyond imports/config when requirements require it, recording why and validating the adapted behavior. If reuse is unsuitable, record the reason rather than forcing a transplant or silently rebuilding. Mark every deliverable and ticket with its justified method.
+
+Retain 90-minute ticket budgets, 30-minute heartbeats, pinned per-wave bases, manager-owned final journey loops, pre-answered Decisions with safe absence rules, and paste-ready dispatch prompts from `assets/dispatch-prompt-preamble.md`. Use existing user authorization without asking again. Defaults and absence rules apply only to reversible choices inside approved scope; silence never supplies required approval or authorizes scope expansion. Record unresolved required input in Open Questions and Human Gates, and continue only independent authorized work.
+
 A blocked handoff must name the decision, human owner, evidence, exact input required, and what can continue independently. Do not use `human required` as a complete blocker.
 
 ## Recovery And Takeover
@@ -243,7 +369,7 @@ Make assignments resumable. Every active issue should expose:
 
 - stable assignment identity and owner;
 - bound spine and active steward;
-- branch, worktree if used, base commit, and latest commit;
+- branch, absolute worktree path, base commit, and latest commit;
 - integration target and PR;
 - last verified absolute time;
 - blocker and exact next action.
@@ -262,11 +388,16 @@ An EpicSpine is healthy when:
 
 - A new teammate can identify the next action within five minutes.
 - A new teammate can understand the intent and state without reading deep issue discussion.
+- The spine declares a stable ID, type, root, and parent; every branch is reciprocally registered by its direct parent.
+- The canonical hierarchy has no cycles or orphans; additional roots are explicitly justified.
+- Direct-child rollups expose current status, health/blocker, evidence, last-rollup time, and next action without copying child detail.
+- The authoritative Current State (or reconciled legacy Execution Cursor) makes owner, last attempt/result/evidence, waiting condition, approved work, next action and verified revision/time unambiguous.
 - The issue ledger and GitHub issue state agree, or drift is explicitly flagged.
 - The write-scope boundary is explicit enough that an agent knows what it may edit.
 - Exactly one active steward is named for each writable spine.
 - Every active ticket has assignment identity, owner, branch, base commit, role, status, acceptance, latest verified time, evidence, and next action.
 - Every major decision has date, rationale, and evidence.
+- Rejected and superseded approaches remain searchable and say when reconsideration is warranted.
 - Every validation claim links to a command, artifact, review, screenshot, or explicit manual check.
 - The bootstrap map separates mandatory reads from conditional reads.
 
@@ -306,8 +437,10 @@ Agents must keep the spine readable as the epic's operating surface.
 Do include:
 
 - concise current state;
+- a precise execution cursor;
+- direct-child rollups and canonical lineage;
 - active spine steward and last reconciliation point;
-- durable decisions and rationale;
+- durable accepted, rejected, and superseded decisions with evidence;
 - acceptance criteria and scope changes;
 - dependency and blocker summaries;
 - links to issues, PRs, commits, commands, screenshots, and artifacts;
@@ -326,10 +459,11 @@ Use this compression rule: if a detail helps only the current ticket worker, kee
 
 ## Update Discipline
 
-Use a two-pass update:
+Use a three-pass update:
 
-1. Update structured fields first: Current State, Issue Ledger, Validation Evidence.
-2. Append narrative history second: Decisions, Handoff Journal, Open Questions.
+1. Update local execution truth once in Current State, plus issue and acceptance evidence. Legacy full spines must keep overlapping cursor facts consistent until a reviewed migration.
+2. Append durable history: Decisions, Handoff Journal, Open Questions.
+3. Publish the compact child rollup to the parent steward when phase, health, blocker, evidence, or next action changed.
 
 Prefer small edits. Do not rewrite old history unless correcting a factual error; if correcting, note the correction date.
 
@@ -356,6 +490,8 @@ A handoff is complete when the next role can answer:
 
 - What changed?
 - Why did it change?
+- What was attempted, and what actually happened?
 - What is the next action?
+- What is waiting, and what work remains approved?
 - How will success be verified?
 - What risks or open questions remain?

@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-07-09
-Updated: 2026-08-27
+Updated: 2026-09-17
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Spine ID: Foundation
@@ -13,7 +13,7 @@ Additional root rationale: n/a
 Integration branch: `main`
 Active spine steward: Epic 0 Foundation planner (`Jordi + current bound Codex task`)
 Steward since: 2026-07-09 19:55 CEST
-Last reconciled commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; the ZAL-22 production receipt remains the deployed rollback/behavior baseline
+Last reconciled commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17); live production (verified via `https://cloud.zenod.dev/api/health`) runs source `22440b4151289900370b1ed375edc1b7aeaca1a1` (deployed 2026-09-17 ~14:44 CEST). The ZAL-22 production receipt remains the historical rollback/behavior baseline
 Planner: Jordi + Codex
 Worker: unassigned
 Tester: unassigned
@@ -89,13 +89,22 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Current State
 
-Phase: Integrated-independent source architecture and phase-1 release packet complete; commercial config approval pending before backup/deploy gates
-Last verified: 2026-08-27 23:12 CEST
+Phase: ZMR M2 dependable memory basics delivered and deployed; M2 evaluation and cost reports integrated on `main`. The Phylax integrated-independent push remains active but is no longer the current thrust.
+Last verified: 2026-09-17 Europe/Paris.
 Integration target: `main`
-Fresh base commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; the signup-closed `a6fbe8f` production candidate remains the current rollback/behavior baseline
-Active child spine: `docs/EPIC-P-PHYLAX-SPRINT.md`
-Next action: Jordi approves or replaces the recommended allowance/tariff values in the exact #1112 release packet; then request Gate A fresh backups only. Closed deploy, real sends, billing and signup remain separate later gates.
-Blockers: no architecture or source blocker is open. Exact production allowance/tariff values are the single current human input. Production backup/deploy, real channel sends, live billing and public signup remain named later gates. Public signup stays closed.
+Fresh base commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17 15:28 CEST). Live production runs source `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified directly against `https://cloud.zenod.dev/api/health` (2026-09-17). `main` is 4 commits ahead of the running build, and those 4 commits are documentation only — the M2 evaluation cost report and full report (`#1330`, `#1331`). Every runtime change is already live. There is no production divergence and no pending functional deploy.
+Active child spine: `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md` (ZMR) for the current memory thrust; `docs/EPIC-P-PHYLAX-SPRINT.md` remains the active delivery surface for the integrated-independent push and is not superseded.
+Next action: hold the deployed M2 milestone stable and observe ordinary use. Route the bounded presentation follow-up (repetitive B10–B12 source/history excerpts) as a small ZMR ticket only if a measured incident justifies it. Do not treat the 31 undeployed `main` commits as a production change without a separate authorized deploy gate.
+Blockers: none for the completed M2 basic-memory milestone. Production deployment of newer `main`, real channel sends, live billing, public signup and destructive migrations remain named later human gates. Public signup stays closed.
+
+## Execution Cursor
+
+Last attempted: verified the live production version from `https://cloud.zenod.dev/api/health` and reconciled this root spine and the ZMR child spine to it (2026-09-17).
+Result: live production reports `22440b4151289900370b1ed375edc1b7aeaca1a1`; `main` `3b95025` is 4 documentation-only commits ahead (eval reports #1330/#1331). Nothing needs deploying for behavior. Evidence: the live health response and [ZMR spine](EPIC-ZENOD-MEMORY-RELIABILITY.md).
+Execution status: done — M2 milestone delivered and deployed; live is effectively current.
+Waiting on: nothing. Ordinary-use observation; no human permission wait.
+Approved work: the bounded B10–B12 presentation follow-up remains behind a separate authorized gate. Deploying newer `main` is unnecessary for behavior and would only add the eval report documents to the image.
+Next action: hold stable; open a bounded presentation ticket only if a measured incident justifies it.
 
 ## Spine Map
 
@@ -103,7 +112,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete multi-idea filing and grounded recall using existing evidence pipeline. | acceptance repair | Source-native and typed-answer repairs integrated at 56c2308 with review/CI; provider quota blocks paid acceptance; production unchanged. | [ZMR-15 #1241](https://github.com/zenod-ai/zenod/issues/1241), contract repair #1268–#1269 | 2026-09-13 Europe/Paris | Restore existing provider quota, then semantic/ASR acceptance and verified recovery before authorized rollout. |
+| ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete multi-idea filing and grounded recall using existing evidence pipeline. | M2 delivered — deployed, observing | M2 dependable basic store, recall and recent-context conversation implemented and deployed (live `22440b4`); frozen isolated suite 36/36 and production MCP smoke 6/6; M2 evaluation and cost reports integrated on `main` (#1324–#1331). Bounded presentation follow-up (repetitive B10–B12 excerpts) remains. | [M2 contract](planning/zenod-basics-m2.md), [recall scorecard](planning/zenod-recall-scorecard.md), [#1313](https://github.com/zenod-ai/zenod/issues/1313), PRs [#1322](https://github.com/zenod-ai/zenod/pull/1322)–[#1331](https://github.com/zenod-ai/zenod/pull/1331) | 2026-09-17 Europe/Paris | Hold stable; open a bounded presentation ticket only on a measured incident. |
 | ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | active — deployed verification | Public29ddb62 verified; affected live recall3/3; upgrade/undo and deployment boundary documented. | [Deployment leaf](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | 2026-09-06 Europe/Paris | Reuse documented process for the next authorized upgrade. |
 
 ## Bootstrap Map
@@ -163,29 +172,30 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 
 ## Decisions
 
-| Date | Decision | Rationale | Evidence |
-|---|---|---|---|
-| 2026-07-09 | Name the pattern EpicSpine. | Short conversational name; machine skill remains `epic-spine`. | `skills/epic-spine/SKILL.md` |
-| 2026-07-09 | Install the skill from the repo copy via symlink. | Keeps the local install and source-controlled skill in sync. | `/Users/jordi/.codex/skills/epic-spine` |
-| 2026-07-09 | Use read broadly, write narrowly as the default write-scope rule. | Prevents parent, sibling, or worker agents from racing on each other's spines. | `skills/epic-spine/SKILL.md` |
-| 2026-07-09 | Use GitHub issues as the execution board, not the source of truth. | Issues are good tickets; the spine carries the full epic memory and acceptance target. | `skills/epic-spine/references/operating-model.md` |
-| 2026-07-09 | Bind agents to goal-seeking role identities. | Workers should keep implementing until ready for testing or precisely blocked; testers should keep validating through bounded fix loops unless a larger planner decision is needed. | `skills/epic-spine/SKILL.md` |
-| 2026-07-09 | Split worker into epic worker and ticket worker. | An epic worker owns delivery through GitHub issue/subagent loops and writes clean state to the bound spine; ticket workers own assigned issues and write deep detail there. | `skills/epic-spine/SKILL.md` |
-| 2026-07-09 | Define Epic 0 worker as project/root spine owner. | Each project can have an Epic 0 spine that keeps the full picture, reads all child spines, spins out child EpicSpines, and binds child workers while preserving project thrust. | `skills/epic-spine/SKILL.md` |
-| 2026-07-09 | Public-repo Milestone 0 is README plus HTML deck. | Before packaging or registering the skill, EpicSpine needs a small public landing repo that explains why it exists, Epic 0, role binding, clean spines, GitHub issue discipline, and goal-seeking agents. | `docs/epicspine-public-repo/README.md` |
-| 2026-07-09 | Use isolated worker branches/worktrees and frequent integration. | Parallel ticket workers need isolated execution, but `main` should stay the fresh ready-for-test base for deployment, human testing, and future agents. | `skills/epic-spine/references/operating-model.md` |
-| 2026-07-09 | Use artifact-specific authority and one active steward per spine. | The spine owns intent and coordination, issues own ticket detail, code owns implementation facts, and tests own proof; one steward reconciles them without concurrent document races. | `skills/epic-spine/SKILL.md` |
-| 2026-07-09 | Treat an epic worker as the delivery lead inside accepted scope. | The epic worker may create and dispatch tickets, reconcile integration, and steward the child spine without silently becoming the product planner. | `skills/epic-spine/references/operating-model.md` |
-| 2026-07-09 | Use dedicated branches, optional per-agent worktrees, protected integration gates, and recorded test commits. | Worktrees isolate files but do not replace branches; frequent integration must still require review/checks and reproducible validation. | `skills/epic-spine/references/operating-model.md` |
-| 2026-07-09 | Make assignments resumable and human gates precise. | A stalled agent can be replaced safely only when owner, commits, evidence, blocker, next action, and required human decision are explicit. | `skills/epic-spine/assets/epic-spine-template.md` |
-| 2026-08-16 | Use alpha-user launch readiness as Zenod's next milestone. | The immediate outcome is a discoverable, onboardable, trustworthy core memory product, not completion of every future execution feature. | [`^e-063285`](https://github.com/AlfaBlok/obsidian-brain/blob/a58d731c33000a780f4bd94bbe02b0432e2282db/Log/2026-08-15.md#L27) |
-| 2026-08-16 | Treat memory + execution as the strategic product direction, with an explicit store-only / store-and-execute choice. | Voice capture is already useful; binding it to a configured Codex harness, repo, and spine closes the loop from intent to work without making every capture executable authority. | [`^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21) |
-| 2026-08-16 | Keep the launch-readiness backlog separate from the future execution-lane backlog. | Grounded recall, packaging, onboarding, website truth, and alpha support must be made shippable now; repo/spine selection, execution authority, Codex reportback, and artifact hosting form a distinct larger epic. | 2026-08-15 voice-note pair and this rollup |
-| 2026-08-20 | Treat priced usage economics as a prerequisite to the Zenod Alpha offer decision. | A monthly or annual price is incomplete until included workload, limit behavior, cost exposure, BYOK treatment, and break-even margins are explicit. | [ZAL-3E #1069](https://github.com/zenod-ai/zenod/issues/1069) and the active child spine |
-| 2026-08-25 | Approve one Zenod Hosted plan at €9/month plus VAT with managed usage and WhatsApp included. | The simplest sellable product is Zenod itself across MCP, Telegram, and Hosted WhatsApp; provider economics and the hidden Phylax service remain operator concerns. | Binding child-spine product decision and `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/ui-contract.html` |
-| 2026-08-26 | Do not deploy the locally proved candidate until its legacy €5/month and €50/year contract is corrected. | Read-only preflight showed code/product/legal/readiness drift despite the functional candidate passing local acceptance. A code-only correction is safer than deploying twice or misrepresenting the approved offer. | [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061), [PR #1089](https://github.com/zenod-ai/zenod/pull/1089), and [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) |
-| 2026-08-27 | Lock Zenod/PM plus Phylax as integrated UX over independent services. | Product backends own customer identity, subscription and memory; Phylax independently owns WhatsApp/Telegram transport, raw staging, STT, delivery and its own cost ledger. A narrow tenant-scoped control/data seam lets one browser experience manage both without moving credentials or sessions. Standalone Phylax reuses the same core with a different allowance issuer. | `docs/EPIC-P-PHYLAX-SPRINT.md` and `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` |
-| 2026-08-27 | Treat tenant credentials and direct MCP tokens as durable data, never deployment state. | Code/image/config rollout must not rotate, migrate, reinterpret or replace customer tokens, Google credentials or channel sessions. The ZAL-22 rollout preserved them and proved the pre-existing direct MCP URL and Google/WhatsApp connections after both restarts. | [PR #1098](https://github.com/zenod-ai/zenod/pull/1098) and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md` |
+| ID | Date | Outcome | Decision / Attempt | Durable Summary | Rule / Absence Rule | Evidence | Revisit When |
+|---|---|---|---|---|---|---|---|
+| D1 | 2026-07-09 | accepted | Name the pattern EpicSpine. | Short conversational name; machine skill remains `epic-spine`. | n/a | `skills/epic-spine/SKILL.md` | n/a |
+| D2 | 2026-07-09 | accepted | Install the skill from the repo copy via symlink. | Keeps the local install and source-controlled skill in sync. | n/a | `/Users/jordi/.codex/skills/epic-spine` | n/a |
+| D3 | 2026-07-09 | accepted | Use read broadly, write narrowly as the default write-scope rule. | Prevents parent, sibling, or worker agents from racing on each other's spines. | n/a | `skills/epic-spine/SKILL.md` | n/a |
+| D4 | 2026-07-09 | accepted | Use GitHub issues as the execution board, not the source of truth. | Issues are good tickets; the spine carries the full epic memory and acceptance target. | n/a | `skills/epic-spine/references/operating-model.md` | n/a |
+| D5 | 2026-07-09 | accepted | Bind agents to goal-seeking role identities. | Workers should keep implementing until ready for testing or precisely blocked; testers should keep validating through bounded fix loops unless a larger planner decision is needed. | n/a | `skills/epic-spine/SKILL.md` | n/a |
+| D6 | 2026-07-09 | accepted | Split worker into epic worker and ticket worker. | An epic worker owns delivery through GitHub issue/subagent loops and writes clean state to the bound spine; ticket workers own assigned issues and write deep detail there. | n/a | `skills/epic-spine/SKILL.md` | n/a |
+| D7 | 2026-07-09 | accepted | Define Epic 0 worker as project/root spine owner. | Each project can have an Epic 0 spine that keeps the full picture, reads all child spines, spins out child EpicSpines, and binds child workers while preserving project thrust. | n/a | `skills/epic-spine/SKILL.md` | n/a |
+| D8 | 2026-07-09 | accepted | Public-repo Milestone 0 is README plus HTML deck. | Before packaging or registering the skill, EpicSpine needs a small public landing repo that explains why it exists, Epic 0, role binding, clean spines, GitHub issue discipline, and goal-seeking agents. | n/a | `docs/epicspine-public-repo/README.md` | n/a |
+| D9 | 2026-07-09 | accepted | Use isolated worker branches/worktrees and frequent integration. | Parallel ticket workers need isolated execution, but `main` should stay the fresh ready-for-test base for deployment, human testing, and future agents. | n/a | `skills/epic-spine/references/operating-model.md` | n/a |
+| D10 | 2026-07-09 | accepted | Use artifact-specific authority and one active steward per spine. | The spine owns intent and coordination, issues own ticket detail, code owns implementation facts, and tests own proof; one steward reconciles them without concurrent document races. | n/a | `skills/epic-spine/SKILL.md` | n/a |
+| D11 | 2026-07-09 | accepted | Treat an epic worker as the delivery lead inside accepted scope. | The epic worker may create and dispatch tickets, reconcile integration, and steward the child spine without silently becoming the product planner. | n/a | `skills/epic-spine/references/operating-model.md` | n/a |
+| D12 | 2026-07-09 | accepted | Use dedicated branches, optional per-agent worktrees, protected integration gates, and recorded test commits. | Worktrees isolate files but do not replace branches; frequent integration must still require review/checks and reproducible validation. | n/a | `skills/epic-spine/references/operating-model.md` | n/a |
+| D13 | 2026-07-09 | accepted | Make assignments resumable and human gates precise. | A stalled agent can be replaced safely only when owner, commits, evidence, blocker, next action, and required human decision are explicit. | n/a | `skills/epic-spine/assets/epic-spine-template.md` | n/a |
+| D14 | 2026-08-16 | accepted | Use alpha-user launch readiness as Zenod's next milestone. | The immediate outcome is a discoverable, onboardable, trustworthy core memory product, not completion of every future execution feature. | n/a | [`^e-063285`](https://github.com/AlfaBlok/obsidian-brain/blob/a58d731c33000a780f4bd94bbe02b0432e2282db/Log/2026-08-15.md#L27) | n/a |
+| D15 | 2026-08-16 | accepted | Treat memory + execution as the strategic product direction, with an explicit store-only / store-and-execute choice. | Voice capture is already useful; binding it to a configured Codex harness, repo, and spine closes the loop from intent to work without making every capture executable authority. | n/a | [`^e-5c1e43`](https://github.com/AlfaBlok/obsidian-brain/blob/c18c1f92cbd26ce5a12518f9c7af7c59ff5eb928/Log/2026-08-15.md#L21) | n/a |
+| D16 | 2026-08-16 | accepted | Keep the launch-readiness backlog separate from the future execution-lane backlog. | Grounded recall, packaging, onboarding, website truth, and alpha support must be made shippable now; repo/spine selection, execution authority, Codex reportback, and artifact hosting form a distinct larger epic. | n/a | 2026-08-15 voice-note pair and this rollup | n/a |
+| D17 | 2026-08-20 | accepted | Treat priced usage economics as a prerequisite to the Zenod Alpha offer decision. | A monthly or annual price is incomplete until included workload, limit behavior, cost exposure, BYOK treatment, and break-even margins are explicit. | n/a | [ZAL-3E #1069](https://github.com/zenod-ai/zenod/issues/1069) and the active child spine | n/a |
+| D18 | 2026-08-25 | accepted | Approve one Zenod Hosted plan at €9/month plus VAT with managed usage and WhatsApp included. | The simplest sellable product is Zenod itself across MCP, Telegram, and Hosted WhatsApp; provider economics and the hidden Phylax service remain operator concerns. | n/a | Binding child-spine product decision and `docs/evidence/zenod-whatsapp-public-beta-2026-08-25/ui-contract.html` | n/a |
+| D19 | 2026-08-26 | accepted | Do not deploy the locally proved candidate until its legacy €5/month and €50/year contract is corrected. | Read-only preflight showed code/product/legal/readiness drift despite the functional candidate passing local acceptance. A code-only correction is safer than deploying twice or misrepresenting the approved offer. | n/a | [ZAL-4 #1061](https://github.com/zenod-ai/zenod/issues/1061), [PR #1089](https://github.com/zenod-ai/zenod/pull/1089), and [ZAL-18 #1090](https://github.com/zenod-ai/zenod/issues/1090) | n/a |
+| D20 | 2026-08-27 | accepted | Lock Zenod/PM plus Phylax as integrated UX over independent services. | Product backends own customer identity, subscription and memory; Phylax independently owns WhatsApp/Telegram transport, raw staging, STT, delivery and its own cost ledger. A narrow tenant-scoped control/data seam lets one browser experience manage both without moving credentials or sessions. Standalone Phylax reuses the same core with a different allowance issuer. | n/a | `docs/EPIC-P-PHYLAX-SPRINT.md` and `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` | n/a |
+| D21 | 2026-08-27 | accepted | Treat tenant credentials and direct MCP tokens as durable data, never deployment state. | Code/image/config rollout must not rotate, migrate, reinterpret or replace customer tokens, Google credentials or channel sessions. The ZAL-22 rollout preserved them and proved the pre-existing direct MCP URL and Google/WhatsApp connections after both restarts. | n/a | [PR #1098](https://github.com/zenod-ai/zenod/pull/1098) and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md` | n/a |
+| D25 | 2026-09-17 | accepted | Verify live production via its health endpoint, not the spine's stored record. | Live production reported `22440b4` while the spine still said `620716f`; `main` `3b95025` is 4 documentation-only commits ahead, so there is no pending functional deploy. | n/a | `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md`, live health `https://cloud.zenod.dev/api/health` | Revisit if live health changes or a measured memory incident justifies a new deploy. |
 
 ## Issue Ledger
 
@@ -271,6 +281,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-09-17 - Epic 0 worker - ZMR M2 delivered and deployed; root spine reconciled to current main
+
+Action: verified live production source directly (`https://cloud.zenod.dev/api/health`) as `22440b4151289900370b1ed375edc1b7aeaca1a1` (deployed 2026-09-17 ~14:44 CEST) and reconciled the root spine to it. Recorded the ZMR M2 milestone as delivered and deployed (frozen isolated suite 36/36, production MCP smoke 6/6) and integrated the M2 evaluation and cost reports (#1324–#1331). `main` `3b95025` is 4 commits ahead of the live build, and those 4 commits are documentation only (#1330/#1331 reports); all runtime changes — including durable conversational-original capture, summary-link sanitization + ask-side reasoning effort, and OpenRouter real per-call cost capture — are already live. No production divergence and nothing pending to deploy functionally.
+
+Evidence: [M2 contract](./planning/zenod-basics-m2.md), [recall scorecard](./planning/zenod-recall-scorecard.md), [HTML results slide](./planning/zenod-basics-test-results.html), PRs [#1322](https://github.com/zenod-ai/zenod/pull/1322)–[#1331](https://github.com/zenod-ai/zenod/pull/1331), and [#1313](https://github.com/zenod-ai/zenod/issues/1313).
+
+Next action: hold the deployed M2 milestone stable and observe ordinary use. No functional deploy is pending; deploying newer `main` would only add the eval report documents. Keep ASR/WhatsApp delivery, B05 fault injection and the 30 unrun production cells behind a separate authorized gate.
+
+Assignment identity: Epic 0 Foundation planner and ZMR delivery manager (`Jordi + current bound task`)
+
+Branch / latest commit: `main` `3b950253abd8e2422369839225740ca945f7b493`; live production source `22440b4151289900370b1ed375edc1b7aeaca1a1`
+
+Last verified: 2026-09-17 Europe/Paris
 
 ### 2026-08-27 - Epic 0 worker - ZPF-10 phase-1 release packet complete; exact config decision next
 
