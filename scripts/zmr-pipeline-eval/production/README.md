@@ -85,3 +85,18 @@ Mocks test operator boundaries, not model semantics or live provisioning. Concre
 Known-token echo protection: durable serialization refuses either in-memory credential anywhere in returned data before writing; no raw exception text is printed. Last planned receipt/lock remains recoverable. Missing/noninteger release timestamps fail closed.
 
 Dispatch preflight requires existing settings and jobs SQLite databases; absent databases are not interpreted as an idle runtime. Cleanup-only may inspect an incompletely initialized pair, but reopens any newly appearing database on each check so newly queued work blocks cleanup. Final review-template hashes are produced after outcome latency and cleanup status updates. Seed raw readback must preserve exact source/sourceId/contentType/capturedAt in addition to content/ref; chat capture timestamps are not invented.
+
+## Cost, tokens, time and report
+
+`cell.mjs` snapshots the disposable tenant's durable usage ledger (`/data/<tenant>/usage.sqlite`) into `usage.json`: per-operation calls, input/output/cached tokens and server-computed cost, plus a per-call timeline. The MCP call start/finish from the operator receipt give per-cell timing. Provider-billed cost is not returned on this path; the ledger cost is the server's pricing × tokens.
+
+`expectations.json` is the frozen expected-behaviour checklist (literals, forbidden output, conditions, citation requirement) used as a manual-scoring review aid — not an auto-grader. Keep it stable across prompt/model changes.
+
+Assemble and render:
+
+```
+node collect.mjs --cells <run-cells-dir> --meta <meta.json> [--reviews <reviews.json>] --out <run.json>
+node report.mjs --runs <baseline.json>,<run.json> --out <report.html> [--title "..."]
+```
+
+`reviews.json` carries the manual semantic verdicts keyed by cell (`{"B01:1":{"verdict":"PASS","checks":[...],"rationale":"..."}}`). The report shows expected-vs-actual per cell, the manual score, tokens, time, actual + reserved cost, a per-operation model breakdown and — with two runs — a baseline-vs-current delta table for comparing prompts or models.

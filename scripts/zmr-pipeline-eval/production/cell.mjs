@@ -25,6 +25,24 @@ const save = (name, data) => {
   writeFileSync(join(p, name), text + '\n', {mode: 0o600});
   chmodSync(join(p, name), 0o600);
 };
+/** Actual LLM usage for this cell from the tenant's durable usage ledger. */
+function readTenantUsage(id) {
+  const path = join('/data', id, 'usage.sqlite');
+  if (!existsSync(path)) return {available: false};
+  const d = new DatabaseSync(path, {readOnly: true});
+  try {
+    const byOperation = d.prepare("SELECT operation,model,COUNT(*) calls,SUM(input_tokens) inputTokens,SUM(output_tokens) outputTokens,SUM(cached_input_tokens) cachedInputTokens,SUM(cost_usd) costUsd,MIN(ts) firstTs,MAX(ts) lastTs FROM llm_usage GROUP BY operation,model ORDER BY operation,model").all();
+    const calls = d.prepare("SELECT ts,operation,model,input_tokens inputTokens,output_tokens outputTokens,cached_input_tokens cachedInputTokens,cost_usd costUsd,status FROM llm_usage ORDER BY ts").all();
+    const totals = byOperation.reduce((acc, r) => ({
+      calls: acc.calls + r.calls,
+      inputTokens: acc.inputTokens + (r.inputTokens || 0),
+      outputTokens: acc.outputTokens + (r.outputTokens || 0),
+      cachedInputTokens: acc.cachedInputTokens + (r.cachedInputTokens || 0),
+      costUsd: acc.costUsd + (r.costUsd || 0),
+    }), {calls: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0});
+    return {available: true, byOperation, calls, totals};
+  } finally { d.close(); }
+}
 const moduleBase = join(p, 'scripts/zmr-pipeline-eval/production');
 const {createOperator} = await import(pathToFileURL(join(moduleBase, 'operator.mjs')));
 const {runProductionCase} = await import(pathToFileURL(join(moduleBase, 'runner.mjs')));
@@ -119,6 +137,7 @@ try {
   io = await createOperator(m, {tenantToken, githubToken: input.githubToken}, {dispatch: true});
   const result = await runProductionCase(m, f, rub, io, {dispatch: true});
   completed = result.phase === 'complete';
+  try { save('usage.json', readTenantUsage(tenantId)); } catch { save('usage.json', {available: false, error: 'usage_read_failed'}); }
   save('execution-summary.json', {phase: result.phase, error: result.error ?? null, cleanupError: result.cleanupError ?? null, outcomes: result.run.outcomes.map((x) => ({key: x.key, status: x.status, gates: x.gates})), cost: result.cost});
   if (completed) rmdirSync(m.receiptPath + '.lock');
   console.log(JSON.stringify({phase: result.phase, caseStatus: result.run.outcomes.find((x) => x.key === input.caseKey)?.status, tenantId, repo: input.repo.full_name, models, cost: result.cost}));

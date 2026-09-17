@@ -1,0 +1,125 @@
+{
+  "version": "m2-expectations-v1",
+  "suite": "m2-basics-v1.1",
+  "note": "Review aid for manual semantic scoring. Literals are expected substrings/facts, not an auto-grader. Frozen ground truth; keep stable across prompt/model changes.",
+  "cases": {
+    "B01": {
+      "name": "Short durable store",
+      "requiredFacts": ["18 November 2026", "14:30", "KILN-47"],
+      "requireCitation": false,
+      "forbidden": [],
+      "conditions": [
+        "Durable source retains the reservation date, time and code unchanged.",
+        "Acknowledgement is truthful about saved + pending organization; no false completion."
+      ]
+    },
+    "B02": {
+      "name": "Fresh exact recall",
+      "requiredFacts": ["18 November 2026", "14:30", "KILN-47"],
+      "requireCitation": true,
+      "forbidden": [],
+      "conditions": ["All three values are answered.", "Citation resolves to evidence that was actually read."]
+    },
+    "B03": {
+      "name": "Paraphrased recall",
+      "requiredFacts": ["18 November 2026", "14:30", "KILN-47"],
+      "requireCitation": true,
+      "forbidden": ["no booking", "cannot find", "alternative booking"],
+      "conditions": ["Paraphrase resolves the same kiln fact without the user supplying a source reference."]
+    },
+    "B04": {
+      "name": "Three independent ideas",
+      "requiredFacts": ["18 November 2026", "21 November 2026", "before noon", "Icelandic", "fifteen minutes"],
+      "requireCitation": false,
+      "forbidden": [],
+      "conditions": [
+        "Kiln booking, conditional garden attendance and Icelandic goal all preserved.",
+        "Each idea filed to a correct destination or explicitly unresolved for a genuine reason.",
+        "No certainty promotion or cross-topic conflation."
+      ]
+    },
+    "B05": {
+      "name": "Interrupted filing and duplicate safety",
+      "requiredFacts": ["18 November 2026", "21 November 2026"],
+      "requireCitation": false,
+      "forbidden": [],
+      "conditions": [
+        "Repeated capture with the same idempotency key creates no duplicate evidence or job.",
+        "Completed replay adds no duplicate effects; input and raw identity preserved.",
+        "Forced-fault interruption is isolated-only (UNMEASURED in production) by the frozen contract."
+      ]
+    },
+    "B06": {
+      "name": "Long-note summary",
+      "requiredFacts": ["280", "unconfirmed", "27 November 2026", "trainee teachers", "grant"],
+      "requireCitation": true,
+      "forbidden": ["purchase decision", "agreed invoice"],
+      "conditions": [
+        "Repair preference is not stated as a purchase decision.",
+        "280 euro labelled an unconfirmed estimate.",
+        "Two free trainee-teacher places, 27 Nov deadline and grant condition all covered."
+      ]
+    },
+    "B07": {
+      "name": "Latest voice note",
+      "requiredFacts": ["blue wheel", "repair"],
+      "requireCitation": true,
+      "forbidden": ["red wheel"],
+      "conditions": [
+        "Selects the latest voice_note by capture time, not a topical distractor or newer ordinary audio/text.",
+        "Repair existing blue wheel first; replacement remains undecided."
+      ]
+    },
+    "B08": {
+      "name": "Summary tail follow-up",
+      "requiredFacts": ["trainee teachers", "27 November 2026", "grant"],
+      "requireCitation": true,
+      "forbidden": [],
+      "conditions": [
+        "First turn is a meaningful qualified summary.",
+        "Follow-up resolves the tail (who/deadline/conditional) rather than stating absent or guaranteed."
+      ]
+    },
+    "B09": {
+      "name": "Second subject and thread isolation",
+      "requiredFacts": ["21 November 2026", "noon"],
+      "requireCitation": false,
+      "forbidden": ["3 December", "violin"],
+      "conditions": [
+        "Final answer concerns the garden on 21 November 2026 with the shift-before-noon condition.",
+        "Does not answer the kiln or import isolated violin-thread details."
+      ]
+    },
+    "B10": {
+      "name": "Grounded opinion",
+      "requiredFacts": ["90", "600", "not confirmed"],
+      "requireCitation": false,
+      "forbidden": [],
+      "conditions": [
+        "Opinion resolves the wheel choice using the 90 vs 600 figures and unconfirmed repair feasibility as sourced premises.",
+        "Provides useful conditional advice explicitly distinguished from the stored decision.",
+        "No blanket refusal, fabricated decision or raw-excerpt-only answer."
+      ]
+    },
+    "B11": {
+      "name": "Correction and history",
+      "requiredFacts": ["19", "12"],
+      "requireCitation": false,
+      "forbidden": [],
+      "conditions": [
+        "Current 19 distinguished from prior incorrect 12.",
+        "Correction/history and source provenance retained; no unresolved-current conflation."
+      ]
+    },
+    "B12": {
+      "name": "Uncertain and unknown",
+      "requiredFacts": ["280", "not confirmed"],
+      "requireCitation": false,
+      "forbidden": ["booked for", "appointment on"],
+      "conditions": [
+        "280 euro labelled an estimate / unconfirmed.",
+        "Appointment date explicitly unknown / not agreed, without invention."
+      ]
+    }
+  }
+}
