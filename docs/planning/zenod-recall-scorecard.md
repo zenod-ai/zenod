@@ -108,3 +108,21 @@ First run where the eval harness is **bound to the deployed snapshot** (candidat
 Per-cell actual cost ranged **$0.029–$0.179**. Luna caches ~2.7× more and emits ~22% fewer output tokens at ~3.6% higher cost. **Regression**: B11 (correction/history) — the Luna-both run reported the prior 12 but did **not** surface the correcting memory ("not 12, but 19"), where the grok run passed. B05's forced-fault leg remains isolated-only by contract.
 
 [Comparison report](zenod-production-eval-comparison.html) · [Luna run](../evidence/m2-basics/run-fee95a7-luna.json) · [grok baseline](../evidence/m2-basics/run-764149b-grok.json). Scored by independent agent review of each literal answer and persisted effect; not a provider invoice (MCP path returns no billed cost; the ledger is server pricing × tokens).
+
+## 2026-09-17 — real OpenRouter cost capture (fee95a7 → 22440b4)
+
+The ledger previously priced calls from a hardcoded table. `22440b4` captures OpenRouter's **real per-call `usage.cost`** (`usage.include`) into new `provider_cost_usd`/`generation_id` columns; the estimate column stays for comparison. Deployment `PFnm5FPJtBrGU0Ctr2Jdl`.
+
+12-cell run on live `22440b4` (Luna low both sides), all 57 calls captured (streams included):
+
+| | value |
+|---|---|
+| **Gateway cost (real)** | **$0.060754** |
+| Pricing-table estimate | $1.122451 (≈**18× over** — the table prices Luna like full `gpt-5`) |
+| Reserved exposure | $7.75 |
+| Tokens | 515,218 in / 26,037 out / 289,191 cached |
+| Score | 10 PASS · 1 partial · 1 **FAIL** (B06) |
+
+Per-cell real cost **$0.0012–$0.0147**. Findings: **B11 passed this run** (the fee95a7 miss was sampling variance, not a stable regression); **B06 failed with the "Memory filing is in progress" busy fallback** — an answer/filing race, not a model error. Key-level OpenRouter reconciliation is available via `GET /api/v1/key`.
+
+[Real-cost report](zenod-production-eval-22440b4-realcost.html) · [Run receipt](../evidence/m2-basics/run-22440b4-luna.json). Real cost is now the comparison basis for future prompt/model runs.

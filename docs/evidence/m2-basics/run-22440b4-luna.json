@@ -1,0 +1,2650 @@
+{
+  "runId": "m2-basics-12-22440b4-luna",
+  "suite": "m2-basics-v1.1",
+  "generatedAt": "2026-09-17T13:11:26.430Z",
+  "source": {
+    "candidateSha": "22440b4151289900370b1ed375edc1b7aeaca1a1",
+    "imageDigest": "sha256:f5f9e2741096288d210a5b4c39eb1b7f49640e7cf59a2714a58067536c6fe4ea",
+    "deployment": {
+      "provider": "Dokploy",
+      "deploymentId": "PFnm5FPJtBrGU0Ctr2Jdl",
+      "title": "ZMR deploy 22440b4",
+      "createdAt": "2026-09-17T12:44:14.152Z"
+    },
+    "models": {
+      "model_classify": "openai/gpt-5.6-luna",
+      "model_classify_reasoning_effort": "low",
+      "model_ask": "openai/gpt-5.6-luna",
+      "model_ask_reasoning_effort": "low"
+    },
+    "hashes": {},
+    "observedAt": null
+  },
+  "cells": [
+    {
+      "key": "B01:1",
+      "caseId": "B01",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 35795,
+      "turns": [
+        {
+          "message": "Please save this memory: My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "thread": "main",
+          "answer": "Saved the original note. Organization is queued.\n\nEvidence:\n- Evidence: <https://github.com/AlfaBlok/m2-b01-22440b4-r/blob/440a0ac1c8369d755339b5c766a32e76a6b4ad69/Log/2026-09-17.md#L3>\n- Evidence: <https://github.com/AlfaBlok/m2-b01-22440b4-r/blob/main/Log/2026-09-17.md>\n- Reference: `Log/2026-09-17.md#^e-20b53a`\n- Receipt: `440a0ac1c8369d755339b5c766a32e76a6b4ad69`\n- Commit: `440a0ac1c8369d755339b5c766a32e76a6b4ad69`\n- Ticket: `a3b642f6-03d2-4145-a685-81dedb451f15`"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-17-e-20b53a.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 15101,
+            "outputTokens": 216,
+            "cachedInputTokens": 7289,
+            "costUsd": 0.0333364375,
+            "providerCostUsd": 0.00193565,
+            "firstTs": 1789649648331,
+            "lastTs": 1789649648331
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2859,
+            "outputTokens": 464,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0090215625,
+            "providerCostUsd": 0.00042203,
+            "firstTs": 1789649655470,
+            "lastTs": 1789649655470
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2294,
+            "outputTokens": 195,
+            "cachedInputTokens": 0,
+            "costUsd": 0.00928,
+            "providerCostUsd": 0.0012714,
+            "firstTs": 1789649658439,
+            "lastTs": 1789649658439
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789649648331,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 15101,
+            "outputTokens": 216,
+            "cachedInputTokens": 7289,
+            "costUsd": 0.0333364375,
+            "providerCostUsd": 0.00193565,
+            "generationId": "gen-1789649639-vVIOISaPRIxN8p2nktyo",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649655470,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2859,
+            "outputTokens": 464,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0090215625,
+            "providerCostUsd": 0.00042203,
+            "generationId": "gen-1789649646-uYo2HTjNdoYGY312iu82",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649658439,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2294,
+            "outputTokens": 195,
+            "cachedInputTokens": 0,
+            "costUsd": 0.00928,
+            "providerCostUsd": 0.0012714,
+            "generationId": "gen-1789649650-sakVnznEUZoffZyccDj8",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 3,
+          "inputTokens": 20254,
+          "outputTokens": 875,
+          "cachedInputTokens": 7289,
+          "costUsd": 0.051638,
+          "providerCostUsd": 0.00362908
+        }
+      },
+      "timing": {
+        "wallMs": 35795,
+        "mcpCalls": 6,
+        "mcpMs": 3461,
+        "calls": [
+          {
+            "name": "chat_with_zenod",
+            "ms": 2518
+          },
+          {
+            "name": "get_task_result",
+            "ms": 150
+          },
+          {
+            "name": "get_task_result",
+            "ms": 119
+          },
+          {
+            "name": "get_task_result",
+            "ms": 138
+          },
+          {
+            "name": "get_task_result",
+            "ms": 345
+          },
+          {
+            "name": "get_memory",
+            "ms": 191
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.25,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Durable source includes reservation date, time and code unchanged.",
+          "evidence": "rawCustody true; Log ref e-04707a"
+        },
+        {
+          "status": "PASS",
+          "text": "Acknowledgement truthfully states actual saved/pending outcome; no false completion.",
+          "evidence": "\"Saved the original note. Organization is queued.\""
+        }
+      ],
+      "rationale": "Source retained once; truthful saved+queued ack; filed Areas/Studio.md."
+    },
+    {
+      "key": "B02:1",
+      "caseId": "B02",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 34535,
+      "turns": [
+        {
+          "message": "When is my Northbridge Studio kiln reservation, and what is its code?",
+          "thread": "main",
+          "answer": "Source summary:\nYour Northbridge Studio ceramic kiln reservation is on 18 November 2026 at 14:30. The reservation code is KILN-47.\n[Log/2026-09-17.md#^e-e33d0b](https://github.com/AlfaBlok/m2-b02-22440b4-r/blob/bbd0d11a719a63419477af5d8598ea2fd2707b5c/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 17428,
+            "outputTokens": 121,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0343590625,
+            "providerCostUsd": 0.00186445,
+            "firstTs": 1789649714803,
+            "lastTs": 1789649714803
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2792,
+            "outputTokens": 441,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0122578125,
+            "providerCostUsd": 0.00122705,
+            "firstTs": 1789649699756,
+            "lastTs": 1789649699756
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2268,
+            "outputTokens": 189,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0082640625,
+            "providerCostUsd": 0.00079365,
+            "firstTs": 1789649704654,
+            "lastTs": 1789649704654
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789649699756,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2792,
+            "outputTokens": 441,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0122578125,
+            "providerCostUsd": 0.00122705,
+            "generationId": "gen-1789649695-4MbGaGOGJ5SZqX7FDJIo",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649704654,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2268,
+            "outputTokens": 189,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0082640625,
+            "providerCostUsd": 0.00079365,
+            "generationId": "gen-1789649700-hqCmGtx6iEaUc5DLIkrc",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649714803,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 17428,
+            "outputTokens": 121,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0343590625,
+            "providerCostUsd": 0.00186445,
+            "generationId": "gen-1789649709-ATxOLG4NUqDuwh3Yq8QO",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 3,
+          "inputTokens": 22488,
+          "outputTokens": 751,
+          "cachedInputTokens": 0,
+          "costUsd": 0.054880937500000004,
+          "providerCostUsd": 0.0038851499999999995
+        }
+      },
+      "timing": {
+        "wallMs": 34535,
+        "mcpCalls": 7,
+        "mcpMs": 1963,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 1251
+          },
+          {
+            "name": "get_task_result",
+            "ms": 155
+          },
+          {
+            "name": "get_task_result",
+            "ms": 100
+          },
+          {
+            "name": "get_memory",
+            "ms": 86
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 95
+          },
+          {
+            "name": "get_task_result",
+            "ms": 103
+          },
+          {
+            "name": "get_task_result",
+            "ms": 173
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "18 November 2026, 14:30 and KILN-47 all answered.",
+          "evidence": "answer literal"
+        },
+        {
+          "status": "PASS",
+          "text": "Citation resolves to actually read relevant evidence.",
+          "evidence": "Log/2026-09-17.md#^e-b094ba"
+        }
+      ],
+      "rationale": "All three values answered with a raw citation."
+    },
+    {
+      "key": "B03:1",
+      "caseId": "B03",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 34173,
+      "turns": [
+        {
+          "message": "What time did I book the pottery firing space, and which booking reference should I bring?",
+          "thread": "main",
+          "answer": "Source summary:\nYour ceramic kiln/firing reservation at Northbridge Studio is on 18 November 2026 at 14:30. Bring booking reference KILN-47.\n[Log/2026-09-17.md#^e-3f344e](https://github.com/AlfaBlok/m2-b03-22440b4-r/blob/a6dea9ab80a4ba23a333b2b756d9b09a02fb3552/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 17448,
+            "outputTokens": 141,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.025104125,
+            "providerCostUsd": 0.00020158,
+            "firstTs": 1789649768104,
+            "lastTs": 1789649768104
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2792,
+            "outputTokens": 461,
+            "cachedInputTokens": 2789,
+            "costUsd": 0.008448625,
+            "providerCostUsd": 0.00060958,
+            "firstTs": 1789649755163,
+            "lastTs": 1789649755163
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2302,
+            "outputTokens": 213,
+            "cachedInputTokens": 1853,
+            "costUsd": 0.005936,
+            "providerCostUsd": 0.00040476,
+            "firstTs": 1789649759934,
+            "lastTs": 1789649759934
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789649755163,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2792,
+            "outputTokens": 461,
+            "cachedInputTokens": 2789,
+            "costUsd": 0.008448625,
+            "providerCostUsd": 0.00060958,
+            "generationId": "gen-1789649749-Jk3hrYwRogjWmpuMpFnu",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649759934,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2302,
+            "outputTokens": 213,
+            "cachedInputTokens": 1853,
+            "costUsd": 0.005936,
+            "providerCostUsd": 0.00040476,
+            "generationId": "gen-1789649755-dZ59FuQI4vqifFn9l4SU",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649768104,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 17448,
+            "outputTokens": 141,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.025104125,
+            "providerCostUsd": 0.00020158,
+            "generationId": "gen-1789649763-x0WNWqA4nidObogq3QXw",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 3,
+          "inputTokens": 22542,
+          "outputTokens": 815,
+          "cachedInputTokens": 19440,
+          "costUsd": 0.03948875,
+          "providerCostUsd": 0.00121592
+        }
+      },
+      "timing": {
+        "wallMs": 34173,
+        "mcpCalls": 7,
+        "mcpMs": 1950,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 1247
+          },
+          {
+            "name": "get_task_result",
+            "ms": 121
+          },
+          {
+            "name": "get_task_result",
+            "ms": 121
+          },
+          {
+            "name": "get_memory",
+            "ms": 117
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 102
+          },
+          {
+            "name": "get_task_result",
+            "ms": 101
+          },
+          {
+            "name": "get_task_result",
+            "ms": 141
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Paraphrase finds the same fact without hidden source refs.",
+          "evidence": "\"booked for 18 November 2026 at 14:30\" / KILN-47"
+        },
+        {
+          "status": "PASS",
+          "text": "No invented alternative booking.",
+          "evidence": "none present"
+        }
+      ],
+      "rationale": "Paraphrase recovered time and code; no invented booking."
+    },
+    {
+      "key": "B04:1",
+      "caseId": "B04",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 50474,
+      "turns": [
+        {
+          "message": "Please save these three separate updates: Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.",
+          "thread": "main",
+          "answer": "Saved the original note. Organization is queued.\n\nEvidence:\n- Evidence: <https://github.com/AlfaBlok/m2-b04-22440b4-r/blob/a00d70211cc91caa4447c9437119962c90b0b1ea/Log/2026-09-17.md#L3>\n- Evidence: <https://github.com/AlfaBlok/m2-b04-22440b4-r/blob/main/Log/2026-09-17.md>\n- Reference: `Log/2026-09-17.md#^e-548299`\n- Receipt: `a00d70211cc91caa4447c9437119962c90b0b1ea`\n- Commit: `a00d70211cc91caa4447c9437119962c90b0b1ea`\n- Ticket: `29b61237-ed0c-40b6-a69d-ca99fca1af3a`"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Areas/Garden.md",
+          "Notes/Language Study.md",
+          "Inbox/filing-2026-09-17-e-548299.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 16144,
+            "outputTokens": 360,
+            "cachedInputTokens": 14577,
+            "costUsd": 0.0257286875,
+            "providerCostUsd": 0.00042261,
+            "firstTs": 1789649814406,
+            "lastTs": 1789649814406
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2912,
+            "outputTokens": 931,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0152625,
+            "providerCostUsd": 0.00069238,
+            "firstTs": 1789649828878,
+            "lastTs": 1789649828878
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 3,
+            "inputTokens": 6687,
+            "outputTokens": 498,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0247825,
+            "providerCostUsd": 0.0032716,
+            "firstTs": 1789649832553,
+            "lastTs": 1789649838114
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789649814406,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 16144,
+            "outputTokens": 360,
+            "cachedInputTokens": 14577,
+            "costUsd": 0.0257286875,
+            "providerCostUsd": 0.00042261,
+            "generationId": "gen-1789649805-hTQ9cBjBfGRAqK80isNe",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649828878,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2912,
+            "outputTokens": 931,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0152625,
+            "providerCostUsd": 0.00069238,
+            "generationId": "gen-1789649811-y618NySHGaMih4ZghctB",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649832553,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2208,
+            "outputTokens": 136,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0086653125,
+            "providerCostUsd": 0.00184505,
+            "generationId": "gen-1789649814-sH7D1WxrOkHsBC6GdBZr",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649835244,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2213,
+            "outputTokens": 132,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0075315625,
+            "providerCostUsd": 0.00071505,
+            "generationId": "gen-1789649829-VA3KTcGltLd0l0AAeEUj",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649838114,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2266,
+            "outputTokens": 230,
+            "cachedInputTokens": 0,
+            "costUsd": 0.008585625,
+            "providerCostUsd": 0.0007115,
+            "generationId": "gen-1789649833-PEmKWCIhXyaJDk0cNG08",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 5,
+          "inputTokens": 25743,
+          "outputTokens": 1789,
+          "cachedInputTokens": 14577,
+          "costUsd": 0.0657736875,
+          "providerCostUsd": 0.00438659
+        }
+      },
+      "timing": {
+        "wallMs": 50474,
+        "mcpCalls": 7,
+        "mcpMs": 2581,
+        "calls": [
+          {
+            "name": "chat_with_zenod",
+            "ms": 1578
+          },
+          {
+            "name": "get_task_result",
+            "ms": 88
+          },
+          {
+            "name": "get_task_result",
+            "ms": 163
+          },
+          {
+            "name": "get_task_result",
+            "ms": 92
+          },
+          {
+            "name": "get_task_result",
+            "ms": 127
+          },
+          {
+            "name": "get_task_result",
+            "ms": 279
+          },
+          {
+            "name": "get_memory",
+            "ms": 254
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.25,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Kiln booking, conditional garden attendance and Icelandic goal all preserved.",
+          "evidence": "raw + pages"
+        },
+        {
+          "status": "PASS",
+          "text": "Each idea filed correctly or explicitly unresolved for a genuine reason.",
+          "evidence": "Areas/Studio.md, Areas/Garden.md, Notes/Language Study.md"
+        },
+        {
+          "status": "PASS",
+          "text": "No certainty promotion or cross-topic conflation.",
+          "evidence": "conditional wording kept"
+        }
+      ],
+      "rationale": "Three ideas preserved and filed to their own pages."
+    },
+    {
+      "key": "B05:1",
+      "caseId": "B05",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 33796,
+      "turns": [],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Areas/Garden.md",
+          "Notes/Language Study.md"
+        ]
+      ],
+      "duplicateReplay": {
+        "sameJob": true,
+        "sameResult": true,
+        "unchangedPages": true
+      },
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2843,
+            "outputTokens": 915,
+            "cachedInputTokens": 2591,
+            "costUsd": 0.0134166875,
+            "providerCostUsd": 0.00121267,
+            "firstTs": 1789649888714,
+            "lastTs": 1789649888714
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 3,
+            "inputTokens": 6725,
+            "outputTokens": 438,
+            "cachedInputTokens": 0,
+            "costUsd": 0.023280000000000002,
+            "providerCostUsd": 0.0022064,
+            "firstTs": 1789649893045,
+            "lastTs": 1789649900249
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789649888714,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2843,
+            "outputTokens": 915,
+            "cachedInputTokens": 2591,
+            "costUsd": 0.0134166875,
+            "providerCostUsd": 0.00121267,
+            "generationId": "gen-1789649875-bVuwFCaAOerGUkBVUfYz",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649893045,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2214,
+            "outputTokens": 117,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0073921875,
+            "providerCostUsd": 0.00069375,
+            "generationId": "gen-1789649889-LQExR1sMatflbnNoUvmm",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649895707,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2226,
+            "outputTokens": 137,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0076259375,
+            "providerCostUsd": 0.00072075,
+            "generationId": "gen-1789649893-iATC9yUJ3emvlTZjjJcg",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649900249,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2285,
+            "outputTokens": 184,
+            "cachedInputTokens": 0,
+            "costUsd": 0.008261875,
+            "providerCostUsd": 0.0007919,
+            "generationId": "gen-1789649896-AMiP3RDR9fyPhNGy5QcZ",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 4,
+          "inputTokens": 9568,
+          "outputTokens": 1353,
+          "cachedInputTokens": 2591,
+          "costUsd": 0.036696687500000005,
+          "providerCostUsd": 0.0034190699999999997
+        }
+      },
+      "timing": {
+        "wallMs": 33796,
+        "mcpCalls": 7,
+        "mcpMs": 1528,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 924
+          },
+          {
+            "name": "get_task_result",
+            "ms": 77
+          },
+          {
+            "name": "get_task_result",
+            "ms": 185
+          },
+          {
+            "name": "get_task_result",
+            "ms": 127
+          },
+          {
+            "name": "get_memory",
+            "ms": 70
+          },
+          {
+            "name": "store_memory",
+            "ms": 73
+          },
+          {
+            "name": "get_task_result",
+            "ms": 72
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PARTIAL",
+      "checks": [
+        {
+          "status": "UNMEASURED",
+          "text": "A real forced boundary failure leaves at least one completed sibling and another pending.",
+          "evidence": "isolated-only by frozen contract"
+        },
+        {
+          "status": "PASS",
+          "text": "Retry preserves completed operation IDs/text/citations, input and raw identity.",
+          "evidence": "sameResult true; inputPreserved true"
+        },
+        {
+          "status": "PASS",
+          "text": "Repeated capture and same idempotency key produce no duplicate evidence/job.",
+          "evidence": "sameJob true; unchangedPages true"
+        }
+      ],
+      "rationale": "Same-key replay produced no duplicate; forced-fault leg is isolated-only."
+    },
+    {
+      "key": "B06:1",
+      "caseId": "B06",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 80770,
+      "turns": [
+        {
+          "message": "Summarize my Northbridge studio planning voice note. Include the beginning, cost estimate and closing arrangements; distinguish decisions from preferences and conditions.",
+          "thread": "main",
+          "answer": "Memory filing is in progress. Please retry your question shortly."
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-17-e-799da6.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 35732,
+            "outputTokens": 436,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.05092475,
+            "providerCostUsd": 0.00032648,
+            "firstTs": 1789650003119,
+            "lastTs": 1789650003119
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 3,
+            "inputTokens": 20376,
+            "outputTokens": 3264,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0899334375,
+            "providerCostUsd": 0.00901035,
+            "firstTs": 1789649941425,
+            "lastTs": 1789649966877
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 3789,
+            "outputTokens": 703,
+            "cachedInputTokens": 0,
+            "costUsd": 0.017681875,
+            "providerCostUsd": 0.0017907,
+            "firstTs": 1789649973869,
+            "lastTs": 1789649973869
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789649941425,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 8658,
+            "outputTokens": 693,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0312759375,
+            "providerCostUsd": 0.00299595,
+            "generationId": "gen-1789649930-gl2tmUfN7CWTUyr7KCiQ",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649954044,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 5509,
+            "outputTokens": 1070,
+            "cachedInputTokens": 0,
+            "costUsd": 0.026189375,
+            "providerCostUsd": 0.0026611,
+            "generationId": "gen-1789649941-5N3qwwjcld7Bss3sGLrJ",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649966877,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 6209,
+            "outputTokens": 1501,
+            "cachedInputTokens": 0,
+            "costUsd": 0.032468125,
+            "providerCostUsd": 0.0033533,
+            "generationId": "gen-1789649954-BOL5l9iz0BnHQ3x9i2si",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789649973869,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 3789,
+            "outputTokens": 703,
+            "cachedInputTokens": 0,
+            "costUsd": 0.017681875,
+            "providerCostUsd": 0.0017907,
+            "generationId": "gen-1789649967-tz8cySnxTLLp1bjDNxOJ",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650003119,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 35732,
+            "outputTokens": 436,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.05092475,
+            "providerCostUsd": 0.00032648,
+            "generationId": "gen-1789649989-LOurKQ4JARyIQ5wyc4SZ",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 5,
+          "inputTokens": 59897,
+          "outputTokens": 4403,
+          "cachedInputTokens": 14798,
+          "costUsd": 0.15854006250000002,
+          "providerCostUsd": 0.01112753
+        }
+      },
+      "timing": {
+        "wallMs": 80770,
+        "mcpCalls": 10,
+        "mcpMs": 2731,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 1411
+          },
+          {
+            "name": "get_task_result",
+            "ms": 142
+          },
+          {
+            "name": "get_task_result",
+            "ms": 104
+          },
+          {
+            "name": "get_task_result",
+            "ms": 145
+          },
+          {
+            "name": "get_task_result",
+            "ms": 103
+          },
+          {
+            "name": "get_task_result",
+            "ms": 204
+          },
+          {
+            "name": "get_memory",
+            "ms": 141
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 122
+          },
+          {
+            "name": "get_task_result",
+            "ms": 158
+          },
+          {
+            "name": "get_task_result",
+            "ms": 201
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "FAIL",
+      "checks": [
+        {
+          "status": "FAIL",
+          "text": "Repair preference is not a purchase decision.",
+          "evidence": "no answer produced"
+        },
+        {
+          "status": "FAIL",
+          "text": "280 euro estimate remains unconfirmed.",
+          "evidence": "no answer produced"
+        },
+        {
+          "status": "FAIL",
+          "text": "Two free trainee-teacher places, 27 November 2026 deadline and grant-approval condition all covered.",
+          "evidence": "no answer produced"
+        },
+        {
+          "status": "FAIL",
+          "text": "Answer is a useful summary, not transcript dump; required source scope read.",
+          "evidence": "busy fallback"
+        }
+      ],
+      "rationale": "Turn returned the busy fallback (\"Memory filing is in progress\") instead of the summary; no content answer."
+    },
+    {
+      "key": "B07:1",
+      "caseId": "B07",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 82903,
+      "turns": [
+        {
+          "message": "What did I say in my latest voice note about the studio equipment?",
+          "thread": "main",
+          "answer": "Source summary:\nYou said you would repair the existing blue wheel first, and that you had not decided whether to replace it.\n[Log/2026-09-17.md#^e-8f3c50](https://github.com/AlfaBlok/m2-b07-22440b4-r/blob/944f9434f5411d1eca79481cc0093b17ebd3796e/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Inbox/filing-2026-09-17-e-8f3c50.md"
+        ],
+        [
+          "Areas/Studio.md"
+        ],
+        [
+          "Inbox/filing-2026-09-17-e-0404f1.md"
+        ],
+        [
+          "Inbox/filing-2026-09-17-e-0af2d2.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 17321,
+            "outputTokens": 162,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.025149125,
+            "providerCostUsd": 0.00024378,
+            "firstTs": 1789650102732,
+            "lastTs": 1789650102732
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 4,
+            "inputTokens": 11015,
+            "outputTokens": 1233,
+            "cachedInputTokens": 5173,
+            "costUsd": 0.03585475,
+            "providerCostUsd": 0.00304296,
+            "firstTs": 1789650038968,
+            "lastTs": 1789650086175
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 4347,
+            "outputTokens": 394,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0161565625,
+            "providerCostUsd": 0.00155925,
+            "firstTs": 1789650061570,
+            "lastTs": 1789650090508
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789650038968,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2757,
+            "outputTokens": 312,
+            "cachedInputTokens": 0,
+            "costUsd": 0.010869375,
+            "providerCostUsd": 0.0010635,
+            "generationId": "gen-1789650035-ILH0exsQlE5Afs9MSs35",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650056026,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2769,
+            "outputTokens": 353,
+            "cachedInputTokens": 2588,
+            "costUsd": 0.007592875,
+            "providerCostUsd": 0.00052046,
+            "generationId": "gen-1789650051-Z8YKjlTJOMgXg4NO0bQU",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650061570,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2159,
+            "outputTokens": 139,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0074575,
+            "providerCostUsd": 0.0007064,
+            "generationId": "gen-1789650056-pTxUnSFKNhETGfiw6Lza",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650071980,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2745,
+            "outputTokens": 292,
+            "cachedInputTokens": 0,
+            "costUsd": 0.010635625,
+            "providerCostUsd": 0.0010365,
+            "generationId": "gen-1789650066-yiWncghZi0mTZnIi5gRk",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650086175,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2744,
+            "outputTokens": 276,
+            "cachedInputTokens": 2585,
+            "costUsd": 0.006756875,
+            "providerCostUsd": 0.0004225,
+            "generationId": "gen-1789650082-SzEL1hm4L1kTyxKccyDP",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650090508,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2188,
+            "outputTokens": 255,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0086990625,
+            "providerCostUsd": 0.00085285,
+            "generationId": "gen-1789650086-72a2vKQriHw3eIOFpoUI",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650102732,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 17321,
+            "outputTokens": 162,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.025149125,
+            "providerCostUsd": 0.00024378,
+            "generationId": "gen-1789650097-4GdQfl5h45Tpw0Sy8mcY",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 7,
+          "inputTokens": 32683,
+          "outputTokens": 1789,
+          "cachedInputTokens": 19971,
+          "costUsd": 0.0771604375,
+          "providerCostUsd": 0.00484599
+        }
+      },
+      "timing": {
+        "wallMs": 82903,
+        "mcpCalls": 19,
+        "mcpMs": 5027,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 2224
+          },
+          {
+            "name": "get_task_result",
+            "ms": 189
+          },
+          {
+            "name": "get_task_result",
+            "ms": 133
+          },
+          {
+            "name": "get_memory",
+            "ms": 154
+          },
+          {
+            "name": "store_memory",
+            "ms": 147
+          },
+          {
+            "name": "get_task_result",
+            "ms": 188
+          },
+          {
+            "name": "get_task_result",
+            "ms": 162
+          },
+          {
+            "name": "get_memory",
+            "ms": 215
+          },
+          {
+            "name": "store_memory",
+            "ms": 145
+          },
+          {
+            "name": "get_task_result",
+            "ms": 133
+          },
+          {
+            "name": "get_task_result",
+            "ms": 179
+          },
+          {
+            "name": "get_memory",
+            "ms": 114
+          },
+          {
+            "name": "store_memory",
+            "ms": 97
+          },
+          {
+            "name": "get_task_result",
+            "ms": 182
+          },
+          {
+            "name": "get_task_result",
+            "ms": 149
+          },
+          {
+            "name": "get_memory",
+            "ms": 159
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 117
+          },
+          {
+            "name": "get_task_result",
+            "ms": 222
+          },
+          {
+            "name": "get_task_result",
+            "ms": 118
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 1.25,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Latest voice_note selected by capturedAt, not processing order or topical distractor.",
+          "evidence": "Log ref e-8545c8"
+        },
+        {
+          "status": "PASS",
+          "text": "Repair existing blue wheel first; replacement remains undecided.",
+          "evidence": "exact"
+        },
+        {
+          "status": "PASS",
+          "text": "Does not substitute newer ordinary audio/text or old red-wheel note.",
+          "evidence": "no red wheel"
+        }
+      ],
+      "rationale": "Latest voice note selected; blue wheel; no distractor."
+    },
+    {
+      "key": "B08:1",
+      "caseId": "B08",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 127251,
+      "turns": [
+        {
+          "message": "Summarize my Northbridge studio planning voice note.",
+          "thread": "main",
+          "answer": "Source summary:\nThis synthetic Northbridge studio planning note says you prefer repairing your current wheel before buying another, though no purchase decision has been made. The working room has a labelled shelf, drying rack, shared sink and noticeboard, and you are documenting this layout for the studio record. An electrician gave an unconfirmed estimate of 280 euros for inspecting the kiln socket; it is not an agreed invoice. The plan proposes reserving two workshop places free of charge for trainee teachers, but only if the grant is approved. Applications close on 27 November 2026; if the grant is rejected, the free places are not promised.\n[Log/2026-09-17.md#^e-a2f282](https://github.com/AlfaBlok/m2-b08-22440b4-r/blob/401a917ce804d390ad2e65f515efcb399f83413a/Log/2026-09-17.md)"
+        },
+        {
+          "message": "What about the free places mentioned at the end—who are they for, what is the deadline, and are they guaranteed?",
+          "thread": "main",
+          "answer": "Source summary:\nThe two free workshop places are intended for trainee teachers. Applications for the grant close on 27 November 2026. The places are conditional, not guaranteed: they are reserved without charge only if the grant is approved; if the grant is rejected, the free places are not promised.\n[Log/2026-09-17.md#^e-a2f282](https://github.com/AlfaBlok/m2-b08-22440b4-r/blob/401a917ce804d390ad2e65f515efcb399f83413a/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-17-e-a2f282.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 84792,
+            "outputTokens": 578,
+            "cachedInputTokens": 36880,
+            "costUsd": 0.1171971875,
+            "providerCostUsd": 0.00066241,
+            "firstTs": 1789650242632,
+            "lastTs": 1789650255996
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 4,
+            "inputTokens": 30480,
+            "outputTokens": 6779,
+            "cachedInputTokens": 20367,
+            "costUsd": 0.12421868750000001,
+            "providerCostUsd": 0.01106979,
+            "firstTs": 1789650162746,
+            "lastTs": 1789650206551
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 6146,
+            "outputTokens": 1202,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0293009375,
+            "providerCostUsd": 0.00297875,
+            "firstTs": 1789650217791,
+            "lastTs": 1789650217791
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789650162746,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 8658,
+            "outputTokens": 1329,
+            "cachedInputTokens": 8655,
+            "costUsd": 0.025194375,
+            "providerCostUsd": 0.0017685,
+            "generationId": "gen-1789650141-61BAYmqGC6Qwn92JoJNf",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650182751,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 10104,
+            "outputTokens": 2795,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0563628125,
+            "providerCostUsd": 0.00587985,
+            "generationId": "gen-1789650163-dxi7qDg7Oy36rMJtytX6",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650194158,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 5509,
+            "outputTokens": 1272,
+            "cachedInputTokens": 5506,
+            "costUsd": 0.0202945,
+            "providerCostUsd": 0.00163712,
+            "generationId": "gen-1789650183-hrjkiqsbXcmcCMxwjjbN",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650206551,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 6209,
+            "outputTokens": 1383,
+            "cachedInputTokens": 6206,
+            "costUsd": 0.022367,
+            "providerCostUsd": 0.00178432,
+            "generationId": "gen-1789650194-D14PRbFySgkFEuOp5gvJ",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650217791,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 6146,
+            "outputTokens": 1202,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0293009375,
+            "providerCostUsd": 0.00297875,
+            "generationId": "gen-1789650206-Z6hCYjaq6vbiQxqRCKOl",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650242632,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 53957,
+            "outputTokens": 399,
+            "cachedInputTokens": 22067,
+            "costUsd": 0.0742180625,
+            "providerCostUsd": 0.00029223,
+            "generationId": "gen-1789650231-3zBUh3qHxHVV6saNQ5nX",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650255996,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 30835,
+            "outputTokens": 179,
+            "cachedInputTokens": 14813,
+            "costUsd": 0.042979125,
+            "providerCostUsd": 0.00037018,
+            "generationId": "gen-1789650234-Zvk6k1s2V1LjeXcuOI4N",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 7,
+          "inputTokens": 121418,
+          "outputTokens": 8559,
+          "cachedInputTokens": 57247,
+          "costUsd": 0.2707168125,
+          "providerCostUsd": 0.01471095
+        }
+      },
+      "timing": {
+        "wallMs": 127251,
+        "mcpCalls": 15,
+        "mcpMs": 4388,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 1292
+          },
+          {
+            "name": "get_task_result",
+            "ms": 114
+          },
+          {
+            "name": "get_task_result",
+            "ms": 129
+          },
+          {
+            "name": "get_task_result",
+            "ms": 269
+          },
+          {
+            "name": "get_task_result",
+            "ms": 153
+          },
+          {
+            "name": "get_task_result",
+            "ms": 181
+          },
+          {
+            "name": "get_task_result",
+            "ms": 105
+          },
+          {
+            "name": "get_task_result",
+            "ms": 111
+          },
+          {
+            "name": "get_memory",
+            "ms": 973
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 184
+          },
+          {
+            "name": "get_task_result",
+            "ms": 185
+          },
+          {
+            "name": "get_task_result",
+            "ms": 185
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 159
+          },
+          {
+            "name": "get_task_result",
+            "ms": 221
+          },
+          {
+            "name": "get_task_result",
+            "ms": 127
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.75,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "First turn is a meaningful qualified summary.",
+          "evidence": "preference/estimate/layout"
+        },
+        {
+          "status": "PASS",
+          "text": "Follow-up resolves same note: two trainee-teacher places, 27 November deadline, conditional grant.",
+          "evidence": "exact"
+        },
+        {
+          "status": "PASS",
+          "text": "Reads/retains tail support rather than stating absent or guaranteed.",
+          "evidence": "\"conditional, not guaranteed\""
+        }
+      ],
+      "rationale": "Summary + tail follow-up both resolve correctly."
+    },
+    {
+      "key": "B09:1",
+      "caseId": "B09",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 128015,
+      "turns": [
+        {
+          "message": "Tell me about my kiln reservation.",
+          "thread": "main",
+          "answer": "Source summary:\nYour ceramic kiln reservation is at Northbridge Studio on 18 November 2026 at 14:30. The reservation code is KILN-47.\n[Log/2026-09-17.md#^e-ff4cbf](https://github.com/AlfaBlok/m2-b09-22440b4-r/blob/0c5e62c48f618035d61a016d1efb016b827605b5/Log/2026-09-17.md)"
+        },
+        {
+          "message": "Now tell me about the Riverside Garden pump inspection.",
+          "thread": "main",
+          "answer": "Source summary:\nThe Riverside Garden pump inspection is scheduled for 21 November 2026. You noted that you will attend only if your shift ends before noon.\n[Log/2026-09-17.md#^e-ec9ade](https://github.com/AlfaBlok/m2-b09-22440b4-r/blob/0c5e62c48f618035d61a016d1efb016b827605b5/Log/2026-09-17.md)"
+        },
+        {
+          "message": "My unrelated private conversation is about a violin rehearsal on 3 December.",
+          "thread": "other",
+          "answer": "Understood — I’ll treat the unrelated private conversation as being about a violin rehearsal on 3 December."
+        },
+        {
+          "message": "For the second thing we discussed, when is it and what condition did I put on attending?",
+          "thread": "main",
+          "answer": "Source summary:\nThe Riverside Garden pump inspection is on 21 November 2026. You said you will attend only if your shift ends before noon.\n[Log/2026-09-17.md#^e-ec9ade](https://github.com/AlfaBlok/m2-b09-22440b4-r/blob/0c5e62c48f618035d61a016d1efb016b827605b5/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ],
+        [
+          "Areas/Garden.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 4,
+            "inputTokens": 72786,
+            "outputTokens": 714,
+            "cachedInputTokens": 60264,
+            "costUsd": 0.11732893750000001,
+            "providerCostUsd": 0.00280029,
+            "firstTs": 1789650353782,
+            "lastTs": 1789650405198
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 5567,
+            "outputTokens": 1002,
+            "cachedInputTokens": 2789,
+            "costUsd": 0.021658625,
+            "providerCostUsd": 0.00195238,
+            "firstTs": 1789650297567,
+            "lastTs": 1789650329758
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 4544,
+            "outputTokens": 411,
+            "cachedInputTokens": 1853,
+            "costUsd": 0.0142169375,
+            "providerCostUsd": 0.00120271,
+            "firstTs": 1789650302943,
+            "lastTs": 1789650333742
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789650297567,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2792,
+            "outputTokens": 492,
+            "cachedInputTokens": 2789,
+            "costUsd": 0.008758625,
+            "providerCostUsd": 0.00064678,
+            "generationId": "gen-1789650289-fpbJL6DwltcCWPpOkFVv",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650302943,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2270,
+            "outputTokens": 189,
+            "cachedInputTokens": 1853,
+            "costUsd": 0.005606,
+            "providerCostUsd": 0.00036796,
+            "generationId": "gen-1789650297-w9F1ABv9pGzPC6nPHQju",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650329758,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2775,
+            "outputTokens": 510,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0129,
+            "providerCostUsd": 0.0013056,
+            "generationId": "gen-1789650320-UDzVKAJnLOhXzQq8U24L",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650333742,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2274,
+            "outputTokens": 222,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0086109375,
+            "providerCostUsd": 0.00083475,
+            "generationId": "gen-1789650330-5Y57QNl1BcXCxX6Kob6m",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650353782,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 19739,
+            "outputTokens": 120,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.0277406875,
+            "providerCostUsd": 0.00019163,
+            "generationId": "gen-1789650349-HK2dPyH7kazgkTCwiqEa",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650372672,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 17589,
+            "outputTokens": 122,
+            "cachedInputTokens": 14809,
+            "costUsd": 0.0325651875,
+            "providerCostUsd": 0.00147733,
+            "generationId": "gen-1789650352-zSmeCwPWgQRir8mPv4Ur",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650383971,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 7275,
+            "outputTokens": 129,
+            "cachedInputTokens": 7254,
+            "costUsd": 0.011493625,
+            "providerCostUsd": 0.0002252,
+            "generationId": "gen-1789650364-sJRTpncrAbvm2HF1YIkK",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650405198,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 28183,
+            "outputTokens": 343,
+            "cachedInputTokens": 23403,
+            "costUsd": 0.0455294375,
+            "providerCostUsd": 0.00090613,
+            "generationId": "gen-1789650369-5NECzKjI3AIXr7TEMmcG",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 8,
+          "inputTokens": 82897,
+          "outputTokens": 2127,
+          "cachedInputTokens": 64906,
+          "costUsd": 0.1532045,
+          "providerCostUsd": 0.005955380000000001
+        }
+      },
+      "timing": {
+        "wallMs": 128015,
+        "mcpCalls": 22,
+        "mcpMs": 5117,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 1962
+          },
+          {
+            "name": "get_task_result",
+            "ms": 122
+          },
+          {
+            "name": "get_task_result",
+            "ms": 167
+          },
+          {
+            "name": "get_task_result",
+            "ms": 189
+          },
+          {
+            "name": "get_memory",
+            "ms": 157
+          },
+          {
+            "name": "store_memory",
+            "ms": 101
+          },
+          {
+            "name": "get_task_result",
+            "ms": 166
+          },
+          {
+            "name": "get_task_result",
+            "ms": 190
+          },
+          {
+            "name": "get_task_result",
+            "ms": 133
+          },
+          {
+            "name": "get_memory",
+            "ms": 157
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 164
+          },
+          {
+            "name": "get_task_result",
+            "ms": 132
+          },
+          {
+            "name": "get_task_result",
+            "ms": 171
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 141
+          },
+          {
+            "name": "get_task_result",
+            "ms": 153
+          },
+          {
+            "name": "get_task_result",
+            "ms": 126
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 132
+          },
+          {
+            "name": "get_task_result",
+            "ms": 155
+          },
+          {
+            "name": "get_task_result",
+            "ms": 125
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 140
+          },
+          {
+            "name": "get_task_result",
+            "ms": 137
+          },
+          {
+            "name": "get_task_result",
+            "ms": 197
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 1.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Final answer concerns garden on 21 November 2026 with shift-before-noon condition.",
+          "evidence": "exact"
+        },
+        {
+          "status": "PASS",
+          "text": "Does not answer kiln or import isolated violin-thread details.",
+          "evidence": "none"
+        }
+      ],
+      "rationale": "Final answer is the garden referent; no thread bleed."
+    },
+    {
+      "key": "B10:1",
+      "caseId": "B10",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 50946,
+      "turns": [
+        {
+          "message": "Remember this thought: For Northbridge Studio, I prefer repairing my current wheel because the repair estimate is 90 euros; a new wheel would cost 600 euros. The technician has not confirmed that repair is possible. I have not decided.",
+          "thread": "main",
+          "answer": "Saved the original note. Organization is queued.\n\nEvidence:\n- Evidence: <https://github.com/AlfaBlok/m2-b10-22440b4-r/blob/43783880132528a04c11f4191a2c813b04753139/Log/2026-09-17.md#L3>\n- Evidence: <https://github.com/AlfaBlok/m2-b10-22440b4-r/blob/main/Log/2026-09-17.md>\n- Reference: `Log/2026-09-17.md#^e-1fe1b4`\n- Receipt: `43783880132528a04c11f4191a2c813b04753139`\n- Commit: `43783880132528a04c11f4191a2c813b04753139`\n- Ticket: `09175066-b925-4502-8579-12ca7bc57a39`"
+        },
+        {
+          "message": "What do you think about it?",
+          "thread": "main",
+          "answer": "My assessment (inference from the cited premises, not an established fact):\nMy view: repair is the sensible first option if the technician confirms it is viable. The price difference is substantial—90 euros versus 600 euros—so replacement seems hard to justify before knowing that repair cannot be done or is unlikely to last. I would ask the technician about the repair’s expected durability, warranty, total cost if complications arise, and how soon a replacement might become necessary. Until those answers are clear, keeping the decision open is prudent.\n\nSource premises:\n\nSource summary:\nThe recorded thought is that repairing the current wheel is preferred because the estimate is 90 euros versus 600 euros for a new wheel, while the technician has not confirmed that repair is possible and no decision has been made.\n[Log/2026-09-17.md#^e-1fe1b4](https://github.com/AlfaBlok/m2-b10-22440b4-r/blob/b1efb359c6ba920e3a027694892ab02ec6c9ce1d/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md",
+          "Inbox/filing-2026-09-17-e-1fe1b4.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 33099,
+            "outputTokens": 468,
+            "cachedInputTokens": 29346,
+            "costUsd": 0.0535829375,
+            "providerCostUsd": 0.00126551,
+            "firstTs": 1789650447639,
+            "lastTs": 1789650474591
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2876,
+            "outputTokens": 678,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0111484375,
+            "providerCostUsd": 0.00040475,
+            "firstTs": 1789650456799,
+            "lastTs": 1789650456799
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2422,
+            "outputTokens": 324,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0107565625,
+            "providerCostUsd": 0.00153245,
+            "firstTs": 1789650460664,
+            "lastTs": 1789650460664
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789650447639,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 15101,
+            "outputTokens": 206,
+            "cachedInputTokens": 14548,
+            "costUsd": 0.022836,
+            "providerCostUsd": 0.00027136,
+            "generationId": "gen-1789650438-jpCyt3tWjQ3oavdPSdPZ",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650456799,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2876,
+            "outputTokens": 678,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0111484375,
+            "providerCostUsd": 0.00040475,
+            "generationId": "gen-1789650445-44qH3fdYcuja8jzJJ1PX",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650460664,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2422,
+            "outputTokens": 324,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0107565625,
+            "providerCostUsd": 0.00153245,
+            "generationId": "gen-1789650449-Avhr3fBKqkjcfTFK0HjC",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650474591,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 17998,
+            "outputTokens": 262,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.0307469375,
+            "providerCostUsd": 0.00099415,
+            "generationId": "gen-1789650457-0T1RXM3ZbTEaHbCzwfgU",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 4,
+          "inputTokens": 38397,
+          "outputTokens": 1470,
+          "cachedInputTokens": 29346,
+          "costUsd": 0.07548793749999999,
+          "providerCostUsd": 0.00320271
+        }
+      },
+      "timing": {
+        "wallMs": 50946,
+        "mcpCalls": 9,
+        "mcpMs": 3255,
+        "calls": [
+          {
+            "name": "chat_with_zenod",
+            "ms": 2443
+          },
+          {
+            "name": "get_task_result",
+            "ms": 145
+          },
+          {
+            "name": "get_task_result",
+            "ms": 66
+          },
+          {
+            "name": "get_task_result",
+            "ms": 93
+          },
+          {
+            "name": "get_task_result",
+            "ms": 94
+          },
+          {
+            "name": "get_memory",
+            "ms": 108
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 105
+          },
+          {
+            "name": "get_task_result",
+            "ms": 79
+          },
+          {
+            "name": "get_task_result",
+            "ms": 122
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Opinion resolves wheel choice and uses 90 vs 600 and unconfirmed repair feasibility as sourced premises.",
+          "evidence": "premise render includes 90/600"
+        },
+        {
+          "status": "PASS",
+          "text": "Provides useful conditional advice explicitly distinguished from stored decision.",
+          "evidence": "\"My assessment (inference ...)\""
+        },
+        {
+          "status": "PASS",
+          "text": "No blanket refusal, fabricated decision or raw-excerpt-only answer.",
+          "evidence": "useful advice"
+        }
+      ],
+      "rationale": "Sourced assessment labelled as inference; 90 vs 600 in premises."
+    },
+    {
+      "key": "B11:1",
+      "caseId": "B11",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 50638,
+      "turns": [
+        {
+          "message": "How many workshop places does Northbridge Studio have now, and what number did I report before correcting it?",
+          "thread": "main",
+          "answer": "Latest supported memory reports as of 2026-09-17 (Areas/Studio.md):\n- Recorded correction report — User report: \"Correction to my earlier Northbridge Studio capacity report: not 12 places, but 19 places. The earlier figure was wrong.\" [Log/2026-09-17.md#^e-cf3919](https://github.com/AlfaBlok/m2-b11-22440b4-r/blob/394b230bb2ebe6dfc847dd76ae98ca540e2208fe/Log/2026-09-17.md#%5Ee-cf3919). Effective: unknown; evidence captured: 2026-09-15T11:00:00.000Z. Verification scope: unknown.\n- Prior note statement (superseded; original evidence/date unknown): \"Northbridge Studio has 12 workshop places.\" — Areas/Studio.md, github revision 5251f1161a7100712258bc35dad56c56e48436d0; correction evidence Log/2026-09-17.md#^e-cf3919.\nPrior legacy statements are preserved from the recorded repository revision/content hash. Their original Log evidence and effective dates are unknown; they are note history, not independently verified historical facts.\nMemory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.\n\nPrior note statement (superseded; original evidence/date unknown): Northbridge Studio has 12 workshop places.\nAreas/Studio.md, github revision 5251f1161a7100712258bc35dad56c56e48436d0; correction evidence Log/2026-09-17.md#^e-cf3919."
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ],
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 44549,
+            "outputTokens": 288,
+            "cachedInputTokens": 36467,
+            "costUsd": 0.0631636875,
+            "providerCostUsd": 0.00019873,
+            "firstTs": 1789650552610,
+            "lastTs": 1789650552610
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 5526,
+            "outputTokens": 706,
+            "cachedInputTokens": 5173,
+            "costUsd": 0.015156312500000001,
+            "providerCostUsd": 0.0010386100000000001,
+            "firstTs": 1789650513217,
+            "lastTs": 1789650530807
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 2,
+            "inputTokens": 4351,
+            "outputTokens": 269,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0149178125,
+            "providerCostUsd": 0.00141025,
+            "firstTs": 1789650515775,
+            "lastTs": 1789650533516
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789650513217,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2748,
+            "outputTokens": 286,
+            "cachedInputTokens": 2585,
+            "costUsd": 0.006868125,
+            "providerCostUsd": 0.0004355,
+            "generationId": "gen-1789650509-zmspqCQO89Rmv3NO196u",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650515775,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2127,
+            "outputTokens": 107,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0070475,
+            "providerCostUsd": 0.00066,
+            "generationId": "gen-1789650513-MTXzKHkeGFRKn1RSytCa",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650530807,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2778,
+            "outputTokens": 420,
+            "cachedInputTokens": 2588,
+            "costUsd": 0.0082881875,
+            "providerCostUsd": 0.00060311,
+            "generationId": "gen-1789650525-Ny0UsdQSVvTwjBshJchQ",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650533516,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2224,
+            "outputTokens": 162,
+            "cachedInputTokens": 0,
+            "costUsd": 0.0078703125,
+            "providerCostUsd": 0.00075025,
+            "generationId": "gen-1789650531-pPS1FCTWkU6tBZJ8Sh9i",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650552610,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 44549,
+            "outputTokens": 288,
+            "cachedInputTokens": 36467,
+            "costUsd": 0.0631636875,
+            "providerCostUsd": 0.00019873,
+            "generationId": "gen-1789650539-81Am1RuklvcQ5jbuRFdI",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 5,
+          "inputTokens": 54426,
+          "outputTokens": 1263,
+          "cachedInputTokens": 41640,
+          "costUsd": 0.0932378125,
+          "providerCostUsd": 0.00264759
+        }
+      },
+      "timing": {
+        "wallMs": 50638,
+        "mcpCalls": 11,
+        "mcpMs": 3150,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 1915
+          },
+          {
+            "name": "get_task_result",
+            "ms": 96
+          },
+          {
+            "name": "get_task_result",
+            "ms": 163
+          },
+          {
+            "name": "get_memory",
+            "ms": 113
+          },
+          {
+            "name": "store_memory",
+            "ms": 119
+          },
+          {
+            "name": "get_task_result",
+            "ms": 83
+          },
+          {
+            "name": "get_task_result",
+            "ms": 128
+          },
+          {
+            "name": "get_memory",
+            "ms": 198
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 101
+          },
+          {
+            "name": "get_task_result",
+            "ms": 122
+          },
+          {
+            "name": "get_task_result",
+            "ms": 112
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.75,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "Current 19 distinguished from prior incorrect 12.",
+          "evidence": "answer shows correction \"not 12 places, but 19 places\" + prior 12"
+        },
+        {
+          "status": "PASS",
+          "text": "Correction/history and source provenance retained; no unresolved-current conflation.",
+          "evidence": "prior statement retained"
+        }
+      ],
+      "rationale": "Correction surfaced: current 19 distinguished from prior 12."
+    },
+    {
+      "key": "B12:1",
+      "caseId": "B12",
+      "trial": 1,
+      "status": "RECORDED",
+      "gates": {
+        "isolation": true,
+        "rawCustody": true,
+        "inputPreserved": true,
+        "noDuplicateEffects": true,
+        "published": true,
+        "readOnlyPagesUnchanged": true
+      },
+      "latencyMs": 50945,
+      "turns": [
+        {
+          "message": "What will the kiln socket inspection cost, and on what date is the electrician booked?",
+          "thread": "main",
+          "answer": "Source summary:\nThe electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed. No appointment date was agreed, so there is no booked date recorded.\n[Log/2026-09-17.md#^e-8c4cbf](https://github.com/AlfaBlok/m2-b12-22440b4-r/blob/da58743b29f4af7c1c663f81a7001b1f692b1b17/Log/2026-09-17.md)"
+        }
+      ],
+      "pagesTouched": [
+        [
+          "Areas/Studio.md"
+        ]
+      ],
+      "duplicateReplay": null,
+      "models": {
+        "model_classify": "openai/gpt-5.6-luna",
+        "model_classify_reasoning_effort": "low",
+        "model_ask": "openai/gpt-5.6-luna",
+        "model_ask_reasoning_effort": "low"
+      },
+      "usage": {
+        "available": true,
+        "byOperation": [
+          {
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 19842,
+            "outputTokens": 127,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.0279550625,
+            "providerCostUsd": 0.00019893,
+            "firstTs": 1789650618221,
+            "lastTs": 1789650618221
+          },
+          {
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2780,
+            "outputTokens": 499,
+            "cachedInputTokens": 2588,
+            "costUsd": 0.0090838125,
+            "providerCostUsd": 0.00069841,
+            "firstTs": 1789650587640,
+            "lastTs": 1789650587640
+          },
+          {
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "calls": 1,
+            "inputTokens": 2283,
+            "outputTokens": 217,
+            "cachedInputTokens": 0,
+            "costUsd": 0.00858625,
+            "providerCostUsd": 0.000831,
+            "firstTs": 1789650593634,
+            "lastTs": 1789650593634
+          }
+        ],
+        "calls": [
+          {
+            "ts": 1789650587640,
+            "operation": "classify",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2780,
+            "outputTokens": 499,
+            "cachedInputTokens": 2588,
+            "costUsd": 0.0090838125,
+            "providerCostUsd": 0.00069841,
+            "generationId": "gen-1789650582-NeT9kjqbWSSwMQEqEVbz",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650593634,
+            "operation": "compose",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 2283,
+            "outputTokens": 217,
+            "cachedInputTokens": 0,
+            "costUsd": 0.00858625,
+            "providerCostUsd": 0.000831,
+            "generationId": "gen-1789650587-uHKUG4dN4fkRB0d1gOnl",
+            "status": "succeeded"
+          },
+          {
+            "ts": 1789650618221,
+            "operation": "answer",
+            "model": "openai/gpt-5.6-luna",
+            "inputTokens": 19842,
+            "outputTokens": 127,
+            "cachedInputTokens": 14798,
+            "costUsd": 0.0279550625,
+            "providerCostUsd": 0.00019893,
+            "generationId": "gen-1789650611-sDigRRE7EVsbRAV4Ezme",
+            "status": "succeeded"
+          }
+        ],
+        "totals": {
+          "calls": 3,
+          "inputTokens": 24905,
+          "outputTokens": 843,
+          "cachedInputTokens": 17386,
+          "costUsd": 0.045625125,
+          "providerCostUsd": 0.00172834
+        }
+      },
+      "timing": {
+        "wallMs": 50945,
+        "mcpCalls": 8,
+        "mcpMs": 3430,
+        "calls": [
+          {
+            "name": "store_memory",
+            "ms": 2340
+          },
+          {
+            "name": "get_task_result",
+            "ms": 106
+          },
+          {
+            "name": "get_task_result",
+            "ms": 153
+          },
+          {
+            "name": "get_task_result",
+            "ms": 226
+          },
+          {
+            "name": "get_memory",
+            "ms": 79
+          },
+          {
+            "name": "chat_with_zenod",
+            "ms": 158
+          },
+          {
+            "name": "get_task_result",
+            "ms": 179
+          },
+          {
+            "name": "get_task_result",
+            "ms": 189
+          }
+        ]
+      },
+      "cost": {
+        "providerReportedCostUsd": null,
+        "unknownCostRequests": null,
+        "reservedExposureUsd": 0.5,
+        "hardDollarCap": false
+      },
+      "semanticVerdict": "PASS",
+      "checks": [
+        {
+          "status": "PASS",
+          "text": "280 euros labelled estimate/unconfirmed.",
+          "evidence": "exact"
+        },
+        {
+          "status": "PASS",
+          "text": "Appointment date explicitly unknown/not agreed, without invention.",
+          "evidence": "\"No appointment date was agreed\""
+        }
+      ],
+      "rationale": "280 unconfirmed; appointment date stated unknown."
+    }
+  ],
+  "totals": {
+    "actualUsd": 1.1224507499999998,
+    "providerUsd": 0.0607543,
+    "reservedUsd": 7.75,
+    "inputTokens": 515218,
+    "outputTokens": 26037,
+    "cachedInputTokens": 289191,
+    "calls": 57,
+    "wallMs": 760241,
+    "mcpCalls": 128,
+    "mcpMs": 38581,
+    "pass": 10,
+    "partial": 1,
+    "fail": 1
+  }
+}
