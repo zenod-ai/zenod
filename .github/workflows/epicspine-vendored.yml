@@ -1,0 +1,28 @@
+name: Vendored EpicSpine skill
+
+on:
+  push:
+    paths:
+      - skills/epic-spine/**
+      - skills/epic-spine.manifest.sha256
+      - skills/epic-spine.SOURCE
+      - scripts/ci/check-epicspine-vendored.sh
+  pull_request:
+    paths:
+      - skills/epic-spine/**
+      - skills/epic-spine.manifest.sha256
+      - skills/epic-spine.SOURCE
+      - scripts/ci/check-epicspine-vendored.sh
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Vendored copy matches pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check vendored skill against pinned manifest
+        run: bash scripts/ci/check-epicspine-vendored.sh

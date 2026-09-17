@@ -8,7 +8,12 @@ Status: ready
 Depends on: <issue links or none>
 Bound spine: <same as EpicSpine unless explicitly different>
 Dedicated branch: <branch name>
-Worktree: <path when concurrent, or n/a>
+Worktree: <absolute dedicated path>
+Spine dialect: <inherit bound spine: v1 or v2; undeclared means v1>
+Acceptance surface: <inherit bound spine; if undeclared in v1, describe existing acceptance without changing it>
+Wave: <number>
+Method: PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
+Budget: 90 min
 Base commit: <SHA>
 Latest commit: <SHA or same as base>
 Integration target: main
@@ -21,6 +26,8 @@ Describe the ticket outcome in one short paragraph.
 Terminal state: review | testing | accepted | blocked with required input | planner decision required
 
 ## Context
+
+FIRST ACTION: `git worktree add ../wt-<ticket> -b <branch> <base-commit>` and work only there. Never run `git checkout` or `git switch` in the shared clone.
 
 - Spine section: <heading or anchor>
 - Required reads: <links copied from the Bootstrap Map>
@@ -35,13 +42,14 @@ Delegated spine section: <section + authority, or none>
 ## Acceptance Criteria
 
 - [ ] <observable ticket-level criterion>
+- [ ] Method justified by recorded discovery (default 15 minutes in current/named relevant repositories/services); uncertainty and unsearched areas disclosed. PORT/DUPLICATE sources inspected first; required adaptations explained and validated.
 - [ ] <observable ticket-level criterion>
 
 ## Validation
 
 Required evidence:
 
-- [ ] <test command, review method, screenshot, or deployment check>
+- [ ] <personally executed observable steps and evidence for declared surface: browser live URL/screenshots; CLI commands/exit codes/outputs; library consumer example; infrastructure authorized state probes; documentation instructions/render/link checks>
 - [ ] Exact commit SHA and named environment or test surface recorded
 
 ## Human Gates
@@ -50,6 +58,8 @@ Required evidence:
 - Trigger: <condition or none>
 - Exact approval / input required: <decision or none>
 - Work that may continue independently: <scope or none>
+
+Use existing user authorization without asking again. Defaults and absence rules apply only to reversible choices inside approved scope; silence never supplies required approval or authorizes scope expansion. Record unresolved required input in Open Questions and Human Gates, and continue only independent authorized work.
 
 ## Handoff Contract
 
