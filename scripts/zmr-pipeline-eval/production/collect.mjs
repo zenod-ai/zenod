@@ -67,6 +67,7 @@ for (const name of readdirSync(cellsDir).sort()) {
 const totals = cells.reduce((a, c) => {
   const u = c.usage?.totals ?? {};
   a.actualUsd += u.costUsd ?? 0;
+  a.providerUsd += u.providerCostUsd ?? 0;
   a.reservedUsd += c.cost?.reservedExposureUsd ?? 0;
   a.inputTokens += u.inputTokens ?? 0;
   a.outputTokens += u.outputTokens ?? 0;
@@ -79,7 +80,7 @@ const totals = cells.reduce((a, c) => {
   else if (c.semanticVerdict === 'PARTIAL') a.partial += 1;
   else if (c.semanticVerdict === 'FAIL') a.fail += 1;
   return a;
-}, {actualUsd: 0, reservedUsd: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, calls: 0, wallMs: 0, mcpCalls: 0, mcpMs: 0, pass: 0, partial: 0, fail: 0});
+}, {actualUsd: 0, providerUsd: 0, reservedUsd: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, calls: 0, wallMs: 0, mcpCalls: 0, mcpMs: 0, pass: 0, partial: 0, fail: 0});
 
 const run = {
   runId: meta.runId ?? `run-${Date.now()}`,

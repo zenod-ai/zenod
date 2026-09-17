@@ -104,6 +104,10 @@ export interface LlmUsageReport {
   status?: "succeeded" | "failed";
   /** Bounded error class for support timelines; never raw provider prose. */
   errorCode?: string | null;
+  /** Real credits charged by the gateway for this call (OpenRouter usage.cost), when reported. */
+  providerCostUsd?: number | null;
+  /** Gateway generation id for reconciliation (OpenRouter response id), when reported. */
+  generationId?: string | null;
 }
 
 export interface AiLlmOptions {
@@ -324,26 +328,104 @@ export function clampMaxSteps(value: number | undefined): number {
 
 type ModelFactory = (id: string) => Parameters<typeof generateText>[0]["model"];
 
+/** Real gateway cost/tokens for one OpenRouter call, read from the response body. */
+export interface ProviderCallUsage {
+  model: string;
+  generationId: string | null;
+  costUsd: number | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  cachedTokens: number | null;
+  cacheWriteTokens: number | null;
+}
+
+function providerUsageFrom(recordedModel: string, body: Record<string, unknown>): ProviderCallUsage {
+  const usage = (body.usage ?? {}) as Record<string, unknown>;
+  const prompt = (usage.prompt_tokens_details ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    model: typeof body.model === "string" && body.model ? body.model : recordedModel,
+    generationId: typeof body.id === "string" ? body.id : null,
+    costUsd: num(usage.cost),
+    promptTokens: num(usage.prompt_tokens),
+    completionTokens: num(usage.completion_tokens),
+    cachedTokens: num(prompt.cached_tokens),
+    cacheWriteTokens: num(prompt.cache_write_tokens),
+  };
+}
+
+/** Read the authoritative gateway usage from a streaming (SSE) response without disturbing the SDK's own read. */
+function captureStreamUsage(response: Response, recordedModel: string, sink: (u: ProviderCallUsage) => void): void {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = "";
+  void (async () => {
+    try {
+      for (;;) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+        let nl: number;
+        while ((nl = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(payload) as Record<string, unknown>;
+            if (parsed.usage) sink(providerUsageFrom(recordedModel, parsed));
+          } catch { /* keep scanning */ }
+        }
+      }
+    } catch { /* capture is best-effort */ }
+  })();
+}
+
 /**
  * Build the per-provider model factory. Anthropic and OpenAI use their native
  * providers; OpenRouter and Groq are OpenAI-compatible gateways reached via the
  * OpenAI provider with a custom baseURL and the Chat Completions model.
+ *
+ * For OpenRouter the fetch seam always requests `usage.include` (and
+ * `stream_options.include_usage` when streaming) so the response carries the
+ * gateway's real `usage.cost`, captured for authoritative accounting. Non-stream
+ * bodies are buffered so the record is available before the SDK resolves the
+ * call; streams are teed (the final usage chunk arrives before the stream ends).
+ * The same seam also adds the optional organizer routing envelope.
  */
-function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[]): ModelFactory {
-  // The OpenAI SDK exposes a fixed provider-option schema, not arbitrary gateway
-  // fields. Its supported fetch seam adds only the OpenRouter routing envelope.
-  const routingFetch: typeof globalThis.fetch | undefined = providerOrder ? async (input, init) => {
+function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[], onProviderUsage?: (u: ProviderCallUsage) => void): ModelFactory {
+  const wantsSeam = provider === "openrouter" && (Boolean(providerOrder) || Boolean(onProviderUsage));
+  const seam: typeof globalThis.fetch | undefined = wantsSeam ? async (input, init) => {
     const request = new Request(input, init);
-    if (request.url !== OPENAI_COMPATIBLE_BASE_URLS.openrouter + "/chat/completions" || request.method !== "POST") throw new Error("Unexpected organizer routing destination");
-    const body = await request.json() as Record<string, unknown>;
-    const provider = {only: providerOrder, order: providerOrder, require_parameters: true};
-    return globalThis.fetch(request.url, {...init, method: request.method, headers: request.headers, signal: request.signal,
-      body: JSON.stringify({...body, provider})});
+    if (request.url !== OPENAI_COMPATIBLE_BASE_URLS.openrouter + "/chat/completions" || request.method !== "POST") {
+      if (providerOrder) throw new Error("Unexpected organizer routing destination");
+      return globalThis.fetch(request, init);
+    }
+    const body = await request.clone().json() as Record<string, unknown>;
+    const patched: Record<string, unknown> = { ...body, usage: { include: true, ...(body.usage as object | undefined) } };
+    if (patched.stream === true) patched.stream_options = { include_usage: true, ...(body.stream_options as object | undefined) };
+    if (providerOrder) patched.provider = { only: providerOrder, order: providerOrder, require_parameters: true };
+    let response = await globalThis.fetch(request.url, {method: request.method, headers: request.headers, signal: request.signal, body: JSON.stringify(patched)});
+    const recordedModel = typeof body.model === "string" ? body.model : "";
+    if (onProviderUsage && response.ok) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
+        captureStreamUsage(response.clone(), recordedModel, onProviderUsage);
+      } else {
+        // Buffer once so the authoritative cost is recorded before reportUsage runs.
+        const bytes = await response.arrayBuffer();
+        try { onProviderUsage(providerUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>)); } catch { /* capture is best-effort */ }
+        response = new Response(bytes, {status: response.status, statusText: response.statusText, headers: response.headers});
+      }
+    }
+    return response;
   } : undefined;
   if (provider === "anthropic") return createAnthropic({ apiKey });
   if (provider === "openai") return createOpenAI({ apiKey });
   const baseURL = OPENAI_COMPATIBLE_BASE_URLS[provider];
-  const compatible = createOpenAI({... (baseURL ? { apiKey, baseURL } : { apiKey }), ...(routingFetch ? {fetch: routingFetch} : {})});
+  const compatible = createOpenAI({... (baseURL ? { apiKey, baseURL } : { apiKey }), ...(seam ? {fetch: seam} : {})});
   return (id: string) => compatible.chat(id);
 }
 
@@ -628,6 +710,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
   private readonly classifyModelId: string;
   private readonly organizerProviderOptions?: { openai: { reasoningEffort: "none" | "low" } };
   private readonly askProviderOptions?: { openai: { reasoningEffort: "none" | "low" } };
+  /** Authoritative OpenRouter usage captured from responses, matched to reports in order. */
+  private readonly providerUsage: ProviderCallUsage[] = [];
   private readonly visionModelId: string;
   private readonly maxSteps: number;
   private readonly provider: Provider;
@@ -663,13 +747,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.maxSteps = clampMaxSteps(options.maxSteps);
     this.provider = options.provider;
     this.onUsage = options.onUsage;
-    this.model = createModelFactory(options.provider, options.apiKey);
+    this.model = createModelFactory(options.provider, options.apiKey, undefined, (u) => this.providerUsage.push(u));
     const order = options.organizerProviderOrder;
     if (order !== undefined && (options.provider !== "openrouter" || !Array.isArray(order) || order.length < 1 || order.length > 3
       || new Set(order).size !== order.length || order.some(slug => typeof slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)))) {
       throw new Error("Organizer provider order requires OpenRouter and 1–3 unique base provider slugs");
     }
-    this.organizerModel = order ? createModelFactory(options.provider, options.apiKey, [...order]) : this.model;
+    this.organizerModel = order ? createModelFactory(options.provider, options.apiKey, [...order], (u) => this.providerUsage.push(u)) : this.model;
   }
 
   /**
@@ -692,16 +776,24 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       cacheReadInputTokens?: number;
     };
     try {
+      // Match the authoritative gateway record captured for this call, when the
+      // response has been read (may lag for streams; falls back to estimate-only).
+      let idx = this.providerUsage.findIndex((r) => r.model === modelId);
+      if (idx < 0 && usage?.outputTokens !== undefined) idx = this.providerUsage.findIndex((r) => r.completionTokens === usage.outputTokens);
+      if (idx < 0 && this.providerUsage.length === 1) idx = 0;
+      const recorded = idx >= 0 ? this.providerUsage.splice(idx, 1)[0] : undefined;
       this.onUsage({
         operation,
         provider: this.provider,
         model: modelId,
         inputTokens: usage?.inputTokens ?? 0,
         outputTokens: usage?.outputTokens ?? 0,
-        cachedInputTokens: usage?.cachedInputTokens ?? anthropic.cacheReadInputTokens ?? 0,
-        cacheCreationInputTokens: anthropic.cacheCreationInputTokens ?? 0,
+        cachedInputTokens: usage?.cachedInputTokens ?? anthropic.cacheReadInputTokens ?? recorded?.cachedTokens ?? 0,
+        cacheCreationInputTokens: anthropic.cacheCreationInputTokens ?? recorded?.cacheWriteTokens ?? 0,
         status: attempt.status ?? "succeeded",
         ...(attempt.errorCode ? { errorCode: attempt.errorCode } : {}),
+        ...(recorded && recorded.costUsd !== null ? { providerCostUsd: recorded.costUsd } : {}),
+        ...(recorded?.generationId ? { generationId: recorded.generationId } : {}),
       });
     } catch {
       // Metering must never break the call path.

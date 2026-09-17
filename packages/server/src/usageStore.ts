@@ -82,6 +82,8 @@ export interface UsageSummary {
   cachedInputTokens: number;
   cacheCreationInputTokens: number;
   costUsd: number;
+  /** Real gateway credits charged across the window, when reported (may undercount early rows). */
+  providerCostUsd: number;
   byOperation: UsageBucket[];
   byModel: UsageBucket[];
 }
@@ -97,6 +99,8 @@ export interface UsageCall {
   cachedInputTokens: number;
   cacheCreationInputTokens: number;
   costUsd: number;
+  /** Real gateway credits charged for the call (OpenRouter usage.cost), when reported. */
+  providerCostUsd: number | null;
   status: "succeeded" | "failed";
   errorCode: string | null;
 }
@@ -162,6 +166,12 @@ export class UsageStore {
     if (!columns.some((column) => column.name === "error_code")) {
       this.db.exec("ALTER TABLE llm_usage ADD COLUMN error_code TEXT");
     }
+    if (!columns.some((column) => column.name === "provider_cost_usd")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN provider_cost_usd REAL");
+    }
+    if (!columns.some((column) => column.name === "generation_id")) {
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN generation_id TEXT");
+    }
     this.backfillCosts();
   }
 
@@ -199,8 +209,8 @@ export class UsageStore {
     this.db
       .prepare(
         `INSERT INTO llm_usage
-           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         now,
@@ -214,6 +224,8 @@ export class UsageStore {
         estimateCostUsd(report),
         report.status ?? "succeeded",
         report.errorCode ?? null,
+        report.providerCostUsd ?? null,
+        report.generationId ?? null,
       );
   }
 
@@ -259,7 +271,7 @@ export class UsageStore {
     const rows = this.db
       .prepare(
         `SELECT ts, operation, provider, model, input_tokens, output_tokens,
-                cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code
+                cached_input_tokens, cache_creation_input_tokens, cost_usd, provider_cost_usd, status, error_code
          FROM llm_usage WHERE ${clauses.join(" AND ")}
          ORDER BY ts DESC, id DESC
          LIMIT ?`,
@@ -274,6 +286,7 @@ export class UsageStore {
       cached_input_tokens: number;
       cache_creation_input_tokens: number;
       cost_usd: number;
+      provider_cost_usd: number | null;
       status: "succeeded" | "failed";
       error_code: string | null;
     }>;
@@ -287,6 +300,7 @@ export class UsageStore {
       cachedInputTokens: row.cached_input_tokens,
       cacheCreationInputTokens: row.cache_creation_input_tokens,
       costUsd: row.cost_usd ?? 0,
+      providerCostUsd: row.provider_cost_usd ?? null,
       status: row.status === "failed" ? "failed" : "succeeded",
       errorCode: row.error_code,
     }));
@@ -300,7 +314,8 @@ export class UsageStore {
                 COALESCE(SUM(output_tokens), 0) AS output_tokens,
                 COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
                 COALESCE(SUM(cache_creation_input_tokens), 0) AS cache_creation_input_tokens,
-                COALESCE(SUM(cost_usd), 0) AS cost_usd
+                COALESCE(SUM(cost_usd), 0) AS cost_usd,
+                COALESCE(SUM(provider_cost_usd), 0) AS provider_cost_usd
          FROM llm_usage WHERE ts >= ?`,
       )
       .get(since) as unknown as Omit<AggRow, "key">;
@@ -312,6 +327,7 @@ export class UsageStore {
       cachedInputTokens: totals.cached_input_tokens,
       cacheCreationInputTokens: totals.cache_creation_input_tokens,
       costUsd: totals.cost_usd ?? 0,
+      providerCostUsd: (totals as unknown as { provider_cost_usd?: number }).provider_cost_usd ?? 0,
       byOperation: this.aggregate("operation", since),
       byModel: this.aggregate("model", since),
     };

@@ -31,15 +31,16 @@ function readTenantUsage(id) {
   if (!existsSync(path)) return {available: false};
   const d = new DatabaseSync(path, {readOnly: true});
   try {
-    const byOperation = d.prepare("SELECT operation,model,COUNT(*) calls,SUM(input_tokens) inputTokens,SUM(output_tokens) outputTokens,SUM(cached_input_tokens) cachedInputTokens,SUM(cost_usd) costUsd,MIN(ts) firstTs,MAX(ts) lastTs FROM llm_usage GROUP BY operation,model ORDER BY operation,model").all();
-    const calls = d.prepare("SELECT ts,operation,model,input_tokens inputTokens,output_tokens outputTokens,cached_input_tokens cachedInputTokens,cost_usd costUsd,status FROM llm_usage ORDER BY ts").all();
+    const byOperation = d.prepare("SELECT operation,model,COUNT(*) calls,SUM(input_tokens) inputTokens,SUM(output_tokens) outputTokens,SUM(cached_input_tokens) cachedInputTokens,SUM(cost_usd) costUsd,SUM(provider_cost_usd) providerCostUsd,MIN(ts) firstTs,MAX(ts) lastTs FROM llm_usage GROUP BY operation,model ORDER BY operation,model").all();
+    const calls = d.prepare("SELECT ts,operation,model,input_tokens inputTokens,output_tokens outputTokens,cached_input_tokens cachedInputTokens,cost_usd costUsd,provider_cost_usd providerCostUsd,generation_id generationId,status FROM llm_usage ORDER BY ts").all();
     const totals = byOperation.reduce((acc, r) => ({
       calls: acc.calls + r.calls,
       inputTokens: acc.inputTokens + (r.inputTokens || 0),
       outputTokens: acc.outputTokens + (r.outputTokens || 0),
       cachedInputTokens: acc.cachedInputTokens + (r.cachedInputTokens || 0),
       costUsd: acc.costUsd + (r.costUsd || 0),
-    }), {calls: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0});
+      providerCostUsd: acc.providerCostUsd + (r.providerCostUsd || 0),
+    }), {calls: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0, providerCostUsd: 0});
     return {available: true, byOperation, calls, totals};
   } finally { d.close(); }
 }
