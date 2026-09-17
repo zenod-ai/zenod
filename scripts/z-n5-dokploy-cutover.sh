@@ -14,6 +14,12 @@ APPROVAL_REF="${APPROVAL_REF:-}"
 STATE_DIR="${STATE_DIR:-/tmp/z-n5-dokploy-cutover-state}"
 DOKPLOY_API_BASE="${DOKPLOY_API_BASE:-https://dokploy.polyqu.com/api}"
 DOKPLOY_API_KEY="${DOKPLOY_API_KEY:-}"
+# TypeSafe (Jev) classify fast path. The key is read from the environment (see the
+# typesafe-env Keychain helper); it is never written into this script or a receipt.
+TYPESAFE_API_KEY="${TYPESAFE_API_KEY:-}"
+ZENOD_JEV_ENABLED="${ZENOD_JEV_ENABLED:-0}"
+ZENOD_JEV_MODEL="${ZENOD_JEV_MODEL:-}"
+ZENOD_JEV_CONFIDENCE_THRESHOLD="${ZENOD_JEV_CONFIDENCE_THRESHOLD:-}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-420}"
 HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-5}"
 
@@ -53,6 +59,12 @@ EOF
 [[ "$MODE" =~ ^(plan|apply|rollback)$ ]] || die "MODE must be plan, apply, or rollback"
 [[ "$DRY_RUN" =~ ^[01]$ ]] || die "DRY_RUN must be 0 or 1"
 [[ -n "$DOKPLOY_API_KEY" ]] || die 'DOKPLOY_API_KEY is required; run eval "$(dokploy-env)"'
+# Fail closed before any mutation: enabling the Jev fast path without a key would
+# deploy a candidate whose classification silently falls back, and the eval would
+# measure nothing.
+if [[ "$ZENOD_JEV_ENABLED" =~ ^(1|true)$ && -z "$TYPESAFE_API_KEY" ]]; then
+  die 'ZENOD_JEV_ENABLED is set but TYPESAFE_API_KEY is empty; run eval "$(typesafe-env)"'
+fi
 [[ "$STATE_DIR" == /* && "$STATE_DIR" != "/" ]] || die "STATE_DIR must be a non-root absolute path"
 case "$STATE_DIR/" in "$(git rev-parse --show-toplevel 2>/dev/null || true)/"*) die "STATE_DIR must be outside the repository" ;; esac
 
@@ -112,7 +124,9 @@ build_target_env() {
   local existing source
   existing="$(jq -r '.env // ""' <<<"$target_json")"
   source="$(jq -r '.env // ""' <<<"$source_json")"
-  jq -nr --arg existing "$existing" --arg source "$source" '
+  jq -nr --arg existing "$existing" --arg source "$source" \
+    --arg typesafe "$TYPESAFE_API_KEY" --arg jevEnabled "$ZENOD_JEV_ENABLED" \
+    --arg jevModel "$ZENOD_JEV_MODEL" --arg jevThreshold "$ZENOD_JEV_CONFIDENCE_THRESHOLD" '
     def parsed($raw):
       $raw | split("\n") | map(select(length > 0) | capture("^(?<key>[^=]+)=(?<value>.*)$")) |
       map({key: .key, value: .value}) | from_entries;
@@ -135,7 +149,14 @@ build_target_env() {
       STRIPE_WEBHOOK_SECRET: $src.STRIPE_WEBHOOK_SECRET,
       PRICE_MONTHLY: "price_1TrjPC76yJ3p1J6XqXl1QwN8",
       PRICE_YEARLY: "price_1TrjPD76yJ3p1J6XZGkcIQ56"
-    } | to_entries | sort_by(.key) | map("\(.key)=\(.value)") | join("\n")
+    }
+    # Jev is always written explicitly (default "0"), so a deploy states plainly
+    # whether the fast path is on rather than leaving it absent and ambiguous.
+    + { ZENOD_JEV_ENABLED: $jevEnabled }
+    + (if $jevModel == "" then {} else { ZENOD_JEV_MODEL: $jevModel } end)
+    + (if $jevThreshold == "" then {} else { ZENOD_JEV_CONFIDENCE_THRESHOLD: $jevThreshold } end)
+    + (if $typesafe == "" then {} else { TYPESAFE_API_KEY: $typesafe } end)
+    | to_entries | sort_by(.key) | map("\(.key)=\(.value)") | join("\n")
   '
 }
 
