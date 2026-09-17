@@ -188,6 +188,26 @@ export type {
   PeerTools,
   VaultReadTools,
 } from "./llm/types.js";
+export {
+  JevClient,
+  JevUnavailableError,
+  assembleClassification,
+  JEV_DEFAULT_MODEL,
+  JEV_DEFAULT_BASE_URL,
+  JEV_DEFAULT_TIMEOUT_MS,
+  type JevClientOptions,
+  type JevVerdict,
+} from "./llm/jev.js";
+export {
+  withJevClassify,
+  isJevEligible,
+  JEV_DEFAULT_CONFIDENCE_THRESHOLD,
+  JEV_DEFAULT_BREAKER_FAILURES,
+  JEV_DEFAULT_BREAKER_COOLDOWN_MS,
+  type ClassifyOutcome,
+  type JevClassifyOptions,
+  type JevFallbackReason,
+} from "./llm/classifyFallback.js";
 export * from "./connections/github.js";
 
 export { selectMemoryEntries, memoryTimestamp } from "./engine/evidence.js";

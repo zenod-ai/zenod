@@ -1,0 +1,59 @@
+{
+  "version": "classify-label-review-v1",
+  "fixture": "classify-fixture-v2",
+  "date": "2026-09-17",
+  "process": "Labels were written by hand against the vault page list and the classify contract. A second reviewer (a different model, opencode-go/grok-4.6) independently labelled all 50 cases from the same page list and contract, with no visibility of the first labels. Disagreements were adjudicated one by one and every outcome is recorded below before any candidate was run against the fixture.",
+  "agreement": { "total": 50, "agreed": 45, "disagreed": 5, "ratePct": 90 },
+  "disagreements": [
+    {
+      "id": "C18",
+      "content": "We adopted a rescue greyhound called Pepper last weekend.",
+      "author": { "page": "@new", "disposition": "append_compact_note" },
+      "reviewer": { "page": "Areas/Family.md", "disposition": "append_compact_note" },
+      "resolved": { "page": "Areas/Family.md", "disposition": "append_compact_note" },
+      "reason": "Reviewer accepted: the page summary covers household members, and a pet is a household member. The author label asked for a new page without a stated need for one."
+    },
+    {
+      "id": "C19",
+      "content": "Opened a dedicated account at Northbank for the renovation budget, separate from the main current account.",
+      "author": { "page": "@new", "disposition": "append_compact_note" },
+      "reviewer": { "page": "Areas/Finance.md", "disposition": "append_compact_note" },
+      "resolved": { "page": "Areas/Finance.md", "disposition": "append_compact_note" },
+      "reason": "Reviewer accepted: Areas/Finance.md explicitly covers accounts, so a new page is not required."
+    },
+    {
+      "id": "C21",
+      "content": "Remember I really prefer dark mode and I hate notification badges.",
+      "author": { "page": null, "disposition": "needs_clarification" },
+      "reviewer": { "page": "@new", "disposition": "append_compact_note" },
+      "resolved": { "page": null, "disposition": "needs_clarification" },
+      "reason": "Author held: no existing page covers a UI preference and the contract requires an unresolved destination to clarify rather than invent a page. The reviewer's new page is defensible but would make the fixture reward inventing a destination, which the contract explicitly forbids. Unresolved disagreement recorded rather than hidden."
+    },
+    {
+      "id": "C22",
+      "content": "It went about as well as expected.",
+      "author": { "page": null, "disposition": "needs_clarification" },
+      "reviewer": { "page": null, "disposition": "evidence_only" },
+      "resolved": { "page": null, "disposition": "evidence_only" },
+      "reason": "Reviewer accepted and category moved to non-substantive: the utterance carries no durable proposition at all, so there is nothing to clarify."
+    },
+    {
+      "id": "C23",
+      "content": "Ask them about the thing we discussed.",
+      "author": { "page": null, "disposition": "needs_clarification" },
+      "reviewer": { "page": null, "disposition": "evidence_only" },
+      "resolved": { "page": null, "disposition": "evidence_only" },
+      "reason": "Reviewer accepted and category moved to non-substantive: an unresolved reference with no stated proposition is not durable knowledge."
+    }
+  ],
+  "effects": [
+    "Category 'new-page' shrank from 4 cases to 2 (C17, C20) because C18 and C19 had existing pages.",
+    "Category 'ambiguous' shrank from 4 to 2 (C21, C24); C22 and C23 moved to 'non-substantive', which now has 6.",
+    "The reviewer's remaining 45 labels were accepted unchanged.",
+    "Labels are frozen at this point. No label was altered after seeing any candidate's output."
+  ],
+  "residualLimits": [
+    "The second reviewer is a model, not a human. It is a different model from the one being evaluated, which removes the worst circularity, but it is not independent human judgement.",
+    "The reviewer saw only the page list and the case text, not the vault bodies, so it could not weigh page contents the way a full classifier can."
+  ]
+}

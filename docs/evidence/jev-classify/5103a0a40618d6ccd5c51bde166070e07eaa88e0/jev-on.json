@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "suite": "classify-basics-v2",
+  "label": "jev-on",
+  "candidateSha": "5103a0a40618d6ccd5c51bde166070e07eaa88e0",
+  "imageDigest": null,
+  "settings": {
+    "jev_enabled": true,
+    "jev_confidence_threshold": 0.75,
+    "route": "opencode-go/responses"
+  },
+  "resultsSha256": "1c03a4d8057c7383362afca49b85a31074ccf52e48a0413697da1e4c14aa2f4d",
+  "fixtureVersion": "classify-fixture-v2",
+  "model": "gpt-5.6-luna",
+  "gate": 0.75,
+  "runs": 3,
+  "trials": 3,
+  "cases": 50,
+  "complete": true,
+  "spentUsd": 0.5822,
+  "incumbentCalls": 450,
+  "generatedAt": "2026-09-17T21:24:13.236Z",
+  "aggregate": {
+    "incumbent": {
+      "correct": 415,
+      "total": 450,
+      "latency": {
+        "p50": 4492,
+        "p90": 7229
+      }
+    },
+    "jevRaw": {
+      "correct": 353,
+      "total": 406,
+      "latency": {
+        "p50": 889,
+        "p90": 1096
+      }
+    },
+    "jevGated": {
+      "correct": 238,
+      "total": 247,
+      "ofAttempts": 450
+    },
+    "combined": {
+      "correct": 427,
+      "total": 450
+    }
+  },
+  "runSummaries": [
+    {
+      "run": 0,
+      "attempts": 150,
+      "incumbent": {
+        "correct": 139,
+        "total": 150
+      },
+      "jevRaw": {
+        "correct": 118,
+        "total": 135
+      },
+      "jevGated": {
+        "correct": 81,
+        "total": 84
+      },
+      "combined": {
+        "correct": 144,
+        "total": 150
+      },
+      "coveragePct": 56,
+      "spentUsd": 0.1948
+    },
+    {
+      "run": 1,
+      "attempts": 150,
+      "incumbent": {
+        "correct": 137,
+        "total": 150
+      },
+      "jevRaw": {
+        "correct": 117,
+        "total": 136
+      },
+      "jevGated": {
+        "correct": 78,
+        "total": 81
+      },
+      "combined": {
+        "correct": 140,
+        "total": 150
+      },
+      "coveragePct": 54,
+      "spentUsd": 0.3888
+    },
+    {
+      "run": 2,
+      "attempts": 150,
+      "incumbent": {
+        "correct": 139,
+        "total": 150
+      },
+      "jevRaw": {
+        "correct": 118,
+        "total": 135
+      },
+      "jevGated": {
+        "correct": 79,
+        "total": 82
+      },
+      "combined": {
+        "correct": 143,
+        "total": 150
+      },
+      "coveragePct": 55,
+      "spentUsd": 0.5822
+    }
+  ],
+  "spread": {
+    "incumbent": {
+      "meanPct": 92.2,
+      "minPct": 91.3,
+      "maxPct": 92.7,
+      "spreadPct": 1.3,
+      "sdPct": 0.6,
+      "runs": 3
+    },
+    "jevGated": {
+      "meanPct": 96.4,
+      "minPct": 96.3,
+      "maxPct": 96.4,
+      "spreadPct": 0.1,
+      "sdPct": 0.1,
+      "runs": 3
+    },
+    "combined": {
+      "meanPct": 94.9,
+      "minPct": 93.3,
+      "maxPct": 96,
+      "spreadPct": 2.7,
+      "sdPct": 1.1,
+      "runs": 3
+    }
+  },
+  "receiptSha256": "2b00cf278c98171c1300569099966799a805d49fced92f16a5656e5155f43690"
+}

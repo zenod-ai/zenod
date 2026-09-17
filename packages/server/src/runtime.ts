@@ -6,6 +6,9 @@ import { createHash } from "node:crypto";
 import { SqliteCredentialVault, type CredentialVault } from "./credentialVault.js";
 import {
   createBrainLlm,
+  JevClient,
+  withJevClassify,
+  type BrainLlm,
   createEngine,
   cleanSlateVault,
   ensureSchemaV1,
@@ -624,7 +627,7 @@ export class Runtime {
     const organizerReasoningEffort = this.settings.organizerReasoningEffort();
     const askReasoningEffort = this.settings.askReasoningEffort();
     const organizerProviderOrder = this.settings.organizerProviderOrder();
-    const llm = createBrainLlm({
+    const primaryLlm = createBrainLlm({
       provider: this.settings.provider(),
       apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
@@ -632,6 +635,7 @@ export class Runtime {
       ...(organizerReasoningEffort ? { organizerReasoningEffort } : {}),
       ...(organizerProviderOrder ? { organizerProviderOrder } : {}),
       ...(this.settings.get("model_classify") ? { classifyModel: this.settings.get("model_classify")! } : {}),
+      ...(this.settings.llmBaseUrl() ? { baseUrl: this.settings.llmBaseUrl()! } : {}),
       ...(this.settings.get("model_vision") ? { visionModel: this.settings.get("model_vision")! } : {}),
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
       // Always persist real per-call token usage for cost analytics (GET
@@ -641,6 +645,7 @@ export class Runtime {
         if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report);
       },
     });
+    const llm = this.withJevClassification(primaryLlm);
     // The chat/MCP Drive tools enqueue onto the background ingest queue.
     const driveTools = vaultless ? null : buildDriveTools(this.settings, this.ingestQueue);
     // Mesh: peer-agent delegation tools, available to any agent (vault or not).
@@ -878,6 +883,35 @@ export class Runtime {
    * call (`ask_<name>`), forwarding over MCP via callPeer. Available to any agent;
    * it's how the vaultless Console answers memory questions by asking Zenod.
    */
+  /**
+   * Put the TypeSafe (Jev) fast path in front of the primary classifier when it
+   * is explicitly enabled and a key is configured. Jev only ever shortens the
+   * path: any failure, low confidence, missing destination or incomplete
+   * evidence returns to the primary classifier (see withJevClassify).
+   */
+  private withJevClassification(llm: BrainLlm): BrainLlm {
+    if (!this.settings.jevEnabled()) return llm;
+    const apiKey = this.settings.get("typesafe_api_key");
+    if (!apiKey) {
+      // Enabled without a credential is a misconfiguration, not a silent no-op.
+      console.warn("[jev] enabled but no typesafe_api_key configured; using the primary classifier");
+      return llm;
+    }
+    const model = this.settings.jevModel();
+    const threshold = this.settings.jevConfidenceThreshold();
+    return withJevClassify(llm, {
+      client: new JevClient({ apiKey, ...(model ? { model } : {}) }),
+      ...(threshold !== undefined ? { confidenceThreshold: threshold } : {}),
+      onOutcome: (outcome) => {
+        if (outcome.route === "jev") {
+          console.log(`[jev] classified via jev in ${outcome.latencyMs}ms confidence=${outcome.confidence.toFixed(2)} destination=${outcome.destination}`);
+        } else if (outcome.reason !== "ineligible") {
+          console.log(`[jev] fell back to primary reason=${outcome.reason}${outcome.errorType ? ` error=${outcome.errorType}` : ""}`);
+        }
+      },
+    });
+  }
+
   private buildPeerTools(): PeerTools {
     const tools: PeerTools = {};
     const shouldForwardConsoleContext = this.agent.name === "console";
