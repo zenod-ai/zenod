@@ -1,0 +1,387 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod Memory — production MCP evals (all runs)</title><style>
+:root{--bg:#0b0f17;--card:#141b26;--fg:#e8eef7;--mut:#93a2b8;--pass:#39d98a;--partial:#ffc453;--fail:#ff6b6b;--acc:#6aa8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1150px;margin:0 auto;padding:32px 20px 80px}h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:34px 0 12px;color:var(--acc)}h4{margin:14px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--card);border:1px solid #1f2a3a;border-radius:12px;padding:14px 16px}.card .k{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.card .v{font-size:22px;font-weight:700;margin-top:6px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px 24px;background:var(--card);border:1px solid #1f2a3a;border-radius:12px;padding:16px 18px;margin:12px 0}
+.meta b{color:var(--mut);font-weight:600;min-width:130px;display:inline-block}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid #1f2a3a;border-radius:10px;overflow:hidden;margin:6px 0}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #1f2a3a;font-size:14px}th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+td.num{font-variant-numeric:tabular-nums;text-align:right}tr.total td{font-weight:700}
+.pass{color:var(--pass);font-weight:700}.partial{color:var(--partial);font-weight:700}.fail{color:var(--fail);font-weight:700}.unscored,.mut{color:var(--mut)}
+.up{color:var(--fail)}.down{color:var(--pass)}
+details.cell{background:var(--card);border:1px solid #1f2a3a;border-radius:10px;padding:10px 14px;margin:8px 0;display:block}
+summary{cursor:pointer;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.labels{margin:3px 0;font-size:13px}.labels span{margin-right:12px}
+ul.checks{list-style:none;padding-left:0;margin:4px 0}ul.checks li{margin:3px 0;font-size:13.5px}
+.qa{margin:6px 0}.q{color:var(--acc);font-size:13.5px}.a{white-space:pre-wrap;background:#0e1420;border-radius:8px;padding:8px 10px;margin-top:3px;font-size:13.5px}
+code{background:#0e1420;padding:2px 6px;border-radius:6px;font-size:12.5px}footer{color:var(--mut);margin-top:40px;font-size:13px}
+</style></head><body><div class="wrap">
+<h1>Zenod Memory — production MCP evals (all runs)</h1>
+<div class="mut">MCP-scored against the deployed agent · manual semantic review · m2-basics-v1.1 · run <code>m2-basics-12-22440b4-luna</code></div>
+<div class="meta">
+    <div><b>Candidate SHA</b><span><code>22440b4151289900370b1ed375edc1b7aeaca1a1</code></span></div>
+    <div><b>Image digest</b><span><code>sha256:f5f9e2741096288d210a5b4c39eb1b7f49640e7cf59a2714a58067536c6fe4ea</code></span></div>
+    <div><b>Deployment</b><span>Dokploy <code>PFnm5FPJtBrGU0Ctr2Jdl</code> ZMR deploy 22440b4</span></div>
+    <div><b>Models</b><span>classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</span></div>
+    <div><b>Suite</b><span>m2-basics-v1.1</span></div>
+    <div><b>Generated</b><span>2026-09-17T13:11:26.430Z</span></div>
+  </div>
+<div class="cards">
+    <div class="card"><div class="k">Cells</div><div class="v">12</div></div>
+    <div class="card"><div class="k">PASS / partial / fail</div><div class="v"><span class="pass">10</span> / <span class="partial">1</span> / <span class="fail">1</span></div></div>
+    <div class="card"><div class="k">Gateway cost (real)</div><div class="v">$0.060754</div></div>
+    <div class="card"><div class="k">Cost estimate</div><div class="v">$1.122451</div></div>
+    <div class="card"><div class="k">Reserved (stop-gate)</div><div class="v">$7.750000</div></div>
+    <div class="card"><div class="k">Tokens in / out</div><div class="v">515,218 / 26,037</div></div>
+    <div class="card"><div class="k">Cached input</div><div class="v">289,191</div></div>
+    <div class="card"><div class="k">LLM calls</div><div class="v">57</div></div>
+    <div class="card"><div class="k">Summed cell wall time</div><div class="v">760.2s</div></div>
+  </div>
+
+<h2>Cost by operation (all cells)</h2><table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">22</td><td class="num">92,818 / 17,373</td><td class="num">$0.365461</td><td class="num">$0.031381</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">19</td><td class="num">48,158 / 5,053</td><td class="num">$0.183159</td><td class="num">$0.019253</td></tr><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">16</td><td class="num">374,242 / 3,611</td><td class="num">$0.573830</td><td class="num">$0.010120</td></tr></tbody></table>
+<h2>Comparison (baseline → current)</h2><table><thead><tr><th>cell</th><th>baseline verdict</th><th>current verdict</th><th>Δ cost (gateway)</th><th>Δ input tokens</th><th>Δ wall</th></tr></thead><tbody><tr><td>B01:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.035836</td>
+      <td class="num">-3,797</td>
+      <td class="num">+1.2s</td></tr><tr><td>B02:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.037417</td>
+      <td class="num">-3,881</td>
+      <td class="num">+0.7s</td></tr><tr><td>B03:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.040884</td>
+      <td class="num">-3,899</td>
+      <td class="num">-0.4s</td></tr><tr><td>B04:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.051519</td>
+      <td class="num">-3,783</td>
+      <td class="num">+1.3s</td></tr><tr><td>B05:1</td><td>PARTIAL</td><td>PARTIAL</td>
+      <td class="num down">$-0.026540</td>
+      <td class="num">-68</td>
+      <td class="num">-0.4s</td></tr><tr><td>B06:1</td><td>PASS</td><td>FAIL</td>
+      <td class="num down">$-0.126108</td>
+      <td class="num">-13,217</td>
+      <td class="num">+15.6s</td></tr><tr><td>B07:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.061442</td>
+      <td class="num">-3,845</td>
+      <td class="num">+2.4s</td></tr><tr><td>B08:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.219407</td>
+      <td class="num">+384</td>
+      <td class="num">+0.6s</td></tr><tr><td>B09:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.105184</td>
+      <td class="num">+8,976</td>
+      <td class="num">+32.6s</td></tr><tr><td>B10:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.060774</td>
+      <td class="num">+2,392</td>
+      <td class="num">-14.1s</td></tr><tr><td>B11:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.069830</td>
+      <td class="num">+8,342</td>
+      <td class="num">+1.3s</td></tr><tr><td>B12:1</td><td>PASS</td><td>PASS</td>
+      <td class="num down">$-0.043492</td>
+      <td class="num">-3,873</td>
+      <td class="num">+16.7s</td></tr><tr class="total"><td>ALL</td><td>11P/1~/0F</td><td>10P/1~/1F</td>
+    <td class="num">+$0.000000</td>
+    <td class="num">-16,269</td>
+    <td class="num">+57.5s</td></tr></tbody></table>
+  <p class="mut">Baseline: <code>764149ba0bb2a14b580917e102ba44b852efe579</code> (classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=x-ai/grok-4.3). Current: <code>22440b4151289900370b1ed375edc1b7aeaca1a1</code> (classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low).</p>
+
+<h2>Cells</h2>
+
+  <details class="cell">
+    <summary><b>B01:1</b> Short durable store — <span class="pass">PASS</span>
+      <span class="mut">· $0.003629 gateway · $0.051638 est · 35.8s · 20,254/875 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="fail">✗ 18 November 2026</span>  <span class="fail">✗ 14:30</span>  <span class="fail">✗ KILN-47</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>Durable source retains the reservation date, time and code unchanged.</li><li>Acknowledgement is truthful about saved + pending organization; no false completion.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">Please save this memory: My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.</div><div class="a">Saved the original note. Organization is queued.
+
+Evidence:
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b01-22440b4-r/blob/440a0ac1c8369d755339b5c766a32e76a6b4ad69/Log/2026-09-17.md#L3&gt;
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b01-22440b4-r/blob/main/Log/2026-09-17.md&gt;
+- Reference: `Log/2026-09-17.md#^e-20b53a`
+- Receipt: `440a0ac1c8369d755339b5c766a32e76a6b4ad69`
+- Commit: `440a0ac1c8369d755339b5c766a32e76a6b4ad69`
+- Ticket: `a3b642f6-03d2-4145-a685-81dedb451f15`</div></div>
+        <div class="mut">Filed: Areas/Studio.md, Inbox/filing-2026-09-17-e-20b53a.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Source retained once; truthful saved+queued ack; filed Areas/Studio.md.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Durable source includes reservation date, time and code unchanged. — <span class="mut">rawCustody true; Log ref e-04707a</span></li><li><span class="pass">PASS</span> Acknowledgement truthfully states actual saved/pending outcome; no false completion. — <span class="mut">&quot;Saved the original note. Organization is queued.&quot;</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">15,101 / 216</td><td class="num">7,289</td><td class="num">$0.033336</td><td class="num">$0.001936</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,859 / 464</td><td class="num">0</td><td class="num">$0.009022</td><td class="num">$0.000422</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,294 / 195</td><td class="num">0</td><td class="num">$0.009280</td><td class="num">$0.001271</td></tr></tbody></table>
+    <div class="mut">wall 35.8s · mcp calls 6 (3.5s): chat_with_zenod (2.5s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.3s), get_memory (0.2s) · reserved $0.250000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B02:1</b> Fresh exact recall — <span class="pass">PASS</span>
+      <span class="mut">· $0.003885 gateway · $0.054881 est · 34.5s · 22,488/751 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ 18 November 2026</span>  <span class="pass">✓ 14:30</span>  <span class="pass">✓ KILN-47</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>yes</b></div>
+        <ul class="checks"><li>All three values are answered.</li><li>Citation resolves to evidence that was actually read.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">When is my Northbridge Studio kiln reservation, and what is its code?</div><div class="a">Source summary:
+Your Northbridge Studio ceramic kiln reservation is on 18 November 2026 at 14:30. The reservation code is KILN-47.
+[Log/2026-09-17.md#^e-e33d0b](https://github.com/AlfaBlok/m2-b02-22440b4-r/blob/bbd0d11a719a63419477af5d8598ea2fd2707b5c/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Areas/Studio.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">All three values answered with a raw citation.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> 18 November 2026, 14:30 and KILN-47 all answered. — <span class="mut">answer literal</span></li><li><span class="pass">PASS</span> Citation resolves to actually read relevant evidence. — <span class="mut">Log/2026-09-17.md#^e-b094ba</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">17,428 / 121</td><td class="num">0</td><td class="num">$0.034359</td><td class="num">$0.001864</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,792 / 441</td><td class="num">0</td><td class="num">$0.012258</td><td class="num">$0.001227</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,268 / 189</td><td class="num">0</td><td class="num">$0.008264</td><td class="num">$0.000794</td></tr></tbody></table>
+    <div class="mut">wall 34.5s · mcp calls 7 (2.0s): store_memory (1.3s), get_task_result (0.2s), get_task_result (0.1s), get_memory (0.1s), chat_with_zenod (0.1s), get_task_result (0.1s), get_task_result (0.2s) · reserved $0.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B03:1</b> Paraphrased recall — <span class="pass">PASS</span>
+      <span class="mut">· $0.001216 gateway · $0.039489 est · 34.2s · 22,542/815 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ 18 November 2026</span>  <span class="pass">✓ 14:30</span>  <span class="pass">✓ KILN-47</span></div>
+        <div class="labels">Forbidden: <span class="pass">✓ absent no booking</span>  <span class="pass">✓ absent cannot find</span>  <span class="pass">✓ absent alternative booking</span></div>
+        <div class="labels">Citation required: <b>yes</b></div>
+        <ul class="checks"><li>Paraphrase resolves the same kiln fact without the user supplying a source reference.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">What time did I book the pottery firing space, and which booking reference should I bring?</div><div class="a">Source summary:
+Your ceramic kiln/firing reservation at Northbridge Studio is on 18 November 2026 at 14:30. Bring booking reference KILN-47.
+[Log/2026-09-17.md#^e-3f344e](https://github.com/AlfaBlok/m2-b03-22440b4-r/blob/a6dea9ab80a4ba23a333b2b756d9b09a02fb3552/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Areas/Studio.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Paraphrase recovered time and code; no invented booking.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Paraphrase finds the same fact without hidden source refs. — <span class="mut">&quot;booked for 18 November 2026 at 14:30&quot; / KILN-47</span></li><li><span class="pass">PASS</span> No invented alternative booking. — <span class="mut">none present</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">17,448 / 141</td><td class="num">14,798</td><td class="num">$0.025104</td><td class="num">$0.000202</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,792 / 461</td><td class="num">2,789</td><td class="num">$0.008449</td><td class="num">$0.000610</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,302 / 213</td><td class="num">1,853</td><td class="num">$0.005936</td><td class="num">$0.000405</td></tr></tbody></table>
+    <div class="mut">wall 34.2s · mcp calls 7 (1.9s): store_memory (1.2s), get_task_result (0.1s), get_task_result (0.1s), get_memory (0.1s), chat_with_zenod (0.1s), get_task_result (0.1s), get_task_result (0.1s) · reserved $0.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B04:1</b> Three independent ideas — <span class="pass">PASS</span>
+      <span class="mut">· $0.004387 gateway · $0.065774 est · 50.5s · 25,743/1,789 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="fail">✗ 18 November 2026</span>  <span class="fail">✗ 21 November 2026</span>  <span class="fail">✗ before noon</span>  <span class="fail">✗ Icelandic</span>  <span class="fail">✗ fifteen minutes</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>Kiln booking, conditional garden attendance and Icelandic goal all preserved.</li><li>Each idea filed to a correct destination or explicitly unresolved for a genuine reason.</li><li>No certainty promotion or cross-topic conflation.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">Please save these three separate updates: Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.</div><div class="a">Saved the original note. Organization is queued.
+
+Evidence:
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b04-22440b4-r/blob/a00d70211cc91caa4447c9437119962c90b0b1ea/Log/2026-09-17.md#L3&gt;
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b04-22440b4-r/blob/main/Log/2026-09-17.md&gt;
+- Reference: `Log/2026-09-17.md#^e-548299`
+- Receipt: `a00d70211cc91caa4447c9437119962c90b0b1ea`
+- Commit: `a00d70211cc91caa4447c9437119962c90b0b1ea`
+- Ticket: `29b61237-ed0c-40b6-a69d-ca99fca1af3a`</div></div>
+        <div class="mut">Filed: Areas/Studio.md, Areas/Garden.md, Notes/Language Study.md, Inbox/filing-2026-09-17-e-548299.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Three ideas preserved and filed to their own pages.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Kiln booking, conditional garden attendance and Icelandic goal all preserved. — <span class="mut">raw + pages</span></li><li><span class="pass">PASS</span> Each idea filed correctly or explicitly unresolved for a genuine reason. — <span class="mut">Areas/Studio.md, Areas/Garden.md, Notes/Language Study.md</span></li><li><span class="pass">PASS</span> No certainty promotion or cross-topic conflation. — <span class="mut">conditional wording kept</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">16,144 / 360</td><td class="num">14,577</td><td class="num">$0.025729</td><td class="num">$0.000423</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,912 / 931</td><td class="num">0</td><td class="num">$0.015263</td><td class="num">$0.000692</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">3</td><td class="num">6,687 / 498</td><td class="num">0</td><td class="num">$0.024782</td><td class="num">$0.003272</td></tr></tbody></table>
+    <div class="mut">wall 50.5s · mcp calls 7 (2.6s): chat_with_zenod (1.6s), get_task_result (0.1s), get_task_result (0.2s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.3s), get_memory (0.3s) · reserved $0.250000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B05:1</b> Interrupted filing and duplicate safety — <span class="partial">PARTIAL</span>
+      <span class="mut">· $0.003419 gateway · $0.036697 est · 33.8s · 9,568/1,353 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="fail">✗ 18 November 2026</span>  <span class="fail">✗ 21 November 2026</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>Repeated capture with the same idempotency key creates no duplicate evidence or job.</li><li>Completed replay adds no duplicate effects; input and raw identity preserved.</li><li>Forced-fault interruption is isolated-only (UNMEASURED in production) by the frozen contract.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="a mut">no chat turn</div></div>
+        <div class="mut">Filed: Areas/Studio.md, Areas/Garden.md, Notes/Language Study.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Same-key replay produced no duplicate; forced-fault leg is isolated-only.</span></h4>
+    <ul class="checks"><li><span class="unscored">UNMEASURED</span> A real forced boundary failure leaves at least one completed sibling and another pending. — <span class="mut">isolated-only by frozen contract</span></li><li><span class="pass">PASS</span> Retry preserves completed operation IDs/text/citations, input and raw identity. — <span class="mut">sameResult true; inputPreserved true</span></li><li><span class="pass">PASS</span> Repeated capture and same idempotency key produce no duplicate evidence/job. — <span class="mut">sameJob true; unchangedPages true</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,843 / 915</td><td class="num">2,591</td><td class="num">$0.013417</td><td class="num">$0.001213</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">3</td><td class="num">6,725 / 438</td><td class="num">0</td><td class="num">$0.023280</td><td class="num">$0.002206</td></tr></tbody></table>
+    <div class="mut">wall 33.8s · mcp calls 7 (1.5s): store_memory (0.9s), get_task_result (0.1s), get_task_result (0.2s), get_task_result (0.1s), get_memory (0.1s), store_memory (0.1s), get_task_result (0.1s) · reserved $0.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B06:1</b> Long-note summary — <span class="fail">FAIL</span>
+      <span class="mut">· $0.011128 gateway · $0.158540 est · 80.8s · 59,897/4,403 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="fail">✗ 280</span>  <span class="fail">✗ unconfirmed</span>  <span class="fail">✗ 27 November 2026</span>  <span class="fail">✗ trainee teachers</span>  <span class="fail">✗ grant</span></div>
+        <div class="labels">Forbidden: <span class="pass">✓ absent purchase decision</span>  <span class="pass">✓ absent agreed invoice</span></div>
+        <div class="labels">Citation required: <b>yes</b></div>
+        <ul class="checks"><li>Repair preference is not stated as a purchase decision.</li><li>280 euro labelled an unconfirmed estimate.</li><li>Two free trainee-teacher places, 27 Nov deadline and grant condition all covered.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">Summarize my Northbridge studio planning voice note. Include the beginning, cost estimate and closing arrangements; distinguish decisions from preferences and conditions.</div><div class="a">Memory filing is in progress. Please retry your question shortly.</div></div>
+        <div class="mut">Filed: Areas/Studio.md, Inbox/filing-2026-09-17-e-799da6.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Turn returned the busy fallback (&quot;Memory filing is in progress&quot;) instead of the summary; no content answer.</span></h4>
+    <ul class="checks"><li><span class="fail">FAIL</span> Repair preference is not a purchase decision. — <span class="mut">no answer produced</span></li><li><span class="fail">FAIL</span> 280 euro estimate remains unconfirmed. — <span class="mut">no answer produced</span></li><li><span class="fail">FAIL</span> Two free trainee-teacher places, 27 November 2026 deadline and grant-approval condition all covered. — <span class="mut">no answer produced</span></li><li><span class="fail">FAIL</span> Answer is a useful summary, not transcript dump; required source scope read. — <span class="mut">busy fallback</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">35,732 / 436</td><td class="num">14,798</td><td class="num">$0.050925</td><td class="num">$0.000326</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">3</td><td class="num">20,376 / 3,264</td><td class="num">0</td><td class="num">$0.089933</td><td class="num">$0.009010</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">3,789 / 703</td><td class="num">0</td><td class="num">$0.017682</td><td class="num">$0.001791</td></tr></tbody></table>
+    <div class="mut">wall 80.8s · mcp calls 10 (2.7s): store_memory (1.4s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.2s), get_memory (0.1s), chat_with_zenod (0.1s), get_task_result (0.2s), get_task_result (0.2s) · reserved $0.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B07:1</b> Latest voice note — <span class="pass">PASS</span>
+      <span class="mut">· $0.004846 gateway · $0.077160 est · 82.9s · 32,683/1,789 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ blue wheel</span>  <span class="pass">✓ repair</span></div>
+        <div class="labels">Forbidden: <span class="pass">✓ absent red wheel</span></div>
+        <div class="labels">Citation required: <b>yes</b></div>
+        <ul class="checks"><li>Selects the latest voice_note by capture time, not a topical distractor or newer ordinary audio/text.</li><li>Repair existing blue wheel first; replacement remains undecided.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">What did I say in my latest voice note about the studio equipment?</div><div class="a">Source summary:
+You said you would repair the existing blue wheel first, and that you had not decided whether to replace it.
+[Log/2026-09-17.md#^e-8f3c50](https://github.com/AlfaBlok/m2-b07-22440b4-r/blob/944f9434f5411d1eca79481cc0093b17ebd3796e/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Inbox/filing-2026-09-17-e-8f3c50.md | Areas/Studio.md | Inbox/filing-2026-09-17-e-0404f1.md | Inbox/filing-2026-09-17-e-0af2d2.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Latest voice note selected; blue wheel; no distractor.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Latest voice_note selected by capturedAt, not processing order or topical distractor. — <span class="mut">Log ref e-8545c8</span></li><li><span class="pass">PASS</span> Repair existing blue wheel first; replacement remains undecided. — <span class="mut">exact</span></li><li><span class="pass">PASS</span> Does not substitute newer ordinary audio/text or old red-wheel note. — <span class="mut">no red wheel</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">17,321 / 162</td><td class="num">14,798</td><td class="num">$0.025149</td><td class="num">$0.000244</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">4</td><td class="num">11,015 / 1,233</td><td class="num">5,173</td><td class="num">$0.035855</td><td class="num">$0.003043</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">4,347 / 394</td><td class="num">0</td><td class="num">$0.016157</td><td class="num">$0.001559</td></tr></tbody></table>
+    <div class="mut">wall 82.9s · mcp calls 19 (5.0s): store_memory (2.2s), get_task_result (0.2s), get_task_result (0.1s), get_memory (0.2s), store_memory (0.1s), get_task_result (0.2s), get_task_result (0.2s), get_memory (0.2s), store_memory (0.1s), get_task_result (0.1s), get_task_result (0.2s), get_memory (0.1s), store_memory (0.1s), get_task_result (0.2s), get_task_result (0.1s), get_memory (0.2s), chat_with_zenod (0.1s), get_task_result (0.2s), get_task_result (0.1s) · reserved $1.250000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B08:1</b> Summary tail follow-up — <span class="pass">PASS</span>
+      <span class="mut">· $0.014711 gateway · $0.270717 est · 127.3s · 121,418/8,559 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ trainee teachers</span>  <span class="pass">✓ 27 November 2026</span>  <span class="pass">✓ grant</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>yes</b></div>
+        <ul class="checks"><li>First turn is a meaningful qualified summary.</li><li>Follow-up resolves the tail (who/deadline/conditional) rather than stating absent or guaranteed.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">Summarize my Northbridge studio planning voice note.</div><div class="a">Source summary:
+This synthetic Northbridge studio planning note says you prefer repairing your current wheel before buying another, though no purchase decision has been made. The working room has a labelled shelf, drying rack, shared sink and noticeboard, and you are documenting this layout for the studio record. An electrician gave an unconfirmed estimate of 280 euros for inspecting the kiln socket; it is not an agreed invoice. The plan proposes reserving two workshop places free of charge for trainee teachers, but only if the grant is approved. Applications close on 27 November 2026; if the grant is rejected, the free places are not promised.
+[Log/2026-09-17.md#^e-a2f282](https://github.com/AlfaBlok/m2-b08-22440b4-r/blob/401a917ce804d390ad2e65f515efcb399f83413a/Log/2026-09-17.md)</div></div><div class="qa"><div class="q">What about the free places mentioned at the end—who are they for, what is the deadline, and are they guaranteed?</div><div class="a">Source summary:
+The two free workshop places are intended for trainee teachers. Applications for the grant close on 27 November 2026. The places are conditional, not guaranteed: they are reserved without charge only if the grant is approved; if the grant is rejected, the free places are not promised.
+[Log/2026-09-17.md#^e-a2f282](https://github.com/AlfaBlok/m2-b08-22440b4-r/blob/401a917ce804d390ad2e65f515efcb399f83413a/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Areas/Studio.md, Inbox/filing-2026-09-17-e-a2f282.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Summary + tail follow-up both resolve correctly.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> First turn is a meaningful qualified summary. — <span class="mut">preference/estimate/layout</span></li><li><span class="pass">PASS</span> Follow-up resolves same note: two trainee-teacher places, 27 November deadline, conditional grant. — <span class="mut">exact</span></li><li><span class="pass">PASS</span> Reads/retains tail support rather than stating absent or guaranteed. — <span class="mut">&quot;conditional, not guaranteed&quot;</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">84,792 / 578</td><td class="num">36,880</td><td class="num">$0.117197</td><td class="num">$0.000662</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">4</td><td class="num">30,480 / 6,779</td><td class="num">20,367</td><td class="num">$0.124219</td><td class="num">$0.011070</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">6,146 / 1,202</td><td class="num">0</td><td class="num">$0.029301</td><td class="num">$0.002979</td></tr></tbody></table>
+    <div class="mut">wall 127.3s · mcp calls 15 (4.4s): store_memory (1.3s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.3s), get_task_result (0.2s), get_task_result (0.2s), get_task_result (0.1s), get_task_result (0.1s), get_memory (1.0s), chat_with_zenod (0.2s), get_task_result (0.2s), get_task_result (0.2s), chat_with_zenod (0.2s), get_task_result (0.2s), get_task_result (0.1s) · reserved $0.750000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B09:1</b> Second subject and thread isolation — <span class="pass">PASS</span>
+      <span class="mut">· $0.005955 gateway · $0.153204 est · 128.0s · 82,897/2,127 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ 21 November 2026</span>  <span class="pass">✓ noon</span></div>
+        <div class="labels">Forbidden: <span class="fail">✗ present 3 December</span>  <span class="fail">✗ present violin</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>Final answer concerns the garden on 21 November 2026 with the shift-before-noon condition.</li><li>Does not answer the kiln or import isolated violin-thread details.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">Tell me about my kiln reservation.</div><div class="a">Source summary:
+Your ceramic kiln reservation is at Northbridge Studio on 18 November 2026 at 14:30. The reservation code is KILN-47.
+[Log/2026-09-17.md#^e-ff4cbf](https://github.com/AlfaBlok/m2-b09-22440b4-r/blob/0c5e62c48f618035d61a016d1efb016b827605b5/Log/2026-09-17.md)</div></div><div class="qa"><div class="q">Now tell me about the Riverside Garden pump inspection.</div><div class="a">Source summary:
+The Riverside Garden pump inspection is scheduled for 21 November 2026. You noted that you will attend only if your shift ends before noon.
+[Log/2026-09-17.md#^e-ec9ade](https://github.com/AlfaBlok/m2-b09-22440b4-r/blob/0c5e62c48f618035d61a016d1efb016b827605b5/Log/2026-09-17.md)</div></div><div class="qa"><div class="q">My unrelated private conversation is about a violin rehearsal on 3 December.</div><div class="a">Understood — I’ll treat the unrelated private conversation as being about a violin rehearsal on 3 December.</div></div><div class="qa"><div class="q">For the second thing we discussed, when is it and what condition did I put on attending?</div><div class="a">Source summary:
+The Riverside Garden pump inspection is on 21 November 2026. You said you will attend only if your shift ends before noon.
+[Log/2026-09-17.md#^e-ec9ade](https://github.com/AlfaBlok/m2-b09-22440b4-r/blob/0c5e62c48f618035d61a016d1efb016b827605b5/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Areas/Studio.md | Areas/Garden.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Final answer is the garden referent; no thread bleed.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Final answer concerns garden on 21 November 2026 with shift-before-noon condition. — <span class="mut">exact</span></li><li><span class="pass">PASS</span> Does not answer kiln or import isolated violin-thread details. — <span class="mut">none</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">4</td><td class="num">72,786 / 714</td><td class="num">60,264</td><td class="num">$0.117329</td><td class="num">$0.002800</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">5,567 / 1,002</td><td class="num">2,789</td><td class="num">$0.021659</td><td class="num">$0.001952</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">4,544 / 411</td><td class="num">1,853</td><td class="num">$0.014217</td><td class="num">$0.001203</td></tr></tbody></table>
+    <div class="mut">wall 128.0s · mcp calls 22 (5.1s): store_memory (2.0s), get_task_result (0.1s), get_task_result (0.2s), get_task_result (0.2s), get_memory (0.2s), store_memory (0.1s), get_task_result (0.2s), get_task_result (0.2s), get_task_result (0.1s), get_memory (0.2s), chat_with_zenod (0.2s), get_task_result (0.1s), get_task_result (0.2s), chat_with_zenod (0.1s), get_task_result (0.2s), get_task_result (0.1s), chat_with_zenod (0.1s), get_task_result (0.2s), get_task_result (0.1s), chat_with_zenod (0.1s), get_task_result (0.1s), get_task_result (0.2s) · reserved $1.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B10:1</b> Grounded opinion — <span class="pass">PASS</span>
+      <span class="mut">· $0.003203 gateway · $0.075488 est · 50.9s · 38,397/1,470 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ 90</span>  <span class="pass">✓ 600</span>  <span class="pass">✓ not confirmed</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>Opinion resolves the wheel choice using the 90 vs 600 figures and unconfirmed repair feasibility as sourced premises.</li><li>Provides useful conditional advice explicitly distinguished from the stored decision.</li><li>No blanket refusal, fabricated decision or raw-excerpt-only answer.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">Remember this thought: For Northbridge Studio, I prefer repairing my current wheel because the repair estimate is 90 euros; a new wheel would cost 600 euros. The technician has not confirmed that repair is possible. I have not decided.</div><div class="a">Saved the original note. Organization is queued.
+
+Evidence:
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b10-22440b4-r/blob/43783880132528a04c11f4191a2c813b04753139/Log/2026-09-17.md#L3&gt;
+- Evidence: &lt;https://github.com/AlfaBlok/m2-b10-22440b4-r/blob/main/Log/2026-09-17.md&gt;
+- Reference: `Log/2026-09-17.md#^e-1fe1b4`
+- Receipt: `43783880132528a04c11f4191a2c813b04753139`
+- Commit: `43783880132528a04c11f4191a2c813b04753139`
+- Ticket: `09175066-b925-4502-8579-12ca7bc57a39`</div></div><div class="qa"><div class="q">What do you think about it?</div><div class="a">My assessment (inference from the cited premises, not an established fact):
+My view: repair is the sensible first option if the technician confirms it is viable. The price difference is substantial—90 euros versus 600 euros—so replacement seems hard to justify before knowing that repair cannot be done or is unlikely to last. I would ask the technician about the repair’s expected durability, warranty, total cost if complications arise, and how soon a replacement might become necessary. Until those answers are clear, keeping the decision open is prudent.
+
+Source premises:
+
+Source summary:
+The recorded thought is that repairing the current wheel is preferred because the estimate is 90 euros versus 600 euros for a new wheel, while the technician has not confirmed that repair is possible and no decision has been made.
+[Log/2026-09-17.md#^e-1fe1b4](https://github.com/AlfaBlok/m2-b10-22440b4-r/blob/b1efb359c6ba920e3a027694892ab02ec6c9ce1d/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Areas/Studio.md, Inbox/filing-2026-09-17-e-1fe1b4.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Sourced assessment labelled as inference; 90 vs 600 in premises.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Opinion resolves wheel choice and uses 90 vs 600 and unconfirmed repair feasibility as sourced premises. — <span class="mut">premise render includes 90/600</span></li><li><span class="pass">PASS</span> Provides useful conditional advice explicitly distinguished from stored decision. — <span class="mut">&quot;My assessment (inference ...)&quot;</span></li><li><span class="pass">PASS</span> No blanket refusal, fabricated decision or raw-excerpt-only answer. — <span class="mut">useful advice</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">33,099 / 468</td><td class="num">29,346</td><td class="num">$0.053583</td><td class="num">$0.001266</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,876 / 678</td><td class="num">0</td><td class="num">$0.011148</td><td class="num">$0.000405</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,422 / 324</td><td class="num">0</td><td class="num">$0.010757</td><td class="num">$0.001532</td></tr></tbody></table>
+    <div class="mut">wall 50.9s · mcp calls 9 (3.3s): chat_with_zenod (2.4s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.1s), get_task_result (0.1s), get_memory (0.1s), chat_with_zenod (0.1s), get_task_result (0.1s), get_task_result (0.1s) · reserved $0.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B11:1</b> Correction and history — <span class="pass">PASS</span>
+      <span class="mut">· $0.002648 gateway · $0.093238 est · 50.6s · 54,426/1,263 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ 19</span>  <span class="pass">✓ 12</span></div>
+        <div class="labels">Forbidden: <span class="mut">none</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>Current 19 distinguished from prior incorrect 12.</li><li>Correction/history and source provenance retained; no unresolved-current conflation.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">How many workshop places does Northbridge Studio have now, and what number did I report before correcting it?</div><div class="a">Latest supported memory reports as of 2026-09-17 (Areas/Studio.md):
+- Recorded correction report — User report: &quot;Correction to my earlier Northbridge Studio capacity report: not 12 places, but 19 places. The earlier figure was wrong.&quot; [Log/2026-09-17.md#^e-cf3919](https://github.com/AlfaBlok/m2-b11-22440b4-r/blob/394b230bb2ebe6dfc847dd76ae98ca540e2208fe/Log/2026-09-17.md#%5Ee-cf3919). Effective: unknown; evidence captured: 2026-09-15T11:00:00.000Z. Verification scope: unknown.
+- Prior note statement (superseded; original evidence/date unknown): &quot;Northbridge Studio has 12 workshop places.&quot; — Areas/Studio.md, github revision 5251f1161a7100712258bc35dad56c56e48436d0; correction evidence Log/2026-09-17.md#^e-cf3919.
+Prior legacy statements are preserved from the recorded repository revision/content hash. Their original Log evidence and effective dates are unknown; they are note history, not independently verified historical facts.
+Memory reports are not live verification. Verification quotes describe only the stated test, environment and date; no deployment or present health is inferred. An absent fix record never proves that a bug remains unfixed.
+
+Prior note statement (superseded; original evidence/date unknown): Northbridge Studio has 12 workshop places.
+Areas/Studio.md, github revision 5251f1161a7100712258bc35dad56c56e48436d0; correction evidence Log/2026-09-17.md#^e-cf3919.</div></div>
+        <div class="mut">Filed: Areas/Studio.md | Areas/Studio.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">Correction surfaced: current 19 distinguished from prior 12.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> Current 19 distinguished from prior incorrect 12. — <span class="mut">answer shows correction &quot;not 12 places, but 19 places&quot; + prior 12</span></li><li><span class="pass">PASS</span> Correction/history and source provenance retained; no unresolved-current conflation. — <span class="mut">prior statement retained</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">44,549 / 288</td><td class="num">36,467</td><td class="num">$0.063164</td><td class="num">$0.000199</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">5,526 / 706</td><td class="num">5,173</td><td class="num">$0.015156</td><td class="num">$0.001039</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">2</td><td class="num">4,351 / 269</td><td class="num">0</td><td class="num">$0.014918</td><td class="num">$0.001410</td></tr></tbody></table>
+    <div class="mut">wall 50.6s · mcp calls 11 (3.1s): store_memory (1.9s), get_task_result (0.1s), get_task_result (0.2s), get_memory (0.1s), store_memory (0.1s), get_task_result (0.1s), get_task_result (0.1s), get_memory (0.2s), chat_with_zenod (0.1s), get_task_result (0.1s), get_task_result (0.1s) · reserved $0.750000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+  <details class="cell">
+    <summary><b>B12:1</b> Uncertain and unknown — <span class="pass">PASS</span>
+      <span class="mut">· $0.001728 gateway · $0.045625 est · 50.9s · 24,905/843 tok</span></summary>
+    <div class="grid">
+      <div><h4>Expected</h4>
+        <div class="labels">Facts: <span class="pass">✓ 280</span>  <span class="pass">✓ not confirmed</span></div>
+        <div class="labels">Forbidden: <span class="pass">✓ absent booked for</span>  <span class="pass">✓ absent appointment on</span></div>
+        <div class="labels">Citation required: <b>no</b></div>
+        <ul class="checks"><li>280 euro labelled an estimate / unconfirmed.</li><li>Appointment date explicitly unknown / not agreed, without invention.</li></ul></div>
+      <div><h4>Actual</h4><div class="qa"><div class="q">What will the kiln socket inspection cost, and on what date is the electrician booked?</div><div class="a">Source summary:
+The electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed. No appointment date was agreed, so there is no booked date recorded.
+[Log/2026-09-17.md#^e-8c4cbf](https://github.com/AlfaBlok/m2-b12-22440b4-r/blob/da58743b29f4af7c1c663f81a7001b1f692b1b17/Log/2026-09-17.md)</div></div>
+        <div class="mut">Filed: Areas/Studio.md</div></div>
+    </div>
+    <h4>Manual review — <span class="mut">280 unconfirmed; appointment date stated unknown.</span></h4>
+    <ul class="checks"><li><span class="pass">PASS</span> 280 euros labelled estimate/unconfirmed. — <span class="mut">exact</span></li><li><span class="pass">PASS</span> Appointment date explicitly unknown/not agreed, without invention. — <span class="mut">&quot;No appointment date was agreed&quot;</span></li></ul>
+    <h4>Cost · tokens · time</h4>
+    <table><thead><tr><th>op</th><th>model</th><th>calls</th><th>in / out</th><th>cached</th><th>estimate</th><th>gateway $</th></tr></thead><tbody><tr><td>answer</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">19,842 / 127</td><td class="num">14,798</td><td class="num">$0.027955</td><td class="num">$0.000199</td></tr><tr><td>classify</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,780 / 499</td><td class="num">2,588</td><td class="num">$0.009084</td><td class="num">$0.000698</td></tr><tr><td>compose</td><td>openai/gpt-5.6-luna</td><td class="num">1</td><td class="num">2,283 / 217</td><td class="num">0</td><td class="num">$0.008586</td><td class="num">$0.000831</td></tr></tbody></table>
+    <div class="mut">wall 50.9s · mcp calls 8 (3.4s): store_memory (2.3s), get_task_result (0.1s), get_task_result (0.2s), get_task_result (0.2s), get_memory (0.1s), chat_with_zenod (0.2s), get_task_result (0.2s), get_task_result (0.2s) · reserved $0.500000</div>
+    <div class="mut">models: classify=openai/gpt-5.6-luna · classify_reasoning_effort=low · ask=openai/gpt-5.6-luna · ask_reasoning_effort=low</div>
+  </details>
+
+<footer>Actual cost is the deployed server's own pricing × tokens (the MCP path does not return provider-billed cost). Reserved is the harness stop-gate, not spend. Generated by report.mjs.</footer>
+</div></body></html>
