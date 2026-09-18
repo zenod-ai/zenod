@@ -1553,6 +1553,20 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect(await readFile(join(repo.path,path),"utf8")).toBe(raw);
   });
 
+  it("files a brand-new page without asking the reconciler to relate ideas to statements that do not exist",async()=>{
+    const path="Notes/Observatory.md",sentence="The observatory opens on 8 September.";
+    llm.classify=vi.fn(async()=>({confidence:.99,summary:"Observatory",tags:[],pages:[],topics:[{topic:"Observatory opening",summary:sentence,evidenceQuotes:[sentence],confidence:.99,disposition:"integrate_page" as const,pages:[{path,title:"Observatory",action:"create" as const}]}]}));
+    const reconcile=vi.fn(async()=>{throw new Error("a new page has no statements to reconcile against");});Object.assign(llm,{reconcile});
+    const result=await engine().store({content:sentence,source:"selftest"});
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(result.filing).toBe("filed");
+    expect(result.topics![0]!.status).toBe("filed");
+    const page=await readFile(join(repo.path,path),"utf8");
+    expect(page).toContain(sentence);
+    expect(page).toContain("#^");
+    expect(page).toContain("title: Observatory");
+  });
+
   it.each([false,true])("reconstructs owned ADD candidates across destinations and pending receipt retry without copying model quotes (sourceUnits=%s)",async sourceUnits=>{
     const paths=["Projects/SharedA.md","Projects/SharedB.md"];
     for(const path of paths)await writeFile(join(repo.path,path),`# Shared\nPreserved history.\n[[Index]]\n`);

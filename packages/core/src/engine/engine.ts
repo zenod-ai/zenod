@@ -45,7 +45,7 @@ import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault } from "../vault/lint.js";
 import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks } from "./meaningNotes.js";
-import { prepareReconciliation, applyReconciliation, reconciliationIdeaId } from "./reconciliation.js";
+import { prepareReconciliation, applyReconciliation, newPageAdditions, reconciliationIdeaId } from "./reconciliation.js";
 import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
@@ -1671,7 +1671,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
             completedIdeaIds:filingPlan?.prior?.outcomes.filter(outcome=>outcome.filedPages.includes(path)).map(outcome=>outcome.ideaId!).filter(Boolean) ?? [],
             ideas:group.outcomes.map(outcome=>({id:outcome.ideaId!,topic:outcome.topic,...(outcome.reason && outcome.reason!=="filing_not_started" ? {priorFailure:outcome.reason.slice(0,240)} : {}),sourceIds:sources.filter(source=>outcome.sourceSpans.some(span=>source.start<span.end&&source.end>span.start)).map(source=>source.id)}))});
           if(prepared.request.ideas.length)reportTokenCost("compose",[JSON.stringify(prepared.request)],undefined,"atomic-reconciliation");
-          const operations = prepared.request.ideas.length ? await llm.reconcile(prepared.request) : [];
+          // A page that does not exist yet has nothing to reconcile against.
+          // Asking the reconciler to relate ideas to an absent branch subject only
+          // ever returns CLARIFY, which left every new-page filing pending forever.
+          const operations = prepared.request.ideas.length
+            ? currentContent === null ? newPageAdditions(prepared) : await llm.reconcile(prepared.request)
+            : [];
           const reconciled = await applyReconciliation(prepared,operations);
           for (const outcome of group.outcomes) {
             const sourceIds=sources.filter(source => outcome.sourceSpans.some(span => source.start < span.end && source.end > span.start)).map(source=>source.id);
