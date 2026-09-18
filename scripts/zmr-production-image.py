@@ -172,19 +172,34 @@ def inspect_revision(image):
     return ssh('docker image inspect --format ' + shlex.quote('{{index .Config.Labels "org.opencontainers.image.revision"}}') + ' ' + shlex.quote(image)).strip()
 
 
+TERMINAL_TASK_STATES = ('complete', 'shutdown', 'failed', 'rejected', 'remove', 'removed')
+
+def task_states():
+    """One call: task id plus current state. A separate lookup by id races the
+    daemon's removal of the very task that scaling to zero just stopped, which
+    aborted a real deploy after quiescence and before any image change."""
+    rows = []
+    for line in ssh("docker service ps --format '{{.ID}} {{.CurrentState}}' " + SERVICE).splitlines():
+        fields = line.split()
+        if fields:
+            rows.append((fields[0], fields[1].lower() if len(fields) > 1 else ''))
+    return rows
+
 def public_is_quiesced():
     """Check all task states, including shutdown-desired tasks still stopping."""
     live = inspect_service()
     require(live['Spec']['Name'] == SERVICE, 'Quiescence target mismatch')
     if live['Spec'].get('Mode', {}).get('Replicated', {}).get('Replicas') != 0:
         return False
-    ids = ssh("docker service ps --format '{{.ID}}' " + SERVICE).split()
-    tasks = json.loads(ssh('docker inspect ' + ' '.join(shlex.quote(i) for i in ids))) if ids else []
     # Orphaned/unknown tasks cannot prove their process has stopped.
-    if any(task['Status']['State'] not in ('complete', 'shutdown', 'failed', 'rejected', 'remove') for task in tasks):
+    if any(state not in TERMINAL_TASK_STATES for _, state in task_states()):
         return False
     return not ssh("docker ps --filter label=com.docker.swarm.service.name=" + SERVICE + " --format '{{.ID}}'").split()
 
+def update_state(live):
+    """Swarm reports null rather than a mapping when no update is in progress,
+    which is also the settled state after Dokploy recreates the service."""
+    return (live.get('UpdateStatus') or {}).get('State')
 
 def quiesce_public():
     # Dokploy's recorded application retains replicas=1 and restores it on deploy.
@@ -222,7 +237,7 @@ def execute(args):
     pending = api(root, '/application.one?applicationId=' + APP)
     check_drift(recovery, live, pending, identities)
     if args.mode == 'deploy':
-        require(live.get('UpdateStatus', {}).get('State') in (None, 'completed'), 'Baseline update is not settled')
+        require(update_state(live) in (None, 'completed'), 'Baseline update is not settled')
         require(live['Spec']['Mode']['Replicated']['Replicas'] == 1, 'Expected running baseline replica')
         ids = ssh("docker service ps --filter desired-state=running --format '{{.ID}}' " + SERVICE).split()
         require(len(ids) == 1, 'Expected one baseline task')
@@ -259,7 +274,7 @@ def execute(args):
         ids = ssh("docker service ps --filter desired-state=running --format '{{.ID}}' " + SERVICE).split()
         tasks = json.loads(ssh('docker inspect ' + ' '.join(shlex.quote(i) for i in ids))) if ids else []
         current = live['Spec']['TaskTemplate']['ContainerSpec']
-        if not (live.get('UpdateStatus', {}).get('State') == 'completed' and len(tasks) == 1
+        if not (update_state(live) in (None, 'completed') and len(tasks) == 1
                 and tasks[0]['Status']['State'] == 'running' and tasks[0]['Spec']['ContainerSpec']['Image'] == target['image']
                 and current['Image'] == target['image'] and live['Spec']['Mode']['Replicated']['Replicas'] == 1):
             continue
