@@ -1,0 +1,138 @@
+{
+  "deployedSha": "99f9f228285053d1354474b089691d86fe090fef",
+  "batchVersion": "production-batch-v2",
+  "case": "P11",
+  "transport": "authenticated MCP session tools (harness tenant token rotated; see note)",
+  "generatedAt": "2026-09-18T16:55:28Z",
+  "correct": true,
+  "score": {
+    "pageOk": true,
+    "dispOk": true,
+    "outcomeOk": true,
+    "outcomeChecks": {
+      "pageWritten": true,
+      "filedTopics": 5,
+      "minFiledTopics": 3,
+      "filedEnough": true,
+      "noCannedClarification": true
+    },
+    "correct": true,
+    "gotPages": [
+      "Notes/EVAL-TEST New Page Filing Invariant.md"
+    ],
+    "gotDisp": [
+      "append_compact_note"
+    ],
+    "filedTopics": 5,
+    "canned": []
+  },
+  "note": "Run case P11 (new-page-multi-topic) against production 99f9f22. The harness transport needs ZENOD_MCP_TOKEN; the token in shell history returns 401, so the identical frozen case was driven through the authenticated session tools and scored by scripts/memory-eval/production-score.mjs.",
+  "results": [
+    {
+      "id": "P11",
+      "category": "new-page-multi-topic",
+      "filing": "filed",
+      "pagesTouched": [
+        "Notes/EVAL-TEST New Page Filing Invariant.md"
+      ],
+      "topics": [
+        {
+          "topic": "Northgate filament supplier ships on Tuesdays",
+          "disposition": "append_compact_note",
+          "confidence": 0.98,
+          "status": "filed",
+          "pages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "filedPages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "appliedOperationIds": [
+            "42ab5f346017b8baf4f3be4b"
+          ]
+        },
+        {
+          "topic": "Beacon Ridge survey drone flies at 90 metres",
+          "disposition": "append_compact_note",
+          "confidence": 0.98,
+          "status": "filed",
+          "pages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "filedPages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "appliedOperationIds": [
+            "bad712edaa5858ffd035d65c"
+          ]
+        },
+        {
+          "topic": "Copperline kiln holds twelve tiles",
+          "disposition": "append_compact_note",
+          "confidence": 0.98,
+          "status": "filed",
+          "pages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "filedPages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "appliedOperationIds": [
+            "6880d2fcc3cae74dcab0c20c"
+          ]
+        },
+        {
+          "topic": "Marrow Bay ferry timetable changes in November",
+          "disposition": "append_compact_note",
+          "confidence": 0.98,
+          "status": "filed",
+          "pages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "filedPages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "appliedOperationIds": [
+            "8284a2696e1d6c9c1b16701a"
+          ]
+        },
+        {
+          "topic": "Sable Point observatory dome needs a new bearing",
+          "disposition": "append_compact_note",
+          "confidence": 0.98,
+          "status": "filed",
+          "pages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "filedPages": [
+            "Notes/EVAL-TEST New Page Filing Invariant.md"
+          ],
+          "appliedOperationIds": [
+            "eedba4d0a7b27c11dc2aa92e"
+          ]
+        }
+      ],
+      "score": {
+        "pageOk": true,
+        "dispOk": true,
+        "outcomeOk": true,
+        "outcomeChecks": {
+          "pageWritten": true,
+          "filedTopics": 5,
+          "minFiledTopics": 3,
+          "filedEnough": true,
+          "noCannedClarification": true
+        },
+        "correct": true,
+        "gotPages": [
+          "Notes/EVAL-TEST New Page Filing Invariant.md"
+        ],
+        "gotDisp": [
+          "append_compact_note"
+        ],
+        "filedTopics": 5,
+        "canned": []
+      }
+    }
+  ]
+}
