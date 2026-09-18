@@ -196,6 +196,8 @@ class Recovery(unittest.TestCase):
             if command.startswith('docker ps '):
                 return 'container1' if state['service']['Spec']['Mode']['Replicated']['Replicas'] else ''
             if command.startswith('docker service ps'):
+                if '{{.CurrentState}}' in command:
+                    return 'task1 ' + ('running' if state['service']['Spec']['Mode']['Replicated']['Replicas'] else 'shutdown')
                 return 'task1'
             if command == 'docker inspect task1':
                 return json.dumps([{'Status': {'State': 'running' if state['service']['Spec']['Mode']['Replicated']['Replicas'] else 'shutdown', 'ContainerStatus': {'ContainerID': 'container1'}}, 'Spec': {'ContainerSpec': state['service']['Spec']['TaskTemplate']['ContainerSpec']}}])
@@ -275,12 +277,32 @@ class Recovery(unittest.TestCase):
         for status in ('running', 'starting', 'orphaned'):
             def ssh(command):
                 if command.startswith('docker service ps'):
-                    return 'old-task'
-                if command == 'docker inspect old-task':
-                    return json.dumps([{'Status': {'State': status}, 'DesiredState': 'shutdown'}])
+                    return 'old-task ' + status
                 raise AssertionError(command)
             with patch.object(operator, 'inspect_service', return_value=stopped), patch.object(operator, 'ssh', side_effect=ssh):
                 self.assertFalse(operator.public_is_quiesced())
+
+    def test_quiescence_never_reinspects_task_ids_that_swarm_removed(self):
+        # A real rollout listed the stopping task, then Swarm removed it before the
+        # follow-up inspect: 'No such object' aborted the deploy after quiescence.
+        stopped = copy.deepcopy(self.service)
+        stopped['Spec']['Mode']['Replicated']['Replicas'] = 0
+        commands = []
+        def ssh(command):
+            commands.append(command)
+            if command.startswith('docker service ps'):
+                return 'gone1 shutdown\ngone2 removed'
+            if command.startswith('docker ps '):
+                return ''
+            raise AssertionError(command)
+        with patch.object(operator, 'inspect_service', return_value=stopped), patch.object(operator, 'ssh', side_effect=ssh):
+            self.assertTrue(operator.public_is_quiesced())
+        self.assertFalse([command for command in commands if command.startswith('docker inspect')], commands)
+
+    def test_null_swarm_update_status_is_settled(self):
+        self.assertIsNone(operator.update_state({'UpdateStatus': None}))
+        self.assertIn(operator.update_state({'UpdateStatus': None}), (None, 'completed'))
+        self.assertEqual(operator.update_state({'UpdateStatus': {'State': 'completed'}}), 'completed')
 
     def test_stopped_tasks_but_stray_running_container_is_not_quiesced(self):
         stopped = copy.deepcopy(self.service)
