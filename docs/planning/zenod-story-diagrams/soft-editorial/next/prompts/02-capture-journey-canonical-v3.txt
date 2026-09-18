@@ -1,0 +1,38 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 02 canonical librarian correction
+
+Primary request: Preserve Image 2's complete layout and content, but replace its librarian with the exact waist-up canonical bust in Image 3 and render the surrounding icons in Image 1's soft-sketch language.
+
+Input images:
+- Image 1 role: full canonical style reference for typography, palette, icons, and soft editorial linework.
+- Image 2 role: edit target. Preserve every label, arrow, position, and narrative element exactly.
+- Image 3 role: exact librarian reference. Copy the waist-up Alexandrian librarian bust shown here: quiet face, flowing hair and beard contours, broad pale robe planes, rolled scroll, restrained thin outline, no smooth 3D shading, no pedestal, no full-body figure.
+
+Change only:
+- Replace the current librarian with the Image 3 bust. Keep it waist-up and integrated into the same position.
+- Redraw the phone, storage, file, MCP, and agent icons in Image 1's soft monochrome pencil/charcoal line style.
+- Remove any decorative or garbled text that is not in the required copy below. Keep the page background clean.
+- Preserve the existing near-black page, cyan connectors, lime accents, typography, logo, and all required labels.
+
+Text (verbatim):
+- "One contact. For whatever's on your mind."
+- "Capture a voice note. Zenod preserves it, organizes it, and makes it available to your agents."
+- "WhatsApp"
+- "Zenod"
+- "Original voice note"
+- "Transcript"
+- "Google Drive"
+- "Obsidian"
+- "MCP"
+- "Codex"
+- "Claude"
+- "Grok Bot"
+- "Other agents"
+
+Constraints:
+- Do not alter the layout, flow, arrows, or labels.
+- Use the exact waist-up bust from Image 3, not a full-body figure or seated statue.
+- All text crisp and legible at website scale.
+
+Avoid:
+- full-body figure, seated figure, smooth 3D render, carved stone, deep black eye sockets, sepia, parchment, gold, beige, salmon, glossy UI cards, decorative background text, malformed text.

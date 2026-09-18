@@ -1,0 +1,33 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 06 canonical identity correction
+
+Primary request: Keep the radial diagram and labels of Image 2, but replace the librarian and icon rendering with the canonical soft-sketch language of Image 1 and correct the connector-label details.
+
+Input images:
+- Image 1 role: canonical style reference. Study its central librarian specifically: a waist-up soft pencil/charcoal bust with a quiet face, flowing hair and beard contours, broad pale robe planes, and gently dissolving edges. Also study its restrained monochrome line-art icons.
+- Image 2 role: edit target. Preserve its radial composition, gateway, library, agents, typography, logo, and labels.
+
+Change only:
+- Replace Image 2's current central librarian with a waist-up canonical-style librarian bust matching Image 1. The figure must be soft flat contemporary editorial drawing, not a smooth 3D render, carved statue, or full-body figure.
+- Redraw the library shelf, Google Drive mark, and agent marks in Image 1's quiet monochrome pencil/charcoal line style while keeping the Google Drive mark colorful and recognizable.
+- Ensure the separate library surface includes the readable label "Google Drive".
+- Preserve the corrected connector semantics: the outward arrow from the Zenod gateway to each agent must be labeled "Retrieve"; the inward arrow from each agent to the gateway must be labeled "Write". Do not reverse either meaning.
+- Preserve all other labels, positions, and relationships.
+
+Text (verbatim):
+- "Every agent. One shared starting point."
+- "Codex, Claude, Grok Bot, and your other agents retrieve from and contribute to your context through MCP."
+- "Zenod gateway"
+- "MCP"
+- "Your library"
+- "Google Drive"
+- "Codex"
+- "Claude"
+- "Grok Bot"
+- "Retrieve"
+- "Write"
+- "Everyone contributes to your context."
+- "For connected agents"
+
+Avoid:
+- full-body statue, smooth 3D render, carved stone, deep black eye sockets, sepia, parchment, gold, beige, salmon, glossy UI cards, missing Google Drive label, reversed arrows, altered layout, malformed text.
