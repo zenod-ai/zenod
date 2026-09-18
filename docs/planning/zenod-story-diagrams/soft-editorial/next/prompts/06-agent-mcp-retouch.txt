@@ -1,0 +1,47 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 06 agent and MCP gateway retouch
+
+Primary request: Separate the user's library from the Zenod MCP gateway, make every bidirectional agent connector semantically correct, and restore the v5 identity and recognizable app marks.
+
+Input images:
+- Image 1 role: edit target and composition reference. Preserve the agent/MCP narrative and radial clarity.
+- Image 2 role: absolute visual-identity, typography, and illustration-style reference.
+
+Preservation invariants:
+- Preserve Image 1's near-black website canvas, minimal navigation, headline/subtitle placement, one dominant central shared-context idea, and restrained editorial finish.
+- Match Image 2 exactly for the editorial sans-serif family, weights, spacing, headline hierarchy, soft cool-white graphite illustration language, cyan connectors, and tiny lime accents.
+- Keep exactly one human figure maximum: the Alexandrian librarian at the gateway. Do not duplicate him.
+- Keep labels readable at website scale and keep the diagram uncluttered enough to understand at a glance.
+
+Subject changes:
+- Make the library and Zenod gateway visually distinct. The central ring is the "Zenod gateway" with a clear "MCP" badge. Below it, draw a separate open cyan bracket or shelf labeled "Your library" containing a colorful official-style Google Drive mark and a small "Google Drive" label.
+- Keep Codex, Claude, and Grok Bot around the gateway. Use recognizable restrained marks and clear labels. Make all three marks read correctly; do not use generic person icons.
+- Draw one clearly bidirectional connector between each agent and the Zenod gateway.
+- Directional semantics must be unambiguous: the outward arrow from the gateway toward an agent is labeled "Retrieve"; the inward arrow from the agent toward the gateway is labeled "Write". Do not reverse these meanings.
+- Keep the separate relationship between the gateway and the user's library visually clear, so Zenod is the gateway and the library belongs to the user.
+- Add the exact context line "Everyone contributes to your context."
+- Correct malformed labels and arrows while preserving the exact required copy below.
+
+Text (verbatim):
+- "Every agent. One shared starting point."
+- "Codex, Claude, Grok Bot, and your other agents retrieve from and contribute to your context through MCP."
+- "Zenod gateway"
+- "MCP"
+- "Your library"
+- "Google Drive"
+- "Codex"
+- "Claude"
+- "Grok Bot"
+- "Retrieve"
+- "Write"
+- "Everyone contributes to your context."
+- "For connected agents"
+
+Constraints:
+- Preserve the radial narrative and keep one dominant visual idea.
+- Use a colorful Google Drive mark. Use restrained, recognizable app marks for the agents.
+- Do not imply a verified third-party integration beyond the marks shown.
+- Do not invent tool IDs, URLs, dates, prices, or unrelated examples.
+
+Avoid:
+- sepia, parchment, gold, salmon, photoreal statues, 3D render, glossy SaaS cards, overpowering gradients, medieval-book clichés, duplicated faces, generic unlabeled agent icons, reversed arrows, dense text walls, malformed or scrambled text, fake metadata.

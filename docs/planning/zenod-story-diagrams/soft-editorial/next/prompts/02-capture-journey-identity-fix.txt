@@ -1,0 +1,39 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 02 identity correction pass
+
+Primary request: Correct only the identity drift in the current capture-journey candidate while preserving its composition, labels, and corrected agent retrieval cluster.
+
+Input images:
+- Image 1 role: edit target and current candidate. Preserve everything except the identity corrections below.
+- Image 2 role: absolute v5 identity, typography, logo, and illustration reference.
+- Image 3 role: focused v5 librarian identity reference.
+
+Change only:
+- Replace the current human/librarian illustration with the exact dignified v5 Alexandrian librarian figure shown in Image 3. Match its beard, classical drapery, statuary-inspired soft illustration language, linework, and shading. Do not use a comic, cartoon, or generic old man.
+- Match Image 2's editorial sans-serif type family, headline weight, tight spacing, subtitle style, and logo treatment exactly. The Zenod wordmark must match the v5 logo and the accent dot must sit on the right of the wordmark.
+- Make the final retrieval cluster read exactly: "Codex", "Claude", "Grok Bot", and "Other agents". Keep the arrows from MCP pointing toward those agents.
+- Preserve Google Drive, Obsidian, Original voice note, Transcript, MCP, WhatsApp, and Zenod labels clearly.
+- Correct malformed text but do not otherwise change the layout or narrative.
+
+Text (verbatim):
+- "One contact. For whatever's on your mind."
+- "Capture a voice note. Zenod preserves it, organizes it, and makes it available to your agents."
+- "WhatsApp"
+- "Zenod"
+- "Original voice note"
+- "Transcript"
+- "Google Drive"
+- "Obsidian"
+- "MCP"
+- "Codex"
+- "Claude"
+- "Grok Bot"
+- "Other agents"
+
+Constraints:
+- Keep the same left-to-right composition and simple flow. Do not add new stages or cards.
+- Match the v5 identity and figure exactly; this must look like the same storyboard family.
+- No new URLs, dates, prices, receipts, or unrelated content.
+
+Avoid:
+- old man, cartoon figure, generic statue, mismatched logo, reversed retrieval arrows, sepia, parchment, gold, 3D render, competing panels, malformed text.
