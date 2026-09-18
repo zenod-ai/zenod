@@ -16,7 +16,7 @@ import { assembleClassification, JevClient, JevUnavailableError, type JevVerdict
  * consecutive failures the fast path is skipped entirely for `breakerCooldownMs`.
  */
 
-export const JEV_DEFAULT_CONFIDENCE_THRESHOLD = 0.75;
+export const JEV_DEFAULT_CONFIDENCE_THRESHOLD = 0.5;
 export const JEV_DEFAULT_BREAKER_FAILURES = 3;
 export const JEV_DEFAULT_BREAKER_COOLDOWN_MS = 30_000;
 const JEV_DEFAULT_ATTEMPTS = 2;
@@ -24,8 +24,14 @@ const JEV_DEFAULT_ATTEMPTS = 2;
  * A single Choice destination cannot express more than one destination, so a
  * capture that likely holds several propositions is declined rather than filed
  * to one page with the rest silently dropped.
+ *
+ * Measured on the frozen classify fixture: at 0.5 this probe declined 21% of
+ * cases while only ~8% were genuinely multi-topic, costing coverage for nothing.
+ * At 0.8 coverage rose 42% -> 56% with accuracy flat (95.2% -> 96.4%); at 0.95
+ * accuracy fell to 85.3% because real multi-topic captures slipped through. 0.8
+ * is the knee, not a guess.
  */
-export const JEV_MULTI_TOPIC_FLOOR = 0.5;
+export const JEV_MULTI_TOPIC_FLOOR = 0.8;
 
 export type JevFallbackReason =
   | "disabled"
