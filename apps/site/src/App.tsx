@@ -12,6 +12,7 @@ import {
 import alexandria from "@/assets/alexandria.jpg";
 import heroLibrarian from "@/assets/zenod-v5-hero-librarian.webp";
 import zenodPlate from "@/assets/zenod-plate.jpg";
+import { StoryDeck } from "@/components/story-deck";
 import { cn } from "@/lib/utils";
 import {
   consumePendingHostedTier,
@@ -142,7 +143,7 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
         </a>
         <nav className="v5-nav-links" aria-label="Primary">
           <a href="/#context">Why memory</a>
-          <a href="/#journey">Examples</a>
+          <a href="/#story">The story</a>
           <a href="/#alexandria">The librarian</a>
           <a href="/#faq">FAQ</a>
         </nav>
@@ -333,6 +334,9 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
                 <a className="v5-button v5-button-primary" href="#start">
                   Try Zenod free
                 </a>
+                <a className="v5-button" href="#story">
+                  See the story
+                </a>
                 <StarLink />
               </div>
               <MemoryRoll />
@@ -361,6 +365,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
             </div>
           </div>
         </section>
+
+        <StoryDeck />
 
         <div className="v5-wrap">
           <section className="v5-section v5-split" id="context">
