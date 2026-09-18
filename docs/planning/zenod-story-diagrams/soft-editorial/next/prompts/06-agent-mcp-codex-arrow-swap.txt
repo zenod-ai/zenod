@@ -1,0 +1,8 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup
+
+Primary request: Swap only the two labels on the Codex connector.
+
+On the connector between Codex and the central Zenod gateway, the arrow pointing outward from the gateway toward Codex must be labeled "Retrieve". The arrow pointing inward from Codex toward the gateway must be labeled "Write".
+
+Keep everything else exactly unchanged: every other label, every other arrow, the agents, the library, the Google Drive mark, the logo, the typography, the layout, and the background. Do not redesign or regenerate the slide. Correct only those two Codex arrow labels.

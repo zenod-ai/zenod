@@ -1,0 +1,37 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 07 identity and typo correction pass
+
+Primary request: Correct only the identity drift and "Meaning rebuilt" typo in the current custodians candidate while preserving the complete timeline structure.
+
+Input images:
+- Image 1 role: edit target and current candidate. Preserve the timeline, labels, and relationships.
+- Image 2 role: absolute v5 identity, typography, logo, and illustration reference.
+- Image 3 role: focused v5 librarian identity reference.
+
+Change only:
+- Replace the Zenod custodian illustration with the exact dignified v5 Alexandrian librarian figure shown in Image 3. Match its classical statuary-inspired soft illustration language, beard, drapery, linework, and shading. Keep the future "Next librarian" custodian as an abstract neutral tool silhouette with no human face.
+- Match Image 2's editorial sans-serif type family, headline weight, tight spacing, subtitle style, and logo treatment exactly. The Zenod wordmark must match v5 and the accent dot must sit on the right of the wordmark.
+- Correct the label "Meaning rebuilt" so it is spelled exactly, with no extra letters.
+- Preserve the unchanged originals foundation, time axis, present-day meaning state, "10 years later" transition, rebuilt meaning state, and all cyan connectors.
+- Correct other malformed text but do not otherwise change the timeline.
+
+Text (verbatim):
+- "Keep the books. Replace the librarian."
+- "Your raw thoughts keep their value. Future custodians can derive new meaning from the same evidence."
+- "YOUR ORIGINALS · UNCHANGED"
+- "time →"
+- "Zenod"
+- "Zenod is the first custodian, not the last."
+- "Meaning today"
+- "10 years later"
+- "Next librarian"
+- "Meaning rebuilt"
+- "Conceptual lifecycle"
+
+Constraints:
+- Preserve the timeline structure, flow, and labels; this is a targeted identity correction.
+- Match the v5 identity and figure exactly; this must look like the same storyboard family.
+- No new URLs, dates beyond "10 years later", prices, receipts, or unrelated content.
+
+Avoid:
+- timeline redesign, human face on the future custodian, old man, cartoon figure, generic statue, mismatched logo, misspelled "rebuilt", sepia, parchment, gold, 3D render, malformed text.

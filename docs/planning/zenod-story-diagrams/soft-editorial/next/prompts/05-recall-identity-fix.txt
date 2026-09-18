@@ -1,0 +1,38 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 05 identity correction pass
+
+Primary request: Correct only the identity drift in the current recall candidate while preserving its question, grounded answer, and source-link composition.
+
+Input images:
+- Image 1 role: edit target and current candidate. Preserve everything except the identity corrections below.
+- Image 2 role: absolute v5 identity, typography, logo, and illustration reference.
+- Image 3 role: focused v5 librarian identity reference.
+
+Change only:
+- Replace the current librarian illustration/emblem with the exact dignified v5 Alexandrian librarian figure shown in Image 3. Match its classical statuary-inspired soft illustration language, beard, drapery, linework, and shading. Do not use a cartoon, flat generic face, or unrelated figure.
+- Match Image 2's editorial sans-serif type family, headline weight, tight spacing, subtitle style, and logo treatment exactly. The Zenod wordmark must match v5 and the accent dot must sit on the right of the wordmark.
+- If the current candidate contains a duplicated "Original voice note" label inside the cyan source chip, keep only one clean label.
+- Preserve the exact question, grounded answer, "Grounded by facts" note, and the three-step read path.
+- Correct malformed text but do not otherwise change the layout or narrative.
+
+Text (verbatim):
+- "Ask the librarian. Get back to the source."
+- "Find the thought you remember vaguely. Return to what you actually said."
+- "Question"
+- "What did I say about the light in that flat?"
+- "Grounded answer"
+- "You loved the natural light."
+- "Original voice note"
+- "Grounded by facts"
+- "Connected thought"
+- "Original recording"
+- "Cited answer"
+- "Illustrative conversation"
+
+Constraints:
+- Keep the same composition and hierarchy. Do not redesign the slide.
+- Match the v5 identity and figure exactly; this must look like the same storyboard family.
+- No new URLs, dates, prices, receipts, or unrelated content.
+
+Avoid:
+- cartoon face, flat generic librarian, duplicated source label, mismatched logo, sepia, parchment, gold, 3D render, competing boxes, malformed text.
