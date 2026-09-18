@@ -1,0 +1,38 @@
+Reference provenance:
+- Image 1: canonical approved style reference `docs/planning/zenod-story-diagrams/website-soft-editorial-openai.png`, restored from commit `8b53ed3`.
+- Image 2: focused librarian face/torso crop of Image 1.
+- Image 3: composition/content source only: the preceding slide 10 candidate, not a style reference.
+
+Use case: infographic-diagram
+Asset type: Zenod website-section mockup / final slide 10 in the soft-editorial storyboard
+
+Primary request: Create the slide 10 closing invitation using the canonical OpenAI soft-editorial identity as the absolute style reference, while borrowing only composition and required copy from the existing slide 10 candidate.
+
+Input images:
+- Image 1 role: canonical style reference. Use its typography, navigation treatment, illustration technique, line quality, shading, palette, and near-black page atmosphere exactly.
+- Image 2 role: focused canonical illustration reference. Use only the librarian face/torso drawing treatment from this crop to keep the figure in the same illustration language.
+- Image 3 role: composition/content source ONLY. Keep its useful left-copy / right-librarian-threshold layout, required headline, subtitle, actions, and simple aspirational pacing. Do NOT copy its illustration style, font rendering, or figure simplification.
+
+Preservation invariants:
+- 16:9 landscape, near-black canvas, premium website-section mockup.
+- Use the canonical top-navigation treatment and contemporary sans-serif from Image 1: "Zenod", "Why memory", "Examples", "The librarian", "FAQ", "Sign in", "Get started".
+- Oversized editorial sans-serif headline at the upper left, with "Start building your" in cool white and "Library of Alexandria." in cyan.
+- One cool-gray subtitle line beneath it.
+- Canonical illustration language from Images 1 and 2: soft flat contemporary editorial drawing, restrained thin contour lines, broad cool-white pale planes, subtle graphite shading, gently fading lower edges, dignified classical form, no harsh engraving, no dense crosshatching, no statue, no photorealism.
+- Electric cyan path/connector language and one tiny lime accent only.
+- Exactly one human figure maximum: the Alexandrian librarian. Show him once, waist-up or three-quarter figure, holding a rolled scroll, with the canonical soft face/hair/robe drawing treatment. Never duplicate him.
+- Generous negative space and a calm, aspirational hierarchy. Do not turn the slide into a busy dashboard.
+
+Scene and composition:
+- Left side: headline, one subtitle line, and two restrained plain-text actions aligned at the lower left.
+- Right side: a calm personal library threshold. The soft, dignified librarian stands beside an open doorway or shelf portal. A single continuous cyan path leads from the lower foreground to the threshold with no floating node or gap. Use only a few orderly shelves or rolled-scroll forms, keeping the library almost empty but full of promise.
+- Actions: "View on GitHub" with a tiny restrained GitHub mark, and "Choose a plan" with a small cyan arrow. Keep them as plain text links, not glossy buttons.
+- Match the canonical reference's quiet editorial illustration density, not a simplified icon or cartoon.
+
+Text (verbatim):
+Navigation: "Zenod", "Why memory", "Examples", "The librarian", "FAQ", "Sign in", "Get started"
+Headline: "Start building your Library of Alexandria."
+Subtitle: "Get Zenod to work on your context. Let it help you cultivate it."
+Actions: "View on GitHub", "Choose a plan"
+
+Avoid: visual drift toward the simplified slide 10 candidate, flat corporate vector cartoon, generic SaaS dashboard, multiple cards, pricing cards, invented prices, fake URLs, invented dates, fake receipts, extra marketing copy, scrambled or misspelled text, more than one human figure, duplicated librarian, photoreal statue, dense crosshatching, harsh etching, sepia, parchment, gold, brown, medieval-book clichés, glossy tiles, overpowering gradients, crowded inventory, decorative clutter.
