@@ -35,6 +35,7 @@ import type {
   GoogleDriveOAuthAuthority,
   SettingKey,
 } from "./settings.js";
+import { jevSettingFallbacks } from "./settings.js";
 import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, customerAuthEnabled, type CustomerLayerOptions } from "./customerLayer.js";
@@ -127,6 +128,7 @@ export class ZenodRuntimePool {
       }),
       settingFallbacks: {
         ...sharedGithubSettingFallbacks(this.sharedGithubApp),
+        ...jevSettingFallbacks(this.env),
       },
       ...(this.googleDriveOAuthAuthorityForTenant
         ? {
