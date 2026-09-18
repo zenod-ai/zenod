@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-07-09
-Updated: 2026-09-17
+Updated: 2026-09-18
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Spine ID: Foundation
@@ -93,7 +93,7 @@ Phase: ZMR M2 dependable memory basics delivered and deployed; M2 evaluation and
 Last verified: 2026-09-17 Europe/Paris.
 Integration target: `main`
 Fresh base commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17 15:28 CEST). Live production runs source `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified directly against `https://cloud.zenod.dev/api/health` (2026-09-17). `main` is 4 commits ahead of the running build, and those 4 commits are documentation only — the M2 evaluation cost report and full report (`#1330`, `#1331`). Every runtime change is already live. There is no production divergence and no pending functional deploy.
-Active child spine: `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md` (ZMR) for the current memory thrust; `docs/EPIC-P-PHYLAX-SPRINT.md` remains the active delivery surface for the integrated-independent push and is not superseded.
+Active child spine: `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md` (ZMR) for the current memory thrust; `docs/EPIC-P-PHYLAX-SPRINT.md` remains the active delivery surface for the integrated-independent push and is not superseded. `docs/EPIC-ZENOD-LANDING-STORY.md` (ZLS) is the active child for the responsive landing-page story iteration and slide 09–10 production.
 Next action: hold the deployed M2 milestone stable and observe ordinary use. Route the bounded presentation follow-up (repetitive B10–B12 source/history excerpts) as a small ZMR ticket only if a measured incident justifies it. Do not treat the 31 undeployed `main` commits as a production change without a separate authorized deploy gate.
 Blockers: none for the completed M2 basic-memory milestone. Production deployment of newer `main`, real channel sends, live billing, public signup and destructive migrations remain named later human gates. Public signup stays closed.
 
@@ -114,6 +114,7 @@ New release registration (2026-09-06); existing child relationships remain recor
 |---|---|---|---|---|---|---|---|---|
 | ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete multi-idea filing and grounded recall using existing evidence pipeline. | M2 delivered — deployed, observing | M2 dependable basic store, recall and recent-context conversation implemented and deployed (live `22440b4`); frozen isolated suite 36/36 and production MCP smoke 6/6; M2 evaluation and cost reports integrated on `main` (#1324–#1331). Bounded presentation follow-up (repetitive B10–B12 excerpts) remains. | [M2 contract](planning/zenod-basics-m2.md), [recall scorecard](planning/zenod-recall-scorecard.md), [#1313](https://github.com/zenod-ai/zenod/issues/1313), PRs [#1322](https://github.com/zenod-ai/zenod/pull/1322)–[#1331](https://github.com/zenod-ai/zenod/pull/1331) | 2026-09-17 Europe/Paris | Hold stable; open a bounded presentation ticket only on a measured incident. |
 | ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | active — deployed verification | Public29ddb62 verified; affected live recall3/3; upgrade/undo and deployment boundary documented. | [Deployment leaf](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | 2026-09-06 Europe/Paris | Reuse documented process for the next authorized upgrade. |
+| ZLS | child | [Landing story](EPIC-ZENOD-LANDING-STORY.md) | Promote the approved Zenod story into a responsive landing-page journey, retouch slides 01–08, and add slides 09–10. | active — wave 1 slide production | PR #1339 CI pending; slide retouches and new slides not yet produced; hosted-price/legal decision open. | [Landing story spine](EPIC-ZENOD-LANDING-STORY.md), [#1340](https://github.com/zenod-ai/zenod/issues/1340)–[#1344](https://github.com/zenod-ai/zenod/issues/1344) | 2026-09-18 Europe/Paris | Dispatch slide 09, slide 10, and retouch workers. |
 
 ## Bootstrap Map
 
