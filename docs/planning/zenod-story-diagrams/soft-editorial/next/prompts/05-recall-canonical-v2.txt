@@ -1,0 +1,16 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 05 canonical librarian correction
+
+Primary request: Preserve Image 2 exactly, but replace its librarian illustration with the exact waist-up canonical bust in Image 3.
+
+Input images:
+- Image 1 role: canonical style reference for typography, palette, and soft editorial linework.
+- Image 2 role: edit target. Preserve its question, grounded answer, source chip, Grounded by facts note, read path, labels, typography, logo, and layout exactly.
+- Image 3 role: exact librarian reference. Copy the waist-up Alexandrian librarian bust: quiet face, flowing hair and beard contours, broad pale robe planes, rolled scroll, restrained thin outline, no smooth 3D shading, no pedestal, no full-body figure.
+
+Change only:
+- Replace the current librarian illustration with the exact Image 3 bust. Keep it small and subordinate to the conversation and source proof.
+- Do not change any other element, label, connector, or spacing.
+
+Avoid:
+- full-body figure, seated figure, smooth 3D render, carved stone, deep black eye sockets, duplicated face, altered labels, altered layout, malformed text.
