@@ -37,7 +37,7 @@ The prompt explicitly preserves the librarian, entry points, account boundary, c
 - Apple Vision OCR on the final master found no remaining words.
 - The final asset remains 16:9 and source-sized.
 - Structural similarity against the original slide is `0.8183` SSIM; differences are expected because the text was removed and the image model reconstructed the underlying illustration.
-- The landing section now uses this asset as the visual layer and renders its headings, labels and copy as native HTML.
+- The landing section now uses this asset as its illustration/content layer inside a normal responsive web section. The section headline, subtitle, body copy and labels are native HTML; the asset is not displayed as a slide.
 
 ## Cost
 

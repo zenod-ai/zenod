@@ -23,9 +23,9 @@ Status: review — illustration-only HTML section pass
 Last attempted: replaced the post-hero landing chapters with the storyboard order 01–10 as native HTML sections and a real responsive layout
 Result: the hero is preserved; every following chapter has native copy and a code-native diagram or illustration panel; the librarian image is a single illustration-only asset, not a full slide; the current pricing section is reused for chapter 08 without changing the public offer.
 Evidence: `912c5f4`; [PR #1359](https://github.com/zenod-ai/zenod/pull/1359); `apps/site/src/components/story-flow.tsx`; `apps/site/src/components/story-flow.css`; `npm run typecheck`, `npm run lint`, `npm run test`, and `npm run build` passing
-Waiting on: visual review of the regenerated section 01; production deployment remains a separate named gate
-Approved work: illustration-only assets plus native HTML text and diagrams; full-slide images may not be embedded as landing sections
-Next action: review section 01 on the local preview, then apply the approved asset-and-overlay pattern to the remaining slides; do not deploy
+Waiting on: visual review of the normal responsive section 01; production deployment remains a separate named gate
+Approved work: regenerate illustration/background assets with the same image model, then render normal responsive HTML sections with the existing landing typography and spacing
+Next action: review section 01 on the local preview, then integrate the parallel 02–10 batches; do not deploy
 Source revision: `912c5f4` on `codex/zls-html-sections`, based on `f2fb7af`
 Verified at: 2026-09-18 16:52 Europe/Paris
 
@@ -96,3 +96,4 @@ HARDEN
 | 2026-09-18 | accepted | Add slide 09 before the pricing chapter and slide 10 after it | The user requested the librarian story and a closing library invitation in the narrative | User feedback | If narrative testing shows a better position |
 | 2026-09-18 | accepted | Revert the story-deck landing integration | Full-slide images are not the desired landing implementation. Future sections should use real HTML text plus illustration-only assets in the hero visual language. | User request; revert of PR #1339 | If Jordi approves a new section-by-section HTML direction |
 | 2026-09-18 | accepted | Build the post-hero landing as slides 01–10 translated into native HTML sections with illustration-only assets and code-native diagrams | The deck is the narrative and visual reference, not the shipping asset. The actual page owns its text, accessibility, responsive behavior, links, and offer truth. | User direction in this thread; `codex/zls-html-sections` first pass | If the illustrative density or section rhythm needs a different treatment |
+| 2026-09-18 | accepted | Treat each slide as a brief for a normal responsive web section, not as a slide to reproduce | The user clarified that the slide represents a section. Keep normal landing-page section title/subtitle typography and spacing; use the slide only to generate illustration/background assets, then lay out the content below in a responsive web section. Do not create fixed 16:9 slide canvases or slide-positioned copy. | User clarification in this thread; section-01 revision | If the page needs a different section-level composition |
