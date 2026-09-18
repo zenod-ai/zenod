@@ -29,6 +29,7 @@ The prompt explicitly preserves the librarian, entry points, account boundary, c
 
 - Master: `apps/site/src/assets/story/slide-01/ownership-illustration-2752.png`
 - Responsive: `ownership-illustration-1280.webp`, `ownership-illustration-640.webp`, `ownership-illustration-1280.jpg`
+- Extracted scene items: `apps/site/src/assets/story/slide-01/items/entry-points-{640,1280}.webp`, `librarian-{640,1280}.webp`, `account-{640,1280}.webp`
 - SHA-256 master: `1f702dca4df867820e200223a0ffdd4b8ef5296aa1d6b92f81ac57e8e93cc8ea`
 - Dimensions: `2752 x 1536`
 
@@ -37,7 +38,7 @@ The prompt explicitly preserves the librarian, entry points, account boundary, c
 - Apple Vision OCR on the final master found no remaining words.
 - The final asset remains 16:9 and source-sized.
 - Structural similarity against the original slide is `0.8183` SSIM; differences are expected because the text was removed and the image model reconstructed the underlying illustration.
-- The landing section now uses this asset as its illustration/content layer inside a normal responsive web section. The section headline, subtitle, body copy and labels are native HTML; the asset is not displayed as a slide.
+- The landing section does not display the full illustration layer as one flat image. It extracts three scene items from the generated layer — entry points, librarian, and user account — and composes them as separate responsive HTML/CSS scene items with native captions and body copy.
 
 ## Cost
 
