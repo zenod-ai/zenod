@@ -1,0 +1,23 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / final slide iteration
+
+Primary request: Make a single targeted illustration-style correction to Image 1 so its librarian and library exactly inherit the soft flat contemporary editorial language of Image 2, while preserving the whole slide layout and copy.
+
+Input images:
+- Image 1 role: edit target. Keep its composition, typography, text, navigation, colors, and library threshold.
+- Image 2 role: visual identity reference ONLY. Match its restrained soft flat illustration language.
+
+Change only:
+- Redraw the librarian figure from Image 1 in the soft flat contemporary editorial illustration language of Image 2. Remove engraving, cross-hatching, fine classical linework, sculptural detail, and heavy shaded folds. Use broad cool-white graphite planes, minimal delicate contours, shallow editorial shading, and simple calm shapes. Keep the same pose and placement.
+- Fix the librarian's far foot (the viewer's right foot): both feet must read as simple, anatomically coherent editorial shapes with no blocky toe mass.
+- Continue the cyan path continuously from the lower foreground toward the open doorway/threshold beside the librarian. Remove the disconnected floating cyan endpoint or glowing dot; the path should terminate subtly and clearly at the threshold.
+- Re-center the "Get started" nav text vertically inside its small lime pill.
+
+Preserve everything else exactly:
+- Preserve the exact headline "Start building your Library of Alexandria." and subtitle "Get Zenod to work on your context. Let it help you cultivate it."
+- Preserve the exact navigation text: "Zenod", "Why memory", "Examples", "The librarian", "FAQ", "Sign in", "Get started".
+- Preserve the exact actions: "View on GitHub" and "Choose a plan".
+- Preserve the near-black background, cool-white typography, cyan headline emphasis, soft architectural library planes, restrained GitHub mark, cyan arrow, lime accents, spacing, composition, and text placement.
+- Do not add text, cards, prices, URLs, dates, extra symbols, or a second human figure.
+
+Avoid: cross-hatching, engraving, classical statue detail, photoreal anatomy, heavy shading, 3D render, glossy SaaS tiles, busy dashboard, multiple figures, changed or scrambled text, disconnected path endpoints, decorative clutter.
