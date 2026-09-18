@@ -15,6 +15,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve, join } from "node:path";
+import { scoreCase } from "./production-score.mjs";
 
 const argv = process.argv.slice(2);
 const arg = (n, f) => { const i = argv.indexOf(n); return i < 0 ? f : argv[i + 1]; };
@@ -51,20 +52,6 @@ async function callTool(name, args) {
   return parsed.result?.structuredContent ?? parsed.result;
 }
 
-function scoreCase(entry, receipt) {
-  const topics = Array.isArray(receipt?.topics) ? receipt.topics : [];
-  const gotPages = new Set();
-  const gotDisp = new Set();
-  for (const t of topics) {
-    if (t.disposition) gotDisp.add(t.disposition);
-    for (const p of (t.filedPages ?? t.pages ?? [])) gotPages.add(String(p));
-  }
-  const wantPages = new Set(entry.expectPage ? String(entry.expectPage).split("|") : []);
-  const pageOk = wantPages.size === 0 ? gotPages.size === 0 : [...gotPages].some((p) => wantPages.has(p));
-  const dispOk = gotDisp.has(entry.expectDisposition);
-  return { pageOk, dispOk, correct: pageOk && dispOk, gotPages: [...gotPages], gotDisp: [...gotDisp] };
-}
-
 async function main() {
   const batchRaw = await readFile(BATCH, "utf8");
   const batch = JSON.parse(batchRaw);
@@ -77,8 +64,8 @@ async function main() {
     if (!TOKEN) console.log("token: MISSING (dry run still validates the batch shape)");
     let bad = 0;
     for (const c of batch.cases) {
-      const okContent = typeof c.content === "string" && c.content.startsWith("EVAL-TEST");
-      if (!c.id || !c.expectDisposition || !okContent) { console.log(`  INVALID ${c.id}`); bad++; }
+      const marker = [typeof c.content === "string" ? c.content : "", ...(c.hints ?? [])].some((value) => String(value).includes("EVAL-TEST"));
+      if (!c.id || !marker) { console.log(`  INVALID ${c.id}`); bad++; }
     }
     console.log(bad ? `batch invalid: ${bad}` : "batch valid; nothing stored");
     const parsed = { deployedSha, dryRun: true, cases: batch.cases.length };
@@ -97,7 +84,7 @@ async function main() {
     try {
       const stored = await callTool("store_memory", {
         content: entry.content,
-        hints: [`EVAL-TEST ${entry.id} (production classify eval; safe to remove)`],
+        hints: [`EVAL-TEST ${entry.id} (production filing eval; safe to remove)`, ...(entry.hints ?? [])],
         source: "selftest",
         idempotencyKey: `jev-prod-${deployedSha.slice(0, 7)}-${entry.id}`,
       });
@@ -116,7 +103,7 @@ async function main() {
       id: entry.id, category: entry.category,
       expectedPage: entry.expectPage, expectedDisposition: entry.expectDisposition,
       pagesTouched: receipt?.pagesTouched ?? null, filing: receipt?.filing ?? null,
-      topics: (receipt?.topics ?? []).map((t) => ({ disp: t.disposition, conf: t.confidence, pages: t.filedPages ?? t.pages ?? [] })),
+      topics: (receipt?.topics ?? []).map((t) => ({ disp: t.disposition, conf: t.confidence, status: t.status, reason: t.reason ?? null, pages: t.filedPages ?? t.pages ?? [] })),
       score, error, ms: Date.now() - started,
     });
     const flag = score ? (score.correct ? "PASS" : `FAIL(${score.gotPages.join(",") || "-"}|${score.gotDisp.join(",")})`) : `ERR(${error})`;
@@ -131,6 +118,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     cases: results.length, scored: scored.length, correct, accuracy: pct(correct, scored.length),
     errors: results.filter((r) => r.error).length,
+    outcomeFailures: results.filter((r) => r.score && !r.score.outcomeOk).length,
     medianMs: results.map((r) => r.ms).sort((a, b) => a - b)[Math.floor(results.length / 2)] ?? null,
   };
   console.log(`\naccuracy ${correct}/${scored.length} (${summary.accuracy})  errors ${summary.errors}  median ${summary.medianMs}ms`);
