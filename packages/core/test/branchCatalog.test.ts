@@ -161,3 +161,29 @@ it.each([false, true])('includes every section of a small page despite cross-lan
   expect(result.content).toContain('Explain distances using familiar scale models. [[2026-09-13#^e-123abc]]');
   expect(result.content).not.toContain(source);
 });
+it('counts only unreadable, missing or stale branches as discovery gaps', async () => {
+  const dir = await vault();
+  for (let i = 0; i < 6; i++) await writeFile(join(dir, `Projects/Branch${i}.md`), '# Branch\nArchive.');
+  const snapshot = await scanVault(dir);
+  const packet = await branchContext(dir, snapshot, Array.from({length: 6}, (_, i) => ({topic: `topic${i}`, query: 'Archive', paths: [`Projects/Branch${i}.md`]})));
+  expect(packet.branches).toHaveLength(4);
+  expect(packet.omittedCount).toBe(2);
+  expect(packet.discoveryGaps).toBe(0);
+  expect(packet.omitted.every(reason => reason.endsWith(':branch_budget'))).toBe(true);
+  const absent = await branchContext(dir, snapshot, [{topic: 'x', query: 'x', paths: ['Projects/Gone.md']}]);
+  expect(absent).toMatchObject({partial: true, discoveryGaps: 1, omittedCount: 1});
+  expect(absent.omitted).toContain('Projects/Gone.md:missing');
+});
+it('allows a confident new page when the fallback only hit branch, topic and serialized budgets', async () => {
+  const dir = await vault();
+  await Promise.all(Array.from({length: 40}, (_, i) => writeFile(join(dir, `Projects/Branch${i}.md`), serializeNote(fm(`Branch${i}`), 'Archive.'))));
+  const snapshot = await scanVault(dir);
+  const created = (n: number) => ({path: `Projects/New${n}.md`, title: `New${n}`, action: 'create' as const});
+  const topics = Array.from({length: 9}, (_, index) => ({topic: `subject${index}`, summary: `Subject ${index} needs its own page`, evidenceQuotes: [`Idea ${index}`], disposition: 'integrate_page' as const, confidence: 0.93, pages: [created(index)]}));
+  const classify = vi.fn().mockResolvedValue({confidence: 0.93, summary: 'many new subjects', tags: [], pages: [], topics});
+  const result = await classifyCandidates({classify}, dir, snapshot, {content: topics.map(topic => topic.summary).join('. '), hints: [], pageIndex: snapshot.pages, tagVocabulary: []});
+  expect(classify).toHaveBeenCalledTimes(2);
+  expect(result.discovery).toMatchObject({partial: false, contextPartial: true, fallbackAttempted: true, fallbackFailed: false});
+  expect(result.topics).toHaveLength(9);
+  expect(result.topics!.every(topic => topic.disposition === 'integrate_page' && topic.confidence === 0.93 && topic.pages[0]!.action === 'create')).toBe(true);
+});

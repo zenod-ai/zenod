@@ -19,7 +19,7 @@ function selected(value:Parameters<typeof prepareProductionReconciliation>[0], c
 }
 function input(raw: string, source: string) {
   const body = parseNote(raw).body;
-  const context = {branches:[{id:'page',path:'Projects/A.md',revision:pageRevision(raw),topics:['topic'],title:'A',scope:'A',sections:catalogSections('Projects/A.md',body).map(section => ({id:section.id,revision:section.revision,start:section.start,end:section.end,excerptStart:section.start,text:body.slice(section.start,section.end),truncated:false}))}],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0};
+  const context = {branches:[{id:'page',path:'Projects/A.md',revision:pageRevision(raw),topics:['topic'],title:'A',scope:'A',sections:catalogSections('Projects/A.md',body).map(section => ({id:section.id,revision:section.revision,start:section.start,end:section.end,excerptStart:section.start,text:body.slice(section.start,section.end),truncated:false}))}],partial:false,omitted:[],omittedCount:0,discoveryGaps:0,contextChars:0,estimatedTokens:0};
   return prepareReconciliation({path:'Projects/A.md',raw,title:'A',type:'project',today:'2026-09-13',evidence:evidence(source),sources:[{id:'p1',start:0,end:source.length,text:source}],context,links:['[[Index]]'],repositoryRevision:{provider:'github',id:'fixture-prior-revision',committedAt:'2026-09-12T10:00:00Z',urls:[]}});
 }
 const op = (kind: 'add'|'link_source'|'supersede'|'conflict'|'clarify', quote:string,targetId:string|null=null) => ({kind,sourceIds:['p1'],sourceQuote:quote,targetId,factKey:null,correctionQuote:null,reason:null});

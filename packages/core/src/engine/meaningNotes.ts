@@ -52,15 +52,25 @@ export interface BranchContextPacket {
   branches: Array<{ id: string; path: string; revision: string; topics: string[]; title: string; scope: string;
     sections: Array<{ id: string; revision: string; start: number; end: number; excerptStart: number; text: string; truncated: boolean }> }>;
   partial: boolean;
+  /** Bounded-context omissions: normal in a large catalog, never evidence of a hidden destination. */
   omitted: string[];
   omittedCount: number;
+  /** Unreadable, missing or stale branches: a real gap that may hide the destination. */
+  discoveryGaps: number;
   contextChars: number;
   /** Character-derived estimate, not provider-billed tokens. */
   estimatedTokens: number;
 }
 export const BRANCH_CONTEXT_MAX_CHARS = 12000;
-function omitContext(packet: BranchContextPacket, reason: string): void {
+/**
+ * A branch dropped for the branch/topic/serialized budget is a bounded-context
+ * limit the classifier is explicitly told about. An unreadable, missing or stale
+ * branch is a discovery gap that may hide the real destination. Only the second
+ * kind may block a confidently requested new page.
+ */
+function omitContext(packet: BranchContextPacket, reason: string, kind: "context" | "discovery" = "context"): void {
   packet.omittedCount++;
+  if (kind === "discovery") packet.discoveryGaps++;
   if (packet.omitted.length < 8) packet.omitted.push(compact(reason, 256));
   packet.partial = true;
 }
@@ -88,16 +98,17 @@ function boundContextPacket(packet: BranchContextPacket): BranchContextPacket {
 export async function branchContext(vaultPath: string, snapshot: VaultSnapshot, queries: BranchQuery[]): Promise<BranchContextPacket> {
   const grouped = new Map<string, BranchQuery[]>();
   for (const query of queries) for (const path of new Set(query.paths)) grouped.set(path, [...(grouped.get(path) ?? []), query]);
-  const packet: BranchContextPacket = { branches: [], partial: Boolean(snapshot.catalogCoverage?.unreadable.length), omitted: [], omittedCount: 0, contextChars: 0, estimatedTokens: 0 };
+  const packet: BranchContextPacket = { branches: [], partial: Boolean(snapshot.catalogCoverage?.unreadable.length), omitted: [], omittedCount: 0, discoveryGaps: 0, contextChars: 0, estimatedTokens: 0 };
   let remaining = BRANCH_CONTEXT_MAX_CHARS;
   for (const [path, related] of grouped) {
     const page = snapshot.pages.find(page => page.path === path);
-    if (!page || packet.branches.length >= 4 || remaining < 200) { omitContext(packet, `${path}:budget_or_missing`); continue; }
+    if (!page) { omitContext(packet, `${path}:missing`, "discovery"); continue; }
+    if (packet.branches.length >= 4 || remaining < 200) { omitContext(packet, `${path}:branch_budget`); continue; }
     let raw: string;
     try { raw = await readFile(join(vaultPath, path), "utf8"); }
-    catch { omitContext(packet, `${path}:unreadable`); continue; }
+    catch { omitContext(packet, `${path}:unreadable`, "discovery"); continue; }
     const revision = pageRevision(raw);
-    if (page.revision && page.revision !== revision) { omitContext(packet, `${path}:revision_changed`); continue; }
+    if (page.revision && page.revision !== revision) { omitContext(packet, `${path}:revision_changed`, "discovery"); continue; }
     const {body} = parseNote(raw);
     const sections = catalogSections(path, body);
     // Lexical ranking cannot establish absence across languages. When a small
@@ -189,9 +200,10 @@ export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultP
       const context = await branchContext(vaultPath, snapshot, groups.map(group => ({topic: group.topic, query: group.query, paths: group.pages.slice(0, 2).map(page => page.path)})));
       if (decisions.length > groups.length) { omitContext(context, "topics:budget"); boundContextPacket(context); }
       contextPartial ||= context.partial;
-      // Truncated excerpts are the normal bounded context surface. Missing reads,
-      // stale revisions or exhausted branch/topic budgets are discovery omissions.
-      discoveryOmitted = context.omittedCount > 0;
+      // Truncated excerpts and branch/topic/serialized budget cuts are the normal
+      // bounded context surface. Only unreadable, missing or stale branches are
+      // discovery omissions that may hide the destination.
+      discoveryOmitted = context.discoveryGaps > 0;
       for (const path of combined.keys()) presented.add(path);
       result = await run([...combined.values()], true, context);
     } catch {
