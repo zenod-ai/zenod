@@ -19,15 +19,15 @@ Pinned base: b0d0c27268e82723a544c96d840202d339f3c3ef; no rebases until the SHIP
 ## Current State
 
 Owner: /root landing-story delivery manager
-Status: active
-Last attempted: completed wave 1 slide production after merging the responsive story shell in PR #1339
-Result: slide 09 PR #1347, slide 10 PR #1346, and retouch PR #1350 are open for review. Slide 08 remains intentionally blocked on the pricing/legal decision. Integration is waiting on steward review of the three image PRs.
-Evidence: PR #1339 merged as `33cb9d6`; PRs #1346/#1347/#1350; issue handoffs #1340/#1341/#1342
-Waiting on: exact public pricing/legal treatment for the proposed hosted price change; steward review of the three wave 1 image PRs
-Approved work: produce slide 09 (librarian of Alexandria), slide 10 (start your library today), and retouches for slides 02, 05, 06, 07, and 08; then integrate the revised sequence into the landing page and verify responsive rendering
-Next action: review #1346, #1347, and #1350 at full resolution; then integrate accepted revisions into issue #1344
-Source revision: bafd667949b1bb446b1bf51b36c6eda85066d3a5
-Verified at: 2026-09-18 15:00 Europe/Paris
+Status: deferred
+Last attempted: reverted the responsive story-deck landing integration at Jordi’s request
+Result: landing source is restored to the previous version before PR #1339; the story deck and its optimized image assets are removed from `apps/site`. The section-01 prototype PR was closed. Image-only slide PRs remain unmerged for history/review.
+Evidence: `codex/revert-landing-story` revert of merge `33cb9d6`; closed PR #1357
+Waiting on: new landing direction. Full-slide images should not be embedded directly; the requested direction is real HTML text with illustration-only assets and hero-style composition.
+Approved work: preserve the reverted landing; no further landing integration until Jordi approves the new section pattern
+Next action: keep the previous landing version live; await direction on whether to pursue the illustration-only HTML section pattern
+Source revision: c1b4761 (pre-revert main)
+Verified at: 2026-09-18 16:20 Europe/Paris
 
 ## Mission
 
@@ -94,3 +94,4 @@ HARDEN
 | 2026-09-18 | accepted | Integrate the story as a responsive landing-page sequence rather than a separate deck-only page | The user asked for the content to be promoted into the landing page | User request | If the page becomes too long or slows down materially |
 | 2026-09-18 | accepted | Keep the current public offer authoritative until pricing/legal copy is reconciled | The proposed $3 hosted price conflicts with the live €9/month + VAT offer and legal copy | User feedback plus public offer tests and legal pages | When Jordi supplies the final price/legal treatment |
 | 2026-09-18 | accepted | Add slide 09 before the pricing chapter and slide 10 after it | The user requested the librarian story and a closing library invitation in the narrative | User feedback | If narrative testing shows a better position |
+| 2026-09-18 | accepted | Revert the story-deck landing integration | Full-slide images are not the desired landing implementation. Future sections should use real HTML text plus illustration-only assets in the hero visual language. | User request; revert of PR #1339 | If Jordi approves a new section-by-section HTML direction |
