@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1678,initial-scale=1">
+<title>02 — One contact. A living memory.</title>
+<link rel="stylesheet" href="../pattern.css">
+<style>
+  main{padding-top:36px}
+  h1{font-size:64px;margin:8px 0 10px;max-width:1180px}
+  .subtitle{font-size:19px;max-width:1120px}
+  .stage{height:548px;margin-top:16px}
+  .zone-title{position:absolute;top:0;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#829298;font-weight:750}
+
+  .entry{position:absolute;left:0;top:38px;width:242px}
+  .phone{position:relative;width:232px;height:388px;border:1.5px solid var(--line-strong);border-radius:28px;background:linear-gradient(150deg,rgba(24,36,39,.96),rgba(11,18,20,.94));padding:18px 16px;box-shadow:0 26px 60px rgba(0,0,0,.34)}
+  .phone:before{content:"";position:absolute;left:50%;top:10px;transform:translateX(-50%);width:48px;height:4px;border-radius:4px;background:rgba(255,255,255,.18)}
+  .phone-head{display:flex;align-items:center;gap:8px;margin:18px 0 18px;font-size:12px;color:#d7e0e1;font-weight:750}
+  .phone-head .dot{width:8px;height:8px;border-radius:50%;background:var(--lime)}
+  .voice-bubble{margin-left:22px;border:1px solid rgba(131,229,237,.4);background:rgba(131,229,237,.09);border-radius:15px;padding:12px 12px 10px}
+  .voice-bubble .time{display:block;text-align:right;color:#8da0a5;font-size:10px;margin-top:8px}
+  .saved{margin:12px 20px 0 0;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.05);padding:12px;color:#c2cdcf;font-size:11px;line-height:1.4}
+  .saved strong{color:var(--lime)}
+
+  .centre{position:absolute;left:286px;top:28px;width:284px;height:458px;display:flex;flex-direction:column;align-items:center}
+  .centre .librarian{width:104px;height:140px;margin-top:20px}
+  .centre .name{font-size:14px;font-weight:800;letter-spacing:.28em;margin-top:7px}
+  .verbs{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin-top:19px;max-width:250px}
+  .verbs span{border:1px solid rgba(186,255,88,.38);color:var(--lime);background:rgba(186,255,88,.065);border-radius:999px;padding:7px 11px;font-size:11px;font-weight:750}
+  .gatekeeper{margin-top:13px;color:#85979c;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+
+  .stores{position:absolute;left:640px;top:24px;width:416px;display:flex;flex-direction:column;gap:16px}
+  .store{min-height:184px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.012));padding:17px 18px}
+  .store.drive{border-color:rgba(131,229,237,.34)}
+  .store.obsidian{border-color:rgba(186,255,88,.30)}
+  .store-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .store-head h2{font-size:14px;letter-spacing:.13em;text-transform:uppercase;margin:0;color:#dbe4e4}
+  .store .items{display:flex;gap:10px;margin-top:15px}
+  .mini-card{flex:1;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035);padding:11px;font-size:11px;color:#aebabc;min-height:65px}
+  .mini-card strong{display:block;color:#e3eaea;font-size:12px;margin-bottom:5px}
+  .store .caption{margin-top:12px;color:#7f9196;font-size:11px;line-height:1.35}
+
+  .mcp{position:absolute;left:1094px;top:178px;width:118px;height:118px;border-radius:50%;border:1px solid rgba(131,229,237,.45);display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,rgba(131,229,237,.15),rgba(131,229,237,.02) 68%)}
+  .mcp:after{content:"";position:absolute;inset:12px;border:1px dashed rgba(131,229,237,.34);border-radius:50%}
+  .mcp .core{position:relative;text-align:center;color:var(--cyan);font-size:12px;font-weight:850;letter-spacing:.16em}
+  .mcp .sub{position:absolute;left:-18px;right:-18px;top:126px;text-align:center;color:#85979c;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+
+  .agents{position:absolute;left:1240px;top:40px;width:322px;height:410px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,rgba(255,255,255,.04),rgba(255,255,255,.012));padding:20px}
+  .agents h2{font-size:14px;text-transform:uppercase;letter-spacing:.14em;margin:0 0 15px;color:#dce5e5}
+  .agent-card{border:1px solid var(--line);border-radius:14px;background:rgba(9,15,17,.48);padding:15px;margin-bottom:11px}
+  .agent-card .top{display:flex;align-items:center;gap:11px;font-size:13px;font-weight:750;color:#e0e7e7}
+  .agent-card p{margin:10px 0 0;color:#8fa0a5;font-size:11px;line-height:1.4}
+  .agents .source-chip{margin-top:15px}
+  .agent-note{position:absolute;left:20px;right:20px;bottom:18px;color:#71858a;font-size:10px;letter-spacing:.04em;text-transform:uppercase}
+
+  .flow-label{position:absolute;font-size:10px;color:var(--cyan);letter-spacing:.06em;text-transform:uppercase}
+  .bottom-note{position:absolute;left:0;top:500px;color:#788b90;font-size:11px;line-height:1.4}
+  .bottom-note strong{color:#d3dddd}
+</style>
+<body>
+<div class="slide">
+  <header><div class="wordmark">ZENOD</div><nav class="nav"><span class="active">Why memory</span><span>Examples</span><span>The librarian</span><span>FAQ</span><span>Sign in</span><span class="cta">Get started</span></nav></header>
+  <main>
+    <div class="eyebrow">CAPTURE → MEMORY → AGENT</div>
+    <h1>One contact. <span class="cyan">A living memory.</span></h1>
+    <p class="subtitle">Send the voice note while it’s fresh. Zenod keeps the original, connects the meaning, and makes it available to your agents.</p>
+    <div class="stage">
+      <div class="zone-title" style="left:0">Capture</div>
+      <div class="entry">
+        <div class="phone">
+          <div class="phone-head"><span class="dot"></span>WhatsApp · Zenod</div>
+          <div class="voice-bubble">
+            <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <span class="time">5:00</span>
+          </div>
+          <div class="saved"><strong>Saved.</strong><br>Original kept · transcript created</div>
+        </div>
+      </div>
+
+      <div class="centre">
+        <div class="librarian" aria-label="Zenod librarian line drawing">
+          <div class="halo"></div>
+          <svg viewBox="0 0 120 160" role="img" aria-hidden="true">
+            <path d="M38 38c0-14 9-25 22-25s22 11 22 25" class="glow"/>
+            <path d="M43 37c0-9 7-16 17-16s17 7 17 16-7 17-17 17-17-8-17-17Z"/>
+            <path d="M47 45c-5 12-5 25 2 34 5 7 12 10 11 18"/>
+            <path d="M73 45c5 12 5 25-2 34-5 7-12 10-11 18"/>
+            <path d="M48 82c-18 7-28 24-30 50h84c-2-26-12-43-30-50"/>
+            <path d="M39 99c12 9 29 9 42 0" class="glow"/>
+            <path d="M40 108c13 7 28 7 40 0"/>
+            <path d="M32 119h18c3 4 5 8 5 13 0 5-5 9-11 9H32c-5 0-8-4-8-9 0-6 3-10 8-13Z" class="lime"/>
+            <path d="M88 91c-5 3-9 9-9 16h18c0-7-4-13-9-16Z" class="lime"/>
+          </svg>
+        </div>
+        <div class="name">ZENOD</div>
+        <div class="verbs"><span>Store</span><span>Transcribe</span><span>Organize</span></div>
+        <div class="gatekeeper">24/7 memory gatekeeper</div>
+      </div>
+
+      <div class="zone-title" style="left:640px">Preserve + connect</div>
+      <div class="stores">
+        <section class="store drive">
+          <div class="store-head"><h2>Your Google Drive</h2><span class="logo logo-drive"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 6 0 6 10-3 5H6l-3-5 6-10Z"/><path d="M9 4 3 14M15 4l6 10M6 19l6-10 6 10"/></svg></span></div>
+          <div class="items">
+            <div class="mini-card"><strong>Original audio</strong>Voice note · 5:00</div>
+            <div class="mini-card"><strong>Transcript</strong>Exact words preserved</div>
+          </div>
+          <div class="caption">Raw evidence stays in your account.</div>
+        </section>
+        <section class="store obsidian">
+          <div class="store-head"><h2>Your Obsidian brain / GitHub</h2><span class="logo logo-obsidian"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 5 4-2 13H9L7 7l5-4Z"/><path d="M7 7 3 12l6 8M17 7l4 5-6 8M12 3v17"/></svg></span></div>
+          <div class="items">
+            <div class="mini-card"><strong>Connected knowledge</strong>Meaning linked to the original</div>
+          </div>
+          <div class="caption">The original remains the source of truth.</div>
+        </section>
+      </div>
+
+      <div class="mcp"><div class="core">MCP</div><div class="sub">Gateway</div></div>
+
+      <div class="zone-title" style="left:1240px">Retrieve</div>
+      <section class="agents">
+        <h2>Your agents</h2>
+        <div class="agent-card">
+          <div class="top"><span class="logo logo-codex"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M15 7l5 5-5 5M13 5l-2 14"/></svg></span>Codex</div>
+          <p>Retrieves the transcript with a link back to the original voice note.</p>
+        </div>
+        <div class="agent-card">
+          <div class="top"><span class="logo logo-claude"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span>Claude</div>
+          <p>Uses the same grounded memory through the same gateway.</p>
+        </div>
+        <span class="source-chip">Original voice note · transcript</span>
+        <div class="agent-note">via MCP · conceptual integration</div>
+      </section>
+
+      <div class="arrow" style="left:242px;top:222px;width:36px"></div>
+      <div class="arrow" style="left:570px;top:222px;width:56px"></div>
+      <div class="arrow" style="left:1056px;top:222px;width:34px"></div>
+      <div class="arrow" style="left:1210px;top:222px;width:28px"></div>
+      <div class="flow-label" style="left:624px;top:201px">Store</div>
+      <div class="flow-label" style="left:1062px;top:201px">Retrieve</div>
+      <div class="flow-label" style="left:1218px;top:201px">Use</div>
+
+      <div class="bottom-note"><strong>Raw voice note → preserved original + connected meaning → agent retrieves the cited transcript.</strong><br>Originals and connected knowledge remain in your account.</div>
+    </div>
+  </main>
+  <footer><span>Illustrative concept · not a product screenshot</span><span class="concept">Conceptual workflow</span></footer>
+</div>
+</body>
+</html>
