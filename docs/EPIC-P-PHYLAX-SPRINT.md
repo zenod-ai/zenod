@@ -2,14 +2,14 @@
 
 Status: active — final integrated-independent delivery push
 Created: 2026-07-11
-Updated: 2026-08-28
+Updated: 2026-09-18
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: `/root` final-push delivery manager
 Steward since: 2026-08-27 14:40 CEST
-Last reconciled commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`
+Last reconciled commit: `c1b47617f5e31902a40b72c759abde04fcb0fc70` on `main`
 Planner: Jordi + Epic 3.0 planner
 Worker: Phylax delivery manager + parallel ticket workers
 Tester: the delivery manager itself (journey walker)
@@ -112,14 +112,24 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
-Phase: Source architecture and wave-6 phase-1 release packet complete; allowance/tariff approval pending before gated backups and closed rollout
-Last verified: 2026-08-27 23:12 CEST
+Phase: Zenod Hosted + integrated WhatsApp reliability lane only; non-Zenod Phylax expansion is parked
+Last verified: 2026-09-18 Europe/Paris
 Integration target: main
-Fresh base commit: `73e309adda4d04c5ea58f2ec4dc114143731ed1c` on `main`; signup-closed production candidate remains deployed and is the rollback/behavior baseline, not target-architecture proof
-Control plane: [PR #1113](https://github.com/zenod-ai/zenod/pull/1113) merged as `3e902f4` after CI and independent review; durable visual contract at `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html`
-Release packet: `docs/evidence/zpf-10-release-gate-2026-08-27/README.md`
-Next action: Jordi approves or replaces the recommended production allowance/tariff values; then request the exact Gate A fresh-backups-only approval. Deployment, real journey, billing and signup remain separate gates.
-Blockers: no architecture decision, source-wave, artifact, security or continuity blocker is open. The exact allowance/tariff values are the single current input. Production backup/deploy, real channel sends, real-card billing and public signup remain later named human gates.
+Live private Phylax: `c1b47617f5e31902a40b72c759abde04fcb0fc70` on application `urbFsgl6eImbQ4MTIZl5N`, service `app-index-back-end-panel-6zm3qg`, volume `phylax-data:/data`
+Live public Zenod: `1f9a3ea0a3f38b0c56506581a48adb1ef4d21bab`; it was not changed by this promotion
+Control plane: [PR #1113](https://github.com/zenod-ai/zenod/pull/1113) merged as `3e902f4`; release packet remains at `docs/evidence/zpf-10-release-gate-2026-08-27/README.md`
+Production receipt: `docs/evidence/phylax-production-c1b4761-2026-09-18/README.md`
+Next action: run the separately authorized real-phone WhatsApp acceptance pass for text, voice/transcription, reply delivery and restart continuity. Do not promote PM, standalone, Telegram, billing or public signup while this gate is open.
+Blockers: only the real-phone WhatsApp acceptance gate. Mechanical deployment, integrated identity, environment preservation, volume preservation and session recovery passed on the deployed revision.
+
+### 2026-09-18 reliability focus lock
+
+Jordi narrowed the active delivery surface to **getting Zenod to production with WhatsApp working reliably**. Everything else is parked unless it is required to fix or validate that path:
+
+- Active: public Zenod Hosted, private `phylax-for-zenod` in fixed `zenod` mode, the existing WhatsApp service number/session, transcription and delivery receipts.
+- Parked: PM mode and adapter work, standalone Phylax customer/billing surfaces, additional Phylax numbers, Telegram expansion, public signup, new landing/promotion work, and experiments that do not improve the Zenod WhatsApp loop.
+- Public Zenod is not to be redeployed merely to match the Phylax revision; the Phylax management MCP contract is unchanged and the current Zenod Hosted health is already the supported integrated peer.
+- The latest Phylax-only production promotion was deployed to preserve `phylax-data`, all 37 environment pairs, the WhatsApp session and the `phylax-for-zenod / zenod / zenod-primary` identity.
 
 ## Role Goals
 
@@ -266,7 +276,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 - Wave 4: #1110 compatibility migration and coupling removal.
 - Wave 5: #1111 three-island PM/standalone conformance.
 - Wave 6: #1112 exact release acceptance, then #1061 public gates.
-- Current wave-6 action: approve or replace the release packet's allowance/tariff values; next request Gate A backups only.
+- Current action: hold the active Zenod/WhatsApp reliability lane; run the separately authorized real-phone acceptance. Park PM, standalone, Telegram, billing, signup and unrelated experiments.
 
 ## Tester Queue
 
@@ -284,6 +294,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-12 | P-S5 MCP server WhatsApp face | `f6cc22c` | live tenant MCP endpoint | external MCP client `send_message` to verified phone | PASS: provider receipt `whatsapp:3EB0A5D62BF7283727DC42:sent` (not silent ack) | live structured MCP receipt |
 | 2026-07-12 | Exact-SHA deployment reconciliation | `f6cc22c` | Dokploy application `urbFsgl6eImbQ4MTIZl5N` + Swarm service | reconcile desired image and `GIT_SHA`; restart preserved fresh Baileys volume/session | PASS: `/api/health` reports full `f6cc22ccc3b7210a5e8afceb9f619ac76a73c734`; WhatsApp reconnected to linked number ending `0219` | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
 | 2026-07-12 | P-S5 completion audit | `f6cc22c` | live deployment + durable stores + screenshots + focused/full tests | inspect every SHIP 1–12 requirement and reject indirect evidence where real-account proof is required | SHIP 1–6, 8–9 pass; SHIP 7/10 Telegram and SHIP 11 live second-tenant isolation remain incomplete | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
+| 2026-09-18 | Phylax-only production reliability promotion | `c1b4761` | Dokploy private app `urbFsgl6eImbQ4MTIZl5N`, service `app-index-back-end-panel-6zm3qg`, `https://phylax.zenod.dev/api/health` | immutable image update only; preserve `phylax-data`, exact environment, credentials and WhatsApp session | PASS: live source `c1b4761`; `phylax-for-zenod / zenod / zenod / zenod-primary`; worker `ok`; WhatsApp connected/ready; no QR/operator action; public Zenod unchanged | `docs/evidence/phylax-production-c1b4761-2026-09-18/README.md` |
 | pending | SHIP journey clean pass | `f6cc22c` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Telegram exercise and two-tenant isolation | test package |
 
 ## Handoff Journal
@@ -503,6 +514,24 @@ Branch / latest commit: `main` `73e309adda4d04c5ea58f2ec4dc114143731ed1c`; contr
 Last verified: 2026-08-27 23:12 CEST
 
 Links: [#1112](https://github.com/zenod-ai/zenod/issues/1112), [CI 33116222429](https://github.com/zenod-ai/zenod/actions/runs/33116222429), [publish 33116222471](https://github.com/zenod-ai/zenod/actions/runs/33116222471)
+
+### 2026-09-18 - Epic worker - Zenod/WhatsApp reliability lane narrowed; Phylax-only promotion deployed
+
+Context: live private Phylax was still `d02493c` while the latest published Phylax artifact was `c1b4761`. The effective Phylax runtime delta was the `d8aba00` 45-second chat foreground deadline, which prevents the premature "still working" acknowledgement before normal WhatsApp chat answers. The Phylax management MCP contract was unchanged.
+
+Action: under Jordi's exact approval, promoted only the private integrated Phylax service from image index `97173b...` (`d02493c`) to `75e8fdc...` (`c1b4761`). Preserved all 37 environment pairs, `phylax-data:/data`, the WhatsApp session, credentials and the fixed Zenod instance identity. Public Zenod stayed on `1f9a3ea`; no PM, standalone, Telegram, billing or signup action occurred.
+
+Result: health reports the exact `c1b4761` source, worker `ok`, WhatsApp connected/ready and no operator action. The service is one healthy replica on the target image; logs show no QR or auth-failure event. Real-phone acceptance remains a separate gate.
+
+Next: run the real-phone text, voice/transcription, reply and restart-continuity pass. Keep PM, standalone, Telegram, billing, signup and unrelated experiments parked until the Zenod WhatsApp lane is reliable.
+
+Assignment identity: `/root` final-push delivery manager and spine steward
+
+Branch / latest commit: `main` `c1b47617f5e31902a40b72c759abde04fcb0fc70`; receipt branch `codex/phylax-c1b4761-receipt`
+
+Last verified: 2026-09-18 Europe/Paris
+
+Links: [PR #1113](https://github.com/zenod-ai/zenod/pull/1113), [#1112](https://github.com/zenod-ai/zenod/issues/1112), `docs/evidence/phylax-production-c1b4761-2026-09-18/README.md`
 
 ## Open Questions
 
