@@ -4,21 +4,16 @@ import {
   ArrowUpRightIcon,
   BookOpenIcon,
   BotIcon,
-  BracesIcon,
   CloudIcon,
   DatabaseIcon,
   FileTextIcon,
   GitBranchIcon,
-  HardDriveIcon,
   ImageIcon,
   LibraryIcon,
-  MessageCircleIcon,
   Mic2Icon,
-  NetworkIcon,
   QuoteIcon,
   SearchIcon,
   ShieldCheckIcon,
-  SparklesIcon,
   WaypointsIcon,
 } from "lucide-react";
 
@@ -26,6 +21,7 @@ import librarian640 from "@/assets/story/section-librarian-640.webp";
 import librarian1280 from "@/assets/story/section-librarian-1280.webp";
 import alexandria from "@/assets/alexandria.jpg";
 import zenodPlate from "@/assets/zenod-plate.jpg";
+import { SlideOneStorySection } from "@/components/slide-01-story";
 import "./story-flow.css";
 
 function StoryIntro({
@@ -74,136 +70,6 @@ function LibrarianArt({
         alt={alt}
       />
     </picture>
-  );
-}
-
-const entryPoints = [
-  {
-    icon: MessageCircleIcon,
-    label: "WhatsApp",
-    detail: "voice note · 05:00",
-    tone: "voice",
-  },
-  {
-    icon: BracesIcon,
-    label: "Codex",
-    detail: "retrieve + write",
-    tone: "agent",
-  },
-  {
-    icon: SparklesIcon,
-    label: "Claude",
-    detail: "retrieve + write",
-    tone: "agent",
-  },
-  {
-    icon: BotIcon,
-    label: "Grok Bot",
-    detail: "retrieve + write",
-    tone: "agent",
-  },
-  {
-    icon: NetworkIcon,
-    label: "Other agents",
-    detail: "through MCP",
-    tone: "other",
-  },
-];
-
-function SectionOwnership() {
-  return (
-    <section className="v5-section v5-story-section" id="ownership">
-      <div className="v5-wrap">
-        <StoryIntro
-          no="01 / OWNERSHIP"
-          kicker="Your account starts here"
-          title={
-            <>
-              Your memory.
-              <br />
-              <span className="v5-cyan">Your library.</span>{" "}
-              <span className="v5-acid">Your librarian.</span>
-            </>
-          }
-          lead="Zenod is not your memory. It is the librarian that stores, organizes, and connects it to your agents."
-        />
-      </div>
-
-      <div className="v5-wrap v5-ownership-diagram">
-        <aside className="v5-entry-panel" aria-label="Your entry points">
-          <p className="v5-panel-label">Your entry points</p>
-          <div className="v5-entry-list">
-            {entryPoints.map(({ icon: Icon, label, detail, tone }) => (
-              <div className={`v5-entry-card v5-entry-${tone}`} key={label}>
-                <span className="v5-entry-icon">
-                  <Icon aria-hidden="true" />
-                </span>
-                <span>
-                  <strong>{label}</strong>
-                  <small>{detail}</small>
-                </span>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <div className="v5-ownership-center">
-          <div className="v5-flow-arrow v5-flow-arrow-in" aria-hidden="true" />
-          <div className="v5-librarian-stage">
-            <LibrarianArt eager />
-            <div className="v5-librarian-shade" aria-hidden="true" />
-          </div>
-          <div className="v5-librarian-badge">
-            <strong>ZENOD</strong>
-            <span>THE MEMORY GATEKEEPER</span>
-          </div>
-          <div className="v5-flow-arrow v5-flow-arrow-out" aria-hidden="true" />
-        </div>
-
-        <aside className="v5-account-panel" aria-label="Your account">
-          <div className="v5-account-head">
-            <span className="v5-account-icon">
-              <HardDriveIcon aria-hidden="true" />
-            </span>
-            <span>
-              <strong>YOUR ACCOUNT</strong>
-              <small>GitHub or Google Drive · your library stays yours</small>
-            </span>
-          </div>
-
-          <div className="v5-account-layer v5-account-knowledge">
-            <div className="v5-layer-head">
-              <strong>CONNECTED KNOWLEDGE</strong>
-              <span>index + meaning</span>
-            </div>
-            <div className="v5-layer-chips">
-              <span>Index</span>
-              <span>Projects</span>
-              <span>People</span>
-              <span>Preferences</span>
-              <span>Open questions</span>
-            </div>
-          </div>
-
-          <div className="v5-account-layer v5-account-originals">
-            <div className="v5-layer-head">
-              <strong>ORIGINALS</strong>
-              <span>raw evidence</span>
-            </div>
-            <div className="v5-layer-chips">
-              <span>Voice note</span>
-              <span>Screenshot</span>
-              <span>Document</span>
-              <span>Source page</span>
-            </div>
-          </div>
-        </aside>
-      </div>
-
-      <p className="v5-wrap v5-story-footnote">
-        It stores. It categorizes. It connects.
-      </p>
-    </section>
   );
 }
 
@@ -660,7 +526,7 @@ function SectionAlexandria() {
 export function StoryFlow({ offer }: { offer: ReactNode }) {
   return (
     <>
-      <SectionOwnership />
+      <SlideOneStorySection />
       <SectionCapture />
       <SectionCultivate />
       <SectionGrounding />

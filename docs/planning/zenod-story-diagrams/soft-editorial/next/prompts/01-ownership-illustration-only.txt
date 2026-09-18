@@ -1,0 +1,24 @@
+Use case: precise-object-edit
+Asset type: landing-page section illustration layer / text-free slide background
+
+Primary request: Turn the supplied slide into a clean illustration-only layer for a real HTML landing-page section. Preserve the complete visual composition and every non-text graphic exactly, but remove all words, navigation labels, headings, subtitles, account labels, app labels, captions, and any other typographic elements. The output must contain the illustration and diagram only, with clean near-black negative space where the HTML copy will later be placed.
+
+Input images:
+- Image 1: edit target and absolute composition reference. Preserve its 16:9 layout, left-to-right information architecture, central Alexandrian librarian, entry-point marks, cyan connectors, account boundary, two memory layers, near-black canvas, spacing, color palette, and visual hierarchy. Remove only the text.
+- Image 2: canonical soft-editorial visual identity reference. Use it only to keep the illustration language, contour weight, graphite planes, cyan connector system, tiny lime accents, and premium dark-web treatment consistent. Do not copy its layout or objects.
+
+Text (verbatim): none.
+
+Required edit:
+- Remove every visible word, letter, numeral, fake URL, invented label, logo wordmark, navigation item and caption from Image 1.
+- Reconstruct the near-black background seamlessly where text was removed. Leave calm empty negative space for HTML text.
+- Preserve the non-text icons and diagram geometry: entry-point cards/marks, central librarian, account panel, source paths, cyan flows, connected-knowledge layer, originals layer, subtle linework and lime accents.
+- Keep the current 16:9 composition and the exact placement/scale of the illustration zones. Do not crop, recenter, simplify, add, remove, duplicate or redesign non-text objects.
+- Keep exactly one human figure. Do not add a second librarian, extra people, new panels, new arrows, new cards, or new icons.
+- No text anywhere, including on the book, clothing, panels, icons, footer, watermark, or background.
+
+Style/medium: soft flat contemporary editorial illustration, cool-white graphite planes, restrained thin contour lines, shallow gentle shading, softly fading lower edges, premium near-black website canvas, modern sans-serif-free illustration layer. No typography.
+
+Constraints: illustration-only output; no words; no letters; no numerals; no captions; no buttons; no navigation; no UI copy; no watermark; no signature; no fake URLs; no dates; no prices; no receipts; no slide chrome. The final image must be usable as the exact background layer beneath native HTML headings, labels, links and diagrams.
+
+Avoid: any text artifact, scrambled lettering, pseudo-text, lorem ipsum, labels, logo wordmarks, watermarks, signatures, cartoon style, photoreal statue, 3D render, sepia, parchment, gold cast, harsh spotlight, dense crosshatching, medieval-book clichés, duplicated librarian, extra figures, new objects, changed layout, crop, border, frame.

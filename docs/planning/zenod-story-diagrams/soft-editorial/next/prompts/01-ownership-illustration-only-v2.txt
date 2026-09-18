@@ -1,0 +1,34 @@
+Use case: precise-object-edit
+Asset type: landing-page section illustration layer / text-free slide background
+
+Primary request: Remove the remaining typography from the supplied generated illustration layer without changing the layout, illustration, diagram, colors, or composition. The final output must be a completely text-free visual layer ready for native HTML text overlays.
+
+Input images:
+- Image 1: edit target. It already contains the desired illustration composition, but still has unwanted labels and typographic marks. Remove them only.
+- Image 2: original slide composition reference. Use it only to understand what diagram furniture must remain after labels are removed. Do not copy or reintroduce any text from it.
+- Image 3: canonical soft-editorial style reference. Use only for illustration language and dark premium finish.
+
+Unwanted text to remove completely:
+- CONNECTED KNOWLEDGE
+- ORIGINALS
+- Index
+- Projects
+- People
+- Preferences
+- Open questions
+- ALEXANDRIA
+- TRAVELS FURTHER
+- any remaining word, letter, numeral, fake label, wordmark, caption or watermark
+
+Required edit:
+- Remove all remaining words and letters, including small labels inside the account panel and bottom-edge text.
+- Reconstruct the underlying near-black surface, panel, rule, icon, diagram line and illustration detail where the text was.
+- Preserve every non-text object in Image 1: the central librarian illustration, left entry-point zone, cyan paths, account boundary, two-layer structure, icon marks, panels, connectors, lime accents and the 16:9 placement.
+- Do not move, crop, resize, simplify, recolor or redesign anything except the removal of text.
+- Do not add replacement labels or substitute pseudo-text. Leave clean negative space.
+
+Text (verbatim): none.
+
+Constraints: no words, no letters, no numerals, no captions, no UI copy, no labels, no logos wordmarks, no fake URLs, no watermark, no signature, no border. Exactly one human figure. Do not add a second librarian, extra panels, cards, people, icons or arrows.
+
+Avoid: preserving any typography, blurred text ghosts, pseudo-text, scrambled lettering, watermarks, slide chrome, new objects, changed composition, crop, recenter, layout change, extra figures, cartoon style, photoreal statue, 3D render, sepia, parchment, gold cast, harsh spotlight, dense crosshatching.

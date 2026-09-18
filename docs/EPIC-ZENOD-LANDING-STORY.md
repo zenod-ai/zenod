@@ -23,9 +23,9 @@ Status: review — illustration-only HTML section pass
 Last attempted: replaced the post-hero landing chapters with the storyboard order 01–10 as native HTML sections and a real responsive layout
 Result: the hero is preserved; every following chapter has native copy and a code-native diagram or illustration panel; the librarian image is a single illustration-only asset, not a full slide; the current pricing section is reused for chapter 08 without changing the public offer.
 Evidence: `912c5f4`; [PR #1359](https://github.com/zenod-ai/zenod/pull/1359); `apps/site/src/components/story-flow.tsx`; `apps/site/src/components/story-flow.css`; `npm run typecheck`, `npm run lint`, `npm run test`, and `npm run build` passing
-Waiting on: human visual review of PR #1359; production deployment remains a separate named gate
+Waiting on: visual review of the regenerated section 01; production deployment remains a separate named gate
 Approved work: illustration-only assets plus native HTML text and diagrams; full-slide images may not be embedded as landing sections
-Next action: review PR #1359, then merge after acceptance; do not deploy
+Next action: review section 01 on the local preview, then apply the approved asset-and-overlay pattern to the remaining slides; do not deploy
 Source revision: `912c5f4` on `codex/zls-html-sections`, based on `f2fb7af`
 Verified at: 2026-09-18 16:52 Europe/Paris
 
@@ -84,7 +84,7 @@ HARDEN
 | [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | review | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
 | [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root | Integrate ten-slide story into landing page | blocked | #1340, #1341, #1342, #1343 | [#1339](https://github.com/zenod-ai/zenod/pull/1339) | 33cb9d6 | story shell merged; image revisions under review | 2026-09-18 15:55 Europe/Paris | integrate accepted revisions after review and pricing decision |
 | [#1343](https://github.com/zenod-ai/zenod/issues/1343) | Planner | /root | Reconcile public offer and ownership copy | blocked | none | docs/EPIC-ZENOD-LANDING-STORY.md | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | receive exact price and copy decision |
-| [PR #1359](https://github.com/zenod-ai/zenod/pull/1359) | Epic worker | /root landing-story delivery manager | Landing story sections as native HTML | review | - | `codex/zls-html-sections` | `f2fb7af` | `912c5f4`; typecheck, lint, 12 tests, production build, and desktop/tablet/mobile overflow checks pass; no full slide images embedded | 2026-09-18 17:06 Europe/Paris | human review and merge; no deployment |
+| [PR #1359](https://github.com/zenod-ai/zenod/pull/1359) | Epic worker | /root landing-story delivery manager | Landing story sections as native HTML | review | - | `codex/zls-html-sections` | `f2fb7af` | Section 01 regenerated with `google/gemini-3-pro-image` and a text-free illustration layer; Apple Vision OCR found no remaining words; typecheck, lint, 12 tests and production build pass | 2026-09-18 17:34 Europe/Paris | human review of section 01; then apply the same asset-and-overlay pattern to slides 02–10; no deployment |
 
 ## Decisions
 
