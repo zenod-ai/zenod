@@ -1,0 +1,372 @@
+{
+  "version": "m2-basics-v1.2",
+  "synthetic": true,
+  "trials": 3,
+  "seedPages": {
+    "Areas/Studio.md": "---\ntitle: Northbridge Studio\nsummary: Ceramics, kiln reservations, studio equipment and workshop planning.\ntags: []\ntype: area\ncreated: 2026-09-15\nupdated: 2026-09-15\n---\n\n# Northbridge Studio\n\n## Scope\n\nCeramics, kiln reservations, studio equipment and workshop planning.\n\n## Sources\n\n[[Index]]\n",
+    "Areas/Garden.md": "---\ntitle: Riverside Garden\nsummary: Shared garden maintenance, pump inspections and volunteer schedules.\ntags: []\ntype: area\ncreated: 2026-09-15\nupdated: 2026-09-15\n---\n\n# Riverside Garden\n\n## Scope\n\nShared garden maintenance, pump inspections and volunteer schedules.\n\n## Sources\n\n[[Index]]\n",
+    "Notes/Language Study.md": "---\ntitle: Language Study\nsummary: Independent language learning goals and course choices.\ntags: []\ntype: note\ncreated: 2026-09-15\nupdated: 2026-09-15\n---\n\n# Language Study\n\n## Scope\n\nIndependent language learning goals and course choices.\n\n## Sources\n\n[[Index]]\n"
+  },
+  "cases": [
+    {
+      "id": "B01",
+      "name": "Short durable store",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Please save this memory: My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B02",
+      "name": "Fresh exact recall",
+      "memories": [
+        {
+          "id": "kiln",
+          "content": "My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "When is my Northbridge Studio kiln reservation, and what is its code?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B03",
+      "name": "Paraphrased recall",
+      "memories": [
+        {
+          "id": "kiln",
+          "content": "My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "What time did I book the pottery firing space, and which booking reference should I bring?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B04",
+      "name": "Three independent ideas",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Please save these three separate updates: Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B05",
+      "name": "Interrupted filing and duplicate safety",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "interrupted_filing",
+          "memory": {
+            "id": "three",
+            "content": "Northbridge Studio: the kiln reservation is 18 November 2026 at 14:30. Riverside Garden: the shared pump inspection is on 21 November 2026; I will attend only if my shift ends before noon. My independent language-study goal is to practice Icelandic for fifteen minutes each morning; I have not chosen a course.",
+            "contentType": "text",
+            "capturedAt": "2026-09-15T10:00:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B06",
+      "name": "Long-note summary",
+      "memories": [
+        {
+          "id": "long",
+          "content": "This is my synthetic Northbridge studio planning note. I prefer repairing my current wheel before buying another, but I have not made a purchase decision. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The electrician estimated 280 euros for the kiln socket inspection; this is an unconfirmed estimate, not an agreed invoice. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. At the end of this plan: two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Summarize my Northbridge studio planning voice note. Include the beginning, cost estimate and closing arrangements; distinguish decisions from preferences and conditions.",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B07",
+      "name": "Latest voice note",
+      "memories": [
+        {
+          "id": "latest",
+          "content": "My latest voice note: I will repair the existing blue wheel first. I have not decided whether to replace it.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-15T11:00:00.000Z"
+        },
+        {
+          "id": "old",
+          "content": "The old Northbridge studio voice note proposed buying a red wheel. This proposal is obsolete.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-10T10:00:00.000Z"
+        },
+        {
+          "id": "audio",
+          "content": "Ordinary audio recording: a green wheel demonstration.",
+          "contentType": "audio",
+          "capturedAt": "2026-09-15T12:00:00.000Z"
+        },
+        {
+          "id": "text",
+          "content": "Studio text update: the door is painted yellow.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T13:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "What did I say in my latest voice note about the studio equipment?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B08",
+      "name": "Summary tail follow-up",
+      "memories": [
+        {
+          "id": "long",
+          "content": "This is my synthetic Northbridge studio planning note. I prefer repairing my current wheel before buying another, but I have not made a purchase decision. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The electrician estimated 280 euros for the kiln socket inspection; this is an unconfirmed estimate, not an agreed invoice. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. The working room has a labelled shelf, a drying rack, a shared sink and a noticeboard. I am documenting the layout for the studio record. At the end of this plan: two workshop places are reserved without charge for trainee teachers, only if the grant is approved. Applications close on 27 November 2026. If the grant is rejected, those free places are not promised.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Summarize my Northbridge studio planning voice note.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "What about the free places mentioned at the end—who are they for, what is the deadline, and are they guaranteed?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B09",
+      "name": "Second subject and thread isolation",
+      "memories": [
+        {
+          "id": "kiln",
+          "content": "My ceramic kiln reservation at Northbridge Studio is on 18 November 2026 at 14:30. The reservation code is KILN-47.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "garden",
+          "content": "Riverside Garden pump inspection is on 21 November 2026. I will attend only if my shift ends before noon.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Tell me about my kiln reservation.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "Now tell me about the Riverside Garden pump inspection.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "My unrelated private conversation is about a violin rehearsal on 3 December.",
+          "thread": "other"
+        },
+        {
+          "kind": "chat",
+          "message": "For the second thing we discussed, when is it and what condition did I put on attending?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B10",
+      "name": "Grounded opinion",
+      "memories": [],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Remember this thought: For Northbridge Studio, I prefer repairing my current wheel because the repair estimate is 90 euros; a new wheel would cost 600 euros. The technician has not confirmed that repair is possible. I have not decided.",
+          "thread": "main"
+        },
+        {
+          "kind": "chat",
+          "message": "What do you think about it?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B11",
+      "name": "Correction and history",
+      "memories": [
+        {
+          "id": "old",
+          "content": "Northbridge Studio has 12 workshop places.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "correction",
+          "content": "Correction to my earlier Northbridge Studio capacity report: not 12 places, but 19 places. The earlier figure was wrong.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T11:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "How many workshop places does Northbridge Studio have now, and what number did I report before correcting it?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B12",
+      "name": "Uncertain and unknown",
+      "memories": [
+        {
+          "id": "estimate",
+          "content": "The electrician estimated 280 euros for the Northbridge Studio kiln socket inspection, but the price is not confirmed. No appointment date was agreed.",
+          "contentType": "text",
+          "capturedAt": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "What will the kiln socket inspection cost, and on what date is the electrician booked?",
+          "thread": "main"
+        }
+      ]
+    },
+    {
+      "id": "B13",
+      "name": "Voice-note inventory, transcript length and duration limitation",
+      "evaluation": {
+        "asOf": "2026-09-18T12:00:00.000Z",
+        "expectedContentType": "voice_note",
+        "expectedWindow": {
+          "capturedAfter": "2026-09-09T00:00:00.000Z",
+          "capturedBefore": "2026-09-18T23:59:59.999Z"
+        },
+        "expectedCount": 6,
+        "expectedIds": [
+          "recent-voice-1",
+          "recent-voice-2",
+          "recent-voice-3",
+          "recent-voice-4",
+          "recent-voice-5",
+          "recent-voice-6"
+        ],
+        "expectedTranscriptChars": {
+          "recent-voice-1": 86,
+          "recent-voice-2": 80,
+          "recent-voice-3": 94,
+          "recent-voice-4": 5000,
+          "recent-voice-5": 7000,
+          "recent-voice-6": 9000
+        },
+        "lengthMetric": "transcript_chars",
+        "audioDurationAvailable": false,
+        "rejectedLexicalScope": "broad lexical matches outside voice_note/date scope"
+      },
+      "memories": [
+        {
+          "id": "recent-voice-1",
+          "content": "Synthetic recent voice note one. The studio kiln booking is 18 November 2026 at 14:30.",
+          "capturedAt": "2026-09-18T08:00:00.000Z",
+          "contentType": "voice_note"
+        },
+        {
+          "id": "recent-voice-2",
+          "content": "Synthetic recent voice note two. The garden pump inspection is 21 November 2026.",
+          "capturedAt": "2026-09-16T09:00:00.000Z",
+          "contentType": "voice_note"
+        },
+        {
+          "id": "recent-voice-3",
+          "content": "Synthetic recent voice note three. My Icelandic practice goal is fifteen minutes each morning.",
+          "capturedAt": "2026-09-10T10:00:00.000Z",
+          "contentType": "voice_note"
+        },
+        {
+          "id": "recent-voice-4",
+          "content": "Synthetic recent voice note recent-voice-4. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-4 records a distinct inventory fact and repeats for length only. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx END",
+          "capturedAt": "2026-09-15T08:00:00.000Z",
+          "contentType": "voice_note"
+        },
+        {
+          "id": "recent-voice-5",
+          "content": "Synthetic recent voice note recent-voice-5. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-5 records a distinct inventory fact and repeats for length only. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx END",
+          "capturedAt": "2026-09-12T08:00:00.000Z",
+          "contentType": "voice_note"
+        },
+        {
+          "id": "recent-voice-6",
+          "content": "Synthetic recent voice note recent-voice-6. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. The synthetic transcript for recent-voice-6 records a distinct inventory fact and repeats for length only. xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx END",
+          "capturedAt": "2026-09-11T08:00:00.000Z",
+          "contentType": "voice_note"
+        },
+        {
+          "id": "old-voice-boundary",
+          "content": "Synthetic old voice note outside the ten-day window.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-09-07T10:00:00.000Z"
+        },
+        {
+          "id": "old-voice",
+          "content": "Synthetic older voice note outside the ten-day window.",
+          "contentType": "voice_note",
+          "capturedAt": "2026-08-30T10:00:00.000Z"
+        },
+        {
+          "id": "ordinary-audio",
+          "content": "Synthetic ordinary audio attachment, not a voice note.",
+          "contentType": "audio",
+          "capturedAt": "2026-09-17T10:00:00.000Z"
+        },
+        {
+          "id": "text-distractor",
+          "content": "Synthetic text note, not audio.",
+          "contentType": "text",
+          "capturedAt": "2026-09-17T11:00:00.000Z"
+        }
+      ],
+      "turns": [
+        {
+          "kind": "chat",
+          "message": "Today is 18 September 2026. how many voicenotes did we store last 10 days? length of each?",
+          "thread": "main"
+        }
+      ]
+    }
+  ]
+}

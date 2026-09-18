@@ -35,9 +35,13 @@ These are scenario specifications. Concrete synthetic fixtures, exact prompts an
 | B11 | Correct a fact, then ask current and previous values | Explicit correction and history preserved and distinguished |
 | B12 | Ask about an uncertain estimate and an unknown fact | Preserves uncertainty and honestly identifies the missing information |
 
+## Additive regression suite — v1.2
+
+The 2026-09-18 ordinary-use incident `how many voicenotes did we store last 10 days? length of each?` is pinned as **B13** in the additive `m2-basics-v1.2` suite. The v1.1 12-case/36-outcome fixture and rubric remain frozen and unchanged. B13 uses a synthetic date frame, separates `voice_note` from ordinary `audio` and text, and requires a typed bounded inventory count plus transcript-character lengths with an explicit statement that audio duration is unavailable in the memory MCP. It rejects the live broad lexical partial-coverage failure. The suite is selectable with `--suite v1.2 --select B13:1`; exposing audio duration through a typed memory field remains a separate product decision and ticket.
+
 ## Score and finish line
 
-Run three independent trials per scenario on the same candidate:36 outcomes. Retain dialogue within each scenario and reset fixture/state between trials. Every case must pass3/3 for this small foundation gate; critical custody, duplicate and isolation failures always block. This measures the specified cases, not a universal accuracy guarantee.
+Run three independent trials per scenario on the same candidate: 36 outcomes in v1.1 and 39 in the additive v1.2 suite. Retain dialogue within each scenario and reset fixture/state between trials. Every case must pass3/3 for this small foundation gate; critical custody, duplicate and isolation failures always block. This measures the specified cases, not a universal accuracy guarantee.
 
 Use actual `engine.chat`/synthetic chat for conversational cases. Direct `engine.ask`, scripted model outputs and hand-pinned source references cannot substitute. Keep existing deterministic unit tests as a separate fast layer.
 
