@@ -1,0 +1,47 @@
+Use case: infographic-diagram
+Asset type: Zenod website-section mockup / slide 09 in the soft-editorial storyboard
+
+Primary request: Tell the Zenodotus origin story — the librarian, not the library, is what made Alexandria usable — as one clean editorial slide.
+
+Input images:
+- Image 1 role: absolute visual identity reference. Copy its typography, font family, font weights, letter spacing, near-black page background, cyan connector language, tiny lime accents, and its soft flat contemporary editorial illustration style. Do NOT copy its diagram, layout, icons or composition.
+- Image 2 role: deck-consistency reference. It is the approved next-iteration slide 01. Match its navigation bar, headline scale and placement, multi-tone headline treatment, subtitle treatment, page framing and margins exactly.
+- Image 3 role: deck-consistency reference. It is next-iteration slide 07. Match its typography and soft-editorial illustration language only. Do NOT copy its timeline structure, labels or content.
+
+Preservation invariants:
+- 16:9 landscape, near-black page background, premium website-section mockup.
+- Minimal consistent top navigation, same wording and order as the references: Zenod, Why memory, Examples, The librarian, FAQ, Sign in, Get started.
+- Restrained editorial sans-serif, oversized headline at the upper left, generous spacing, strong single hierarchy.
+- Multi-tone headline, rendered on ONE single unbroken line across the top of the composition: "ZENODOTUS" in white, "· THE LIBRARIAN OF ALEXANDRIA" in cyan. Never render the whole headline in one flat colour. Do not wrap, stack or split the headline onto two lines, and do not drop or abbreviate any word; size the type so the complete headline still fits comfortably on that single line.
+- Exactly one cool-gray subtitle line, one sentence, placed under the headline.
+- Soft flat contemporary editorial illustration: cool-white graphite planes, delicate contour lines, shallow gentle shading, softly fading lower edges, very faint architectural line atmosphere.
+- Cyan connectors and gate lines, tiny lime accents used sparingly. Place exactly three small lime accents, one per callout: on the shelved scroll in ORGANIZATION, on the returned scroll in RETRIEVAL, and on a small threshold mark at the gate. The lime accent colour must be clearly visible, but must stay tiny.
+- Labels readable at website scale. This is a conceptual design mockup, not a live product screenshot and not a photoreal historical painting.
+
+Subject and scene:
+- The interior of the ancient Library of Alexandria, drawn entirely in the soft flat editorial line language: tall scroll niches, stacked shelving, a restrained colonnade behind the gate, cool-white planes, no texture, no colour cast.
+- One dominant visual idea: a GATE / threshold across the middle of the composition. The library interior is on the far side; the queue of visitors is on the near side.
+- Zenodotus, the librarian, stands AT the gate, turned slightly toward the queue. He is the same character as in the identity reference: the single soft-editorial librarian figure, calm neutral face, simple robe, short hair, holding a scroll. Draw him with cool-white planes and delicate contour lines.
+- Near side, waiting to speak with him: a restrained queue / procession of visitors, drawn as simple soft-gray silhouette figures — quiet, generic, faceless, clearly subordinate to the librarian. Four to six minimal figures reading as a line, not a crowd, not detailed characters.
+- Important, authorised deviation from the shared one-figure rule: the librarian remains the only realised character; the waiting people are deliberately minimal silhouettes because this slide must show a queue at the gate.
+- Three small legible callouts around the gate show what the librarian controls, each tied to him with a short cyan line:
+  - "INGESTION" — a visitor hands him something they brought (scroll, wax tablet, letter); a short cyan arrow points from the near side into the library.
+  - "ORGANIZATION" — a tidy scroll niche / shelf grid behind him where each item is placed in its right place, a small lime accent on the shelved item.
+  - "RETRIEVAL" — at the end of the queue a visitor receives the exact item back; a lime accent marks the returned scroll and a short cyan arrow points back out through the gate.
+- A single thin cyan line runs from the queue, through the gate, into the library and back out, so one gate visibly controls both directions.
+- Keep one dominant visual idea. No cards, no dashboards, no pricing, no competing diagrams.
+
+Text (verbatim):
+Headline: "ZENODOTUS · THE LIBRARIAN OF ALEXANDRIA"
+Subtitle: "The library was the place. The librarian made it usable."
+Required labels, exact, each short and fully legible on one line: "THE GATE", "INGESTION", "ORGANIZATION", "RETRIEVAL"
+One small closing line, exact: "This is why the product is named Zenod."
+Tiny footer: "Conceptual illustration"
+
+Avoid: sepia, parchment, gold, brown, photographs, photoreal statues or ruins, 3D render, glossy SaaS cards, gradients that overpower the illustration, medieval-book clichés, dense text walls, fake URLs, invented dates, prices or receipts, scrambled or misspelled text, a duplicated or cloned librarian, large crowds, costume drama, or anything that makes the library building the hero instead of the librarian at the gate.
+
+Background discipline (critical, deck identity):
+- The near-black page background must stay dominant. Roughly three quarters of the frame should read as near-black canvas, exactly like the identity reference.
+- Draw the library interior as delicate cool-white contour line work and thin translucent planes that sit on the dark canvas and fade into the near-black background at the top, left, right and bottom edges. Softly fading lower edge.
+- Do NOT flood the canvas with large flat white or light-grey filled areas. No bright wall, no bright floor, no bright ceiling. Cool-white is used as line and accent, not as a big fill.
+- Keep the librarian and the queue small relative to the page, placed in the middle band, with generous near-black negative space around them.
