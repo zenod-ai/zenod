@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { prepareReconciliation as prepareProductionReconciliation, applyReconciliation } from '../src/engine/reconciliation.js';
+import { prepareReconciliation as prepareProductionReconciliation, applyReconciliation, newPageAdditions } from '../src/engine/reconciliation.js';
 import { pageRevision, catalogSections } from '../src/vault/pages.js';
 import { parseNote, serializeNote } from '../src/vault/frontmatter.js';
 import { appendMemoryFacts, parseMemoryFacts, projectFacts, renderFactViews } from "../src/engine/temporalFacts.js";
@@ -19,7 +19,7 @@ function selected(value:Parameters<typeof prepareProductionReconciliation>[0], c
 }
 function input(raw: string, source: string) {
   const body = parseNote(raw).body;
-  const context = {branches:[{id:'page',path:'Projects/A.md',revision:pageRevision(raw),topics:['topic'],title:'A',scope:'A',sections:catalogSections('Projects/A.md',body).map(section => ({id:section.id,revision:section.revision,start:section.start,end:section.end,excerptStart:section.start,text:body.slice(section.start,section.end),truncated:false}))}],partial:false,omitted:[],omittedCount:0,discoveryGaps:0,contextChars:0,estimatedTokens:0};
+  const context = {branches:[{id:'page',path:'Projects/A.md',revision:pageRevision(raw),topics:['topic'],title:'A',scope:'A',sections:catalogSections('Projects/A.md',body).map(section => ({id:section.id,revision:section.revision,start:section.start,end:section.end,excerptStart:section.start,text:body.slice(section.start,section.end),truncated:false}))}],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0};
   return prepareReconciliation({path:'Projects/A.md',raw,title:'A',type:'project',today:'2026-09-13',evidence:evidence(source),sources:[{id:'p1',start:0,end:source.length,text:source}],context,links:['[[Index]]'],repositoryRevision:{provider:'github',id:'fixture-prior-revision',committedAt:'2026-09-12T10:00:00Z',urls:[]}});
 }
 const op = (kind: 'add'|'link_source'|'supersede'|'conflict'|'clarify', quote:string,targetId:string|null=null) => ({kind,sourceIds:['p1'],sourceQuote:quote,targetId,factKey:null,correctionQuote:null,reason:null});
@@ -599,4 +599,37 @@ it('keeps completed facets unchanged when an unfinished shared group fails',asyn
  expect(failed.content).toBe(seed.input.raw);expect(failed.pending.flatMap(p=>p.ideaIds)).toEqual(['B']);
  const valid=await applyReconciliation(prepared,[{...op('add','Invented.'),ideaIds:['A']},{...op('add','New condition.'),ideaIds:['A','B']}]);
  expect(valid.pending).toEqual([]);expect(valid.appliedOperations[0]!.ideaIds).toEqual(['B']);
+});
+
+it('applies host ADDs directly for a page that does not exist yet instead of asking the reconciler', async () => {
+  const raw = 'The observatory opens on 8 September and runs a night session.';
+  const prepared = prepareProductionReconciliation({
+    path: 'Notes/Observatory.md', raw: null, title: 'Observatory', type: 'note', today: '2026-09-18',
+    evidence: evidence(raw), sources: [{ id: 'p1', start: 0, end: raw.length, text: raw }],
+    context: { branches: [], partial: true, omitted: [], omittedCount: 0, discoveryGaps: 0, contextChars: 0, estimatedTokens: 0 },
+    links: [], addCandidates: [{ id: 'p1', start: 0, end: raw.length, text: raw, ideaIds: ['idea-1'] }],
+    ideas: [{ id: 'idea-1', topic: 'Observatory opening', sourceIds: ['p1'] }],
+  });
+  expect(prepared.request.statements).toEqual([]);
+  expect(prepared.request.branch).toBeUndefined();
+  const operations = newPageAdditions(prepared);
+  expect(operations).toHaveLength(1);
+  expect(operations[0]).toMatchObject({ kind: 'add', ideaIds: ['idea-1'], sourceIds: ['p1'], targetId: null });
+  const result = await applyReconciliation(prepared, operations);
+  expect(result.pending).toEqual([]);
+  expect(result.content).toContain(raw);
+  expect(result.content).toContain('[[2026-09-13#^e-000001]]');
+});
+
+it('leaves a new-page idea without a host candidate pending rather than clarifying it', async () => {
+  const raw = 'The observatory opens on 8 September.';
+  const prepared = prepareProductionReconciliation({
+    path: 'Notes/Observatory.md', raw: null, title: 'Observatory', type: 'note', today: '2026-09-18',
+    evidence: evidence(raw), sources: [{ id: 'p1', start: 0, end: raw.length, text: raw }],
+    context: { branches: [], partial: true, omitted: [], omittedCount: 0, discoveryGaps: 0, contextChars: 0, estimatedTokens: 0 },
+    links: [], addCandidates: [], ideas: [{ id: 'idea-1', topic: 'Observatory opening', sourceIds: ['p1'] }],
+  });
+  const result = await applyReconciliation(prepared, newPageAdditions(prepared));
+  expect(result.content).toBe('');
+  expect(result.pending.map(item => item.reason)).toEqual(['reconciliation_idea_unassigned']);
 });

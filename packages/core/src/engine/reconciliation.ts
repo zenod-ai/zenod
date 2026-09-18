@@ -160,6 +160,20 @@ export function prepareReconciliation(input: PrepareInput) {
 }
 export type PreparedReconciliation = ReturnType<typeof prepareReconciliation>;
 
+/** A destination with no content has no statements to link, supersede or conflict
+ * with, so ADD is the only possible decision for its ideas. The host decides it
+ * directly: the reconciler's contract is to relate each idea to the *existing*
+ * branch subject and statements, so with an empty branch it can only answer
+ * CLARIFY, and a new page could never be written. Every selected candidate stays
+ * an exact host-persisted quote; ideas without a candidate remain pending.
+ */
+export function newPageAdditions(prepared: PreparedReconciliation): ReconciliationOperation[] {
+  return prepared.request.ideas.flatMap(idea => (prepared.request.addCandidates ?? [])
+    .filter(candidate => candidate.ideaIds.includes(idea.id))
+    .map(candidate => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: [candidate.id],
+      sourceQuote: candidate.text, targetId: null, factKey: null, correctionQuote: null, reason: "new_page" })));
+}
+
 /** Apply supported minimal changes; IDs/revisions prove addresses, not semantic entailment. */
 export async function applyReconciliation(prepared: PreparedReconciliation, operations: ReconciliationOperation[]): Promise<ReconciliationResult> {
   const {input, targets} = prepared;
