@@ -23,7 +23,7 @@ function input(overrides: Partial<ClassifyInput> = {}): ClassifyInput {
 const PRIMARY: Classification = { confidence: 0.9, summary: 'primary', tags: ['insurance'], pages: [] };
 
 /** A Jev responder that answers every question the client asks, shaped like the real API. */
-function fakeJev(overrides: { destination?: string; destinationConfidence?: number; dispositionConfidence?: number; unitProb?: number; multiPageProb?: number } = {}) {
+function fakeJev(overrides: { destination?: string; page?: string; destinationConfidence?: number; pageConfidence?: number; dispositionConfidence?: number; unitProb?: number; multiPageProb?: number } = {}) {
   const calls: any[] = [];
   const fetchImpl = (async (_url: string, init: any) => {
     const body = JSON.parse(init.body);
@@ -33,10 +33,23 @@ function fakeJev(overrides: { destination?: string; destinationConfidence?: numb
     for (const [key, question] of Object.entries<any>(body.questions)) {
       if (question.type === 'choice') {
         const isScope = key === 'multiple_propositions';
+        const isGroup = key === 'destination_group';
+        const isPage = key.startsWith('page__');
+        const choice = isGroup
+          ? (overrides.destination ?? 'grp0')
+          : isPage
+            ? (overrides.page ?? 'pg0')
+            : isScope
+              ? (p >= 0.5 ? 'multiple_pages' : 'single_page')
+              : 'append_compact_note';
         answers[key] = {
           type: 'choice',
-          choice: key === 'destination' ? (overrides.destination ?? 'pg0') : isScope ? (p >= 0.5 ? 'multiple_pages' : 'single_page') : 'append_compact_note',
-          confidence: key === 'destination' ? (overrides.destinationConfidence ?? 0.95) : (overrides.dispositionConfidence ?? 0.95),
+          choice,
+          confidence: key === 'destination_group'
+            ? (overrides.destinationConfidence ?? 0.95)
+            : isPage
+              ? (overrides.pageConfidence ?? 0.95)
+              : (overrides.dispositionConfidence ?? 0.95),
           probabilities: isScope ? { single_page: 1 - p, multiple_pages: p } : {},
         };
       } else {
@@ -110,7 +123,7 @@ it('falls back when no source unit is selected, rather than filing without evide
 });
 
 it('falls back when jev names a destination that is not in the supplied catalog', async () => {
-  const { fetchImpl } = fakeJev({ destination: 'pg999' });
+  const { fetchImpl } = fakeJev({ page: 'pg999' });
   const { llm, classify } = primaryLlm();
   const outcomes: ClassifyOutcome[] = [];
   const wrapped = withJevClassify(llm, { client: client(fetchImpl), ...fast, onOutcome: (o) => outcomes.push(o) });
@@ -218,6 +231,21 @@ it('still files a single-page memory when the second-page probability is low', a
 
   expect(classify).not.toHaveBeenCalled();
   expect(result.topics![0]!.pages[0]!.path).toBe('Areas/Insurance.md');
+});
+
+it('takes the weaker of the group and page confidences', async () => {
+  const { fetchImpl } = fakeJev({ destinationConfidence: 0.95, pageConfidence: 0.4 });
+  const { llm, classify } = primaryLlm();
+  const outcomes: ClassifyOutcome[] = [];
+  const wrapped = withJevClassify(llm, { client: client(fetchImpl), ...fast, onOutcome: (o) => outcomes.push(o) });
+
+  const result = await wrapped.classify(input());
+
+  // An easy page inside a confidently-chosen group must not paper over a weak
+  // page decision.
+  expect(classify).toHaveBeenCalledTimes(1);
+  expect(result).toBe(PRIMARY);
+  expect(outcomes[0]).toMatchObject({ route: 'primary', reason: 'low_confidence' });
 });
 
 it('never throws when the client fails unexpectedly', async () => {
