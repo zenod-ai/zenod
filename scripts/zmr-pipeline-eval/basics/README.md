@@ -1,6 +1,6 @@
 # M2 fixed basic memory baseline (#1313)
 
-This runner extends the existing evaluator guard/ledger and the existing server `runSyntheticChat` seam. No product behavior changes. `fixture.json` freezes12 synthetic cases; `rubric.json` holds expected checks **never included in model inputs**. Trial-major order B01–B12 ×3 retains denominator36 under every stop. Each case/trial uses a fresh local Git bare repository, vault and SQLite state; multi-turn case conversations retain their key. B09 also exercises a different key. No owner vault, phone, external Git or ASR access. Uses the candidate ZENOD_AGENT persona and local vault task tools; external task/Drive/peer integrations and tenant project registry are absent and recorded. This isolated memory surface does not claim complete production prompt/tool parity.
+This runner extends the existing evaluator guard/ledger and the existing server `runSyntheticChat` seam. No product behavior changes. `fixture.json` freezes the original12 synthetic cases; `rubric.json` holds expected checks **never included in model inputs**; trial-major order B01–B12 ×3 retains denominator36 under every stop. `fixture-v1.2.json`/`rubric-v1.2.json` add the measured B13 incident as a separate39-outcome suite; the v1.1 files and baseline meaning remain frozen. Each case/trial uses a fresh local Git bare repository, vault and SQLite state; multi-turn case conversations retain their key. B09 also exercises a different key. No owner vault, phone, external Git or ASR access. Uses the candidate ZENOD_AGENT persona and local vault task tools; external task/Drive/peer integrations and tenant project registry are absent and recorded. This isolated memory surface does not claim complete production prompt/tool parity.
 
 B10 directly captures a thought then asks for an opinion. B07 deliberately processes the older voice note after the newer one. B05 consumes the local fixture job's automatic retry allowance before starting, injects one failure before its second real reconciliation (no synthetic model response), saves the actual partial receipt/pages, then retries with a fresh engine. It requires observed filed+pending intermediate work; verifies durable input/fingerprint, completed IDs and actual claim/citation lines, duplicate capture/key and completed replay. A pending retry leaves completed replay UNMEASURED and cannot pass B05; it is not mislabeled data loss.
 
@@ -12,7 +12,7 @@ Plan only (no key/network):
 node scripts/zmr-pipeline-eval/basics/run.mjs
 ```
 
-Use a **separate clean candidate checkout**, exact full source and independently observed deployment SHA. Runner builds it with credential environment variables removed before any child process, hashes source/compiled outputs and records all request bodies/responses privately. No fake transport for live mode. Existing provider deadline120s, maximum$1/80requests remain unchanged. The full36 cases may not fit; incomplete is a valid red baseline, never a smaller passing suite. Optional `--select B01:1,B02:1` is an explicitly named partial batch, not an automatic resume or fresh-budget retry; all36 rows remain in its report. Root must authorize any subsequent batch separately and compare all attempts.
+Use a **separate clean candidate checkout**, exact full source and independently observed deployment SHA. Runner builds it with credential environment variables removed before any child process, hashes source/compiled outputs and records all request bodies/responses privately. No fake transport for live mode. Existing provider deadline120s, maximum$1/80requests remain unchanged. The full36 cases may not fit; incomplete is a valid red baseline, never a smaller passing suite. Optional `--select B01:1,B02:1` is an explicitly named partial batch, not an automatic resume or fresh-budget retry; all rows in the selected suite remain in its report. `--suite v1.2` selects the additive B13 regression suite documented below. Root must authorize any subsequent batch separately and compare all attempts.
 
 ```sh
 node scripts/zmr-pipeline-eval/basics/run.mjs --preflight \
@@ -21,7 +21,22 @@ node scripts/zmr-pipeline-eval/basics/run.mjs --preflight \
   --classify-model openai/gpt-5.6-luna --organizer-reasoning-effort low --ask-model x-ai/grok-4.3
 ```
 
-After independent review, parent supplies existing key securely as `ZMR_EVAL_OPENROUTER_KEY` and replaces `--preflight` with `--live --budget-usd 1 --max-requests 80`. **Do not put the key in command arguments or files.** These model identifiers describe the current baseline explicitly, not product defaults or a model switch. Preflight exercises all36 isolated bootstraps with zero external calls; it does not run agent answers or prove quality.
+After independent review, parent supplies existing key securely as `ZMR_EVAL_OPENROUTER_KEY` and replaces `--preflight` with `--live --budget-usd 1 --max-requests 80`. **Do not put the key in command arguments or files.** These model identifiers describe the current baseline explicitly, not product defaults or a model switch. Preflight exercises every planned row in the selected suite (36 for v1.1, 39 for v1.2) with zero external calls; it does not run agent answers or prove quality.
+
+## B13 — typed voice-note inventory and duration limitation
+
+The live WhatsApp question `how many voicenotes did we store last 10 days? length of each?` returned a partial-coverage failure because the answer loop searched a broad lexical scope instead of the typed voice-note inventory, then blocked on unread full transcript bodies. B13 pins that incident in the additive `m2-basics-v1.2` suite. The synthetic fixture fixes the date frame with `Today is 18 September 2026`, contains three in-window voice notes, one ordinary audio distractor, one text distractor and older out-of-window voice notes, and records evaluator-only expectations outside the model projection.
+
+The rubric requires the exact count, transcript character lengths labelled as such, explicit unavailability of audio duration in the memory MCP, exact evidence refs, and no partial-coverage refusal for a complete typed inventory. It does not authorize invented durations or require full-body reads for a metadata-only count. Audio duration is present in Phylax channel state but is not part of the Zenod `MemoryEntry`/`search_memory` contract; exposing it is a separate product ticket.
+
+Plan or run only this regression:
+
+```sh
+node scripts/zmr-pipeline-eval/basics/run.mjs --suite v1.2 --select B13:1
+node --test scripts/zmr-pipeline-eval/basics/policy.test.mjs
+```
+
+A paid live B13 cell uses the same candidate/preflight/live arguments and full39-row denominator as the normal suite. Unrun rows remain unmeasured.
 
 ## Score
 

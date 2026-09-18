@@ -1,0 +1,163 @@
+{
+  "version": "m2-basics-rubric-v1.2",
+  "suiteVersion": "m2-basics-v1.2",
+  "plannedOutcomes": 39,
+  "semanticScoring": "Independent human/agent review of every actual answer, source reads and persisted effects; no automatic lexical or model judge PASS.",
+  "dimensions": [
+    "correctness",
+    "completeness",
+    "context",
+    "citations"
+  ],
+  "criticalGates": [
+    "rawCustody",
+    "inputPreserved",
+    "noDuplicateEffects",
+    "isolation",
+    "published"
+  ],
+  "cases": [
+    {
+      "id": "B01",
+      "checks": [
+        "Durable source includes reservation date, time and code unchanged.",
+        "Acknowledgement truthfully states actual saved/pending outcome; no false completion."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B02",
+      "checks": [
+        "18 November 2026, 14:30 and KILN-47 all answered.",
+        "Citation resolves to actually read relevant evidence."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B03",
+      "checks": [
+        "Paraphrase finds the same18 November2026 14:30 KILN-47 fact without hidden source refs.",
+        "No invented alternative booking."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B04",
+      "checks": [
+        "Kiln booking, conditional garden attendance and Icelandic goal all preserved.",
+        "Each idea filed correctly or explicitly unresolved for a genuine missing destination/ambiguity; generic failure is not acceptable.",
+        "No certainty promotion or cross-topic conflation."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B05",
+      "checks": [
+        "A real forced boundary failure leaves at least one completed sibling and another pending.",
+        "Retry preserves completed operation IDs/text/citations, input and raw identity.",
+        "Repeated capture and same idempotency key produce no duplicate evidence/job; completed replay adds no duplicate effects."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B06",
+      "checks": [
+        "Repair preference is not a purchase decision.",
+        "280 euro estimate remains unconfirmed.",
+        "Two free trainee-teacher places,27 November2026 deadline and grant-approval condition all covered.",
+        "Answer is a useful summary, not transcript dump; required source scope read."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B07",
+      "checks": [
+        "Latest voice_note selected by capturedAt, not processing order or topical distractor.",
+        "Repair existing blue wheel first; replacement remains undecided.",
+        "Does not substitute newer ordinary audio/text or old red-wheel note."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B08",
+      "checks": [
+        "First turn is a meaningful qualified summary.",
+        "Follow-up resolves same note: two trainee-teacher places,27 November deadline, conditional grant.",
+        "Reads/retains tail support rather than stating absent or guaranteed."
+      ],
+      "requiredTurns": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "B09",
+      "checks": [
+        "Final answer concerns garden on21 November2026 with shift-before-noon condition.",
+        "Does not answer kiln or import isolated violin-thread details."
+      ],
+      "requiredTurns": [
+        0,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "B10",
+      "checks": [
+        "Opinion resolves wheel choice and uses90 vs600 and unconfirmed repair feasibility as sourced premises.",
+        "Provides useful conditional advice explicitly distinguished from stored decision.",
+        "No blanket refusal, fabricated decision or raw-excerpt-only answer."
+      ],
+      "requiredTurns": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "B11",
+      "checks": [
+        "Current19 distinguished from prior incorrect12.",
+        "Correction/history and source provenance retained; no unresolved-current conflation."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B12",
+      "checks": [
+        "280 euros labelled estimate/unconfirmed.",
+        "Appointment date explicitly unknown/not agreed, without invention."
+      ],
+      "requiredTurns": [
+        0
+      ]
+    },
+    {
+      "id": "B13",
+      "checks": [
+        "Uses a bounded typed voice_note inventory and returns exactly 6 recent voice notes; excludes the ordinary audio and text distractors and both older voice notes.",
+        "Reports the transcript character length of each included voice note (recent-voice-1: 86, recent-voice-2: 80, recent-voice-3: 94, recent-voice-4: 5000, recent-voice-5: 7000, recent-voice-6: 9000) and labels the metric as transcript characters, not audio duration.",
+        "States that audio duration is unavailable in the memory MCP rather than inventing seconds/minutes; asking one short clarification about which length metric is acceptable only if the exact count and available transcript lengths are still supplied.",
+        "Does not return the partial-coverage refusal or a broad lexical-match audit when the typed inventory is complete; cites the exact evidence refs for the six included entries.",
+        "Does not claim the out-of-window voice notes, ordinary audio, or text distractor were part of the requested voice-note window."
+      ]
+    }
+  ],
+  "finish": "Every scenario3/3; any critical failure blocks; unrun/error/incomplete remains in the full denominator. HTTP200, tools, citations or process exit alone are not semantic passes."
+}
