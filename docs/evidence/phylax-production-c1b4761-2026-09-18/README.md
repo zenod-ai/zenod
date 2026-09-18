@@ -67,9 +67,22 @@ corrected Phylax bundle boundary from `f6e48ca`.
 The Phylax management MCP contract is unchanged between the previous and
 deployed revisions, so the existing Zenod BFF remains compatible.
 
-## Remaining gate
+## Real-phone acceptance
 
-This receipt proves the controlled deployment and session recovery only. It does
-not claim a real-phone WhatsApp acceptance pass. Text, voice, transcription,
-reply delivery and restart continuity still require the separately authorized
-live channel test.
+On 2026-09-18 at 15:57–16:01 Europe/Paris, Jordi exercised the live WhatsApp
+path from a real phone. The observed sequence proved:
+
+- a normal text message received a normal reply (`hey bro` → `Hey bro 👋 What's up?`);
+- a voice note was received and queued for transcription;
+- transcription completed;
+- the Google Drive audio artifact link was returned;
+- the captured transcript was returned (`Do you understand what I'm saying? Can you say the word banana?`);
+- Phylax delivered the terminal capture receipt back to WhatsApp.
+
+This is a PASS for the Zenod Hosted + integrated WhatsApp text, voice capture,
+transcription, Drive archive and receipt path on the deployed revision.
+
+Residual UX observation: the live transcript also showed three intermediate
+messages during the filing window (“still filing”, “still working” and “retry
+shortly”) before the final capture receipt. That is not a transport failure, but
+it is the next bounded reliability-polish candidate if it remains noticeable.

@@ -119,8 +119,8 @@ Live private Phylax: `c1b47617f5e31902a40b72c759abde04fcb0fc70` on application `
 Live public Zenod: `1f9a3ea0a3f38b0c56506581a48adb1ef4d21bab`; it was not changed by this promotion
 Control plane: [PR #1113](https://github.com/zenod-ai/zenod/pull/1113) merged as `3e902f4`; release packet remains at `docs/evidence/zpf-10-release-gate-2026-08-27/README.md`
 Production receipt: `docs/evidence/phylax-production-c1b4761-2026-09-18/README.md`
-Next action: run the separately authorized real-phone WhatsApp acceptance pass for text, voice/transcription, reply delivery and restart continuity. Do not promote PM, standalone, Telegram, billing or public signup while this gate is open.
-Blockers: only the real-phone WhatsApp acceptance gate. Mechanical deployment, integrated identity, environment preservation, volume preservation and session recovery passed on the deployed revision.
+Next action: keep the Zenod Hosted + integrated WhatsApp lane stable. The real-phone acceptance passed for text, voice capture, transcription, Drive archive and terminal receipt. If the repeated intermediate “still filing / still working / retry shortly” messages remain noticeable, open one bounded UX cleanup; otherwise do not expand scope.
+Blockers: none for the core Zenod WhatsApp path. The only known residual is repeated intermediate filing acknowledgements during a longer capture window.
 
 ### 2026-09-18 reliability focus lock
 
@@ -295,6 +295,7 @@ Stale assignment policy: manager reassigns any ticket silent past its 90-minute 
 | 2026-07-12 | Exact-SHA deployment reconciliation | `f6cc22c` | Dokploy application `urbFsgl6eImbQ4MTIZl5N` + Swarm service | reconcile desired image and `GIT_SHA`; restart preserved fresh Baileys volume/session | PASS: `/api/health` reports full `f6cc22ccc3b7210a5e8afceb9f619ac76a73c734`; WhatsApp reconnected to linked number ending `0219` | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
 | 2026-07-12 | P-S5 completion audit | `f6cc22c` | live deployment + durable stores + screenshots + focused/full tests | inspect every SHIP 1–12 requirement and reject indirect evidence where real-account proof is required | SHIP 1–6, 8–9 pass; SHIP 7/10 Telegram and SHIP 11 live second-tenant isolation remain incomplete | `docs/evidence/phylax-ship-2026-07-12/13-completion-audit.md` |
 | 2026-09-18 | Phylax-only production reliability promotion | `c1b4761` | Dokploy private app `urbFsgl6eImbQ4MTIZl5N`, service `app-index-back-end-panel-6zm3qg`, `https://phylax.zenod.dev/api/health` | immutable image update only; preserve `phylax-data`, exact environment, credentials and WhatsApp session | PASS: live source `c1b4761`; `phylax-for-zenod / zenod / zenod / zenod-primary`; worker `ok`; WhatsApp connected/ready; no QR/operator action; public Zenod unchanged | `docs/evidence/phylax-production-c1b4761-2026-09-18/README.md` |
+| 2026-09-18 | Real-phone Zenod WhatsApp acceptance | `c1b4761` | live `phylax.zenod.dev` + real WhatsApp phone | text round trip; voice note capture; transcription; Google Drive audio link; terminal WhatsApp receipt | PASS: text reply delivered; voice transcription completed; transcript and Drive link returned; final “Captured ✓” receipt delivered; residual repeated intermediate filing messages noted | `docs/evidence/phylax-production-c1b4761-2026-09-18/README.md` |
 | pending | SHIP journey clean pass | `f6cc22c` | phylax.zenod.dev live + real phone | browser + phone walk, screenshots both | pending Telegram exercise and two-tenant isolation | test package |
 
 ## Handoff Journal
@@ -521,9 +522,9 @@ Context: live private Phylax was still `d02493c` while the latest published Phyl
 
 Action: under Jordi's exact approval, promoted only the private integrated Phylax service from image index `97173b...` (`d02493c`) to `75e8fdc...` (`c1b4761`). Preserved all 37 environment pairs, `phylax-data:/data`, the WhatsApp session, credentials and the fixed Zenod instance identity. Public Zenod stayed on `1f9a3ea`; no PM, standalone, Telegram, billing or signup action occurred.
 
-Result: health reports the exact `c1b4761` source, worker `ok`, WhatsApp connected/ready and no operator action. The service is one healthy replica on the target image; logs show no QR or auth-failure event. Real-phone acceptance remains a separate gate.
+Result: health reports the exact `c1b4761` source, worker `ok`, WhatsApp connected/ready and no operator action. The service is one healthy replica on the target image; logs show no QR or auth-failure event. A later real-phone lap at 15:57–16:01 CEST passed text reply, voice capture, transcription, Google Drive audio link and terminal WhatsApp receipt. The capture window still produced three intermediate filing messages before the final receipt; that UX residue is the only follow-up candidate.
 
-Next: run the real-phone text, voice/transcription, reply and restart-continuity pass. Keep PM, standalone, Telegram, billing, signup and unrelated experiments parked until the Zenod WhatsApp lane is reliable.
+Next: keep Zenod/WhatsApp stable and do not expand scope. Open one bounded presentation cleanup only if the repeated intermediate messages remain noticeable. Park PM, standalone, Telegram, billing, signup and unrelated experiments.
 
 Assignment identity: `/root` final-push delivery manager and spine steward
 
