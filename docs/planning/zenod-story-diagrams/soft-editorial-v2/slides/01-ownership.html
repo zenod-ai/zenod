@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1678,initial-scale=1">
+<title>01 — Your memory. Your library. Your librarian.</title>
+<link rel="stylesheet" href="../pattern.css">
+<style>
+  main{padding-top:34px}
+  h1{font-size:62px;margin:10px 0 12px;max-width:1240px}
+  .subtitle{font-size:20px;max-width:1120px}
+  .stage{height:546px;margin-top:18px}
+
+  .col-title{position:absolute;top:6px;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#829298;font-weight:750}
+
+  /* ---------- left: your entry points ---------- */
+  .entry{position:absolute;left:0;top:0;width:392px;height:520px}
+  .phone{position:absolute;left:14px;top:44px;width:196px;height:352px;border:1.5px solid var(--line-strong);border-radius:26px;background:linear-gradient(150deg,rgba(23,34,37,.95),rgba(12,19,21,.92));padding:16px 14px;box-shadow:0 26px 60px rgba(0,0,0,.34)}
+  .phone:before{content:"";position:absolute;left:50%;top:9px;transform:translateX(-50%);width:46px;height:4px;border-radius:4px;background:rgba(255,255,255,.2)}
+  .phone-head{display:flex;align-items:center;gap:7px;margin:14px 0 12px;font-size:11px;color:#cad5d6;font-weight:750;letter-spacing:.03em}
+  .phone-head .dotmark{width:7px;height:7px;border-radius:50%;background:var(--lime)}
+  .bubble{border-radius:14px;padding:9px 11px;font-size:11px;line-height:1.35}
+  .bubble.out{margin-left:26px;background:rgba(131,229,237,.1);border:1px solid rgba(131,229,237,.32);color:#dbe7e8}
+  .bubble.in{margin-right:22px;margin-top:9px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:#b7c4c6}
+  .bubble .stamp{display:block;margin-top:7px;text-align:right;color:#8298a0;font-size:10px}
+  .chiprow{position:absolute;left:14px;top:412px;display:flex;flex-direction:column;gap:9px}
+  .entrychip{display:flex;align-items:center;gap:10px;font-size:12px;color:#c3ced0;font-weight:650}
+  .entrychip .logo{width:25px;height:25px;border-radius:8px}
+  .entrychip .logo svg{width:15px;height:15px}
+
+  /* ---------- centre: the librarian ---------- */
+  .centre{position:absolute;left:452px;top:0;width:330px;height:520px;display:flex;flex-direction:column;align-items:center}
+  .centre .librarian{margin-top:34px}
+  .wordmark-big{font-size:14px;font-weight:800;letter-spacing:.28em;margin-top:6px}
+  .gatekeeper{margin-top:7px;font-size:11px;color:#8a9ba0;letter-spacing:.05em}
+  .verbs{display:flex;gap:9px;margin-top:22px}
+  .verbs span{border:1px solid rgba(186,255,88,.4);color:var(--lime);background:rgba(186,255,88,.07);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:800;letter-spacing:.04em}
+  .gate-tag{margin-top:14px;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#829298;font-weight:750}
+
+  /* ---------- right: the user's account ---------- */
+  .account{position:absolute;left:812px;top:44px;width:750px;height:452px;border:2px solid rgba(131,229,237,.62);border-left:0;border-radius:0 24px 24px 0;background:linear-gradient(90deg,rgba(131,229,237,.075),rgba(131,229,237,.012));padding:30px 26px 24px 34px}
+  .account .boundary-label{position:absolute;left:30px;top:-15px;background:var(--ink);padding:0 9px;color:var(--cyan);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:800}
+  .account .owner{margin:0 0 4px;font-size:22px;font-weight:780;letter-spacing:-.03em;color:var(--paper)}
+  .account .owner-note{font-size:12px;color:#8fa0a5;margin:0 0 20px}
+  .layer{border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.04);padding:16px 18px}
+  .layer + .layer{margin-top:13px}
+  .layer.originals{border-color:rgba(131,229,237,.3)}
+  .layer.connected{border-color:rgba(186,255,88,.28)}
+  .layer-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+  .layer-head .name{font-size:12px;text-transform:uppercase;letter-spacing:.15em;font-weight:800}
+  .layer.originals .layer-head .name{color:var(--cyan)}
+  .layer.connected .layer-head .name{color:var(--lime)}
+  .layer-head .sub{font-size:11px;color:#7d8f94}
+  .thumbs{display:flex;gap:11px}
+  .thumb{flex:1;height:62px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:10px;color:#93a5a9;letter-spacing:.04em;text-transform:uppercase}
+  .tags{display:flex;flex-wrap:wrap;gap:8px}
+  .tag{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:12px;color:#d3dddd;background:rgba(255,255,255,.035)}
+  .keepnote{position:absolute;left:34px;bottom:16px;font-size:11px;color:#7b9296;letter-spacing:.03em}
+  .bottom-note{position:absolute;left:812px;top:506px;font-size:11px;color:#718187;letter-spacing:.03em}
+</style>
+<body>
+<div class="slide">
+  <header><div class="wordmark">ZENOD</div><nav class="nav"><span class="active">Why memory</span><span>Examples</span><span>The librarian</span><span>FAQ</span><span>Sign in</span><span class="cta">Get started</span></nav></header>
+  <main>
+    <div class="eyebrow">YOUR ACCOUNT STARTS HERE</div>
+    <h1>Your memory. <span class="cyan">Your library.</span> <span class="lime">Your librarian.</span></h1>
+    <p class="subtitle">Zenod is not your memory. It is the librarian that gatekeeps it, connects it to your agents, and organizes it.</p>
+    <div class="stage">
+
+      <div class="col-title" style="left:14px">Your entry points</div>
+      <div class="entry">
+        <div class="phone">
+          <div class="phone-head"><span class="dotmark"></span>Zenod</div>
+          <div class="bubble out">
+            <span class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="stamp">5:00</span>
+          </div>
+          <div class="bubble in">Saved. Original kept.</div>
+        </div>
+        <div class="chiprow">
+          <div class="entrychip"><span class="logo logo-whatsapp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3.5 20l.9-4.2A8.5 8.5 0 1 1 20.5 11.7Z"/><path d="M8.4 7.8c.4-.8 1.2-.7 1.5-.1l.8 1.5c.2.4.1.8-.2 1.1l-.6.6c.7 1.5 1.8 2.6 3.3 3.3l.6-.6c.3-.3.7-.4 1.1-.2l1.5.8c.6.3.7 1.1-.1 1.5-1.3.7-3 .2-5.1-1.9s-2.6-3.8-1.9-5.1Z"/></svg></span>WhatsApp</div>
+          <div class="entrychip"><span class="logo logo-codex"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M15 7l5 5-5 5M13 5l-2 14"/></svg></span>Codex</div>
+          <div class="entrychip"><span class="logo logo-claude"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span>Claude</div>
+          <div class="entrychip"><span class="logo logo-grok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 19 14-14M5 5l4 4M15 15l4 4"/><path d="m9 5 10 10"/></svg></span>Grok</div>
+        </div>
+      </div>
+
+      <div class="centre">
+        <div class="librarian" aria-label="Zenod librarian line drawing">
+          <div class="halo"></div>
+          <svg viewBox="0 0 120 160" role="img" aria-hidden="true">
+            <path d="M38 38c0-14 9-25 22-25s22 11 22 25" class="glow"/>
+            <path d="M43 37c0-9 7-16 17-16s17 7 17 16-7 17-17 17-17-8-17-17Z"/>
+            <path d="M47 45c-5 12-5 25 2 34 5 7 12 10 11 18"/>
+            <path d="M73 45c5 12 5 25-2 34-5 7-12 10-11 18"/>
+            <path d="M48 82c-18 7-28 24-30 50h84c-2-26-12-43-30-50"/>
+            <path d="M39 99c12 9 29 9 42 0" class="glow"/>
+            <path d="M40 108c13 7 28 7 40 0"/>
+            <path d="M32 119h18c3 4 5 8 5 13 0 5-5 9-11 9H32c-5 0-8-4-8-9 0-6 3-10 8-13Z" class="lime"/>
+            <path d="M88 91c-5 3-9 9-9 16h18c0-7-4-13-9-16Z" class="lime"/>
+          </svg>
+        </div>
+        <div class="wordmark-big">ZENOD</div>
+        <div class="gatekeeper">24/7 memory gatekeeper</div>
+        <div class="verbs"><span>Stores</span><span>Organizes</span><span>Connects</span></div>
+        <div class="gate-tag">What the librarian does</div>
+      </div>
+
+      <div class="account">
+        <div class="boundary-label">Your Google Drive account</div>
+        <p class="owner">Your library</p>
+        <p class="owner-note">Owned by you. Zenod only has permission to maintain it.</p>
+        <div class="layer originals">
+          <div class="layer-head"><span class="name">Originals</span><span class="sub">raw evidence</span></div>
+          <div class="thumbs">
+            <div class="thumb"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span>Voice</div>
+            <div class="thumb">Image</div>
+            <div class="thumb">Source page</div>
+            <div class="thumb">Transcript</div>
+          </div>
+        </div>
+        <div class="layer connected">
+          <div class="layer-head"><span class="name">Connected knowledge</span><span class="sub">derived from the originals</span></div>
+          <div class="tags"><span class="tag">Index</span><span class="tag">Projects</span><span class="tag">People</span><span class="tag">Preferences</span><span class="tag">Open questions</span></div>
+        </div>
+        <div class="keepnote">Every connected note links back to the original it came from.</div>
+      </div>
+      <div class="bottom-note">This is your Google Drive account.</div>
+
+      <div class="arrow bidir" style="left:412px;top:262px;width:44px"></div>
+      <div class="arrow bidir" style="left:772px;top:262px;width:44px"></div>
+    </div>
+  </main>
+  <footer><span>Illustrative concept · not a product screenshot</span><span class="concept">Conceptual workflow</span></footer>
+</div>
+</body>
+</html>

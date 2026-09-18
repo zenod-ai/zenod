@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1678,initial-scale=1">
+<title>05 — Ask the librarian. Get back to the source.</title>
+<link rel="stylesheet" href="../pattern.css">
+<style>
+  main{padding-top:34px}
+  h1{font-size:62px;margin:10px 0 12px;max-width:1200px}
+  .subtitle{font-size:20px;max-width:1100px}
+  .stage{height:540px;margin-top:16px}
+
+  /* ---------- dominant conversation ---------- */
+  .chat{position:absolute;left:0;top:0;width:930px;height:404px;border:1px solid var(--line-strong);border-radius:20px;background:linear-gradient(150deg,rgba(20,30,33,.95),rgba(11,18,20,.9));padding:20px 24px;box-shadow:0 26px 60px rgba(0,0,0,.3)}
+  .chat-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .chat-head .who{display:flex;align-items:center;gap:11px}
+  .chat-head .who .ava{width:30px;height:30px;border-radius:9px;border:1px solid rgba(131,229,237,.36);display:grid;place-items:center;color:var(--cyan);font-size:11px;font-weight:850}
+  .chat-head .who .nm{font-size:13px;font-weight:750}
+  .chat-head .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#74868b}
+  .row{display:flex;margin-top:22px}
+  .row.out{justify-content:flex-end}
+  .bubblewrap{max-width:74%}
+  .role{font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;margin-bottom:8px}
+  .row.out .role{color:#9fb0b4;text-align:right}
+  .row.in .role{color:var(--cyan)}
+  .bubble{border-radius:16px;padding:16px 18px;font-size:20px;line-height:1.35;font-weight:600;letter-spacing:-.01em}
+  .row.out .bubble{background:rgba(255,255,255,.055);border:1px solid var(--line);color:#e2eaeb}
+  .row.in .bubble{background:rgba(131,229,237,.09);border:1px solid rgba(131,229,237,.34);color:#eef7f8}
+  .srcline{display:flex;align-items:center;gap:12px;margin-top:16px}
+  .srcline .elbow{width:26px;height:26px;border-left:2px solid var(--cyan);border-bottom:2px solid var(--cyan);border-bottom-left-radius:12px;margin-top:-30px}
+  .source-chip{display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(131,229,237,.5);color:var(--cyan);background:rgba(131,229,237,.09);border-radius:999px;padding:11px 18px;font-size:13px;font-weight:700}
+  .grounded{margin-left:12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7f9298;font-weight:750}
+
+  /* ---------- read path ---------- */
+  .readpath{position:absolute;left:0;top:452px;width:930px}
+  .readpath .rl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#829298;font-weight:750;margin-bottom:12px}
+  .steps{display:flex;align-items:center;gap:0}
+  .step{border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035);padding:11px 14px;font-size:12px;color:#cbd6d7;white-space:nowrap}
+  .step.active{border-color:rgba(131,229,237,.5);color:var(--cyan);background:rgba(131,229,237,.08)}
+  .hop{position:relative;width:46px;height:2px;background:linear-gradient(90deg,rgba(131,229,237,.25),var(--cyan));flex:0 0 46px}
+  .hop:after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--cyan)}
+
+  /* ---------- side panel ---------- */
+  .aside{position:absolute;left:1000px;top:0;width:562px;height:540px;border-left:1px solid var(--line);padding-left:56px}
+  .aside .eyebrow2{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);font-weight:800}
+  .aside h2{font-size:26px;letter-spacing:-.03em;margin:12px 0 10px;font-weight:760}
+  .aside p{font-size:14px;line-height:1.55;color:#9eabb0;margin:0 0 18px;max-width:440px}
+  .factlist{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+  .fact{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.035);padding:13px 15px}
+  .fact .k{font-size:12px;font-weight:750;color:#dde6e6}
+  .fact .v{font-size:11px;color:#83959a;margin-top:3px;line-height:1.4}
+  .fact .tick{width:22px;height:22px;flex:0 0 22px;border-radius:7px;border:1px solid rgba(186,255,88,.4);color:var(--lime);display:grid;place-items:center;font-size:11px;font-weight:850}
+  .aside .librarian{margin-top:4px;width:74px;height:100px}
+</style>
+<body>
+<div class="slide">
+  <header><div class="wordmark">ZENOD</div><nav class="nav"><span>Why memory</span><span class="active">Examples</span><span>The librarian</span><span>FAQ</span><span>Sign in</span><span class="cta">Get started</span></nav></header>
+  <main>
+    <div class="eyebrow">ASK → CITE → RETURN</div>
+    <h1>Ask the librarian. <span class="cyan">Get back to the source.</span></h1>
+    <p class="subtitle">Find the thought you remember vaguely. Return to what you actually said.</p>
+    <div class="stage">
+      <div class="chat">
+        <div class="chat-head">
+          <div class="who"><span class="ava">Z</span><span class="nm">Zenod</span></div>
+          <span class="tag">Illustrative conversation</span>
+        </div>
+        <div class="row out">
+          <div class="bubblewrap">
+            <div class="role">Question</div>
+            <div class="bubble">What did I say about the light in that flat?</div>
+          </div>
+        </div>
+        <div class="row in">
+          <div class="bubblewrap">
+            <div class="role">Grounded answer</div>
+            <div class="bubble">You loved the natural light.</div>
+          </div>
+        </div>
+        <div class="srcline">
+          <span class="elbow"></span>
+          <span class="source-chip"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span>Original voice note · 5:00</span>
+          <span class="grounded">Grounded by facts</span>
+        </div>
+      </div>
+
+      <div class="readpath">
+        <div class="rl">How the answer was reached</div>
+        <div class="steps">
+          <span class="step">Connected thought</span>
+          <span class="hop"></span>
+          <span class="step">Original recording</span>
+          <span class="hop"></span>
+          <span class="step active">Cited answer</span>
+        </div>
+      </div>
+
+      <div class="aside">
+        <div class="eyebrow2">No answer without a source</div>
+        <h2>It returns the evidence,<br>not just a plausible sentence.</h2>
+        <p>The librarian answers from your own record and shows exactly which original it read. If nothing was captured, it says so instead of inventing.</p>
+        <div class="factlist">
+          <div class="fact"><span class="tick">✓</span><span><span class="k">Answer cites the original</span><span class="v">Every claim carries the source it came from.</span></span></div>
+          <div class="fact"><span class="tick">✓</span><span><span class="k">Original stays untouched</span><span class="v">The recording is preserved exactly as captured.</span></span></div>
+        </div>
+        <div class="librarian" aria-label="Zenod librarian line drawing" style="position:absolute;right:6px;bottom:6px">
+          <div class="halo"></div>
+          <svg viewBox="0 0 120 160" role="img" aria-hidden="true">
+            <path d="M43 37c0-9 7-16 17-16s17 7 17 16-7 17-17 17-17-8-17-17Z"/>
+            <path d="M47 45c-5 12-5 25 2 34 5 7 12 10 11 18"/>
+            <path d="M73 45c5 12 5 25-2 34-5 7-12 10-11 18"/>
+            <path d="M48 82c-18 7-28 24-30 50h84c-2-26-12-43-30-50"/>
+            <path d="M39 99c12 9 29 9 42 0" class="glow"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer><span>Illustrative concept · not a product screenshot</span><span class="concept">Conceptual workflow</span></footer>
+</div>
+</body>
+</html>
