@@ -1,0 +1,24 @@
+Use case: precise-object-edit
+Asset type: responsive landing-page section illustration layer
+
+Primary request: Convert the supplied slide into a completely text-free illustration/diagram layer for a normal responsive web section. Preserve the slide’s visual content and composition, but remove every word, letter, numeral, label, navigation item, headline, subtitle and caption.
+
+Input images:
+- Image 1: edit target and composition reference. Keep its 16:9 visual structure, phone-to-Zenod-to-storage-to-agent flow, central librarian, app/device marks without wordmarks, connectors, icons, near-black canvas and cyan/lime accents. Remove all typography.
+- Image 2: canonical soft-editorial visual identity reference. Match its illustration language, contour weight, graphite planes, dark premium finish, cyan connectors and tiny lime accents. Do not copy its layout.
+
+Text (verbatim): none.
+
+Required edit:
+- Remove every visible word/letter/numeral/label/wordmark/caption from the slide.
+- Keep the full diagram composition and all non-text objects: phone, waveform, central librarian, storage forms, source/page cards, agent/device marks, arrows and connectors.
+- Reconstruct clean near-black negative space where text was removed.
+- Do not crop, recenter, simplify, add, remove, duplicate or redesign non-text objects.
+- Keep exactly one human figure.
+- No text anywhere, including on device screens, cards, icons, background, footer or watermark.
+
+Style/medium: soft flat contemporary editorial illustration, cool-white graphite planes, restrained thin contour lines, shallow gentle shading, softly fading edges, premium near-black web canvas, cyan connectors, tiny lime accents.
+
+Constraints: illustration-only output; no words; no letters; no numerals; no labels; no wordmarks; no captions; no navigation; no UI copy; no fake URLs; no dates; no prices; no watermark; no signature. The result must work beneath HTML headings, labels and body copy in a responsive section.
+
+Avoid: any typography, scrambled lettering, pseudo-text, wordmarks, nav, slide chrome, frame, crop, changed composition, extra figures, duplicate librarian, cartoon style, photoreal statue, 3D render, sepia, parchment, gold cast, harsh spotlight, dense crosshatching.

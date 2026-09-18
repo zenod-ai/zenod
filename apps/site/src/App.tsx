@@ -210,7 +210,71 @@ function SectionTitle({
   );
 }
 
-function PricingSection({ customer }: { customer: CustomerJourney }) {
+function PricingContent({ customer }: { customer: CustomerJourney }) {
+  return (
+    <>
+      <div className="v5-plans">
+        {PRICING_OPTIONS.map((plan) => (
+          <article
+            key={plan.name}
+            className={cn("v5-plan", plan.tier && "v5-plan-hosted")}
+          >
+            <span className="v5-micro">
+              {plan.tier ? "ZENOD HOSTED" : "OPEN SOURCE"}
+            </span>
+            <div className="v5-price">
+              {plan.price} <small>{plan.cadence}</small>
+            </div>
+            <p>{plan.description}</p>
+            {plan.tier ? (
+              <button
+                className="v5-button v5-button-primary"
+                disabled={
+                  customer.busyTier !== null || !customer.paidSignupReady
+                }
+                onClick={() => plan.tier && customer.subscribe(plan.tier)}
+              >
+                {customer.busyTier === plan.tier
+                  ? "Opening checkout…"
+                  : customer.paidSignupReady
+                    ? "Choose Hosted"
+                    : "Hosted beta opening soon"}
+                <ArrowUpRightIcon />
+              </button>
+            ) : (
+              <a
+                className="v5-button"
+                href={`${GITHUB_URL}#readme`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <GithubIcon /> View install guide
+              </a>
+            )}
+          </article>
+        ))}
+      </div>
+      {customer.error ? (
+        <p className="v5-error">{customer.error}. Please retry.</p>
+      ) : null}
+      <p className="v5-offer-truth">
+        Self-host Zenod free with your AI provider and Telegram. Zenod Hosted is
+        €9/month + VAT with managed AI usage and WhatsApp included. Hosted:
+        GitHub or Drive · self-hosted: GitHub.
+      </p>
+    </>
+  );
+}
+
+function PricingSection({
+  customer,
+  embedded = false,
+}: {
+  customer: CustomerJourney;
+  embedded?: boolean;
+}) {
+  if (embedded) return <PricingContent customer={customer} />;
+
   return (
     <section className="v5-section" id="start">
       <div className="v5-wrap">
@@ -220,55 +284,7 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
           title="Run it your way."
           lead="The same open-source engine can run on your infrastructure or ours. The library stays yours."
         />
-        <div className="v5-plans">
-          {PRICING_OPTIONS.map((plan) => (
-            <article
-              key={plan.name}
-              className={cn("v5-plan", plan.tier && "v5-plan-hosted")}
-            >
-              <span className="v5-micro">
-                {plan.tier ? "ZENOD HOSTED" : "OPEN SOURCE"}
-              </span>
-              <div className="v5-price">
-                {plan.price} <small>{plan.cadence}</small>
-              </div>
-              <p>{plan.description}</p>
-              {plan.tier ? (
-                <button
-                  className="v5-button v5-button-primary"
-                  disabled={
-                    customer.busyTier !== null || !customer.paidSignupReady
-                  }
-                  onClick={() => plan.tier && customer.subscribe(plan.tier)}
-                >
-                  {customer.busyTier === plan.tier
-                    ? "Opening checkout…"
-                    : customer.paidSignupReady
-                      ? "Choose Hosted"
-                      : "Hosted beta opening soon"}
-                  <ArrowUpRightIcon />
-                </button>
-              ) : (
-                <a
-                  className="v5-button"
-                  href={`${GITHUB_URL}#readme`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <GithubIcon /> View install guide
-                </a>
-              )}
-            </article>
-          ))}
-        </div>
-        {customer.error ? (
-          <p className="v5-error">{customer.error}. Please retry.</p>
-        ) : null}
-        <p className="v5-offer-truth">
-          Self-host Zenod free with your AI provider and Telegram. Zenod Hosted
-          is €9/month + VAT with managed AI usage and WhatsApp included.
-          Hosted: GitHub or Drive · self-hosted: GitHub.
-        </p>
+        <PricingContent customer={customer} />
       </div>
     </section>
   );
@@ -363,7 +379,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
           </div>
         </section>
 
-        <StoryFlow offer={<PricingSection customer={customer} />} />
+        <StoryFlow offer={<PricingSection customer={customer} embedded />} />
 
         <section className="v5-section" id="faq">
           <div className="v5-wrap v5-faq">

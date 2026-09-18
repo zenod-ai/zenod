@@ -1,0 +1,98 @@
+/* 09/10 — slide illustration layers with native HTML copy and controls. */
+
+.v5-alexandria.v5-alexandria-illustrated {
+  min-height: 0;
+  background:
+    radial-gradient(circle at 78% 42%, rgb(127 232 247 / 0.06), transparent 34rem),
+    linear-gradient(115deg, transparent 24%, rgb(196 255 91 / 0.015) 62%, transparent 84%),
+    var(--v5-bg);
+}
+
+.v5-alexandria-illustrated::after {
+  display: none;
+}
+
+.v5-alexandria-illustrated .v5-alexandria-inner {
+  min-height: 0;
+  grid-template-columns: minmax(0, 0.88fr) minmax(420px, 1.12fr);
+  gap: clamp(2.5rem, 6vw, 6rem);
+  padding-block: clamp(1.5rem, 3vw, 3rem);
+}
+
+.v5-alexandria-illustrated .v5-alexandria-inner > .v5-alexandria-illustration {
+  justify-self: end;
+  width: min(680px, 100%);
+  border: 1px solid rgb(127 232 247 / 0.26);
+  background: #070a0c;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 0.38);
+  backdrop-filter: blur(12px);
+}
+
+.v5-alexandria-illustration > picture,
+.v5-alexandria-illustration > picture > img {
+  display: block;
+  width: 100%;
+}
+
+.v5-alexandria-illustration > picture > img {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  object-position: center;
+}
+
+.v5-alexandria-illustration figcaption {
+  display: grid;
+  gap: 0.38rem;
+  border-top: 1px solid var(--v5-line);
+  padding: 1rem 1.1rem 1.1rem;
+}
+
+.v5-alexandria-illustration figcaption b {
+  color: var(--v5-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+}
+
+.v5-alexandria-illustration figcaption p {
+  margin: 0;
+  color: #aeb8be;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.v5-alexandria-illustration figcaption small {
+  color: #718087;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+}
+
+.v5-closing-story .v5-closing-art {
+  min-height: clamp(360px, 45vw, 560px);
+}
+
+.v5-closing-story .v5-closing-art .v5-closing-librarian img {
+  object-position: 64% center;
+}
+
+@media (max-width: 1080px) {
+  .v5-alexandria-illustrated .v5-alexandria-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .v5-alexandria-illustration {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .v5-alexandria-illustrated .v5-alexandria-inner {
+    padding-block: 0;
+  }
+
+  .v5-alexandria-illustration figcaption {
+    padding-inline: 0.85rem;
+  }
+}

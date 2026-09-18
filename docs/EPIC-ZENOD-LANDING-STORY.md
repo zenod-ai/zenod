@@ -19,13 +19,13 @@ Pinned base: b0d0c27268e82723a544c96d840202d339f3c3ef; no rebases until the SHIP
 ## Current State
 
 Owner: /root landing-story delivery manager
-Status: review — illustration-only HTML section pass
-Last attempted: replaced the post-hero landing chapters with the storyboard order 01–10 as native HTML sections and a real responsive layout
-Result: the hero is preserved; every following chapter has native copy and a code-native diagram or illustration panel; the librarian image is a single illustration-only asset, not a full slide; the current pricing section is reused for chapter 08 without changing the public offer.
-Evidence: `912c5f4`; [PR #1359](https://github.com/zenod-ai/zenod/pull/1359); `apps/site/src/components/story-flow.tsx`; `apps/site/src/components/story-flow.css`; `npm run typecheck`, `npm run lint`, `npm run test`, and `npm run build` passing
-Waiting on: visual review of the normal responsive section 01; production deployment remains a separate named gate
-Approved work: regenerate illustration/background assets with the same image model, then render normal responsive HTML sections with the existing landing typography and spacing
-Next action: review section 01 on the local preview, then integrate the parallel 02–10 batches; do not deploy
+Status: review — normal responsive section pass
+Last attempted: integrated the story sequence 01–10 as normal responsive web sections with the existing landing-page title/subtitle typography and illustration/content layers below
+Result: the hero is preserved; sections 01–10 render as normal sections rather than 16:9 slide reproductions. Section 01 uses a newly AI-generated text-free illustration layer. Sections 02–10 use the available illustration/background layers; 05/07/08/09 are text-free by OCR, 06/10 and 02–04 received deterministic cleanup, and 02–04 retain some diagram labels from the reference crops.
+Evidence: `codex/zls-html-sections`; `apps/site/src/components/story-*`; `apps/site/src/components/slide-*`; typecheck, lint, 12 tests and production build passing
+Waiting on: user review of the full normal-section pass; OpenRouter image generation is currently blocked with HTTP 402, so further AI regeneration of 02–04/06/10 needs a credit top-up
+Approved work: normal responsive web sections with slide-derived illustration/background assets; no fixed slide frames or slide-positioned page copy
+Next action: review the local preview and decide whether to top up image credits for clean regeneration of the remaining diagram labels; do not deploy
 Source revision: `912c5f4` on `codex/zls-html-sections`, based on `f2fb7af`
 Verified at: 2026-09-18 16:52 Europe/Paris
 
@@ -84,7 +84,7 @@ HARDEN
 | [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | review | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
 | [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root | Integrate ten-slide story into landing page | blocked | #1340, #1341, #1342, #1343 | [#1339](https://github.com/zenod-ai/zenod/pull/1339) | 33cb9d6 | story shell merged; image revisions under review | 2026-09-18 15:55 Europe/Paris | integrate accepted revisions after review and pricing decision |
 | [#1343](https://github.com/zenod-ai/zenod/issues/1343) | Planner | /root | Reconcile public offer and ownership copy | blocked | none | docs/EPIC-ZENOD-LANDING-STORY.md | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | receive exact price and copy decision |
-| [PR #1359](https://github.com/zenod-ai/zenod/pull/1359) | Epic worker | /root landing-story delivery manager | Landing story sections as native HTML | review | - | `codex/zls-html-sections` | `f2fb7af` | Section 01 regenerated with `google/gemini-3-pro-image` and a text-free illustration layer; Apple Vision OCR found no remaining words; typecheck, lint, 12 tests and production build pass | 2026-09-18 17:34 Europe/Paris | human review of section 01; then apply the same asset-and-overlay pattern to slides 02–10; no deployment |
+| [PR #1359](https://github.com/zenod-ai/zenod/pull/1359) | Epic worker | /root landing-story delivery manager | Landing story sections as native HTML | review | - | `codex/zls-html-sections` | `f2fb7af` | Sections 01–10 integrated as normal responsive sections; section 01 uses a `google/gemini-3-pro-image` text-free layer; typecheck, lint, 12 tests and production build pass; OpenRouter image calls now return HTTP 402 | 2026-09-18 18:14 Europe/Paris | user review; top up image credits before attempting further AI regeneration of remaining labels |
 
 ## Decisions
 

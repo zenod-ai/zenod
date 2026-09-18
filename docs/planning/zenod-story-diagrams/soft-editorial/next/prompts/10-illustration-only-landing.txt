@@ -1,0 +1,29 @@
+Use case: precise-object-edit
+Asset type: landing-page closing illustration layer / text-free slide background
+
+Primary request: Rebuild the supplied closing slide as a completely text-free editorial illustration layer for a native HTML landing-page section. Preserve the calm personal-library threshold, the single Alexandrian librarian, the open doorway or shelf portal, the restrained shelves and the continuous cyan path. Remove every piece of typography and every user-interface mark.
+
+Input images:
+- Image 1: content and composition reference. Keep its left/right pacing, librarian, personal-library threshold, shelf forms, portal, cyan path and near-black atmosphere, but remove all text and fixed web chrome.
+- Image 2: canonical soft-editorial identity reference. Match its illustration technique, near-black surface, cool-white graphite planes, restrained contour lines, soft pale robe shapes, cyan path and tiny lime accent.
+- Image 3: already-approved text-free illustration layer. Use it only as the benchmark for how clean the final asset must be after text removal; do not copy its composition.
+
+Scene and composition:
+- 16:9 landscape, premium editorial website-section illustration, near-black background.
+- A calm, almost-empty personal library threshold on the right, drawn with a few orderly shelves, rolled-scroll forms and faint architectural line work.
+- The canonical Alexandrian librarian stands once beside the open doorway or shelf portal, waist-up or three-quarter figure, holding a rolled scroll. He is the only realised character and the only face.
+- One continuous electric-cyan path leads from the lower foreground toward the threshold with no floating node, no gap and no extra arrowheads.
+- Use generous dark negative space around the illustration so it can be cropped into a wide or portrait landing-page frame without losing the librarian and doorway.
+- One tiny lime accent only, used once on the rolled scroll or portal threshold.
+
+Text (verbatim): none.
+
+Required edit:
+- Remove completely: navigation labels, "Zenod", "Why memory", "Examples", "The librarian", "FAQ", "Sign in", "Get started", "Start building your", "Library of Alexandria.", the subtitle, "View on GitHub", "Choose a plan", footer copy, numerals, captions, logos and watermarks.
+- Reconstruct clean near-black surface, faint architecture and illustration detail wherever removed text used to be.
+- Do not add replacement labels, pseudo-text, glyphs, interface chrome, cards, buttons or pricing.
+- Preserve every non-text object: librarian, doorway, shelves, scrolls, cyan path, lime accent, negative space.
+
+Constraints: no words, letters, numerals, captions, labels, navigation, buttons, pricing, fake URLs, receipts, watermark, signature or border. Exactly one realised face maximum. No duplicated librarian, no crowd, no busy dashboard.
+
+Avoid: any preserved typography, blurred text ghosts, pseudo-text, scrambled lettering, crop, recenter, changed composition, photoreal statue, 3D render, sepia, parchment, gold, brown, medieval-book clichés, flat corporate vector cartoon, glossy SaaS cards, visual clutter, harsh spotlight, dense crosshatching.
