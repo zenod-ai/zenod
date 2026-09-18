@@ -10,7 +10,7 @@ function prepare(texts:string[],owners:string[][]=texts.map((_,i)=>[`idea${i}`])
  return prepareReconciliation({path:'Projects/Test.md',raw,title:'Test',type:'project',today:'2026-09-15',sourceContent:content,
   evidence:{content,evidenceRef:'Log/2026-09-15.md#^e-123abc',path:'Log/2026-09-15.md',anchor:'e-123abc',title:'source',source:'mcp',verbatim:true,capturedAt:'2026-09-15T00:00:00Z',url:'https://example.invalid',provider:'github'},
   sources,ideas,addCandidates:sources.map((source,i)=>({...source,ideaIds:owners[i]!})),
-  context:{branches:[],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0},links:['[[Index]]']});
+  context:{branches:[],partial:false,omitted:[],omittedCount:0,discoveryGaps:0,contextChars:0,estimatedTokens:0},links:['[[Index]]']});
 }
 const add=(sourceIds:string[],ideaIds:string[],sourceQuote='Regenerated, unsupported text.'):ReconciliationOperation=>({kind:'add',sourceIds,ideaIds,sourceQuote,targetId:null,factKey:'test.claim',correctionQuote:null,reason:null});
 it('renders canonical raw qualifiers despite regenerated spaces, punctuation or omitted model text',async()=>{

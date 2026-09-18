@@ -108,7 +108,7 @@ it('requires explicit retry IDs only on corrective classification and preserves 
   const text='Only if approved, Mina checks the drain.';
   const prepared=prepareReconciliation({path:'Notes/Test.md',raw:null,title:'Test',type:'note',today:'2026-09-15',sourceContent:text,
    evidence:{content:text,evidenceRef:'Log/2026-09-15.md#^e-123abc'} as any,sources:[{id:'context',start:0,end:text.length,text}],ideas:[{id:'idea',topic:'Conditional check',sourceIds:['context']}],
-   addCandidates:[{id:'candidate',ideaIds:['idea'],start:0,end:text.length,text}],context:{branches:[],partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0},links:[]});
+   addCandidates:[{id:'candidate',ideaIds:['idea'],start:0,end:text.length,text}],context:{branches:[],partial:false,omitted:[],omittedCount:0,discoveryGaps:0,contextChars:0,estimatedTokens:0},links:[]});
   const base={kind:'add',ideaIds:['idea'],sourceIds:['candidate'],sourceQuote:'-',targetId:null,factKey:null,correctionQuote:null,reason:null};
   const requests=transport(classified,{operations:[base]});const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused'});
   const result=await llm.reconcile!(prepared.request);
@@ -140,7 +140,7 @@ it('carries declared branch title and scope on the actual reconciliation wire wi
  const {parseNote}=await import('../src/vault/frontmatter.js');
  const raw='# Relatives\n'+Array.from({length:48},(_,i)=>`Statement ${i}: ${'existing shared context '.repeat(10)}.`).join('\n');
  const body=parseNote(raw).body,scope='Father, sister, inheritance and family arrangements.';
- const prepared=prepareReconciliation({path:'Areas/Relatives.md',raw,title:'Relatives',type:'area',today:'2026-09-15',evidence:{content:'A studio could offer peace.'} as any,sources:[],ideas:[],links:[],context:{partial:false,omitted:[],omittedCount:0,contextChars:0,estimatedTokens:0,branches:[{id:'branch',path:'Areas/Relatives.md',revision:pageRevision(raw),title:'Family arrangements',scope,topics:[],sections:[{id:'section',revision:'test',start:0,end:body.length,excerptStart:0,text:body,truncated:false}]}]}});
+ const prepared=prepareReconciliation({path:'Areas/Relatives.md',raw,title:'Relatives',type:'area',today:'2026-09-15',evidence:{content:'A studio could offer peace.'} as any,sources:[],ideas:[],links:[],context:{partial:false,omitted:[],omittedCount:0,discoveryGaps:0,contextChars:0,estimatedTokens:0,branches:[{id:'branch',path:'Areas/Relatives.md',revision:pageRevision(raw),title:'Family arrangements',scope,topics:[],sections:[{id:'section',revision:'test',start:0,end:body.length,excerptStart:0,text:body,truncated:false}]}]}});
  const requests=transport();await createBrainLlm({provider:'openrouter',apiKey:'offline-unused'}).reconcile!(prepared.request);
  const sent=JSON.parse(requests[0].messages.at(-1).content);
  expect(sent.branch).toEqual({title:'Family arrangements',scope});
