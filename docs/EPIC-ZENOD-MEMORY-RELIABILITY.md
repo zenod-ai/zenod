@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-09-06
-Updated: 2026-09-17
+Updated: 2026-09-18
 Repository: zenod-ai/zenod
 Primary document: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md
 Spine ID: ZMR
@@ -14,7 +14,7 @@ GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
-Last reconciled commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17). Live production source is `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified via `https://cloud.zenod.dev/api/health` (2026-09-17); it is an ancestor of `main`, which is 4 documentation-only commits ahead (no runtime divergence).
+Last reconciled commit: `39fd8d95819f3f91020ab8032f88d9de7f541aa5` on `main` (2026-09-18). Live production source remains `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified via `https://cloud.zenod.dev/api/health` (2026-09-17). `main` contains later docs/tests and unrelated delivery-stream changes; this reconciliation adds only the B13 eval task and does not claim a new runtime deployment.
 Planner: Jordi + ZMR-release-planner
 Worker: ZMR-24–25 and terminal-provider repair complete; /root retains delivery management
 Tester: /root owns production verification; provider research deferred
@@ -106,11 +106,11 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Phase: M2 dependable basic store, recall and recent-context conversation is implemented and deployed. Exact candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` passed the frozen isolated suite 36/36 and a representative production MCP smoke 6/6. The bounded reliability milestone is complete; broader transport and presentation work stays separate. M2 evaluation and cost reports (#1324–#1331) are integrated on `main` `3b950253abd8e2422369839225740ca945f7b493`. Live production runs `22440b4151289900370b1ed375edc1b7aeaca1a1` (verified via `https://cloud.zenod.dev/api/health`, 2026-09-17), so `main` is 4 commits ahead and those 4 are documentation only (#1330/#1331 reports); every runtime change is already live and no functional deploy is pending.
-Last verified: 2026-09-17 Europe/Paris.
+Phase: M2 dependable basic store, recall and recent-context conversation is implemented and deployed. Exact candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` passed the frozen isolated suite 36/36 and a representative production MCP smoke 6/6. The bounded reliability milestone is complete; broader transport and presentation work stays separate. M2 evaluation and cost reports (#1324–#1331) and the additive B13 voice-note-inventory regression (#1348/PR #1349) are integrated on `main` `39fd8d95819f3f91020ab8032f88d9de7f541aa5`. Live production runs `22440b4151289900370b1ed375edc1b7aeaca1a1` (verified via `https://cloud.zenod.dev/api/health`, 2026-09-17). Later `main` commits include unrelated delivery-stream changes; no new runtime deployment is claimed by this eval-only reconciliation.
+Last verified: 2026-09-18 Europe/Paris.
 Live production source verified via `https://cloud.zenod.dev/api/health` is `22440b4151289900370b1ed375edc1b7aeaca1a1` (2026-09-17); the earlier M2 candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` remains an ancestor of `main`. The existing one-replica service, `zenod-mt-data:/data` mount and every non-`GIT_SHA` environment value were preserved. Verified pre-deploy restore covered 958 files, 40 JSON files and 79 SQLite databases.
 Owner: /root, sole ZMR spine steward/delivery manager. Harness #1313 is frozen; capture #1316 and answer #1318 are in the release candidate; isolated production adapter #1320 produced the production receipts. [Scorecard](planning/zenod-recall-scorecard.md) and [HTML results](planning/zenod-basics-test-results.html) retain costs, hashes and scope limits.
-Next action: hold this release stable and observe ordinary use. Treat repetitive source/history excerpts in B10–B12 as a bounded presentation follow-up. The 2026-09-18 voice-note inventory incident is now pinned as B13 in the additive v1.2 eval suite; its product repair remains a separate bounded decision. Keep ASR/WhatsApp delivery, B05 production fault injection and the 30 unrun production cells outside this completed basic-memory milestone unless a new measured incident justifies reopening it.
+Next action: hold this release stable and observe ordinary use. Treat repetitive source/history excerpts in B10–B12 as a bounded presentation follow-up. The 2026-09-18 voice-note inventory incident is pinned as B13 in the merged additive v1.2 eval suite; its product repair remains #1348 and requires a separately approved bounded fix plus live verification. Keep ASR/WhatsApp delivery, B05 production fault injection and the 30 unrun production cells outside this completed basic-memory milestone unless a new measured incident justifies reopening it.
 Acceptance: [M2 contract](planning/zenod-basics-m2.md), 12 cases × 3 trials on one candidate, actual chat for conversation tests, cost/coverage and failed attempts retained, critical preservation/isolation/idempotency gates, exact-version production smoke. Isolated suite: 36/36, 235 total requests including one retained incomplete attempt, $0.76876957 and zero unknown costs. Production smoke: B01/B06/B09/B10/B11/B12 all pass, 63 MCP calls, $4.00 reserved exposure and actual cost `null`; 30 production cells remain unrun. MCP and WhatsApp transport evidence stay distinct.
 Known gaps: production answers in B10–B12 are correct but repetitive. B05 deterministic fault injection remains isolated-only. The production smoke does not exercise ASR/WhatsApp delivery or all 36 cells. [Prompt/tool audit and slide](planning/librarian-model/README.md).
 Human gates: none pending for this milestone. No recurring automation was created. Public signup, billing, model experiments and channel/session changes remain outside this authorization.
@@ -273,7 +273,7 @@ Live customer data changes require snapshot + checksum + one restore drill per m
 
 ### Active M2 ticket
 
-[#1348](https://github.com/zenod-ai/zenod/issues/1348): add the measured WhatsApp voice-note inventory/duration failure as B13 in additive suite `m2-basics-v1.2`. Owner /root; branch `codex/zmr-39-voice-note-inventory-eval`; base `bafd667`. The v1.1 36-cell suite stays frozen; B13 requires a typed count, transcript-character lengths, explicit audio-duration unavailability and no partial-coverage refusal. No product deployment or paid production run in the eval ticket.
+[#1348](https://github.com/zenod-ai/zenod/issues/1348): measured WhatsApp voice-note inventory/duration failure. Eval task **merged** via [PR #1349](https://github.com/zenod-ai/zenod/pull/1349) as `39fd8d9`: additive suite `m2-basics-v1.2` and B13 require a typed count, transcript-character lengths, explicit audio-duration unavailability and no partial-coverage refusal; v1.1 remains frozen at36. CI `35347529517` PASS. Issue remains open for the product repair; no product deployment or paid production run was made by the eval ticket.
 
 [#1313](https://github.com/zenod-ai/zenod/issues/1313): fixed basic store/recall/conversation harness and baseline. Status: frozen implementation f941619; baseline-1 incomplete, targeted drain/cost parser repair active. Method: EXTEND scripts/zmr-pipeline-eval and server/testHarness. Owner: /root/zmr12_worker. Branch codex/zmr-m2-basics; base2a4ff6623fc6efa48355c5e697dd38c9c4833f67; 90minute checkpoint. Acceptance and candidate pin in [M2 contract](planning/zenod-basics-m2.md). No deployment in the harness ticket.
 
