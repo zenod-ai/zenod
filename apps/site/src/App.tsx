@@ -12,6 +12,7 @@ import {
 import alexandria from "@/assets/alexandria.jpg";
 import heroLibrarian from "@/assets/zenod-v5-hero-librarian.webp";
 import zenodPlate from "@/assets/zenod-plate.jpg";
+import { SectionOnePrototype } from "@/components/section-one";
 import { StoryDeck } from "@/components/story-deck";
 import { cn } from "@/lib/utils";
 import {
@@ -729,6 +730,18 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
   );
 }
 
+
+function SectionOnePage({ customer }: { customer: CustomerJourney }) {
+  return (
+    <div className="v5-site">
+      <SiteHeader customer={customer} />
+      <main className="v5-wrap">
+        <SectionOnePrototype />
+      </main>
+    </div>
+  );
+}
+
 function PricingPage({ customer }: { customer: CustomerJourney }) {
   return (
     <div className="v5-site v5-pricing-page">
@@ -754,6 +767,9 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
 
 export default function App() {
   const customer = useCustomerJourney();
+  if (window.location.pathname.endsWith("/section-01")) {
+    return <SectionOnePage customer={customer} />;
+  }
   return window.location.pathname === "/pricing" ? (
     <PricingPage customer={customer} />
   ) : (
