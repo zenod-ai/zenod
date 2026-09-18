@@ -1,0 +1,47 @@
+/* Illustration-first story sections 02–04.
+   Keep the established landing section heading frame and replace only
+   the content area with the text-free storyboard illustration layer. */
+
+.v5-story-diagram {
+  position: relative;
+  overflow: hidden;
+  margin: clamp(3rem, 7vw, 5.5rem) 0 0;
+  border: 1px solid rgb(58 66 74 / 0.72);
+  border-radius: 18px;
+  background: #070a0c;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 0.36);
+}
+
+.v5-story-diagram::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(7 10 12 / 0.04), transparent 18%, transparent 78%, rgb(7 10 12 / 0.22)),
+    radial-gradient(circle at 78% 26%, rgb(127 232 247 / 0.035), transparent 25rem);
+}
+
+.v5-story-diagram img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.v5-story-diagram-capture img {
+  object-position: center top;
+}
+
+.v5-story-diagram-cultivate img {
+  object-position: center;
+}
+
+.v5-story-diagram-grounding img {
+  object-position: center top;
+}
+
+@media (max-width: 760px) {
+  .v5-story-diagram {
+    border-radius: 12px;
+  }
+}

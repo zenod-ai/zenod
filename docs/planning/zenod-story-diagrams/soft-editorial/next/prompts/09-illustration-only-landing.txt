@@ -1,0 +1,30 @@
+Use case: precise-object-edit
+Asset type: landing-page section illustration layer / text-free slide background
+
+Primary request: Rebuild the supplied Library-of-Alexandria slide as a completely text-free editorial illustration layer for a native HTML landing-page section. Preserve the gate, the single librarian, the queue, the library architecture, the cyan directional path, and the near-black soft-editorial atmosphere. Remove every piece of typography and every user-interface mark.
+
+Input images:
+- Image 1: content and composition reference. Keep its gate scene, librarian, queue, library interior, cyan path, palette and negative space, but remove all text and all fixed web chrome.
+- Image 2: canonical soft-editorial identity reference. Match its illustration technique, typography-free visual language, near-black surface, cool-white graphite planes, restrained contour lines, cyan connectors and single tiny lime accent.
+- Image 3: already-approved text-free illustration layer. Use it only as the benchmark for how clean the final asset must be after text removal; do not copy its composition.
+
+Scene and composition:
+- 16:9 landscape, premium editorial website-section illustration, near-black background.
+- One dominant visual idea: the Library of Alexandria gate / threshold in the middle.
+- Zenodotus stands at the gate, turned slightly toward a restrained queue of four to six minimal faceless visitors on the near side. He is the only realised face and the only human figure with any facial detail.
+- Behind the gate: faint, cool-white shelf-niche, colonnade and papyrus-scroll line work dissolving into charcoal negative space.
+- One clean electric-cyan path enters from the left through the gate and leaves to the right, with exactly one unmistakable inward arrowhead and one unmistakable outward arrowhead. The path stays long, straight and legible.
+- A tiny lime accent appears once on the returned scroll at the retrieval side. Do not use lime anywhere else.
+- Keep generous dark negative space at the edges so the illustration can be cropped into a landscape or portrait landing-page frame without losing the librarian-and-gate focal point.
+
+Text (verbatim): none.
+
+Required edit:
+- Remove completely: navigation labels, "Zenod", "Why memory", "Examples", "The librarian", "FAQ", "Sign in", "Get started", "ZENODOTUS", "THE LIBRARIAN OF ALEXANDRIA", the subtitle, "INGESTION", "ORGANIZATION", "RETRIEVAL", the closing line, the footer, "Conceptual illustration", numerals, captions, logos and watermarks.
+- Reconstruct clean near-black surface, faint architecture and illustration detail wherever removed text used to be.
+- Do not add replacement labels, pseudo-text, glyphs, interface chrome, cards or buttons.
+- Preserve every non-text object: librarian, queue, gate, shelves, scrolls, cyan path, arrows, lime accent, negative space.
+
+Constraints: no words, letters, numerals, captions, labels, navigation, buttons, pricing, fake URLs, receipts, watermark, signature or border. Exactly one realised face maximum. No modern clothing, no duplicated librarian, no crowd.
+
+Avoid: any preserved typography, blurred text ghosts, pseudo-text, scrambled lettering, crop, recenter, changed composition, photoreal statue, 3D render, sepia, parchment, gold, brown, medieval-book clichés, cartoon flatness, harsh spotlight, dense crosshatching, bright white filled architecture, competing diagrams.
