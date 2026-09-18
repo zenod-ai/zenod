@@ -20,13 +20,13 @@ Pinned base: b0d0c27268e82723a544c96d840202d339f3c3ef; no rebases until the SHIP
 
 Owner: /root landing-story delivery manager
 Status: active
-Last attempted: promoted the first image-generated story deck into a responsive landing-page section in PR #1339
-Result: PR #1339 is open with the responsive story section; CI is still running. Slide retouches and new slides 09–10 are not yet produced.
-Evidence: PR #1339; docs/planning/zenod-story-diagrams/soft-editorial/next/index.html; apps/site/src/components/story-deck.tsx
-Waiting on: exact public pricing/legal treatment for the proposed hosted price change; PR #1339 CI completion
+Last attempted: completed wave 1 slide production after merging the responsive story shell in PR #1339
+Result: slide 09 PR #1347, slide 10 PR #1346, and retouch PR #1350 are open for review. Slide 08 remains intentionally blocked on the pricing/legal decision. Integration is waiting on steward review of the three image PRs.
+Evidence: PR #1339 merged as `33cb9d6`; PRs #1346/#1347/#1350; issue handoffs #1340/#1341/#1342
+Waiting on: exact public pricing/legal treatment for the proposed hosted price change; steward review of the three wave 1 image PRs
 Approved work: produce slide 09 (librarian of Alexandria), slide 10 (start your library today), and retouches for slides 02, 05, 06, 07, and 08; then integrate the revised sequence into the landing page and verify responsive rendering
-Next action: dispatch wave 1 workers for slide 09, slide 10, and the retouch batch
-Source revision: 8b8ae0974405260cef07e06b0127c74c9bf6fda1
+Next action: review #1346, #1347, and #1350 at full resolution; then integrate accepted revisions into issue #1344
+Source revision: bafd667949b1bb446b1bf51b36c6eda85066d3a5
 Verified at: 2026-09-18 15:00 Europe/Paris
 
 ## Mission
@@ -80,10 +80,10 @@ HARDEN
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [#1340](https://github.com/zenod-ai/zenod/issues/1340) | Ticket worker | image_a | Produce slide 09 librarian at the gate of Alexandria | ready | none | codex/zls-slide-09 | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | generate and review |
-| [#1341](https://github.com/zenod-ai/zenod/issues/1341) | Ticket worker | image_b | Produce slide 10 start your library today | ready | none | codex/zls-slide-10 | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | generate and review |
-| [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | ready | #1343 for slide 08 | codex/zls-slide-retouches | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | generate revised images |
-| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root | Integrate ten-slide story into landing page | blocked | #1340, #1341, #1342, #1343 | codex/landing-story | 8b8ae09 | PR #1339 | 2026-09-18 15:00 Europe/Paris | integrate after assets land |
+| [#1340](https://github.com/zenod-ai/zenod/issues/1340) | Ticket worker | image_a | Produce slide 09 librarian at the gate of Alexandria | review | none | [#1347](https://github.com/zenod-ai/zenod/pull/1347) | b0d0c27 | commit `58a37d3`; 4/5 identity match; slightly lighter background | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
+| [#1341](https://github.com/zenod-ai/zenod/issues/1341) | Ticket worker | image_b | Produce slide 10 start your library today | review | none | [#1346](https://github.com/zenod-ai/zenod/pull/1346) | b0d0c27 | commit `015f5e5`; OCR clean; minor cyan endpoint concern | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
+| [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | review | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
+| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root | Integrate ten-slide story into landing page | blocked | #1340, #1341, #1342, #1343 | [#1339](https://github.com/zenod-ai/zenod/pull/1339) | 33cb9d6 | story shell merged; image revisions under review | 2026-09-18 15:55 Europe/Paris | integrate accepted revisions after review and pricing decision |
 | [#1343](https://github.com/zenod-ai/zenod/issues/1343) | Planner | /root | Reconcile public offer and ownership copy | blocked | none | docs/EPIC-ZENOD-LANDING-STORY.md | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | receive exact price and copy decision |
 
 ## Decisions
