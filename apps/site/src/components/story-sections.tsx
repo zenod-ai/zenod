@@ -72,7 +72,7 @@ export const storyChapters: readonly Chapter[] = [
     lead: "Capture a voice note. Zenod preserves it, organizes it, and makes relevant context available to your connected agents.",
     image: capture,
     small: captureSmall,
-    alt: "A WhatsApp voice note flows from a phone through the librarian to preserved audio, a transcript and connected files. The flow then reaches a connected agent through an MCP doorway. Google Drive and Obsidian-compatible files illustrate storage and reading, respectively.",
+    alt: "A WhatsApp voice note passes through Zenod’s classical Hellenic librarian to preserved audio, transcripts and connected files. Both branches return through the same librarian, shown again as the Zenod MCP gateway, before reaching the agent. Google Drive and Obsidian-compatible files illustrate storage and reading, respectively.",
     captions: [
       [
         "Speak while the thought is fresh.",

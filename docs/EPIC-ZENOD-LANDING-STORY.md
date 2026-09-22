@@ -20,9 +20,9 @@ Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local i
 
 Owner: /root landing-story integration worker
 Status: testing
-Last attempted: integrated all ten diagram-led chapters below the existing hero on 2026-09-22, following Jordi’s explicit approval of the diagram-centered pattern
+Last attempted: revised chapter 02 on 2026-09-22 at Jordi’s request: the hero-style Hellenic librarian now appears at both capture and MCP retrieval; all ten chapters remain integrated below the unchanged hero
 Result: original hero markup, artwork and existing CSS are unchanged; legacy narrative sections are replaced; section titles/copy/captions/CTAs are HTML, and diagram-only illustrations remain the visual core. Existing pricing, signup gating, sign-in and legal/footer routes are retained.
-Evidence: [local integration handoff](evidence/landing-story-integration/README.md); 17 site tests and production build pass; desktop/mobile chapter walkthroughs and pricing navigation verified
+Evidence: [capture style revision](evidence/landing-story-integration/capture-revision.md); [local integration handoff](evidence/landing-story-integration/README.md); 17 site tests and production build pass; desktop/mobile chapter walkthroughs and pricing navigation verified
 Waiting on: Jordi’s visual review of the integrated landing and a separate exact-SHA production deployment approval
 Approved work: all-section local implementation and verification, explicitly requested in this task; no production deployment, signup change or changed commercial offer
 Next action: review the integrated local landing; adjust only requested presentation details, then request the exact deployment gate if publishing is desired
