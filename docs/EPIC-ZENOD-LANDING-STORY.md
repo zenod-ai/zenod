@@ -19,13 +19,13 @@ Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local i
 ## Current State
 
 Owner: /root landing-story integration worker
-Status: done
-Last attempted: deployed the exact user-approved landing source `c1d835774aaccbc3accc764738e47871c23ad107` to public Zenod on 2026-09-22
+Status: review
+Last attempted: harmonized recall and hosting artwork locally toward the unchanged hero on 2026-09-22; muted ivory/cyan and classical engraving replace bright white/smooth figures
 Result: all ten diagram-led chapters and the corrected Hellenic capture/MCP illustration are live at https://zenod.dev/; original hero preserved. No other service deployment or non-SHA environment/mount changes.
 Evidence: [production receipt](evidence/landing-story-integration/production.md); CI/image publication pass; 17 site tests and build pass; exact running image/OCI/health and live browser desktop/mobile checks verified
-Waiting on: nothing for this approved landing deployment
+Waiting on: visual review and exact-version deployment approval for the new illustration-only revision; the prior landing remains live
 Approved work: Jordi explicitly approved public deployment of exact source c1d8357; no changed price, signup settings, credentials, billing or unrelated-service deployment
-Next action: observe the official landing; further illustration refinements only on request
+Next action: review the [style harmony revision](evidence/landing-story-integration/style-harmony.md) in the local preview; publish only after a new exact-version approval
 Source revision: deployed `c1d835774aaccbc3accc764738e47871c23ad107`; PR #1364 merged as `60239a3a51c1577302c7483ed390314b28e76c41`; prior live `99f9f228285053d1354474b089691d86fe090fef`
 Verified at: 2026-09-22 03:06 UTC
 
