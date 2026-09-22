@@ -9,10 +9,9 @@ import {
   LayoutDashboardIcon,
 } from "lucide-react";
 
-import alexandria from "@/assets/alexandria.jpg";
 import heroLibrarian from "@/assets/zenod-v5-hero-librarian.webp";
-import zenodPlate from "@/assets/zenod-plate.jpg";
 import { cn } from "@/lib/utils";
+import { StorySections } from "@/components/story-sections";
 import {
   consumePendingHostedTier,
   createHostedCheckout,
@@ -144,7 +143,7 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
           <a href="/#context">Why memory</a>
           <a href="/#journey">Examples</a>
           <a href="/#alexandria">The librarian</a>
-          <a href="/#faq">FAQ</a>
+          <a href="/#start">Run it your way</a>
         </nav>
         <div className="v5-nav-actions">
           {customer.session ? (
@@ -211,15 +210,16 @@ function SectionTitle({
   );
 }
 
-function PricingSection({ customer }: { customer: CustomerJourney }) {
+function PricingSection({ customer, embedded = false }: { customer: CustomerJourney; embedded?: boolean }) {
+  const Container = embedded ? "div" : "section";
   return (
-    <section className="v5-section" id="start">
-      <SectionTitle
+    <Container className={embedded ? "zls-offer" : "v5-section"} id={embedded ? undefined : "start"}>
+      {!embedded && <SectionTitle
         no="06 / START"
         kicker="Choose where it runs"
         title="Start free. Stay in control."
         lead="One library. Two ways to run it."
-      />
+      />}
       <div className="v5-plans">
         {PRICING_OPTIONS.map((plan) => (
           <article
@@ -269,7 +269,7 @@ function PricingSection({ customer }: { customer: CustomerJourney }) {
         €9/month + VAT with managed AI usage and WhatsApp included.
         Hosted: GitHub or Drive · self-hosted: GitHub.
       </p>
-    </section>
+    </Container>
   );
 }
 
@@ -362,342 +362,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
           </div>
         </section>
 
+        <StorySections pricing={<PricingSection customer={customer} embedded />} />
         <div className="v5-wrap">
-          <section className="v5-section v5-split" id="context">
-            <div className="v5-sticky">
-              <SectionTitle
-                no="01 / CONTEXT"
-                kicker="Your memory matters"
-                title="Context changes everything."
-                lead="Same prompt. Same model. Night-and-day output."
-              />
-            </div>
-            <div className="v5-context-stack">
-              <article className="v5-context-card">
-                <div className="v5-card-head">
-                  <span>SAME PROMPT</span>
-                  <span>NO MEMORY</span>
-                </div>
-                <div className="v5-card-body">
-                  <div className="v5-prompt">
-                    Plan the next landing-page iteration.
-                  </div>
-                  <div className="v5-tokens">
-                    <span>generic brief</span>
-                  </div>
-                  <p>Here are five common landing-page best practices…</p>
-                </div>
-              </article>
-              <article className="v5-context-card v5-context-good">
-                <div className="v5-card-head">
-                  <span>SAME PROMPT</span>
-                  <span>ZENOD CONNECTED</span>
-                </div>
-                <div className="v5-card-body">
-                  <div className="v5-prompt">
-                    Plan the next landing-page iteration.
-                  </div>
-                  <div className="v5-tokens">
-                    <span>recent voice note</span>
-                    <span>approved offer</span>
-                    <span>V3 feedback</span>
-                  </div>
-                  <p>
-                    Use the Alexandria identity. Keep the futuristic system. Cut
-                    the copy.
-                  </p>
-                  <div className="v5-delta">
-                    Better context raises the ceiling of useful automation.
-                  </div>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section className="v5-section" id="input">
-            <SectionTitle
-              no="02 / INPUT"
-              kicker="Contribute from anywhere"
-              title="Put anything useful into it."
-              lead="A quick fact. A screenshot. A 35-minute voice note."
-            />
-            <div className="v5-input-grid">
-              <article className="v5-input-card v5-input-feature">
-                <span className="v5-micro">◉ WHATSAPP VOICE</span>
-                <div className="v5-wave" aria-hidden="true">
-                  {Array.from({ length: 15 }, (_, index) => (
-                    <i key={index} />
-                  ))}
-                </div>
-                <h3>35:08 voice note</h3>
-                <p>Preserved. Understood. Searchable.</p>
-                <small>EVIDENCE · MEANING · RECEIPT</small>
-              </article>
-              <article className="v5-input-card">
-                <span className="v5-micro">▧ FILES</span>
-                <h3>Documents</h3>
-                <p>One source. Every future agent.</p>
-                <small>PDF · MARKDOWN · TEXT</small>
-              </article>
-              <article className="v5-input-card">
-                <span className="v5-micro">▣ IMAGES</span>
-                <h3>Screenshots</h3>
-                <p>Find the image you barely remember.</p>
-                <small>VISUAL EVIDENCE</small>
-              </article>
-              <article className="v5-input-card">
-                <span className="v5-micro">⌁ MCP</span>
-                <h3>Conversations</h3>
-                <p>Save what matters from any agent.</p>
-                <small>CODEX · CLAUDE · CHATGPT</small>
-              </article>
-            </div>
-          </section>
-
-          <section className="v5-section" id="journey">
-            <SectionTitle
-              no="03 / PROOF"
-              kicker="One memory across time"
-              title="Think here. Remember there."
-              lead="Your context follows the work. Not the platform."
-            />
-            <div className="v5-journey">
-              {[
-                [
-                  "01 · WHATSAPP",
-                  "Think out loud.",
-                  "Leave the long voice note.",
-                  "VOICE · 35:08",
-                  "🎙 Voice note · 35:08",
-                  "Saved to your memory",
-                  "v5-receipt",
-                ],
-                [
-                  "02 · CODEX",
-                  "Recall it.",
-                  "Ask for the note three days later.",
-                  "ZENOD MCP",
-                  "Find that landing-page note.",
-                  "↳ search_memory",
-                  "v5-tool",
-                ],
-                [
-                  "03 · ACTION",
-                  "Use it.",
-                  "Turn remembered intent into work.",
-                  "BACKLOG",
-                  "Create the content tasks.",
-                  "7 sourced candidates",
-                  "v5-receipt",
-                ],
-                [
-                  "04 · CLAUDE",
-                  "Switch models.",
-                  "The same memory is still there.",
-                  "SAME MEMORY",
-                  "What did I mean by cultivate?",
-                  "↳ ask_brain",
-                  "v5-tool",
-                ],
-              ].map(([step, title, copy, ui, message, result, resultClass]) => (
-                <article className="v5-journey-step" key={step}>
-                  <span className="v5-micro">{step}</span>
-                  <h3>{title}</h3>
-                  <p>{copy}</p>
-                  <div className="v5-mini-ui">
-                    <div>{ui}</div>
-                    <div>
-                      <span>{message}</span>
-                      <b className={resultClass}>{result}</b>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <section className="v5-section v5-alexandria" id="alexandria">
-          <img src={alexandria} alt="The Great Library of Alexandria" />
-          <div className="v5-wrap v5-alexandria-inner">
-            <div>
-              <p className="v5-eyebrow v5-gold">The first library problem</p>
-              <h2>A collection needs a librarian.</h2>
-              <div className="v5-short-lines">
-                <p>Alexandria had scrolls.</p>
-                <p>You have chats, files, voice notes, and agents.</p>
-                <p>The organizing problem is the same.</p>
-              </div>
-              <p className="v5-muted">
-                Zenod is named after Zenodotus. The first librarian of
-                Alexandria. He turned a collection into a system.
-              </p>
-            </div>
-            <figure>
-              <img src={zenodPlate} alt="Zenod, the Librarian" />
-              <figcaption>
-                <b>ZENODOTUS → ZENOD</b>
-                <p>The gatekeeper that keeps your digital memory usable.</p>
-                <small>ANCIENT JOB · MODERN INTERFACE</small>
-              </figcaption>
-            </figure>
-          </div>
-        </section>
-
-        <div className="v5-wrap">
-          <section className="v5-section" id="order">
-            <SectionTitle
-              no="04 / ORDER"
-              kicker="Good access starts with good organization"
-              title="Everybody reads. One librarian writes."
-              lead="Without order, memory becomes a junk drawer."
-            />
-            <div className="v5-gate-grid">
-              <div className="v5-gate-map">
-                <span className="v5-agent v5-a1">CODEX · READ</span>
-                <span className="v5-agent v5-a2">CLAUDE · READ</span>
-                <span className="v5-agent v5-a3">CHATGPT · READ</span>
-                <span className="v5-agent v5-a4">WHATSAPP · INPUT</span>
-                <div className="v5-librarian-node">
-                  <b>ZENOD</b>
-                  <span>CONTROLLED WRITE</span>
-                </div>
-                <small>OPEN ACCESS · GATEKEPT ORGANIZATION</small>
-              </div>
-              <div className="v5-index">
-                <span className="v5-eyebrow">Semantic index · live</span>
-                <h3>Built for retrieval</h3>
-                {[
-                  ["landing page direction", ".97"],
-                  ["digital memory ownership", ".94"],
-                  ["cross-model portability", ".91"],
-                  ["voice-note scenario", ".88"],
-                ].map(([label, score]) => (
-                  <div className="v5-index-row" key={label}>
-                    <span>{label}</span>
-                    <b>{score}</b>
-                  </div>
-                ))}
-                <div className="v5-rules">
-                  <i>01</i> preserve evidence
-                  <br />
-                  <i>02</i> distill meaning
-                  <br />
-                  <i>03</i> link related ideas
-                  <br />
-                  <i>04</i> validate + commit
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="v5-section" id="freedom">
-            <SectionTitle
-              no="05 / FREEDOM"
-              kicker="No model lock-in. No Zenod lock-in."
-              title="Fire the librarian. Keep the library."
-              lead="Your memory stays plain Markdown in your own account."
-            />
-            <div className="v5-freedom">
-              <div className="v5-repo">
-                <div>
-                  <span>your memory</span>
-                  <b>YOUR ACCOUNT</b>
-                </div>
-                <pre>{`▾ Log/
-  2026-09-01.md
-▾ Projects/
-  Zenod.md
-  Landing Page.md
-▾ Areas/
-  Positioning & Story.md
-
-✓ plain Markdown
-✓ git history or Drive files
-✓ Obsidian-compatible`}</pre>
-              </div>
-              <div className="v5-fire">
-                <blockquote>“You can fire us. Your memory stays.”</blockquote>
-                <p>A librarian you hire. Not a platform that owns you.</p>
-                <small>OPEN SOURCE · PORTABLE BY DEFAULT</small>
-              </div>
-            </div>
-          </section>
-
-          <PricingSection customer={customer} />
-
-          <section className="v5-section v5-faq" id="faq">
-            <div>
-              <SectionTitle
-                no="07 / FAQ"
-                kicker="Straight answers"
-                title="Before you trust the librarian."
-              />
-            </div>
-            <div className="v5-faq-list">
-              <details>
-                <summary>Do I own the memory?</summary>
-                <p>
-                  Yes. Plain Markdown in your account: GitHub for self-hosted,
-                  or GitHub or an app-created Google Drive folder with Hosted.
-                </p>
-              </details>
-              <details>
-                <summary>Can every agent use it?</summary>
-                <p>
-                  Any compatible MCP client can retrieve or contribute context
-                  through Zenod.
-                </p>
-              </details>
-              <details>
-                <summary>Why one controlled writer?</summary>
-                <p>
-                  Open reads make memory useful. Gatekept writes keep it
-                  organized.
-                </p>
-              </details>
-              <details>
-                <summary>What can I send?</summary>
-                <p>
-                  Text, conversations, voice notes, screenshots, and supported
-                  documents.
-                </p>
-              </details>
-              <details>
-                <summary>What if I leave Zenod?</summary>
-                <p>
-                  You keep the complete library. Self-host it. Read it directly.
-                  Hire another librarian.
-                </p>
-              </details>
-            </div>
-          </section>
-
-          <section className="v5-section v5-final">
-            <p className="v5-kicker">Your context already matters</p>
-            <h2>
-              One memory.
-              <br />
-              <span className="v5-acid">Totally yours.</span>
-            </h2>
-            <p className="v5-lead">
-              Every agent gets the right context. You keep control.
-            </p>
-            <div className="v5-actions">
-              <a className="v5-button v5-button-primary" href="#start">
-                Try Zenod free
-              </a>
-              <a
-                className="v5-button"
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <GithubIcon /> Star on GitHub
-              </a>
-            </div>
-          </section>
-
           <footer className="v5-footer">
             <div>
               <b>ZENOD</b>
