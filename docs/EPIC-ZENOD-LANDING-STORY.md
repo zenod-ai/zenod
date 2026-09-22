@@ -19,15 +19,15 @@ Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local i
 ## Current State
 
 Owner: /root landing-story integration worker
-Status: testing
-Last attempted: revised chapter 02 on 2026-09-22 at Jordi’s request: the hero-style Hellenic librarian now appears at both capture and MCP retrieval; all ten chapters remain integrated below the unchanged hero
-Result: original hero markup, artwork and existing CSS are unchanged; legacy narrative sections are replaced; section titles/copy/captions/CTAs are HTML, and diagram-only illustrations remain the visual core. Existing pricing, signup gating, sign-in and legal/footer routes are retained.
-Evidence: [capture style revision](evidence/landing-story-integration/capture-revision.md); [local integration handoff](evidence/landing-story-integration/README.md); 17 site tests and production build pass; desktop/mobile chapter walkthroughs and pricing navigation verified
-Waiting on: Jordi’s visual review of the integrated landing and a separate exact-SHA production deployment approval
-Approved work: all-section local implementation and verification, explicitly requested in this task; no production deployment, signup change or changed commercial offer
-Next action: review the integrated local landing; adjust only requested presentation details, then request the exact deployment gate if publishing is desired
-Source revision: implementation `2dba68787c5e74a29cd68b9fd462af42764b1877`; base `99f9f228285053d1354474b089691d86fe090fef`; branch `codex/landing-two-section-preview`
-Verified at: 2026-09-22 Europe/Paris
+Status: done
+Last attempted: deployed the exact user-approved landing source `c1d835774aaccbc3accc764738e47871c23ad107` to public Zenod on 2026-09-22
+Result: all ten diagram-led chapters and the corrected Hellenic capture/MCP illustration are live at https://zenod.dev/; original hero preserved. No other service deployment or non-SHA environment/mount changes.
+Evidence: [production receipt](evidence/landing-story-integration/production.md); CI/image publication pass; 17 site tests and build pass; exact running image/OCI/health and live browser desktop/mobile checks verified
+Waiting on: nothing for this approved landing deployment
+Approved work: Jordi explicitly approved public deployment of exact source c1d8357; no changed price, signup settings, credentials, billing or unrelated-service deployment
+Next action: observe the official landing; further illustration refinements only on request
+Source revision: deployed `c1d835774aaccbc3accc764738e47871c23ad107`; PR #1364 merged as `60239a3a51c1577302c7483ed390314b28e76c41`; prior live `99f9f228285053d1354474b089691d86fe090fef`
+Verified at: 2026-09-22 03:06 UTC
 
 ## Mission
 
@@ -55,7 +55,7 @@ The 2026-09-22 approved contract below supersedes the earlier full-slide integra
 - [x] 5. BUILD corrected MCP arrows, coherent raw/source images, and distinct hosting/storage bands; preserve the current offer with no $3 price in artwork.
 - [x] 6. PORT existing pricing/account behavior: preserve €9/month + VAT, signup readiness gating, sign-in routes and /pricing; embed the native plan controls in chapter 08.
 - [x] 7. BUILD local browser verification: desktop and mobile chapter walkthroughs, loaded assets, working pricing navigation, no horizontal overflow; 17 tests and production build pass.
-- [ ] 8. PORT the deployment gate from `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`: deploy only after approval for the exact source SHA, then record production health and live browser evidence.
+- [x] 8. PORT the deployment gate from `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`: deploy only after approval for the exact source SHA, then record production health and live browser evidence.
 
 HARDEN
 
