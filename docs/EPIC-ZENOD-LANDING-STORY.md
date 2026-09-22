@@ -19,14 +19,14 @@ Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local i
 ## Current State
 
 Owner: /root landing-story integration worker
-Status: local review — implementation complete, production unchanged
+Status: testing
 Last attempted: integrated all ten diagram-led chapters below the existing hero on 2026-09-22, following Jordi’s explicit approval of the diagram-centered pattern
 Result: original hero markup, artwork and existing CSS are unchanged; legacy narrative sections are replaced; section titles/copy/captions/CTAs are HTML, and diagram-only illustrations remain the visual core. Existing pricing, signup gating, sign-in and legal/footer routes are retained.
 Evidence: [local integration handoff](evidence/landing-story-integration/README.md); 17 site tests and production build pass; desktop/mobile chapter walkthroughs and pricing navigation verified
 Waiting on: Jordi’s visual review of the integrated landing and a separate exact-SHA production deployment approval
 Approved work: all-section local implementation and verification, explicitly requested in this task; no production deployment, signup change or changed commercial offer
 Next action: review the integrated local landing; adjust only requested presentation details, then request the exact deployment gate if publishing is desired
-Source revision: base `99f9f228285053d1354474b089691d86fe090fef`; branch `codex/landing-two-section-preview`; candidate changes documented in the linked handoff
+Source revision: implementation `2dba68787c5e74a29cd68b9fd462af42764b1877`; base `99f9f228285053d1354474b089691d86fe090fef`; branch `codex/landing-two-section-preview`
 Verified at: 2026-09-22 Europe/Paris
 
 ## Mission
@@ -82,7 +82,7 @@ HARDEN
 | [#1340](https://github.com/zenod-ai/zenod/issues/1340) | Ticket worker | image_a | Produce slide 09 librarian at the gate of Alexandria | review | none | [#1347](https://github.com/zenod-ai/zenod/pull/1347) | b0d0c27 | commit `58a37d3`; 4/5 identity match; slightly lighter background | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
 | [#1341](https://github.com/zenod-ai/zenod/issues/1341) | Ticket worker | image_b | Produce slide 10 start your library today | review | none | [#1346](https://github.com/zenod-ai/zenod/pull/1346) | b0d0c27 | commit `015f5e5`; OCR clean; minor cyan endpoint concern | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
 | [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | review | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
-| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root landing-story integration worker | Integrate diagram-led story below unchanged hero (PORT board narrative; BUILD diagram-only assets) | local review | user pattern approval received; current offer retained | `codex/landing-two-section-preview` (local, no PR) | 99f9f22 | [handoff](evidence/landing-story-integration/README.md); 17 tests and build pass | 2026-09-22 | visual review, then separate deployment gate |
+| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root landing-story integration worker | Integrate diagram-led story below unchanged hero (PORT board narrative; BUILD diagram-only assets) | testing | user pattern approval received; current offer retained | `codex/landing-two-section-preview` (local, no PR) | 99f9f22 | [handoff](evidence/landing-story-integration/README.md); 17 tests and build pass | 2026-09-22 | visual review, then separate deployment gate |
 | [#1343](https://github.com/zenod-ai/zenod/issues/1343) | Planner | /root | Reconcile public offer and ownership copy | blocked | none | docs/EPIC-ZENOD-LANDING-STORY.md | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | receive exact price and copy decision |
 
 ## Decisions

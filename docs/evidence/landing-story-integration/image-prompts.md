@@ -8,7 +8,7 @@ Edit target: attached Zenod storyboard. Extract and recompose ONLY THE ILLUSTRAT
 
 ## Common adaptation prompt (02–10)
 
-Use case: precise-object-edit. Adapt the FIRST reference storyboard into ONLY its illustrated diagram, a wide approximately 2:1 website asset. Remove the navigation, section heading, subtitle/body paragraphs, footer, CTA buttons, outer slide frame. Preserve very closely the original diagram's objects, spatial relationships, composition, fine detail, near-black background (#101113), cyan flow connections, restrained lime accents, cool pale Greek editorial librarian and subtle classical drafting. SECOND reference is the approved diagram-only visual identity. DO NOT redesign into cards or a website mockup. The diagram must remain the visual core and look recognizably like this storyboard. Fill the canvas with the diagram with modest margins, no page text. Diagram-internal short labels may remain. Specific requirements: 
+Use case: precise-object-edit. Adapt the FIRST reference storyboard into ONLY its illustrated diagram, a wide approximately 2:1 website asset. Remove the navigation, section heading, subtitle/body paragraphs, footer, CTA buttons, outer slide frame. Preserve very closely the original diagram's objects, spatial relationships, composition, fine detail, near-black background (#101113), cyan flow connections, restrained lime accents, cool pale Greek editorial librarian and subtle classical drafting. SECOND reference is the approved diagram-only visual identity. DO NOT redesign into cards or a website mockup. The diagram must remain the visual core and look recognizably like this storyboard. Fill the canvas with the diagram with modest margins, no page text. Diagram-internal short labels may remain. Specific requirements:
 
 ## 02-capture
 
@@ -63,4 +63,3 @@ Keep entire intake queue on LEFT, ancient librarian at gateway CENTER, organized
 Source: `10-start-your-library-today.png`.
 
 Keep classical librarian holding scroll next to an inviting open door to shelves of scrolls, subtle architectural drafting and glowing cyan path leading through door. Center illustration as one wide visual, allow architectural space left but no giant empty text area. NO TEXT WHATSOEVER, no nav, no buttons, no headings. This is the closing illustration, not a new hero.
-

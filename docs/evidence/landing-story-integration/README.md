@@ -8,6 +8,8 @@
 - Older issue/checklist text describes superseded full-slide integration. Current user-approved visual contract supersedes that presentation method, not the deployment gate.
 - Local app: http://127.0.0.1:4319/ (frontend only).
 
+Implementation commit: `2dba68787c5e74a29cd68b9fd462af42764b1877`. Local only; not merged to main or deployed.
+
 ## Result
 
 - Existing hero JSX, original CSS and hero image match the base exactly, protected by SHA-256 regression tests.
