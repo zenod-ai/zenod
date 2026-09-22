@@ -14,20 +14,20 @@ Additional root rationale: n/a
 Integration branch: main
 Active steward: /root landing-story delivery manager
 Steward since: 2026-09-18 15:00 Europe/Paris
-Pinned base: b0d0c27268e82723a544c96d840202d339f3c3ef; no rebases until the SHIP journey passes
+Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local integration; no rebases during this review
 
 ## Current State
 
-Owner: /root landing-story delivery manager
-Status: deferred
-Last attempted: reverted the responsive story-deck landing integration at Jordi’s request
-Result: landing source is restored to the previous version before PR #1339; the story deck and its optimized image assets are removed from `apps/site`. The section-01 prototype PR was closed. Image-only slide PRs remain unmerged for history/review.
-Evidence: `codex/revert-landing-story` revert of merge `33cb9d6`; closed PR #1357
-Waiting on: new landing direction. Full-slide images should not be embedded directly; the requested direction is real HTML text with illustration-only assets and hero-style composition.
-Approved work: preserve the reverted landing; no further landing integration until Jordi approves the new section pattern
-Next action: keep the previous landing version live; await direction on whether to pursue the illustration-only HTML section pattern
-Source revision: c1b4761 (pre-revert main)
-Verified at: 2026-09-18 16:20 Europe/Paris
+Owner: /root landing-story integration worker
+Status: local review — implementation complete, production unchanged
+Last attempted: integrated all ten diagram-led chapters below the existing hero on 2026-09-22, following Jordi’s explicit approval of the diagram-centered pattern
+Result: original hero markup, artwork and existing CSS are unchanged; legacy narrative sections are replaced; section titles/copy/captions/CTAs are HTML, and diagram-only illustrations remain the visual core. Existing pricing, signup gating, sign-in and legal/footer routes are retained.
+Evidence: [local integration handoff](evidence/landing-story-integration/README.md); 17 site tests and production build pass; desktop/mobile chapter walkthroughs and pricing navigation verified
+Waiting on: Jordi’s visual review of the integrated landing and a separate exact-SHA production deployment approval
+Approved work: all-section local implementation and verification, explicitly requested in this task; no production deployment, signup change or changed commercial offer
+Next action: review the integrated local landing; adjust only requested presentation details, then request the exact deployment gate if publishing is desired
+Source revision: base `99f9f228285053d1354474b089691d86fe090fef`; branch `codex/landing-two-section-preview`; candidate changes documented in the linked handoff
+Verified at: 2026-09-22 Europe/Paris
 
 ## Mission
 
@@ -46,17 +46,16 @@ SHIP
 
 Manager execution contract: `/root` personally executes each numbered browser step, stops at the first failure, dispatches a scoped fix, reprepares the candidate, and restarts at step 1 until one uninterrupted clean pass. The test package handoff records the exact commit, named environment, live URL, per-step browser screenshots, and remaining limits so Jordi can reproduce the same journey.
 
-- [ ] 1. PORT from `apps/site/src/components/story-deck.tsx`: the landing page includes the story sequence with slides 01–10 in narrative order.
-- [ ] 2. DUPLICATE from `01-ownership-v5.png`: slides 01–08 retain the approved soft-editorial identity, typography, and illustration language.
-- [ ] 3. BUILD (no suitable source beyond the current slide image found in recorded scope): slide 02 shows WhatsApp, Zenod, Google Drive, Obsidian, and named agent retrieval with the intended flow.
-- [ ] 4. BUILD (image-generation retouch): slide 05 restores the approved font and librarian illustration style.
-- [ ] 5. BUILD (image-generation retouch): slide 06 places the library and Zenod gateway distinctly at the center, uses colorful Google Drive and agent marks, and fixes retrieve/write arrow directions.
-- [ ] 6. BUILD (image-generation retouch): slide 07 keeps the timeline structure while restoring the approved font and illustration style.
-- [ ] 7. BUILD (offer copy and image retouch): slide 08 presents accurate storage and hosting choices, with Telegram on the self-hosted side and Telegram + WhatsApp on the hosted side, using the actual public offer.
-- [ ] 8. BUILD (new narrative image): slide 09 tells the Zenodotus/Alexandria story: Zenodotus was the librarian, not the library; he controlled ingestion and created the index at the gate.
-- [ ] 9. BUILD (new closing image): slide 10 closes with the invitation to start building a personal Library of Alexandria today and routes to GitHub or the current hosted plan.
-- [ ] 10. BUILD (no existing responsive story regression suite found in recorded scope): the live landing page passes desktop, tablet, and mobile browser checks with no horizontal overflow, clipped copy, failed assets, or broken CTAs.
-- [ ] 11. PORT from `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`: the exact deployed source SHA and live URL are recorded after authorized deployment.
+The 2026-09-22 approved contract below supersedes the earlier full-slide integration checklist. Checked steps are verified on the local frontend candidate, not production.
+
+- [x] 1. PORT from the current landing hero: preserve its JSX, artwork, animation helpers and existing CSS exactly.
+- [x] 2. BUILD from the approved board diagrams: render all ten chapters below the hero; remove legacy narrative, FAQ and final CTA sections; retain functional footer/legal links.
+- [x] 3. BUILD the diagram-only asset treatment: real HTML headings, introductions, captions and CTAs; no full-slide screenshots. Short diagram labels may remain rasterized.
+- [x] 4. DUPLICATE the approved ownership diagram visual language across the remaining diagram adaptations; preserve each board’s composition and illustrated objects.
+- [x] 5. BUILD corrected MCP arrows, coherent raw/source images, and distinct hosting/storage bands; preserve the current offer with no $3 price in artwork.
+- [x] 6. PORT existing pricing/account behavior: preserve €9/month + VAT, signup readiness gating, sign-in routes and /pricing; embed the native plan controls in chapter 08.
+- [x] 7. BUILD local browser verification: desktop and mobile chapter walkthroughs, loaded assets, working pricing navigation, no horizontal overflow; 17 tests and production build pass.
+- [ ] 8. PORT the deployment gate from `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`: deploy only after approval for the exact source SHA, then record production health and live browser evidence.
 
 HARDEN
 
@@ -83,7 +82,7 @@ HARDEN
 | [#1340](https://github.com/zenod-ai/zenod/issues/1340) | Ticket worker | image_a | Produce slide 09 librarian at the gate of Alexandria | review | none | [#1347](https://github.com/zenod-ai/zenod/pull/1347) | b0d0c27 | commit `58a37d3`; 4/5 identity match; slightly lighter background | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
 | [#1341](https://github.com/zenod-ai/zenod/issues/1341) | Ticket worker | image_b | Produce slide 10 start your library today | review | none | [#1346](https://github.com/zenod-ai/zenod/pull/1346) | b0d0c27 | commit `015f5e5`; OCR clean; minor cyan endpoint concern | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
 | [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | review | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
-| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root | Integrate ten-slide story into landing page | blocked | #1340, #1341, #1342, #1343 | [#1339](https://github.com/zenod-ai/zenod/pull/1339) | 33cb9d6 | story shell merged; image revisions under review | 2026-09-18 15:55 Europe/Paris | integrate accepted revisions after review and pricing decision |
+| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root landing-story integration worker | Integrate diagram-led story below unchanged hero (PORT board narrative; BUILD diagram-only assets) | local review | user pattern approval received; current offer retained | `codex/landing-two-section-preview` (local, no PR) | 99f9f22 | [handoff](evidence/landing-story-integration/README.md); 17 tests and build pass | 2026-09-22 | visual review, then separate deployment gate |
 | [#1343](https://github.com/zenod-ai/zenod/issues/1343) | Planner | /root | Reconcile public offer and ownership copy | blocked | none | docs/EPIC-ZENOD-LANDING-STORY.md | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | receive exact price and copy decision |
 
 ## Decisions
@@ -95,3 +94,5 @@ HARDEN
 | 2026-09-18 | accepted | Keep the current public offer authoritative until pricing/legal copy is reconciled | The proposed $3 hosted price conflicts with the live €9/month + VAT offer and legal copy | User feedback plus public offer tests and legal pages | When Jordi supplies the final price/legal treatment |
 | 2026-09-18 | accepted | Add slide 09 before the pricing chapter and slide 10 after it | The user requested the librarian story and a closing library invitation in the narrative | User feedback | If narrative testing shows a better position |
 | 2026-09-18 | accepted | Revert the story-deck landing integration | Full-slide images are not the desired landing implementation. Future sections should use real HTML text plus illustration-only assets in the hero visual language. | User request; revert of PR #1339 | If Jordi approves a new section-by-section HTML direction |
+| 2026-09-22 | accepted | Preserve the existing hero exactly; replace only sections below it | Jordi explicitly rejected hero replacement and approved extending the diagram-centered preview to all sections. Large illustrated diagrams closely follow the board; headings/supporting copy/captions/CTAs remain HTML. Internal diagram labels may remain rasterized as in the approved preview. | Current user instructions; local integration evidence | Only on explicit user request |
+| 2026-09-22 | accepted | Keep current offer and functional pricing flow | The old $3 storyboard offer is not authority. Diagram 08 has no price; HTML offer remains €9/month + VAT, signup-gated, with existing customer behavior. All ten boards are represented in order 01–07, 09, 08, 10, retaining the approved Alexandria-before-pricing placement. | Current code and public-offer tests | On a new approved pricing decision |
