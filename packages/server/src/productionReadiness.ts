@@ -281,3 +281,28 @@ export function assertPublicSignupIsReady(env: NodeJS.ProcessEnv = process.env):
     throw new Error(`ZENOD_PUBLIC_PAID_SIGNUP=1 but production readiness checks failed: ${failed}`);
   }
 }
+
+// Startup-safe readiness gate used by the running service. Unlike the strict
+// assert above, it never terminates the process: a stale or failing operational
+// check (for example an aged backup_restore proof) must disable the affected
+// journey at request time, not take capture, filing and recall offline together.
+// Paid checkout remains independently fail-closed because checkoutEnabled()
+// requires report.ready. Failures are logged so the degradation is visible.
+export function reportPublicSignupReadiness(
+  env: NodeJS.ProcessEnv = process.env,
+): ProductionReadinessReport {
+  const report = productionReadinessReport(env);
+  const failed = report.checks
+    .filter((check) => !check.ok && !ADVISORY_CHECKS.has(check.id))
+    .map((check) => check.id);
+  if (env.ZENOD_PUBLIC_GOOGLE_SIGNUP === "1" && env.ZENOD_PUBLIC_PAID_SIGNUP !== "1") {
+    console.warn("ZENOD_PUBLIC_GOOGLE_SIGNUP=1 requires ZENOD_PUBLIC_PAID_SIGNUP=1");
+  }
+  if (env.ZENOD_PUBLIC_PAID_SIGNUP === "1" && failed.length > 0) {
+    console.warn(
+      `ZENOD_PUBLIC_PAID_SIGNUP=1 but production readiness checks failed: ${failed.join(", ")}. ` +
+        "Serving normally; paid checkout stays disabled until they pass.",
+    );
+  }
+  return report;
+}

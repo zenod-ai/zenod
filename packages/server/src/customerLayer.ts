@@ -56,10 +56,10 @@ import { CustomerTokenVault } from "./customerTokenVault.js";
 import { hashToken } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import {
-  assertPublicSignupIsReady,
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
   productionReadinessReport,
+  reportPublicSignupReadiness,
 } from "./productionReadiness.js";
 
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
@@ -306,7 +306,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     return principal;
   };
   const billing = loadCustomerBillingConfig(env, product);
-  assertPublicSignupIsReady(env);
+  reportPublicSignupReadiness(env);
   const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
   if (env.STRIPE_SECRET_KEY) {
     const expectedMarker = billing.stripeMode === "live" ? "_live_" : "_test_";
