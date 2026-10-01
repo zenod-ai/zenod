@@ -7,6 +7,7 @@ import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
   productionReadinessReport,
+  reportPublicSignupReadiness,
   ZENOD_LEGAL_VERSION,
 } from "../src/productionReadiness.js";
 
@@ -196,6 +197,21 @@ describe("production readiness gate", () => {
     expect(checkoutEnabled(readyEnv)).toBe(false);
     expect(() => assertPublicSignupIsReady(readyEnv)).toThrow(/backup_restore/);
     expect(() => assertPublicSignupIsReady(googleReadyEnv)).toThrow(/backup_restore/);
+  });
+
+  it("keeps the service running when operational evidence ages out, disabling only paid checkout", () => {
+    vi.setSystemTime(new Date("2026-09-13T00:00:00.000Z"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const report = reportPublicSignupReadiness(readyEnv);
+      expect(report.ready).toBe(false);
+      expect(report.checks.find((check) => check.id === "backup_restore")?.ok).toBe(false);
+      // Paid checkout is still fail-closed through the request-time gate.
+      expect(checkoutEnabled(readyEnv)).toBe(false);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("backup_restore"));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("does not accept a legacy yearly price in place of the monthly Hosted price", () => {
