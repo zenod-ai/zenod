@@ -1,15 +1,27 @@
 import {
+  classifyProviderFailure,
+  classifyThrownError,
   DEFAULT_OPENROUTER_STT_MODEL,
   GROQ_STT_MODEL,
   OPENAI_STT_MODEL,
+  parseProviderErrorBody,
+  type TranscriptionFailureReason,
 } from "./transcribe.js";
 import type { PhylaxTranscriptionProvider } from "./phylaxTenantSettings.js";
+
+export type PhylaxTranscriptionProbeReason =
+  | TranscriptionFailureReason
+  | "catalog_unverified"
+  | "model_unavailable";
 
 export type PhylaxTranscriptionProbeResult = {
   ok: boolean;
   provider: PhylaxTranscriptionProvider;
   model: string;
   message: string;
+  /** Closed reason so a probe distinguishes credit/auth/rate/network, not just ok:false. */
+  reason?: PhylaxTranscriptionProbeReason;
+  httpStatus?: number;
 };
 
 type ProbeOptions = {
@@ -92,6 +104,7 @@ export async function probePhylaxTranscriptionProvider({
       provider,
       model: selectedModel,
       message: `${provider} requires a provider key`,
+      reason: "not_configured",
     };
   }
   try {
@@ -103,11 +116,14 @@ export async function probePhylaxTranscriptionProvider({
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
+      const body = (await response.text().catch(() => "")).slice(0, 400);
       return {
         ok: false,
         provider,
         model: selectedModel,
         message: failureMessage(provider, response.status),
+        reason: classifyProviderFailure(response.status, parseProviderErrorBody(body).code, body),
+        httpStatus: response.status,
       };
     }
     if (provider === "groq") {
@@ -122,6 +138,7 @@ export async function probePhylaxTranscriptionProvider({
           provider,
           model: selectedModel,
           message: `Groq accepted the key but ${GROQ_STT_MODEL} is not available to it`,
+          reason: "model_unavailable",
         };
       }
     }
@@ -137,6 +154,7 @@ export async function probePhylaxTranscriptionProvider({
           model: selectedModel,
           message:
             "OpenRouter accepted the key but its configured limit has no remaining credit",
+          reason: "provider_credit_exhausted",
         };
       }
       if (!openRouterCatalog || openRouterCatalog.fallback) {
@@ -146,6 +164,7 @@ export async function probePhylaxTranscriptionProvider({
           model: selectedModel,
           message:
             "OpenRouter accepted the key, but live transcription model availability could not be verified",
+          reason: "catalog_unverified",
         };
       }
       if (!openRouterCatalog.models.some((candidate) => candidate.id === selectedModel)) {
@@ -154,6 +173,7 @@ export async function probePhylaxTranscriptionProvider({
           provider,
           model: selectedModel,
           message: `OpenRouter accepted the key, but ${selectedModel} is not in its live transcription catalog`,
+          reason: "model_unavailable",
         };
       }
     }
@@ -173,6 +193,7 @@ export async function probePhylaxTranscriptionProvider({
       provider,
       model: selectedModel,
       message: `${provider} ${detail}; no settings were changed`,
+      reason: classifyThrownError(error),
     };
   }
 }

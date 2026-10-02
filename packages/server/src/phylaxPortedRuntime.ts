@@ -16,6 +16,7 @@ import {
   type PhylaxInboundReceipt,
   type PhylaxTenantDelivery,
   type PhylaxStagedVoice,
+  type PhylaxTranscriptionFailure,
   type PhylaxTranscriptionReceipt,
 } from "./phylaxChannels.js";
 import { probeAudioDurationSeconds } from "./transcribe.js";
@@ -40,17 +41,157 @@ function normalizedWhatsAppSenderTimestamp(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-function safeVoiceTranscriptionFailure(code: string | null | undefined): string {
-  switch (code?.trim().toLowerCase()) {
+/** Provider-credit notification throttle: one owner ping per reason per tenant per window. */
+export const TRANSCRIPTION_FAILURE_NOTIFY_COOLDOWN_MS = 6 * 60 * 60 * 1_000;
+
+export interface TranscriptionFailureEvent {
+  tenantId: string;
+  provider: string | null;
+  reason: string;
+  httpStatus: number | null;
+  providerCode: string | null;
+  attempts: number | null;
+  message: string;
+}
+
+function transcriptionProviderLabel(provider: string | null | undefined): string {
+  switch (provider?.trim().toLowerCase()) {
+    case "openrouter":
+      return "OpenRouter";
+    case "groq":
+      return "Groq";
+    case "openai":
+      return "OpenAI";
+    case "local":
+    case "whisper.cpp":
+      return "local whisper";
+    default:
+      return "transcription provider";
+  }
+}
+
+/** Short, stable user-facing code per failure reason. */
+export function transcriptionFailureCode(reason: string | null | undefined): string {
+  switch (reason?.trim().toLowerCase()) {
+    case "provider_credit_exhausted":
+      return "ZT-402";
+    case "provider_auth_failed":
+      return "ZT-401";
+    case "provider_rate_limited":
+      return "ZT-429";
+    case "provider_unavailable":
+      return "ZT-5XX";
+    case "network_error":
+      return "ZT-NET";
+    case "timeout":
+      return "ZT-TIMEOUT";
     case "no_speech":
-      return "⚠️ Zenod could not find speech in that voice note. Please try again.";
+      return "ZT-SPEECH";
+    case "disabled":
+      return "ZT-OFF";
+    case "not_configured":
+      return "ZT-KEY";
+    default:
+      return "ZT-500";
+  }
+}
+
+/**
+ * Bounded, secret-free user copy for a transcription failure. Provider credit
+ * and Phylax allowance credit are deliberately distinct: this is ZT-402 (the
+ * tenant's provider account), never the channel-allowance notice.
+ */
+export function safeVoiceTranscriptionFailure(
+  failure: PhylaxTranscriptionFailure | null | undefined,
+  context: { tenantOwnedKey?: boolean } = {},
+): string {
+  const reason = (failure?.reason ?? failure?.code ?? "unavailable").trim().toLowerCase();
+  const tenantKey = context.tenantOwnedKey !== false;
+  const provider = transcriptionProviderLabel(failure?.provider);
+  const ownerCopy = tenantKey ? `your ${provider} key/account` : `the platform ${provider} account`;
+  const code = transcriptionFailureCode(reason);
+  switch (reason) {
+    case "provider_credit_exhausted":
+      return `⚠️ Voice transcription failed (code ${code} · transcription credit exhausted). ${ownerCopy} has no remaining credit — add credits under Phylax settings. Zenod has been notified.`;
+    case "provider_auth_failed":
+      return `⚠️ Voice transcription failed (code ${code} · provider key rejected). ${tenantKey ? `your ${provider} key` : `the platform ${provider} key`} is invalid or revoked — update it under Phylax settings. Zenod has been notified.`;
+    case "provider_rate_limited":
+      return `⚠️ Voice transcription failed (code ${code} · provider rate limited). Please try again in a few minutes.`;
+    case "network_error":
+      return `⚠️ Voice transcription failed (code ${code} · network error reaching the transcription provider). Please try again.`;
+    case "provider_unavailable":
+      return `⚠️ Voice transcription failed (code ${code} · transcription provider is temporarily down). Please try again later.`;
     case "timeout":
       return "⚠️ Zenod could not finish transcribing that voice note. Please try a shorter note or try again.";
+    case "no_speech":
+      return "⚠️ Zenod could not find speech in that voice note. Please try again.";
     case "disabled":
+      return "⚠️ Voice transcription is turned off (code ZT-OFF). Turn it on under Phylax settings.";
     case "not_configured":
-    case "unavailable":
+      return "⚠️ Voice transcription has no provider key configured (code ZT-KEY). Add one under Phylax settings.";
     default:
       return "⚠️ Voice transcription is unavailable right now. Please try again later.";
+  }
+}
+
+/** Concise owner/admin notice, distinct from the customer copy. */
+export function transcriptionOwnerNotice(event: TranscriptionFailureEvent): string {
+  const provider = transcriptionProviderLabel(event.provider);
+  if (event.reason === "provider_auth_failed") {
+    return `⚠️ Phylax transcription is failing: the ${provider} key was rejected (ZT-401). Update it under Phylax settings.`;
+  }
+  return `⚠️ Phylax transcription is failing: the ${provider} key/account has no remaining credit (ZT-402). Add credits under Phylax settings.`;
+}
+
+export interface TranscriptionFailureObservation {
+  tenantId: string;
+  failure: PhylaxTranscriptionFailure;
+}
+
+/**
+ * Emits the structured operator log line for every failure and throttles the
+ * owner notification to once per reason per tenant per window (default 6h).
+ * Injectable clock/adapter keep it unit-testable without timers or channels.
+ */
+export class TranscriptionFailureNotifier {
+  private readonly notifiedAt = new Map<string, number>();
+
+  constructor(
+    private readonly notify?: (event: TranscriptionFailureEvent) => void | Promise<void>,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  observe({ tenantId, failure }: TranscriptionFailureObservation): TranscriptionFailureEvent {
+    const reason = (failure.reason ?? failure.code ?? "unknown").trim().toLowerCase();
+    const event: TranscriptionFailureEvent = {
+      tenantId,
+      provider: failure.provider ?? null,
+      reason,
+      httpStatus: failure.http_status ?? null,
+      providerCode: failure.provider_code ?? null,
+      attempts: failure.attempts ?? null,
+      message: failure.message,
+    };
+    console.error(JSON.stringify({
+      event: "transcription.failed",
+      tenant_id: event.tenantId,
+      provider: event.provider,
+      reason: event.reason,
+      http_status: event.httpStatus,
+      provider_code: event.providerCode,
+      attempts: event.attempts,
+    }));
+    if (reason !== "provider_credit_exhausted" && reason !== "provider_auth_failed") return event;
+    const key = `${tenantId}:${reason}`;
+    const last = this.notifiedAt.get(key);
+    if (last !== undefined && this.now() - last < TRANSCRIPTION_FAILURE_NOTIFY_COOLDOWN_MS) return event;
+    this.notifiedAt.set(key, this.now());
+    try {
+      void this.notify?.(event);
+    } catch (error) {
+      console.error("[phylax] transcription failure notification failed:", error);
+    }
+    return event;
   }
 }
 
@@ -665,9 +806,22 @@ export class PhylaxPortedRuntime {
               this.completeVoiceTranscriptionUsage?.(usageClaim, false);
               usageSettled = true;
             }
+            const failure: PhylaxTranscriptionFailure = transcription.transcription_failed ?? {
+              code: "unavailable",
+              reason: "unknown",
+              message: "transcription returned empty text",
+            };
             this.whatsappStore.queueVoiceFailureReply(
               job.providerMessageId,
-              safeVoiceTranscriptionFailure(transcription.transcription_failed?.code),
+              safeVoiceTranscriptionFailure(failure),
+              Date.now(),
+              {
+                reason: failure.reason ?? failure.code,
+                provider: failure.provider ?? null,
+                httpStatus: failure.http_status ?? null,
+                providerCode: failure.provider_code ?? null,
+                message: failure.message,
+              },
             );
             await this.whatsapp.drainMediaRecovery();
             continue;

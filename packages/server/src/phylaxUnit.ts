@@ -56,8 +56,14 @@ import {
   registerPhylaxChannelTools,
   type PhylaxFixedProductAdapter,
   type PhylaxPortedChannel,
+  type PhylaxTranscriptionFailure,
 } from "./phylaxChannels.js";
-import { mountPhylaxAdminChannelRoutes, PhylaxPortedRuntime } from "./phylaxPortedRuntime.js";
+import {
+  mountPhylaxAdminChannelRoutes,
+  PhylaxPortedRuntime,
+  TranscriptionFailureNotifier,
+  transcriptionOwnerNotice,
+} from "./phylaxPortedRuntime.js";
 import {
   effectivePhylaxTurnBindings,
   defaultPhylaxTurnBindings,
@@ -193,6 +199,19 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       return status === "recorded" || status === "duplicate" ? status : "pending";
     },
   );
+  let runtimeRef: PhylaxPortedRuntime | null = null;
+  const transcriptionFailureNotifier = new TranscriptionFailureNotifier((event) => {
+    const tenant = tenantSettings.get(event.tenantId);
+    const notice = transcriptionOwnerNotice(event);
+    const failures: Array<Promise<unknown>> = [];
+    if (tenant.notificationPrefs.whatsapp && tenant.verified && tenant.phoneNumber) {
+      failures.push(runtimeRef?.whatsapp.sendText(tenant.phoneNumber, notice, undefined, event.tenantId) ?? Promise.resolve());
+    }
+    if (tenant.notificationPrefs.telegram && tenant.telegramBinding) {
+      failures.push(runtimeRef?.telegram.sendText(tenant.telegramBinding, notice, event.tenantId) ?? Promise.resolve());
+    }
+    return Promise.allSettled(failures).then(() => undefined);
+  });
   const organ = createTenantOrgan(
     storage.dataDir,
     tenantSettings,
@@ -202,6 +221,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     usageMeter,
     compatibilityMigration,
     options.fixedProductAdapter,
+    (observation) => transcriptionFailureNotifier.observe(observation),
   );
   const runtime = new PhylaxPortedRuntime(storage.dataDir, organ, env, {
     verifyInbound({ channel, sender, username, text }) {
@@ -250,6 +270,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       return usageMeter.recoverDeliveryReceipt(input);
     },
   });
+  runtimeRef = runtime;
   usageMeter.setWorkReadyCallback(() => runtime.wakeAllowanceWork());
   const bootLocalModel = env.PHYLAX_LOCAL_WHISPER_MODEL?.trim();
   if (env.PHYLAX_PREWARM_LOCAL_MODEL !== "0") {
@@ -424,6 +445,9 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
     const token = account ? customer.tokenVault.get(account.account_id) : null;
     return c.json({
       settings: tenantSettings.view(tenantId),
+      // Durable last transcription failure so settings/status can show e.g.
+      // "OpenRouter credit exhausted — add credits" without reading logs.
+      transcriptionFailure: runtime.whatsappStore.latestVoiceFailure(tenantId),
       phylaxNumber: runtime.whatsapp.status().linkedNumber,
       mcp: token
         ? {
@@ -906,6 +930,10 @@ function createTenantOrgan(
   usageMeter: PhylaxUsageMeter,
   compatibilityMigration: PhylaxCompatibilityMigration,
   fixedProductAdapter?: PhylaxFixedProductAdapter,
+  onTranscriptionFailure?: (observation: {
+    tenantId: string;
+    failure: PhylaxTranscriptionFailure;
+  }) => void,
 ): PhylaxChannelsOrgan {
   const configuredDeadline = Number(env.PHYLAX_TRANSCRIPTION_DEADLINE_MS ?? 60_000);
   const configuredVoiceJobDeadline = Number(
@@ -966,16 +994,24 @@ function createTenantOrgan(
       async transcribe(input) {
         const transcription = tenantSettings.transcriptionConfig(input.tenantId);
         if (!transcription.enabled) {
-          return { transcription_failed: { code: "disabled", message: "tenant transcription is disabled" } };
+          const disabled: PhylaxTranscriptionFailure = {
+            code: "disabled",
+            reason: "disabled",
+            message: "tenant transcription is disabled",
+          };
+          onTranscriptionFailure?.({ tenantId: input.tenantId, failure: disabled });
+          return { transcription_failed: disabled };
         }
         const configurationError = phylaxTranscriptionConfigurationError(transcription);
         if (configurationError) {
-          return {
-            transcription_failed: {
-              code: "not_configured",
-              message: configurationError,
-            },
+          const unconfigured: PhylaxTranscriptionFailure = {
+            code: "not_configured",
+            reason: "not_configured",
+            message: configurationError,
+            ...(transcription.provider ? { provider: transcription.provider } : {}),
           };
+          onTranscriptionFailure?.({ tenantId: input.tenantId, failure: unconfigured });
+          return { transcription_failed: unconfigured };
         }
         const result = await transcribeAudio(
           Buffer.from(input.bytes),
@@ -983,13 +1019,25 @@ function createTenantOrgan(
           phylaxTranscriptionOptions(transcription, env, input.signal),
         );
         if (!result.success || !result.transcript?.trim()) {
+          const reason = input.signal.aborted
+            ? "timeout"
+            : result.noSpeech
+              ? "no_speech"
+              : result.failureReason ?? "unavailable";
+          const failure: PhylaxTranscriptionFailure = {
+            code: reason,
+            reason,
+            message: result.error ?? "transcription failed",
+            ...(result.httpStatus !== undefined ? { http_status: result.httpStatus } : {}),
+            ...(result.providerCode ? { provider_code: result.providerCode } : {}),
+            ...(result.provider ? { provider: transcriptionProviderId(result.provider) } : {}),
+            ...(result.attempts !== undefined ? { attempts: result.attempts } : {}),
+          };
+          onTranscriptionFailure?.({ tenantId: input.tenantId, failure });
           return {
             ...(result.provider ? { transcription_source: result.provider } : {}),
             ...(result.timing ? { transcription_timing: result.timing } : {}),
-            transcription_failed: {
-              code: input.signal.aborted ? "timeout" : result.noSpeech ? "no_speech" : "unavailable",
-              message: result.error ?? "transcription failed",
-            },
+            transcription_failed: failure,
           };
         }
         return {
@@ -1038,6 +1086,12 @@ export function resolvePhylaxRuntimeRoute(
       : effectivePhylaxTurnBindings(tenantSettings.get(route.tenantId)),
   };
 }
+/** "openrouter openai/whisper…" -> "openrouter"; used for stable failure copy. */
+export function transcriptionProviderId(provider: string | undefined): string | undefined {
+  const first = provider?.trim().split(/\s+/)[0]?.toLowerCase();
+  return first || undefined;
+}
+
 export function phylaxTranscriptionConfigurationError(transcription: {
   provider: "local" | "groq" | "openai" | "openrouter";
   model?: string | null;
