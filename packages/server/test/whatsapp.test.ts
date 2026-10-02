@@ -1219,7 +1219,11 @@ describe("WhatsAppGateway", () => {
     try {
       await gateway.pair();
       await gateway.handleEvent(event);
-      expect(socket.sent).toEqual([]);
+      expect(socket.sent.map((message) => message.text)).toEqual([
+        expect.stringContaining("Your Phylax credit has run out"),
+      ]);
+      await gateway.handleEvent({ ...event, messageId: `${event.messageId}-again` });
+      expect(socket.sent).toHaveLength(1);
       expect(store.recoverableReceiptIntent("alpha", event.messageId)).toMatchObject({
         bodyText: "Saved the launch note.",
         state: "pending",
@@ -1243,14 +1247,14 @@ describe("WhatsAppGateway", () => {
 
       deliveryAllowed = true;
       await expect(gateway.recoverPortedReceipt("alpha", event.messageId))
-        .resolves.toBe("sent_1");
-      expect(socket.sent.map((message) => message.text)).toEqual(["Saved the launch note."]);
+        .resolves.toBe("sent_2");
+      expect(socket.sent.map((message) => message.text).slice(1)).toEqual(["Saved the launch note."]);
       expect(socket.sent.map((message) => message.text).join("\n"))
         .not.toContain("Zenod could not process");
       expect(store.channelAudit(event.messageId)).toMatchObject({
         lifecycleState: "replied",
         outboundStatus: "recovery_sent",
-        outboundProviderId: "sent_1",
+        outboundProviderId: "sent_2",
       });
     } finally {
       consoleError.mockRestore();

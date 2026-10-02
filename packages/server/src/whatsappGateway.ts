@@ -46,6 +46,11 @@ import {
 import { PhylaxUsagePausedError, type PhylaxUsageClaim } from "./phylaxUsageMeter.js";
 import { linkifyGithubRefs } from "./githubLinks.js";
 
+const NO_CREDIT_NOTICE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const NO_CREDIT_NOTICE_TEXT =
+  "⚠️ Your Phylax credit has run out, so I can't process or reply to messages right now. "
+  + "Your message was received and I'll reply once credit is available again.";
+
 // Soak finding #1 / C-26 — how the Console must treat a shared image. Its described
 // contents are evidence/context, NEVER a list of instructions to decompose. A real
 // instruction lives only in the caption; a captionless (or chit-chat) image is filed and
@@ -650,6 +655,7 @@ export class WhatsAppGateway {
   private readonly lifecycleFailures: unknown[] = [];
   private readonly activeSocketWork = new Set<Promise<unknown>>();
   private readonly outboundIntentSends = new Map<string, Promise<{ sentMessageId: string; raw?: unknown }>>();
+  private readonly noCreditNoticeAt = new Map<string, number>();
   private readonly waiters = new Set<() => void>();
   private lifecyclePhase: WhatsAppLifecyclePhase = "idle";
   private lastTransitionAt = Date.now();
@@ -1839,6 +1845,7 @@ export class WhatsAppGateway {
           totalLifecycleMs: Date.now() - lifecycleStartedAt,
         });
         console.error(`[whatsapp] ported delivery paused for ${event.messageId}: ${message}`);
+        await this.sendNoCreditNotice(event);
         return;
       }
       // The Zenod operation failed, but a provider-accepted failure notice is a
@@ -2241,6 +2248,23 @@ export class WhatsAppGateway {
   private async sendBackgroundReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
     await this.sendReply(event, text, status);
     await this.options.recordAssistantMessage?.(event, text);
+  }
+
+  // Deliberately unmetered and not an outbound intent: the paused terminal reply
+  // must stay the only recoverable receipt for this message. Throttled per chat.
+  private async sendNoCreditNotice(event: WhatsAppInboundEvent): Promise<void> {
+    const socket = this.socket;
+    if (!socket) return;
+    const recipientJid = this.recipientJid(event);
+    const last = this.noCreditNoticeAt.get(recipientJid) ?? 0;
+    if (Date.now() - last < NO_CREDIT_NOTICE_INTERVAL_MS) return;
+    this.noCreditNoticeAt.set(recipientJid, Date.now());
+    try {
+      await socket.sendMessage(recipientJid, { text: NO_CREDIT_NOTICE_TEXT });
+    } catch (error) {
+      this.noCreditNoticeAt.delete(recipientJid);
+      console.error("[whatsapp] no-credit notice failed:", error);
+    }
   }
 
   private async sendReply(event: WhatsAppInboundEvent, text: string, status: string): Promise<void> {
