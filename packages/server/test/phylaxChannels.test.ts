@@ -16,9 +16,16 @@ import {
   phylaxWhatsAppPaths,
   registerPhylaxChannelTools,
   type PhylaxDownstreamCall,
+  type PhylaxTranscriptionFailure,
 } from "../src/phylaxChannels.js";
 import type { PeerToolResult } from "../src/peerClient.js";
-import { PhylaxPortedRuntime } from "../src/phylaxPortedRuntime.js";
+import {
+  PhylaxPortedRuntime,
+  safeVoiceTranscriptionFailure,
+  TRANSCRIPTION_FAILURE_NOTIFY_COOLDOWN_MS,
+  TranscriptionFailureNotifier,
+  type TranscriptionFailureEvent,
+} from "../src/phylaxPortedRuntime.js";
 import { defaultPhylaxTurnBindings, PhylaxTenantSettingsStore } from "../src/phylaxTenantSettings.js";
 import {
   phylaxTranscriptionConfigurationError,
@@ -4957,5 +4964,208 @@ describe("ported gateway integration", () => {
     expect(after.mediaCoalescing(event.messageId)).toMatchObject({ state: "completed" });
     expect(after.channelAudit(event.messageId)).toMatchObject({ lifecycleState: "replied", outboundProviderId: "wa-sent-before-crash" });
     after.close();
+  });
+});
+
+describe("Phylax typed transcription failure codes", () => {
+  it("maps each closed reason to distinct, secret-free user copy with a stable code", () => {
+    const cases: Array<[string, string]> = [
+      ["provider_credit_exhausted", "ZT-402"],
+      ["provider_auth_failed", "ZT-401"],
+      ["provider_rate_limited", "ZT-429"],
+      ["network_error", "ZT-NET"],
+      ["provider_unavailable", "ZT-5XX"],
+      ["disabled", "ZT-OFF"],
+      ["not_configured", "ZT-KEY"],
+    ];
+    for (const [reason, code] of cases) {
+      const copy = safeVoiceTranscriptionFailure({
+        code: reason,
+        reason,
+        message: "provider said no",
+        provider: "openrouter",
+      });
+      expect(copy).toContain(code);
+      expect(copy).not.toContain("provider said no");
+    }
+    expect(safeVoiceTranscriptionFailure({
+      code: "provider_credit_exhausted",
+      reason: "provider_credit_exhausted",
+      message: "no credit",
+      provider: "openrouter",
+    }, { tenantOwnedKey: false })).toContain("platform OpenRouter");
+    expect(safeVoiceTranscriptionFailure({
+      code: "provider_credit_exhausted",
+      reason: "provider_credit_exhausted",
+      message: "no credit",
+      provider: "openrouter",
+    })).toContain("your OpenRouter key/account");
+    // Allowance-credit copy is a different message with no ZT code.
+    expect(safeVoiceTranscriptionFailure(undefined)).not.toContain("ZT-402");
+  });
+
+  it("notifies the key owner once per reason per cooldown window and never for rate limits", () => {
+    const notified: TranscriptionFailureEvent[] = [];
+    let now = 1_000;
+    const notifier = new TranscriptionFailureNotifier((event) => {
+      notified.push(event);
+    }, () => now);
+    const credit: PhylaxTranscriptionFailure = {
+      code: "provider_credit_exhausted",
+      reason: "provider_credit_exhausted",
+      message: "requires at least $0.50 in balance",
+      provider: "openrouter",
+      http_status: 402,
+      provider_code: "insufficient_quota",
+    };
+    notifier.observe({ tenantId: "alpha", failure: credit });
+    notifier.observe({ tenantId: "alpha", failure: credit });
+    expect(notified).toHaveLength(1);
+    now += TRANSCRIPTION_FAILURE_NOTIFY_COOLDOWN_MS;
+    notifier.observe({ tenantId: "alpha", failure: credit });
+    expect(notified).toHaveLength(2);
+    notifier.observe({
+      tenantId: "alpha",
+      failure: { ...credit, code: "provider_rate_limited", reason: "provider_rate_limited" },
+    });
+    expect(notified).toHaveLength(2);
+  });
+
+  it("persists structured failure detail on the voice job and replies with ZT-402", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-typed-failure-"));
+    dirs.push(dataDir);
+    const sent: Array<{ jid: string; text: string }> = [];
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/token/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          return {
+            transcription_failed: {
+              code: "provider_credit_exhausted",
+              reason: "provider_credit_exhausted",
+              message: "This request requires at least $0.50 in balance for audio",
+              http_status: 402,
+              provider_code: "insufficient_quota",
+              provider: "openrouter",
+              attempts: 1,
+            },
+          };
+        },
+      },
+      async callDownstream() {
+        return { content: [{ type: "text", text: "should not run" }] };
+      },
+    });
+    const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+      probeVoiceDuration: async () => 12,
+      whatsappSocketFactory: async () => ({
+        ev: { on() {} },
+        user: { id: "34999999999@s.whatsapp.net" },
+        async sendMessage(jid, content) {
+          sent.push({ jid, text: content.text });
+          return { key: { id: `sent-${sent.length}` } };
+        },
+      }),
+    });
+    runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+    await runtime.whatsapp.start();
+    try {
+      await runtime.whatsapp.handleEvent({
+        messageId: "typed-credit",
+        chatId: "34611111111@s.whatsapp.net",
+        senderId: "34611111111@s.whatsapp.net",
+        senderName: "Alpha",
+        chatName: "Alpha",
+        isGroup: false,
+        timestamp: 1,
+        body: "",
+        hasMedia: true,
+        mediaType: "ptt",
+        mimeType: "audio/ogg",
+        fileName: null,
+        mediaRaw: { testBytes: "typed-credit" },
+      });
+      await vi.waitFor(() => expect(runtime.whatsappStore.voiceJob("typed-credit")?.state).toBe("failed"));
+      const job = runtime.whatsappStore.voiceJob("typed-credit")!;
+      expect(job).toMatchObject({
+        failureReason: "provider_credit_exhausted",
+        failureProvider: "openrouter",
+        failureHttpStatus: 402,
+        failureProviderCode: "insufficient_quota",
+      });
+      expect(job.errorText).toContain("ZT-402");
+      expect(job.errorText).not.toContain("sk-");
+      // The sanitized provider message is queryable from the receipt, no logs.
+      expect(job.transcription).toMatchObject({
+        transcription_failed: {
+          code: "provider_credit_exhausted",
+          message: "This request requires at least $0.50 in balance for audio",
+        },
+      });
+      expect(runtime.whatsappStore.latestVoiceFailure("alpha")).toMatchObject({
+        reason: "provider_credit_exhausted",
+        httpStatus: 402,
+      });
+      expect(sent.at(-1)?.text).toContain("ZT-402");
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  it("carries structured failure detail through the Telegram receive path", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-typed-telegram-"));
+    dirs.push(dataDir);
+    let captured: PhylaxDownstreamCall | null = null;
+    const organ = new PhylaxChannelsOrgan({
+      dataDir,
+      routes: { resolve: () => ({ tenantId: "alpha", downstreamUrl: "https://ring.test/mcp/alpha", downstreamToken: "token" }) },
+      artifactUrl: (tenantId, artifactId) => `https://phylax.zenod.dev/mcp/token/artifacts/${tenantId}/${artifactId}`,
+      transcriber: {
+        async transcribe() {
+          return {
+            transcription_failed: {
+              code: "provider_auth_failed",
+              reason: "provider_auth_failed",
+              message: "Invalid API Key",
+              http_status: 401,
+              provider_code: "invalid_api_key",
+              provider: "groq",
+            },
+          };
+        },
+      },
+      async callDownstream(call) {
+        captured = call;
+        return { content: [{ type: "text", text: "ok" }] };
+      },
+    });
+    try {
+      const receipt = await organ.receive({
+        channel: "telegram",
+        sender: "42",
+        chatId: "42",
+        messageId: "tg-typed-failure",
+        media: {
+          bytes: Buffer.from("telegram-audio"),
+          mimeType: "audio/ogg",
+          fileName: "v.ogg",
+          isVoiceNote: true,
+          durationSeconds: 5,
+        },
+      });
+      expect(receipt.handoff.transcription_failed).toMatchObject({
+        code: "provider_auth_failed",
+        reason: "provider_auth_failed",
+        http_status: 401,
+        provider_code: "invalid_api_key",
+        provider: "groq",
+      });
+      expect(captured).not.toBeNull();
+      expect(JSON.stringify(captured)).not.toContain("sk-");
+    } finally {
+      await organ.close();
+    }
   });
 });

@@ -59,6 +59,7 @@ describe("transcribeChannelAudio", () => {
     expect(result).toEqual({
       success: false,
       error: "no cloud transcription provider is configured for this channel",
+      failureReason: "not_configured",
     });
   });
 });
