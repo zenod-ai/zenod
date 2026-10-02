@@ -511,6 +511,19 @@ async function transcribeWithOpenAI(
   }
 }
 
+/** Retry only when the request never got an HTTP response (egress blips surface as "fetch failed"). */
+async function fetchRetryingNetworkErrors(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      if (attempt >= attempts || init.signal?.aborted) throw err;
+      console.warn(`[transcribe] network error, retrying (${attempt}/${attempts - 1}): ${(err as Error).message}`);
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
+    }
+  }
+}
+
 async function transcribeWithOpenRouter(
   data: Buffer,
   filename: string,
@@ -539,7 +552,7 @@ async function transcribeWithOpenRouter(
     };
     if (LANGUAGE !== "auto") body.language = LANGUAGE;
     const timeout = AbortSignal.timeout(300_000);
-    const response = await fetch(OPENROUTER_STT_URL, {
+    const response = await fetchRetryingNetworkErrors(OPENROUTER_STT_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
