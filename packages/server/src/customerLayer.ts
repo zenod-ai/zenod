@@ -501,7 +501,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           const refreshed = await refreshCurrentTenantKeyAuthority(account);
           if (refreshed) refreshedAccountIds.push(account.account_id);
           else failedAccountIds.push(account.account_id);
-        } catch {
+        } catch (error) {
+          console.error(`[customer] current-key refresh failed for account ${account.account_id}:`, error);
           failedAccountIds.push(account.account_id);
         }
         continue;

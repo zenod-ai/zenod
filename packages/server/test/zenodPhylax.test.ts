@@ -79,6 +79,7 @@ function config(patch: Partial<ZenodPhylaxConfig> = {}): ZenodPhylaxConfig {
     downstreamUrl: "https://cloud.zenod.dev/mcp",
     warnPercent: 80,
     reconcileIntervalMs: 3_600_000,
+    compedAccountIds: new Set(),
     ...patch,
   };
 }
@@ -576,6 +577,33 @@ describe("Zenod Phylax product adapter", () => {
       startsAt: Date.parse(customer.current_period_start!),
       endsAt: Date.parse(customer.current_period_end!),
     })));
+    adapter.close();
+  });
+
+  it("gives a comped account one fixed long window regardless of its stale billing period", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zpf6-comped-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(
+      dataDir,
+      config({ compedAccountIds: new Set(["account-alpha"]) }),
+      remote,
+    );
+    adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
+    await adapter.setEntitlement(
+      account("alpha", {
+        stripe_subscription_id: null,
+        current_period_start: "2026-09-01T00:00:00.000Z",
+        current_period_end: "2026-10-01T00:00:00.000Z",
+      }),
+      true,
+    );
+    await adapter.setEntitlement(account("beta", { current_period_end: "2026-09-27T00:00:00.000Z" }), true);
+    const grants = remote.calls.filter((call) => call.tool === "phylax_management_v1_credit_grant");
+    expect(grants.map((call) => ({ periodId: call.args.periodId, endsAt: call.args.endsAt }))).toEqual([
+      { periodId: "zenod:account-alpha:comped", endsAt: Date.UTC(2036, 0, 1) },
+      { periodId: "zenod:sub-beta:2026-09-27T00:00:00.000Z", endsAt: Date.parse("2026-09-27T00:00:00.000Z") },
+    ]);
     adapter.close();
   });
 

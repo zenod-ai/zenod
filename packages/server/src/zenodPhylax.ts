@@ -41,6 +41,7 @@ export interface ZenodPhylaxConfig {
   downstreamUrl: string;
   warnPercent: number;
   reconcileIntervalMs: number;
+  compedAccountIds: ReadonlySet<string>;
 }
 
 export interface ZenodPhylaxAllowance {
@@ -219,6 +220,12 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
     ),
     warnPercent,
     reconcileIntervalMs,
+    compedAccountIds: new Set(
+      (env.ZENOD_PHYLAX_COMPED_ACCOUNT_IDS ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
   };
 }
 
@@ -233,11 +240,22 @@ function operationId(kind: string, values: unknown[]): string {
     .slice(0, 32)}`;
 }
 
-function periodFor(account: CustomerAccount): {
+// Comped accounts have no Stripe period to follow, so they get one fixed long window.
+const COMPED_PERIOD_STARTS_AT = Date.UTC(2026, 0, 1);
+const COMPED_PERIOD_ENDS_AT = Date.UTC(2036, 0, 1);
+
+function periodFor(account: CustomerAccount, comped: ReadonlySet<string>): {
   id: string;
   startsAt: number;
   endsAt: number;
 } | null {
+  if (comped.has(account.account_id)) {
+    return {
+      id: `zenod:${account.account_id}:comped`,
+      startsAt: COMPED_PERIOD_STARTS_AT,
+      endsAt: COMPED_PERIOD_ENDS_AT,
+    };
+  }
   if (!account.current_period_start || !account.current_period_end) return null;
   const startsAt = Date.parse(account.current_period_start);
   const endsAt = Date.parse(account.current_period_end);
@@ -614,7 +632,7 @@ export class ZenodPhylaxAdapter {
   private recordEntitlement(account: CustomerAccount, entitled: boolean): string | null {
     if (!this.config.enabled || !account.tenant_id) return null;
     const row = this.ensureRow(account);
-    const period = periodFor(account);
+    const period = periodFor(account, this.config.compedAccountIds);
     const currentAllowance = this.storedAllowance(row);
     const outstandingUnits = currentAllowance?.allocatedUnits ?? row.allocation_units;
     const allocationUnits = entitled && period
