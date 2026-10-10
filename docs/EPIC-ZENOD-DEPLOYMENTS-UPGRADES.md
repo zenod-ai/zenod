@@ -1,7 +1,7 @@
 # Zenod deployments and upgrades
 
 Status: current — bounded production upgrade verified; deployment scope enforced
-Updated: 2026-09-07
+Updated: 2026-10-10
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
 Spine ID: ZDU
@@ -70,6 +70,18 @@ For every upgrade:
 If a future candidate remains queued, first cancel that exact pending candidate request through the supported queue operation after rechecking its application and waiting state, then invoke rollback. Otherwise an already queued upgrade could run after the undo. Do not cancel unrelated jobs.
 
 Rollback changes code, not data. It retains captures written after deployment. Restoring an older data archive can erase later writes and needs a separately scoped recovery decision; never silently restore over the live volume.
+
+## Automatic Zenod production roll (2026-10-10, PR #964)
+
+Owner decision (root spine D27): a push to `main` re-pins and redeploys Zenod production without a manual step. `publish.yml` builds the images, then its `deploy` job runs `scripts/deploy-fleet.sh` with `IMAGE=ghcr.io/zenod-ai/zenod:sha-<short>` through the Dokploy API (`application.update` + `application.deploy`).
+
+- **Auto-deployed:** only the Dokploy app named in `DEPLOY_APPS` (default `zenod-mt`, project `zenod`, environment `production`; `cloud.zenod.dev`). The script refuses any app whose current image is not `ghcr.io/zenod-ai/zenod`.
+- **Never auto-deployed:** the dedicated `ghcr.io/zenod-ai/phylax` image (published only; the private `phylax` app, `urbFsgl6eImbQ4MTIZl5N`, stays a deliberate manual deploy "when appropriate"), Ring, Herald, Epaminon, Outbound, Callisthenes, x-mcp and any other independent service. Do not widen `DEPLOY_APPS` to include them.
+- **Activation:** repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` (owner adds them). With either unset the job skips cleanly (exit 0). `DRY_RUN=1` prints the planned change without mutating.
+- **Success check:** the script waits until `VERIFY_URL` (default `https://cloud.zenod.dev/api/health`) reports the new sha, since Dokploy can accept a deploy and leave it queued (decision 9 below); Dokploy `error` or a timeout fails the job. Runs are serialized (`deploy-zenod-production` concurrency group).
+- **Rollback:** pins are immutable, so re-pin the previous sha. Each run logs `zenod-mt: <previous> -> <new>`; to undo, run the script locally with `IMAGE=ghcr.io/zenod-ai/zenod:sha-<previous> VERIFY_SHA=<previous>` (or set the image in Dokploy and redeploy). The next push to `main` rolls forward again. Code rollback only; data is not restored.
+- **Downtime and safety:** this path does not take the recoverable backup or quiesce step of the manual helper above, so it fits code-only changes with unchanged storage contracts. A storage/migration change still follows the manual procedure. The image defines no `HEALTHCHECK`, and `zenod-mt` has a single `/data` volume (SQLite) with stop-first replacement (`scripts/zmr-production-image.py` deliberately avoids start-first), so expect a restart blip of seconds, accepted while the owner is the only user. Zero-downtime needs the staging/prod split and a healthcheck (root spine D28, planned).
+- Merged code is not deployed proof: confirm the live sha at `/api/health` and record it.
 
 ## Backup policy
 

@@ -165,3 +165,38 @@ jobs:
           build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Roll hosted ZENOD PRODUCTION (Dokploy app zenod-mt, cloud.zenod.dev) to the sha
+  # we just published, so a merge to main actually deploys instead of leaving the
+  # docker-source app pinned to a stale immutable tag.
+  #
+  # Boundary (AGENTS.md "Production deployment boundary", 2026-09-07): Zenod
+  # production only. The dedicated Phylax image above is published but NEVER rolled
+  # here, and independent agents (Ring, Herald, Epaminon, ...) are not touched; the
+  # script rolls only the apps in DEPLOY_APPS (default zenod-mt).
+  #
+  # Clean skip until the DOKPLOY_API_KEY / DOKPLOY_API_BASE secrets exist, so this
+  # is safe to merge first. Rollback = re-pin the previous sha (scripts/deploy-fleet.sh).
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # One production roll at a time. A newer push replaces a still-pending run; a
+    # roll already in flight is never cancelled mid-deploy.
+    concurrency:
+      group: deploy-zenod-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Roll Zenod production to the freshly published sha
+        env:
+          DOKPLOY_API_BASE: ${{ secrets.DOKPLOY_API_BASE }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+        run: |
+          # metadata-action's `type=sha,format=short` pins the 7-char short sha;
+          # match that here rather than the full 40-char commit.
+          export IMAGE="ghcr.io/zenod-ai/zenod:sha-${GITHUB_SHA::7}"
+          bash scripts/deploy-fleet.sh

@@ -11,7 +11,7 @@ Root spine: docs/EPIC-0-FOUNDATION-SPINE.md. Read its Current State and Operatin
 Precedence: user per-task instruction > this block > skill defaults. Details: skills/epic-spine/SKILL.md.
 <!-- epicspine:end -->
 Dispatch profile: mechanism: Claude Code `Agent` tool (background); model: `sonnet` (Sonnet 5.5); reasoning: inherited; isolation: worktree-first; parallelism: disjoint waves.
-Integration policy: main-direct via self-merged CI-gated PR (user never merges; production deploy stays a human gate).
+Integration policy: main-direct via self-merged CI-gated PR (user never merges; production deploy stays a human gate, except the owner-approved push-to-main roll of Zenod production only, root spine D27).
 Skill updates: manual (vendored copy; re-sync per `skills/epic-spine.SOURCE`).
 Local adaptation: rules 3–4 differ from the stock template by Jordi's decision (root spine D26); re-apply them after any `agents_block.py install`.
 

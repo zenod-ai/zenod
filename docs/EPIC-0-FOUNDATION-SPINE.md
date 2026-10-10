@@ -95,7 +95,7 @@ Always:
 - L-1 | any task beyond answering a question | the delivery manager dispatches a worker and never implements itself | Jordi's chosen operating model | confirmed 2026-10-10
 - L-2 | dispatching a worker | use the Claude Code `Agent` tool with `model: sonnet`, in the background, one task per worktree `../wt-<task>` | same subscription, no T3/OpenCode hop | confirmed 2026-10-10
 - L-3 | integrating worker output | verify diff and checks yourself, then merge via your own PR once `ci` is green; never admin-push `main` | protected main requires `ci` | confirmed 2026-10-10
-- L-4 | any push to `main` | treat it as image publish only; production deploy remains a separate human gate | publish.yml pushes GHCR images | confirmed 2026-10-10
+- L-4 | any push to `main` | it publishes GHCR images; once #964 is merged and its secrets exist (D27) it also auto-deploys Zenod production only, never Phylax or independent agents; before then, deploy stays a human gate | publish.yml pushes GHCR images; D27 | confirmed 2026-10-10, amended 2026-10-10
 
 Scoped index:
 - none yet
@@ -107,7 +107,8 @@ Last verified: 2026-09-17 Europe/Paris.
 Integration target: `main`
 Fresh base commit: `3b950253abd8e2422369839225740ca945f7b493` on `main` (2026-09-17 15:28 CEST). Live production runs source `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified directly against `https://cloud.zenod.dev/api/health` (2026-09-17). `main` is 4 commits ahead of the running build, and those 4 commits are documentation only — the M2 evaluation cost report and full report (`#1330`, `#1331`). Every runtime change is already live. There is no production divergence and no pending functional deploy.
 Active child spine: `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md` (ZMR) for the current memory thrust; `docs/EPIC-P-PHYLAX-SPRINT.md` remains the active delivery surface for the integrated-independent push and is not superseded. `docs/EPIC-ZENOD-LANDING-STORY.md` (ZLS) is the active child for the responsive landing-page story iteration and slide 09–10 production.
-Next action: hold the deployed M2 milestone stable and observe ordinary use. Route the bounded presentation follow-up (repetitive B10–B12 source/history excerpts) as a small ZMR ticket only if a measured incident justifies it. Do not treat the 31 undeployed `main` commits as a production change without a separate authorized deploy gate.
+Next action: hold the deployed M2 milestone stable and observe ordinary use. Route the bounded presentation follow-up (repetitive B10–B12 source/history excerpts) as a small ZMR ticket only if a measured incident justifies it. Do not treat the 31 undeployed `main` commits as a production change without a separate authorized deploy gate. Land #964 when `ci` is green; verify the first automatic roll against `https://cloud.zenod.dev/api/health` and record the deployed SHA.
+Auto-deploy: [PR #964](https://github.com/zenod-ai/zenod/pull/964) (`ci/fleet-auto-deploy`, rebased on `main` 2026-10-10, open, not merged) wires push-to-main to roll Zenod production (`zenod-mt`, `cloud.zenod.dev`) per D27. Inert until Jordi adds the repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE`; merged code is not deployed proof.
 Blockers: none for the completed M2 basic-memory milestone. Production deployment of newer `main`, real channel sends, live billing, public signup and destructive migrations remain named later human gates. Public signup stays closed.
 
 ## Execution Cursor
@@ -211,6 +212,8 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | D21 | 2026-08-27 | accepted | Treat tenant credentials and direct MCP tokens as durable data, never deployment state. | Code/image/config rollout must not rotate, migrate, reinterpret or replace customer tokens, Google credentials or channel sessions. The ZAL-22 rollout preserved them and proved the pre-existing direct MCP URL and Google/WhatsApp connections after both restarts. | n/a | [PR #1098](https://github.com/zenod-ai/zenod/pull/1098) and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md` | n/a |
 | D25 | 2026-09-17 | accepted | Verify live production via its health endpoint, not the spine's stored record. | Live production reported `22440b4` while the spine still said `620716f`; `main` `3b95025` is 4 documentation-only commits ahead, so there is no pending functional deploy. | n/a | `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md`, live health `https://cloud.zenod.dev/api/health` | Revisit if live health changes or a measured memory incident justifies a new deploy. |
 | D26 | 2026-10-10 | accepted | Adopt EpicSpine 2026.10.09 with a Claude-native dispatch profile: the delivery manager never implements; workers are background Claude Code `Agent` subagents on Sonnet 5.5 in their own worktree; the manager verifies and self-merges through a CI-gated PR. | Jordi's preferred way of working; same subscription, no T3/OpenCode hop; protected `main` requires the `ci` check, so a self-merged PR keeps CI without the user merging. | n/a | `AGENTS.md` EpicSpine block; `skills/epic-spine.SOURCE` @ `8c6eef8` | Revisit if Jordi changes the worker model or merge policy. |
+| D27 | 2026-10-10 | accepted | Push to `main` auto-deploys the Zenod production image; no manual re-pin. | Hosted apps are pinned to immutable `ghcr.io/zenod-ai/zenod:sha-<short>` tags, so nothing advances the pin after merge (after #963, `zenod-mt` stayed on a 10-day-old image); #964 wires it up. Scope stays inside the 2026-09-07 production deployment boundary: Zenod production only (`zenod-mt`, explicit allowlist), independent agents never auto-deployed, Phylax companion only when appropriate (not rolled by #964). Rollback = re-pin the previous immutable sha. Activation needs repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` (owner adds them). Merged code is not deployed proof; record the deployed SHA when verified. | Never auto-deploy anything outside the allowlist. | [PR #964](https://github.com/zenod-ai/zenod/pull/964); `AGENTS.md` Production deployment boundary; `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md` | Revisit at the staging/prod split (D28) or a second real user. |
+| D28 | 2026-10-10 | planned | Follow-up, not started: split staging and prod. | A `staging` app auto-follows `main`; `prod` moves only on an explicit promote that re-pins prod to the sha staging runs (one-line promote script); add a healthcheck for zero-downtime swaps before real users arrive. Today there is a single user (the owner), so a few seconds of redeploy blip is accepted. | n/a | D27 | Before the first real user, or when the redeploy blip matters. |
 
 ## Issue Ledger
 
@@ -244,6 +247,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | Alpha package and public promise | Jordi | Satisfied 2026-08-25 through the binding product/UI review | Approved: one €9/month plus VAT Zenod Hosted plan with managed usage and WhatsApp included; provider economics hidden; Phylax is the existing private Channels service; Ring absent from Zenod; MCP first-class; self-host remains free/BYO/Telegram. | Local implementation and validation inside this contract; production, billing, credentials, sessions, signup, and promotion remain separately gated. |
 | External promotion | Jordi | A Reddit/X/email draft is ready | Approve the exact final content and destination | Research, strategy, and drafts |
 | Voice-triggered execution authority | Jordi | The proposed execution child spine is ready to move beyond design | Approve the store+execute interaction, repo/spine confirmation rule, pricing posture, and mutation gates | Read-only design and local prototypes |
+| Zenod production auto-deploy activation | Jordi | #964 merged and `ci` green | Add repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` (no other input; nothing is deployed until then) | Merging #964 and all other work; the deploy job skips cleanly while the secrets are unset |
 
 ## Recovery And Takeover
 
@@ -296,6 +300,20 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 | 2026-07-09 | Public Pages deployment and visual QA | `3ab84fa` | GitHub Pages | Pages build returned `built`; live deck rendered 14 slides with working navigation, no console warnings/errors, no desktop overflow at 1280x720, and no horizontal mobile overflow at 390x844. | pass | https://alfablok.github.io/epicspine-skill/ |
 
 ## Handoff Journal
+
+### 2026-10-10 - Epic 0 worker - Push-to-main Zenod production auto-deploy (#964) narrowed and recorded
+
+Action: rebased PR #964 onto current `main` (kept the dedicated Phylax publish steps), narrowed its roll from open-ended discovery to an explicit allowlist (`DEPLOY_APPS`, default `zenod-mt`; refuses any app not on a `ghcr.io/zenod-ai/zenod` image, so the Phylax image, Ring, Herald and other independent services are never touched), added `DRY_RUN`, live-sha verification against `https://cloud.zenod.dev/api/health`, a serialized `deploy-zenod-production` concurrency group and a documented rollback. Recorded D27/D28 and the activation gate. Nothing deployed; no secret set.
+
+Evidence: [PR #964](https://github.com/zenod-ai/zenod/pull/964); `scripts/deploy-fleet.sh` header; `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md` "Automatic Zenod production roll".
+
+Next action: Jordi adds `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE`; the manager merges #964 on green `ci`, watches the first roll, and records the verified deployed SHA here. Staging/prod split (D28) is planned, not started.
+
+Assignment identity: Epic 0 worker (`ci/fleet-auto-deploy`)
+
+Branch / latest commit: `ci/fleet-auto-deploy` on `main` `52418e3`
+
+Last verified: 2026-10-10 Europe/Paris (code and mock-API tests only; no live deployment)
 
 ### 2026-09-17 - Epic 0 worker - ZMR M2 delivered and deployed; root spine reconciled to current main
 
