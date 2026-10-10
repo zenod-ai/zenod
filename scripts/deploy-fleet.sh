@@ -53,6 +53,19 @@ set -eEuo pipefail
 #                       sha in IMAGE); override when rolling back to an older tag
 #   HEALTH_TIMEOUT_SECONDS  optional — per-app wait for the roll (default 300)
 #   DRY_RUN             optional — 1 = report only, change nothing
+#   SETTLE_SECONDS      optional — pause between deploy and first check (default 10)
+#
+# Stale GIT_SHA override (root cause of the 2026-10-10 "timed out" false failure)
+# --------------------------------------------------------------------------------
+# The image bakes GIT_SHA at build time (Dockerfile ENV) and /api/health reports it.
+# zenod-mt had also been given an explicit GIT_SHA=<old sha> line in its Dokploy
+# environment (set by the manual zmr-production-image.py roll). A runtime env var
+# overrides the image ENV, so after a correct roll (new image, Swarm task and OCI
+# revision all right) /api/health kept reporting the old sha and this script timed
+# out. The script therefore removes any GIT_SHA line from the app env as part of the
+# update (every other env line is preserved) so health reflects the image that is
+# actually running. An app that already has the right image but still carries the
+# override is also fixed (re-deployed), not skipped.
 #
 # Downtime: the script does not manage rollout ordering. Zenod production uses a
 # single SQLite-backed /data volume and Swarm stop-first; expect a brief restart blip
@@ -119,18 +132,32 @@ for row in "${targets[@]}"; do
   # or anything else, even if mistakenly allowlisted.
   [[ "$current_image" == ghcr.io/zenod-ai/zenod:* || "$current_image" == ghcr.io/zenod-ai/zenod@* ]] \
     || die "$app_name is on '$current_image', not a ghcr.io/zenod-ai/zenod image — refusing (outside Zenod production boundary)"
-  if [[ "$current_image" == "$IMAGE" ]]; then
+  # A stale GIT_SHA env line overrides the sha baked into the image and makes
+  # /api/health lie about the running build, so detect it from the app's env.
+  strip_env=0
+  app_env="$(api_get "application.one?applicationId=$app_id" | jq -r '.env // ""')"
+  if grep -q '^GIT_SHA=' <<<"$app_env"; then
+    strip_env=1
+    log "  $app_name: env has a GIT_SHA override; it will be removed so /api/health reports the image's own baked sha"
+  fi
+  if [[ "$current_image" == "$IMAGE" && "$strip_env" == "0" ]]; then
     log "  $app_name already on $IMAGE — skipping"
     continue
   fi
   log "  $app_name: $current_image -> $IMAGE   (rollback: re-pin $current_image)"
   summary "- \`$app_name\`: \`$current_image\` -> \`$IMAGE\`"
   if [[ "$DRY_RUN" == "1" ]]; then
-    log "  DRY_RUN: would application.update + application.deploy $app_name"
+    log "  DRY_RUN: would application.update (strip_git_sha_env=$strip_env) + application.deploy $app_name"
     continue
   fi
-  api_post "application.update" "$(jq -n --arg applicationId "$app_id" --arg dockerImage "$IMAGE" \
-    '{applicationId:$applicationId,dockerImage:$dockerImage}')"
+  if [[ "$strip_env" == "1" ]]; then
+    # Rewrite env without the GIT_SHA line only; all other lines are kept as-is.
+    api_post "application.update" "$(jq -n --arg applicationId "$app_id" --arg dockerImage "$IMAGE" --arg env "$app_env" \
+      '{applicationId:$applicationId,dockerImage:$dockerImage,env:($env|split("\n")|map(select(startswith("GIT_SHA=")|not))|join("\n"))}')"
+  else
+    api_post "application.update" "$(jq -n --arg applicationId "$app_id" --arg dockerImage "$IMAGE" \
+      '{applicationId:$applicationId,dockerImage:$dockerImage}')"
+  fi
   api_post "application.deploy" "$(jq -n --arg applicationId "$app_id" --arg image "$IMAGE" \
     '{applicationId:$applicationId,title:("Zenod production roll -> " + $image)}')"
   rolled+=("$app_id"$'\t'"$app_name")
@@ -148,7 +175,7 @@ fi
 # Wait for each rolled app. Success = the live health endpoint reports the new sha
 # (when VERIFY_URL is set) else Dokploy status "done". Dokploy "error" or a timeout
 # fails loudly. A Dokploy deploy can be accepted yet sit queued, hence the health check.
-sleep 10
+sleep "${SETTLE_SECONDS:-10}"
 failed=()
 for row in "${rolled[@]}"; do
   IFS=$'\t' read -r app_id app_name <<<"$row"
@@ -168,6 +195,7 @@ for row in "${rolled[@]}"; do
     fi
     if (( $(date +%s) > deadline )); then
       log "  $app_name: timed out (Dokploy status '$status', live sha '${live_sha:-unknown}', want '$VERIFY_SHA')"
+      log "  hint: Dokploy done but sha stale => check the Swarm task image/OCI revision and the app env for a GIT_SHA override"
       failed+=("$app_name"); break
     fi
     sleep 5
