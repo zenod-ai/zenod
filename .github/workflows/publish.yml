@@ -181,7 +181,10 @@ jobs:
     needs: publish
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # deploy-fleet.sh waits up to HEALTH_TIMEOUT_SECONDS (default 900s) for the roll,
+    # which can queue behind unrelated Dokploy builds; keep the job limit well above
+    # that so the script's own, descriptive timeout always fires first.
+    timeout-minutes: 25
     permissions:
       contents: read
     # One production roll at a time. A newer push replaces a still-pending run; a

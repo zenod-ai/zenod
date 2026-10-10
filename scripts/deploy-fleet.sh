@@ -51,9 +51,25 @@ set -eEuo pipefail
 #                       deploy and queue it without starting it, so status alone is weak.
 #   VERIFY_SHA          optional — sha prefix expected from VERIFY_URL (default: the
 #                       sha in IMAGE); override when rolling back to an older tag
-#   HEALTH_TIMEOUT_SECONDS  optional — per-app wait for the roll (default 300)
+#   HEALTH_TIMEOUT_SECONDS  optional — per-app wait for the roll, measured from the
+#                       deploy request (default 900; see "Roll duration" below)
+#   HEALTH_POLL_SECONDS optional — seconds between health checks (default 5)
 #   DRY_RUN             optional — 1 = report only, change nothing
 #   SETTLE_SECONDS      optional — pause between deploy and first check (default 10)
+#
+# Roll duration (why the default wait is 900s)
+# --------------------------------------------
+# Measured 2026-10-10 on zenod-mt: a roll on an idle Dokploy takes ~40s from the
+# deploy request to /api/health reporting the new sha (30f709a 40s, c34ee43 42s; the
+# new Swarm task starts in ~3s, start-first). But Dokploy runs deployments through ONE
+# shared FIFO queue across every project, so a roll waits behind any unrelated build:
+# for a7673eb the deploy request was accepted at 20:52:13Z, Dokploy only started it at
+# 20:58:47Z (right after a 6m52s Scrapingv1 compose build finished), and production
+# was live at 20:59:19Z, 7m06s end to end. Meanwhile applicationStatus still reads
+# 'done' (the previous deploy), so status cannot distinguish "queued" from "stale".
+# Dokploy deployments across all projects have run up to ~12 min, so 900s covers the
+# worst observed blocking build plus the ~40s roll. Success is still ONLY the health
+# sha matching; this timeout only bounds how long we wait for it.
 #
 # Stale GIT_SHA override (root cause of the 2026-10-10 "timed out" false failure)
 # --------------------------------------------------------------------------------
@@ -78,7 +94,8 @@ DEPLOY_APPS="${DEPLOY_APPS:-zenod-mt}"
 DOKPLOY_PROJECT="${DOKPLOY_PROJECT:-zenod}"
 DOKPLOY_ENVIRONMENT="${DOKPLOY_ENVIRONMENT:-production}"
 VERIFY_URL="${VERIFY_URL-https://cloud.zenod.dev/api/health}"
-HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-300}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-900}"
+HEALTH_POLL_SECONDS="${HEALTH_POLL_SECONDS:-5}"
 DRY_RUN="${DRY_RUN:-0}"
 
 log() { printf '[deploy-fleet] %s\n' "$*" >&2; }
@@ -175,11 +192,13 @@ fi
 # Wait for each rolled app. Success = the live health endpoint reports the new sha
 # (when VERIFY_URL is set) else Dokploy status "done". Dokploy "error" or a timeout
 # fails loudly. A Dokploy deploy can be accepted yet sit queued, hence the health check.
+roll_started=$(date +%s)
 sleep "${SETTLE_SECONDS:-10}"
 failed=()
 for row in "${rolled[@]}"; do
   IFS=$'\t' read -r app_id app_name <<<"$row"
-  deadline=$(( $(date +%s) + HEALTH_TIMEOUT_SECONDS ))
+  deadline=$(( roll_started + HEALTH_TIMEOUT_SECONDS ))
+  next_progress=$(( roll_started + 60 ))
   while :; do
     status="$(api_get "application.one?applicationId=$app_id" | jq -r '.applicationStatus')"
     live_sha=""
@@ -189,16 +208,21 @@ for row in "${rolled[@]}"; do
     if [[ "$status" == "error" ]]; then
       log "  $app_name: Dokploy status error"; failed+=("$app_name"); break
     elif [[ -n "$VERIFY_URL" && -n "$live_sha" && "$live_sha" == "$VERIFY_SHA"* ]]; then
-      log "  $app_name: live sha $live_sha matches (Dokploy status '$status')"; break
+      log "  $app_name: live sha $live_sha matches (Dokploy status '$status', $(( $(date +%s) - roll_started ))s after deploy request)"; break
     elif [[ -z "$VERIFY_URL" && "$status" == "done" ]]; then
       log "  $app_name: Dokploy status done"; break
     fi
-    if (( $(date +%s) > deadline )); then
-      log "  $app_name: timed out (Dokploy status '$status', live sha '${live_sha:-unknown}', want '$VERIFY_SHA')"
-      log "  hint: Dokploy done but sha stale => check the Swarm task image/OCI revision and the app env for a GIT_SHA override"
+    now=$(date +%s)
+    if (( now > deadline )); then
+      log "  $app_name: timed out after $(( now - roll_started ))s (limit ${HEALTH_TIMEOUT_SECONDS}s; Dokploy status '$status', live sha '${live_sha:-unknown}', want '$VERIFY_SHA')"
+      log "  hint: Dokploy shares one deploy queue across projects, so the roll may still be queued behind another build (check deployment.all for $app_name); if it started and the sha is still stale => check the Swarm task image/OCI revision and the app env for a GIT_SHA override"
       failed+=("$app_name"); break
     fi
-    sleep 5
+    if (( now >= next_progress )); then
+      log "  $app_name: still waiting after $(( now - roll_started ))s (Dokploy status '$status', live sha '${live_sha:-unknown}', want '$VERIFY_SHA')"
+      next_progress=$(( now + 60 ))
+    fi
+    sleep "$HEALTH_POLL_SECONDS"
   done
 done
 
