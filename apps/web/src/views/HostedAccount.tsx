@@ -21,6 +21,7 @@ import {
 } from "@/components/hosted-usage-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { McpTokensCard } from "@/components/mcp-tokens-card"
 import type { VaultCapabilityProjection, VaultStatus } from "@/lib/api"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
@@ -373,6 +374,7 @@ export function HostedAccount() {
               </CardContent>
             </Card>
           )}
+          {endpoint && <McpTokensCard mcpUrl={endpoint} />}
 
           <Card className="rounded-none">
             <CardHeader>

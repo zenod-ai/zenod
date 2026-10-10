@@ -5,6 +5,7 @@ import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Runtime } from "./runtime.js";
+import { McpTokenStore, type McpTokenRecord } from "./mcpTokens.js";
 import { CustomerAccountStore, customerAccountIdForUser, customerVaultBinding, type CustomerAccount } from "./customerAccounts.js";
 import {
   completeCustomerCheckout,
@@ -53,7 +54,7 @@ import {
 } from "./customerSession.js";
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
-import { hashToken } from "@zenod/mcp-chassis";
+import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import {
   checkoutEnabledForOwner,
@@ -308,6 +309,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const billing = loadCustomerBillingConfig(env, product);
   reportPublicSignupReadiness(env);
   const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
+  const mcpTokens = new McpTokenStore(host.dataDir);
   if (env.STRIPE_SECRET_KEY) {
     const expectedMarker = billing.stripeMode === "live" ? "_live_" : "_test_";
     if (!env.STRIPE_SECRET_KEY.includes(expectedMarker)) {
@@ -1364,6 +1366,76 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     });
   }
 
+  // --- static MCP tokens (account dashboard, session-authenticated) ---
+
+  const mcpTokenView = (record: McpTokenRecord) => ({
+    id: record.id,
+    label: record.label,
+    preview: record.preview,
+    created_at: record.createdAt,
+    last_used_at: record.lastUsedAt,
+    revoked_at: record.revokedAt,
+  });
+
+  app.get("/api/account/mcp-tokens", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveForUser(session.user_id);
+    if (!account) return c.json({ error: "no_account" }, 404);
+    return c.json({ tokens: mcpTokens.list(account.account_id).map(mcpTokenView) });
+  });
+
+  app.post("/api/account/mcp-tokens", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const body = await c.req.json<{ label?: unknown }>().catch(() => ({}) as { label?: unknown });
+    const label = typeof body.label === "string" ? body.label.trim() : "";
+    if (!label) return c.json({ error: "label is required" }, 400);
+    const { token, record } = mcpTokens.create({
+      accountId: account.account_id,
+      tenantId: account.tenant_id,
+      label,
+    });
+    c.header("Cache-Control", "no-store");
+    // The plaintext is shown here exactly once; only its hash is stored.
+    return c.json({ token, ...mcpTokenView(record), mcp_url: `${billing.domain}/mcp` }, 201);
+  });
+
+  app.delete("/api/account/mcp-tokens/:id", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveForUser(session.user_id);
+    if (!account) return c.json({ error: "no_account" }, 404);
+    if (!mcpTokens.revoke(account.account_id, c.req.param("id"))) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Resolve a static MCP token hash to the same tenant identity the account's own
+   * tenant token carries (full, unprofiled access), or null when the token is
+   * unknown/revoked or the account is no longer entitled. Mirrors the OAuth grant
+   * checks in the Zenod unit so both credentials get identical permissions.
+   */
+  async function resolveMcpTokenRecord(tokenHash: string): Promise<TenantTokenRecord | null> {
+    const stored = mcpTokens.resolveHash(tokenHash);
+    if (!stored) return null;
+    const account = accounts.resolveForAccountId(stored.accountId);
+    if (
+      !account?.tenant_id || account.tenant_id !== stored.tenantId ||
+      (account.subscription_status !== "active" && account.subscription_status !== "past_due")
+    ) return null;
+    const vaulted = tokenVault.get(account.account_id);
+    const base = vaulted ? await options.tenantStore?.resolveTokenHash(hashToken(vaulted)) : null;
+    const expiresAt = base?.expiresAt == null ? Infinity : new Date(base.expiresAt).getTime();
+    if (
+      !base || base.profile?.trim() || base.tenant.id !== account.tenant_id ||
+      (base.status ?? "active") !== "active" || !(expiresAt > Date.now())
+    ) return null;
+    return { tokenHash, tenant: { ...base.tenant }, profile: null, status: "active", expiresAt: base.expiresAt ?? null };
+  }
+
   app.post("/api/token/regenerate", async (c) => {
     const session = readCustomerSession(c, env);
     if (!session) return c.json({ error: "unauthorized" }, 401);
@@ -1541,6 +1613,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     identities,
     principalForSession,
     tokenVault,
+    mcpTokens,
+    resolveMcpTokenRecord,
     managedAi,
     usageForAccount,
     managedAiAdmissions,
@@ -1551,6 +1625,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (reconcileTimer) clearInterval(reconcileTimer);
       managedAiAdmissions.close();
       managedAi.close();
+      mcpTokens.close();
     },
   };
 }

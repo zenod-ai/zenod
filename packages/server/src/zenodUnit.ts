@@ -12,6 +12,7 @@ import {
   hashToken,
   type ControlPlaneOptions,
   type TenantProvisioningStore,
+  type TenantTokenStore,
   type UnitHonoEnv,
   type UnitContext,
 } from "@zenod/mcp-chassis";
@@ -50,6 +51,7 @@ import type {
 import { ManagedAiDownstreamOutbox } from "./customerManagedAiOutbox.js";
 import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
+import { FailedAttemptLimiter, isMcpToken } from "./mcpTokens.js";
 import {
   hostedChannelsConfigured,
   mountHostedChannelsCustomerRoutes,
@@ -192,6 +194,18 @@ export class ZenodRuntimePool {
       .map((result) => result.reason);
     if (failures.length > 0) throw new AggregateError(failures, "Tenant runtime shutdown failed");
   }
+}
+
+/**
+ * Client address for failed-attempt throttling. Behind the reverse proxy the socket
+ * peer is the proxy, so prefer the right-most X-Forwarded-For entry (the hop the
+ * trusted proxy itself appended; earlier entries are client-controlled).
+ */
+export function clientAddress(c: { req: { header(name: string): string | undefined }; env?: unknown }): string {
+  const forwarded = c.req.header("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean).pop();
+  if (forwarded) return forwarded;
+  const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming;
+  return incoming?.socket?.remoteAddress ?? "unknown";
 }
 
 function registerZenodTools(
@@ -700,6 +714,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     (tenantId, input) => onVaultBindingUpdateForTenant(tenantId, input),
   );
   const oauthStore = createSqliteOAuthStore({ dataDir: storage.dataDir });
+  // Tenant tokens and OAuth grants resolve exactly as before. A hash that matches
+  // neither falls through to the account's static `zmt_` MCP tokens, which resolve
+  // to the same tenant identity with the same (unprofiled) permissions.
+  const mcpTokenFailures = new FailedAttemptLimiter();
+  const tenantOrMcpTokenStore: TenantTokenStore = {
+    async resolveTokenHash(tokenHash) {
+      return (await tenantStore.resolveTokenHash(tokenHash)) ?? (await customer.resolveMcpTokenRecord(tokenHash));
+    },
+  };
   const unit = createUnit({
     name: unitName,
     version: VERSION,
@@ -708,7 +731,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       toolKinds: { read: [...ZENOD_READ_TOOLS, ...(options.additionalReadTools ?? [])] },
       longTools: ZENOD_LONG_TOOLS,
     },
-    tenantAuth: { store: tenantStore },
+    tenantAuth: { store: tenantOrMcpTokenStore },
     toolProfiles: {
       "memory-channel": [
         ...MEMORY_CHANNEL_MCP_TOOLS,
@@ -1301,9 +1324,25 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     const pathToken = c.req.path.startsWith("/mcp/")
       ? decodeURIComponent(c.req.path.slice("/mcp/".length).split("/")[0] ?? "")
       : null;
+    // Static MCP tokens are accepted only as `Authorization: Bearer` on /mcp: never
+    // in a URL path, and never on /api or any other surface. Repeated failures from
+    // one client are throttled before any lookup happens.
+    const presentsMcpToken = isMcpToken(directToken) || isMcpToken(pathToken);
+    const failureKey = presentsMcpToken ? clientAddress(c) : "";
+    if (presentsMcpToken && mcpTokenFailures.isBlocked(failureKey)) {
+      c.header("Retry-After", String(mcpTokenFailures.retryAfterSeconds(failureKey)));
+      return c.json({ error: "too_many_attempts" }, 429);
+    }
+    if (isMcpToken(pathToken) || (isMcpToken(directToken) && c.req.path !== "/mcp")) {
+      mcpTokenFailures.recordFailure(failureKey);
+      return c.json({ error: "unauthorized" }, 401);
+    }
     let bearerRecord = directToken
-      ? await tenantStore.resolveTokenHash(hashToken(directToken))
+      ? await tenantOrMcpTokenStore.resolveTokenHash(hashToken(directToken))
       : null;
+    // An unknown or revoked token falls through to the unit, which answers with the
+    // unchanged 401 + OAuth WWW-Authenticate challenge.
+    if (isMcpToken(directToken) && !bearerRecord) mcpTokenFailures.recordFailure(failureKey);
     // OAuth clients must pass through the same hosted entitlement, capability and
     // usage controls as manually configured clients. Resolve the current account
     // binding rather than relying only on the tenant snapshot in an OAuth grant.
@@ -1470,6 +1509,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     customerAccounts: customer.accounts,
     customerIdentities: customer.identities,
     customerTokenVault: customer.tokenVault,
+    customerMcpTokens: customer.mcpTokens,
     customerManagedAiAdmissions: customer.managedAiAdmissions,
     zenodPhylax,
     resumeManagedAiAdmissions,

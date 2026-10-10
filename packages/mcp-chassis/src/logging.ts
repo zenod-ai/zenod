@@ -158,9 +158,15 @@ function isSensitiveKey(key: string): boolean {
   );
 }
 
+/** Redact bearer values, static MCP tokens (`zmt_...`), path tokens and secret query params. */
+export function redactSecretString(value: string): string {
+  return redactString(value);
+}
+
 function redactString(value: string): string {
   return value
     .replace(/\bBearer\s+[^\s,;]+/gi, `Bearer ${REDACTED}`)
+    .replace(/\bzmt_[A-Za-z0-9_-]+/g, `zmt_${REDACTED}`)
     .replace(/(\/mcp\/)[^/?#\s]+/gi, "$1:token")
     .replace(
       /([?&](?:access_token|refresh_token|id_token|token|state|oauth_state|api_key|secret|password)=)[^&#\s]*/gi,
