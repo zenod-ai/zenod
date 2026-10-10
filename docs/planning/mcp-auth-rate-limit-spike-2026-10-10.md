@@ -7,7 +7,7 @@ Date 2026-10-10 · Status: spike, nothing deployed, no production changes · Rel
 - Production is **one replica** behind **Traefik only** (Cloudflare is DNS-only), so #1373's in-memory limiter is adequate today. The only real gap is that it resets on restart/deploy.
 - Right-most X-Forwarded-For is correct **today** (Traefik overwrites XFF with the peer IP). It silently breaks if Cloudflare proxying is re-enabled: every client would share a CF edge IP. Prefer `CF-Connecting-IP` in that case, or add a startup/config guard.
 - Do **not** rely on the proxy: Traefik `rateLimit` counts all requests (not failures) and cannot express "10 failed auths". Keep the limiter in the app.
-- Recommended: merge #1373 as is, then (optionally) swap its store to the SQLite limiter prototyped here (`packages/server/src/authFailureLimiter.ts`, env flag `MCP_AUTH_RATE_LIMIT_STORE=sqlite`, default off). Add a global backstop and a token-hash key. Redis is not in the stack and is not worth adding.
+- Recommended: merge #1373 as is, then (optionally) swap its store to the SQLite limiter prototyped here (`packages/server/src/authFailureLimiter.ts`, env flag `MCP_AUTH_RATE_LIMIT_STORE=sqlite`, default off). Add an alert-only global counter and a token-hash key. Redis is not in the stack and is not worth adding.
 - Separately, `/oauth/register`, `/oauth/token` and `/api/auth/login` (self-host) have **no** abuse protection. `/oauth/register` is the most worthwhile follow-up (unauthenticated writes to SQLite).
 
 ## 1. Replicas and what sits in front
@@ -50,14 +50,14 @@ Proposed limits (all counted on failures only, 5-minute sliding window):
 |---|---|---|
 | per IP | 10 | 429 + `Retry-After` (= #1373 default) |
 | per token hash | 5 | 429 + `Retry-After` |
-| global backstop | 300 | 429 + `Retry-After`, plus a single warn log |
+| global (alert-only) | 300 | **Never blocks.** `check()` returns `globalTripped`; caller warn-logs once. |
 
 Avoiding lockout abuse of legit users:
 - Count only requests that **present a well-formed `zmt_` token and fail**. Requests with no credentials (the 401 discovery probe every MCP client makes first) must not count.
 - Never log or return which key tripped; log only the fingerprint and IP.
 - IP spoofing is not possible while Traefik is the sole hop; a victim can only be locked out if they share a NAT with the attacker. That is acceptable for per-IP 10/5min; keep the number generous and do not escalate to long bans.
 - Do not exempt valid tokens from a blocked IP: that turns the limiter into a guessing oracle. Accept the NAT trade-off instead.
-- Global backstop 429s affect everyone, so it should be set well above the observed peak and alert on trip rather than silently degrade.
+- The global key must never block: a few dozen attacker IPs could trip it and lock out every real user. It only raises an alert (`globalTripped`); per-IP and per-token keys do all blocking.
 
 ## 4. OAuth and dashboard login
 
@@ -78,7 +78,7 @@ Recommendation: yes, reuse the same limiter with distinct scopes (`oauth_registe
 
 1. Merge #1373 as is (in-memory, fine for 1 replica).
 2. Add a one-time log of XFF vs socket peer to confirm the real-client-IP assumption in prod (read-only observation; needs a human to look at logs).
-3. Follow-up PR: wire `SqliteFailureLimiter` behind `MCP_AUTH_RATE_LIMIT_STORE` (default off), dark-launch with the env var set in staging, then prod. Add the `global` and `tok:` keys.
+3. Follow-up PR: wire `SqliteFailureLimiter` behind `MCP_AUTH_RATE_LIMIT_STORE` (default off), dark-launch with the env var set in staging, then prod. Add the `tok:` key and the alert-only `global` counter (warn-log once on trip, never reject).
 4. Follow-up PR: `/oauth/register`, `/oauth/token`, `/api/auth/login`.
 5. If Cloudflare proxying is ever re-enabled, change client-IP derivation first (see section 1).
 
@@ -87,4 +87,4 @@ Recommendation: yes, reuse the same limiter with distinct scopes (`oauth_registe
 1. Cloudflare dashboard: confirm `cloud.zenod.dev` is still grey-cloud, and the plan tier/rule limits if a CF rule is ever wanted.
 2. Dokploy/VPS: Traefik static config (`forwardedHeaders.trustedIPs`) and whether ports are host-published, i.e. does the app see real client IPs.
 3. Are there known clients that legitimately sit behind large shared NATs (offices, mobile carriers) that would trip 10 failures/5 min?
-4. Approve extending protection to OAuth register/token and admin login, and the 300/5-min global number (no traffic baseline in the repo).
+4. Approve extending protection to OAuth register/token and admin login, and the 300/5-min alert threshold for the global counter (no traffic baseline in the repo).

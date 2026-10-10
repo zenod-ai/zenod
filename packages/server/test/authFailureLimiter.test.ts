@@ -50,10 +50,14 @@ describe("SqliteFailureLimiter", () => {
     expect(tokenFingerprint(FAKE_TOKEN)).toHaveLength(12);
   });
 
-  it("global backstop trips across many IPs", () => {
+  it("global key is alert-only: reports a trip but never blocks", () => {
     limiter = new SqliteFailureLimiter(":memory:", rules);
     for (let i = 0; i < 5; i++) limiter.recordFailure(failureKeys({ ip: `192.0.2.${i}` }), 7000);
-    expect(limiter.check(failureKeys({ ip: "192.0.2.99" }), 7001).blocked).toBe(true);
+    const result = limiter.check(failureKeys({ ip: "192.0.2.99" }), 7001);
+    expect(result.globalTripped).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.retryAfterSeconds).toBe(0);
+    expect(limiter.isBlocked("global", 7001)).toBe(false);
   });
 
   it("keeps rows bounded and sweeps expired rows", () => {

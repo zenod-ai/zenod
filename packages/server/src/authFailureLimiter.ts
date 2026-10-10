@@ -74,14 +74,24 @@ export class SqliteFailureLimiter {
     return Math.max(1, Math.ceil((recent[recent.length - max]! + windowMs - now) / 1000));
   }
 
+  /** The `global` key is alert-only and never blocks. */
   isBlocked(key: string, now = Date.now()): boolean {
-    return this.retryAfterSeconds(key, now) > 0;
+    return scopeOf(key) !== "global" && this.retryAfterSeconds(key, now) > 0;
   }
 
-  /** Blocked when ANY key is over its rule; returns the longest Retry-After. */
-  check(keys: string[], now = Date.now()): { blocked: boolean; retryAfterSeconds: number } {
-    const retryAfterSeconds = Math.max(0, ...keys.map((key) => this.retryAfterSeconds(key, now)));
-    return { blocked: retryAfterSeconds > 0, retryAfterSeconds };
+  /**
+   * Blocks only on `ip:` and `tok:` keys (longest Retry-After). `globalTripped` is
+   * informational: the caller may warn-log it once, but must NOT reject requests
+   * on it, or a few dozen attacker IPs could lock out every real user.
+   */
+  check(
+    keys: string[],
+    now = Date.now(),
+  ): { blocked: boolean; retryAfterSeconds: number; globalTripped: boolean } {
+    const blocking = keys.filter((key) => scopeOf(key) !== "global");
+    const retryAfterSeconds = Math.max(0, ...blocking.map((key) => this.retryAfterSeconds(key, now)));
+    const globalTripped = keys.some((key) => scopeOf(key) === "global" && this.retryAfterSeconds(key, now) > 0);
+    return { blocked: retryAfterSeconds > 0, retryAfterSeconds, globalTripped };
   }
 
   /** Records a failure per key. Keys already at their cap are skipped so rows stay bounded. */
