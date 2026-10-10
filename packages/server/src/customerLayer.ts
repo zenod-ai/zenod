@@ -309,7 +309,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const billing = loadCustomerBillingConfig(env, product);
   reportPublicSignupReadiness(env);
   const tokenVault = new CustomerTokenVault(host.dataDir, customerStateSecret(env));
-  const mcpTokens = new McpTokenStore(host.dataDir);
+  const mcpTokens = new McpTokenStore(host.dataDir, customerStateSecret(env));
   if (env.STRIPE_SECRET_KEY) {
     const expectedMarker = billing.stripeMode === "live" ? "_live_" : "_test_";
     if (!env.STRIPE_SECRET_KEY.includes(expectedMarker)) {
@@ -1401,6 +1401,19 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     c.header("Cache-Control", "no-store");
     // The plaintext is shown here exactly once; only its hash is stored.
     return c.json({ token, ...mcpTokenView(record), mcp_url: `${billing.domain}/mcp` }, 201);
+  });
+
+  // Plaintext reveal: owning account's session only. Other accounts, revoked or
+  // unknown tokens all look the same (404). The response is never cached or logged.
+  app.get("/api/account/mcp-tokens/:id/reveal", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveForUser(session.user_id);
+    if (!account) return c.json({ error: "no_account" }, 404);
+    const token = mcpTokens.reveal(account.account_id, c.req.param("id"));
+    c.header("Cache-Control", "no-store");
+    if (!token) return c.json({ error: "not_found" }, 404);
+    return c.json({ token });
   });
 
   app.delete("/api/account/mcp-tokens/:id", (c) => {

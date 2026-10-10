@@ -37,6 +37,9 @@ export function McpTokensCard({ mcpUrl }: { mcpUrl: string }) {
   const [copied, setCopied] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // Plaintext fetched on demand from the owner-only reveal endpoint; kept only in memory.
+  const [revealed, setRevealed] = React.useState<Record<string, string>>({})
+  const [copiedId, setCopiedId] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     const response = await fetch("/api/account/mcp-tokens")
@@ -74,6 +77,58 @@ export function McpTokensCard({ mcpUrl }: { mcpUrl: string }) {
     }
   }
 
+  async function reveal(id: string): Promise<string | null> {
+    const known = revealed[id]
+    if (known) return known
+    const response = await fetch(`/api/account/mcp-tokens/${id}/reveal`)
+    if (!response.ok) {
+      setError("Could not retrieve the token")
+      return null
+    }
+    const { token } = (await response.json()) as { token: string }
+    setRevealed((previous) => ({ ...previous, [id]: token }))
+    return token
+  }
+
+  async function toggleShow(id: string) {
+    if (revealed[id]) {
+      setRevealed((previous) => {
+        const next = { ...previous }
+        delete next[id]
+        return next
+      })
+      return
+    }
+    setError(null)
+    await reveal(id)
+  }
+
+  async function copyToken(id: string) {
+    setError(null)
+    const token = await reveal(id)
+    if (!token) return
+    try {
+      await navigator.clipboard.writeText(token)
+    } catch {
+      // Clipboard API can be unavailable or denied (insecure origin, permissions);
+      // fall back to a selection copy, and tell the user if that fails too.
+      const area = document.createElement("textarea")
+      area.value = token
+      area.style.position = "fixed"
+      area.style.opacity = "0"
+      document.body.appendChild(area)
+      area.select()
+      const ok = document.execCommand("copy")
+      area.remove()
+      if (!ok) {
+        setError("Could not copy automatically. Use Show and copy it manually.")
+        return
+      }
+    }
+    setCopiedId(id)
+    window.setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500)
+  }
+
   async function revoke(id: string) {
     setError(null)
     const response = await fetch(`/api/account/mcp-tokens/${id}`, {
@@ -84,6 +139,11 @@ export function McpTokensCard({ mcpUrl }: { mcpUrl: string }) {
       return
     }
     if (created?.id === id) setCreated(null)
+    setRevealed((previous) => {
+      const next = { ...previous }
+      delete next[id]
+      return next
+    })
     await load()
   }
 
@@ -93,7 +153,7 @@ export function McpTokensCard({ mcpUrl }: { mcpUrl: string }) {
         <CardTitle>MCP tokens</CardTitle>
         <CardDescription>
           For headless clients or a shared config that cannot sign in with
-          OAuth. Send as <code>Authorization: Bearer &lt;token&gt;</code> to{" "}
+          OAuth. You can show or copy your tokens here at any time. Send as <code>Authorization: Bearer &lt;token&gt;</code> to{" "}
           <code>{mcpUrl}</code>. Each token has full access to your Zenod;
           revoke any you no longer use.
         </CardDescription>
@@ -115,7 +175,7 @@ export function McpTokensCard({ mcpUrl }: { mcpUrl: string }) {
         {created && (
           <div className="border border-border p-3 text-sm">
             <p className="font-medium">
-              Copy this token now. It will not be shown again.
+              Your new token. You can show or copy it again at any time below.
             </p>
             <div className="mt-2 flex items-center gap-2">
               <code className="min-w-0 flex-1 overflow-x-auto bg-muted p-2 text-xs">
@@ -172,17 +232,40 @@ export function McpTokensCard({ mcpUrl }: { mcpUrl: string }) {
                     Created {formatWhen(token.created_at)} · Last used{" "}
                     {formatWhen(token.last_used_at)}
                   </p>
+                  {revealed[token.id] && (
+                    <code className="mt-1 block overflow-x-auto bg-muted p-2 text-xs">
+                      {revealed[token.id]}
+                    </code>
+                  )}
                 </div>
                 {token.revoked_at === null && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() => void revoke(token.id)}
-                  >
-                    Revoke
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void toggleShow(token.id)}
+                    >
+                      {revealed[token.id] ? "Hide" : "Show"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void copyToken(token.id)}
+                    >
+                      {copiedId === token.id ? "Copied" : "Copy"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() => void revoke(token.id)}
+                    >
+                      Revoke
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}

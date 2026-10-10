@@ -139,13 +139,37 @@ describe("static MCP tokens on /mcp", () => {
     expect(other.tokens).toEqual([]);
   });
 
-  it("stores only the SHA-256 hash, never the plaintext", async () => {
+  it("authenticates by SHA-256 hash and holds no plaintext in the database", async () => {
     const { token } = await createToken();
     const rows = unit.customerMcpTokens.rawRowsForTests();
     expect(rows).toHaveLength(1);
     expect(JSON.stringify(rows)).not.toContain(token);
+    expect(JSON.stringify(rows)).not.toContain(token.slice(4));
     expect(rows[0]!.token_hash).toBe(createHash("sha256").update(token).digest("hex"));
     expect(rows[0]!.preview).toBe(maskMcpToken(token));
+    // The encrypted copy is an AES-GCM envelope, not the token.
+    expect(Object.keys(JSON.parse(String(rows[0]!.token_enc))).sort()).toEqual(["ct", "iv", "tag"]);
+  });
+
+  it("lets only the owning session reveal a token, never a revoked one, with no-store", async () => {
+    const { token, id } = await createToken();
+    expect((await request(`/api/account/mcp-tokens/${id}/reveal`)).status).toBe(401);
+    const own = await api(`/api/account/mcp-tokens/${id}/reveal`, "GET");
+    expect(own.status).toBe(200);
+    expect(own.headers.get("cache-control")).toBe("no-store");
+    expect(((await own.json()) as { token: string }).token).toBe(token);
+    // A revealed token is the same credential that authenticates.
+    expect((await mcpRequest(`Bearer ${token}`)).status).not.toBe(401);
+    // Another account gets 404, identical to an unknown id.
+    const cross = await api(`/api/account/mcp-tokens/${id}/reveal`, "GET", otherCookie);
+    expect(cross.status).toBe(404);
+    expect(cross.headers.get("cache-control")).toBe("no-store");
+    expect(await cross.text()).not.toContain(token);
+    expect((await api("/api/account/mcp-tokens/nope/reveal", "GET")).status).toBe(404);
+    // List still shows only masked previews.
+    expect(await (await api("/api/account/mcp-tokens", "GET")).text()).not.toContain(token);
+    expect((await api(`/api/account/mcp-tokens/${id}`, "DELETE")).status).toBe(200);
+    expect((await api(`/api/account/mcp-tokens/${id}/reveal`, "GET")).status).toBe(404);
   });
 
   it("accepts a valid MCP token for initialize and tools/list, and rejects the same calls without it", async () => {
@@ -300,7 +324,7 @@ describe("MCP token primitives", () => {
 
   it("resolves by hash, treats revoked as unknown, and throttles last_used_at writes", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zenod-mcp-store-"));
-    const store = new McpTokenStore(dir);
+    const store = new McpTokenStore(dir, "unit-test-secret");
     try {
       const { token, record } = store.create({ accountId: "a", tenantId: "t", label: " CI ", now: 1000 });
       expect(record.label).toBe("CI");
@@ -308,9 +332,13 @@ describe("MCP token primitives", () => {
       expect(store.resolveHash(hashMcpToken(token), 2000)?.lastUsedAt).toBe(2000);
       expect(store.resolveHash(hashMcpToken(token), 2500)?.lastUsedAt).toBe(2000);
       expect(store.resolveHash(hashMcpToken(token), 70_000)?.lastUsedAt).toBe(70_000);
+      expect(store.reveal("a", record.id)).toBe(token);
+      expect(store.reveal("b", record.id)).toBeNull();
+      expect(new McpTokenStore(dir, "a-different-secret").reveal("a", record.id)).toBeNull();
       expect(store.revoke("b", record.id)).toBe(false);
       expect(store.revoke("a", record.id)).toBe(true);
       expect(store.resolveHash(hashMcpToken(token))).toBeNull();
+      expect(store.reveal("a", record.id)).toBeNull();
       expect(store.list("a")[0]!.revokedAt).not.toBeNull();
       expect(() => store.create({ accountId: "a", tenantId: "t", label: "  " })).toThrow();
     } finally {

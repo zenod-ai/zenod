@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { openZenodSqlite } from "./sqlite.js";
 
@@ -48,6 +48,7 @@ interface Row {
   tenant_id: string;
   label: string;
   token_hash: string;
+  token_enc: string | null;
   preview: string;
   created_at: number;
   last_used_at: number | null;
@@ -68,15 +69,23 @@ function toRecord(row: Row): McpTokenRecord {
 }
 
 /**
- * Static, user-created MCP tokens. Only a SHA-256 hash is persisted; the plaintext
- * is returned exactly once by `create`. Lives in its own SQLite file so it never
+ * Static, user-created MCP tokens. Authentication uses a SHA-256 hash; the plaintext
+ * is also stored encrypted at rest (AES-256-GCM) so the owning account can reveal it. Lives in its own SQLite file so it never
  * contends with other stores.
  */
 export class McpTokenStore {
   private readonly db;
+  private readonly key: Buffer | null;
   private closed = false;
 
-  constructor(dataDir: string) {
+  /**
+   * `secret` is the customer-state secret already used to encrypt the customer token
+   * vault (ACCOUNT_STATE_SECRET); the AES-256-GCM key is derived from it the same way,
+   * so no new configuration is needed. Without it tokens can be authenticated by hash
+   * but not revealed.
+   */
+  constructor(dataDir: string, secret = "") {
+    this.key = secret ? createHash("sha256").update(secret, "utf8").digest() : null;
     this.db = openZenodSqlite(join(dataDir, "mcp-tokens.sqlite"));
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_tokens (
@@ -85,6 +94,7 @@ export class McpTokenStore {
         tenant_id TEXT NOT NULL,
         label TEXT NOT NULL,
         token_hash TEXT NOT NULL UNIQUE,
+        token_enc TEXT,
         preview TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         last_used_at INTEGER,
@@ -92,6 +102,10 @@ export class McpTokenStore {
       );
       CREATE INDEX IF NOT EXISTS idx_mcp_tokens_account ON mcp_tokens (account_id);
     `);
+    const columns = this.db.prepare("PRAGMA table_info(mcp_tokens)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "token_enc")) {
+      this.db.exec("ALTER TABLE mcp_tokens ADD COLUMN token_enc TEXT");
+    }
   }
 
   create(input: { accountId: string; tenantId: string; label: string; now?: number }): {
@@ -100,13 +114,16 @@ export class McpTokenStore {
   } {
     const label = input.label.trim().slice(0, MAX_LABEL_LENGTH);
     if (!label) throw new Error("label is required");
+    if (!this.key) throw new Error("MCP token encryption secret is not configured");
     const token = generateMcpToken();
+    const id = randomUUID();
     const row: Row = {
-      id: randomUUID(),
+      id,
       account_id: input.accountId,
       tenant_id: input.tenantId,
       label,
       token_hash: hashMcpToken(token),
+      token_enc: this.encrypt(token, input.accountId, id),
       preview: maskMcpToken(token),
       created_at: input.now ?? Date.now(),
       last_used_at: null,
@@ -114,10 +131,10 @@ export class McpTokenStore {
     };
     this.db
       .prepare(
-        `INSERT INTO mcp_tokens (id, account_id, tenant_id, label, token_hash, preview, created_at, last_used_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
+        `INSERT INTO mcp_tokens (id, account_id, tenant_id, label, token_hash, token_enc, preview, created_at, last_used_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
       )
-      .run(row.id, row.account_id, row.tenant_id, row.label, row.token_hash, row.preview, row.created_at);
+      .run(row.id, row.account_id, row.tenant_id, row.label, row.token_hash, row.token_enc, row.preview, row.created_at);
     return { token, record: toRecord(row) };
   }
 
@@ -126,6 +143,37 @@ export class McpTokenStore {
       .prepare("SELECT * FROM mcp_tokens WHERE account_id = ? ORDER BY created_at DESC, id")
       .all(accountId) as unknown as Row[];
     return rows.map(toRecord);
+  }
+
+  /**
+   * Decrypt and return the plaintext of an active token owned by the account.
+   * Null when it does not exist, belongs to another account, is revoked, or cannot
+   * be decrypted. The account id and token id are bound as AES-GCM AAD.
+   */
+  reveal(accountId: string, id: string): string | null {
+    if (!this.key) return null;
+    const row = this.db
+      .prepare("SELECT * FROM mcp_tokens WHERE id = ? AND account_id = ? AND revoked_at IS NULL")
+      .get(id, accountId) as unknown as Row | undefined;
+    if (!row?.token_enc) return null;
+    try {
+      const envelope = JSON.parse(row.token_enc) as { iv: string; ct: string; tag: string };
+      const decipher = createDecipheriv("aes-256-gcm", this.key, Buffer.from(envelope.iv, "base64url"));
+      decipher.setAAD(Buffer.from(`${accountId}:${id}`, "utf8"));
+      decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+      const token = Buffer.concat([decipher.update(Buffer.from(envelope.ct, "base64url")), decipher.final()]).toString("utf8");
+      return hashesEqual(hashMcpToken(token), row.token_hash) ? token : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private encrypt(token: string, accountId: string, id: string): string {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.key!, iv);
+    cipher.setAAD(Buffer.from(`${accountId}:${id}`, "utf8"));
+    const ct = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+    return JSON.stringify({ iv: iv.toString("base64url"), ct: ct.toString("base64url"), tag: cipher.getAuthTag().toString("base64url") });
   }
 
   /** Revoke one token owned by the account. Returns false when it does not exist or is already revoked. */
