@@ -68,6 +68,19 @@ export function isCoalescible(event: NotificationEvent): boolean {
 const DEFAULT_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 
 /**
+ * Default exact-duplicate window: an identical text on the same surface within one
+ * minute is suppressed regardless of eventType/dedupeKey. Coalescing (R2-T2) only
+ * protects events with an explicit identity (target/execution/run/dedupeKey) — a
+ * keyless "manual" send (e.g. Phylax's deliver_to_principal, which carries no
+ * targetIssue/executionId) is intentionally exempt from that so distinct manual
+ * messages are never gagged. But a literal double-fire of the SAME text (a retried
+ * tool call, a duplicate trigger) is not a "distinct message" — it is the same send
+ * landing twice, which is what caused the daily digest to sometimes go out twice
+ * within a minute. This guard catches that case without touching coalescing at all.
+ */
+const DEFAULT_EXACT_DUPLICATE_WINDOW_MS = 60 * 1000;
+
+/**
  * PURE (R2-T3): the state rank of an event type for a run. Ordering flows start →
  * (blocked | terminal), and `terminal` is final. A higher-ranked state must never be
  * followed by a lower-ranked one for the same run without being stale.
@@ -90,6 +103,7 @@ export class NotificationBus {
     private readonly now: () => number = Date.now,
     private readonly dedupeWindowMs: number = DEFAULT_DEDUPE_WINDOW_MS,
     private readonly orderingWindowMs: number = DEFAULT_ORDERING_WINDOW_MS,
+    private readonly exactDuplicateWindowMs: number = DEFAULT_EXACT_DUPLICATE_WINDOW_MS,
   ) {}
 
   /**
@@ -107,6 +121,20 @@ export class NotificationBus {
     if (!composedText) {
       this.store.record(
         { id, eventType: event.eventType, surface, targetIssue: event.targetIssue, executionId: event.executionId, runId: event.runId, severity: event.severity, dedupeKey, composedText: "", recipients: [], status: "suppressed" },
+        now,
+      );
+      return { id, status: "suppressed", sent: 0, recipients: [] };
+    }
+
+    // Exact-duplicate guard: the SAME text on the SAME surface sent moments ago is a
+    // double-fire, not a distinct message — suppress it regardless of eventType or
+    // dedupeKey (so it also protects keyless "manual" sends like the daily digest,
+    // which coalescing intentionally leaves alone). Narrow on purpose: unlike
+    // coalescing, this never suppresses two DIFFERENT texts.
+    const priorExact = this.store.latestSentByText(surface, composedText, now - this.exactDuplicateWindowMs);
+    if (priorExact) {
+      this.store.record(
+        { id, eventType: event.eventType, surface, targetIssue: event.targetIssue, executionId: event.executionId, runId: event.runId, severity: event.severity, dedupeKey, composedText, recipients: [], status: "suppressed", suppressedBy: priorExact.id },
         now,
       );
       return { id, status: "suppressed", sent: 0, recipients: [] };
