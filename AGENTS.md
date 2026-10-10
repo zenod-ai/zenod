@@ -1,5 +1,20 @@
 # Zenod agent entrypoint
 
+<!-- epicspine:begin 2026.10.09 -->
+## EpicSpine — always on, every task, every agent
+Root spine: docs/EPIC-0-FOUNDATION-SPINE.md. Read its Current State and Operating Learnings before acting.
+1. Bind first: first reply names role (default: delivery manager) and `Learnings in force:`.
+2. The manager never implements. Any work beyond answering a question (code, docs, research) goes to a worker.
+3. Workers: native Claude Code `Agent` subagent, `model: sonnet` (Sonnet 5.5, same subscription), run in background, own worktree `../wt-<task>` on branch `wt/<task>`. Do not route workers through T3/OpenCode. If the model is unavailable: stop, say so, propose a substitute.
+4. Integrate: verify diff and checks yourself; `main` requires the `ci` check, so push `wt/<task>`, open a PR, merge it yourself when `ci` is green (never bypass with an admin push); revert on red; remove the worktree and branch.
+5. Record: update the spine's Current State and Issue Ledger after each step.
+Precedence: user per-task instruction > this block > skill defaults. Details: skills/epic-spine/SKILL.md.
+<!-- epicspine:end -->
+Dispatch profile: mechanism: Claude Code `Agent` tool (background); model: `sonnet` (Sonnet 5.5); reasoning: inherited; isolation: worktree-first; parallelism: disjoint waves.
+Integration policy: main-direct via self-merged CI-gated PR (user never merges; production deploy stays a human gate).
+Skill updates: manual (vendored copy; re-sync per `skills/epic-spine.SOURCE`).
+Local adaptation: rules 3–4 differ from the stock template by Jordi's decision (root spine D26); re-apply them after any `agents_block.py install`.
+
 ## Start here
 
 For every repository-level task, read `docs/EPIC-0-FOUNDATION-SPINE.md` first. Its **Current State** and child-spine map are authoritative for project direction, the active delivery surface, human gates, and the next action.
@@ -16,8 +31,8 @@ Independent agents should move to their own repositories and deployment lifecycl
 
 ## Command contract
 
-- **“Continue”**: bind as the Epic 0 worker and active child-spine delivery manager. Read the root spine, then the active child spine; reconcile its linked GitHub issues/PRs and current `main`; execute the child's single **Next action**; remain the sole spine steward; loop until ready for human test or blocked on a named gate.
-- **“Work on ZAL-N” / “work on issue #N”**: first verify the issue is linked and dispatchable in the active child spine. Bind one ticket worker to that issue with its recorded branch, fresh base commit, required reads, acceptance, human gates, and handoff. Use a separate worktree for concurrent work. The delivery manager remains in the parent task and reconciles the worker's GitHub handoff.
+- **“Continue”**: bind as the Epic 0 worker and active child-spine delivery manager. Read the root spine, then the active child spine; reconcile its linked GitHub issues/PRs and current `main`; dispatch the child's single **Next action** to a worker, verify and integrate it; remain the sole spine steward; loop until ready for human test or blocked on a named gate.
+- **“Work on ZAL-N” / “work on issue #N”**: first verify the issue is linked and dispatchable in the active child spine. Dispatch one ticket worker (Sonnet subagent) to that issue with its recorded branch, fresh base commit, required reads, acceptance, human gates, and handoff. Use a separate worktree for concurrent work. The delivery manager remains in the parent task and reconciles the worker's GitHub handoff.
 - **“What are we working on?”**: report the active child spine's Current State, ready/active issues, owners, blockers, human gates, and one recommended next action. Do not summarize from chat memory alone.
 
 ## Write and authority rules
