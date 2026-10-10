@@ -6,6 +6,12 @@ The core idea is simple: every serious body of work gets a living epic document 
 
 This repository is the single development home for the skill. Any other copy of `skill/epic-spine/` is a snapshot; read [SYNC.md](SYNC.md) before editing one.
 
+## Defaults
+
+The kernel's **Default Behaviors** card (`skill/epic-spine/SKILL.md`) is the automatic default for every task; read it in full before any task, since you or the root spine may override it.
+
+Per-topic detail and pointers live in the references: [roles-and-dispatch](skill/epic-spine/references/roles-and-dispatch.md) · [role-protocols](skill/epic-spine/references/role-protocols.md) · [git-doctrine](skill/epic-spine/references/git-doctrine.md) · [learnings](skill/epic-spine/references/learnings.md) · [hygiene](skill/epic-spine/references/hygiene.md) · [artifacts](skill/epic-spine/references/artifacts.md).
+
 ## Get Started
 
 From this checkout's root, use Python 3.10+; no Python packages are required. Copy the **complete** skill into your user skills directory. This refuses an existing destination rather than overwriting it:
@@ -50,6 +56,16 @@ Open the deck: [index.html](index.html)
 When published with GitHub Pages, the deck lives at:
 
 https://alfablok.github.io/epicspine-skill/
+
+## Upgrading
+
+Ask your agent to "upgrade epic-spine", or run the updater from the installed copy:
+
+```sh
+python3 ~/.agents/skills/epic-spine/scripts/skill_update.py upgrade
+```
+
+`status` compares the installed copy's pinned commit against the source's latest `main` without cloning; `upgrade` shallow-clones, verifies the tree against `MANIFEST.sha256`, swaps atomically (one `.bak`), and rewrites the pin. The default source is this repository. The delivery manager runs `status` at bind and follows `Skill updates: auto|manual|off` (default `auto`). See [skill-update.md](skill/epic-spine/references/skill-update.md).
 
 ## Why This Exists
 
@@ -303,16 +319,37 @@ This repo includes the installable Codex skill under `skill/epic-spine/`:
 skill/
   epic-spine/
     SKILL.md
+    VERSION
     agents/openai.yaml
     assets/
       book-companion-contract.md
+      compact-spine-template.md
       dispatch-prompt-preamble.md
       epic-spine-template.md
       github-issue-template.md
+      sweep-brief.md
     references/
+      artifacts.md
       book-companion.md
+      compact-state.md
+      dispatch-prompts.md
+      execution-rollups.md
+      git-doctrine.md
+      hygiene.md
+      learnings.md
       operating-model.md
+      role-protocols.md
+      roles-and-dispatch.md
+      skill-update.md
+      spine-creation.md
+      spine-model.md
+      sprint-dialect-v2.md
+      structural-validation.md
+      ticket-backends.md
     scripts/
+      migrate_spine.py
+      rollup_spine.py
+      skill_update.py
       validate_spine.py
 ```
 

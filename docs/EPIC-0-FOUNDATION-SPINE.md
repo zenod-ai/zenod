@@ -2,7 +2,7 @@
 
 Status: active
 Created: 2026-07-09
-Updated: 2026-09-18
+Updated: 2026-10-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-0-FOUNDATION-SPINE.md`
 Spine ID: Foundation
@@ -86,6 +86,19 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 - Owning public positioning copy; that remains `docs/EPIC-0-STORY.md`.
 - Replacing GitHub issues; issues remain the execution board.
 - Defining every future agent role in full detail.
+
+## Operating Learnings
+
+EpicSpine skill: 2026.10.09 @ 8c6eef8, checked 2026-10-10
+
+Always:
+- L-1 | any task beyond answering a question | the delivery manager dispatches a worker and never implements itself | Jordi's chosen operating model | confirmed 2026-10-10
+- L-2 | dispatching a worker | use the Claude Code `Agent` tool with `model: sonnet`, in the background, one task per worktree `../wt-<task>` | same subscription, no T3/OpenCode hop | confirmed 2026-10-10
+- L-3 | integrating worker output | verify diff and checks yourself, then merge via your own PR once `ci` is green; never admin-push `main` | protected main requires `ci` | confirmed 2026-10-10
+- L-4 | any push to `main` | treat it as image publish only; production deploy remains a separate human gate | publish.yml pushes GHCR images | confirmed 2026-10-10
+
+Scoped index:
+- none yet
 
 ## Current State
 
@@ -197,6 +210,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 | D20 | 2026-08-27 | accepted | Lock Zenod/PM plus Phylax as integrated UX over independent services. | Product backends own customer identity, subscription and memory; Phylax independently owns WhatsApp/Telegram transport, raw staging, STT, delivery and its own cost ledger. A narrow tenant-scoped control/data seam lets one browser experience manage both without moving credentials or sessions. Standalone Phylax reuses the same core with a different allowance issuer. | n/a | `docs/EPIC-P-PHYLAX-SPRINT.md` and `docs/evidence/zenod-phylax-integrated-independent-2026-08-27/index.html` | n/a |
 | D21 | 2026-08-27 | accepted | Treat tenant credentials and direct MCP tokens as durable data, never deployment state. | Code/image/config rollout must not rotate, migrate, reinterpret or replace customer tokens, Google credentials or channel sessions. The ZAL-22 rollout preserved them and proved the pre-existing direct MCP URL and Google/WhatsApp connections after both restarts. | n/a | [PR #1098](https://github.com/zenod-ai/zenod/pull/1098) and `docs/evidence/zenod-zal22-production-rollout-2026-08-27/README.md` | n/a |
 | D25 | 2026-09-17 | accepted | Verify live production via its health endpoint, not the spine's stored record. | Live production reported `22440b4` while the spine still said `620716f`; `main` `3b95025` is 4 documentation-only commits ahead, so there is no pending functional deploy. | n/a | `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md`, live health `https://cloud.zenod.dev/api/health` | Revisit if live health changes or a measured memory incident justifies a new deploy. |
+| D26 | 2026-10-10 | accepted | Adopt EpicSpine 2026.10.09 with a Claude-native dispatch profile: the delivery manager never implements; workers are background Claude Code `Agent` subagents on Sonnet 5.5 in their own worktree; the manager verifies and self-merges through a CI-gated PR. | Jordi's preferred way of working; same subscription, no T3/OpenCode hop; protected `main` requires the `ci` check, so a self-merged PR keeps CI without the user merging. | n/a | `AGENTS.md` EpicSpine block; `skills/epic-spine.SOURCE` @ `8c6eef8` | Revisit if Jordi changes the worker model or merge policy. |
 
 ## Issue Ledger
 

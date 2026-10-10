@@ -194,7 +194,7 @@ Authority by role:
 | Epic 0 worker | Keep the full project picture and spin out child spines/workers | Bound Epic 0 spine, child-spine drafts, coordination issues | Mutate child implementation detail without authority | Child scope conflicts, project direction changes, or human decision is needed |
 | Planner | Shape intent, scope, backlog, dispatch | Bound spine planning sections, issue board | Implement code by default | Work needs product/scope decision or multi-spine edit |
 | Epic worker | Act as delivery lead for scoped epic through issue/subagent loop | Bound spine as steward, GitHub issues, dispatch and integration state | Change acceptance, product intent, or cross-spine scope without input | Epic is ready for human test, or a required decision blocks delivery |
-| Ticket worker | Execute one bound ticket | Issue branch/code, issue comments, PR, structured handoff | Rewrite the spine, mission, acceptance, or broad architecture unless explicitly delegated | Code/issue/spine diverge, blocker changes scope |
+| Ticket worker | Execute one bound ticket | Worktree branch/code, issue comments, commits, structured handoff | Rewrite the spine, mission, acceptance, or broad architecture unless explicitly delegated | Code/issue/spine diverge, blocker changes scope |
 | Tester | Validate against acceptance | Test evidence, issue comments, structured handoff | Change implementation code or shared spine state by default | Acceptance is unclear, failure implies scope or design change |
 | Reviewer | Inspect and advise | Findings only unless promoted | Mutate docs/issues/code | Finding requires owner decision |
 | Observer | Bootstrap and summarize | Nothing unless promoted | Mutate docs/issues/code | Binding is unclear |
@@ -210,7 +210,7 @@ EpicSpine work should converge on a role-specific terminal state.
 | Epic 0 worker | Keep the project coherent | Child spines are mapped, state is rolled up, workers are bound, next actions are clear | Project direction, cross-child conflict, or human decision is required |
 | Planner | Make the epic executable | Backlog is coherent, issues are ready, owners dispatched, blockers named | Product/scope decision, cross-spine authority, or user input is required |
 | Epic worker | Deliver the scoped epic | Issues are created, subagents dispatched, fixes coordinated, and the epic is ready for human test or tester handoff | Product/scope decision, acceptance change, cross-spine authority, or human input is required |
-| Ticket worker | Complete the bound issue | Implementation is ready for testing with PR/branch/evidence linked | Blocker changes scope, acceptance is unclear, or credentials/approval are required |
+| Ticket worker | Complete the bound issue | Implementation is ready for testing with local branch/commit evidence linked | Blocker changes scope, acceptance is unclear, or credentials/approval are required |
 | Tester | Prove pass/fail | Acceptance passes, a bounded fix loop passes, or failure is evidenced | Failure implies scope/design/acceptance change or cannot be fixed locally |
 | Reviewer | Surface risks | Findings are linked and prioritized | Mutation is needed; request role promotion |
 | Observer | Bootstrap state | Current state and next action are clear | Binding is unclear |
@@ -228,7 +228,7 @@ Subagent write discipline:
 - Ticket workers/subagents write deep detail and their final structured handoff to the assigned GitHub issue.
 - Testers write exact commit/environment evidence to the issue and return a structured result.
 - The active steward alone reconciles the spine unless a narrow section is explicitly delegated.
-- The bound spine receives only clean state: issue links, PR/branch links, blockers, decisions needed, validation evidence, and next action.
+- The bound spine receives only clean state: issue links, branch/commit links, blockers, decisions needed, validation evidence, and next action.
 - If a subagent needs a decision outside its issue, it raises it in the issue; the epic worker summarizes the durable consequence in the spine.
 
 Testers may run a bounded self-fix loop when the failure is small and clearly inside the existing ticket. Preferred sequence:
@@ -258,23 +258,23 @@ An epic worker may create and dispatch tickets inside already accepted scope. Th
 
 ## Branch, Worktree, And Integration Model
 
-Use dedicated branches and worktrees for every dispatched worker/tester, whether serial or parallel, and keep the integration line fresh.
+Use dedicated worktrees for every dispatched worker/tester, whether serial or parallel, and keep one integration line fresh.
 
-- **Every dispatched worker/tester uses one dedicated branch and worktree**. The worker's first action is `git worktree add ../wt-<ticket> -b <branch> <pinned-base>`; record the absolute path. The primary clone stays pinned to integration and read-only. Checkout/switch there is a branch-ransom defect.
-- Use branch names that identify the issue or role, for example `epic-2.4/c-3-checkout` or `issue-671-cloud-checkout`.
-- Create the separate worktree even for serial execution; it checks out the dedicated issue branch and does not replace that branch. If creation fails, report to the steward before editing; never fall back to the shared checkout.
+- **Every dispatched worker/tester uses one local worktree branch**. The worker's first action is `git worktree add ../wt-<task> -b wt/<task> main`; record the absolute path. The primary checkout always sits on a clean `main` and is read-only. Checkout/switch there is a branch-ransom defect.
+- Use branch names that identify the task, for example `wt/checkout-fix` or `wt/issue-671`.
+- Create the separate worktree even for serial execution; it checks out the local task branch and does not replace that branch. If creation fails, report to the steward before editing; never fall back to the shared checkout.
 - Record branch, absolute worktree path, base commit SHA, integration target, owner, and latest verified time at dispatch.
-- Protected `main` is the default integration and deployment base unless the spine declares another branch.
-- Merge small work frequently after required review and automated checks pass. New agents should bootstrap from the freshest validated integration base, not a stale long-lived branch.
-- If work cannot merge, keep the issue ledger and GitHub issue explicit: branch, PR, blocker, owner, and next action.
-- Prefer small PRs that can merge independently over large hidden branches.
-- Human test should run from merged `main`, a named integration branch, or an explicit PR preview recorded in the spine. Always record the tested commit and environment.
+- `main` is the default integration and deployment base unless the spine declares another branch.
+- The delivery manager integrates verified work to `main` itself under [Git doctrine](git-doctrine.md), then tests in `main`. New agents should bootstrap from the freshest validated `main`, not a stale long-lived branch.
+- If work cannot merge, keep the issue ledger and GitHub issue explicit: local branch, commits, blocker, owner, and next action.
+- Prefer small, independently integrable changes over large hidden branches.
+- Human test runs from merged `main`, or a named integration branch when one is declared. Always record the tested commit and environment.
 
 Integration gates:
 
 | Status | Required Meaning |
 |---|---|
-| `review` | Implementation complete, PR open, and required automated checks passing |
+| `review` | Implementation complete, local branch handed off, and required automated checks passing |
 | `testing` | Exact commit available in the named test surface; acceptance validation in progress |
 | `done` | Acceptance passed, evidence linked, residual risk recorded, spine reconciled |
 
@@ -291,7 +291,7 @@ Planner flow:
    - no expected write conflict in the same files, services, migrations, or release surface;
    - acceptance criteria can be validated independently;
    - each worker can complete with only its issue plus the bound spine bootstrap map.
-6. Dispatch workers with explicit bound spine, steward, assignment identity, dedicated branch, base commit, integration target, write scope, required reads, acceptance criteria, human gates, and handoff requirements.
+6. Dispatch workers with explicit bound spine, steward, assignment identity, local worktree branch (`wt/<task>`), base commit, integration target, write scope, required reads, acceptance criteria, human gates, and handoff requirements.
 7. Record dispatch state in the spine so a later planner can see which worker owns which issue.
 
 Planners dispatch the initial plan. Epic workers may dispatch or re-dispatch parallel batches inside accepted scope; they must return scope or acceptance changes to the planner.
@@ -370,13 +370,13 @@ Make assignments resumable. Every active issue should expose:
 - stable assignment identity and owner;
 - bound spine and active steward;
 - branch, absolute worktree path, base commit, and latest commit;
-- integration target and PR;
+- integration target and optional PR;
 - last verified absolute time;
 - blocker and exact next action.
 
 When an assignment becomes stale or abandoned:
 
-1. Verify the issue, branch, PR, code, and latest evidence.
+1. Verify the issue, branch, commits, code, and latest evidence.
 2. Mark the old assignment `superseded` or otherwise visibly inactive; do not erase its history.
 3. Record the takeover identity, starting commit, and any untrusted or unverified work.
 4. Re-dispatch from the freshest safe base and reconcile the issue ledger.
@@ -409,7 +409,7 @@ Use these statuses unless a repository already has its own vocabulary:
 - `ready`: scoped and ready for the owning role.
 - `active`: currently being worked.
 - `blocked`: cannot progress without named input or dependency.
-- `review`: implementation is complete, PR is open, and required automated checks pass.
+- `review`: implementation is complete, the local branch is handed off, and required automated checks pass.
 - `testing`: the exact commit is available in a named test surface and acceptance validation is in progress.
 - `done`: accepted against criteria, evidence is linked, and durable state is reflected in the spine.
 - `superseded`: an assignment was replaced; preserve its history and point to the takeover.

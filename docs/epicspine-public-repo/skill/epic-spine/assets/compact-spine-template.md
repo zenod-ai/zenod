@@ -6,7 +6,11 @@ Spine dialect: v1
 Repository: <owner/repo>
 Primary document: <path to this file>
 Spine ID: <stable-id>
-Integration branch: <branch>
+Integration branch: main
+Integration policy: main-direct
+<!-- Optional: main-direct (default) or pr-approval. The delivery manager merges verified work to the integration branch itself under ../references/git-doctrine.md. -->
+Dispatch profile: default
+<!-- Optional: overrides merge field by field over the built-in default; `template:<name>` is reserved and not yet defined. See ../references/roles-and-dispatch.md. -->
 
 ## Current State
 
@@ -28,6 +32,12 @@ Verified at: <absolute time with timezone>
 ## Non-Goals
 
 <explicit scope exclusions>
+
+## Operating Learnings
+
+Optional. One line per learning: `L-<n> | applies when | the rule, imperative | why (≤ 8 words) | confirmed YYYY-MM-DD`. Keep only what applies to this spine; scoped entries point to the branch spine that owns them. Root spines also keep an **Always** list (≤ 12 lines) and a **Scoped index**. See ../references/learnings.md.
+
+- L-1 | <applies when> | <imperative rule> | <why, ≤ 8 words> | confirmed YYYY-MM-DD
 
 ## Definition Of Done
 

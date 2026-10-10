@@ -7,7 +7,7 @@ Spine steward: <agent/thread/task/name>
 Status: ready
 Depends on: <issue links or none>
 Bound spine: <same as EpicSpine unless explicitly different>
-Dedicated branch: <branch name>
+Worktree branch: wt/<task> (local; no push or PR by default)
 Worktree: <absolute dedicated path>
 Spine dialect: <inherit bound spine: v1 or v2; undeclared means v1>
 Acceptance surface: <inherit bound spine; if undeclared in v1, describe existing acceptance without changing it>
@@ -27,7 +27,7 @@ Terminal state: review | testing | accepted | blocked with required input | plan
 
 ## Context
 
-FIRST ACTION: `git worktree add ../wt-<ticket> -b <branch> <base-commit>` and work only there. Never run `git checkout` or `git switch` in the shared clone.
+FIRST ACTION: `git worktree add ../wt-<task> -b wt/<task> main` and work only there. Never run `git checkout` or `git switch` in the shared clone.
 
 - Spine section: <heading or anchor>
 - Required reads: <links copied from the Bootstrap Map>
@@ -65,11 +65,11 @@ Use existing user authorization without asking again. Defaults and absence rules
 
 When done, update this issue and notify the spine steward:
 
-- [ ] PR/branch, base and latest commit, evidence, last verified time, and next action
+- [ ] Worktree branch, base and latest commit, evidence, last verified time, and next action
 - [ ] Structured handoff answering what changed, why, how to verify, remaining risk, and exact terminal state
 - [ ] Validation evidence includes exact commit and environment if testing was performed
 - [ ] Proposed Cross-Spine Updates if this work reveals changes needed in read-only spines
-- [ ] Merge or PR status against the integration branch
+- [ ] Integration status against the integration branch (the manager merges verified work itself)
 - [ ] Spine steward notified to reconcile Issue Ledger, Handoff Journal, and durable Validation Evidence
 
 ## Recovery
