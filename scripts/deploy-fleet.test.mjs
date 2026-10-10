@@ -12,10 +12,10 @@ const script = join(dirname(fileURLToPath(import.meta.url)), "deploy-fleet.sh");
 const NEW_SHA = "066ab3d4eedab49aa975b2f02623cdfc271bf6c0";
 const IMAGE = "ghcr.io/zenod-ai/zenod:sha-066ab3d";
 
-async function fake({ image, env, healthAfterDeploy }) {
+async function fake({ image, env, healthAfterDeploy, rollDelayMs = 0 }) {
   const calls = [];
   const app = { applicationId: "app1", name: "zenod-mt", dockerImage: image, env, applicationStatus: "done" };
-  let deployed = false;
+  let deployedAt = null;
   const server = createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
@@ -29,7 +29,7 @@ async function fake({ image, env, healthAfterDeploy }) {
           if (parsed.dockerImage) app.dockerImage = parsed.dockerImage;
           if (parsed.env !== undefined) app.env = parsed.env;
         }
-        if (url.pathname === "/api/application.deploy") deployed = true;
+        if (url.pathname === "/api/application.deploy") deployedAt = Date.now();
         return send({});
       }
       if (url.pathname === "/api/project.all") {
@@ -38,7 +38,7 @@ async function fake({ image, env, healthAfterDeploy }) {
       }
       if (url.pathname === "/api/application.one") return send(app);
       if (url.pathname === "/health") {
-        return send({ status: "ok", sha: deployed ? healthAfterDeploy : "587c00521ddda32295a3dfff44e15f428935e853" });
+        return send({ status: "ok", sha: deployedAt !== null && Date.now() - deployedAt >= rollDelayMs ? healthAfterDeploy : "587c00521ddda32295a3dfff44e15f428935e853" });
       }
       res.statusCode = 404; res.end("{}");
     });
@@ -101,7 +101,35 @@ test("fails (never reports success) when live health keeps the old sha", async (
   const f = await fake({ image: OLD_IMAGE, env: "A=1", healthAfterDeploy: "587c00521ddda32295a3dfff44e15f428935e853" });
   const { code, out } = await run(f, { HEALTH_TIMEOUT_SECONDS: "1" });
   assert.notEqual(code, 0);
-  assert.match(out, /timed out/);
+  assert.match(out, /timed out after \d+s \(limit 1s;/);
+  assert.match(out, /live sha '587c00521ddda32295a3dfff44e15f428935e853'/);
+});
+
+// 2026-10-10 a7673eb: Dokploy queued the deploy behind an unrelated build, so health
+// kept the old sha (Dokploy status 'done' throughout) for minutes before the roll
+// landed. A slow-but-successful roll within the timeout must succeed.
+test("slow roll: health flips to the new sha only after a delay, within the timeout", async () => {
+  const f = await fake({ image: OLD_IMAGE, env: "A=1", healthAfterDeploy: NEW_SHA, rollDelayMs: 4000 });
+  const { code, out } = await run(f, { HEALTH_TIMEOUT_SECONDS: "20", HEALTH_POLL_SECONDS: "1" });
+  assert.equal(code, 0, out);
+  assert.match(out, /live sha 066ab3d\w+ matches \(Dokploy status 'done', \d+s after deploy request\)/);
+});
+
+test("slow roll beyond the configured timeout still fails with elapsed time and live sha", async () => {
+  const f = await fake({ image: OLD_IMAGE, env: "A=1", healthAfterDeploy: NEW_SHA, rollDelayMs: 60000 });
+  const { code, out } = await run(f, { HEALTH_TIMEOUT_SECONDS: "3", HEALTH_POLL_SECONDS: "1" });
+  assert.notEqual(code, 0);
+  assert.match(out, /timed out after [3-9]s \(limit 3s;.*live sha '587c005/);
+});
+
+test("default timeout is 900s and the workflow job limit exceeds it", async () => {
+  const { readFileSync } = await import("node:fs");
+  const sh = readFileSync(script, "utf8");
+  assert.match(sh, /HEALTH_TIMEOUT_SECONDS="\$\{HEALTH_TIMEOUT_SECONDS:-900\}"/);
+  const wf = readFileSync(join(dirname(script), "..", ".github", "workflows", "publish.yml"), "utf8");
+  const deploy = wf.slice(wf.indexOf("\n  deploy:"));
+  const minutes = Number(/timeout-minutes:\s*(\d+)/.exec(deploy)[1]);
+  assert.ok(minutes * 60 >= 900 + 300, `deploy timeout-minutes ${minutes} too small`);
 });
 
 test("DRY_RUN changes nothing", async () => {
