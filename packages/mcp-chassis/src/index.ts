@@ -66,6 +66,7 @@ import {
 } from "./conduct.js";
 export type { BillingOptions } from "./billing.js";
 export type { ChassisLoggingOptions } from "./logging.js";
+export { redactSecretString } from "./logging.js";
 export {
   defaultTenantSettingsValues,
   SqliteTenantSettingsStore,
