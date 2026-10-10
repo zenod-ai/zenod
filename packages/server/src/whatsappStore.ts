@@ -306,9 +306,23 @@ export interface WhatsAppVoiceJob {
   transcription: Record<string, unknown> | null;
   replyText: string | null;
   errorText: string | null;
+  /** Structured failure detail, queryable without logs. Null on success. */
+  failureReason: string | null;
+  failureProvider: string | null;
+  failureHttpStatus: number | null;
+  failureProviderCode: string | null;
   attempts: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface WhatsAppVoiceFailureDetail {
+  reason?: string | null;
+  provider?: string | null;
+  httpStatus?: number | null;
+  providerCode?: string | null;
+  /** Sanitized, bounded provider message; persisted on the receipt JSON. */
+  message?: string | null;
 }
 
 export interface WhatsAppVoiceTranscript {
@@ -638,6 +652,20 @@ export class WhatsAppStore {
     if (!voiceColumns.some((column) => column.name === "reply_to_message_id")) {
       this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN reply_to_message_id TEXT");
     }
+    // Structured transcription failure detail: a failed voice job is diagnosable
+    // from this row alone (reason/status/provider code), without container logs.
+    for (const column of [
+      "failure_reason",
+      "failure_provider",
+      "failure_provider_code",
+    ]) {
+      if (!voiceColumns.some((candidate) => candidate.name === column)) {
+        this.db.exec(`ALTER TABLE whatsapp_voice_jobs ADD COLUMN ${column} TEXT`);
+      }
+    }
+    if (!voiceColumns.some((column) => column.name === "failure_http_status")) {
+      this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN failure_http_status INTEGER");
+    }
     for (const column of [
       "media_download_ms",
       "transcription_queue_wait_ms",
@@ -914,8 +942,10 @@ export class WhatsAppStore {
          artifact_sha256 AS artifactSha256, mime_type AS mimeType, file_name AS fileName,
          caption_text AS captionText, duration_seconds AS durationSeconds,
          job_state AS state, transcription_json AS transcriptionJson,
-         reply_text AS replyText, error_text AS errorText, attempts,
-         created_at AS createdAt, updated_at AS updatedAt
+         reply_text AS replyText, error_text AS errorText,
+         failure_reason AS failureReason, failure_provider AS failureProvider,
+         failure_http_status AS failureHttpStatus, failure_provider_code AS failureProviderCode,
+         attempts, created_at AS createdAt, updated_at AS updatedAt
        FROM whatsapp_voice_jobs WHERE provider_message_id = ?`,
     ).get(providerMessageId) as (Omit<WhatsAppVoiceJob, "transcription"> & { transcriptionJson: string | null }) | undefined;
     if (!row) return null;
@@ -925,6 +955,46 @@ export class WhatsAppStore {
       transcription: transcriptionJson
         ? JSON.parse(transcriptionJson) as Record<string, unknown>
         : null,
+    };
+  }
+
+  /**
+   * Most recent structured transcription failure for a tenant, so the customer
+   * settings surface and status probes can show "credit exhausted" without
+   * reading container logs.
+   */
+  latestVoiceFailure(tenantId: string): {
+    reason: string;
+    provider: string | null;
+    httpStatus: number | null;
+    providerCode: string | null;
+    message: string;
+    failedAt: number;
+  } | null {
+    const row = this.db.prepare(
+      `SELECT failure_reason AS reason, failure_provider AS provider,
+         failure_http_status AS httpStatus, failure_provider_code AS providerCode,
+         error_text AS message, updated_at AS failedAt
+       FROM whatsapp_voice_jobs
+       WHERE tenant_id = ? AND failure_reason IS NOT NULL
+       ORDER BY updated_at DESC, provider_message_id DESC
+       LIMIT 1`,
+    ).get(tenantId) as {
+      reason: string;
+      provider: string | null;
+      httpStatus: number | null;
+      providerCode: string | null;
+      message: string | null;
+      failedAt: number;
+    } | undefined;
+    if (!row) return null;
+    return {
+      reason: row.reason,
+      provider: row.provider,
+      httpStatus: row.httpStatus,
+      providerCode: row.providerCode,
+      message: row.message ?? "",
+      failedAt: row.failedAt,
     };
   }
 
@@ -1085,7 +1155,10 @@ export class WhatsAppStore {
   ): boolean {
     return Boolean(this.db.prepare(
       `UPDATE whatsapp_voice_jobs
-       SET job_state = 'transcribed', transcription_json = ?, error_text = NULL, updated_at = ?
+       SET job_state = 'transcribed', transcription_json = ?, error_text = NULL,
+           failure_reason = NULL, failure_provider = NULL,
+           failure_http_status = NULL, failure_provider_code = NULL,
+           updated_at = ?
        WHERE provider_message_id = ? AND job_state = 'transcribing'`,
     ).run(safeJson(transcription), now, providerMessageId).changes);
   }
@@ -1147,17 +1220,45 @@ export class WhatsAppStore {
     ).run(errorText.slice(0, 2_000), now, providerMessageId);
   }
 
-  queueVoiceFailureReply(providerMessageId: string, replyText: string, now = Date.now()): void {
+  queueVoiceFailureReply(
+    providerMessageId: string,
+    replyText: string,
+    now = Date.now(),
+    failure?: WhatsAppVoiceFailureDetail,
+  ): void {
     const bounded = boundedRecoveryReply(replyText);
     if (!bounded) throw new Error("voice failure reply is empty");
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const changed = this.db.prepare(
         `UPDATE whatsapp_voice_jobs
-         SET job_state = 'failed', error_text = ?, updated_at = ?
+         SET job_state = 'failed', error_text = ?,
+             transcription_json = ?,
+             failure_reason = ?, failure_provider = ?,
+             failure_http_status = ?, failure_provider_code = ?,
+             updated_at = ?
          WHERE provider_message_id = ?
            AND job_state NOT IN ('cancelled', 'completed', 'reply_ready', 'ring_outcome_unknown')`,
-      ).run(bounded, now, providerMessageId).changes;
+      ).run(
+        bounded,
+        failure
+          ? safeJson({
+              transcription_failed: {
+                code: failure.reason ?? "unknown",
+                ...(failure.message ? { message: failure.message } : {}),
+                ...(failure.provider ? { provider: failure.provider } : {}),
+                ...(failure.httpStatus != null ? { http_status: failure.httpStatus } : {}),
+                ...(failure.providerCode ? { provider_code: failure.providerCode } : {}),
+              },
+            })
+          : null,
+        failure?.reason ?? null,
+        failure?.provider ?? null,
+        failure?.httpStatus ?? null,
+        failure?.providerCode ?? null,
+        now,
+        providerMessageId,
+      ).changes;
       if (!changed) {
         this.db.exec("COMMIT");
         return;

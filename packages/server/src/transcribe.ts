@@ -40,11 +40,38 @@ import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
  *   ZENOD_WHISPER_THREADS  (default: 4)
  */
 
+/**
+ * Closed-enum reason a transcription attempt failed. User copy and operator
+ * logging key off this instead of parsing the free-form provider message, so a
+ * credit failure can never collapse into the same "unavailable" text as a
+ * network blip or a revoked key.
+ */
+export type TranscriptionFailureReason =
+  | "provider_credit_exhausted"
+  | "provider_auth_failed"
+  | "provider_rate_limited"
+  | "provider_unavailable"
+  | "network_error"
+  | "timeout"
+  | "no_speech"
+  | "duration_limit"
+  | "disabled"
+  | "not_configured"
+  | "unknown";
+
 export interface TranscriptionEnvelope {
   success: boolean;
   transcript?: string;
   provider?: string;
   error?: string;
+  /** Structured, closed-enum failure reason; present on every failure. */
+  failureReason?: TranscriptionFailureReason;
+  /** HTTP status when a provider answered; absent for transport failures. */
+  httpStatus?: number;
+  /** Sanitized provider error code (e.g. insufficient_quota) or network cause code. */
+  providerCode?: string;
+  /** Attempts made before giving up (network retries). */
+  attempts?: number;
   /** True when the audio contained no intelligible speech (silence/hallucination). */
   noSpeech?: boolean;
   timing?: { queue_wait_ms: number | null; runtime_ms: number | null };
@@ -365,15 +392,188 @@ function fakeFailedProviders(): Set<string> {
   );
 }
 
-/** POST one audio file to Groq's OpenAI-compatible transcription endpoint. */
+// Provider error bodies are adversarial/verbose; never store or forward more
+// than a bounded, whitespace-collapsed prefix. API keys are never in the body,
+// but truncation keeps receipt rows and log lines small regardless.
+const PROVIDER_MESSAGE_MAX_CHARS = 400;
+
+// Codes that mean the provider key is valid but has no usable allowance.
+const CREDIT_EXHAUSTED_CODES = new Set([
+  "insufficient_quota",
+  "insufficient_credits",
+  "insufficient_balance",
+  "insufficient_funds",
+  "credit_limit_reached",
+  "billing_hard_limit_reached",
+  "billing_not_active",
+]);
+
+export function sanitizeProviderMessage(value: string, max = PROVIDER_MESSAGE_MAX_CHARS): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/** Groq failure carrying the parsed status/reason for the shared classifier. */
 class GroqTranscriptionError extends Error {
   constructor(
     message: string,
     readonly status: number,
     readonly retryAfterSeconds: number | null,
+    readonly reason: TranscriptionFailureReason = "provider_unavailable",
+    readonly providerCode?: string,
   ) {
     super(message);
   }
+}
+
+/** A fetch that never produced an HTTP response, after bounded network retries. */
+class NetworkFetchError extends Error {
+  constructor(
+    message: string,
+    readonly attempts: number,
+    readonly causeCode: string | undefined,
+  ) {
+    super(message);
+    this.name = "NetworkFetchError";
+    if (causeCode) Object.defineProperty(this, "code", { value: causeCode, enumerable: true });
+  }
+}
+
+/** Best-effort structured extraction from an OpenAI-compatible error body. */
+export function parseProviderErrorBody(body: string): { code?: string; message?: string } {
+  const trimmed = body.trim();
+  if (!trimmed) return {};
+  try {
+    const json = JSON.parse(trimmed) as unknown;
+    if (typeof json === "object" && json !== null) {
+      const root = json as Record<string, unknown>;
+      const error = (typeof root.error === "object" && root.error !== null
+        ? root.error
+        : root) as Record<string, unknown>;
+      const code = typeof error.code === "string"
+        ? error.code
+        : typeof error.type === "string"
+          ? error.type
+          : typeof root.code === "string"
+            ? root.code
+            : undefined;
+      const message = typeof error.message === "string"
+        ? error.message
+        : typeof root.message === "string"
+          ? root.message
+          : undefined;
+      return { ...(code ? { code } : {}), ...(message ? { message } : {}) };
+    }
+  } catch {
+    // Non-JSON bodies (plain text) fall through to the raw-message branch.
+  }
+  return { message: trimmed };
+}
+
+function mentionsCreditExhaustion(text: string): boolean {
+  return /insufficient[_ ]?(?:quota|credit|balance|funds)|requires at least|not enough (?:credit|balance|funds)|add (?:more )?credits|out of credit|quota (?:exceeded|exhausted)|billing/i.test(
+    text,
+  );
+}
+
+/**
+ * Map an HTTP failure to the closed reason enum. Order matters: 402 is credit,
+ * 401/403 is auth, a credit-worded 429 is a quota (not a throttle), and only
+ * then does 429 mean rate limiting.
+ */
+export function classifyProviderFailure(
+  status: number,
+  providerCode: string | undefined,
+  body: string,
+): TranscriptionFailureReason {
+  const code = providerCode?.trim().toLowerCase() ?? "";
+  if (CREDIT_EXHAUSTED_CODES.has(code) || code.startsWith("billing_")) {
+    return "provider_credit_exhausted";
+  }
+  if (status === 401 || status === 403) return "provider_auth_failed";
+  if (status === 402) return "provider_credit_exhausted";
+  if (status === 429) {
+    return /quota|credit|billing/i.test(code) || mentionsCreditExhaustion(body)
+      ? "provider_credit_exhausted"
+      : "provider_rate_limited";
+  }
+  if (status === 408) return "timeout";
+  if (status >= 500) return "provider_unavailable";
+  if (mentionsCreditExhaustion(body)) return "provider_credit_exhausted";
+  return "provider_unavailable";
+}
+
+/** Node fetch surfaces the real transport cause (ETIMEDOUT, UND_ERR_*, …) on err.cause.code. */
+export function networkErrorCode(err: unknown): string | undefined {
+  const candidate = err as { cause?: { code?: unknown }; code?: unknown } | null | undefined;
+  const causeCode = candidate?.cause?.code;
+  if (typeof causeCode === "string" && causeCode.trim()) return causeCode.trim();
+  const direct = candidate?.code;
+  return typeof direct === "string" && direct.trim() ? direct.trim() : undefined;
+}
+
+export function classifyThrownError(err: unknown): TranscriptionFailureReason {
+  const name = (err as { name?: string } | null | undefined)?.name ?? "";
+  // AbortSignal.timeout / aborted fetches surface as TimeoutError/AbortError.
+  // Transport-level causes (ETIMEDOUT, ECONNRESET, UND_ERR_CONNECT_TIMEOUT, …)
+  // are network errors and keep their cause code for the log line.
+  if (name === "TimeoutError" || name === "AbortError") return "timeout";
+  return "network_error";
+}
+
+/** Build the failure envelope from a provider's non-OK HTTP response. */
+export function transcriptionFailureFromResponse(
+  provider: string,
+  status: number,
+  body: string,
+): TranscriptionEnvelope {
+  const parsed = parseProviderErrorBody(body);
+  return {
+    success: false,
+    provider,
+    error: `${provider} transcription failed (${status}): ${sanitizeProviderMessage(body)}`,
+    failureReason: classifyProviderFailure(status, parsed.code, body),
+    httpStatus: status,
+    ...(parsed.code ? { providerCode: parsed.code } : {}),
+  };
+}
+
+/** Groq throws rather than returning an envelope; normalize it to the shared shape. */
+export function groqFailure(err: unknown, aborted: boolean): TranscriptionEnvelope {
+  const message = err instanceof Error ? err.message : String(err);
+  if (aborted) {
+    return { success: false, provider: "groq", error: message, failureReason: "timeout" };
+  }
+  if (err instanceof GroqTranscriptionError) {
+    return {
+      success: false,
+      provider: "groq",
+      error: message,
+      failureReason: err.reason,
+      httpStatus: err.status,
+      ...(err.providerCode ? { providerCode: err.providerCode } : {}),
+    };
+  }
+  // Local ffmpeg/segment/upload-cap errors are not provider transport failures.
+  return { success: false, provider: "groq", error: message, failureReason: "provider_unavailable" };
+}
+
+/** Build the failure envelope from a thrown fetch/provider error. */
+export function transcriptionFailureFromThrown(
+  provider: string,
+  err: unknown,
+): TranscriptionEnvelope {
+  const message = err instanceof Error ? err.message : String(err);
+  const causeCode = networkErrorCode(err);
+  const failureReason = classifyThrownError(err);
+  const attempts = err instanceof NetworkFetchError ? err.attempts : undefined;
+  return {
+    success: false,
+    provider,
+    error: causeCode ? `${message} (cause: ${causeCode})` : message,
+    failureReason,
+    ...(causeCode ? { providerCode: causeCode } : {}),
+    ...(attempts !== undefined ? { attempts } : {}),
+  };
 }
 
 function parseRetryAfterSeconds(response: Response, body: string): number | null {
@@ -408,21 +608,32 @@ async function groqTranscribeFile(path: string, apiKey: string, signal?: AbortSi
   });
   if (!response.ok) {
     const body = (await response.text().catch(() => "")).slice(0, 400);
+    const parsed = parseProviderErrorBody(body);
     throw new GroqTranscriptionError(
-      `groq transcription failed (${response.status}): ${body}`,
+      `groq transcription failed (${response.status}): ${sanitizeProviderMessage(body)}`,
       response.status,
       parseRetryAfterSeconds(response, body),
+      classifyProviderFailure(response.status, parsed.code, body),
+      parsed.code,
     );
   }
   return (await response.text()).trim();
 }
 
-async function groqTranscribeFileWithRetry(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
+export async function groqTranscribeFileWithRetry(path: string, apiKey: string, signal?: AbortSignal): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await groqTranscribeFile(path, apiKey, signal);
     } catch (err) {
-      if (!(err instanceof GroqTranscriptionError) || err.status !== 429) throw err;
+      // Never retry auth, credit/quota, or non-429 failures. A quota-worded
+      // 429 is classified as provider_credit_exhausted and thrown through.
+      if (
+        !(err instanceof GroqTranscriptionError)
+        || err.status !== 429
+        || err.reason !== "provider_rate_limited"
+      ) {
+        throw err;
+      }
       const retryAfter = err.retryAfterSeconds;
       if (
         retryAfter === null ||
@@ -483,6 +694,7 @@ async function transcribeWithOpenAI(
         success: false,
         provider: "openai",
         error: `compressed audio exceeds OpenAI upload cap (${Math.round(size / 1_000_000)} MB)`,
+        failureReason: "unknown",
       };
     }
     const form = new FormData();
@@ -499,26 +711,43 @@ async function transcribeWithOpenAI(
     });
     if (!response.ok) {
       const body = (await response.text().catch(() => "")).slice(0, 400);
-      return { success: false, provider: "openai", error: `openai transcription failed (${response.status}): ${body}` };
+      return transcriptionFailureFromResponse("openai", response.status, body);
     }
     const transcript = (await response.text()).trim();
-    if (!transcript) return { success: false, provider: "openai", error: "transcription returned empty text" };
+    if (!transcript) {
+      return { success: false, provider: "openai", error: "transcription returned empty text", failureReason: "unknown" };
+    }
     return { success: true, transcript, provider: `openai ${OPENAI_STT_MODEL}` };
   } catch (err) {
-    return { success: false, provider: "openai", error: (err as Error).message };
+    return transcriptionFailureFromThrown("openai", err);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 }
 
 /** Retry only when the request never got an HTTP response (egress blips surface as "fetch failed"). */
-async function fetchRetryingNetworkErrors(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+export async function fetchRetryingNetworkErrors(
+  url: string,
+  init: RequestInit,
+  attempts = 3,
+): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fetch(url, init);
     } catch (err) {
-      if (attempt >= attempts || init.signal?.aborted) throw err;
-      console.warn(`[transcribe] network error, retrying (${attempt}/${attempts - 1}): ${(err as Error).message}`);
+      if (attempt >= attempts || init.signal?.aborted) {
+        // Preserve how many attempts were made and the transport cause code so
+        // the failure log line can say "network_error … attempts=3 cause=ETIMEDOUT".
+        throw new NetworkFetchError(
+          err instanceof Error ? err.message : String(err),
+          attempt,
+          networkErrorCode(err),
+        );
+      }
+      const cause = networkErrorCode(err);
+      console.warn(
+        `[transcribe] network error, retrying (${attempt}/${attempts - 1})${cause ? ` cause=${cause}` : ""}: ${(err as Error).message}`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
     }
   }
@@ -560,18 +789,16 @@ async function transcribeWithOpenRouter(
     });
     if (!response.ok) {
       const text = (await response.text().catch(() => "")).slice(0, 400);
-      return {
-        success: false,
-        provider: "openrouter",
-        error: `openrouter transcription failed (${response.status}): ${text}`,
-      };
+      return transcriptionFailureFromResponse("openrouter", response.status, text);
     }
     const json = (await response.json().catch(() => null)) as { text?: unknown } | null;
     const transcript = typeof json?.text === "string" ? json.text.trim() : "";
-    if (!transcript) return { success: false, provider: "openrouter", error: "transcription returned empty text" };
+    if (!transcript) {
+      return { success: false, provider: "openrouter", error: "transcription returned empty text", failureReason: "unknown" };
+    }
     return { success: true, transcript, provider: `openrouter ${model}` };
   } catch (err) {
-    return { success: false, provider: "openrouter", error: (err as Error).message };
+    return transcriptionFailureFromThrown("openrouter", err);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -686,6 +913,7 @@ export async function transcribeAudio(
       success: false,
       provider: timedResult.provider,
       error: NO_SPEECH_MESSAGE,
+      failureReason: "no_speech",
       noSpeech: true,
       ...(timedResult.timing ? { timing: timedResult.timing } : {}),
     };
@@ -767,6 +995,7 @@ async function runTranscription(
         success: false,
         provider: failedProvider,
         error: `${failedProvider} transcription failed`,
+        failureReason: "provider_unavailable",
       };
     }
     return {
@@ -782,8 +1011,8 @@ async function runTranscription(
       try {
         return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
       } catch (err) {
-        if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
-        cloudFailure = { success: false, provider: "groq", error: (err as Error).message };
+        cloudFailure = groqFailure(err, signal?.aborted === true);
+        if (signal?.aborted) return cloudFailure;
         console.warn(
           `[transcribe] groq failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${(err as Error).message}`,
         );
@@ -811,7 +1040,8 @@ async function runTranscription(
     try {
       return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
     } catch (err) {
-      if (signal?.aborted) return { success: false, provider: "groq", error: (err as Error).message };
+      const groqError = groqFailure(err, signal?.aborted === true);
+      if (signal?.aborted) return groqError;
       if (openrouterApiKey && shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)) {
         const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
         if (result.success || signal?.aborted) return result;
@@ -820,7 +1050,7 @@ async function runTranscription(
           `[transcribe] openrouter fallback failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`,
         );
       } else {
-        cloudFailure = { success: false, provider: "groq", error: (err as Error).message };
+        cloudFailure = groqError;
       }
       console.warn(
         `[transcribe] groq failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${(err as Error).message}`,
@@ -848,6 +1078,7 @@ async function runTranscription(
     return cloudFailure ?? {
       success: false,
       error: "no cloud transcription provider is configured for this channel",
+      failureReason: "not_configured",
     };
   }
 

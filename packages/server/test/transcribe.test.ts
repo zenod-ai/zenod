@@ -1,6 +1,121 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { NO_SPEECH_MESSAGE, transcribeAudio } from "../src/transcribe.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  classifyProviderFailure,
+  fetchRetryingNetworkErrors,
+  groqTranscribeFileWithRetry,
+  NO_SPEECH_MESSAGE,
+  transcribeAudio,
+  transcriptionFailureFromResponse,
+  transcriptionFailureFromThrown,
+} from "../src/transcribe.js";
+
+// Real OpenRouter 402 body from the incident log that motivated typed codes.
+const OPENROUTER_402_BODY = JSON.stringify({
+  error: {
+    message: "This request requires at least $0.50 in balance for audio",
+    code: 402,
+    metadata: { limit_source: "openrouter_credits" },
+  },
+});
+
+describe("transcription failure classification", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("parses the OpenRouter 402 body as provider credit exhaustion with the HTTP status", () => {
+    const envelope = transcriptionFailureFromResponse("openrouter", 402, OPENROUTER_402_BODY);
+    expect(envelope).toMatchObject({
+      success: false,
+      provider: "openrouter",
+      failureReason: "provider_credit_exhausted",
+      httpStatus: 402,
+    });
+    expect(envelope.error).toContain("requires at least $0.50");
+    expect(JSON.stringify(envelope)).not.toContain("sk-");
+  });
+
+  it.each([
+    [401, "{}", "provider_auth_failed"],
+    [403, "{}", "provider_auth_failed"],
+    [429, JSON.stringify({ error: { message: "slow down" } }), "provider_rate_limited"],
+    [500, "upstream exploded", "provider_unavailable"],
+    [503, "", "provider_unavailable"],
+    [429, JSON.stringify({ error: { code: "insufficient_quota" } }), "provider_credit_exhausted"],
+    [400, JSON.stringify({ error: { message: "insufficient credits; add more credits" } }), "provider_credit_exhausted"],
+  ] as const)("classifies provider HTTP failure (status %i)", (status, body, expected) => {
+    expect(classifyProviderFailure(status, undefined, body)).toBe(expected);
+  });
+
+  it("classifies a thrown fetch failure via its cause code and preserves it", () => {
+    const thrown = Object.assign(new TypeError("fetch failed"), {
+      cause: { code: "UND_ERR_CONNECT_TIMEOUT" },
+    });
+    const envelope = transcriptionFailureFromThrown("openrouter", thrown);
+    expect(envelope).toMatchObject({
+      failureReason: "network_error",
+      providerCode: "UND_ERR_CONNECT_TIMEOUT",
+    });
+    expect(envelope.error).toContain("UND_ERR_CONNECT_TIMEOUT");
+  });
+
+  it("does not retry a Groq 402 credit failure", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-groq-test-"));
+    const file = join(dir, "a.flac");
+    await writeFile(file, Buffer.from("audio"));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(OPENROUTER_402_BODY, { status: 402 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(groqTranscribeFileWithRetry(file, "gsk-test")).rejects.toMatchObject({
+        status: 402,
+        reason: "provider_credit_exhausted",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not retry a Groq 401 auth failure", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-groq-test-"));
+    const file = join(dir, "a.flac");
+    await writeFile(file, Buffer.from("audio"));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "invalid_api_key", message: "Invalid API Key" } }), { status: 401 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await expect(groqTranscribeFileWithRetry(file, "gsk-test")).rejects.toMatchObject({
+        status: 401,
+        reason: "provider_auth_failed",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("retries a bounded network error up to 3 attempts and reports attempts + cause", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(
+      Object.assign(new TypeError("fetch failed"), { cause: { code: "ETIMEDOUT" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const thrown = await fetchRetryingNetworkErrors("https://example.test/audio", {}).catch((err) => err);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(transcriptionFailureFromThrown("openrouter", thrown)).toMatchObject({
+      failureReason: "network_error",
+      providerCode: "ETIMEDOUT",
+      attempts: 3,
+    });
+  }, 15_000);
+});
 
 // The fake-transcript hook (ZENOD_WHISPER_FAKE_TRANSCRIPT) short-circuits the
 // provider cascade in test env, so these exercise the post-transcription

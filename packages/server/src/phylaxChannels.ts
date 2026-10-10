@@ -79,9 +79,25 @@ export interface PhylaxChannelInbound {
   transcription?: PhylaxTranscriptionReceipt;
 }
 
+/**
+ * Structured transcription failure. `code` stays the stable user/consumer code
+ * (for provider failures it is the closed-enum `reason`), while `reason`,
+ * `http_status` and `provider_code` make a failure diagnosable from the row or
+ * log alone — no SSH. Provider message text is bounded and never contains a key.
+ */
+export interface PhylaxTranscriptionFailure {
+  code: string;
+  message: string;
+  reason?: string;
+  http_status?: number;
+  provider_code?: string;
+  provider?: string;
+  attempts?: number;
+}
+
 export interface PhylaxTranscriptionReceipt {
   text_transcript?: string;
-  transcription_failed?: { code: string; message: string };
+  transcription_failed?: PhylaxTranscriptionFailure;
   transcription_source?: string;
   duration_seconds?: number | null;
   transcription_timing?: {
@@ -142,7 +158,7 @@ export interface PhylaxDownstreamCall {
     artifact_mime_type?: string;
     artifact_file_name?: string;
     duration_seconds?: number | null;
-    transcription_failed?: { code: string; message: string };
+    transcription_failed?: PhylaxTranscriptionFailure;
     transcription_source?: string;
     transcription_timing?: { queue_wait_ms?: number | null; runtime_ms?: number | null };
     reply_context?: { evidenceRef: string };
@@ -192,7 +208,7 @@ export interface PhylaxTransportEnvelopeV1 {
         runtimeMs?: number | null;
       } | null;
       disposition: "provided" | "archive_only" | "unavailable" | "not_applicable";
-      failure: { code: string; message: string } | null;
+      failure: PhylaxTranscriptionFailure | null;
     };
     replyContext: { evidenceRef: string } | null;
   };
@@ -1499,7 +1515,13 @@ export class PhylaxChannelsOrgan {
     signal: AbortSignal,
   ): Promise<PhylaxTranscriptionReceipt> {
     if (!this.options.transcriber) {
-      return { transcription_failed: { code: "disabled", message: "tenant transcription is disabled" } };
+      return {
+        transcription_failed: {
+          code: "disabled",
+          reason: "disabled",
+          message: "tenant transcription is disabled",
+        },
+      };
     }
     if (signal.aborted) throw signal.reason ?? new Error("voice transcription cancelled");
     const deadlineMs = normalizePhylaxVoiceJobDeadlineMs(this.options.voiceJobDeadlineMs);
@@ -1521,6 +1543,7 @@ export class PhylaxChannelsOrgan {
       return {
         transcription_failed: {
           code: controller.signal.aborted ? "timeout" : "unavailable",
+          reason: controller.signal.aborted ? "timeout" : "unknown",
           message: controller.signal.aborted
             ? `transcription exceeded the ${deadlineMs}ms safety deadline`
             : error instanceof Error ? error.message : "transcription failed",

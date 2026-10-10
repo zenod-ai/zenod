@@ -46,6 +46,8 @@ describe("probePhylaxTranscriptionProvider", () => {
       provider: "openrouter",
       model: "openai/whisper-large-v3-turbo",
       message: "openrouter rejected this provider key",
+      reason: "provider_auth_failed",
+      httpStatus: 401,
     });
     expect(JSON.stringify(result)).not.toContain("tenant-secret");
     expect(JSON.stringify(result)).not.toContain("upstream bodies");
@@ -86,6 +88,7 @@ describe("probePhylaxTranscriptionProvider", () => {
       }),
     ).resolves.toMatchObject({
       ok: false,
+      reason: "provider_credit_exhausted",
       message:
         "OpenRouter accepted the key but its configured limit has no remaining credit",
     });
@@ -108,6 +111,7 @@ describe("probePhylaxTranscriptionProvider", () => {
       }),
     ).resolves.toMatchObject({
       ok: false,
+      reason: "model_unavailable",
       message:
         "OpenRouter accepted the key, but vendor/stale-model is not in its live transcription catalog",
     });
@@ -129,8 +133,39 @@ describe("probePhylaxTranscriptionProvider", () => {
       }),
     ).resolves.toMatchObject({
       ok: false,
+      reason: "catalog_unverified",
       message:
         "OpenRouter accepted the key, but live transcription model availability could not be verified",
     });
+  });
+
+  it.each([
+    [429, JSON.stringify({ error: { code: "rate_limit_exceeded", message: "slow down" } }), "provider_rate_limited"],
+    [402, JSON.stringify({ error: { message: "This request requires at least $0.50 in balance for audio" } }), "provider_credit_exhausted"],
+    [401, JSON.stringify({ error: { code: "invalid_api_key" } }), "provider_auth_failed"],
+    [503, "<html>upstream down</html>", "provider_unavailable"],
+  ])("distinguishes probe failure reason for status %i", async (status, body, reason) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status }));
+    await expect(
+      probePhylaxTranscriptionProvider({
+        provider: "openrouter",
+        key: "openrouter-secret",
+        fetchImpl,
+        openRouterCatalog: { models: [{ id: "openai/whisper-large-v3-turbo" }], fallback: false },
+      }),
+    ).resolves.toMatchObject({ ok: false, reason, httpStatus: status });
+  });
+
+  it("reports a network failure as a network reason without leaking the key", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(
+      Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } }),
+    );
+    const result = await probePhylaxTranscriptionProvider({
+      provider: "groq",
+      key: "groq-secret",
+      fetchImpl,
+    });
+    expect(result).toMatchObject({ ok: false, reason: "network_error" });
+    expect(JSON.stringify(result)).not.toContain("groq-secret");
   });
 });
