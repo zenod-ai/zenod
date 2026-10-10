@@ -1,0 +1,82 @@
+{
+  "lane": "vendors",
+  "title": "Example vendor shortlist",
+  "subtitle": "SAMPLE — neutral data for the builder test and as a schema example",
+  "generatedAt": "2026-10-09T00:00:00Z",
+  "criteria": [
+    "Meets every stated requirement",
+    "Within the agreed budget",
+    "Reachable for support during the project"
+  ],
+  "columns": ["score", "area", "price", "tags", "evidence", "risks", "status"],
+  "items": [
+    {
+      "id": "vendor-alpha",
+      "name": "Vendor Alpha (sample)",
+      "url": "https://example.com/vendor-alpha",
+      "area": "North",
+      "score": 9.0,
+      "price": { "amount": 1200, "currency": "EUR", "unit": "per month" },
+      "tags": ["fast", "documented"],
+      "evidence": [
+        { "type": "review", "url": "https://example.com/vendor-alpha/reviews", "quote": "Fast responses and clear docs." }
+      ],
+      "risks": ["Premium price"],
+      "notes": "SAMPLE ROW — exercises the shortlisted + starred path.",
+      "status": "shortlisted",
+      "starred": true
+    },
+    {
+      "id": "vendor-beta",
+      "name": "Vendor Beta (sample)",
+      "url": "https://example.com/vendor-beta",
+      "area": "South",
+      "score": 8.2,
+      "price": { "amount": 900, "currency": "EUR", "unit": "per month" },
+      "tags": ["cheap", "community"],
+      "evidence": [
+        { "type": "note", "url": "https://example.com/vendor-beta", "quote": "Active community forum." }
+      ],
+      "risks": ["Support is email-only"],
+      "notes": "SAMPLE ROW — exercises the chosen path.",
+      "status": "chosen",
+      "starred": true
+    },
+    {
+      "id": "vendor-gamma",
+      "name": "Vendor Gamma (sample)",
+      "url": "https://example.com/vendor-gamma",
+      "area": "North",
+      "score": 6.5,
+      "price": { "amount": 1500, "currency": "EUR", "unit": "per month" },
+      "tags": ["enterprise"],
+      "evidence": [
+        { "type": "listing", "url": "https://example.com/vendor-gamma", "quote": "Enterprise plan only." }
+      ],
+      "risks": ["Annual contract", "No self-serve tier"],
+      "notes": "SAMPLE ROW — exercises the rejected + rejectedReason path.",
+      "status": "rejected",
+      "starred": false,
+      "rejectedReason": "Over budget and requires an annual contract."
+    },
+    {
+      "id": "vendor-delta",
+      "name": "Vendor Delta (sample)",
+      "url": "https://example.com/vendor-delta",
+      "area": "East",
+      "score": 7.4,
+      "price": { "amount": 750, "currency": "EUR", "unit": "per month" },
+      "tags": ["cheap"],
+      "evidence": [
+        { "type": "note", "url": "https://example.com/vendor-delta", "quote": "Newer, fewer public reviews." }
+      ],
+      "risks": ["Unproven at scale"],
+      "notes": "SAMPLE ROW — exercises the default candidate path.",
+      "status": "candidate",
+      "starred": false
+    }
+  ],
+  "notes": [
+    "SAMPLE FILE — every row is fictional. Replace with verified data before using it as a real shortlist."
+  ]
+}

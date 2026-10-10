@@ -5,6 +5,10 @@ keep overlapping Current State and Execution Cursor facts consistent until migra
 
 Spine profile: full
 Ticket backend: github
+Dispatch profile: default
+<!-- Optional: default dispatches workers via T3 delegate_task on the OpenCode provider instance offering the built-in model, reasoning high. Override per task or name a reserved template: template:<name>. See ../references/roles-and-dispatch.md. -->
+Integration policy: main-direct
+<!-- Optional: main-direct (default) or pr-approval. The delivery manager merges verified work to the integration branch itself under ../references/git-doctrine.md. -->
 
 Status: draft | ready | active | pending — DISPATCH ONLY AFTER <condition> | CLOSED | ON HOLD | SUPERSEDED by <path> — do not execute from this document
 Created: YYYY-MM-DD
@@ -34,7 +38,7 @@ Tester: <name or agent/thread>
 | Epic 0 worker | <task/thread/agent> | <project/root scope> | Steward root project state, child-spine map, rollups, dependencies, dispatch notes; create child spine drafts. | Root spine current, child workers bound, next human decision clear. |
 | Planner | <task/thread/agent> | <epic scope> | Steward planning sections when explicitly bound; maintain issue board; do not implement code by default. | Updated ledger, decisions, dispatch notes, stewardship transfer if applicable. |
 | Epic worker | <task/thread/agent> | <epic scope> | MANAGER: mint tickets, dispatch parallel worktree workers, integrate, deploy when required and authorized, walk the SHIP journey personally, and iterate until SHIP, a named Human Gate, or budget expiry. | Test package, ledger, blockers, tested commit/environment, next action. |
-| Ticket worker | <task/thread/agent> | <issue URL or ledger row> | FIRST ACTION: `git worktree add ../wt-<ticket> -b <branch> <pinned-base>` and work only there; never checkout/switch in the shared clone. Inspect PORT/DUPLICATE sources and record required adaptations and their validation. | PR/branch, worktree path, latest commit, validation notes, blocker, next action in issue. |
+| Ticket worker | <task/thread/agent> | <issue URL or ledger row> | FIRST ACTION: `git worktree add ../wt-<task> -b wt/<task> main` and work only there; never checkout/switch in the shared clone. Inspect PORT/DUPLICATE sources and record required adaptations and their validation. | Branch/commits, worktree path, latest commit, validation notes, blocker, next action in issue. |
 | Tester | <task/thread/agent> | <issue URL, PR, or milestone> | Validate exact commit against acceptance; write issue evidence; no shared spine edits unless delegated. | Commit, environment, test method, result, risks, follow-up issues. |
 | Reviewer | <task/thread/agent> | <scope> | Read and report findings; no mutation unless promoted. | Findings and proposed next actions. |
 
@@ -109,6 +113,20 @@ HARDEN — explicitly deferred until the human approves SHIP:
 ## Non-Goals
 
 - <explicitly out of scope>
+
+## Operating Learnings
+
+Read **Always** at bind; match the task against **Scoped index**; follow only matching pointers. One line per learning: `L-<n> | applies when | the rule, imperative | why (≤ 8 words) | confirmed YYYY-MM-DD`. See ../references/learnings.md.
+
+**Always** (every task; read in full at bind; hard cap 12 lines):
+
+- L-1 | <applies when> | <imperative rule> | <why, ≤ 8 words> | confirmed YYYY-MM-DD
+
+**Scoped index** (one row per scoped learning; points to the child spine or leaf that owns it):
+
+| Applies when | Learning lives in |
+|---|---|
+| <trigger> | [<child spine or leaf>](<path>) |
 
 ## Current State
 
@@ -189,13 +207,13 @@ Use this as durable anti-repetition memory. Pre-answer likely manager choices wi
 ## Branch And Integration
 
 - Default integration branch: `main`
-- Worker isolation: FIRST ACTION for every worker/tester is `git worktree add ../wt-<ticket> -b <branch> <pinned-base>`. The primary/shared clone stays pinned to the integration branch and is read-only; `git checkout`/`git switch` there is a branch-ransom defect.
+- Worker isolation: FIRST ACTION for every worker/tester is `git worktree add ../wt-<task> -b wt/<task> main`. The primary checkout always sits on a clean `main` and is read-only; `git checkout`/`git switch` there is a branch-ransom defect.
 - Dispatch record: branch, absolute worktree path, base commit, integration target, owner, and latest verified time.
-- Review gate: implementation complete, PR open, and required automated checks passing.
+- Review gate: implementation complete, local branch handed off, and required automated checks passing.
 - Testing gate: exact commit available in a named test surface; acceptance validation in progress.
 - Done gate: acceptance passed, evidence linked, residual risk recorded, and spine reconciled.
-- Integration rule: merge small reviewed work after required checks pass so new agents bootstrap from the freshest validated base.
-- If not merged, the issue ledger must show branch/PR, blocker, owner, latest commit, and next action.
+- Integration rule: the delivery manager integrates verified work to the integration branch itself under `../references/git-doctrine.md`, then tests in that branch, so new agents bootstrap from the freshest validated base.
+- If not merged, the issue ledger must show local branch, blocker, owner, latest commit, and next action.
 
 ## Human Gates
 

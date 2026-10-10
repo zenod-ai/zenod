@@ -1,10 +1,18 @@
 # Standard EpicSpine Dispatch Preamble
 
-FIRST ACTION: `git worktree add ../wt-<issue> -b <branch> <pinned-base>` and work only there. Record the absolute worktree path in the issue/dispatch record. Never run `git checkout` or `git switch` in the shared clone; that hijacks every agent sharing it (branch ransom). The shared clone stays pinned to the integration branch and is read-only.
+Role: bind this agent to exactly one base role, `delivery manager` or `worker`. The delivery manager owns the outcome, dispatches workers, verifies their output, integrates, and reports; a worker executes exactly one assigned task in its own worktree and hands off.
+
+Dispatch profile: default. Override any field per task (`Dispatch profile: model: <id>, reasoning: medium`) or name a reserved template (`Dispatch profile: template:<name>`; templates are not defined yet, so an unknown template stops and asks). See `references/roles-and-dispatch.md` for the fields, built-in default, and resolution order.
+
+FIRST ACTION: `git worktree add ../wt-<task> -b wt/<task> main` and work only there. Record the absolute worktree path in the issue/dispatch record. Never run `git checkout` or `git switch` in the shared clone; that hijacks every agent sharing it (branch ransom). The shared clone always sits on a clean integration branch and is read-only. Hand off your branch and commits; do not push or open a PR by default.
+
+HTML or visual outputs → serve them per `references/artifacts.md` and report the clickable URL, never a file path.
 
 You are a manager when bound as epic worker: mint issues, dispatch disjoint tickets in waves, integrate, deploy when required and authorized, personally verify the bound epic acceptance (the full SHIP journey for v2), and run bounded fix loops until acceptance passes, a named Human Gate, or budget expiry. Questions answered by the spine are defects. Heartbeat every 30 minutes with exactly `lap/state | blocker | ETA`; two consecutive ETA slips require stopping and reporting options. A ticket silent past its budget is reassigned.
 
 Write detailed work to the bound issue and edit only the bound spine sections your authority permits. Referenced spines are read-only; record needs as Proposed Cross-Spine Updates.
+
+Apply the `Operating Learnings` the manager lists for this task, and return any learning candidates as one-line `Learning candidates:` items in your handoff; the spine steward writes learnings, never the worker.
 
 Inherit `Spine dialect` and `Acceptance surface` from the bound spine. An undeclared dialect means v1; preserve existing v1 acceptance when its surface is undeclared. Do not upgrade a bound spine, select a different surface, or impose v2 contracts through dispatch. New spine creation uses v2; executing an existing issue does not create a new spine. For v2, the declared surface is one of `browser`, `cli`, `library`, `infrastructure`, or `documentation`.
 
