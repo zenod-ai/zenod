@@ -1070,7 +1070,7 @@ body:has(.v5-site) {
   background: #101113;
 }
 .zls-chapter {
-  padding-block: clamp(3.5rem, 7vw, 6.5rem) clamp(2rem, 4vw, 4rem);
+  padding-block: clamp(2.5rem, 4.5vw, 4.5rem) clamp(1.5rem, 3vw, 3rem);
   border-top: 1px solid var(--v5-line);
   scroll-margin-top: 80px;
 }
@@ -1087,7 +1087,7 @@ body:has(.v5-site) {
   font-size: 0.7rem;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 .zls-eyebrow > span {
   color: var(--v5-acid);
@@ -1099,7 +1099,7 @@ body:has(.v5-site) {
   font-weight: 580;
   line-height: 1.07;
   letter-spacing: -0.05em;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.8rem;
 }
 .zls-heading h2 > span {
   color: var(--v5-cyan);
@@ -1151,7 +1151,7 @@ body:has(.v5-site) {
   align-items: baseline;
   justify-content: space-between;
   gap: 1.5rem;
-  margin-top: 1.8rem;
+  margin-top: 1rem;
 }
 .zls-figure-meta p {
   color: var(--v5-muted);
@@ -1168,10 +1168,24 @@ body:has(.v5-site) {
   text-underline-offset: 4px;
 }
 .zls-pricing {
-  margin-top: 2.5rem;
+  margin-top: 1.25rem;
 }
 .zls-offer .v5-plans {
   margin-top: 0;
+}
+.zls-pricing .v5-plan {
+  min-height: 220px;
+  padding: clamp(1.1rem, 2vw, 1.5rem) clamp(1.25rem, 2.5vw, 2rem);
+}
+.zls-pricing .v5-price {
+  margin-block: 0.5rem;
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+}
+.zls-pricing .v5-plan > p {
+  margin-bottom: 1rem;
+}
+.zls-pricing .v5-offer-truth {
+  margin-top: 0.75rem;
 }
 .zls-closing-actions {
   display: flex;
@@ -1179,9 +1193,46 @@ body:has(.v5-site) {
   gap: 1rem;
   margin-top: 1.5rem;
 }
+/* Wide screens: heading and diagram sit side by side so a chapter nearly fits one screen.
+   The figure is a sibling of the heading (outside .v5-wrap), so placement is explicit. */
+@media (min-width: 1080px) {
+  .zls-chapter {
+    display: grid;
+    grid-template-columns: minmax(300px, 0.9fr) 1.1fr;
+    column-gap: clamp(2rem, 4vw, 4rem);
+    align-items: center;
+    padding-inline: max(20px, calc((100% - 1240px) / 2));
+  }
+  .zls-chapter > .zls-heading.v5-wrap {
+    grid-column: 1;
+    width: auto;
+    margin: 0;
+  }
+  .v5-site .zls-chapter > .zls-figure {
+    grid-column: 2;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+  }
+  .zls-figure > figcaption.v5-wrap {
+    width: 100%;
+  }
+  .zls-chapter > .zls-pricing,
+  .zls-chapter > .zls-closing-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .v5-site .zls-heading h2 {
+    font-size: clamp(1.7rem, 2.7vw, 2.9rem);
+    line-height: 1.06;
+  }
+  .zls-lead {
+    font-size: clamp(0.95rem, 1.2vw, 1.1rem);
+  }
+}
 @media (max-width: 680px) {
   .zls-chapter {
-    padding-top: 3rem;
+    padding-top: 2.25rem;
   }
   .zls-heading {
     margin-bottom: 1.25rem;
