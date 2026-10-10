@@ -29,6 +29,8 @@ Jordi explicitly set this boundary on 2026-09-07: this repository deploys **live
 
 Independent agents should move to their own repositories and deployment lifecycles as separate, incremental follow-up work. Their continued presence in this source tree does not grant deployment authority. The durable procedure, exact live state and reversible trigger receipts are in `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`. Preserve running services and data during any later extraction.
 
+Dokploy credentials already exist in the owner's macOS Keychain (service `alpha9-dokploy-api-key`): load them yourself with `eval "$(dokploy-env)"` and never ask the owner for them or print them; see "Dokploy credentials — where they live" in `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`.
+
 ## Command contract
 
 - **“Continue”**: bind as the Epic 0 worker and active child-spine delivery manager. Read the root spine, then the active child spine; reconcile its linked GitHub issues/PRs and current `main`; dispatch the child's single **Next action** to a worker, verify and integrate it; remain the sole spine steward; loop until ready for human test or blocked on a named gate.
