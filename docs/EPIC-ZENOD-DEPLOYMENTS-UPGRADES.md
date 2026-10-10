@@ -77,11 +77,21 @@ Owner decision (root spine D27): a push to `main` re-pins and redeploys Zenod pr
 
 - **Auto-deployed:** only the Dokploy app named in `DEPLOY_APPS` (default `zenod-mt`, project `zenod`, environment `production`; `cloud.zenod.dev`). The script refuses any app whose current image is not `ghcr.io/zenod-ai/zenod`.
 - **Never auto-deployed:** the dedicated `ghcr.io/zenod-ai/phylax` image (published only; the private `phylax` app, `urbFsgl6eImbQ4MTIZl5N`, stays a deliberate manual deploy "when appropriate"), Ring, Herald, Epaminon, Outbound, Callisthenes, x-mcp and any other independent service. Do not widen `DEPLOY_APPS` to include them.
-- **Activation:** repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` (owner adds them). With either unset the job skips cleanly (exit 0). `DRY_RUN=1` prints the planned change without mutating.
+- **Activation:** repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` (set from the Keychain loader, see "Dokploy credentials — where they live"). With either unset the job skips cleanly (exit 0). `DRY_RUN=1` prints the planned change without mutating.
 - **Success check:** the script waits until `VERIFY_URL` (default `https://cloud.zenod.dev/api/health`) reports the new sha, since Dokploy can accept a deploy and leave it queued (decision 9 below); Dokploy `error` or a timeout fails the job. Runs are serialized (`deploy-zenod-production` concurrency group).
 - **Rollback:** pins are immutable, so re-pin the previous sha. Each run logs `zenod-mt: <previous> -> <new>`; to undo, run the script locally with `IMAGE=ghcr.io/zenod-ai/zenod:sha-<previous> VERIFY_SHA=<previous>` (or set the image in Dokploy and redeploy). The next push to `main` rolls forward again. Code rollback only; data is not restored.
 - **Downtime and safety:** this path does not take the recoverable backup or quiesce step of the manual helper above, so it fits code-only changes with unchanged storage contracts. A storage/migration change still follows the manual procedure. The image defines no `HEALTHCHECK`, and `zenod-mt` has a single `/data` volume (SQLite) with stop-first replacement (`scripts/zmr-production-image.py` deliberately avoids start-first), so expect a restart blip of seconds, accepted while the owner is the only user. Zero-downtime needs the staging/prod split and a healthcheck (root spine D28, planned).
 - Merged code is not deployed proof: confirm the live sha at `/api/health` and record it.
+
+## Dokploy credentials — where they live
+
+The Dokploy API credentials already exist on the owner's Mac. Agents must load them and must never ask the owner for them.
+
+- **Keychain item:** login keychain, generic password, service `alpha9-dokploy-api-key`, account `jordi`. It holds the Dokploy API key. Never read it with `-w` into logs, chat, files or PRs.
+- **Non-secret profile:** `~/.config/alpha9/dokploy.env` holds only the Keychain item names and the public values (`DOKPLOY_API_BASE`, `DOKPLOY_PUBLIC_URL`, `DOKPLOY_VPS_SSH_HOST`, `DOKPLOY_VPS_HOST`). No key.
+- **Loader:** `/Users/jordi/.local/bin/dokploy-env` reads the profile and the Keychain item and prints `export` lines. Use `eval "$(dokploy-env)"`; it exports `DOKPLOY_API_BASE` and `DOKPLOY_API_KEY`. Auth header is `x-api-key`. Verify by behavior, for example an authenticated `GET "$DOKPLOY_API_BASE/project.all"` returning HTTP 200 with the `phylax` and `zenod-mt` apps visible; never print the key.
+- **GitHub repo secrets:** `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` are set on `zenod-ai/zenod` for the auto-roll job above. To rotate, set them again from the loader with the value on stdin (`gh secret set DOKPLOY_API_KEY --repo zenod-ai/zenod` fed from the loader, never as an argument).
+- **Rule:** an agent that needs Dokploy runs `eval "$(dokploy-env)"` itself. If the loader fails, report the exact error (missing profile, missing Keychain item, HTTP status); do not ask the owner to supply or paste the key.
 
 ## Backup policy
 
