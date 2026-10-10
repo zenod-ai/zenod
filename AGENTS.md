@@ -44,6 +44,7 @@ Dokploy credentials already exist in the owner's macOS Keychain (service `alpha9
 - One ticket worker = one issue = one dedicated branch. Concurrent workers use separate worktrees. Record base/latest commit, integration target, evidence, blocker, and next action.
 - Never treat merged code as deployed proof. Record the exact deployed SHA and named environment before claiming behavior is live.
 - Production deployment, credentials, real-card billing, opening public signup, destructive actions, and external posting require the exact human gate recorded in the active spine.
+- Merge is the default for fresh work: finished, CI-green work is merged by the worker that produced it (docs/spine/receipt PRs included); hold only when merging carries real risk of breaking production or hits a human gate; never leave PRs open or branches orphaned. Legacy backlog cleanup is conservative.
 
 ## Current ready batch
 

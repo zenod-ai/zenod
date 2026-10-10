@@ -301,6 +301,22 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 
 ## Handoff Journal
 
+### 2026-10-10 - Epic 0 worker - Git backlog sweep (conservative)
+
+Context: owner asked for a diagnostic and cleanup of the PR/branch/worktree backlog. Every merge to `main` now triggers CI, an image publish and a live Zenod production roll, so the sweep merged nothing from the legacy backlog and only closed or deleted what was provably already on `main` or superseded.
+
+Before -> after: open PRs 22 -> 15; remote branches (excluding `main`) 54 -> 48; local branches 45 -> 19; local worktrees 14 -> 10.
+
+Action: closed 7 PRs with a comment each and kept their branches: #112 and #1160 (content already on `main`: #112's commit is patch-equivalent to one on `main`, `editGithubIssue` lives in `packages/core`, issue #111 closed; #1160's repository interface landed via #1166 and `VaultRepo implements VaultRepository` on `main`), #1347 and #1350 (superseded by #1353 and #1355 as stated in their own comments), #569 and #571 (stale B-6-open receipts that the later B-6 CLOSED entries in `docs/EPIC-2-HOSTED-READINESS.md` contradict), #1359 (parallel implementation of ticket #1344, delivered by #1364/#1365). Deleted 6 remote branches whose content is verifiably on `main` (`feat/x-mcp`, `feat/runner-x-posting`, `codex/issue-133-central-86-re-implement-openrouter-transcription-mod`, `epic23-c2-z1`, `epic23-c5b-f8b-hb`, `codex/issue-111-central-68-add-github-issue-editing-tool-to-agent-ca`; the first three squash-merged with a byte-identical patch). Removed 4 clean worktrees and 26 local branches with no unique commits. Restore lists (branch -> tip sha) are in `/Users/jordi/.local/state/git-sweep-20261010/`.
+
+Result: no production change beyond this docs PR's own roll. The remaining 15 open PRs and the remaining unmerged-work branches are listed for the owner in the sweep report (clusters: Epic 3.2 / z-mt-*, ZLS art and landing, Epic 2 / 2.3 journals, Phylax WhatsApp lifecycle, old drafts); none were merged because each is conflicting, stale against current `main`, or touches production behavior, the public site or a human gate.
+
+Next: owner decides the "ask the owner" items from the report; any further merge is one PR at a time and waits for the Publish image deploy job.
+
+Assignment identity: Epic 0 worker (`docs/git-sweep-2026-10-10`)
+
+Last verified: 2026-10-10; `origin/main` c34ee43 and `https://cloud.zenod.dev/api/health` sha c34ee43 before this PR
+
 ### 2026-10-10 - Epic 0 worker - Push-to-main Zenod production auto-deploy (#964) narrowed and recorded
 
 Action: rebased PR #964 onto current `main` (kept the dedicated Phylax publish steps), narrowed its roll from open-ended discovery to an explicit allowlist (`DEPLOY_APPS`, default `zenod-mt`; refuses any app not on a `ghcr.io/zenod-ai/zenod` image, so the Phylax image, Ring, Herald and other independent services are never touched), added `DRY_RUN`, live-sha verification against `https://cloud.zenod.dev/api/health`, a serialized `deploy-zenod-production` concurrency group and a documented rollback. Recorded D27/D28 and the activation gate. Nothing deployed; no secret set.
