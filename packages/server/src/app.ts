@@ -2167,6 +2167,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       openrouterModel: settings.openrouterTranscriptionModel(),
       longTranscriptionProvider: settings.longTranscriptionProvider(),
       useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
+      onUsage: settings.transcriptionUsageSink(),
     });
     if (!result.success) {
       console.warn(

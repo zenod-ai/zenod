@@ -432,6 +432,8 @@ export class Runtime {
       },
     });
     this.usageStore = new UsageStore(join(dataDir, "usage.sqlite"));
+    // Non-token LLM spend (transcription) lands in THIS tenant's ledger.
+    this.settings.setUsageSink((report) => this.usageStore.record(report));
     this.notificationStore = new NotificationStore(join(dataDir, "notifications.sqlite"));
     this.notificationBus = new NotificationBus(
       (surface, text) => (surface === "telegram" ? this.telegram.notifyOwner(text) : this.whatsapp.notifyOwner(text)),

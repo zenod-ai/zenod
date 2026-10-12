@@ -82,7 +82,7 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<Provider, string>> = {
 };
 
 /** LLM operations, tagged on every usage report for cost analytics. */
-export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog" | "describeImage" | "turnPlan";
+export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog" | "describeImage" | "turnPlan" | "transcribe";
 
 /**
  * Real, provider-billed token usage for one LLM call — read from the AI SDK
@@ -108,6 +108,8 @@ export interface LlmUsageReport {
   providerCostUsd?: number | null;
   /** Gateway generation id for reconciliation (OpenRouter response id), when reported. */
   generationId?: string | null;
+  /** Estimated USD for calls that are not token-priced (audio transcription); used as cost_usd when no real cost was reported. */
+  estimatedCostUsd?: number;
 }
 
 export interface AiLlmOptions {

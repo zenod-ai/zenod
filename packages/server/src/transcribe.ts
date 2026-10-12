@@ -7,6 +7,8 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import type { LlmUsageReport } from "zenod";
+
 import { runLocalTranscriptionSerialized } from "./localTranscriptionQueue.js";
 
 /**
@@ -753,6 +755,53 @@ export async function fetchRetryingNetworkErrors(
   }
 }
 
+type UsageSink = (report: LlmUsageReport) => void;
+
+/** USD per audio minute used only when the provider does not report a real cost. */
+export function estimateTranscriptionUsd(model: string, seconds: number | null): number {
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return 0;
+  const perMinute = /whisper-1\b/.test(model) ? 0.006 : /gpt-4o-(mini-)?transcribe/.test(model) ? 0.003 : 0.04 / 60;
+  return (seconds / 60) * perMinute;
+}
+
+function failureCode(env: TranscriptionEnvelope): string {
+  return env.providerCode ?? env.failureReason ?? "unknown";
+}
+
+function recordTranscribeUsage(
+  onUsage: UsageSink | undefined,
+  entry: {
+    provider: LlmUsageReport["provider"];
+    model: string;
+    status: "succeeded" | "failed";
+    errorCode?: string;
+    seconds: number | null;
+    providerCostUsd?: number | null;
+    generationId?: string | null;
+  },
+): void {
+  if (!onUsage) return;
+  try {
+    onUsage({
+      operation: "transcribe",
+      provider: entry.provider,
+      model: entry.model,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      status: entry.status,
+      errorCode: entry.status === "failed" ? entry.errorCode ?? "unknown" : null,
+      // A failed call is not billed; a succeeded one falls back to a per-minute estimate.
+      estimatedCostUsd: entry.status === "failed" ? 0 : estimateTranscriptionUsd(entry.model, entry.seconds),
+      ...(entry.providerCostUsd != null ? { providerCostUsd: entry.providerCostUsd } : {}),
+      ...(entry.generationId ? { generationId: entry.generationId } : {}),
+    });
+  } catch (err) {
+    console.warn(`[transcribe] could not record usage: ${(err as Error).message}`);
+  }
+}
+
 async function transcribeWithOpenRouter(
   data: Buffer,
   filename: string,
@@ -760,8 +809,10 @@ async function transcribeWithOpenRouter(
   model: string,
   signal?: AbortSignal,
   user?: string,
+  onUsage?: UsageSink,
 ): Promise<TranscriptionEnvelope> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-openrouter-"));
+  let seconds: number | null = null;
   const input = join(dir, `in${extname(filename) || ".m4a"}`);
   const mp3 = join(dir, "audio.mp3");
   try {
@@ -772,6 +823,7 @@ async function transcribeWithOpenRouter(
       { signal },
     );
     const audio = await readFile(mp3);
+    seconds = audio.length / 4_000; // 32 kbps mono mp3
     const body: {
       model: string;
       input_audio: { data: string; format: "mp3" };
@@ -791,16 +843,36 @@ async function transcribeWithOpenRouter(
     });
     if (!response.ok) {
       const text = (await response.text().catch(() => "")).slice(0, 400);
-      return transcriptionFailureFromResponse("openrouter", response.status, text);
+      const failed = transcriptionFailureFromResponse("openrouter", response.status, text);
+      recordTranscribeUsage(onUsage, { provider: "openrouter", model, status: "failed", errorCode: failureCode(failed), seconds });
+      return failed;
     }
-    const json = (await response.json().catch(() => null)) as { text?: unknown } | null;
+    const json = (await response.json().catch(() => null)) as {
+      text?: unknown;
+      id?: unknown;
+      usage?: { cost?: unknown; seconds?: unknown } | null;
+    } | null;
     const transcript = typeof json?.text === "string" ? json.text.trim() : "";
+    // Same real-cost/generation-id approach as #1329 when OpenRouter reports them; otherwise the per-minute estimate.
+    const cost = json?.usage?.cost;
+    const billedSeconds = json?.usage?.seconds;
+    recordTranscribeUsage(onUsage, {
+      provider: "openrouter",
+      model,
+      status: transcript ? "succeeded" : "failed",
+      errorCode: "empty_transcript",
+      seconds: typeof billedSeconds === "number" && billedSeconds > 0 ? billedSeconds : seconds,
+      providerCostUsd: typeof cost === "number" && Number.isFinite(cost) ? cost : null,
+      generationId: typeof json?.id === "string" ? json.id : null,
+    });
     if (!transcript) {
       return { success: false, provider: "openrouter", error: "transcription returned empty text", failureReason: "unknown" };
     }
     return { success: true, transcript, provider: `openrouter ${model}` };
   } catch (err) {
-    return transcriptionFailureFromThrown("openrouter", err);
+    const failed = transcriptionFailureFromThrown("openrouter", err);
+    recordTranscribeUsage(onUsage, { provider: "openrouter", model, status: "failed", errorCode: failureCode(failed), seconds });
+    return failed;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -812,6 +884,41 @@ async function transcribeWithOpenRouter(
  * into fixed-length segments transcribed in order. Short 429 rate limits are
  * retried; other failures throw so the caller can fall back to local whisper.
  */
+/** Records one row for a Groq/OpenAI attempt (estimated cost; neither reports a real one). */
+async function metered(
+  provider: "groq" | "openai",
+  model: string,
+  data: Buffer,
+  filename: string,
+  options: { onUsage?: UsageSink; durationSeconds?: number | null; signal?: AbortSignal },
+  run: () => Promise<TranscriptionEnvelope>,
+): Promise<TranscriptionEnvelope> {
+  const { onUsage } = options;
+  if (!onUsage) return run();
+  const seconds = async () =>
+    options.durationSeconds ?? (await probeAudioDurationSeconds(data, filename, options.signal));
+  try {
+    const result = await run();
+    recordTranscribeUsage(onUsage, {
+      provider,
+      model,
+      status: result.success ? "succeeded" : "failed",
+      errorCode: failureCode(result),
+      seconds: await seconds(),
+    });
+    return result;
+  } catch (err) {
+    recordTranscribeUsage(onUsage, {
+      provider,
+      model,
+      status: "failed",
+      errorCode: failureCode(groqFailure(err, options.signal?.aborted === true)),
+      seconds: await seconds(),
+    });
+    throw err;
+  }
+}
+
 async function transcribeWithGroq(
   data: Buffer,
   filename: string,
@@ -889,6 +996,8 @@ export type TranscribeOptions =
       onProgress?: (percent: number) => void;
       signal?: AbortSignal;
       includeTiming?: boolean;
+      /** Records one `llm_usage` row per billed cloud attempt into the calling tenant's ledger. */
+      onUsage?: (report: LlmUsageReport) => void;
       /** Channel capture disables the slow local fallback and fails honestly instead. */
       allowLocalFallback?: boolean;
     }
@@ -966,6 +1075,8 @@ async function runTranscription(
         ? undefined
         : options.durationSeconds
       : options.durationSeconds ?? (await probeAudioDurationSeconds(data, filename, signal));
+  const onUsage = typeof options === "function" ? undefined : options.onUsage;
+  const meterOpts = { ...(onUsage ? { onUsage } : {}), durationSeconds: durationSeconds ?? null, ...(signal ? { signal } : {}) };
   const isLongAudio = durationSeconds !== null && durationSeconds !== undefined && durationSeconds > LONG_AUDIO_SECONDS;
   if (fakeTranscript) {
     onProgress?.(100);
@@ -1014,7 +1125,7 @@ async function runTranscription(
   if (isLongAudio) {
     if (longProvider === "groq" && groqApiKey) {
       try {
-        return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
+        return await metered("groq", GROQ_STT_MODEL, data, filename, meterOpts, () => transcribeWithGroq(data, filename, groqApiKey, onProgress, signal));
       } catch (err) {
         cloudFailure = groqFailure(err, signal?.aborted === true);
         if (signal?.aborted) return cloudFailure;
@@ -1023,12 +1134,12 @@ async function runTranscription(
         );
       }
     } else if (longProvider === "openrouter" && openrouterApiKey) {
-      const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser);
+      const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser, onUsage);
       if (result.success || signal?.aborted) return result;
       cloudFailure = result;
       console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
     } else if (longProvider === "openai" && openaiApiKey) {
-      const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
+      const result = await metered("openai", OPENAI_STT_MODEL, data, filename, meterOpts, () => transcribeWithOpenAI(data, filename, openaiApiKey, signal));
       if (result.success || signal?.aborted) return result;
       cloudFailure = result;
       console.warn(`[transcribe] openai failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
@@ -1043,12 +1154,12 @@ async function runTranscription(
     // pin the server's CPUs. Any failure (rate limit, network, oversized chunk)
     // falls through to local whisper.cpp so transcription still works offline.
     try {
-      return await transcribeWithGroq(data, filename, groqApiKey, onProgress, signal);
+      return await metered("groq", GROQ_STT_MODEL, data, filename, meterOpts, () => transcribeWithGroq(data, filename, groqApiKey, onProgress, signal));
     } catch (err) {
       const groqError = groqFailure(err, signal?.aborted === true);
       if (signal?.aborted) return groqError;
       if (openrouterApiKey && shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)) {
-        const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser);
+        const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser, onUsage);
         if (result.success || signal?.aborted) return result;
         cloudFailure = result;
         console.warn(
@@ -1067,13 +1178,13 @@ async function runTranscription(
     // longer shipped in the image — so a voice note errored "whisper-cli is not installed"
     // even though a working cloud key existed. (The fake-transcript path already reported
     // "openrouter" here; the real path now matches it.)
-    const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser);
+    const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser, onUsage);
     if (result.success || signal?.aborted) return result;
     cloudFailure = result;
     console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
   } else if (openaiApiKey) {
     // Same, for a short-audio-only OpenAI key.
-    const result = await transcribeWithOpenAI(data, filename, openaiApiKey, signal);
+    const result = await metered("openai", OPENAI_STT_MODEL, data, filename, meterOpts, () => transcribeWithOpenAI(data, filename, openaiApiKey, signal));
     if (result.success || signal?.aborted) return result;
     cloudFailure = result;
     console.warn(`[transcribe] openai failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
