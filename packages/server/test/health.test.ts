@@ -33,6 +33,12 @@ describe("server API", () => {
     expect(body.status).toBe("ok");
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(body.sha).toBe("unknown");
+    expect(body.eventLoop).toMatchObject({
+      p50Ms: expect.any(Number),
+      p99Ms: expect.any(Number),
+      maxMs: expect.any(Number),
+      utilization: expect.any(Number),
+    });
   });
 
   it("GET /api/health reports the build's GIT_SHA when set", async () => {

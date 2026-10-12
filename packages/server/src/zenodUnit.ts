@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { eventLoopHealth } from "./eventLoopHealth.js";
 import type { HttpBindings } from "@hono/node-server";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -1185,7 +1186,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     );
   }
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth() }),
   );
   if (
     agent.name === "zenod" &&

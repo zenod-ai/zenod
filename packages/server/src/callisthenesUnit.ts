@@ -1,4 +1,5 @@
 import type { HttpBindings } from "@hono/node-server";
+import { eventLoopHealth } from "./eventLoopHealth.js";
 import { Hono, type Context } from "hono";
 import { ChassisStorage, createSqliteTenantStore, hashToken, type TenantProvisioningStore } from "@zenod/mcp-chassis";
 import { createCallisthenesCustomerLayer, type CallisthenesCustomerLayerOptions } from "./callisthenesCustomerLayer.js";
@@ -559,7 +560,7 @@ export function createCallisthenesUnit(options: CreateCallisthenesUnitOptions = 
   }
 
   app.get("/healthz", (c) => c.json({ status: "ok", name: "callisthenes", sha: resolvedGitSha() }));
-  app.get("/api/health", (c) => c.json({ status: "ok", name: "callisthenes", sha: resolvedGitSha() }));
+  app.get("/api/health", (c) => c.json({ status: "ok", name: "callisthenes", sha: resolvedGitSha(), eventLoop: eventLoopHealth() }));
   app.route("/", customer.app);
 
   app.all("/mcp", forwardMcp);

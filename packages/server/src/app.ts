@@ -1,4 +1,5 @@
 import { access } from "node:fs/promises";
+import { eventLoopHealth } from "./eventLoopHealth.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -322,7 +323,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // --- public ---
 
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha() }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth() }),
   );
 
   // Agent identity for the UI shell (title/subtitle) so the same UI renders
