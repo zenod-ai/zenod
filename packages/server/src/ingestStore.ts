@@ -154,6 +154,8 @@ export class IngestStore {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS ingest_jobs_status ON ingest_jobs(status, created_at);
+      -- recent(): ORDER BY created_at DESC LIMIT n must be an index walk, not a table sort.
+      CREATE INDEX IF NOT EXISTS ingest_jobs_created ON ingest_jobs(created_at);
     `);
     this.migrate();
     // A restart killed any in-flight whisper process — surface those jobs as

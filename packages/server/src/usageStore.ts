@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { LlmUsageReport } from "zenod";
 import { openZenodSqlite } from "./sqlite.js";
@@ -183,26 +184,45 @@ export class UsageStore {
    * current PRICING table. The usage log is small and this is idempotent.
    */
   private backfillCosts(): void {
-    const rows = this.db
-      .prepare(
-        `SELECT id, operation, provider, model AS key, input_tokens, output_tokens,
-                cached_input_tokens, cache_creation_input_tokens, cost_usd
-         FROM llm_usage`,
-      )
-      .all() as unknown as Array<AggRow & { id: number; operation: string; provider: string }>;
+    // Hot-path rule (docs/evidence/sqlite-hot-path-audit-2026-10-12.md): never scan the whole,
+    // unbounded usage table on boot. The re-price only matters when the cost model changed, so
+    // it is gated on a fingerprint of PRICING + the pricing code and runs in id-keyset batches.
+    this.db.exec("CREATE TABLE IF NOT EXISTS llm_usage_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    const fingerprint = createHash("sha256")
+      .update(PRICING.map((p) => `${p.match}|${p.input}|${p.output}`).join("\n"))
+      .update(estimateCostUsd.toString())
+      .digest("hex");
+    const stored = this.db.prepare("SELECT value FROM llm_usage_meta WHERE key = 'cost_model_fingerprint'").get() as
+      | { value: string }
+      | undefined;
+    if (stored?.value === fingerprint) return;
     const update = this.db.prepare(`UPDATE llm_usage SET cost_usd = ? WHERE id = ?`);
-    for (const row of rows) {
-      const usd = estimateCostUsd({
-        operation: row.operation,
-        provider: row.provider,
-        model: row.key,
-        inputTokens: row.input_tokens,
-        outputTokens: row.output_tokens,
-        cachedInputTokens: row.cached_input_tokens,
-        cacheCreationInputTokens: row.cache_creation_input_tokens,
-      } as LlmUsageReport);
-      if (Math.abs(usd - row.cost_usd) > 1e-9) update.run(usd, row.id);
+    const page = this.db.prepare(
+      `SELECT id, operation, provider, model AS key, input_tokens, output_tokens,
+              cached_input_tokens, cache_creation_input_tokens, cost_usd
+       FROM llm_usage WHERE id > ? ORDER BY id LIMIT 2000`,
+    );
+    let lastId = 0;
+    for (;;) {
+      const rows = page.all(lastId) as unknown as Array<AggRow & { id: number; operation: string; provider: string }>;
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        const usd = estimateCostUsd({
+          operation: row.operation,
+          provider: row.provider,
+          model: row.key,
+          inputTokens: row.input_tokens,
+          outputTokens: row.output_tokens,
+          cachedInputTokens: row.cached_input_tokens,
+          cacheCreationInputTokens: row.cache_creation_input_tokens,
+        } as LlmUsageReport);
+        if (Math.abs(usd - row.cost_usd) > 1e-9) update.run(usd, row.id);
+        lastId = row.id;
+      }
     }
+    this.db
+      .prepare("INSERT OR REPLACE INTO llm_usage_meta (key, value) VALUES ('cost_model_fingerprint', ?)")
+      .run(fingerprint);
   }
 
   record(report: LlmUsageReport, now: number = Date.now()): void {
@@ -239,7 +259,7 @@ export class UsageStore {
                 SUM(cached_input_tokens) AS cached_input_tokens,
                 SUM(cache_creation_input_tokens) AS cache_creation_input_tokens,
                 SUM(cost_usd) AS cost_usd
-         FROM llm_usage WHERE ts >= ?
+         FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ?
          GROUP BY ${column}
          ORDER BY cost_usd DESC`,
       )
@@ -304,6 +324,17 @@ export class UsageStore {
       status: row.status === "failed" ? "failed" : "succeeded",
       errorCode: row.error_code,
     }));
+  }
+
+  /**
+   * Total estimated spend since `since` (one index-range SUM, no GROUP BY). The watchdog polls
+   * /api/usage/headroom with this, so it must stay a single bounded range scan on llm_usage_ts.
+   */
+  costSince(since: number): number {
+    const row = this.db
+      .prepare("SELECT COALESCE(SUM(cost_usd), 0) AS cost_usd FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ?")
+      .get(since) as unknown as { cost_usd: number };
+    return row.cost_usd ?? 0;
   }
 
   summary(since: number): UsageSummary {

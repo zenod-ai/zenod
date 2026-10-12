@@ -150,6 +150,13 @@ export class PhylaxUsageMeter {
       ON phylax_usage_compat (tenant_id, intent_provider_event_id, operation)
       WHERE intent_provider_event_id IS NOT NULL
     `);
+    // Hot-path rule: the pending (unbooked) set is tiny; index only it so pending()/reconcile
+    // never walk the unbounded booked history.
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS phylax_usage_compat_pending
+      ON phylax_usage_compat (tenant_id, occurred_at, provider_event_id, operation)
+      WHERE booked_at IS NULL
+    `);
     this.reconcileAllPending();
     this.sweepTimer = setInterval(() => {
       try {

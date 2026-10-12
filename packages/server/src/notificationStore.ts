@@ -96,6 +96,7 @@ export class NotificationStore {
       );
       CREATE INDEX IF NOT EXISTS notifications_created ON notifications(created_at);
       CREATE INDEX IF NOT EXISTS notifications_dedupe ON notifications(dedupe_key, created_at);
+      CREATE INDEX IF NOT EXISTS notifications_target_issue ON notifications(target_issue, created_at);
     `);
   }
 

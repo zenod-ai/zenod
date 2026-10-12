@@ -66,6 +66,7 @@ export class OAuthStore {
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_tokens_refresh ON oauth_tokens (refresh_token);
+      CREATE INDEX IF NOT EXISTS idx_tokens_client ON oauth_tokens (client_id);
     `);
   }
 

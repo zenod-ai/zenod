@@ -544,6 +544,10 @@ class PhylaxCaptureJournal {
       );
       CREATE INDEX IF NOT EXISTS idx_phylax_capture_jobs_pending
         ON phylax_capture_jobs(state, updated_at);
+      CREATE INDEX IF NOT EXISTS idx_phylax_capture_jobs_job
+        ON phylax_capture_jobs(job_id);
+      CREATE INDEX IF NOT EXISTS idx_phylax_capture_jobs_provider_message
+        ON phylax_capture_jobs(provider_message_id);
 
       CREATE TABLE IF NOT EXISTS phylax_capture_conversations (
         tenant_id TEXT NOT NULL,
@@ -565,11 +569,20 @@ class PhylaxCaptureJournal {
       );
       CREATE INDEX IF NOT EXISTS idx_phylax_capture_receipts_lookup
         ON phylax_capture_receipts(tenant_id, channel, conversation_key, provider_receipt_message_id);
+      CREATE INDEX IF NOT EXISTS idx_phylax_capture_receipts_capture
+        ON phylax_capture_receipts(capture_provider_message_id);
     `);
     const jobColumns = this.db.prepare("PRAGMA table_info(phylax_capture_jobs)").all() as unknown as Array<{ name: string }>;
     if (!jobColumns.some((column) => column.name === "delivery_completed_at")) {
       this.db.exec("ALTER TABLE phylax_capture_jobs ADD COLUMN delivery_completed_at INTEGER");
     }
+    // Hot-path rule: startup recovery must not walk the unbounded done/error history; only
+    // terminal jobs whose receipt delivery is still outstanding are indexed.
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_phylax_capture_jobs_undelivered
+        ON phylax_capture_jobs(created_at)
+        WHERE state IN ('done', 'error') AND receipt_text IS NOT NULL AND delivery_completed_at IS NULL
+    `);
   }
 
   accepted(input: Omit<PhylaxCaptureJob, "state" | "receiptText" | "evidenceRef" | "deliveredAt" | "deliveryCompletedAt">): PhylaxCaptureJob {

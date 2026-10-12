@@ -95,6 +95,8 @@ export class ExecutionStore {
         updated_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS execution_tickets_state ON execution_tickets(state, updated_at);
+      -- recent(): ORDER BY updated_at DESC LIMIT n must be an index walk, not a table sort.
+      CREATE INDEX IF NOT EXISTS execution_tickets_updated ON execution_tickets(updated_at);
     `);
     // Migration for DBs created before the deliverable manifest (R1-T1). Adding a
     // column is idempotent-by-guard: only ALTER when it's absent.
