@@ -679,6 +679,8 @@ export class WhatsAppStore {
       }
     }
 
+    this.ensureHotPathIndexesAndCounters();
+
     // Recover the durable boundary, never the Ring call. If the provider send
     // was already audited, reconcile it as replied. Otherwise queue exactly one
     // provider action: the stored Ring reply when forwarding completed, or a
@@ -2234,28 +2236,99 @@ export class WhatsAppStore {
     return row ? outboundIntentFromRow(row) : null;
   }
 
+  /**
+   * Hot-path rule (docs/evidence/sqlite-hot-path-audit-2026-10-12.md): status/diagnostics are
+   * polled and must not scan the unbounded message/audit tables. Indexes make the "latest row"
+   * and by-message lookups range seeks; trigger-maintained counters make the row counts O(1).
+   */
+  private ensureHotPathIndexesAndCounters(): void {
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_received
+        ON whatsapp_messages(received_at);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_inbound_contact
+        ON whatsapp_messages(contact_id, received_at) WHERE direction='inbound' AND has_media=1;
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_audit_created
+        ON whatsapp_outbound_audit(created_at);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_outbound_audit_message
+        ON whatsapp_outbound_audit(message_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_media_followups_media
+        ON whatsapp_media_followups(media_message_id);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_media_coalescing_canonical
+        ON whatsapp_media_coalescing(canonical_provider_message_id);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_voice_jobs_failure
+        ON whatsapp_voice_jobs(tenant_id, updated_at) WHERE failure_reason IS NOT NULL;
+    `);
+    const hadCounters = this.db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='whatsapp_status_counters'")
+      .get() !== undefined;
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS whatsapp_status_counters (
+        scope TEXT NOT NULL,
+        status TEXT NOT NULL,
+        count INTEGER NOT NULL,
+        PRIMARY KEY (scope, status)
+      );
+      CREATE TRIGGER IF NOT EXISTS whatsapp_counters_msg_ins AFTER INSERT ON whatsapp_messages BEGIN
+        INSERT INTO whatsapp_status_counters (scope, status, count) VALUES ('message', NEW.processing_status, 1)
+          ON CONFLICT (scope, status) DO UPDATE SET count = count + 1;
+      END;
+      CREATE TRIGGER IF NOT EXISTS whatsapp_counters_msg_upd AFTER UPDATE OF processing_status ON whatsapp_messages
+        WHEN OLD.processing_status IS NOT NEW.processing_status BEGIN
+        UPDATE whatsapp_status_counters SET count = count - 1 WHERE scope = 'message' AND status = OLD.processing_status;
+        INSERT INTO whatsapp_status_counters (scope, status, count) VALUES ('message', NEW.processing_status, 1)
+          ON CONFLICT (scope, status) DO UPDATE SET count = count + 1;
+      END;
+      CREATE TRIGGER IF NOT EXISTS whatsapp_counters_msg_del AFTER DELETE ON whatsapp_messages BEGIN
+        UPDATE whatsapp_status_counters SET count = count - 1 WHERE scope = 'message' AND status = OLD.processing_status;
+      END;
+      CREATE TRIGGER IF NOT EXISTS whatsapp_counters_audit_ins AFTER INSERT ON whatsapp_outbound_audit BEGIN
+        INSERT INTO whatsapp_status_counters (scope, status, count) VALUES ('outbound', NEW.status, 1)
+          ON CONFLICT (scope, status) DO UPDATE SET count = count + 1;
+      END;
+      CREATE TRIGGER IF NOT EXISTS whatsapp_counters_audit_upd AFTER UPDATE OF status ON whatsapp_outbound_audit
+        WHEN OLD.status IS NOT NEW.status BEGIN
+        UPDATE whatsapp_status_counters SET count = count - 1 WHERE scope = 'outbound' AND status = OLD.status;
+        INSERT INTO whatsapp_status_counters (scope, status, count) VALUES ('outbound', NEW.status, 1)
+          ON CONFLICT (scope, status) DO UPDATE SET count = count + 1;
+      END;
+      CREATE TRIGGER IF NOT EXISTS whatsapp_counters_audit_del AFTER DELETE ON whatsapp_outbound_audit BEGIN
+        UPDATE whatsapp_status_counters SET count = count - 1 WHERE scope = 'outbound' AND status = OLD.status;
+      END;
+    `);
+    if (!hadCounters) {
+      // One-time backfill when the counters are first introduced on an existing database.
+      this.db.exec(`
+        INSERT OR REPLACE INTO whatsapp_status_counters (scope, status, count)
+          SELECT 'message', processing_status, COUNT(*) FROM whatsapp_messages GROUP BY processing_status;
+        INSERT OR REPLACE INTO whatsapp_status_counters (scope, status, count)
+          SELECT 'outbound', status, COUNT(*) FROM whatsapp_outbound_audit GROUP BY status;
+      `);
+    }
+  }
+
+  private counters(scope: "message" | "outbound"): Array<{ status: string; count: number }> {
+    return this.db
+      .prepare("SELECT status, count FROM whatsapp_status_counters WHERE scope = ? AND count > 0")
+      .all(scope) as unknown as Array<{ status: string; count: number }>;
+  }
+
   lastActivity(): number | null {
-    const row = this.db
-      .prepare(
-        `SELECT MAX(at) AS at FROM (
-           SELECT received_at AS at FROM whatsapp_messages
-           UNION ALL
-           SELECT created_at AS at FROM whatsapp_outbound_audit
-         )`,
-      )
-      .get() as { at: number | null } | undefined;
-    return row?.at ?? null;
+    // MIN/MAX on an indexed column is a single b-tree seek; never scan the tables.
+    const inbound = this.db.prepare("SELECT MAX(received_at) AS at FROM whatsapp_messages").get() as
+      | { at: number | null }
+      | undefined;
+    const outbound = this.db.prepare("SELECT MAX(created_at) AS at FROM whatsapp_outbound_audit").get() as
+      | { at: number | null }
+      | undefined;
+    const candidates = [inbound?.at, outbound?.at].filter((value): value is number => typeof value === "number");
+    return candidates.length > 0 ? Math.max(...candidates) : null;
   }
 
   diagnostics(): WhatsAppStoreDiagnostics {
     const inboundMessages = this.countMessages();
     const outboundAudits = this.countOutboundAudits();
-    const processingRows = this.db
-      .prepare("SELECT processing_status AS status, COUNT(*) AS count FROM whatsapp_messages GROUP BY processing_status")
-      .all() as unknown as Array<{ status: string; count: number }>;
-    const outboundRows = this.db
-      .prepare("SELECT status, COUNT(*) AS count FROM whatsapp_outbound_audit GROUP BY status")
-      .all() as unknown as Array<{ status: string; count: number }>;
+    const processingRows = this.counters("message");
+    const outboundRows = this.counters("outbound");
     const lastInbound = this.db
       .prepare(
         `SELECT m.received_at, m.contact_id, m.processing_status, c.chat_type
@@ -2680,17 +2753,13 @@ export class WhatsAppStore {
   }
 
   countMessages(): number {
-    const row = this.db.prepare("SELECT COUNT(*) AS count FROM whatsapp_messages").get() as { count: number };
-    return row.count;
+    return this.counters("message").reduce((total, row) => total + Number(row.count), 0);
   }
 
   countOutboundAudits(status?: string): number {
-    const row = status
-      ? (this.db.prepare("SELECT COUNT(*) AS count FROM whatsapp_outbound_audit WHERE status = ?").get(status) as {
-          count: number;
-        })
-      : (this.db.prepare("SELECT COUNT(*) AS count FROM whatsapp_outbound_audit").get() as { count: number });
-    return row.count;
+    return this.counters("outbound")
+      .filter((row) => !status || row.status === status)
+      .reduce((total, row) => total + Number(row.count), 0);
   }
 
   close(): void {

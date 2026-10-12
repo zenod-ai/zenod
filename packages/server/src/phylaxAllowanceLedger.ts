@@ -358,6 +358,7 @@ export class PhylaxAllowanceLedger {
     if (!paidWorkColumns.has("cancellation_requested_at")) {
       this.db.exec("ALTER TABLE phylax_paid_work ADD COLUMN cancellation_requested_at INTEGER");
     }
+    this.ensureHotPathStructures();
     // Older completed rows already point at their immutable usage entry. Backfill
     // only the provider receipt projection; no credential, session or tenant
     // payload is touched.
@@ -369,6 +370,80 @@ export class PhylaxAllowanceLedger {
       )
       WHERE state='done' AND provider_receipt_id IS NULL AND usage_entry_sequence IS NOT NULL
     `);
+  }
+
+  /**
+   * Hot-path rule (docs/evidence/sqlite-hot-path-audit-2026-10-12.md): paid-work accept/claim/finish
+   * and the customer projection run per request, so they must not SUM or scan ledger history.
+   * Entries are append-only, so a trigger-maintained per-period totals row is exact, and the
+   * indexes below turn the remaining "latest row" / sweep queries into range seeks.
+   */
+  private ensureHotPathStructures(): void {
+    const hadTotals = this.db
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='phylax_allowance_period_totals'")
+      .get() !== undefined;
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS phylax_allowance_entries_tenant_sequence
+        ON phylax_allowance_entries (tenant_id, sequence);
+      CREATE INDEX IF NOT EXISTS phylax_allowance_entries_suspension
+        ON phylax_allowance_entries (tenant_id, sequence) WHERE kind IN ('suspend', 'resume');
+      CREATE INDEX IF NOT EXISTS phylax_paid_work_state_lease
+        ON phylax_paid_work (state, lease_until);
+      CREATE INDEX IF NOT EXISTS phylax_allowance_periods_ends
+        ON phylax_allowance_periods (ends_at);
+      CREATE TABLE IF NOT EXISTS phylax_allowance_period_totals (
+        tenant_id TEXT NOT NULL,
+        period_id TEXT NOT NULL,
+        balance_units INTEGER NOT NULL,
+        allocated_units INTEGER NOT NULL,
+        used_units INTEGER NOT NULL,
+        PRIMARY KEY (tenant_id, period_id)
+      );
+      CREATE INDEX IF NOT EXISTS phylax_allowance_period_totals_open
+        ON phylax_allowance_period_totals (tenant_id, period_id) WHERE balance_units > 0;
+      CREATE TRIGGER IF NOT EXISTS phylax_allowance_totals_insert
+      AFTER INSERT ON phylax_allowance_entries WHEN NEW.period_id IS NOT NULL BEGIN
+        INSERT INTO phylax_allowance_period_totals (tenant_id, period_id, balance_units, allocated_units, used_units)
+        VALUES (
+          NEW.tenant_id, NEW.period_id, NEW.amount_units,
+          CASE WHEN NEW.kind IN ('grant', 'adjustment', 'expiry') THEN NEW.amount_units ELSE 0 END,
+          CASE WHEN NEW.kind = 'usage' THEN -NEW.amount_units ELSE 0 END
+        )
+        ON CONFLICT (tenant_id, period_id) DO UPDATE SET
+          balance_units = balance_units + excluded.balance_units,
+          allocated_units = allocated_units + excluded.allocated_units,
+          used_units = used_units + excluded.used_units;
+      END;
+    `);
+    if (!hadTotals) {
+      // One-time backfill when the totals are first introduced on an existing ledger.
+      this.db.exec(`
+        INSERT OR REPLACE INTO phylax_allowance_period_totals
+          (tenant_id, period_id, balance_units, allocated_units, used_units)
+        SELECT tenant_id, period_id, COALESCE(SUM(amount_units), 0),
+               COALESCE(SUM(CASE WHEN kind IN ('grant', 'adjustment', 'expiry') THEN amount_units ELSE 0 END), 0),
+               COALESCE(-SUM(CASE WHEN kind='usage' THEN amount_units ELSE 0 END), 0)
+        FROM phylax_allowance_entries WHERE period_id IS NOT NULL
+        GROUP BY tenant_id, period_id
+      `);
+    }
+  }
+
+  private periodTotals(
+    tenantId: string,
+    periodId: string,
+  ): { balance: number; allocated: number; used: number } {
+    const row = this.db.prepare(
+      `SELECT balance_units, allocated_units, used_units
+       FROM phylax_allowance_period_totals WHERE tenant_id=? AND period_id=?`,
+    ).get(tenantId, periodId) as unknown as
+      | { balance_units: number; allocated_units: number; used_units: number }
+      | undefined;
+    return {
+      balance: Number(row?.balance_units ?? 0),
+      allocated: Number(row?.allocated_units ?? 0),
+      used: Number(row?.used_units ?? 0),
+    };
   }
 
   private transaction<T>(run: () => T): T {
@@ -735,11 +810,7 @@ export class PhylaxAllowanceLedger {
   }
 
   private periodBalance(tenantId: string, periodId: string): number {
-    const row = this.db.prepare(
-      `SELECT COALESCE(SUM(amount_units), 0) AS units
-       FROM phylax_allowance_entries WHERE tenant_id=? AND period_id=?`,
-    ).get(tenantId, periodId) as unknown as { units: number };
-    return Number(row.units);
+    return this.periodTotals(tenantId, periodId).balance;
   }
 
   private reservedInPeriod(tenantId: string, periodId: string): number {
@@ -761,10 +832,20 @@ export class PhylaxAllowanceLedger {
   }
 
   private reconcileExpiredPeriodsInTransaction(now: number): number {
+    // Only ended periods that can still change need visiting: a positive unexpired balance, or
+    // open (captured/ready) paid work to pause. Every other ended period is a no-op, so the
+    // history of settled periods is never walked on the per-request path.
     const periods = this.db.prepare(
-      `SELECT * FROM phylax_allowance_periods
-       WHERE ends_at <= ? ORDER BY ends_at, tenant_id, period_id`,
-    ).all(now) as unknown as PeriodRow[];
+      `SELECT * FROM (
+         SELECT p.* FROM phylax_allowance_period_totals t
+         JOIN phylax_allowance_periods p ON p.tenant_id = t.tenant_id AND p.period_id = t.period_id
+         WHERE t.balance_units > 0 AND p.ends_at <= ?
+         UNION
+         SELECT p.* FROM phylax_paid_work w
+         JOIN phylax_allowance_periods p ON p.tenant_id = w.tenant_id AND p.period_id = w.period_id
+         WHERE w.state IN ('captured', 'ready') AND p.ends_at <= ?
+       ) ORDER BY ends_at, tenant_id, period_id`,
+    ).all(now, now) as unknown as PeriodRow[];
     let inserted = 0;
     for (const period of periods) {
       this.db.prepare(
@@ -831,12 +912,7 @@ export class PhylaxAllowanceLedger {
         resetsAt: null,
       };
     }
-    const totals = this.db.prepare(
-      `SELECT
-         COALESCE(SUM(CASE WHEN kind IN ('grant', 'adjustment', 'expiry') THEN amount_units ELSE 0 END), 0) AS allocated,
-         COALESCE(-SUM(CASE WHEN kind='usage' THEN amount_units ELSE 0 END), 0) AS used
-       FROM phylax_allowance_entries WHERE tenant_id=? AND period_id=?`,
-    ).get(tenantId, period.period_id) as unknown as { allocated: number; used: number };
+    const totals = this.periodTotals(tenantId, period.period_id);
     const allocatedUnits = Number(totals.allocated);
     const usedUnits = Number(totals.used);
     const reservedUnits = this.reservedInPeriod(tenantId, period.period_id);
@@ -862,11 +938,22 @@ export class PhylaxAllowanceLedger {
   /** Read-only inventory of every tenant represented in the authoritative ledger. */
   tenantIds(): string[] {
     const rows = this.db.prepare(`
-      SELECT tenant_id FROM phylax_allowance_periods
-      UNION
-      SELECT tenant_id FROM phylax_allowance_entries
-      UNION
-      SELECT tenant_id FROM phylax_paid_work
+      WITH RECURSIVE
+        a(t) AS (
+          SELECT MIN(tenant_id) FROM phylax_allowance_periods
+          UNION ALL SELECT (SELECT MIN(tenant_id) FROM phylax_allowance_periods WHERE tenant_id > a.t) FROM a WHERE a.t IS NOT NULL
+        ),
+        b(t) AS (
+          SELECT MIN(tenant_id) FROM phylax_allowance_entries
+          UNION ALL SELECT (SELECT MIN(tenant_id) FROM phylax_allowance_entries WHERE tenant_id > b.t) FROM b WHERE b.t IS NOT NULL
+        ),
+        c(t) AS (
+          SELECT MIN(tenant_id) FROM phylax_paid_work
+          UNION ALL SELECT (SELECT MIN(tenant_id) FROM phylax_paid_work WHERE tenant_id > c.t) FROM c WHERE c.t IS NOT NULL
+        )
+      SELECT t AS tenant_id FROM a WHERE t IS NOT NULL
+      UNION SELECT t FROM b WHERE t IS NOT NULL
+      UNION SELECT t FROM c WHERE t IS NOT NULL
       ORDER BY tenant_id
     `).all() as unknown as Array<{ tenant_id: string }>;
     return rows.map((row) => row.tenant_id);

@@ -228,6 +228,8 @@ export class TaskJobStore {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS task_jobs_tenant_status
         ON task_jobs(tenant_id, status, created_at);
+      CREATE INDEX IF NOT EXISTS task_jobs_tenant_created
+        ON task_jobs(tenant_id, created_at);
       CREATE UNIQUE INDEX IF NOT EXISTS task_jobs_tenant_idempotency
         ON task_jobs(tenant_id, idempotency_key)
         WHERE idempotency_key IS NOT NULL;

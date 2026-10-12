@@ -2225,7 +2225,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // level "warn" once projected daily spend hits ZENOD_CREDIT_WARN_FRACTION (default 0.8).
   app.get("/api/usage/headroom", (c) => {
     const windowMinutes = 60;
-    const windowSpendUsd = runtime.usageStore.summary(Date.now() - windowMinutes * 60 * 1000).costUsd;
+    const windowSpendUsd = runtime.usageStore.costSince(Date.now() - windowMinutes * 60 * 1000);
     const budgetEnv = Number(process.env.ZENOD_CREDIT_BUDGET_USD_PER_DAY);
     const budgetUsdPerDay = Number.isFinite(budgetEnv) && budgetEnv > 0 ? budgetEnv : null;
     const warnEnv = Number(process.env.ZENOD_CREDIT_WARN_FRACTION);

@@ -160,6 +160,12 @@ export class CustomerManagedAiAdmissionQueue {
       );
       CREATE INDEX IF NOT EXISTS customer_managed_ai_admission_pending
         ON customer_managed_ai_admission(status, resets_at, created_at);
+      CREATE INDEX IF NOT EXISTS customer_managed_ai_admission_paused_notice
+        ON customer_managed_ai_admission(created_at)
+        WHERE path='/internal/telegram' AND paused_notice_state='pending';
+      CREATE INDEX IF NOT EXISTS customer_managed_ai_admission_terminal_notice
+        ON customer_managed_ai_admission(created_at)
+        WHERE path='/internal/telegram' AND terminal_notice_state='pending';
     `);
     const columns = new Set(
       (this.db.prepare("PRAGMA table_info(customer_managed_ai_admission)").all() as Array<{ name: string }>)
@@ -295,9 +301,15 @@ export class CustomerManagedAiAdmissionQueue {
 
   noticeCandidates(): ManagedAiAdmissionJob[] {
     const rows = this.db.prepare(
+      // Two partial-index probes (only pending notices are indexed) instead of an OR over the table.
       `SELECT * FROM customer_managed_ai_admission
-       WHERE path='/internal/telegram'
-         AND (paused_notice_state='pending' OR terminal_notice_state='pending')
+       WHERE id IN (
+         SELECT id FROM customer_managed_ai_admission
+         WHERE path='/internal/telegram' AND paused_notice_state='pending'
+         UNION
+         SELECT id FROM customer_managed_ai_admission
+         WHERE path='/internal/telegram' AND terminal_notice_state='pending'
+       )
        ORDER BY created_at ASC`,
     ).all() as unknown as Row[];
     return rows.map(job);

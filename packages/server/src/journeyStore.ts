@@ -258,6 +258,7 @@ export class JourneyStore {
         completed_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS journeys_status_updated ON journeys(status, updated_at);
+      CREATE INDEX IF NOT EXISTS journeys_updated ON journeys(updated_at);
       CREATE INDEX IF NOT EXISTS journeys_conversation ON journeys(conversation_id, updated_at);
 
       CREATE TABLE IF NOT EXISTS journey_steps (
@@ -301,6 +302,7 @@ export class JourneyStore {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS journey_artifacts_key ON journey_artifacts(journey_id, artifact_key);
       CREATE INDEX IF NOT EXISTS journey_artifacts_journey_kind ON journey_artifacts(journey_id, kind);
+      CREATE INDEX IF NOT EXISTS journey_artifacts_kind_updated ON journey_artifacts(kind, updated_at);
 
       CREATE TABLE IF NOT EXISTS journey_events (
         id TEXT PRIMARY KEY,
@@ -673,7 +675,7 @@ export class JourneyStore {
       .prepare(
         `SELECT COUNT(*) AS completed
          FROM journey_steps
-         WHERE journey_id=? AND id IN (${placeholders}) AND status='completed'`,
+         WHERE journey_id=? AND id IN (${placeholders}) AND +status='completed'`,
       )
       .get(journeyId, ...dependencyIds) as { completed: number };
     return row.completed === dependencyIds.length;

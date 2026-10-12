@@ -447,7 +447,12 @@ export class HeraldLoopStore {
 
   listApprovedTenantIds(): string[] {
     const rows = this.db.prepare(`
-      SELECT DISTINCT tenant_id FROM herald_briefings ORDER BY tenant_id
+      WITH RECURSIVE t(tenant_id) AS (
+        SELECT MIN(tenant_id) FROM herald_briefings
+        UNION ALL
+        SELECT (SELECT MIN(tenant_id) FROM herald_briefings WHERE tenant_id > t.tenant_id) FROM t WHERE t.tenant_id IS NOT NULL
+      )
+      SELECT tenant_id FROM t WHERE tenant_id IS NOT NULL ORDER BY tenant_id
     `).all() as unknown as Array<{ tenant_id: string }>;
     return rows.map((row) => row.tenant_id);
   }
