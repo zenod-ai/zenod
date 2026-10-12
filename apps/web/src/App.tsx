@@ -276,7 +276,6 @@ interface ZenodAdminOverview {
     tier: string | null
     subscriptionStatus: string | null
     currentPeriodEnd: string | null
-    managedAiStatus: string
   }>
   generatedAt: string
 }
@@ -374,8 +373,7 @@ export function ZenodAdmin() {
                       <th className="py-3 pr-4 font-medium">GitHub</th>
                       <th className="py-3 pr-4 font-medium">Tenant</th>
                       <th className="py-3 pr-4 font-medium">Plan</th>
-                      <th className="py-3 pr-4 font-medium">Subscription</th>
-                      <th className="py-3 font-medium">AI state</th>
+                      <th className="py-3 font-medium">Subscription</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -391,16 +389,15 @@ export function ZenodAdmin() {
                           {tenant.tenantId ?? "—"}
                         </td>
                         <td className="py-3 pr-4">{tenant.tier ?? "—"}</td>
-                        <td className="py-3 pr-4">
+                        <td className="py-3">
                           {tenant.subscriptionStatus ?? "pending"}
                         </td>
-                        <td className="py-3">{tenant.managedAiStatus}</td>
                       </tr>
                     ))}
                     {overview.tenants.length === 0 && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={4}
                           className="py-8 text-center text-muted-foreground"
                         >
                           No customer accounts yet.

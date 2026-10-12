@@ -1905,7 +1905,6 @@ describe("Zenod chassis unit", () => {
         subscription_status: "active",
         tenant_id: "github-42",
         current_period_end: "2026-09-01T00:00:00.000Z",
-        managed_ai_status: "active",
       });
 
       expect((await unit.app.request("/admin")).status).toBe(404);
@@ -1932,7 +1931,6 @@ describe("Zenod chassis unit", () => {
           tenantId: "github-42",
           tier: "monthly",
           subscriptionStatus: "active",
-          managedAiStatus: "active",
         }],
       });
       const serialized = JSON.stringify(body);

@@ -52,14 +52,6 @@ function account(id: string, patch: Partial<CustomerAccount> = {}): CustomerAcco
     vault_repo: null,
     vault_repo_url: null,
     checkout_completed_at: "2026-08-27T00:00:00.000Z",
-    managed_ai_key_hash: null,
-    managed_ai_key_name: null,
-    managed_ai_limit_usd: 2,
-    managed_ai_limit_override_usd: null,
-    managed_ai_status: "active",
-    managed_ai_updated_at: null,
-    managed_ai_last_reconciled_at: null,
-    managed_ai_error_code: null,
     ...patch,
   };
 }
@@ -75,6 +67,7 @@ function config(patch: Partial<ZenodPhylaxConfig> = {}): ZenodPhylaxConfig {
     phylaxWalletTargetUnits: 1_000_000,
     phylaxWalletLowWaterUnits: 100_000,
     unitsPerUsd: 1_000_000,
+    localAllowanceUsd: 1.5,
     tariffVersion: "tariff-v1",
     downstreamUrl: "https://cloud.zenod.dev/mcp",
     warnPercent: 80,
@@ -495,7 +488,7 @@ describe("Zenod Phylax product adapter", () => {
       return response;
     });
 
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     const adapterConfig = config({
       origin,
       masterAllowanceUnits: 3_500_000,
@@ -587,7 +580,7 @@ describe("Zenod Phylax product adapter", () => {
       phylaxWalletLowWaterUnits: 100_000,
     }));
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
-    await adapter.setEntitlement(account("alpha", { managed_ai_limit_usd: 1.5 }), true);
+    await adapter.setEntitlement(account("alpha"), true);
     await adapter.reconcileAccount("account-alpha");
     await adapter.reconcileAccount("account-alpha");
     expect(toolCalls).toBeGreaterThan(3);
@@ -714,10 +707,18 @@ describe("Zenod Phylax product adapter", () => {
     dirs.push(dataDir);
     const remote = new FakeRemote();
     const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const recordEntitlement = (adapter as unknown as {
+      recordEntitlement: (account: CustomerAccount, entitled: boolean) => string | null;
+    }).recordEntitlement.bind(adapter);
+    vi.spyOn(adapter as unknown as { recordEntitlement: typeof recordEntitlement }, "recordEntitlement")
+      .mockImplementationOnce((customer: CustomerAccount, entitled: boolean) => {
+        recordEntitlement(customer, entitled);
+        throw new Error("Zenod local allowance plus outstanding Phylax allocation exceeds master allowance capacity");
+      });
     adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     await adapter.bootstrapAccounts([
-      account("over-cap", { managed_ai_limit_usd: 3 }),
+      account("over-cap"),
       account("alpha"),
     ]);
     expect(adapter.viewForAccount("account-over-cap")).toMatchObject({
@@ -774,7 +775,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-cap-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const adapter = new ZenodPhylaxAdapter(dataDir, config({ masterAllowanceUnits: 2_500_000 }), remote);
+    const adapter = new ZenodPhylaxAdapter(dataDir, config({ masterAllowanceUnits: 2_400_000 }), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await expect(adapter.setEntitlement(account("alpha"), true)).rejects.toThrow("master allowance capacity");
     expect(adapter.viewForAccount("account-alpha")).toMatchObject({
@@ -789,7 +790,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-topup-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     const first = new ZenodPhylaxAdapter(dataDir, config(), remote);
     first.setDownstreamTokenResolver(() => "zenod-memory-token");
     await first.setEntitlement(customer, true);
@@ -849,7 +850,7 @@ describe("Zenod Phylax product adapter", () => {
     });
     const adapter = new ZenodPhylaxAdapter(dataDir, faucetConfig, remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     await adapter.setEntitlement(customer, true);
     const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
     expect(remote.allowance.get(tenantId)).toMatchObject({
@@ -890,7 +891,7 @@ describe("Zenod Phylax product adapter", () => {
       phylaxWalletLowWaterUnits: 100_000,
     }), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     await adapter.setEntitlement(customer, true);
     const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
     remote.allowance.set(tenantId, {
@@ -925,7 +926,7 @@ describe("Zenod Phylax product adapter", () => {
       phylaxWalletLowWaterUnits: 100_000,
     }), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     await adapter.setEntitlement(customer, true);
     const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
     remote.allowance.set(tenantId, {
@@ -969,7 +970,7 @@ describe("Zenod Phylax product adapter", () => {
       phylaxWalletLowWaterUnits: 100_000,
     }), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     await adapter.setEntitlement(customer, true);
     const tenantId = adapter.viewForAccount(customer.account_id)!.phylaxTenantId;
     remote.allowance.set(tenantId, {
@@ -1072,7 +1073,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-stale-topup-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
@@ -1103,7 +1104,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf-credit-faucet-stale-cap-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
@@ -1137,7 +1138,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-rollover-topup-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     const first = new ZenodPhylaxAdapter(dataDir, config(), remote);
     first.setDownstreamTokenResolver(() => "zenod-memory-token");
     await first.setEntitlement(customer, true);
@@ -1153,8 +1154,7 @@ describe("Zenod Phylax product adapter", () => {
     remote.unavailable = false;
     remote.calls.splice(0);
     const nextPeriod = account("alpha", {
-      managed_ai_limit_usd: 1.5,
-      current_period_start: "2026-09-27T00:00:00.000Z",
+        current_period_start: "2026-09-27T00:00:00.000Z",
       current_period_end: "2026-10-27T00:00:00.000Z",
     });
     const restarted = new ZenodPhylaxAdapter(dataDir, config(), remote);
@@ -1180,7 +1180,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-cancel-topup-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
+    const customer = account("alpha");
     const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
@@ -1194,8 +1194,7 @@ describe("Zenod Phylax product adapter", () => {
     remote.unavailable = false;
     remote.calls.splice(0);
     await adapter.setEntitlement(account("alpha", {
-      managed_ai_limit_usd: 1.5,
-      subscription_status: "canceled",
+        subscription_status: "canceled",
     }), false);
     expect(remote.calls.some((call) => call.tool === "phylax_management_v1_credit_adjust")).toBe(false);
     expect(adapter.viewForAccount(customer.account_id)).toMatchObject({
@@ -1216,8 +1215,9 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-cap-topup-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
-    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const cfg = config();
+    const customer = account("alpha");
+    const adapter = new ZenodPhylaxAdapter(dataDir, cfg, remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
     remote.unavailable = true;
@@ -1229,7 +1229,8 @@ describe("Zenod Phylax product adapter", () => {
     })).rejects.toThrow("offline");
     remote.unavailable = false;
     remote.calls.splice(0);
-    const largerLocalAllocation = account("alpha", { managed_ai_limit_usd: 2 });
+    cfg.localAllowanceUsd = 2;
+    const largerLocalAllocation = account("alpha");
     await adapter.setEntitlement(largerLocalAllocation, true);
     expect(remote.calls.some((call) => call.tool === "phylax_management_v1_credit_adjust")).toBe(false);
     await expect(adapter.topUpAllowance({
@@ -1249,8 +1250,9 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-applied-cap-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
-    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const cfg = config();
+    const customer = account("alpha");
+    const adapter = new ZenodPhylaxAdapter(dataDir, cfg, remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
     remote.loseAdjustResponseOnce = true;
@@ -1261,8 +1263,9 @@ describe("Zenod Phylax product adapter", () => {
       auditReason: "response lost after apply",
     })).rejects.toThrow("adjust response lost");
 
+    cfg.localAllowanceUsd = 2;
     remote.loseAdjustResponseOnce = true;
-    await expect(adapter.setEntitlement(account("alpha", { managed_ai_limit_usd: 2 }), true))
+    await expect(adapter.setEntitlement(account("alpha"), true))
       .rejects.toThrow("adjust response lost");
     expect(adapter.viewForAccount(customer.account_id)).toMatchObject({
       state: "unavailable",
@@ -1271,7 +1274,7 @@ describe("Zenod Phylax product adapter", () => {
     });
     adapter.close();
 
-    const restarted = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const restarted = new ZenodPhylaxAdapter(dataDir, cfg, remote);
     restarted.setDownstreamTokenResolver(() => "zenod-memory-token");
     await restarted.reconcileAccount(customer.account_id);
     expect(restarted.viewForAccount(customer.account_id)).toMatchObject({
@@ -1288,8 +1291,9 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-reserved-cap-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
-    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const cfg = config();
+    const customer = account("alpha");
+    const adapter = new ZenodPhylaxAdapter(dataDir, cfg, remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
     remote.loseAdjustResponseOnce = true;
@@ -1305,10 +1309,11 @@ describe("Zenod Phylax product adapter", () => {
       reservedUnits: 600_000,
       remainingUnits: 900_000,
     });
+    cfg.localAllowanceUsd = 1.9;
     remote.callDelayMs = 5;
     remote.maxActiveCalls.clear();
     await Promise.all([
-      adapter.setEntitlement(account("alpha", { managed_ai_limit_usd: 1.9 }), true),
+      adapter.setEntitlement(account("alpha"), true),
       adapter.reconcileAll(),
     ]);
     expect(remote.maxActiveCalls.get(tenantId)).toBe(1);
@@ -1329,10 +1334,12 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-repeated-cap-reclaim-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const cfg = config();
+    const adapter = new ZenodPhylaxAdapter(dataDir, cfg, remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
-    const smallerLocalAllocation = account("alpha", { managed_ai_limit_usd: 1.5 });
-    const largerLocalAllocation = account("alpha", { managed_ai_limit_usd: 2 });
+    const smallerLocalAllocation = account("alpha");
+    const largerLocalAllocation = account("alpha");
+    cfg.localAllowanceUsd = 1.5;
     await adapter.setEntitlement(smallerLocalAllocation, true);
     await adapter.topUpAllowance({
       account: smallerLocalAllocation,
@@ -1340,7 +1347,9 @@ describe("Zenod Phylax product adapter", () => {
       amountUnits: 500_000,
       auditReason: "first allocation increase",
     });
+    cfg.localAllowanceUsd = 2;
     await adapter.setEntitlement(largerLocalAllocation, true);
+    cfg.localAllowanceUsd = 1.5;
     await adapter.setEntitlement(smallerLocalAllocation, true);
     await adapter.topUpAllowance({
       account: smallerLocalAllocation,
@@ -1348,6 +1357,7 @@ describe("Zenod Phylax product adapter", () => {
       amountUnits: 500_000,
       auditReason: "intervening allocation increase",
     });
+    cfg.localAllowanceUsd = 2;
     await adapter.setEntitlement(largerLocalAllocation, true);
 
     const tenantId = adapter.viewForAccount(smallerLocalAllocation.account_id)!.phylaxTenantId;
@@ -1373,8 +1383,9 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-irreducible-cap-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const customer = account("alpha", { managed_ai_limit_usd: 1.5 });
-    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const cfg = config();
+    const customer = account("alpha");
+    const adapter = new ZenodPhylaxAdapter(dataDir, cfg, remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     await adapter.setEntitlement(customer, true);
     remote.loseAdjustResponseOnce = true;
@@ -1391,7 +1402,8 @@ describe("Zenod Phylax product adapter", () => {
       reservedUnits: 400_000,
       remainingUnits: 300_000,
     });
-    await expect(adapter.setEntitlement(account("alpha", { managed_ai_limit_usd: 1.9 }), true))
+    cfg.localAllowanceUsd = 1.9;
+    await expect(adapter.setEntitlement(account("alpha"), true))
       .rejects.toThrow("Irreducible Phylax usage");
     expect(remote.allowance.get(tenantId)).toMatchObject({
       allocatedUnits: 1_200_000,
@@ -1411,8 +1423,8 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-concurrency-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const alpha = account("alpha", { managed_ai_limit_usd: 1.5 });
-    const beta = account("beta", { managed_ai_limit_usd: 1.5 });
+    const alpha = account("alpha");
+    const beta = account("beta");
     const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
     adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
     await adapter.bootstrapAccounts([alpha, beta]);
@@ -1437,8 +1449,7 @@ describe("Zenod Phylax product adapter", () => {
         auditReason: "concurrent top-up",
       }),
       adapter.setEntitlement(account("alpha", {
-        managed_ai_limit_usd: 1.5,
-        subscription_status: "canceled",
+            subscription_status: "canceled",
       }), false),
       adapter.reconcileAll(),
     ]);
@@ -1455,7 +1466,7 @@ describe("Zenod Phylax product adapter", () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-metering-"));
     dirs.push(dataDir);
     const remote = new FakeRemote();
-    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    const adapter = new ZenodPhylaxAdapter(dataDir, config({ localAllowanceUsd: 2 }), remote);
     adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
     const customer = account("alpha");
     await adapter.setEntitlement(customer, true);
@@ -1489,6 +1500,73 @@ describe("Zenod Phylax product adapter", () => {
       phylax: { allocatedUnits: 1_000_000, projection: { usedUnits: 250_000 } },
     });
     adapter.close();
+  });
+
+  describe("D30 entitlement and platform-mode capacity (no managed_ai_* fields)", () => {
+    const paused = (adapter: ZenodPhylaxAdapter, customer: CustomerAccount) =>
+      adapter.customerTenant(customer, "memory-token")?.processingPaused;
+
+    it("does not pause a comped account even without a subscription status", async () => {
+      const dataDir = await mkdtemp(join(tmpdir(), "zpf6-comped-paused-"));
+      dirs.push(dataDir);
+      const adapter = new ZenodPhylaxAdapter(
+        dataDir,
+        config({ compedAccountIds: new Set(["account-comped"]) }),
+        new FakeRemote(),
+      );
+      adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+      const comped = account("comped", { subscription_status: null });
+      await adapter.setEntitlement(comped, true);
+      expect(paused(adapter, comped)).toBe(false);
+      adapter.close();
+    });
+
+    it("does not pause an active or past_due Stripe subscription, and pauses canceled, paused or pending ones", async () => {
+      const dataDir = await mkdtemp(join(tmpdir(), "zpf6-stripe-paused-"));
+      dirs.push(dataDir);
+      const adapter = new ZenodPhylaxAdapter(dataDir, config(), new FakeRemote());
+      adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+      const cases = [
+        ["active", false],
+        ["past_due", false],
+        ["canceled", true],
+        ["paused", true],
+        ["checkout_pending", true],
+        [null, true],
+      ] as const;
+      for (const [status, expected] of cases) {
+        const customer = account(`s-${status ?? "none"}`, { subscription_status: status });
+        await adapter.setEntitlement(customer, true);
+        expect(paused(adapter, customer), String(status)).toBe(expected);
+      }
+      adapter.close();
+    });
+
+    it("keeps capacity normal in platform mode with no shadow allowance", async () => {
+      const dataDir = await mkdtemp(join(tmpdir(), "zpf6-platform-capacity-"));
+      dirs.push(dataDir);
+      const remote = new FakeRemote();
+      const adapter = new ZenodPhylaxAdapter(dataDir, config({ localAllowanceUsd: null }), remote);
+      adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+      const customer = account("alpha");
+      await adapter.setEntitlement(customer, true);
+      const local = {
+        percentageUsed: 0,
+        state: "normal" as const,
+        resetsAt: "2026-11-01T00:00:00.000Z",
+        monthSpendUsd: 7.27,
+      };
+      expect(await adapter.usageForAccount(customer, local)).toMatchObject({
+        percentageUsed: 0,
+        state: "normal",
+      });
+      expect(adapter.operatorProjection(customer, local).local).toMatchObject({
+        configuredUsd: null,
+        configuredUnits: 0,
+        usedUnits: 0,
+      });
+      adapter.close();
+    });
   });
 
   it("isolates two tenant mappings and replays channel actions with the original revision", async () => {

@@ -42,7 +42,6 @@ describe("Zenod owner admin", () => {
               tier: "monthly",
               subscriptionStatus: "active",
               currentPeriodEnd: "2026-09-01T00:00:00.000Z",
-              managedAiStatus: "active",
             },
           ],
           generatedAt: "2026-08-28T00:00:00.000Z",
