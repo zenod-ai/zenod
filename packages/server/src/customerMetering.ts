@@ -217,7 +217,7 @@ export async function customerUsageProjection(
 /**
  * Platform-key (D30) usage projection: this tenant's UTC month-to-date ledger spend against the shadow
  * allowance. It is informational and never reports "paused" (blocking is a later, human-gated decision),
- * so hosted admission is never gated on it. Unset allowance = no percentage, state stays normal.
+ * so hosted admission is never gated on it. Unset allowance or an unreadable ledger = 0%, state normal.
  */
 export function projectLedgerUsage(
   spendUsd: number | null,
@@ -226,9 +226,11 @@ export function projectLedgerUsage(
   now = Date.now(),
 ): CustomerUsageProjection {
   const resetsAt = nextUtcMonthlyReset(now);
-  if (spendUsd === null) return { percentageUsed: null, state: "normal", resetsAt, monthSpendUsd: null };
+  // Shadow mode fails open: the combined Zenod+Phylax projection and hosted admission treat a null
+  // percentage as "unavailable" and queue paid requests, so report 0% when there is nothing to compare.
+  if (spendUsd === null) return { percentageUsed: 0, state: "normal", resetsAt, monthSpendUsd: null };
   if (allowanceUsd === null || allowanceUsd <= 0) {
-    return { percentageUsed: null, state: "normal", resetsAt, monthSpendUsd: spendUsd };
+    return { percentageUsed: 0, state: "normal", resetsAt, monthSpendUsd: spendUsd };
   }
   const percentageUsed = Math.min(100, Math.max(0, Math.round(spendUsd / allowanceUsd * 100)));
   return {

@@ -111,8 +111,8 @@ describe("per-tenant metering and shadow allowance", () => {
   });
 
   it("ledger usage projection never pauses (shadow) and warns near the allowance", () => {
-    expect(projectLedgerUsage(1, null)).toMatchObject({ state: "normal", percentageUsed: null, monthSpendUsd: 1 });
-    expect(projectLedgerUsage(null, 5).state).toBe("normal");
+    expect(projectLedgerUsage(1, null)).toMatchObject({ state: "normal", percentageUsed: 0, monthSpendUsd: 1 });
+    expect(projectLedgerUsage(null, 5)).toMatchObject({ state: "normal", percentageUsed: 0 });
     expect(projectLedgerUsage(1, 5)).toMatchObject({ state: "normal", percentageUsed: 20 });
     expect(projectLedgerUsage(4.5, 5)).toMatchObject({ state: "warn", percentageUsed: 90 });
     expect(projectLedgerUsage(50, 5)).toMatchObject({ state: "warn", percentageUsed: 100 });
