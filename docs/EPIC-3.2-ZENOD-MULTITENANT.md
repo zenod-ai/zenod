@@ -244,7 +244,7 @@ Links:
 ## Open Questions
 
 - Do any ingest/media code paths hardcode `/data` roots outside `runtime.ts`? Owner: Epic worker. Needed by: Z-MT-1.
-- Per-tenant gateway (LLM) keys: chassis vault or keep the standalone keyring? Owner: Jordi. Needed by: Z-MT-2.
+- ~~Per-tenant gateway (LLM) keys: chassis vault or keep the standalone keyring?~~ Resolved by D30 (2026-10-12): one platform OpenRouter key, metered per tenant; no per-tenant keys. Owner: Jordi. Needed by: Z-MT-2.
 
 ## Proposed Cross-Spine Updates
 
