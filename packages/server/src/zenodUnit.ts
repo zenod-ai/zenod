@@ -42,14 +42,6 @@ import type { TelegramManagedInbound } from "./telegramGateway.js";
 import type { ChatTestAuditStore, ChatTurnInterceptor } from "./testHarness.js";
 import { createCustomerLayer, customerAuthEnabled, type CustomerLayerOptions } from "./customerLayer.js";
 import type { VaultBindingStatus, VaultProviderBindingRecord } from "./googleDriveVaultContract.js";
-import type {
-  ManagedAiAdmissionJob,
-  ManagedAiAdmissionNoticeKind,
-  ManagedAiAdmissionInput,
-  ManagedAiRawKind,
-  ManagedAiTerminalReceipt,
-} from "./customerManagedAiAdmission.js";
-import { ManagedAiDownstreamOutbox } from "./customerManagedAiOutbox.js";
 import type { CustomerProductConfig } from "./customerBilling.js";
 import { readCustomerSession } from "./customerSession.js";
 import { FailedAttemptLimiter, isMcpToken } from "./mcpTokens.js";
@@ -584,15 +576,6 @@ async function hostedSettingsBodyViolation(request: Request): Promise<boolean> {
   );
 }
 
-const MANAGED_AI_HTTP_PATHS = new Set([
-  "/api/ask",
-  "/api/chat",
-  "/api/chat/stream",
-  "/api/chat/voice/transcribe",
-  "/api/store",
-  "/api/test/chat",
-  "/api/work",
-]);
 function hostedSensitiveMcpRead(raw: Uint8Array): boolean {
   try {
     const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
@@ -603,59 +586,6 @@ function hostedSensitiveMcpRead(raw: Uint8Array): boolean {
   } catch {
     return false;
   }
-}
-
-function managedAiRawKind(
-  path: string,
-  contentType: string | null,
-  mcpKind: ManagedAiRawKind,
-  raw: Uint8Array,
-): ManagedAiRawKind {
-  if (path === "/mcp" || path.startsWith("/mcp/")) return mcpKind;
-  if (path.includes("voice") || contentType?.startsWith("audio/") || contentType?.includes("multipart/form-data")) {
-    return "audio";
-  }
-  if (contentType?.startsWith("image/")) return "image";
-  if (contentType?.includes("json")) {
-    const text = Buffer.from(raw).toString("utf8");
-    if (/"(?:mimeType|contentType|type)"\s*:\s*"image\//i.test(text)) return "image";
-    if (/"(?:mimeType|contentType|type)"\s*:\s*"audio\//i.test(text)) return "audio";
-  }
-  return "text";
-}
-
-function admissionIdempotencyKey(
-  request: Request,
-  tenantId: string,
-  mcpId: string | null,
-  raw: Uint8Array,
-): string {
-  const explicit = request.headers.get("idempotency-key") ?? request.headers.get("x-provider-message-id");
-  if (explicit?.trim()) return explicit.trim();
-  if (mcpId) {
-    return createHash("sha256")
-      .update(`${tenantId}\0mcp\0${mcpId}\0`)
-      .update(raw)
-      .digest("hex");
-  }
-  return randomUUID();
-}
-
-async function terminalReceipt(response: Response): Promise<ManagedAiTerminalReceipt> {
-  return {
-    state: response.ok ? "completed" : "failed",
-    statusCode: response.status,
-    contentType: response.headers.get("content-type"),
-    body: await response.clone().text(),
-    completedAt: new Date().toISOString(),
-  };
-}
-
-function responseFromReceipt(receipt: ManagedAiTerminalReceipt): Response {
-  return new Response(receipt.body, {
-    status: receipt.statusCode,
-    headers: receipt.contentType ? { "content-type": receipt.contentType } : undefined,
-  });
 }
 
 export function createZenodUnit(options: CreateZenodUnitOptions) {
@@ -923,7 +853,6 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       void runPhylaxRefresh();
     });
   }
-  const managedAiOutbox = new ManagedAiDownstreamOutbox(join(storage.dataDir, "managed-ai-downstream.sqlite"));
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
   googleDriveOAuthAuthorityForTenant = (tenantId) => {
     const allAccounts = customer.accounts.list();
@@ -987,150 +916,25 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       vault_binding_updated_at: new Date().toISOString(),
     });
   };
-  const dispatchManagedInput = async (input: ManagedAiAdmissionInput): Promise<Response> => {
-    const account = customer.accounts.resolveForTenantId(input.tenantId);
-    const token = account ? customer.tokenVault.get(account.account_id) : null;
-    const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
-    if (
-      !account ||
-      !token ||
-      !record ||
-      record.tenant.id !== input.tenantId ||
-      (record.status ?? "active") !== "active" ||
-      (account.subscription_status !== "active" && account.subscription_status !== "past_due")
-    ) {
-      return Response.json({ error: "managed Hosted tenant is unavailable" }, { status: 401 });
-    }
-    if (input.path === "/internal/telegram") {
-      const runtime = runtimes.get(input.tenantId) ??
-        runtimes.forTenantStorage(input.tenantId, storage.forTenant({ id: input.tenantId }));
-      if (!runtime) return Response.json({ error: "managed Hosted tenant runtime is unavailable" }, { status: 503 });
-      const telegramInput = JSON.parse(Buffer.from(input.raw).toString("utf8")) as TelegramManagedInbound;
-      return Response.json(await runtime.telegram.processManagedInbound(telegramInput));
-    }
-    const storedUrl = new URL(input.path, "http://zenod.internal");
-    const targetPath = storedUrl.pathname === "/mcp"
-      ? `/mcp/${encodeURIComponent(token)}${storedUrl.search}`
-      : `${storedUrl.pathname}${storedUrl.search}`;
-    const headers = new Headers({
-      authorization: `Bearer ${token}`,
-      "idempotency-key": input.idempotencyKey,
-    });
-    if (input.contentType) headers.set("content-type", input.contentType);
-    if (storedUrl.pathname === "/mcp") headers.set("accept", "application/json, text/event-stream");
-    const bodyAllowed = input.method !== "GET" && input.method !== "HEAD";
-    return unit.app.fetch(new Request(`http://zenod.internal${targetPath}`, {
-      method: input.method,
-      headers,
-      ...(bodyAllowed ? { body: Buffer.from(input.raw) } : {}),
-    }));
-  };
-  const processManagedInput = async (input: ManagedAiAdmissionInput) => {
-    const response = await managedAiOutbox.execute(input, () => dispatchManagedInput(input));
-    return { value: response, receipt: await terminalReceipt(response) };
-  };
-  const managedTelegramNoticeText = (
-    job: ManagedAiAdmissionJob,
-    kind: ManagedAiAdmissionNoticeKind,
-  ): string => {
-    if (kind === "paused") {
-      return "I saved your message and queued it. I’ll process it when included AI usage is available again. Nothing was lost.";
-    }
-    if (job.terminalReceipt?.state === "completed") {
-      try {
-        const body = JSON.parse(job.terminalReceipt.body) as { replyText?: unknown };
-        if (typeof body.replyText === "string" && body.replyText.trim()) return body.replyText;
-      } catch {
-        // A malformed downstream receipt is not customer-safe success truth.
-      }
-    }
-    return "⚠️ I saved your message, but could not finish processing it. Please try again later.";
-  };
-  const deliverManagedTelegramNotice = async (
-    job: ManagedAiAdmissionJob,
-    kind: ManagedAiAdmissionNoticeKind,
-  ): Promise<void> => {
-    const claimed = customer.managedAiAdmissions.claimNotice(job.id, kind);
-    if (!claimed) return;
-    try {
-      const raw = customer.managedAiAdmissions.raw(job.id);
-      if (!raw) throw new Error("managed Telegram raw evidence disappeared");
-      const telegramInput = JSON.parse(Buffer.from(raw).toString("utf8")) as TelegramManagedInbound;
-      const runtime = runtimes.get(job.tenantId) ??
-        runtimes.forTenantStorage(job.tenantId, storage.forTenant({ id: job.tenantId }));
-      await runtime.telegram.sendManagedNotice(
-        telegramInput.chatId,
-        managedTelegramNoticeText(claimed, kind),
-      );
-      customer.managedAiAdmissions.completeNotice(job.id, kind, true);
-    } catch (error) {
-      customer.managedAiAdmissions.completeNotice(job.id, kind, false);
-      console.error(
-        `[managed-ai] Telegram ${kind} notice failed for job ${job.id}:`,
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  };
-  const reconcileManagedTelegramNotices = async (
-    jobs: ManagedAiAdmissionJob[] = customer.managedAiAdmissions.noticeCandidates(),
-  ): Promise<void> => {
-    for (const job of jobs) {
-      if (job.pausedNotice?.state === "pending") await deliverManagedTelegramNotice(job, "paused");
-      const refreshed = customer.managedAiAdmissions.get(job.id);
-      if (refreshed?.terminalNotice?.state === "pending") {
-        await deliverManagedTelegramNotice(refreshed, "terminal");
-      }
-    }
-  };
   managedTelegramAdmission = async (tenantId, telegramInput) => {
     const account = customer.accounts.resolveForTenantId(tenantId);
     if (!account?.tenant_id || (account.subscription_status !== "active" && account.subscription_status !== "past_due")) {
       throw new Error("Hosted Telegram tenant is not entitled");
     }
-    const raw = new Uint8Array(Buffer.from(JSON.stringify(telegramInput), "utf8"));
-    const outcome = await customer.managedAiAdmissions.submit(
-      {
-        tenantId,
-        idempotencyKey: `telegram:${telegramInput.chatId}:${telegramInput.messageId}`,
-        kind: telegramInput.kind,
-        method: "POST",
-        path: "/internal/telegram",
-        contentType: "application/json",
-        raw,
-      },
-      await customer.usageForAccount(account),
-      processManagedInput,
-    );
-    await reconcileManagedTelegramNotices([outcome.job]);
+    const runtime = runtimes.get(tenantId) ??
+      runtimes.forTenantStorage(tenantId, storage.forTenant({ id: tenantId }));
+    let replyText: string;
+    try {
+      replyText = (await runtime.telegram.processManagedInbound(telegramInput)).replyText;
+    } catch (error) {
+      console.error(
+        `[telegram] managed inbound failed for tenant ${tenantId}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      replyText = "⚠️ I could not finish processing your message. Please try again later.";
+    }
+    await runtime.telegram.sendManagedNotice(telegramInput.chatId, replyText);
   };
-  const resumeManagedAiAdmissions = async (): Promise<number> => {
-    // Preserve customer-visible ordering: a queued/cap notice is reconciled
-    // before the terminal result generated by this resume pass.
-    await reconcileManagedTelegramNotices();
-    const completed = await customer.managedAiAdmissions.resume(
-      async (tenantId) => {
-        const account = customer.accounts.resolveForTenantId(tenantId);
-        return account
-          ? customer.usageForAccount(account)
-          : { percentageUsed: null, state: "unavailable", resetsAt: null };
-      },
-      processManagedInput,
-    );
-    await reconcileManagedTelegramNotices();
-    return completed;
-  };
-  const admissionResumeRaw = Number(env.ZENOD_MANAGED_AI_ADMISSION_RESUME_INTERVAL_MS);
-  const admissionResumeMs = Number.isFinite(admissionResumeRaw) && admissionResumeRaw > 0
-    ? admissionResumeRaw
-    : 30_000;
-  const admissionResumeTimer = env.ZENOD_MANAGED_AI_ENABLED === "1"
-    ? setInterval(() => {
-        void resumeManagedAiAdmissions().catch((error) => {
-          console.error("[managed-ai] admission resume failed:", error);
-        });
-      }, admissionResumeMs)
-    : null;
-  admissionResumeTimer?.unref?.();
   const app = new Hono<{ Bindings: HttpBindings }>();
   app.use("*", async (c, next) => {
     await next();
@@ -1371,14 +1175,6 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       bearerRecord && pathRecord && bearerRecord.tenant.id !== pathRecord.tenant.id,
     );
     const directRecord = bearerRecord ?? pathRecord;
-    if (c.req.method === "GET" && c.req.path.startsWith("/api/customer-managed-ai/jobs/") && directRecord) {
-      const account = customer.accounts.resolveForTenantId(directRecord.tenant.id);
-      const id = c.req.path.slice("/api/customer-managed-ai/jobs/".length);
-      const job = account?.tenant_id && (directRecord.status ?? "active") === "active"
-        ? customer.managedAiAdmissions.getForTenant(id, account.tenant_id)
-        : null;
-      return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
-    }
     const isCustomerAdmin = isCustomerAdminSession(session);
     const hostedAccount = !isCustomerAdmin && session
       ? customer.accounts.resolveForUser(session.user_id)
@@ -1443,52 +1239,6 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       downstreamRequest = new Request(c.req.raw, { headers });
       admissionAccount = customer.accounts.resolveActiveTenantForUser(session.user_id);
     }
-    const isEntitledHosted = Boolean(
-      admissionAccount?.tenant_id &&
-      (admissionAccount.subscription_status === "active" || admissionAccount.subscription_status === "past_due"),
-    );
-    if (isEntitledHosted && !credentialMismatch) {
-      const raw = new Uint8Array(await downstreamRequest.clone().arrayBuffer());
-      const isMcp = c.req.path === "/mcp" || c.req.path.startsWith("/mcp/");
-      // MCP is already a complete authenticated service boundary, and Phylax
-      // owns durable channel admission/replay. Never persist and replay the raw
-      // MCP HTTP exchange through the hosted web-usage queue: the streamable
-      // MCP transport is tied to the original Node request/response bindings.
-      // Product HTTP endpoints keep their existing hosted admission policy.
-      const paid = !isMcp && MANAGED_AI_HTTP_PATHS.has(c.req.path);
-      if (paid) {
-        const requestUrl = new URL(c.req.url);
-        const storedPath = `${requestUrl.pathname}${requestUrl.search}`;
-        const input: ManagedAiAdmissionInput = {
-          tenantId: admissionAccount!.tenant_id!,
-          idempotencyKey: admissionIdempotencyKey(c.req.raw, admissionAccount!.tenant_id!, null, raw),
-          kind: managedAiRawKind(storedPath, c.req.header("content-type") ?? null, "text", raw),
-          method: c.req.method,
-          path: storedPath,
-          contentType: c.req.header("content-type") ?? null,
-          raw,
-        };
-        const outcome = await customer.managedAiAdmissions.submit(
-          input,
-          await customer.usageForAccount(admissionAccount!),
-          processManagedInput,
-        );
-        if (outcome.state === "processed") return outcome.value;
-        if (outcome.state === "replayed" || outcome.state === "failed") {
-          return responseFromReceipt(outcome.receipt);
-        }
-        return c.json({
-          state: outcome.state,
-          job: {
-            id: outcome.job.id,
-            status: outcome.job.status,
-            kind: outcome.job.kind,
-            resetsAt: outcome.job.resetsAt,
-          },
-          poll: `/api/customer-managed-ai/jobs/${outcome.job.id}`,
-        }, 202);
-      }
-    }
     const response = await unit.app.fetch(downstreamRequest, c.env);
     const hostedDriveAuthority = admissionAccount?.tenant_id
       ? runtimes.get(admissionAccount.tenant_id)?.settings.googleDriveOAuthAuthority()
@@ -1513,9 +1263,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     customerIdentities: customer.identities,
     customerTokenVault: customer.tokenVault,
     customerMcpTokens: customer.mcpTokens,
-    customerManagedAiAdmissions: customer.managedAiAdmissions,
     zenodPhylax,
-    resumeManagedAiAdmissions,
     async close() {
       const failures: unknown[] = [];
       phylaxRefreshStopped = true;
@@ -1531,11 +1279,9 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         const result of await Promise.allSettled([
           Promise.resolve().then(() => options.customerAdmin?.close?.()),
           Promise.resolve().then(() => {
-            if (admissionResumeTimer) clearInterval(admissionResumeTimer);
           }),
           Promise.resolve().then(() => customer.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),
-          Promise.resolve().then(() => managedAiOutbox.close()),
           runtimes.close(),
         ])
       ) {

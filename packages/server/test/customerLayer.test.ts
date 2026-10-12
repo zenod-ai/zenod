@@ -16,7 +16,6 @@ import { createCustomerLayer, customerAuthEnabled } from "../src/customerLayer.j
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { issueCustomerSession } from "../src/customerSession.js";
 import { customerMetering } from "../src/customerMetering.js";
-import type { ManagedAiProviderClient } from "../src/customerManagedAi.js";
 import { Runtime } from "../src/runtime.js";
 
 const DESTINATION = "https://cloud.zenod.dev";
@@ -1266,96 +1265,6 @@ describe("hosted customer layer", () => {
     }
   });
 
-  it("provisions one managed child key after tenant binding and projects customer-safe usage", async () => {
-    env.ZENOD_MANAGED_AI_ENABLED = "1";
-    env.ZENOD_MANAGED_AI_LIMIT_USD = "2";
-    env.OPENROUTER_PROVISIONING_KEY = "provisioning-test";
-    const keys: Awaited<ReturnType<ManagedAiProviderClient["listKeys"]>> = [];
-    const provider: ManagedAiProviderClient = {
-      listKeys: vi.fn(async () => keys.map((key) => ({ ...key }))),
-      createKey: vi.fn(async (input) => {
-        keys.push({
-          name: input.name,
-          slug: "octocat-42",
-          hash: "managed-hash",
-          limit: input.limit,
-          usage: 0.33,
-          usage_monthly: 0.33,
-          byok_usage_monthly: 0,
-          limit_remaining: 1.67,
-          disabled: false,
-          limit_reset: input.limitReset,
-          include_byok_in_limit: input.includeByokInLimit,
-          reset_at: "2026-09-01T00:00:00.000Z",
-        });
-        return {
-          key: "sk-or-managed-test",
-          hash: "managed-hash",
-          name: input.name,
-          limit: input.limit,
-          limitReset: input.limitReset,
-        };
-      }),
-      updateKey: vi.fn(async () => undefined),
-    };
-    const app = createCustomerLayer(
-      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
-      {
-        env,
-        stripe,
-        tenantStore: tenants,
-        managedAiProvider: provider,
-        identity: {
-          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
-          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
-        },
-      },
-    ).app;
-    const cookie = await signInCookie(app);
-    await app.request("/create-checkout-session", {
-      method: "POST",
-      headers: { cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ tier: "monthly" }),
-    });
-
-    const first = await app.request("/webhook", {
-      method: "POST",
-      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const duplicate = await app.request("/webhook", {
-      method: "POST",
-      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
-      body: "{}",
-    });
-    expect(await first.json()).toEqual({ received: true, result: "completed" });
-    expect(await duplicate.json()).toEqual({ received: true, result: "duplicate" });
-    expect(provider.createKey).toHaveBeenCalledTimes(1);
-    expect(provider.createKey).toHaveBeenCalledWith({
-      name: "zenod-tenant:octocat-42",
-      limit: 2,
-      limitReset: "monthly",
-      includeByokInLimit: true,
-    });
-    expect(runtime.settings.get("openrouter_api_key")).toBe("sk-or-managed-test");
-
-    const usage = await app.request("/api/customer-usage", { headers: { cookie } });
-    expect(await usage.json()).toEqual({
-      percentageUsed: 17,
-      state: "normal",
-      resetsAt: "2026-09-01T00:00:00.000Z",
-    });
-    const accountResponse = await app.request("/api/console/account", { headers: { cookie } });
-    const accountPayload = await accountResponse.json();
-    expect(accountPayload.usage).toEqual({
-      percentageUsed: 17,
-      state: "normal",
-      resetsAt: "2026-09-01T00:00:00.000Z",
-    });
-    expect(accountPayload).not.toHaveProperty("balance");
-    expect(accountPayload).not.toHaveProperty("ledger");
-  });
-
   it("tracks recurring billing state and suspends only terminal subscriptions", async () => {
     const app = locallyBoundCustomerApp();
     const cookie = await signInCookie(app);
@@ -1454,7 +1363,7 @@ describe("hosted customer layer", () => {
     expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("active");
   });
 
-  it("uses authoritative Stripe state for webhook and periodic entitlement reconciliation", async () => {
+  it("uses authoritative Stripe state for webhook entitlement reconciliation and suspend", async () => {
     const layer = createCustomerLayer(
       { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
       {
@@ -1505,7 +1414,16 @@ describe("hosted customer layer", () => {
         ...authoritativeSubscription,
         status: "canceled",
       } as Stripe.Subscription;
-      await layer.reconcileManagedAiAccounts();
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type: "customer.subscription.updated",
+        livemode: false,
+        data: { object: staleDelivered },
+      } as Stripe.Event);
+      await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
       expect(layer.accounts.resolveForSubscription("sub_test_customer")?.subscription_status).toBe("canceled");
       expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("suspended");
     } finally {
@@ -1616,118 +1534,27 @@ describe("hosted customer layer", () => {
     layer.close();
   });
 
-  it("uses an existing tenant OpenRouter key as the authoritative capped monthly usage source", async () => {
-    runtime.settings.set("provider", "openrouter");
-    runtime.settings.set("openrouter_api_key", "tenant-key-kept-in-vault");
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(JSON.stringify({
-        data: {
-          label: "existing-tenant-key",
-          limit: 2,
-          limit_remaining: 1.4,
-          limit_reset: "monthly",
-          usage: 0.6,
-          usage_monthly: 0.6,
-          byok_usage_monthly: 0,
-          include_byok_in_limit: true,
-        },
-      }), { status: 200, headers: { "content-type": "application/json" } }));
-    const projectedAccounts: CustomerAccount[] = [];
-    const layer = createCustomerLayer(
-      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
-      {
-        env,
-        stripe,
-        tenantStore: tenants,
-        projectUsage(account, local) {
-          projectedAccounts.push(account);
-          return local;
-        },
-      },
-    );
-    const account = layer.accounts.upsert("legacy-current-key", {
-      account_id: "legacy-current-key",
-      github_id: 105,
-      github_login: "current-key",
-      tenant_id: "legacy-current-key",
-      subscription_status: "active",
-    });
-    const expectedStart = new Date(Date.UTC(
-      new Date().getUTCFullYear(),
-      new Date().getUTCMonth(),
-      1,
-    )).toISOString();
-    const expectedEnd = new Date(Date.UTC(
-      new Date().getUTCFullYear(),
-      new Date().getUTCMonth() + 1,
-      1,
-    )).toISOString();
-
-    expect(await layer.refreshAuthoritativeSubscriptions()).toEqual({
-      refreshedAccountIds: ["legacy-current-key"],
-      failedAccountIds: [],
-    });
-    expect(await layer.usageForAccount(account)).toEqual({
-      percentageUsed: 30,
-      state: "normal",
-      resetsAt: expectedEnd,
-    });
-    expect(layer.accounts.get("legacy-current-key")).toMatchObject({
-      managed_ai_limit_usd: 2,
-      managed_ai_status: "active",
-      current_period_start: expectedStart,
-      current_period_end: expectedEnd,
-    });
-    expect(projectedAccounts.at(-1)).toMatchObject({
-      managed_ai_limit_usd: 2,
-      current_period_start: expectedStart,
-      current_period_end: expectedEnd,
-    });
-    expect(request).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", {
-      headers: { Authorization: "Bearer tenant-key-kept-in-vault" },
-    });
-    expect(layer.tokenVault.get("legacy-current-key")).toBeNull();
-    layer.close();
-  });
-
-  it("fails closed when an existing tenant key does not match the hosted monthly cap", async () => {
-    runtime.settings.set("provider", "openrouter");
-    runtime.settings.set("openrouter_api_key", "tenant-key-kept-in-vault");
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(JSON.stringify({
-        data: {
-          label: "wrong-policy-key",
-          limit: 5,
-          limit_remaining: 5,
-          limit_reset: "monthly",
-          usage_monthly: 0,
-        },
-      }), { status: 200, headers: { "content-type": "application/json" } }));
+  it("reports unavailable usage and refreshes a non-Stripe account to the UTC month without a platform key", async () => {
     const layer = createCustomerLayer(
       { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
       { env, stripe, tenantStore: tenants },
     );
-    const account = layer.accounts.upsert("legacy-wrong-key-policy", {
-      account_id: "legacy-wrong-key-policy",
+    const account = layer.accounts.upsert("self-comped", {
+      account_id: "self-comped",
       github_id: 106,
-      github_login: "wrong-key-policy",
-      tenant_id: "legacy-wrong-key-policy",
+      github_login: "self-comped",
+      tenant_id: "self-comped",
       subscription_status: "active",
     });
-
+    expect(await layer.usageForAccount(account)).toMatchObject({ percentageUsed: null, state: "unavailable" });
     expect(await layer.refreshAuthoritativeSubscriptions()).toEqual({
-      refreshedAccountIds: [],
-      failedAccountIds: ["legacy-wrong-key-policy"],
+      refreshedAccountIds: ["self-comped"],
+      failedAccountIds: [],
     });
-    expect(await layer.usageForAccount(account)).toMatchObject({
-      percentageUsed: null,
-      state: "unavailable",
-    });
-    expect(layer.accounts.get("legacy-wrong-key-policy")).toMatchObject({
-      managed_ai_limit_usd: null,
-      current_period_start: null,
-      current_period_end: null,
-    });
+    const start = new Date();
+    expect(layer.accounts.get("self-comped")?.current_period_start).toBe(
+      new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)).toISOString(),
+    );
     layer.close();
   });
 

@@ -96,18 +96,6 @@
       "evidence": { "file": "packages/server/test/phylaxChannels.test.ts", "test": "reconciles a restart after an audited provider send without sending or forwarding again" }
     },
     {
-      "id": "cap_pause_capture_first",
-      "automatedStatus": "proved",
-      "productionStatus": "unproved",
-      "evidence": { "file": "packages/server/test/customerManagedAiAdmission.test.ts", "test": "journals text, audio, and image before returning a typed cap pause" }
-    },
-    {
-      "id": "one_terminal_response",
-      "automatedStatus": "proved",
-      "productionStatus": "unproved",
-      "evidence": { "file": "packages/server/test/customerManagedAiAdmission.test.ts", "test": "allows only one cross-process claimant and persists one terminal receipt" }
-    },
-    {
       "id": "direct_mcp_bearer_continuity",
       "automatedStatus": "proved",
       "productionStatus": "observed",
