@@ -123,6 +123,7 @@ export type UnitHonoEnv = {
     credentialProfile: string | null;
     unitContext: TenantUnitContext;
     requestId: string;
+    mcpLog?: McpRequestLog;
   };
 };
 
@@ -955,6 +956,41 @@ async function requestBody(c: Context): Promise<unknown> {
   return c.req.json().catch(() => undefined);
 }
 
+export interface McpRequestLog {
+  methods: string[];
+  client_name?: string;
+  client_version?: string;
+}
+
+function logText(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, max);
+}
+
+/**
+ * Non-secret diagnostics for a /mcp POST: JSON-RPC method names and, for
+ * initialize, the client's self-declared name/version (#1383, #1384).
+ */
+function summarizeMcpBody(body: unknown): McpRequestLog | undefined {
+  const messages = Array.isArray(body) ? body : [body];
+  const log: McpRequestLog = { methods: [] };
+  for (const message of messages.slice(0, 20)) {
+    if (!message || typeof message !== "object") continue;
+    const { method, params } = message as { method?: unknown; params?: unknown };
+    const name = logText(method, 64);
+    if (name) log.methods.push(name);
+    if (method === "initialize" && params && typeof params === "object") {
+      const info = (params as { clientInfo?: unknown }).clientInfo;
+      if (info && typeof info === "object") {
+        log.client_name = logText((info as { name?: unknown }).name, 80);
+        log.client_version = logText((info as { version?: unknown }).version, 40);
+      }
+    }
+  }
+  return log.methods.length > 0 ? log : undefined;
+}
+
 /** Number of `tools/call` requests in a JSON-RPC message or batch. */
 function countBillableToolCalls(body: unknown): number {
   const messages = Array.isArray(body) ? body : [body];
@@ -1438,6 +1474,12 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
           path: safeRequestPath(c.req.url),
           status_code: responseStatus(c),
         },
+        ...(safeRequestPath(c.req.url).startsWith("/mcp")
+          ? {
+              user_agent: logText(c.req.header("user-agent"), 120),
+              mcp: c.get("mcpLog"),
+            }
+          : {}),
         duration_ms: Math.round((performance.now() - startedAt) * 100) / 100,
       };
       if (error)
@@ -1818,6 +1860,7 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
   const handleMcp = async (c: Context<UnitHonoEnv>) => {
     const { incoming, outgoing } = nodeBindings(c);
     const body = await requestBody(c);
+    c.set("mcpLog", summarizeMcpBody(body));
     const server = new McpServer({ name, version });
     const assertConductRegistrations = installConductToolRegistration(
       server,
