@@ -34,20 +34,10 @@ import {
 import type { CustomerIdentityProvider } from "./googleDriveVaultContract.js";
 import { projectVaultCapabilities } from "./googleDriveVaultContract.js";
 import {
-  currentGatewayKey,
   projectLedgerUsage,
   projectCustomerUsage,
   type CustomerUsageProjection,
-  type GatewayKeyUsage,
 } from "./customerMetering.js";
-import {
-  createOpenRouterManagedAiClient,
-  CustomerManagedAiAuditStore,
-  CustomerManagedAiLifecycle,
-  loadManagedAiConfig,
-  type ManagedAiProviderClient,
-} from "./customerManagedAi.js";
-import { CustomerManagedAiAdmissionQueue } from "./customerManagedAiAdmission.js";
 import {
   clearCustomerSession,
   issueCustomerSession,
@@ -87,7 +77,6 @@ export interface CustomerLayerOptions {
     account: CustomerAccount,
     local: CustomerUsageProjection,
   ) => Promise<CustomerUsageProjection> | CustomerUsageProjection;
-  managedAiProvider?: ManagedAiProviderClient;
   /** Product-owned Google Drive consent adapter; omitted by units that do not own Drive vaults. */
   driveVaultOAuth?: {
     authorizationUrl(input: {
@@ -114,8 +103,6 @@ export interface CustomerLayerOptions {
    * application capabilities they do not own.
    */
   capabilities?: Partial<CustomerLayerCapabilities>;
-  /** Test-only fault seam proving Telegram does not acknowledge before SQLite admission. */
-  managedAiAdmissionBeforeJournal?: () => void;
 }
 
 export interface CustomerLayerCapabilities {
@@ -356,24 +343,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       tenantStore: options.tenantStore,
       tokenVault,
     });
-  const managedAiConfig = loadManagedAiConfig(env);
-  const managedAiProvider =
-    product.product === "zenod" && managedAiConfig.enabled && managedAiConfig.provisioningKey
-      ? options.managedAiProvider ?? createOpenRouterManagedAiClient(managedAiConfig.provisioningKey)
-      : null;
-  const managedAi = new CustomerManagedAiLifecycle({
-    accounts,
-    runtimeForAccount: (account) => host.runtimeForAccount?.(account) ?? null,
-    config: managedAiConfig,
-    provider: managedAiProvider,
-    audit: new CustomerManagedAiAuditStore(host.dataDir),
-  });
-  const managedAiAdmissions = new CustomerManagedAiAdmissionQueue(
-    join(host.dataDir, "customer-managed-ai-admission.sqlite"),
-    Date.now,
-    undefined,
-    options.managedAiAdmissionBeforeJournal,
-  );
   // Platform-key mode (D30): one host OpenRouter key serves every tenant, so there is no per-tenant key to
   // police and usage comes from each tenant's own ledger against the shadow allowance.
   const platformKeyMode = product.product === "zenod" && Boolean(env.ZENOD_PLATFORM_OPENROUTER_KEY?.trim());
@@ -387,41 +356,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       current_period_end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
     });
   };
-  const refreshCurrentTenantKeyAuthority = async (
-    account: CustomerAccount,
-  ): Promise<{ account: CustomerAccount; gateway: GatewayKeyUsage } | null> => {
-    if (product.product !== "zenod" || managedAiProvider || platformKeyMode) return null;
-    const runtime = host.runtimeForAccount?.(account) ?? null;
-    if (!runtime || runtime.settings.provider() !== "openrouter") return null;
-    const apiKey = runtime.settings.activeApiKey();
-    if (!apiKey) return null;
-    const gateway = await currentGatewayKey(apiKey);
-    if (
-      gateway.limit_reset !== "monthly" ||
-      gateway.limit === null ||
-      gateway.limit <= 0 ||
-      Math.abs(gateway.limit - managedAiConfig.monthlyLimitUsd) > 1e-9
-    ) {
-      throw new Error("existing OpenRouter key does not match the hosted monthly allowance policy");
-    }
-    const now = new Date();
-    const currentPeriodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    const currentPeriodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
-    const refreshed = accounts.upsert(account.session_id, {
-      managed_ai_limit_usd: gateway.limit,
-      managed_ai_status: gateway.disabled ? "paused" : "active",
-      managed_ai_updated_at: now.toISOString(),
-      managed_ai_last_reconciled_at: now.toISOString(),
-      managed_ai_error_code: null,
-      ...(!account.stripe_subscription_id
-        ? {
-            current_period_start: currentPeriodStart,
-            current_period_end: currentPeriodEnd,
-          }
-        : {}),
-    });
-    return { account: refreshed, gateway };
-  };
   const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
     await bindCheckout(account, session);
   };
@@ -433,11 +367,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (options.tenantStore) {
       await options.tenantStore.setTenantStatus(account.tenant_id, entitled ? "active" : "suspended");
     }
-    const managedOutcome = await managedAi.setSubscriptionAccess(account, entitled);
-    if (managedOutcome.state === "orphaned") throw new Error("managed AI child key requires operator recovery");
-    const reconciled = accounts.get(account.session_id) ?? account;
-    await options.onEntitlementChanged?.(reconciled, { entitled });
-    return accounts.get(account.session_id) ?? reconciled;
+    await options.onEntitlementChanged?.(account, { entitled });
+    return accounts.get(account.session_id) ?? account;
   };
   const refreshAuthoritativeSubscription = async (
     account: CustomerAccount | null,
@@ -458,58 +389,23 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     await refreshAuthoritativeSubscription(account, subscriptionId),
   );
   const localUsageForAccount = async (account: CustomerAccount) => {
-    if (platformKeyMode) {
-      const runtime = host.runtimeForAccount?.(account) ?? null;
-      let spend: number | null = null;
-      try {
-        spend = runtime ? runtime.monthToDateSpendUsd() : null;
-      } catch {
-        spend = null;
-      }
-      return projectLedgerUsage(spend, tenantAllowanceUsd, managedAiConfig.warnPercent);
+    if (!platformKeyMode) {
+      // Self-hosted or no platform key: there is no per-tenant provider authority to read.
+      return projectCustomerUsage(null);
     }
-    if (!managedAiProvider || !account.tenant_slug) {
-      try {
-        const current = await refreshCurrentTenantKeyAuthority(account);
-        return projectCustomerUsage(current?.gateway ?? null, managedAiConfig.warnPercent);
-      } catch {
-        return projectCustomerUsage(null, managedAiConfig.warnPercent);
-      }
-    }
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    let spend: number | null = null;
     try {
-      const keys = await managedAiProvider.listKeys();
-      const key = account.managed_ai_key_hash
-        ? keys.find((candidate) => candidate.hash === account.managed_ai_key_hash) ?? null
-        : keys.find((candidate) => candidate.slug === account.tenant_slug) ?? null;
-      return projectCustomerUsage(
-        key,
-        managedAiConfig.warnPercent,
-      );
+      spend = runtime ? runtime.monthToDateSpendUsd() : null;
     } catch {
-      return projectCustomerUsage(null, managedAiConfig.warnPercent);
+      spend = null;
     }
+    return projectLedgerUsage(spend, tenantAllowanceUsd);
   };
   const usageForAccount = async (account: CustomerAccount) => {
     const local = await localUsageForAccount(account);
     const refreshedAccount = accounts.get(account.session_id) ?? account;
     return options.projectUsage ? options.projectUsage(refreshedAccount, local) : local;
-  };
-  const reconcileManagedAiAccounts = async (): Promise<void> => {
-    const failures: unknown[] = [];
-    for (const account of accounts.list()) {
-      if (!account.tenant_id || account.subscription_status === null || account.subscription_status === "checkout_pending") {
-        continue;
-      }
-      try {
-        const authoritative = account.stripe_subscription_id && stripe?.subscriptions
-          ? await refreshAuthoritativeSubscription(account)
-          : account;
-        await reconcileEntitlement(authoritative);
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures.length > 0) throw new AggregateError(failures, "managed AI periodic reconciliation failed");
   };
   const refreshAuthoritativeSubscriptions = async (): Promise<{
     refreshedAccountIds: string[];
@@ -523,23 +419,12 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         account.subscription_status === null ||
         account.subscription_status === "checkout_pending"
       ) continue;
-      if (!account.stripe_subscription_id && platformKeyMode) {
+      if (!account.stripe_subscription_id) {
         try {
           refreshNonStripePeriod(account);
           refreshedAccountIds.push(account.account_id);
         } catch (error) {
           console.error(`[customer] period refresh failed for account ${account.account_id}:`, error);
-          failedAccountIds.push(account.account_id);
-        }
-        continue;
-      }
-      if (!account.stripe_subscription_id) {
-        try {
-          const refreshed = await refreshCurrentTenantKeyAuthority(account);
-          if (refreshed) refreshedAccountIds.push(account.account_id);
-          else failedAccountIds.push(account.account_id);
-        } catch (error) {
-          console.error(`[customer] current-key refresh failed for account ${account.account_id}:`, error);
           failedAccountIds.push(account.account_id);
         }
         continue;
@@ -557,18 +442,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
     return { refreshedAccountIds, failedAccountIds };
   };
-  const reconcileIntervalRaw = Number(env.ZENOD_MANAGED_AI_RECONCILE_INTERVAL_MS);
-  const reconcileIntervalMs = Number.isFinite(reconcileIntervalRaw) && reconcileIntervalRaw > 0
-    ? reconcileIntervalRaw
-    : 5 * 60_000;
-  const reconcileTimer = managedAiProvider
-    ? setInterval(() => {
-        void reconcileManagedAiAccounts().catch((error) => {
-          console.error("[managed-ai] periodic reconciliation failed:", error);
-        });
-      }, reconcileIntervalMs)
-    : null;
-  reconcileTimer?.unref?.();
   const app = new Hono<{ Bindings: HttpBindings }>();
 
   if (capabilities.productionReadiness) {
@@ -1389,16 +1262,6 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.json(await usageForAccount(account));
     });
 
-    app.get("/api/customer-managed-ai/jobs/:id", async (c, next) => {
-      const session = readCustomerSession(c, env);
-      // Bearer-authenticated channel/MCP callers are resolved by the Zenod unit,
-      // which owns the tenant token store. Cookie customers stay on this seam.
-      if (!session) return next();
-      const account = accounts.resolveActiveTenantForUser(session.user_id);
-      if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
-      const job = managedAiAdmissions.getForTenant(c.req.param("id"), account.tenant_id);
-      return job ? c.json({ job }) : c.json({ error: "job not found" }, 404);
-    });
   }
 
   // --- static MCP tokens (account dashboard, session-authenticated) ---
@@ -1663,16 +1526,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     tokenVault,
     mcpTokens,
     resolveMcpTokenRecord,
-    managedAi,
     usageForAccount,
-    managedAiAdmissions,
     reconcileEntitlement,
-    reconcileManagedAiAccounts,
     refreshAuthoritativeSubscriptions,
     close() {
-      if (reconcileTimer) clearInterval(reconcileTimer);
-      managedAiAdmissions.close();
-      managedAi.close();
       mcpTokens.close();
     },
   };

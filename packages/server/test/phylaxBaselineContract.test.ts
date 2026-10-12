@@ -76,8 +76,6 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
       "voice_gt_two_hours_archive_only",
       "drive_aware_terminal_receipt",
       "restart_capture_recovery",
-      "cap_pause_capture_first",
-      "one_terminal_response",
       "direct_mcp_bearer_continuity",
       "oauth_client_token_continuity",
       "tenant_google_continuity",
