@@ -26,6 +26,7 @@ import { openZenodSqlite } from "./sqlite.js";
 
 const MANAGEMENT_PROFILE = "phylax-management-v1-zenod";
 const DEFAULT_RECONCILE_MS = 30_000;
+const CLIENT_IDLE_MS = 5 * 60_000;
 
 export interface ZenodPhylaxConfig {
   enabled: boolean;
@@ -123,6 +124,7 @@ export interface ZenodPhylaxRemote {
     desiredAccess: "active" | "suspended";
   }): Promise<void>;
   call(token: string, tool: string, args: Record<string, unknown>): Promise<ToolResult>;
+  close?(): void;
 }
 
 function integerEnv(value: string | undefined, fallback: number): number {
@@ -407,21 +409,47 @@ class HttpZenodPhylaxRemote implements ZenodPhylaxRemote {
     if (!ensured.ok) throw new Error(`Phylax service credential ensure failed (${ensured.status})`);
   }
 
+  // Phylax /mcp is stateless Streamable HTTP, so one initialized client per
+  // management token can serve every call. A fresh client per call cost four
+  // HTTP requests (GET + initialize + initialized + call) for each tool call.
+  private readonly clients = new Map<string, { connected: Promise<Client>; lastUsed: number }>();
+
+  private evictClient(token: string, entry: { connected: Promise<Client> }): void {
+    if (this.clients.get(token) === entry) this.clients.delete(token);
+    void entry.connected.then((client) => client.close()).catch(() => {});
+  }
+
   async call(token: string, tool: string, args: Record<string, unknown>): Promise<ToolResult> {
-    const client = new Client(
-      { name: "zenod-phylax-management", version: "1.0" },
-      { capabilities: {} },
-    );
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`${this.config.origin}/mcp`),
-      { requestInit: { headers: { Authorization: `Bearer ${token}` } } },
-    );
-    try {
-      await client.connect(transport);
-      return await client.callTool({ name: tool, arguments: args }) as ToolResult;
-    } finally {
-      await client.close().catch(() => {});
+    const now = Date.now();
+    for (const [key, candidate] of this.clients) {
+      if (now - candidate.lastUsed > CLIENT_IDLE_MS) this.evictClient(key, candidate);
     }
+    let entry = this.clients.get(token);
+    if (!entry) {
+      const client = new Client(
+        { name: "zenod-phylax-management", version: "1.0" },
+        { capabilities: {} },
+      );
+      const transport = new StreamableHTTPClientTransport(
+        new URL(`${this.config.origin}/mcp`),
+        { requestInit: { headers: { Authorization: `Bearer ${token}` } } },
+      );
+      entry = { connected: client.connect(transport).then(() => client), lastUsed: now };
+      this.clients.set(token, entry);
+    }
+    entry.lastUsed = now;
+    try {
+      const client = await entry.connected;
+      return await client.callTool({ name: tool, arguments: args }) as ToolResult;
+    } catch (error) {
+      // Transport/connect failure: drop the client so the next call reconnects.
+      this.evictClient(token, entry);
+      throw error;
+    }
+  }
+
+  close(): void {
+    for (const [key, entry] of this.clients) this.evictClient(key, entry);
   }
 }
 
@@ -1577,6 +1605,7 @@ export class ZenodPhylaxAdapter {
     if (this.closed) return;
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
+    this.remote.close?.();
     this.db.close();
   }
 }

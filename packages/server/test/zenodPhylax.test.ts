@@ -547,6 +547,54 @@ describe("Zenod Phylax product adapter", () => {
     restarted.close();
   });
 
+  it("reuses one initialized MCP client across reconciles instead of a handshake per tool call (#1384)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zpf6-reuse-"));
+    dirs.push(root);
+    const phylax = createPhylaxUnit({
+      dataDir: join(root, "phylax"),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: "77".repeat(32),
+        CONTROL_PLANE_TOKEN: "control-secret",
+        PHYLAX_PREWARM_LOCAL_MODEL: "0",
+        PHYLAX_INSTANCE_MODE: "zenod",
+        PHYLAX_INSTANCE_ID: "zpf6-reuse",
+        PHYLAX_SERVICE_NUMBER_ID: "zpf6-reuse-number",
+      },
+    });
+    units.push(phylax);
+    const server = await new Promise<ServerType>((resolve) => {
+      const active = serve({ fetch: phylax.app.fetch, port: 0 }, () => resolve(active));
+    });
+    servers.push(server);
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const realFetch = globalThis.fetch;
+    let initializes = 0;
+    let toolCalls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
+      if (url.origin === origin && url.pathname === "/mcp" && init?.method === "POST") {
+        const method = (JSON.parse(String(init.body)) as { method?: string }).method;
+        if (method === "initialize") initializes += 1;
+        if (method === "tools/call") toolCalls += 1;
+      }
+      return realFetch(input, init);
+    });
+    const adapter = new ZenodPhylaxAdapter(join(root, "zenod"), config({
+      origin,
+      masterAllowanceUnits: 3_500_000,
+      phylaxAllowanceUnits: 2_000_000,
+      phylaxWalletTargetUnits: 500_000,
+      phylaxWalletLowWaterUnits: 100_000,
+    }));
+    adapter.setDownstreamTokenResolver(() => "zenod-memory-token");
+    await adapter.setEntitlement(account("alpha", { managed_ai_limit_usd: 1.5 }), true);
+    await adapter.reconcileAccount("account-alpha");
+    await adapter.reconcileAccount("account-alpha");
+    expect(toolCalls).toBeGreaterThan(3);
+    expect(initializes).toBe(1);
+    adapter.close();
+  });
+
   it("uses Stripe's authoritative monthly, yearly, and month-end period boundaries", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "zpf6-periods-"));
     dirs.push(dataDir);

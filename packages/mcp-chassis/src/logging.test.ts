@@ -122,7 +122,7 @@ describe("chassis logging", () => {
 
     const initialized = await fetch(`${base}/mcp/${token}`, {
       method: "POST",
-      headers: mcpHeaders,
+      headers: { ...mcpHeaders, "user-agent": "logging-test-agent/1.2" },
       body: initializeBody(),
     });
     const called = await fetch(`${base}/mcp/${token}`, {
@@ -134,6 +134,16 @@ describe("chassis logging", () => {
     expect(initialized.status).toBe(200);
     expect(called.status).toBe(200);
     const records = logs.records();
+    expect(
+      records.find(
+        (record) =>
+          record.event === "http.request.completed" &&
+          record.request_id === initialized.headers.get("x-request-id"),
+      ),
+    ).toMatchObject({
+      user_agent: "logging-test-agent/1.2",
+      mcp: { methods: ["initialize"], client_name: "logging-test", client_version: "0.0.0" },
+    });
     const toolLog = records.find((record) =>
       String(record.msg).startsWith("tool invoked"),
     );
