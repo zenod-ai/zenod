@@ -193,7 +193,10 @@ describe("TelegramGateway", () => {
     });
     try {
       await gateway.start();
-      await waitFor(() => consoleError.mock.calls.length >= 2);
+      // The error is logged before the gateway re-polls, so wait for both conditions.
+      await waitFor(
+        () => consoleError.mock.calls.length >= 2 && calls.filter((call) => call.method === "getUpdates").length >= 2,
+      );
       expect(acknowledged()).toBe(false);
       expect(calls.some((call) => call.method === "sendRichMessage" || call.method === "sendMessage")).toBe(false);
       expect(calls.filter((call) => call.method === "getUpdates").length).toBeGreaterThanOrEqual(2);
