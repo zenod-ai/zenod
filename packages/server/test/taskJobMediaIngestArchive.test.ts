@@ -206,6 +206,7 @@ describe("TaskJobQueue media_ingest archive integration", () => {
       whisperModel: () => "large-v3-turbo",
       openrouterApiKey: () => null,
       openrouterUser: () => undefined,
+      transcriptionUsageSink: () => () => undefined,
       openrouterTranscriptionModel: () => "openai/whisper-large-v3-turbo",
       longTranscriptionProvider: () => "local",
       useOpenAiForLongTranscription: () => false,
