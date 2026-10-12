@@ -52,6 +52,7 @@ import {
   type ChassisUsageStoreOptions,
   type TenantUsageMeter,
 } from "./usage.js";
+import { rateLimitFromEnv, TokenBucketLimiter, type RateLimitOptions } from "./rateLimit.js";
 import { SqliteTenantSettingsStore } from "./settings.js";
 import {
   assertRegisteredToolResult,
@@ -364,6 +365,11 @@ export interface CreateUnitOptions {
   storage?: ChassisStorage | ChassisStorageOptions;
   /** Tenant usage ledger and quota checks. Defaults on when a storage/data dir is configured. */
   metering?: ChassisUsageStore | ChassisUsageStoreOptions | false;
+  /**
+   * Per-tenant rate limit on /mcp, applied before any usage/DB work. Defaults to
+   * MCP_RATE_LIMIT_RPS (10) / MCP_RATE_LIMIT_BURST (30); `false` or rps 0 disables.
+   */
+  rateLimit?: RateLimitOptions | false;
   /** Optional tenant-scoped settings UI shell. */
   ui?: UnitUiOptions;
   /** OAuth server for MCP-client sign-in and OAuth client providers for world connections. */
@@ -947,6 +953,16 @@ export function seedSingleTenantFromEnv(
 async function requestBody(c: Context): Promise<unknown> {
   if (c.req.method !== "POST") return undefined;
   return c.req.json().catch(() => undefined);
+}
+
+/** Number of `tools/call` requests in a JSON-RPC message or batch. */
+function countBillableToolCalls(body: unknown): number {
+  const messages = Array.isArray(body) ? body : [body];
+  let count = 0;
+  for (const message of messages) {
+    if (message && typeof message === "object" && (message as { method?: unknown }).method === "tools/call") count += 1;
+  }
+  return count;
 }
 
 function nodeBindings(c: Context<UnitHonoEnv>): {
@@ -1768,8 +1784,40 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     });
   }
 
+  const mcpLimiter = new TokenBucketLimiter(
+    options.rateLimit === false ? { rps: 0, burst: 0 } : (options.rateLimit ?? rateLimitFromEnv()),
+  );
+
+  // Stateless server: no session and no server-initiated messages, so there is no SSE
+  // stream to offer (MCP Streamable HTTP: GET -> 405 when the server has no stream).
+  // Runs after auth so unauthenticated clients still get the OAuth 401 challenge.
+  const mcpMethodGuard = async (c: Context<UnitHonoEnv>, next: () => Promise<void>) => {
+    const method = c.req.method;
+    if (method === "GET" || method === "DELETE") {
+      return c.json({ error: "method_not_allowed", message: "This MCP server is stateless; use POST." }, 405, {
+        Allow: "POST, OPTIONS",
+      });
+    }
+    await next();
+  };
+
+  // Per-tenant token bucket, in memory, before any usage DB work.
+  const mcpRateLimit = async (c: Context<UnitHonoEnv>, next: () => Promise<void>) => {
+    if (c.req.method === "POST" && mcpLimiter.enabled) {
+      const key = c.get("tenant")?.id ?? c.req.header("x-forwarded-for") ?? "anonymous";
+      const decision = mcpLimiter.take(key);
+      if (!decision.allowed) {
+        return c.json({ error: "rate_limited", retryAfterSeconds: decision.retryAfterSeconds }, 429, {
+          "Retry-After": String(decision.retryAfterSeconds),
+        });
+      }
+    }
+    await next();
+  };
+
   const handleMcp = async (c: Context<UnitHonoEnv>) => {
     const { incoming, outgoing } = nodeBindings(c);
+    const body = await requestBody(c);
     const server = new McpServer({ name, version });
     const assertConductRegistrations = installConductToolRegistration(
       server,
@@ -1782,10 +1830,13 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
       profileToolAllowlist(credentialProfile, options.toolProfiles),
     );
     const usage = tenant ? (getUsageStore()?.forTenant(tenant) ?? null) : null;
-    if (tenant && usage) {
-      const decision = usage.checkQuota(tenant.quota, 1);
+    // Only billable work (tool calls) is metered. initialize, notifications, ping and
+    // list methods are protocol chatter: they neither consume quota nor write ledger rows.
+    const billableUnits = countBillableToolCalls(body);
+    if (tenant && usage && billableUnits > 0) {
+      const decision = usage.checkQuota(tenant.quota, billableUnits);
       if (!decision.allowed) return quotaExceededResponse(c, decision);
-      usage.record({ kind: "mcp.request", units: 1 });
+      usage.record({ kind: "mcp.request", units: billableUnits });
     }
     const turnPreamble = tenant
       ? await operatingRules.turnPreamble(tenant)
@@ -1817,12 +1868,12 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     });
 
     await server.connect(transport);
-    await transport.handleRequest(incoming, outgoing, await requestBody(c));
+    await transport.handleRequest(incoming, outgoing, body);
     return RESPONSE_ALREADY_SENT;
   };
 
-  app.all("/mcp", mcpAuth, handleMcp);
-  app.all("/mcp/:token", mcpAuth, handleMcp);
+  app.all("/mcp", mcpAuth, mcpMethodGuard, mcpRateLimit, handleMcp);
+  app.all("/mcp/:token", mcpAuth, mcpMethodGuard, mcpRateLimit, handleMcp);
 
   if (options.routes) {
     const tenantAuth = options.tenantAuth;
@@ -1970,6 +2021,7 @@ function toProvisionTenantResponse(result: ProvisionTenantResult): {
 export * from "./conduct.js";
 export { ChassisStorage, openSqlite } from "./storage.js";
 export { ChassisUsageStore, TenantUsageMeter } from "./usage.js";
+export { TokenBucketLimiter, rateLimitFromEnv, DEFAULT_MCP_RATE_LIMIT, type RateLimitOptions } from "./rateLimit.js";
 export type {
   ChassisStorageOptions,
   TenantStorage,
