@@ -204,6 +204,8 @@ describe("TaskJobQueue media_ingest archive integration", () => {
           artifact_archive_local_dir: archiveDir,
         })[key] ?? null,
       whisperModel: () => "large-v3-turbo",
+      openrouterApiKey: () => null,
+      openrouterUser: () => undefined,
       openrouterTranscriptionModel: () => "openai/whisper-large-v3-turbo",
       longTranscriptionProvider: () => "local",
       useOpenAiForLongTranscription: () => false,
