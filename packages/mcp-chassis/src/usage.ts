@@ -57,7 +57,8 @@ export interface UsageQuery {
 export interface QuotaDecision {
   allowed: boolean;
   quota: number | null;
-  used: number;
+  /** Total units used; null when no quota applies (usage is not computed on the hot path). */
+  used: number | null;
   requested: number;
   remaining: number | null;
 }
@@ -85,8 +86,45 @@ export class ChassisUsageStore {
         metadata_json TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_tenant_usage_tenant_ts ON tenant_usage (tenant_id, ts);
-      CREATE INDEX IF NOT EXISTS idx_tenant_usage_tenant_kind_ts ON tenant_usage (tenant_id, kind, ts);
+      CREATE TABLE IF NOT EXISTS tenant_usage_totals (
+        tenant_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        events INTEGER NOT NULL DEFAULT 0,
+        units INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (tenant_id, kind)
+      ) WITHOUT ROWID;
+      CREATE TABLE IF NOT EXISTS usage_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
     `);
+    this.migrateCoveringIndexAndTotals();
+  }
+
+  /**
+   * One-time, idempotent migration for ledgers that predate the running totals.
+   * Builds a covering (tenant, kind, ts, units) index (replacing the old non-covering
+   * kind index) and backfills tenant_usage_totals in a single GROUP BY pass, inside one
+   * IMMEDIATE transaction so no writer can slip a row between the scan and the flag.
+   */
+  private migrateCoveringIndexAndTotals(): void {
+    const done = this.db.prepare("SELECT value FROM usage_meta WHERE key = 'totals_backfilled'").get();
+    if (done) {
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_usage_covering ON tenant_usage (tenant_id, kind, ts, units);");
+      return;
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_tenant_usage_covering ON tenant_usage (tenant_id, kind, ts, units);
+        DROP INDEX IF EXISTS idx_tenant_usage_tenant_kind_ts;
+        DELETE FROM tenant_usage_totals;
+        INSERT INTO tenant_usage_totals (tenant_id, kind, events, units)
+          SELECT tenant_id, kind, COUNT(*), COALESCE(SUM(units), 0) FROM tenant_usage GROUP BY tenant_id, kind;
+        INSERT OR REPLACE INTO usage_meta (key, value) VALUES ('totals_backfilled', '1');
+      `);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   forTenant(tenant: UnitTenant): TenantUsageMeter {
@@ -99,9 +137,23 @@ export class ChassisUsageStore {
     const units = normalizeUnits(input.units ?? 1);
     const ts = normalizeTimestamp(input.at ?? Date.now());
     const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
-    const result = this.db
-      .prepare("INSERT INTO tenant_usage (tenant_id, ts, kind, units, metadata_json) VALUES (?, ?, ?, ?, ?)")
-      .run(tenantId, ts, kind, units, metadataJson);
+    let result: { lastInsertRowid: number | bigint };
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      result = this.db
+        .prepare("INSERT INTO tenant_usage (tenant_id, ts, kind, units, metadata_json) VALUES (?, ?, ?, ?, ?)")
+        .run(tenantId, ts, kind, units, metadataJson);
+      this.db
+        .prepare(
+          `INSERT INTO tenant_usage_totals (tenant_id, kind, events, units) VALUES (?, ?, 1, ?)
+           ON CONFLICT (tenant_id, kind) DO UPDATE SET events = events + 1, units = units + excluded.units`,
+        )
+        .run(tenantId, kind, units);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
     return {
       id: Number(result.lastInsertRowid),
       tenantId,
@@ -120,6 +172,19 @@ export class ChassisUsageStore {
     if (query.kind) {
       clauses.push("kind = ?");
       params.push(normalizeKind(query.kind));
+    }
+    if (!query.kind && since === 0) {
+      // All-time summary is served from the maintained running totals: O(kinds), not O(rows).
+      const buckets = this.db
+        .prepare("SELECT kind, events, units FROM tenant_usage_totals WHERE tenant_id = ? ORDER BY kind")
+        .all(tenantId) as unknown as UsageBucket[];
+      return {
+        tenantId,
+        since,
+        events: buckets.reduce((sum, b) => sum + b.events, 0),
+        units: buckets.reduce((sum, b) => sum + b.units, 0),
+        byKind: buckets,
+      };
     }
     const where = clauses.join(" AND ");
     const totals = this.db
@@ -183,10 +248,11 @@ export class ChassisUsageStore {
   checkQuota(tenant: UnitTenant, quota: number | null | undefined, requestedUnits = 1): QuotaDecision {
     const requested = normalizeUnits(requestedUnits);
     const normalizedQuota = normalizeQuota(quota);
-    const used = this.summary(tenant).units;
     if (normalizedQuota === null) {
-      return { allowed: true, quota: null, used, requested, remaining: null };
+      // No quota: nothing to enforce, so do not touch the ledger at all.
+      return { allowed: true, quota: null, used: null, requested, remaining: null };
     }
+    const used = this.totalUnits(tenant);
     const remaining = Math.max(normalizedQuota - used, 0);
     return {
       allowed: remaining >= requested,
@@ -195,6 +261,14 @@ export class ChassisUsageStore {
       requested,
       remaining,
     };
+  }
+
+  /** All-time units for a tenant from the running totals (O(kinds)). */
+  private totalUnits(tenant: UnitTenant): number {
+    const row = this.db
+      .prepare("SELECT COALESCE(SUM(units), 0) AS units FROM tenant_usage_totals WHERE tenant_id = ?")
+      .get(normalizeTenantId(tenant.id)) as { units: number };
+    return row.units;
   }
 
   close(): void {

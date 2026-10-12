@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { ChassisUsageStore } from "./usage.js";
 
 const tempDirs: string[] = [];
@@ -67,6 +68,93 @@ describe("tenant usage metering", () => {
         requested: 1,
         remaining: 0,
       });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("does not touch the ledger for null quota and reports used as unknown", async () => {
+    const store = new ChassisUsageStore({ dataDir: await tempDataDir() });
+    try {
+      const alpha = store.forTenant({ id: "tenant_alpha" });
+      alpha.record({ units: 5 });
+      expect(alpha.checkQuota(null)).toEqual({ allowed: true, quota: null, used: null, requested: 1, remaining: null });
+      expect(alpha.checkQuota(undefined, 3).allowed).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("keeps running totals identical to a full scan and enforces the quota at the limit", async () => {
+    const store = new ChassisUsageStore({ dataDir: await tempDataDir() });
+    try {
+      const alpha = store.forTenant({ id: "tenant_alpha" });
+      store.record({ tenant: { id: "tenant_beta" }, units: 100 });
+      for (let i = 0; i < 3; i++) alpha.record({ kind: "mcp.request", units: 1 });
+      alpha.record({ kind: "tool.search", units: 4 });
+      expect(alpha.checkQuota(7, 1)).toMatchObject({ allowed: false, used: 7, remaining: 0 });
+      expect(alpha.checkQuota(8, 1)).toMatchObject({ allowed: true, used: 7, remaining: 1 });
+      expect(alpha.checkQuota(8, 2).allowed).toBe(false);
+      const fast = alpha.summary();
+      const scanned = alpha.summary({ since: 1 }); // bypasses totals, scans rows
+      expect(fast.events).toBe(scanned.events);
+      expect(fast.units).toBe(scanned.units);
+      expect(fast.byKind).toEqual(scanned.byKind);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("backfills running totals once from a legacy ledger", async () => {
+    const dir = await tempDataDir();
+    const legacy = new DatabaseSync(join(dir, "usage.sqlite"));
+    legacy.exec(`CREATE TABLE tenant_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, ts INTEGER NOT NULL, kind TEXT NOT NULL, units INTEGER NOT NULL DEFAULT 1, metadata_json TEXT);
+      INSERT INTO tenant_usage (tenant_id, ts, kind, units) VALUES ('t', 1, 'mcp.request', 1), ('t', 2, 'mcp.request', 1), ('t', 3, 'x', 5);`);
+    legacy.close();
+    let store = new ChassisUsageStore({ dataDir: dir });
+    try {
+      expect(store.checkQuota({ id: "t" }, 100)).toMatchObject({ used: 7 });
+      store.record({ tenant: { id: "t" }, units: 2 });
+    } finally {
+      store.close();
+    }
+    store = new ChassisUsageStore({ dataDir: dir }); // reopen: must not double count
+    try {
+      expect(store.checkQuota({ id: "t" }, 100)).toMatchObject({ used: 9 });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("keeps per-request quota check and record O(1) on a large ledger", async () => {
+    const dir = await tempDataDir();
+    const seed = new ChassisUsageStore({ dataDir: dir });
+    seed.close();
+    const raw = new DatabaseSync(join(dir, "usage.sqlite"));
+    raw.exec("BEGIN");
+    const ins = raw.prepare("INSERT INTO tenant_usage (tenant_id, ts, kind, units) VALUES ('big', ?, 'mcp.request', 1)");
+    for (let i = 0; i < 300_000; i++) ins.run(i);
+    raw.exec("DELETE FROM usage_meta; COMMIT");
+    raw.close();
+    const store = new ChassisUsageStore({ dataDir: dir }); // re-runs backfill
+    try {
+      const meter = store.forTenant({ id: "big" });
+      const t0 = performance.now();
+      for (let i = 0; i < 1000; i++) {
+        meter.checkQuota(null, 1);
+        meter.record({ kind: "mcp.request" });
+      }
+      const nullMs = performance.now() - t0;
+      const t1 = performance.now();
+      for (let i = 0; i < 1000; i++) {
+        meter.checkQuota(10_000_000, 1);
+        meter.record({ kind: "mcp.request" });
+      }
+      const quotaMs = performance.now() - t1;
+      console.log(`usage hot path, 300k rows: null ${nullMs.toFixed(1)}ms, quota ${quotaMs.toFixed(1)}ms per 1000`);
+      expect(nullMs).toBeLessThan(1500);
+      expect(quotaMs).toBeLessThan(1500);
+      expect(meter.checkQuota(10_000_000)).toMatchObject({ used: 302_000 });
     } finally {
       store.close();
     }
