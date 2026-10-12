@@ -126,6 +126,72 @@ describe("tenant usage metering", () => {
     }
   });
 
+  it("self-heals totals from a watermark: rows inserted behind the store's back are counted once on next boot", async () => {
+    const dir = await tempDataDir();
+    let store = new ChassisUsageStore({ dataDir: dir });
+    store.record({ tenant: { id: "t" }, units: 3 });
+    store.close();
+    // Simulate an older container (no totals maintenance) inserting rows during rollback/overlap.
+    const raw = new DatabaseSync(join(dir, "usage.sqlite"));
+    raw.exec("INSERT INTO tenant_usage (tenant_id, ts, kind, units) VALUES ('t', 5, 'mcp.request', 1), ('u', 6, 'x', 4)");
+    raw.close();
+    store = new ChassisUsageStore({ dataDir: dir });
+    try {
+      expect(store.checkQuota({ id: "t" }, 100)).toMatchObject({ used: 4 });
+      expect(store.checkQuota({ id: "u" }, 100)).toMatchObject({ used: 4 });
+    } finally {
+      store.close();
+    }
+    store = new ChassisUsageStore({ dataDir: dir }); // idempotent
+    try {
+      expect(store.checkQuota({ id: "t" }, 100)).toMatchObject({ used: 4 });
+      const t = store.forTenant({ id: "t" });
+      t.record({ units: 2 });
+      expect(t.summary().units).toBe(t.summary({ since: 1 }).units);
+    } finally {
+      store.close();
+    }
+    const check = new DatabaseSync(join(dir, "usage.sqlite"));
+    const wm = check.prepare("SELECT value FROM usage_meta WHERE key='totals_watermark'").get() as { value: string };
+    const max = check.prepare("SELECT MAX(id) AS m FROM tenant_usage").get() as { m: number };
+    expect(Number(wm.value)).toBe(max.m);
+    check.close();
+  });
+
+  it("rebuilds totals from scratch when no watermark exists (drifted legacy totals)", async () => {
+    const dir = await tempDataDir();
+    let store = new ChassisUsageStore({ dataDir: dir });
+    store.record({ tenant: { id: "t" }, units: 3 });
+    store.close();
+    const raw = new DatabaseSync(join(dir, "usage.sqlite"));
+    raw.exec("UPDATE tenant_usage_totals SET units = 999; DELETE FROM usage_meta WHERE key = 'totals_watermark'");
+    raw.close();
+    store = new ChassisUsageStore({ dataDir: dir });
+    try {
+      expect(store.checkQuota({ id: "t" }, 100)).toMatchObject({ used: 3 });
+    } finally {
+      store.close();
+    }
+  });
+
+  it("catches up across multiple chunks", async () => {
+    const dir = await tempDataDir();
+    new ChassisUsageStore({ dataDir: dir }).close();
+    const raw = new DatabaseSync(join(dir, "usage.sqlite"));
+    raw.exec("BEGIN");
+    const ins = raw.prepare("INSERT INTO tenant_usage (tenant_id, ts, kind, units) VALUES (?, ?, 'mcp.request', 1)");
+    for (let i = 0; i < 120_000; i++) ins.run(i % 2 ? "a" : "b", i);
+    raw.exec("COMMIT");
+    raw.close();
+    const store = new ChassisUsageStore({ dataDir: dir });
+    try {
+      expect(store.checkQuota({ id: "a" }, 1e9)).toMatchObject({ used: 60_000 });
+      expect(store.checkQuota({ id: "b" }, 1e9)).toMatchObject({ used: 60_000 });
+    } finally {
+      store.close();
+    }
+  });
+
   it("keeps per-request quota check and record O(1) on a large ledger", async () => {
     const dir = await tempDataDir();
     const seed = new ChassisUsageStore({ dataDir: dir });

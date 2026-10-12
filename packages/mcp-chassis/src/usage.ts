@@ -6,6 +6,7 @@ import type { UnitTenant } from "./storage.js";
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 const DEFAULT_USAGE_DB_NAME = "usage.sqlite";
 const DEFAULT_REQUEST_KIND = "mcp.request";
+const BACKFILL_CHUNK_ROWS = 50_000;
 const EVENT_KIND_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 export interface ChassisUsageStoreOptions {
@@ -99,32 +100,65 @@ export class ChassisUsageStore {
   }
 
   /**
-   * One-time, idempotent migration for ledgers that predate the running totals.
-   * Builds a covering (tenant, kind, ts, units) index (replacing the old non-covering
-   * kind index) and backfills tenant_usage_totals in a single GROUP BY pass, inside one
-   * IMMEDIATE transaction so no writer can slip a row between the scan and the flag.
+   * Self-healing running totals. usage_meta 'totals_watermark' holds the max tenant_usage.id already
+   * counted in tenant_usage_totals. On boot every row with id > watermark is added to the totals in
+   * chunked transactions (each chunk advances the watermark atomically, so a crash resumes cleanly).
+   * With no watermark (first boot of this scheme) the totals are rebuilt from scratch, which also
+   * repairs any drift left by earlier versions. Inserts update totals + watermark in one transaction
+   * (see record()). Pruning (A1) only ever deletes rows with id <= watermark.
    */
   private migrateCoveringIndexAndTotals(): void {
-    const done = this.db.prepare("SELECT value FROM usage_meta WHERE key = 'totals_backfilled'").get();
-    if (done) {
-      this.db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_usage_covering ON tenant_usage (tenant_id, kind, ts, units);");
-      return;
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_usage_covering ON tenant_usage (tenant_id, kind, ts, units);");
+    this.db.exec("DROP INDEX IF EXISTS idx_tenant_usage_tenant_kind_ts;");
+    let watermark = this.getWatermark();
+    if (watermark === null) {
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        this.db.exec("DELETE FROM tenant_usage_totals;");
+        this.db.exec("INSERT OR REPLACE INTO usage_meta (key, value) VALUES ('totals_watermark', '0')");
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+      watermark = 0;
     }
-    this.db.exec("BEGIN IMMEDIATE");
-    try {
-      this.db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_tenant_usage_covering ON tenant_usage (tenant_id, kind, ts, units);
-        DROP INDEX IF EXISTS idx_tenant_usage_tenant_kind_ts;
-        DELETE FROM tenant_usage_totals;
-        INSERT INTO tenant_usage_totals (tenant_id, kind, events, units)
-          SELECT tenant_id, kind, COUNT(*), COALESCE(SUM(units), 0) FROM tenant_usage GROUP BY tenant_id, kind;
-        INSERT OR REPLACE INTO usage_meta (key, value) VALUES ('totals_backfilled', '1');
-      `);
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
+    const bound = this.db.prepare("SELECT MAX(id) AS hi FROM (SELECT id FROM tenant_usage WHERE id > ? ORDER BY id LIMIT ?)");
+    const add = this.db.prepare(
+      `INSERT INTO tenant_usage_totals (tenant_id, kind, events, units)
+         SELECT tenant_id, kind, COUNT(*), COALESCE(SUM(units), 0) FROM tenant_usage WHERE id > ? AND id <= ? GROUP BY tenant_id, kind
+       ON CONFLICT (tenant_id, kind) DO UPDATE SET events = events + excluded.events, units = units + excluded.units`,
+    );
+    for (;;) {
+      const row = bound.get(watermark, BACKFILL_CHUNK_ROWS) as { hi: number | null };
+      const hi = row.hi;
+      if (hi === null) break;
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        // Re-read inside the write lock: another process may have advanced the watermark.
+        const current = this.getWatermark() ?? 0;
+        if (current < hi) {
+          add.run(Math.max(current, watermark), hi);
+          this.setWatermark(hi);
+        }
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+      watermark = hi;
     }
+  }
+
+  private getWatermark(): number | null {
+    const row = this.db.prepare("SELECT value FROM usage_meta WHERE key = 'totals_watermark'").get() as
+      | { value: string }
+      | undefined;
+    return row ? Number(row.value) : null;
+  }
+
+  private setWatermark(id: number): void {
+    this.db.prepare("INSERT OR REPLACE INTO usage_meta (key, value) VALUES ('totals_watermark', ?)").run(String(id));
   }
 
   forTenant(tenant: UnitTenant): TenantUsageMeter {
@@ -149,6 +183,7 @@ export class ChassisUsageStore {
            ON CONFLICT (tenant_id, kind) DO UPDATE SET events = events + 1, units = units + excluded.units`,
         )
         .run(tenantId, kind, units);
+      this.setWatermark(Number(result.lastInsertRowid));
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
