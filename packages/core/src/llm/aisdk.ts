@@ -159,6 +159,16 @@ export interface AiLlmOptions {
    * throw into the call path — a metering failure must not break a chat turn.
    */
   onUsage?: (report: LlmUsageReport) => void;
+  /**
+   * OpenRouter `user` field: an opaque end-user id sent on every request so the
+   * gateway can attribute spend per customer when many customers share one key.
+   */
+  user?: string;
+  /**
+   * Called synchronously before each model call (one per generateText/streamText
+   * invocation). Used for shadow-mode spend checks; it must never throw into the call path.
+   */
+  onBeforeCall?: () => void;
 }
 
 /** Per-provider default models. All are user-overridable in settings. */
@@ -411,8 +421,8 @@ function captureStreamUsage(response: Response, recordedModel: string, sink: (u:
  * call; streams are teed (the final usage chunk arrives before the stream ends).
  * The same seam also adds the optional organizer routing envelope.
  */
-function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[], onProviderUsage?: (u: ProviderCallUsage) => void, baseUrl?: string, headers?: Record<string, string>, apiFormat?: "chat" | "responses"): ModelFactory {
-  const wantsSeam = provider === "openrouter" && (Boolean(providerOrder) || Boolean(onProviderUsage));
+function createModelFactory(provider: Provider, apiKey: string, providerOrder?: string[], onProviderUsage?: (u: ProviderCallUsage) => void, baseUrl?: string, headers?: Record<string, string>, apiFormat?: "chat" | "responses", user?: string): ModelFactory {
+  const wantsSeam = provider === "openrouter" && (Boolean(providerOrder) || Boolean(onProviderUsage) || Boolean(user));
   const seam: typeof globalThis.fetch | undefined = wantsSeam ? async (input, init) => {
     const request = new Request(input, init);
     if (request.url !== OPENAI_COMPATIBLE_BASE_URLS.openrouter + "/chat/completions" || request.method !== "POST") {
@@ -423,6 +433,7 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
     const patched: Record<string, unknown> = { ...body, usage: { include: true, ...(body.usage as object | undefined) } };
     if (patched.stream === true) patched.stream_options = { include_usage: true, ...(body.stream_options as object | undefined) };
     if (providerOrder) patched.provider = { only: providerOrder, order: providerOrder, require_parameters: true };
+    if (user) patched.user = user;
     let response = await globalThis.fetch(request.url, {method: request.method, headers: request.headers, signal: request.signal, body: JSON.stringify(patched)});
     const recordedModel = typeof body.model === "string" ? body.model : "";
     if (onProviderUsage && response.ok) {
@@ -769,13 +780,16 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.maxSteps = clampMaxSteps(options.maxSteps);
     this.provider = options.provider;
     this.onUsage = options.onUsage;
-    this.model = createModelFactory(options.provider, options.apiKey, undefined, (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat);
+    const beforeCall = options.onBeforeCall;
+    const metered = (factory: ModelFactory): ModelFactory =>
+      beforeCall ? (id: string) => { try { beforeCall(); } catch { /* shadow check never breaks a call */ } return factory(id); } : factory;
+    this.model = metered(createModelFactory(options.provider, options.apiKey, undefined, (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat, options.user));
     const order = options.organizerProviderOrder;
     if (order !== undefined && (options.provider !== "openrouter" || !Array.isArray(order) || order.length < 1 || order.length > 3
       || new Set(order).size !== order.length || order.some(slug => typeof slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)))) {
       throw new Error("Organizer provider order requires OpenRouter and 1–3 unique base provider slugs");
     }
-    this.organizerModel = order ? createModelFactory(options.provider, options.apiKey, [...order], (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat) : this.model;
+    this.organizerModel = order ? metered(createModelFactory(options.provider, options.apiKey, [...order], (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat, options.user)) : this.model;
   }
 
   /**

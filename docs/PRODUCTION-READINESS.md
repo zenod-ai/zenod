@@ -111,6 +111,23 @@ ZENOD_MANAGED_AI_ENABLED
 
 The locked next design keeps one customer allowance while Zenod and Phylax meter their own costs. Zenod/PM issues a tenant-scoped allowance to Phylax; Phylax records transport/STT use; the product presents combined percentage/state/reset truth. Standalone Phylax uses the same ledger with a different allowance issuer. This is an accounting/control seam, not a provider-key-per-tenant requirement.
 
+Hosted LLM access (D30) uses one host-owned OpenRouter key, like Phylax. Optional host env:
+
+```text
+ZENOD_PLATFORM_OPENROUTER_KEY        # when set, hosted tenant runtimes use provider openrouter with this key,
+                                     # authoritative over any key stored in the tenant settings (stored keys
+                                     # stay in place, unused). Unset = previous per-tenant-key behaviour.
+ZENOD_TENANT_MONTHLY_ALLOWANCE_USD   # per-tenant UTC-month spend allowance, SHADOW mode: logs
+                                     # llm.allowance.exceeded once per tenant per hour, never blocks. Unset = no check.
+ZENOD_MODEL_ASK / ZENOD_MODEL_CLASSIFY / ZENOD_MODEL_VISION   # host model allowlist while the platform key is active
+```
+
+While the platform key is active, tenant model/provider/base-URL overrides are ignored (only host-configured
+models, else the built-in defaults, are used), every OpenRouter call carries the tenant id as the `user` field,
+and per-tenant month-to-date spend (from the tenant's own `llm_usage` ledger) is shown in the customer usage
+view (`monthSpendUsd`) and `GET /api/usage` (`month`). The key is never returned by any settings endpoint.
+Rollback = remove `ZENOD_PLATFORM_OPENROUTER_KEY` and redeploy.
+
 The customer Channels facade requires:
 
 ```text

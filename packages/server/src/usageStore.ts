@@ -337,6 +337,19 @@ export class UsageStore {
     return row.cost_usd ?? 0;
   }
 
+  /**
+   * Spend since `since` (one index-range SUM): the gateway's real charge when reported, else the
+   * token-price estimate. This is the per-tenant metering figure (month-to-date, allowance readout).
+   */
+  spendSince(since: number): number {
+    const row = this.db
+      .prepare(
+        "SELECT COALESCE(SUM(COALESCE(provider_cost_usd, cost_usd)), 0) AS spend FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded'",
+      )
+      .get(since) as unknown as { spend: number };
+    return row.spend ?? 0;
+  }
+
   summary(since: number): UsageSummary {
     const totals = this.db
       .prepare(

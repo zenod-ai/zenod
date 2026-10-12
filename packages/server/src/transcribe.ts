@@ -759,6 +759,7 @@ async function transcribeWithOpenRouter(
   apiKey: string,
   model: string,
   signal?: AbortSignal,
+  user?: string,
 ): Promise<TranscriptionEnvelope> {
   const dir = await mkdtemp(join(tmpdir(), "zenod-openrouter-"));
   const input = join(dir, `in${extname(filename) || ".m4a"}`);
@@ -780,6 +781,7 @@ async function transcribeWithOpenRouter(
       input_audio: { data: audio.toString("base64"), format: "mp3" },
     };
     if (LANGUAGE !== "auto") body.language = LANGUAGE;
+    if (user) (body as { user?: string }).user = user;
     const timeout = AbortSignal.timeout(300_000);
     const response = await fetchRetryingNetworkErrors(OPENROUTER_STT_URL, {
       method: "POST",
@@ -879,6 +881,8 @@ export type TranscribeOptions =
       openaiApiKey?: string | null;
       openrouterApiKey?: string | null;
       openrouterModel?: string | null;
+      /** OpenRouter `user` attribution (tenant id) when many tenants share one key. */
+      openrouterUser?: string | null;
       longTranscriptionProvider?: "groq" | "openrouter" | "openai" | "local";
       useOpenAiForLongAudio?: boolean;
       durationSeconds?: number;
@@ -937,6 +941,7 @@ async function runTranscription(
   const openaiApiKey = (typeof options === "function" ? undefined : options.openaiApiKey) ?? process.env.OPENAI_API_KEY;
   const openrouterApiKey =
     (typeof options === "function" ? undefined : options.openrouterApiKey) ?? process.env.OPENROUTER_API_KEY;
+  const openrouterUser = typeof options === "function" ? undefined : options.openrouterUser ?? undefined;
   const openrouterModel =
     (typeof options === "function" ? undefined : options.openrouterModel) ?? DEFAULT_OPENROUTER_STT_MODEL;
   const explicitLongProvider = typeof options === "function" ? undefined : options.longTranscriptionProvider;
@@ -1018,7 +1023,7 @@ async function runTranscription(
         );
       }
     } else if (longProvider === "openrouter" && openrouterApiKey) {
-      const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
+      const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser);
       if (result.success || signal?.aborted) return result;
       cloudFailure = result;
       console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);
@@ -1043,7 +1048,7 @@ async function runTranscription(
       const groqError = groqFailure(err, signal?.aborted === true);
       if (signal?.aborted) return groqError;
       if (openrouterApiKey && shouldTryOpenRouterFallback(isLongAudio, longProvider, openrouterApiKey)) {
-        const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
+        const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser);
         if (result.success || signal?.aborted) return result;
         cloudFailure = result;
         console.warn(
@@ -1062,7 +1067,7 @@ async function runTranscription(
     // longer shipped in the image — so a voice note errored "whisper-cli is not installed"
     // even though a working cloud key existed. (The fake-transcript path already reported
     // "openrouter" here; the real path now matches it.)
-    const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal);
+    const result = await transcribeWithOpenRouter(data, filename, openrouterApiKey, openrouterModel, signal, openrouterUser);
     if (result.success || signal?.aborted) return result;
     cloudFailure = result;
     console.warn(`[transcribe] openrouter failed${allowLocalFallback ? ", falling back to whisper.cpp" : ""}: ${result.error}`);

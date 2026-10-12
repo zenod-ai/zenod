@@ -1731,6 +1731,45 @@ describe("hosted customer layer", () => {
     layer.close();
   });
 
+  it("platform-key mode skips the per-tenant key check and reports ledger usage, never paused", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      throw new Error("no OpenRouter call expected in platform-key mode");
+    });
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env: { ...env, ZENOD_PLATFORM_OPENROUTER_KEY: "platform-key", ZENOD_TENANT_MONTHLY_ALLOWANCE_USD: "10" },
+        stripe,
+        tenantStore: tenants,
+      },
+    );
+    const account = layer.accounts.upsert("platform-comped", {
+      account_id: "platform-comped",
+      github_id: 107,
+      github_login: "platform-comped",
+      tenant_id: "platform-comped",
+      subscription_status: "active",
+    });
+    runtime.usageStore.record({
+      operation: "answer",
+      provider: "openrouter",
+      model: "m",
+      inputTokens: 1,
+      outputTokens: 1,
+      cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      providerCostUsd: 12,
+    });
+    expect(await layer.refreshAuthoritativeSubscriptions()).toEqual({
+      refreshedAccountIds: ["platform-comped"],
+      failedAccountIds: [],
+    });
+    expect(layer.accounts.get("platform-comped")?.current_period_start).not.toBeNull();
+    expect(await layer.usageForAccount(account)).toMatchObject({ state: "warn", percentageUsed: 100, monthSpendUsd: 12 });
+    expect(request).not.toHaveBeenCalled();
+    layer.close();
+  });
+
   it("leaves a legacy row unchanged when no authoritative Stripe provider exists", async () => {
     const layer = createCustomerLayer(
       { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },

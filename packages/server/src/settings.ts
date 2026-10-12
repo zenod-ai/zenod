@@ -215,6 +215,53 @@ export function jevSettingFallbacks(env: NodeJS.ProcessEnv): Readonly<Record<str
   return out;
 }
 
+/**
+ * Host-owned LLM authority for hosted tenants (ZENOD_PLATFORM_OPENROUTER_KEY). While present it is
+ * authoritative over any key stored in the tenant's own settings (those stay in place, unused).
+ * The key is only ever read through `activeApiKey()` / `openrouterApiKey()`; `get()`/`masked()`
+ * never return it, so no settings endpoint can reveal it.
+ */
+export interface PlatformLlm {
+  apiKey: string;
+  /** OpenRouter `user` attribution sent on every call (the tenant id). */
+  user?: string;
+  /** Host-configured model settings (the allowlist). Anything not listed uses the built-in defaults. */
+  models?: Readonly<Partial<Record<SettingKey, string>>>;
+}
+
+/** Settings a tenant may not override while a platform LLM key is active (model allowlist + routing). */
+const PLATFORM_LOCKED_KEYS: ReadonlySet<string> = new Set([
+  "provider",
+  "model_ask",
+  "model_ask_reasoning_effort",
+  "model_classify",
+  "model_classify_reasoning_effort",
+  "model_classify_provider_order",
+  "model_vision",
+  "llm_base_url",
+]);
+
+/** Build the platform LLM config from host env; null when ZENOD_PLATFORM_OPENROUTER_KEY is unset. */
+export function platformLlmFromEnv(env: NodeJS.ProcessEnv): PlatformLlm | null {
+  const apiKey = env.ZENOD_PLATFORM_OPENROUTER_KEY?.trim();
+  if (!apiKey) return null;
+  const models: Partial<Record<SettingKey, string>> = {};
+  for (const key of PLATFORM_LOCKED_KEYS) {
+    if (key === "provider" || key === "llm_base_url") continue;
+    const value = env[ENV_SEEDS[key as SettingKey]]?.trim();
+    if (value) models[key as SettingKey] = value;
+  }
+  return { apiKey, models };
+}
+
+/** ZENOD_TENANT_MONTHLY_ALLOWANCE_USD: positive number of USD per tenant per UTC month; unset/invalid = no check. */
+export function tenantMonthlyAllowanceFromEnv(env: NodeJS.ProcessEnv): number | null {
+  const raw = env.ZENOD_TENANT_MONTHLY_ALLOWANCE_USD?.trim();
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export class Settings {
   constructor(
     private readonly store: SqliteStateStore,
@@ -225,8 +272,24 @@ export class Settings {
     private readonly githubAuthorizationScopeSource?: () => string,
     private readonly githubAuthorizationRevokedCallback?: () => void,
     private readonly githubAuthorizationCacheClear?: (installationId?: string | null) => void,
+    private readonly platformLlm: PlatformLlm | null = null,
   ) {
     this.migrateCredentialSecrets();
+  }
+
+  /** True when the host platform key (not the tenant's own key) powers this runtime's LLM calls. */
+  platformLlmActive(): boolean {
+    return this.platformLlm !== null;
+  }
+
+  /** Tenant id sent as the OpenRouter `user` field while the platform key is active. */
+  openrouterUser(): string | undefined {
+    return this.platformLlm?.user;
+  }
+
+  /** OpenRouter key for gateway calls (transcription etc.): the platform key when active, else the tenant's own. */
+  openrouterApiKey(): string | null {
+    return this.platformLlm?.apiKey ?? this.get("openrouter_api_key");
   }
 
   /** Seed settings from env vars that aren't already set (first boot). */
@@ -311,6 +374,10 @@ export class Settings {
   }
 
   get(key: SettingKey): string | null {
+    if (this.platformLlm && PLATFORM_LOCKED_KEYS.has(key)) {
+      if (key === "provider") return "openrouter";
+      return this.platformLlm.models?.[key] ?? null;
+    }
     return this.getStoredValue(key);
   }
 
@@ -705,6 +772,7 @@ export class Settings {
 
   /** The API key for the active provider. */
   activeApiKey(): string | null {
+    if (this.platformLlm) return this.platformLlm.apiKey;
     return this.get(PROVIDER_KEY[this.provider()]);
   }
 
@@ -751,7 +819,7 @@ export class Settings {
   longTranscriptionProvider(): "openrouter" | "openai" | "local" {
     const value = this.get("long_transcription_provider");
     if (value === "openrouter" || value === "openai" || value === "local") return value;
-    if (this.get("openrouter_api_key")) return "openrouter";
+    if (this.openrouterApiKey()) return "openrouter";
     return this.useOpenAiForLongTranscription() ? "openai" : "local";
   }
 

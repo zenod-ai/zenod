@@ -1823,6 +1823,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     const sa = SUITE_AGENTS.find((a) => a.name === body.name);
     if (!sa) return c.json({ error: "unknown agent" }, 400);
 
+    // The host platform key is never handed to other agents.
+    if (settings.platformLlmActive()) return c.json({ error: "Team agents are unavailable with the hosted platform key." }, 400);
     const apiKey = settings.activeApiKey();
     if (!apiKey) return c.json({ error: "Set an LLM key on the Console first (Keys & models)." }, 400);
 
@@ -2020,7 +2022,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       folderId: settings.get("google_drive_folder_id"),
       transcriptionProvider: [
         settings.get("groq_api_key") ? "groq for notes up to 5 min" : null,
-        settings.longTranscriptionProvider() === "openrouter" && settings.get("openrouter_api_key")
+        settings.longTranscriptionProvider() === "openrouter" && settings.openrouterApiKey()
           ? `openrouter ${settings.openrouterTranscriptionModel()} for notes over 5 min and Groq fallback`
           : settings.longTranscriptionProvider() === "openai" && settings.get("openai_api_key")
             ? "openai for notes over 5 min"
@@ -2160,7 +2162,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
       model: settings.whisperModel(),
       groqApiKey: settings.get("groq_api_key"),
       openaiApiKey: settings.get("openai_api_key"),
-      openrouterApiKey: settings.get("openrouter_api_key"),
+      openrouterApiKey: settings.openrouterApiKey(),
+      openrouterUser: settings.openrouterUser(),
       openrouterModel: settings.openrouterTranscriptionModel(),
       longTranscriptionProvider: settings.longTranscriptionProvider(),
       useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
@@ -2218,6 +2221,12 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({
       today: runtime.usageStore.summary(now - day),
       last7d: runtime.usageStore.summary(now - 7 * day),
+      // Per-tenant metering: UTC month-to-date, plus the shadow allowance (null = unset) it is compared against.
+      month: {
+        spendUsd: runtime.monthToDateSpendUsd(now),
+        allowanceUsd: runtime.tenantAllowanceUsd(),
+        platformKey: runtime.settings.platformLlmActive(),
+      },
     });
   });
 
