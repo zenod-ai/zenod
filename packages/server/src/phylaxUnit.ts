@@ -1,4 +1,5 @@
 import type { HttpBindings } from "@hono/node-server";
+import { eventLoopHealth } from "./eventLoopHealth.js";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -410,6 +411,7 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         runtime: "phylax",
       },
       worker,
+      eventLoop: eventLoopHealth(),
       restart: {
         required: restartRequired,
         reason: workerRestartRequired
