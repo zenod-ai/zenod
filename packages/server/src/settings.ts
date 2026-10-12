@@ -13,6 +13,7 @@ import {
   parseStoredAllowedUsers,
   type TelegramSettings,
 } from "./telegramConfig.js";
+import type { LlmUsageReport } from "zenod";
 import type { PeerConfig } from "./peerClient.js";
 import type { RingConnectedServer, RingRelayPolicy, RingRouteLogEntry } from "./ringRouter.js";
 import { isCredentialHandle, type CredentialVault } from "./credentialVault.js";
@@ -280,6 +281,24 @@ export class Settings {
   /** True when the host platform key (not the tenant's own key) powers this runtime's LLM calls. */
   platformLlmActive(): boolean {
     return this.platformLlm !== null;
+  }
+
+  private usageSink: ((report: LlmUsageReport) => void) | null = null;
+
+  /** Bind this tenant's usage ledger; non-token callers (transcription) record through it. */
+  setUsageSink(sink: ((report: LlmUsageReport) => void) | null): void {
+    this.usageSink = sink;
+  }
+
+  /** Best-effort recorder into the owning tenant's `llm_usage` ledger (never throws). */
+  transcriptionUsageSink(): (report: LlmUsageReport) => void {
+    return (report) => {
+      try {
+        this.usageSink?.(report);
+      } catch (err) {
+        console.warn(`[usage] could not record ${report.operation}: ${(err as Error).message}`);
+      }
+    };
   }
 
   /** Tenant id sent as the OpenRouter `user` field while the platform key is active. */

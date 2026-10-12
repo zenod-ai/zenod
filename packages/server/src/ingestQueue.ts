@@ -117,6 +117,7 @@ export class IngestQueue {
           openrouterModel: this.settings.openrouterTranscriptionModel(),
           longTranscriptionProvider: this.settings.longTranscriptionProvider(),
           useOpenAiForLongAudio: this.settings.useOpenAiForLongTranscription(),
+          onUsage: this.settings.transcriptionUsageSink(),
           onProgress: (pct) => this.store.update(job.id, { progress: pct }),
           signal: controller.signal,
         });

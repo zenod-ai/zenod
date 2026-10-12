@@ -540,6 +540,7 @@ async function transcribeMedia(
     openrouterModel: settings.openrouterTranscriptionModel(),
     longTranscriptionProvider: settings.longTranscriptionProvider(),
     useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
+    onUsage: settings.transcriptionUsageSink(),
   });
   if (!result.success) throw new Error(`transcription failed: ${result.error}`);
   return {

@@ -16,5 +16,6 @@ export async function transcribeChannelAudio(
     longTranscriptionProvider: settings.longTranscriptionProvider(),
     useOpenAiForLongAudio: settings.useOpenAiForLongTranscription(),
     allowLocalFallback: false,
+    onUsage: settings.transcriptionUsageSink(),
   });
 }
