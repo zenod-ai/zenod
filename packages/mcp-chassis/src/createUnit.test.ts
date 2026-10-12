@@ -2350,7 +2350,7 @@ describe("createUnit", () => {
     expect(captured?.storage?.dir("unit")).toBe(join(dataDir, "tenant_alpha", "unit"));
   });
 
-  it("increments only the resolved tenant's usage for MCP requests", async () => {
+  it("meters only tool calls, per resolved tenant", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-usage-"));
     tempDirs.push(dataDir);
     const usageStore = new ChassisUsageStore({ dataDir });
@@ -2371,9 +2371,9 @@ describe("createUnit", () => {
     });
     const base = await listen(unit.app);
 
-    expect((await initialize(base, { headers: { authorization: "Bearer tenant-alpha-token" } })).status).toBe(200);
-    expect((await initialize(base, { headers: { authorization: "Bearer tenant-beta-token" } })).status).toBe(200);
-    expect((await initialize(base, { headers: { authorization: "Bearer tenant-alpha-token" } })).status).toBe(200);
+    expect((await callTool(base, "noop", {}, { headers: { authorization: "Bearer tenant-alpha-token" } })).status).toBe(200);
+    expect((await callTool(base, "noop", {}, { headers: { authorization: "Bearer tenant-beta-token" } })).status).toBe(200);
+    expect((await callTool(base, "noop", {}, { headers: { authorization: "Bearer tenant-alpha-token" } })).status).toBe(200);
 
     expect(seenUsageTotals).toEqual([1, 1, 2]);
     expect(usageStore.summary({ id: "tenant_alpha" })).toMatchObject({ events: 2, units: 2 });
@@ -2400,7 +2400,7 @@ describe("createUnit", () => {
     });
     const base = await listen(unit.app);
 
-    const response = await initialize(base, { headers: { authorization: "Bearer tenant-zero-token" } });
+    const response = await callTool(base, "noop", {}, { headers: { authorization: "Bearer tenant-zero-token" } });
 
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toEqual({
@@ -2435,12 +2435,92 @@ describe("createUnit", () => {
     const base = await listen(unit.app);
     const created = await provisionTenant(base, { tenantId: "tenant_zero", quota: 0 }).then((r) => r.json());
 
-    const response = await initialize(base, { headers: { authorization: `Bearer ${created.token}` } });
+    const response = await callTool(base, "noop", {}, { headers: { authorization: `Bearer ${created.token}` } });
 
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toMatchObject({ error: "quota_exceeded", quota: 0 });
     expect(toolCalls).toBe(0);
     expect(tenants.snapshot()[0]?.tenant).toEqual({ id: "tenant_zero", quota: 0 });
+    usageStore.close();
+  });
+
+  it("does not meter or write ledger rows for protocol chatter (initialize, list, notifications)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-chatter-"));
+    tempDirs.push(dataDir);
+    const usageStore = new ChassisUsageStore({ dataDir });
+    const tenants = createMemoryTenantStore([{ token: "zero-token", tenant: { id: "tenant_zero", quota: 0 } }]);
+    const unit = createUnit({ name: "demo", version: "1.2.3", storage: { dataDir }, tenantAuth: { store: tenants }, metering: usageStore, rateLimit: false });
+    const base = await listen(unit.app);
+    const headers = { authorization: "Bearer zero-token" };
+    expect((await initialize(base, { headers })).status).toBe(200);
+    expect((await listTools(base, { headers })).status).toBe(200);
+    const note = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+    });
+    expect(note.status).toBe(202);
+    expect(usageStore.summary({ id: "tenant_zero" })).toMatchObject({ events: 0, units: 0 });
+    expect((await callTool(base, "noop", {}, { headers })).status).toBe(429);
+    usageStore.close();
+  });
+
+  it("counts each tools/call in a JSON-RPC batch as one billable unit", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-batch-"));
+    tempDirs.push(dataDir);
+    const usageStore = new ChassisUsageStore({ dataDir });
+    const tenants = createMemoryTenantStore([{ token: "b-token", tenant: { id: "tenant_b", quota: 10 } }]);
+    const unit = createUnit({ name: "demo", version: "1.2.3", storage: { dataDir }, tenantAuth: { store: tenants }, metering: usageStore, rateLimit: false });
+    const base = await listen(unit.app);
+    await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: "Bearer b-token" },
+      body: JSON.stringify([
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "noop", arguments: {} } },
+        { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "noop", arguments: {} } },
+        { jsonrpc: "2.0", id: 3, method: "ping" },
+      ]),
+    });
+    expect(usageStore.summary({ id: "tenant_b" })).toMatchObject({ events: 1, units: 2 });
+    usageStore.close();
+  });
+
+  it("answers GET and DELETE /mcp with 405 + Allow: POST, after auth", async () => {
+    const tenants = createMemoryTenantStore([{ token: "g-token", tenant: { id: "tenant_g" } }]);
+    const unit = createUnit({ name: "demo", version: "1.2.3", tenantAuth: { store: tenants }, metering: false });
+    const base = await listen(unit.app);
+    for (const method of ["GET", "DELETE"]) {
+      const res = await fetch(`${base}/mcp`, { method, headers: { authorization: "Bearer g-token", accept: "text/event-stream" } });
+      expect(res.status).toBe(405);
+      expect(res.headers.get("allow")).toContain("POST");
+    }
+    const unauth = await fetch(`${base}/mcp`, { method: "GET" });
+    expect(unauth.status).toBe(401);
+  });
+
+  it("rate limits /mcp per tenant with 429 + Retry-After before any usage work", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-create-unit-rl-"));
+    tempDirs.push(dataDir);
+    const usageStore = new ChassisUsageStore({ dataDir });
+    const tenants = createMemoryTenantStore([
+      { token: "a-token", tenant: { id: "tenant_a" } },
+      { token: "c-token", tenant: { id: "tenant_c" } },
+    ]);
+    const unit = createUnit({ name: "demo", version: "1.2.3", storage: { dataDir }, tenantAuth: { store: tenants }, metering: usageStore, rateLimit: { rps: 1, burst: 3 } });
+    const base = await listen(unit.app);
+    const statuses: number[] = [];
+    let limited: Response | null = null;
+    for (let i = 0; i < 5; i++) {
+      const res = await callTool(base, "noop", {}, { headers: { authorization: "Bearer a-token" } });
+      statuses.push(res.status);
+      if (res.status === 429) limited = res;
+    }
+    expect(statuses.slice(3)).toEqual([429, 429]);
+    expect(statuses.slice(0, 3).every((x) => x !== 429)).toBe(true);
+    expect(Number(limited?.headers.get("retry-after"))).toBeGreaterThanOrEqual(1);
+    await expect(limited?.json()).resolves.toMatchObject({ error: "rate_limited" });
+    expect(usageStore.summary({ id: "tenant_a" }).units).toBe(3); // limited requests not metered
+    expect((await callTool(base, "noop", {}, { headers: { authorization: "Bearer c-token" } })).status).not.toBe(429);
     usageStore.close();
   });
 

@@ -389,3 +389,9 @@ The SDK's experimental `registerToolTask` wire shape does not expose the SEAM
 accepted-ticket and named poll-tool contract, so `createUnit` rejects it. Use
 guarded `registerTool` plus `conduct.longTools` until that experimental protocol
 can represent the same contract without an unguarded registration path.
+
+## /mcp request handling: metering, GET, rate limit
+
+- Only `tools/call` is billable. `initialize`, notifications (202), `ping` and list methods neither consume quota nor write usage rows. Each `tools/call` (including those inside a JSON-RPC batch) is one unit, recorded as kind `mcp.request`. A tenant over quota can still initialize and list tools; its tool calls get `429 quota_exceeded`.
+- The server is stateless (no session, no server-initiated messages), so `GET /mcp` and `DELETE /mcp` return `405` with `Allow: POST, OPTIONS` (after auth, so unauthenticated clients still receive the OAuth 401 challenge).
+- Per-tenant in-memory token bucket on `POST /mcp`, before any usage DB work: `429 rate_limited` with `Retry-After`. Env: `MCP_RATE_LIMIT_RPS` (default 10, 0 disables) and `MCP_RATE_LIMIT_BURST` (default 30), or `createUnit({ rateLimit })`.
