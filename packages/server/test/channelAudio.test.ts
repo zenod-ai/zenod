@@ -8,6 +8,8 @@ function settingsWith(openrouterApiKey: string | null): Settings {
   return {
     whisperModel: () => "small",
     get: (key: string) => key === "openrouter_api_key" ? openrouterApiKey : null,
+    openrouterApiKey: () => openrouterApiKey,
+    openrouterUser: () => undefined,
     openrouterTranscriptionModel: () => "openai/whisper-large-v3-turbo",
     longTranscriptionProvider: () => openrouterApiKey ? "openrouter" : "local",
     useOpenAiForLongTranscription: () => false,

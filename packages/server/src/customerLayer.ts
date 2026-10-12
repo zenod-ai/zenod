@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { tenantMonthlyAllowanceFromEnv } from "./settings.js";
 import type { Runtime } from "./runtime.js";
 import { McpTokenStore, type McpTokenRecord } from "./mcpTokens.js";
 import { CustomerAccountStore, customerAccountIdForUser, customerVaultBinding, type CustomerAccount } from "./customerAccounts.js";
@@ -34,6 +35,7 @@ import type { CustomerIdentityProvider } from "./googleDriveVaultContract.js";
 import { projectVaultCapabilities } from "./googleDriveVaultContract.js";
 import {
   currentGatewayKey,
+  projectLedgerUsage,
   projectCustomerUsage,
   type CustomerUsageProjection,
   type GatewayKeyUsage,
@@ -372,10 +374,23 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     undefined,
     options.managedAiAdmissionBeforeJournal,
   );
+  // Platform-key mode (D30): one host OpenRouter key serves every tenant, so there is no per-tenant key to
+  // police and usage comes from each tenant's own ledger against the shadow allowance.
+  const platformKeyMode = product.product === "zenod" && Boolean(env.ZENOD_PLATFORM_OPENROUTER_KEY?.trim());
+  const tenantAllowanceUsd = tenantMonthlyAllowanceFromEnv(env);
+  /** Non-Stripe accounts follow the current UTC month as their billing window (comped accounts use a fixed one in Phylax). */
+  const refreshNonStripePeriod = (account: CustomerAccount): CustomerAccount => {
+    if (account.stripe_subscription_id) return account;
+    const now = new Date();
+    return accounts.upsert(account.session_id, {
+      current_period_start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+      current_period_end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
+    });
+  };
   const refreshCurrentTenantKeyAuthority = async (
     account: CustomerAccount,
   ): Promise<{ account: CustomerAccount; gateway: GatewayKeyUsage } | null> => {
-    if (product.product !== "zenod" || managedAiProvider) return null;
+    if (product.product !== "zenod" || managedAiProvider || platformKeyMode) return null;
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime || runtime.settings.provider() !== "openrouter") return null;
     const apiKey = runtime.settings.activeApiKey();
@@ -443,6 +458,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     await refreshAuthoritativeSubscription(account, subscriptionId),
   );
   const localUsageForAccount = async (account: CustomerAccount) => {
+    if (platformKeyMode) {
+      const runtime = host.runtimeForAccount?.(account) ?? null;
+      let spend: number | null = null;
+      try {
+        spend = runtime ? runtime.monthToDateSpendUsd() : null;
+      } catch {
+        spend = null;
+      }
+      return projectLedgerUsage(spend, tenantAllowanceUsd, managedAiConfig.warnPercent);
+    }
     if (!managedAiProvider || !account.tenant_slug) {
       try {
         const current = await refreshCurrentTenantKeyAuthority(account);
@@ -498,6 +523,16 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         account.subscription_status === null ||
         account.subscription_status === "checkout_pending"
       ) continue;
+      if (!account.stripe_subscription_id && platformKeyMode) {
+        try {
+          refreshNonStripePeriod(account);
+          refreshedAccountIds.push(account.account_id);
+        } catch (error) {
+          console.error(`[customer] period refresh failed for account ${account.account_id}:`, error);
+          failedAccountIds.push(account.account_id);
+        }
+        continue;
+      }
       if (!account.stripe_subscription_id) {
         try {
           const refreshed = await refreshCurrentTenantKeyAuthority(account);

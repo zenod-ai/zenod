@@ -23,6 +23,8 @@ export interface GatewayKeyUsage {
 export type CustomerUsageState = "normal" | "warn" | "paused" | "setting_up" | "unavailable";
 
 export interface CustomerUsageProjection {
+  /** UTC month-to-date spend from the tenant's own ledger (platform-key mode only). */
+  monthSpendUsd?: number | null;
   percentageUsed: number | null;
   state: CustomerUsageState;
   resetsAt: string | null;
@@ -210,4 +212,29 @@ export async function customerUsageProjection(
     // Hosted customer responses fail closed instead of projecting the local estimate as provider truth.
     return projectCustomerUsage(null);
   }
+}
+
+/**
+ * Platform-key (D30) usage projection: this tenant's UTC month-to-date ledger spend against the shadow
+ * allowance. It is informational and never reports "paused" (blocking is a later, human-gated decision),
+ * so hosted admission is never gated on it. Unset allowance = no percentage, state stays normal.
+ */
+export function projectLedgerUsage(
+  spendUsd: number | null,
+  allowanceUsd: number | null,
+  warnPercent = 80,
+  now = Date.now(),
+): CustomerUsageProjection {
+  const resetsAt = nextUtcMonthlyReset(now);
+  if (spendUsd === null) return { percentageUsed: null, state: "normal", resetsAt, monthSpendUsd: null };
+  if (allowanceUsd === null || allowanceUsd <= 0) {
+    return { percentageUsed: null, state: "normal", resetsAt, monthSpendUsd: spendUsd };
+  }
+  const percentageUsed = Math.min(100, Math.max(0, Math.round(spendUsd / allowanceUsd * 100)));
+  return {
+    percentageUsed,
+    state: percentageUsed >= warnPercent ? "warn" : "normal",
+    resetsAt,
+    monthSpendUsd: spendUsd,
+  };
 }

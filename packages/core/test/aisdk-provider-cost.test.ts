@@ -35,3 +35,17 @@ it('combines the usage capture with the organizer provider-routing envelope',asy
  expect(requestBody.usage).toEqual({include:true});
  expect(requestBody.provider).toEqual({only:['fireworks'],order:['fireworks'],require_parameters:true});
 });
+
+it('sends the OpenRouter user field on every call and runs the before-call hook once per call',async()=>{
+ let requestBody:any;let hooks=0;
+ vi.stubGlobal('fetch',vi.fn(async(_url:unknown,init:RequestInit)=>{
+  requestBody=JSON.parse(String(init.body));
+  return new Response(JSON.stringify({id:'gen-user',object:'chat.completion',created:0,model:requestBody.model,
+   choices:[{index:0,message:{role:'assistant',content:JSON.stringify(classified)},finish_reason:'stop'}],
+   usage:{prompt_tokens:5,completion_tokens:2,total_tokens:7,cost:0.00001}}),{headers:{'content-type':'application/json'}});
+ }));
+ const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused',classifyModel:'synthetic/model',user:'tenant-a',onBeforeCall:()=>{hooks++;throw new Error('hook failure must not break the call');}});
+ await llm.classify({content:'Synthetic proposition.',context:'',pageIndex:[],hints:[],tagVocabulary:[]});
+ expect(requestBody.user).toBe('tenant-a');
+ expect(hooks).toBe(1);
+});

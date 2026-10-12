@@ -108,6 +108,7 @@ import {
 import {
   Settings,
   type GoogleDriveOAuthAuthoritySource,
+  type PlatformLlm,
   type Provider,
   type VaultProviderBindingSource,
 } from "./settings.js";
@@ -278,6 +279,9 @@ export class Runtime {
   private repo: VaultRepository | null = null;
   private repoAuthorityKey: string | null = null;
   private readonly tenantId: string;
+  private readonly tenantMonthlyAllowanceUsd: number | null;
+  private allowanceCache: { at: number; spendUsd: number } | null = null;
+  private allowanceLoggedAt = 0;
   private readonly vaultBindingSource?: VaultProviderBindingSource;
   private readonly onVaultBindingUpdate?: (input: {
     status?: VaultBindingStatus;
@@ -314,6 +318,10 @@ export class Runtime {
       credentialVault?: CredentialVault;
       credentialMasterKey?: string;
       settingFallbacks?: Readonly<Record<string, string>>;
+      /** Host platform LLM key (hosted tenants). Authoritative over any stored tenant key. */
+      platformLlm?: PlatformLlm | null;
+      /** Per-tenant monthly LLM allowance in USD. Shadow mode: crossing it logs, never blocks. */
+      tenantMonthlyAllowanceUsd?: number | null;
       googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
       vaultProviderBinding?: VaultProviderBindingSource;
       onVaultBindingUpdate?: (input: {
@@ -347,7 +355,9 @@ export class Runtime {
       () => `${this.tenantId}:${this.vaultBindingSource?.()?.binding_id ?? "unbound"}`,
       () => this.invalidate(),
       (installationId) => clearGithubAuthorizationCache(this.settings, installationId),
+      options.platformLlm ? { ...options.platformLlm, user: this.tenantId } : null,
     );
+    this.tenantMonthlyAllowanceUsd = options.tenantMonthlyAllowanceUsd ?? null;
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
@@ -638,6 +648,10 @@ export class Runtime {
       ...(this.settings.llmBaseUrl() ? { baseUrl: this.settings.llmBaseUrl()! } : {}),
       ...(this.settings.get("model_vision") ? { visionModel: this.settings.get("model_vision")! } : {}),
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
+      // Hosted platform key: attribute every OpenRouter call to this tenant, and run the shadow allowance check.
+      ...(this.settings.platformLlmActive() && this.settings.openrouterUser()
+        ? { user: this.settings.openrouterUser()!, onBeforeCall: () => this.checkTenantAllowance() }
+        : {}),
       // Always persist real per-call token usage for cost analytics (GET
       // /api/usage). ZENOD_LLM_COST_LOG=1 additionally tails it to stdout.
       onUsage: (report) => {
@@ -889,6 +903,38 @@ export class Runtime {
    * path: any failure, low confidence, missing destination or incomplete
    * evidence returns to the primary classifier (see withJevClassify).
    */
+  tenantAllowanceUsd(): number | null {
+    return this.tenantMonthlyAllowanceUsd;
+  }
+
+  /** Month-to-date LLM spend (USD, UTC calendar month) for this tenant, from its own usage ledger. */
+  monthToDateSpendUsd(now: number = Date.now()): number {
+    return this.usageStore.spendSince(startOfUtcMonth(now));
+  }
+
+  /**
+   * SHADOW allowance check (ZENOD_TENANT_MONTHLY_ALLOWANCE_USD): logs `llm.allowance.exceeded` at most once
+   * per tenant per hour when month-to-date spend is over the allowance. It never blocks or throws; blocking
+   * is a separate, human-gated decision. Spend is cached for 60s so the hot path stays one cheap read.
+   */
+  checkTenantAllowance(now: number = Date.now()): void {
+    const allowance = this.tenantMonthlyAllowanceUsd;
+    if (allowance === null || !Number.isFinite(allowance) || allowance <= 0) return;
+    try {
+      if (!this.allowanceCache || now - this.allowanceCache.at > 60_000) {
+        this.allowanceCache = { at: now, spendUsd: this.monthToDateSpendUsd(now) };
+      }
+      const spend = this.allowanceCache.spendUsd;
+      if (spend <= allowance || now - this.allowanceLoggedAt < 3_600_000) return;
+      this.allowanceLoggedAt = now;
+      console.warn(
+        `[llm.allowance.exceeded] tenant=${this.tenantId} month_to_date_usd=${spend.toFixed(4)} allowance_usd=${allowance} mode=shadow`,
+      );
+    } catch {
+      // A metering failure must never break a chat turn.
+    }
+  }
+
   private withJevClassification(llm: BrainLlm): BrainLlm {
     if (!this.settings.jevEnabled()) return llm;
     const apiKey = this.settings.getRaw("typesafe_api_key");
@@ -2329,6 +2375,11 @@ export class Runtime {
     close(() => this.credentialVault.close());
     if (failures.length > 0) throw new AggregateError(failures, "Runtime shutdown failed");
   }
+}
+
+function startOfUtcMonth(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
 }
 
 /** One-line real-usage tail (opt-in via ZENOD_LLM_COST_LOG=1). */
