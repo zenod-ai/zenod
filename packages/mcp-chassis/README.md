@@ -395,3 +395,12 @@ can represent the same contract without an unguarded registration path.
 - Only `tools/call` is billable. `initialize`, notifications (202), `ping` and list methods neither consume quota nor write usage rows. Each `tools/call` (including those inside a JSON-RPC batch) is one unit, recorded as kind `mcp.request`. A tenant over quota can still initialize and list tools; its tool calls get `429 quota_exceeded`.
 - The server is stateless (no session, no server-initiated messages), so `GET /mcp` and `DELETE /mcp` return `405` with `Allow: POST, OPTIONS` (after auth, so unauthenticated clients still receive the OAuth 401 challenge).
 - Per-tenant in-memory token bucket on `POST /mcp`, before any usage DB work: `429 rate_limited` with `Retry-After`. Env: `MCP_RATE_LIMIT_RPS` (default 10, 0 disables) and `MCP_RATE_LIMIT_BURST` (default 30), or `createUnit({ rateLimit })`.
+## Usage ledger retention (opt-in data deletion)
+
+`/data/usage.sqlite` grows by one row per metered event. Retention is **disabled unless `USAGE_RETENTION_DAYS` is set** (integer >= 1; unset or 0 = never delete). When enabled, an unref'd timer (first run 60 s after boot, then hourly) rolls raw rows older than the window into `tenant_usage_daily (tenant_id, day, kind, events, units)` and deletes them in batches of 1000 rows (one transaction each, yielding via `setImmediate`).
+
+- The cutoff is aligned to a UTC day boundary, so only complete days are rolled up.
+- All-time totals (`tenant_usage_totals`, used for quota) are never changed by pruning. Only rows with `id <= totals_watermark` are pruned.
+- `summary({ since, kind })` = raw rows + rolled-up days. Rolled-up data has UTC-day granularity: a day that overlaps `since` is included whole, so a mid-day `since` can include up to one day of already-pruned events from before `since`. `timeline()` returns raw rows only, i.e. the retention window.
+- Space: `PRAGMA incremental_vacuum` runs after batches only if the file is already `auto_vacuum=INCREMENTAL`. A full VACUUM is never run automatically; otherwise a one-time notice asks for an offline `sqlite3 usage.sqlite 'PRAGMA auto_vacuum=INCREMENTAL; VACUUM;'`. Until then the file stops growing (freed pages are reused) but does not shrink.
+- Enabling retention builds a `ts` index on first boot. The ledger uses `synchronous=NORMAL` (WAL): an OS crash or power loss can drop the last few usage rows, never corrupt the file.

@@ -7,6 +7,11 @@ const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 const DEFAULT_USAGE_DB_NAME = "usage.sqlite";
 const DEFAULT_REQUEST_KIND = "mcp.request";
 const BACKFILL_CHUNK_ROWS = 50_000;
+const DAY_MS = 86_400_000;
+const DEFAULT_PRUNE_BATCH_ROWS = 1_000;
+const DEFAULT_PRUNE_INTERVAL_MS = 3_600_000;
+const DEFAULT_PRUNE_FIRST_RUN_DELAY_MS = 60_000;
+const INCREMENTAL_VACUUM_PAGES = 1_000;
 const EVENT_KIND_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 export interface ChassisUsageStoreOptions {
@@ -16,6 +21,32 @@ export interface ChassisUsageStoreOptions {
   filename?: string;
   /** SQLite busy timeout applied to the usage ledger. */
   busyTimeoutMs?: number;
+  /**
+   * Retention window in days for raw usage rows. Older rows are rolled into tenant_usage_daily
+   * and deleted in small batches. Defaults to env USAGE_RETENTION_DAYS; unset/0 DISABLES
+   * rollup+prune entirely (deleting data is an explicit opt-in).
+   */
+  retentionDays?: number;
+  /** Rows per prune transaction (default 1000). */
+  pruneBatchRows?: number;
+  /** How often the background prune runs (default 1h). */
+  pruneIntervalMs?: number;
+  /** Delay before the first background prune after boot (default 60s). */
+  pruneFirstRunDelayMs?: number;
+  /** Operational notices (default console.warn). */
+  onNotice?: (message: string) => void;
+  /** Clock override for tests. */
+  now?: () => number;
+}
+
+export interface PruneResult {
+  /** Raw rows rolled into tenant_usage_daily and deleted. */
+  rowsPruned: number;
+  batches: number;
+  /** Slowest single batch transaction, ms. */
+  maxBatchMs: number;
+  /** 95th percentile batch transaction time, ms. */
+  p95BatchMs: number;
 }
 
 export interface UsageRecordInput {
@@ -66,6 +97,14 @@ export interface QuotaDecision {
 
 export class ChassisUsageStore {
   private readonly db: DatabaseSync;
+  private readonly retentionMs: number | null;
+  private readonly pruneBatchRows: number;
+  private readonly now: () => number;
+  private readonly notice: (message: string) => void;
+  private pruneTimer: ReturnType<typeof setTimeout> | null = null;
+  private pruning = false;
+  private closed = false;
+  private warnedNoIncrementalVacuum = false;
 
   constructor(options: ChassisUsageStoreOptions = {}) {
     const dataDir = resolve(options.dataDir ?? process.env.DATA_DIR ?? "/data");
@@ -78,6 +117,7 @@ export class ChassisUsageStore {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA busy_timeout = ${timeout};
+      PRAGMA synchronous = NORMAL;
       CREATE TABLE IF NOT EXISTS tenant_usage (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id TEXT NOT NULL,
@@ -96,7 +136,133 @@ export class ChassisUsageStore {
       ) WITHOUT ROWID;
       CREATE TABLE IF NOT EXISTS usage_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
     `);
+    this.now = options.now ?? Date.now;
+    this.notice = options.onNotice ?? ((message) => console.warn(`[usage] ${message}`));
+    this.pruneBatchRows = Math.max(1, Math.trunc(options.pruneBatchRows ?? DEFAULT_PRUNE_BATCH_ROWS));
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tenant_usage_daily (
+        tenant_id TEXT NOT NULL,
+        day INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        events INTEGER NOT NULL DEFAULT 0,
+        units INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (tenant_id, day, kind)
+      ) WITHOUT ROWID;
+    `);
     this.migrateCoveringIndexAndTotals();
+    const retentionDays = resolveRetentionDays(options.retentionDays, this.notice);
+    this.retentionMs = retentionDays === null ? null : retentionDays * DAY_MS;
+    if (this.retentionMs !== null) {
+      // Global ts index so the prune scan is O(batch), not O(table). Only built when retention is on.
+      this.db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_usage_ts ON tenant_usage (ts);");
+      this.scheduleBackgroundPrune(
+        options.pruneFirstRunDelayMs ?? DEFAULT_PRUNE_FIRST_RUN_DELAY_MS,
+        options.pruneIntervalMs ?? DEFAULT_PRUNE_INTERVAL_MS,
+      );
+    }
+  }
+
+  get retentionEnabled(): boolean {
+    return this.retentionMs !== null;
+  }
+
+  private scheduleBackgroundPrune(firstDelayMs: number, intervalMs: number): void {
+    const tick = (): void => {
+      void this.pruneOnce()
+        .catch((error) => this.notice(`prune failed: ${error instanceof Error ? error.message : String(error)}`))
+        .finally(() => {
+          if (this.closed) return;
+          this.pruneTimer = setTimeout(tick, intervalMs);
+          this.pruneTimer.unref();
+        });
+    };
+    this.pruneTimer = setTimeout(tick, firstDelayMs);
+    this.pruneTimer.unref();
+  }
+
+  /**
+   * Roll raw rows older than the retention window into tenant_usage_daily and delete them, in
+   * batches of at most `pruneBatchRows`, yielding to the event loop (setImmediate) between batches.
+   * The cutoff is aligned down to a UTC day boundary, so only complete days are rolled up. Only rows
+   * with id <= the totals watermark are ever touched (totals already include them), and
+   * tenant_usage_totals is never modified: it stays the all-time figure. No-op when retention is off.
+   */
+  async pruneOnce(): Promise<PruneResult> {
+    const result: PruneResult = { rowsPruned: 0, batches: 0, maxBatchMs: 0, p95BatchMs: 0 };
+    const durations: number[] = [];
+    if (this.retentionMs === null || this.pruning || this.closed) return result;
+    this.pruning = true;
+    try {
+      const cutoffTs = Math.floor((this.now() - this.retentionMs) / DAY_MS) * DAY_MS;
+      for (;;) {
+        if (this.closed) break;
+        const started = performance.now();
+        const pruned = this.pruneBatch(cutoffTs);
+        const elapsed = performance.now() - started;
+        if (pruned === 0) break;
+        result.rowsPruned += pruned;
+        result.batches += 1;
+        result.maxBatchMs = Math.max(result.maxBatchMs, elapsed);
+        durations.push(elapsed);
+        this.reclaimSpace();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+    } finally {
+      this.pruning = false;
+    }
+    durations.sort((x, y) => x - y);
+    result.p95BatchMs = durations[Math.min(durations.length - 1, Math.floor(durations.length * 0.95))] ?? 0;
+    return result;
+  }
+
+  /** One bounded prune transaction. Returns the number of raw rows moved into the daily rollup. */
+  private pruneBatch(cutoffTs: number): number {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      // Watermark read inside the write lock: pruned rows are always already counted in totals.
+      const watermark = this.getWatermark() ?? 0;
+      const rows = this.db
+        .prepare("SELECT id FROM tenant_usage WHERE ts < ? AND id <= ? ORDER BY ts, id LIMIT ?")
+        .all(cutoffTs, watermark, this.pruneBatchRows) as Array<{ id: number }>;
+      if (rows.length === 0) {
+        this.db.exec("COMMIT");
+        return 0;
+      }
+      const ids = JSON.stringify(rows.map((row) => row.id));
+      this.db
+        .prepare(
+          `INSERT INTO tenant_usage_daily (tenant_id, day, kind, events, units)
+             SELECT tenant_id, ts / ${DAY_MS}, kind, COUNT(*), COALESCE(SUM(units), 0)
+             FROM tenant_usage WHERE id IN (SELECT value FROM json_each(?))
+             GROUP BY tenant_id, ts / ${DAY_MS}, kind
+           ON CONFLICT (tenant_id, day, kind) DO UPDATE SET events = events + excluded.events, units = units + excluded.units`,
+        )
+        .run(ids);
+      this.db.prepare("DELETE FROM tenant_usage WHERE id IN (SELECT value FROM json_each(?))").run(ids);
+      this.db.exec("COMMIT");
+      return rows.length;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  /**
+   * Reclaim freed pages without ever running a blocking full VACUUM. Incremental vacuum only works
+   * when the file was created/converted with auto_vacuum=INCREMENTAL, which needs a one-time offline
+   * `PRAGMA auto_vacuum=INCREMENTAL; VACUUM;`. Otherwise log once and leave the file size as is.
+   */
+  private reclaimSpace(): void {
+    const mode = (this.db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum;
+    if (mode === 2) {
+      this.db.exec(`PRAGMA incremental_vacuum(${INCREMENTAL_VACUUM_PAGES})`);
+    } else if (!this.warnedNoIncrementalVacuum) {
+      this.warnedNoIncrementalVacuum = true;
+      this.notice(
+        "usage.sqlite auto_vacuum is not INCREMENTAL; pruned pages are reused but the file will not shrink. " +
+          "Run once, offline: sqlite3 usage.sqlite 'PRAGMA auto_vacuum=INCREMENTAL; VACUUM;'",
+      );
+    }
   }
 
   /**
@@ -225,7 +391,7 @@ export class ChassisUsageStore {
     const totals = this.db
       .prepare(`SELECT COUNT(*) AS events, COALESCE(SUM(units), 0) AS units FROM tenant_usage WHERE ${where}`)
       .get(...params) as { events: number; units: number };
-    const buckets = this.db
+    const rawBuckets = this.db
       .prepare(
         `SELECT kind, COUNT(*) AS events, COALESCE(SUM(units), 0) AS units
          FROM tenant_usage
@@ -234,15 +400,42 @@ export class ChassisUsageStore {
          ORDER BY kind`,
       )
       .all(...params) as unknown as UsageBucket[];
+    // Pruned history lives in tenant_usage_daily (UTC day granularity). A rolled-up day is included
+    // when it overlaps [since, now): for a `since` that falls mid-day this can include up to one UTC
+    // day of already-pruned events from before `since`. Raw rows are exact. Empty when pruning is off.
+    const dailyClauses = ["tenant_id = ?", "day >= ?"];
+    const dailyParams: Array<string | number> = [tenantId, Math.floor(since / DAY_MS)];
+    if (query.kind) {
+      dailyClauses.push("kind = ?");
+      dailyParams.push(normalizeKind(query.kind));
+    }
+    const dailyBuckets = this.db
+      .prepare(
+        `SELECT kind, SUM(events) AS events, SUM(units) AS units
+         FROM tenant_usage_daily WHERE ${dailyClauses.join(" AND ")} GROUP BY kind`,
+      )
+      .all(...dailyParams) as unknown as UsageBucket[];
+    const merged = new Map<string, UsageBucket>();
+    for (const bucket of [...rawBuckets, ...dailyBuckets]) {
+      const existing = merged.get(bucket.kind);
+      if (existing) {
+        existing.events += bucket.events;
+        existing.units += bucket.units;
+      } else {
+        merged.set(bucket.kind, { kind: bucket.kind, events: bucket.events, units: bucket.units });
+      }
+    }
+    const buckets = [...merged.values()].sort((x, y) => (x.kind < y.kind ? -1 : x.kind > y.kind ? 1 : 0));
     return {
       tenantId,
       since,
-      events: totals.events,
-      units: totals.units,
+      events: totals.events + dailyBuckets.reduce((sum, b) => sum + b.events, 0),
+      units: totals.units + dailyBuckets.reduce((sum, b) => sum + b.units, 0),
       byKind: buckets,
     };
   }
 
+  /** Individual events. Only raw rows exist here: events older than the retention window are pruned. */
   timeline(tenant: UnitTenant, query: UsageQuery = {}): UsageEvent[] {
     const tenantId = normalizeTenantId(tenant.id);
     const since = normalizeTimestamp(query.since ?? 0);
@@ -307,6 +500,8 @@ export class ChassisUsageStore {
   }
 
   close(): void {
+    this.closed = true;
+    if (this.pruneTimer) clearTimeout(this.pruneTimer);
     this.db.close();
   }
 }
@@ -362,6 +557,16 @@ function normalizeQuota(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (!Number.isFinite(value) || value < 0) throw new Error("tenant quota must be a non-negative finite number");
   return Math.trunc(value);
+}
+
+function resolveRetentionDays(option: number | undefined, notice: (message: string) => void): number | null {
+  const raw = option ?? (process.env.USAGE_RETENTION_DAYS?.trim() ? Number(process.env.USAGE_RETENTION_DAYS) : undefined);
+  if (raw === undefined || raw === 0) return null;
+  if (!Number.isFinite(raw) || raw < 1) {
+    notice(`ignoring invalid USAGE_RETENTION_DAYS=${String(raw)}; usage retention stays disabled`);
+    return null;
+  }
+  return Math.trunc(raw);
 }
 
 function normalizeBusyTimeout(value: number): number {
