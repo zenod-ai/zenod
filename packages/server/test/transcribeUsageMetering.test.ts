@@ -30,7 +30,23 @@ describe.skipIf(!hasFfmpeg)("transcription writes llm_usage rows", () => {
       onUsage,
     });
 
-  it("records real provider cost and generation id from OpenRouter, in the supplied ledger only", async () => {
+  it("records the real provider cost and header generation id in the live OpenRouter response shape", async () => {
+    // Captured from the live API: no `id` in the body, `usage: { seconds, cost }`, id in `x-generation-id`.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ text: "hello there world", usage: { seconds: 2, cost: 0.0123 } }), {
+          status: 200,
+          headers: { "x-generation-id": "gen-9" },
+        })),
+    );
+    const reports: LlmUsageReport[] = [];
+    await run((r) => reports.push(r));
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ providerCostUsd: 0.0123, generationId: "gen-9" });
+  });
+
+  it("records real provider cost in the supplied ledger only", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ id: "gen-9", text: "hello there world", usage: { cost: 0.0123 } }), { status: 200 })),
