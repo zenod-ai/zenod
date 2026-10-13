@@ -29,3 +29,23 @@ Container `zenod-mt` started 2026-10-12 22:32:05 UTC. Checked after at least 10 
 ## Rollback
 
 Remove the `ZENOD_PLATFORM_OPENROUTER_KEY` env entry from Dokploy app `zenod-mt` and redeploy via Dokploy. Tenants fall back to their stored keys, which are still present.
+
+## Follow-up 1: managed_ai_* readers removed (PR #1402, merge `3bee448`)
+
+- Readers of the dead fields were all in the Phylax adapter and unit wiring. Replacements:
+  - `processingPaused` (Phylax `customerTenant` and the non-Phylax hosted-channels path) read `managed_ai_status === "paused"`. It now means "not entitled": Stripe `active`/`past_due`, or the account is in `ZENOD_PHYLAX_COMPED_ACCOUNT_IDS` (fixed window from #1367). Canceled, paused, pending and unknown are paused. Phylax bootstrap uses the same check.
+  - Local capacity (three call sites), local usage and operator projection read `managed_ai_limit_usd`. They now use the D30 shadow allowance (`ZENOD_TENANT_MONTHLY_ALLOWANCE_USD`, local capacity 0 while unset). Spend still comes from the tenant's `llm_usage` month-to-date; Phylax capacity from Phylax's own allowance ledger.
+  - Admin overview API and the admin UI "AI state" column read `managed_ai_status`; both removed.
+- All `managed_ai_*` fields are gone from the `CustomerAccount` type and defaults. The stored JSON values in `customer-accounts.json` (for example github-63050995's stale `managed_ai_status`) are left in place; removing them would be a destructive data migration, and nothing reads them now.
+- Tests: comped not paused, Stripe active/past_due not paused, canceled/paused/pending paused, platform mode with no shadow allowance reports capacity normal.
+- Production (2026-10-13, container on `3bee448`, 0 restarts, no `current-key refresh failed` or `waiting_for_usage` lines): Phylax health 200; github-63050995 (comped) and user-usr_450335af676221c44d2d4394 (Stripe active) both entitled, `processingPaused` false, Phylax binding `active`, no binding error.
+
+## Follow-up 2: transcription cost is real (PR for this receipt)
+
+- Live probe from inside `zenod-mt` with the platform key (key never printed): a 1.5 s 440 Hz WAV to `openai/whisper-large-v3-turbo`, once raw and once through `transcribeAudio`.
+- OpenRouter's response body is `{ "text": string, "usage": { "seconds": 1.5, "cost": 0.000004995 } }`. There is no `id` in the body; the generation id is in the `x-generation-id` response header.
+- `usage.cost` was already read correctly: the `llm_usage` report had `providerCostUsd` 0.000004995 (the per-minute estimate would have been 0.0000167, 3.3x too high), and spend uses `COALESCE(provider_cost_usd, cost_usd)`.
+- Gap fixed: the generation id was never captured because the code read `body.id`. It now falls back to the `x-generation-id` header. Since real cost is returned inline, the async `GET /api/v1/generation?id=` lookup is not needed.
+- Cost source convention: `provider_cost_usd` NOT NULL means real provider cost; NULL means the per-minute estimate (`cost_usd`), used only when a response lacks `usage.cost`. No new column.
+- Production rows: as of 2026-10-13 neither live tenant has any `transcribe` row in `llm_usage` yet (the probe bypassed the ledger), so there is nothing to mis-source. Rows written from now on take the real cost path.
+- Spend of the probe: about $0.00001.
