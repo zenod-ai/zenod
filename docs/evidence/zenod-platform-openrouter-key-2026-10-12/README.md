@@ -40,7 +40,7 @@ Remove the `ZENOD_PLATFORM_OPENROUTER_KEY` env entry from Dokploy app `zenod-mt`
 - Tests: comped not paused, Stripe active/past_due not paused, canceled/paused/pending paused, platform mode with no shadow allowance reports capacity normal.
 - Production (2026-10-13, container on `3bee448`, 0 restarts, no `current-key refresh failed` or `waiting_for_usage` lines): Phylax health 200; github-63050995 (comped) and user-usr_450335af676221c44d2d4394 (Stripe active) both entitled, `processingPaused` false, Phylax binding `active`, no binding error.
 
-## Follow-up 2: transcription cost is real (PR for this receipt)
+## Follow-up 2: transcription cost is real (PR #1403)
 
 - Live probe from inside `zenod-mt` with the platform key (key never printed): a 1.5 s 440 Hz WAV to `openai/whisper-large-v3-turbo`, once raw and once through `transcribeAudio`.
 - OpenRouter's response body is `{ "text": string, "usage": { "seconds": 1.5, "cost": 0.000004995 } }`. There is no `id` in the body; the generation id is in the `x-generation-id` response header.
