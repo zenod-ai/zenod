@@ -52,6 +52,8 @@ import {
 import {
   loadZenodPhylaxConfig,
   ZenodPhylaxAdapter,
+  compedAccountIdsFromEnv,
+  isAccountEntitled,
 } from "./zenodPhylax.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
@@ -1033,9 +1035,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           : {
               tenantId: account.tenant_id,
               downstreamToken,
-              processingPaused:
-                (account as { managed_ai_status?: string }).managed_ai_status ===
-                "paused",
+              processingPaused: !isAccountEntitled(account, compedAccountIdsFromEnv(env)),
             };
       },
     });
@@ -1094,7 +1094,6 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           tier: account.tier,
           subscriptionStatus: account.subscription_status,
           currentPeriodEnd: account.current_period_end,
-          managedAiStatus: account.managed_ai_status,
         })),
         generatedAt: new Date().toISOString(),
       });

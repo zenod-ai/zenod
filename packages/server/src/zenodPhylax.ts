@@ -22,6 +22,7 @@ import {
   projectHostedChannelError,
   projectHostedChannels,
 } from "./hostedChannels.js";
+import { tenantMonthlyAllowanceFromEnv } from "./settings.js";
 import { openZenodSqlite } from "./sqlite.js";
 
 const MANAGEMENT_PROFILE = "phylax-management-v1-zenod";
@@ -38,6 +39,8 @@ export interface ZenodPhylaxConfig {
   phylaxWalletTargetUnits: number;
   phylaxWalletLowWaterUnits: number;
   unitsPerUsd: number;
+  /** D30 shadow allowance per tenant (ZENOD_TENANT_MONTHLY_ALLOWANCE_USD); null = none, so local capacity is 0. */
+  localAllowanceUsd: number | null;
   tariffVersion: string;
   downstreamUrl: string;
   warnPercent: number;
@@ -215,6 +218,7 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
     phylaxWalletTargetUnits,
     phylaxWalletLowWaterUnits,
     unitsPerUsd,
+    localAllowanceUsd: tenantMonthlyAllowanceFromEnv(env),
     tariffVersion: tariffVersion || "unconfigured",
     downstreamUrl: (
       env.ZENOD_PHYLAX_DOWNSTREAM_URL?.trim() ||
@@ -222,13 +226,27 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
     ),
     warnPercent,
     reconcileIntervalMs,
-    compedAccountIds: new Set(
-      (env.ZENOD_PHYLAX_COMPED_ACCOUNT_IDS ?? "")
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean),
-    ),
+    compedAccountIds: compedAccountIdsFromEnv(env),
   };
+}
+
+export function compedAccountIdsFromEnv(env: NodeJS.ProcessEnv): ReadonlySet<string> {
+  return new Set(
+    (env.ZENOD_PHYLAX_COMPED_ACCOUNT_IDS ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * D30 entitlement: a live Stripe subscription (active or past_due), or a comped account. This is the only
+ * authority for "processing paused"; it never reads per-tenant key or cap fields.
+ */
+export function isAccountEntitled(account: CustomerAccount, comped: ReadonlySet<string>): boolean {
+  return comped.has(account.account_id) ||
+    account.subscription_status === "active" ||
+    account.subscription_status === "past_due";
 }
 
 function legacyDeterministicPhylaxTenantId(zenodTenantId: string): string {
@@ -657,6 +675,10 @@ export class ZenodPhylaxAdapter {
     };
   }
 
+  private localCapacityUnits(): number {
+    return Math.max(0, Math.round((this.config.localAllowanceUsd ?? 0) * this.config.unitsPerUsd));
+  }
+
   private recordEntitlement(account: CustomerAccount, entitled: boolean): string | null {
     if (!this.config.enabled || !account.tenant_id) return null;
     const row = this.ensureRow(account);
@@ -668,10 +690,7 @@ export class ZenodPhylaxAdapter {
         ? outstandingUnits
         : this.config.phylaxWalletTargetUnits
       : outstandingUnits;
-    const localCapacity = Math.max(
-      0,
-      Math.round((account.managed_ai_limit_usd ?? 0) * this.config.unitsPerUsd),
-    );
+    const localCapacity = this.localCapacityUnits();
     const impossibleInitialAllocation = entitled &&
       currentAllowance === null &&
       localCapacity + allocationUnits > this.config.masterAllowanceUnits;
@@ -714,8 +733,7 @@ export class ZenodPhylaxAdapter {
     // than leaving later accounts absent because an earlier tenant was slow.
     for (const account of accounts) {
       if (!account.tenant_id || account.subscription_status === "checkout_pending") continue;
-      const entitled = account.subscription_status === "active" ||
-        account.subscription_status === "past_due";
+      const entitled = isAccountEntitled(account, this.config.compedAccountIds);
       try {
         const accountId = this.recordEntitlement(account, entitled);
         if (accountId) accountIds.push(accountId);
@@ -801,10 +819,7 @@ export class ZenodPhylaxAdapter {
       if (row.desired_access !== "active" || !row.period_id) {
         throw new Error("Phylax allowance is not active");
       }
-      const localCapacity = Math.max(
-        0,
-        Math.round((input.account.managed_ai_limit_usd ?? 0) * this.config.unitsPerUsd),
-      );
+      const localCapacity = this.localCapacityUnits();
       const pending = this.db.prepare(
         `SELECT operation_id FROM zenod_phylax_allowance_operations
          WHERE account_id=? AND completed_at IS NULL LIMIT 1`,
@@ -1397,10 +1412,7 @@ export class ZenodPhylaxAdapter {
         resetsAt: local.resetsAt ?? (phylax?.resetsAt ? new Date(phylax.resetsAt).toISOString() : null),
       };
     }
-    const localCapacity = Math.max(
-      0,
-      Math.round((account.managed_ai_limit_usd ?? 0) * this.config.unitsPerUsd),
-    );
+    const localCapacity = this.localCapacityUnits();
     const localUsed = Math.round(localCapacity * local.percentageUsed / 100);
     const used = localUsed + phylax.usedUnits;
     const percentageUsed = Math.min(100, Math.max(
@@ -1423,10 +1435,7 @@ export class ZenodPhylaxAdapter {
   operatorProjection(account: CustomerAccount, local: CustomerUsageProjection) {
     const row = this.row(account.account_id);
     const phylax = row ? this.storedAllowance(row) : null;
-    const configuredUnits = Math.max(
-      0,
-      Math.round((account.managed_ai_limit_usd ?? 0) * this.config.unitsPerUsd),
-    );
+    const configuredUnits = this.localCapacityUnits();
     const usedUnits = local.percentageUsed === null
       ? null
       : Math.round(configuredUnits * local.percentageUsed / 100);
@@ -1437,7 +1446,7 @@ export class ZenodPhylaxAdapter {
         tariffVersion: this.config.tariffVersion,
       },
       local: {
-        configuredUsd: account.managed_ai_limit_usd,
+        configuredUsd: this.config.localAllowanceUsd,
         configuredUnits,
         usedUnits,
         remainingUnits: usedUnits === null ? null : Math.max(0, configuredUnits - usedUnits),
@@ -1460,7 +1469,7 @@ export class ZenodPhylaxAdapter {
     return {
       tenantId: row.phylax_tenant_id,
       downstreamToken,
-      processingPaused: account.managed_ai_status === "paused",
+      processingPaused: !isAccountEntitled(account, this.config.compedAccountIds),
     };
   }
 
