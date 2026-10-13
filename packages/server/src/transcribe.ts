@@ -853,7 +853,9 @@ async function transcribeWithOpenRouter(
       usage?: { cost?: unknown; seconds?: unknown } | null;
     } | null;
     const transcript = typeof json?.text === "string" ? json.text.trim() : "";
-    // Same real-cost/generation-id approach as #1329 when OpenRouter reports them; otherwise the per-minute estimate.
+    // Verified against the live API (2026-10-12, 1.5 s tone): the body is `{ text, usage: { seconds, cost } }` with
+    // no `id`; the generation id arrives only in the `x-generation-id` response header. Real `usage.cost` is used
+    // when present; otherwise the per-minute estimate is recorded and `provider_cost_usd` stays NULL.
     const cost = json?.usage?.cost;
     const billedSeconds = json?.usage?.seconds;
     recordTranscribeUsage(onUsage, {
@@ -863,7 +865,7 @@ async function transcribeWithOpenRouter(
       errorCode: "empty_transcript",
       seconds: typeof billedSeconds === "number" && billedSeconds > 0 ? billedSeconds : seconds,
       providerCostUsd: typeof cost === "number" && Number.isFinite(cost) ? cost : null,
-      generationId: typeof json?.id === "string" ? json.id : null,
+      generationId: typeof json?.id === "string" ? json.id : response.headers.get("x-generation-id"),
     });
     if (!transcript) {
       return { success: false, provider: "openrouter", error: "transcription returned empty text", failureReason: "unknown" };
