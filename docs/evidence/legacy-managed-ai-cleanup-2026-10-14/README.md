@@ -43,7 +43,7 @@ Production results (counts only):
 
 ## Left in place
 
-- Nothing stored remains. The two stored `openrouter_api_key` values in test tenants `jordiepic32clean-ml7rz0` and `jordiepic32test-5oqq39` (Aug 2026, no customer account) were removed by #1412 (merge `b21d439`); see Follow-up checks.
+- No managed-AI test-tenant keys remain on zenod-mt; ring and herald still hold a separate, valid vault key for `github-63050995` (not part of this cleanup). The two stored `openrouter_api_key` values in test tenants `jordiepic32clean-ml7rz0` and `jordiepic32test-5oqq39` (Aug 2026, no customer account) were removed by #1412 (merge `b21d439`); see Follow-up checks.
 - Rollback to per-tenant stored keys is no longer possible.
 - Other zenod instances (`ring`, `herald`, `zenod-cloud-test`) run old images and were not touched.
 
