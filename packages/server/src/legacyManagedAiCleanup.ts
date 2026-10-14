@@ -12,6 +12,8 @@ import type { Runtime } from "./runtime.js";
  *  1. the tenant `openrouter_api_key` setting, only for tenants whose customer
  *     account recorded a managed child key (`managed_ai_key_hash` or a
  *     `zenod-tenant:` `managed_ai_key_name`); other tenants' keys are never touched;
+ *  1b. the tenant `openrouter_api_key` of the two named Aug-2026 test tenants that never had a
+ *     customer account (exact ids below, skipped if any account row references them);
  *  2. every `managed_ai_*` field on customer-account rows;
  *  3. the dead sidecar files of the removed lifecycle (exact names below).
  *
@@ -22,6 +24,9 @@ import type { Runtime } from "./runtime.js";
 
 export const LEGACY_MANAGED_AI_FIELD_PREFIX = "managed_ai_";
 export const LEGACY_MANAGED_AI_KEY_NAME_PREFIX = "zenod-tenant:";
+
+/** Test tenants with a stored key but no customer account (Jordi's go 2026-10-14). Exact ids only. */
+export const LEGACY_ACCOUNTLESS_KEY_TENANTS: readonly string[] = ["jordiepic32clean-ml7rz0", "jordiepic32test-5oqq39"];
 
 /** Exact basenames of the removed lifecycle's files inside the data dir (plus SQLite sidecars). */
 const SQLITE_SIDECARS = ["", "-wal", "-shm", "-journal"];
@@ -37,6 +42,7 @@ export interface LegacyManagedAiCleanupCounts {
   accountFieldsRemoved: number;
   tenantKeysDeleted: number;
   tenantKeysFailed: number;
+  accountlessKeysDeleted: number;
   filesDeleted: number;
   errors: number;
 }
@@ -47,6 +53,8 @@ export interface LegacyManagedAiCleanupOptions {
   accountsPath: string;
   /** Resolves a tenant runtime for an account; omitted for services that own no tenant settings (Phylax). */
   runtimeForAccount?: (account: CustomerAccount) => Pick<Runtime, "settings"> | null;
+  /** Resolves a tenant runtime by id, for the named accountless test tenants. */
+  runtimeForTenant?: (tenantId: string) => Pick<Runtime, "settings"> | null;
   log?: (line: string) => void;
 }
 
@@ -67,6 +75,7 @@ export function cleanupLegacyManagedAi(options: LegacyManagedAiCleanupOptions): 
     accountFieldsRemoved: 0,
     tenantKeysDeleted: 0,
     tenantKeysFailed: 0,
+    accountlessKeysDeleted: 0,
     filesDeleted: 0,
     errors: 0,
   };
@@ -97,6 +106,25 @@ export function cleanupLegacyManagedAi(options: LegacyManagedAiCleanupOptions): 
         }
       } catch {
         counts.tenantKeysFailed += 1;
+      }
+    }
+  }
+
+  // 1b. Named accountless test tenants. Never touches a tenant that has a customer account row.
+  if (options.runtimeForTenant) {
+    const accountTenants = new Set(
+      Object.values(store ?? {}).map((row) => (row && typeof row.tenant_id === "string" ? row.tenant_id : "")),
+    );
+    for (const tenantId of LEGACY_ACCOUNTLESS_KEY_TENANTS) {
+      if (accountTenants.has(tenantId)) continue;
+      try {
+        const runtime = options.runtimeForTenant(tenantId);
+        if (runtime && runtime.settings.get("openrouter_api_key") !== null) {
+          runtime.settings.set("openrouter_api_key", "");
+          counts.accountlessKeysDeleted += 1;
+        }
+      } catch {
+        counts.errors += 1;
       }
     }
   }
@@ -137,10 +165,10 @@ export function cleanupLegacyManagedAi(options: LegacyManagedAiCleanupOptions): 
     }
   }
 
-  const changed = counts.accountFieldsRemoved + counts.tenantKeysDeleted + counts.filesDeleted;
+  const changed = counts.accountFieldsRemoved + counts.tenantKeysDeleted + counts.accountlessKeysDeleted + counts.filesDeleted;
   if (changed > 0 || counts.errors > 0 || counts.tenantKeysFailed > 0) {
     log(
-      `[legacy-managed-ai-cleanup] tenant_keys_deleted=${counts.tenantKeysDeleted} tenant_keys_failed=${counts.tenantKeysFailed} ` +
+      `[legacy-managed-ai-cleanup] tenant_keys_deleted=${counts.tenantKeysDeleted} tenant_keys_failed=${counts.tenantKeysFailed} accountless_keys_deleted=${counts.accountlessKeysDeleted} ` +
         `account_rows_cleaned=${counts.accountRowsCleaned} account_fields_removed=${counts.accountFieldsRemoved} ` +
         `files_deleted=${counts.filesDeleted} errors=${counts.errors}`,
     );
