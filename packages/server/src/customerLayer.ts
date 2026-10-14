@@ -46,6 +46,7 @@ import {
 } from "./customerSession.js";
 import { createLocalTenantBindingAdapter } from "./customerTenantBinding.js";
 import { CustomerTokenVault } from "./customerTokenVault.js";
+import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import {
@@ -1517,6 +1518,17 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
     return c.json({ received: true, result: "ignored" });
   });
+
+  // D30: one-time (idempotent) removal of the per-customer key data left by the removed lifecycle.
+  try {
+    cleanupLegacyManagedAi({
+      dataDir: host.dataDir,
+      accountsPath: accounts.path,
+      runtimeForAccount: host.runtimeForAccount,
+    });
+  } catch (error) {
+    console.error("[legacy-managed-ai-cleanup] failed:", (error as Error).message);
+  }
 
   return {
     app,
