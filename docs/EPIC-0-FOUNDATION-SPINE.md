@@ -89,7 +89,7 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Operating Learnings
 
-EpicSpine skill: 2026.10.09 @ 8c6eef8, checked 2026-10-10
+EpicSpine skill: linked to source checkout (main), checked 2026-10-14
 
 Always:
 - L-1 | any task beyond answering a question | the delivery manager dispatches a worker and never implements itself | Jordi's chosen operating model | confirmed 2026-10-10
