@@ -81,6 +81,7 @@ import {
   projectPhylaxCustomerUsage,
 } from "./phylaxCustomerLayer.js";
 import type { CustomerLayerOptions } from "./customerLayer.js";
+import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 
 export const PHYLAX_ADMIN_GITHUB_LOGIN = "alfablok";
@@ -353,6 +354,17 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
       },
     )
     : null;
+  if (!customer) {
+    // Zenod-mode Phylax has no customer layer; still remove the dead managed-AI files (D30). Files only.
+    try {
+      cleanupLegacyManagedAi({
+        dataDir: storage.dataDir,
+        accountsPath: join(storage.dataDir, "customer-accounts-phylax.json"),
+      });
+    } catch (error) {
+      console.error("[legacy-managed-ai-cleanup] failed:", (error as Error).message);
+    }
+  }
   void runtime.start().catch((error) => console.error("phylax channels failed to start:", error));
 
   const app = new Hono<{ Bindings: HttpBindings }>();
