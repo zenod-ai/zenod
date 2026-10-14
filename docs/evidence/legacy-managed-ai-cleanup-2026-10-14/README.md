@@ -46,3 +46,9 @@ Production results (counts only):
 - Stored `openrouter_api_key` in tenants `jordiepic32clean-ml7rz0` and `jordiepic32test-5oqq39` (Aug 2026 test tenants with no customer account). Provenance is unattributable, so they were kept. They are unused (platform key wins); delete on request.
 - Rollback to per-tenant stored keys is no longer possible.
 - Other zenod instances (`ring`, `herald`, `zenod-cloud-test`) run old images and were not touched.
+
+## Follow-up checks (2026-10-14, evening)
+
+- Other instances unaffected: `ring`, `herald`, `zenod-cloud-test` health 200 on their old images, 0 OpenRouter 401/403/unauthorized lines in 24 h of logs. Only tenant `github-63050995` on ring and herald holds a stored OpenRouter key (vault, `provider=openrouter`); both keys still authenticate at OpenRouter (HTTP 200), i.e. they are not among the deleted keys. Those images predate the platform key (D30), so nothing there depends on it.
+- Telegram lives on Phylax (Dokploy env `TELEGRAM_ENABLED/BOT_TOKEN`, bot `@zenod_bot`), not on zenod-mt. Phylax `/api/health` lists only WhatsApp by design (`phylaxUnit.ts`); Telegram `getMe` ok, no webhook, 0 pending updates, 0 poll failures in logs.
+- The two leftover test-tenant keys are removed by the same idempotent startup cleanup, extended to the exact tenant ids `jordiepic32clean-ml7rz0` and `jordiepic32test-5oqq39` (skipped if an account references them); log field `accountless_keys_deleted`.

@@ -63,6 +63,33 @@ describe("legacy managed-AI cleanup (D30)", () => {
     expect(lines).toEqual([]);
   });
 
+  it("deletes the stored key of the two named accountless test tenants only, idempotently, and never a tenant with an account", () => {
+    writeFileSync(accountsPath, JSON.stringify({ a: { account_id: "a", tenant_id: "jordiepic32test-5oqq39", tier: "monthly" } }));
+    const keys: Record<string, string> = {
+      "jordiepic32clean-ml7rz0": "sk-secret-1",
+      "jordiepic32test-5oqq39": "sk-has-account",
+      "someone-else": "sk-other",
+    };
+    const rt = fakeRuntimes(keys);
+    const run = () => cleanupLegacyManagedAi({
+      dataDir: dir,
+      accountsPath,
+      runtimeForTenant: (tenantId) => rt.runtimeForAccount({ tenant_id: tenantId }),
+      log: (l) => lines.push(l),
+    });
+
+    const counts = run();
+    expect(counts).toMatchObject({ accountlessKeysDeleted: 1, tenantKeysDeleted: 0, errors: 0 });
+    expect(keys).toEqual({ "jordiepic32test-5oqq39": "sk-has-account", "someone-else": "sk-other" });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("accountless_keys_deleted=1");
+    expect(lines[0]).not.toMatch(/secret|sk-/);
+
+    lines.length = 0;
+    expect(run()).toMatchObject({ accountlessKeysDeleted: 0, errors: 0 });
+    expect(lines).toEqual([]);
+  });
+
   it("keeps account attribution for a retry when a tenant key deletion fails", () => {
     writeFileSync(accountsPath, JSON.stringify({ a: { account_id: "a", tenant_id: "t", managed_ai_key_hash: "h" } }));
     const counts = cleanupLegacyManagedAi({

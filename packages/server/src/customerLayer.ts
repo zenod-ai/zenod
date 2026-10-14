@@ -1525,6 +1525,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       dataDir: host.dataDir,
       accountsPath: accounts.path,
       runtimeForAccount: host.runtimeForAccount,
+      runtimeForTenant: (tenantId) => host.runtimeForAccount?.({ tenant_id: tenantId } as CustomerAccount) ?? null,
     });
   } catch (error) {
     console.error("[legacy-managed-ai-cleanup] failed:", (error as Error).message);
