@@ -287,6 +287,33 @@ describe("dedicated Phylax deployment islands", () => {
     }
   });
 
+  it("removes only the dead managed-AI files when a zenod-mode Phylax boots (D30)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-legacy-ai-"));
+    dirs.push(dataDir);
+    await writeFile(join(dataDir, "customer-managed-ai-admission.sqlite"), "dead");
+    await writeFile(join(dataDir, "managed-ai-downstream.sqlite-wal"), "dead");
+    await writeFile(join(dataDir, "sentinel.txt"), "keep");
+    const unit = createPhylaxUnit({
+      dataDir,
+      tenantStore: createMemoryTenantStore(),
+      env: {
+        CHASSIS_VAULT_MASTER_KEY: MASTER_KEY,
+        PHYLAX_INSTANCE_MODE: "zenod",
+        PHYLAX_INSTANCE_ID: "phylax-for-zenod",
+        PHYLAX_SERVICE_NUMBER_ID: "zenod-primary",
+        PHYLAX_PREWARM_LOCAL_MODEL: "0",
+      },
+    });
+    try {
+      const names = await readdir(dataDir);
+      expect(names).not.toContain("customer-managed-ai-admission.sqlite");
+      expect(names).not.toContain("managed-ai-downstream.sqlite-wal");
+      expect(names).toContain("sentinel.txt");
+    } finally {
+      await unit.close();
+    }
+  });
+
   it("boots two isolated modes concurrently and preserves a mounted legacy session", async () => {
     const zenodDir = await mkdtemp(join(tmpdir(), "phylax-zenod-island-"));
     const pmDir = await mkdtemp(join(tmpdir(), "phylax-pm-island-"));
