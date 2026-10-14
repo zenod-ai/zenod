@@ -110,6 +110,7 @@ Active child spine: `docs/EPIC-ZENOD-MEMORY-RELIABILITY.md` (ZMR) for the curren
 Next action: hold the deployed M2 milestone stable and observe ordinary use. Route the bounded presentation follow-up (repetitive B10–B12 source/history excerpts) as a small ZMR ticket only if a measured incident justifies it. Do not treat the 31 undeployed `main` commits as a production change without a separate authorized deploy gate. Land #964 when `ci` is green; verify the first automatic roll against `https://cloud.zenod.dev/api/health` and record the deployed SHA.
 Auto-deploy: [PR #964](https://github.com/zenod-ai/zenod/pull/964) (`ci/fleet-auto-deploy`, rebased on `main` 2026-10-10, open, not merged) wires push-to-main to roll Zenod production (`zenod-mt`, `cloud.zenod.dev`) per D27. Inert until Jordi adds the repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE`; merged code is not deployed proof.
 Blockers: none for the completed M2 basic-memory milestone. Production deployment of newer `main`, real channel sends, live billing, public signup and destructive migrations remain named later human gates. Public signup stays closed.
+Housekeeping: EpicSpine block migrated to thin repo-1 (shared rules from skill) (2026-10-14)
 
 ## Execution Cursor
 

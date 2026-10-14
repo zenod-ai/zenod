@@ -1,19 +1,15 @@
 # Zenod agent entrypoint
 
-<!-- epicspine:begin 2026.10.09 -->
+<!-- epicspine:begin repo-1 -->
 ## EpicSpine — always on, every task, every agent
 Root spine: docs/EPIC-0-FOUNDATION-SPINE.md. Read its Current State and Operating Learnings before acting.
-1. Bind first: first reply names role (default: delivery manager) and `Learnings in force:`.
-2. The manager never implements. Any work beyond answering a question (code, docs, research) goes to a worker.
-3. Workers: native Claude Code `Agent` subagent, `model: sonnet` (Sonnet 5.5, same subscription), run in background, own worktree `../wt-<task>` on branch `wt/<task>`. Do not route workers through T3/OpenCode. If the model is unavailable: stop, say so, propose a substitute.
-4. Integrate: verify diff and checks yourself; `main` requires the `ci` check, so push `wt/<task>`, open a PR, merge it yourself when `ci` is green (never bypass with an admin push); revert on red; remove the worktree and branch.
-5. Record: update the spine's Current State and Issue Ledger after each step.
-Precedence: user per-task instruction > this block > skill defaults. Details: skills/epic-spine/SKILL.md.
+Shared EpicSpine rules (bind, dispatch, integrate, links) come from the epic-spine skill's always-on block, injected each session; if it was not, read `assets/global-block.md` in the skill dir (usually `~/.agents/skills/epic-spine`).
+Repo values (`Dispatch profile:`, `Integration policy:`, `Skill updates:`) in the root spine or AGENTS.md override skill defaults.
+Precedence: user per-task instruction > repo values > skill block.
 <!-- epicspine:end -->
-Dispatch profile: mechanism: Claude Code `Agent` tool (background); model: `sonnet` (Sonnet 5.5); reasoning: inherited; isolation: worktree-first; parallelism: disjoint waves.
-Integration policy: main-direct via self-merged CI-gated PR (user never merges; production deploy stays a human gate, except the owner-approved push-to-main roll of Zenod production only, root spine D27).
+Dispatch profile: mechanism: Claude Code `Agent` tool (background), never T3/OpenCode; model: `sonnet` (Sonnet 5.5, same subscription); reasoning: inherited; isolation: worktree-first (`../wt-<task>` on branch `wt/<task>`); parallelism: disjoint waves (root spine D26).
+Integration policy: main-direct via self-merged CI-gated PR (`main` requires the `ci` check: push `wt/<task>`, open a PR, merge it yourself when `ci` is green, never bypass with an admin push; remove the worktree and branch; user never merges; production deploy stays a human gate, except the owner-approved push-to-main roll of Zenod production only, root spine D27).
 Skill updates: manual (vendored copy; re-sync per `skills/epic-spine.SOURCE`).
-Local adaptation: rules 3–4 differ from the stock template by Jordi's decision (root spine D26); re-apply them after any `agents_block.py install`.
 
 ## Start here
 
