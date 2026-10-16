@@ -6,7 +6,7 @@ keep overlapping Current State and Execution Cursor facts consistent until migra
 Spine profile: full
 Ticket backend: github
 Dispatch profile: default
-<!-- Optional: default dispatches workers via T3 delegate_task on the OpenCode provider instance offering the built-in model, reasoning high. Override per task or name a reserved template: template:<name>. See ../references/roles-and-dispatch.md. -->
+<!-- Optional: optional repo override; the machine profile `~/.agents/epicspine-profile.md` applies when unset or `default`, else a lower-cost native subagent. Override per task or name a reserved template: template:<name>. See ../references/roles-and-dispatch.md. -->
 Integration policy: main-direct
 <!-- Optional: main-direct (default) or pr-approval. The delivery manager merges verified work to the integration branch itself under ../references/git-doctrine.md. -->
 
@@ -91,7 +91,7 @@ State the outcome in one paragraph. Write for a capable teammate who has not see
 
 ## Definition Of Done
 
-<!-- See ../references/structural-validation.md for strict data checks and advisory prose. -->
+<!-- See ../references/structural-validation.md for strict data checks and advisory prose. Machine-read contract (`- [ ] <ID> <criterion>` lines here, Status/Waiting on, Issue Ledger columns): ../references/spine-model.md. -->
 
 SHIP — one observable journey with as many steps as the outcome requires on the declared Acceptance surface (choose one header value). The epic worker personally executes it: run → first failure → dispatch a scoped fix → prepare the updated surface → restart from step 1, until one uninterrupted clean pass. Deploy only when required and authorized.
 
@@ -100,15 +100,15 @@ Evidence method: <selected surface>: <how the result will be exercised and recor
 
 Evidence by surface: browser requires a REAL browser on the LIVE deployment and one screenshot per step; cli requires exact commands, inputs, exit codes and outputs; library requires a runnable consumer example and behavior checks; infrastructure requires authorized health/state probes in the named environment; documentation requires following instructions and checking rendered artifacts, links and examples as applicable. Run appropriate checks and repeat when changes or failures warrant it.
 
-- [ ] 1. <first observable step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
-- [ ] 2. <journey step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
-- [ ] 3. <journey step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
-- [ ] 4. <journey step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
-- [ ] 5. Test package: personally verified steps, exact commit, named environment, commands/results or artifact checks, and remaining limits. For browser: live URL and per-step screenshots. Every handed-off element was exercised against this build or artifact; the human can repeat the same journey.
+- [ ] X-1 <first observable step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
+- [ ] X-2 <journey step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
+- [ ] X-3 <journey step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
+- [ ] X-4 <journey step> — PORT from <repo/path> | DUPLICATE from <working unit> | BUILD (no suitable source found in recorded scope)
+- [ ] X-5 Test package: personally verified steps, exact commit, named environment, commands/results or artifact checks, and remaining limits. For browser: live URL and per-step screenshots. Every handed-off element was exercised against this build or artifact; the human can repeat the same journey.
 
 HARDEN — explicitly deferred until the human approves SHIP:
 
-- [ ] <hardening item>
+- [ ] X-6 <hardening item>
 
 ## Non-Goals
 
@@ -130,6 +130,7 @@ Read **Always** at bind; match the task against **Scoped index**; follow only ma
 
 ## Current State
 
+Status: draft
 Phase: planning | implementation | testing | blocked | complete
 Last verified: YYYY-MM-DD HH:MM TZ
 Integration target: main
@@ -143,7 +144,7 @@ Blockers: <none or list>
 
 Last attempted: <most recent concrete action, or none yet>
 Result: <actual outcome plus evidence link, or not started>
-Execution status: not-started | ready | active | blocked | review | testing | done
+Execution status: draft
 Waiting on: <person, decision, dependency, or nothing>
 Approved work: <work that may proceed without another planning turn, or none>
 Next action: <one exact resumable action>

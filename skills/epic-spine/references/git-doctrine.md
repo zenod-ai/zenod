@@ -20,9 +20,12 @@ The manager has standing authority to merge verified work to the declared integr
 2. If `main` moved, `git rebase main` in the worktree and re-verify.
 3. In the primary checkout on clean `main`, `git merge --ff-only wt/<task>`.
 4. Refresh generated artefacts (for example manifests) in a follow-up commit when the repository requires it.
-5. Push `main`.
+5. Push `main` to origin (fast-forward only, never forced; under `pr-approval` open the PR instead). Do this right after the merge, not at session end: the other machine sees the work only once it is pushed.
 6. Test in `main`: run the full checks or CI against the merged result.
 7. Remove the worktree and delete the local branch.
+8. Record the step (spine Current State and Issue Ledger), commit that update on `main` and push it the same way.
+
+The Stop hook (`scripts/stop_push.py`) pushes committed `main` work at the end of every turn as a safety net: only when the tracked tree is clean, `main` is ahead and not behind, and never under `pr-approval`. It never commits; commits are the agent's job. A repo opts out with `EpicSpine: off` in AGENTS.md or a `.epicspine-off` file.
 
 ## Rollback
 
@@ -44,6 +47,7 @@ After every integration with no work in flight, the repository is in this end-st
 - exactly one branch: `main`;
 - exactly one worktree: the primary checkout;
 - `git status` clean;
+- `main` equal to `origin/main` (nothing committed and unpushed);
 - no stray remote branches.
 
 The manager audits this at the end of each task and fixes drift before declaring done.

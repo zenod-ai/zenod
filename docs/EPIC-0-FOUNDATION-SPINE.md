@@ -1,6 +1,5 @@
 # EPIC 0 · Foundation Spine — operating behavior and document-centered delivery
 
-Status: active
 Created: 2026-07-09
 Updated: 2026-10-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -68,17 +67,17 @@ Set the foundational operating behavior for Zenod's AI-assisted development syst
 
 ## Definition Of Done
 
-- [x] EpicSpine skill is installed, valid, and documented as the default operating pattern.
-- [x] EpicSpine deck exists for onboarding humans and agents to the pattern.
-- [x] Write-scope rules are captured: read broadly, write narrowly; cross-spine changes are proposed, not silently applied.
-- [x] Planner backlog and parallel dispatch flow is captured in the skill.
-- [x] Goal-seeking persistence is captured: workers continue until ready for testing or blocked; testers continue through bounded fix loops or escalate major decisions.
-- [x] Public-repo Milestone 0 exists: README lands EpicSpine and a standalone HTML deck explains the root concept.
-- [x] Branch/worktree integration discipline is captured: ticket workers isolate work, merge ready-for-test changes to the integration branch frequently, and keep new-agent bases fresh.
-- [x] Authority, single-steward, protected integration gates, human gates, and recovery/takeover rules are encoded in the skill and reusable templates.
-- [x] A deterministic local spine validator checks the required operating structure.
-- [ ] At least one real epic uses the EpicSpine pattern with a bound spine, issue ledger, and handoff journal.
-- [ ] GitHub issues exist for any remaining rollout work needed to make this behavior standard.
+- [x] DOD-1 EpicSpine skill is installed, valid, and documented as the default operating pattern.
+- [x] DOD-2 EpicSpine deck exists for onboarding humans and agents to the pattern.
+- [x] DOD-3 Write-scope rules are captured: read broadly, write narrowly; cross-spine changes are proposed, not silently applied.
+- [x] DOD-4 Planner backlog and parallel dispatch flow is captured in the skill.
+- [x] DOD-5 Goal-seeking persistence is captured: workers continue until ready for testing or blocked; testers continue through bounded fix loops or escalate major decisions.
+- [x] DOD-6 Public-repo Milestone 0 exists: README lands EpicSpine and a standalone HTML deck explains the root concept.
+- [x] DOD-7 Branch/worktree integration discipline is captured: ticket workers isolate work, merge ready-for-test changes to the integration branch frequently, and keep new-agent bases fresh.
+- [x] DOD-8 Authority, single-steward, protected integration gates, human gates, and recovery/takeover rules are encoded in the skill and reusable templates.
+- [x] DOD-9 A deterministic local spine validator checks the required operating structure.
+- [ ] DOD-10 At least one real epic uses the EpicSpine pattern with a bound spine, issue ledger, and handoff journal.
+- [ ] DOD-11 GitHub issues exist for any remaining rollout work needed to make this behavior standard.
 
 ## Non-Goals
 
@@ -102,6 +101,7 @@ Scoped index:
 
 ## Current State
 
+Status: active
 Phase: ZMR M2 dependable memory basics delivered and deployed; M2 evaluation and cost reports integrated on `main`. The Phylax integrated-independent push remains active but is no longer the current thrust.
 Last verified: 2026-09-17 Europe/Paris.
 Integration target: `main`
@@ -273,7 +273,7 @@ Stale assignment policy: no automatic timeout. Before takeover, verify the issue
 - Identify the first child epic to retrofit with explicit Write Scope.
 - Add a short reference from relevant handover docs to EpicSpine once the pattern is proven.
 - Review the Epaminon 2.9 draft spine and decide whether to dispatch planner tickets.
-- Review `docs/epicspine-public-repo/` as the seed for the future public EpicSpine repo.
+- Public EpicSpine repo exists (https://github.com/AlfaBlok/epicspine-skill); the old in-repo seed `docs/epicspine-public-repo/` was removed (history keeps it).
 
 ## Worker Queue
 
@@ -511,8 +511,6 @@ Risks: Do not overpackage before the core language lands. The next milestone can
 
 Links:
 
-- `docs/epicspine-public-repo/README.md`
-- `docs/epicspine-public-repo/index.html`
 - `docs/epic-spine-deck.html`
 - https://github.com/AlfaBlok/epicspine-skill
 - https://alfablok.github.io/epicspine-skill/

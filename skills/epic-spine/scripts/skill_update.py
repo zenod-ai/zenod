@@ -27,10 +27,10 @@ from pathlib import Path
 
 DEFAULT_SOURCE = "https://github.com/AlfaBlok/epicspine-skill.git"
 DEFAULT_REF = "main"
-DEFAULT_WINDOW_DAYS = 7
+DEFAULT_WINDOW_DAYS = 1
 SKILL_REL = "skill/epic-spine"
 SYNC_HINT = (
-    "Vendored and symlinked copies follow SYNC.md: re-sync them, do not upgrade in place."
+    "Vendored and git-checkout copies follow SYNC.md: re-sync them, do not upgrade in place."
 )
 HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -73,7 +73,7 @@ def generate_manifest(repo_root: Path | str, rel_skill: str = SKILL_REL) -> str:
 
 
 def skill_dir_from_here() -> Path:
-    return Path(__file__).absolute().parent.parent
+    return Path(__file__).resolve().parent.parent
 
 
 def pin_path(skill_dir: Path) -> Path:
@@ -131,6 +131,8 @@ def write_pin_atomic(path: Path, fields: dict[str, str]) -> None:
         f"version: {fields['version']}",
         f"installed: {fields['installed']}",
         f"checked: {fields['checked']}",
+        f"tree: {fields['tree']}",
+        f"latest: {fields['tree']}",
         "",
         "Managed by skill_update.py. Do not edit the installed copy by hand.",
     ]
@@ -167,15 +169,34 @@ def git(args: list[str], *, cwd: Path | None = None, timeout: int = 60) -> subpr
     )
 
 
-def remote_head(source: str, ref: str, timeout: int = 30) -> tuple[str | None, str | None]:
-    proc = git(["ls-remote", source, f"refs/heads/{ref}"], timeout=timeout)
-    if proc.returncode != 0:
-        return None, proc.stderr.strip() or "git ls-remote failed"
-    lines = [line for line in proc.stdout.splitlines() if line.strip()]
-    if not lines:
-        return None, f"ref refs/heads/{ref} not found on {source}"
-    sha = lines[0].split()[0].strip()
-    return (sha or None), None
+def tree_info(source: str, ref: str, timeout: int = 60) -> tuple[str | None, str | None, str | None]:
+    """Blobless clone; return (skill tree hash, head commit, error)."""
+    tmp = Path(tempfile.mkdtemp(prefix="epicspine-check-"))
+    try:
+        proc = git(
+            ["clone", "--depth", "1", "--filter=blob:none", "--no-checkout", "--single-branch",
+             "--branch", ref, source, str(tmp / "r")],
+            timeout=timeout,
+        )
+        if proc.returncode != 0:
+            return None, None, proc.stderr.strip() or "git clone failed"
+        out = git(["rev-parse", f"HEAD:{SKILL_REL}", "HEAD"], cwd=tmp / "r", timeout=timeout)
+        lines = out.stdout.split()
+        if out.returncode != 0 or len(lines) != 2:
+            return None, None, f"{SKILL_REL} not found on {source} ({ref})"
+        return lines[0], lines[1], None
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return None, None, str(exc)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def record(path: Path, **keys: str) -> None:
+    try:
+        for key, value in keys.items():
+            set_pin_key(path, key, value)
+    except OSError:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -184,10 +205,9 @@ def remote_head(source: str, ref: str, timeout: int = 30) -> tuple[str | None, s
 
 
 def detect_linked(skill_dir: Path) -> str | None:
-    if skill_dir.is_symlink():
-        return f"skill dir is a symlink: {skill_dir}"
-    if skill_dir.parent.is_symlink():
-        return f"skill parent is a symlink: {skill_dir.parent}"
+    for parent in skill_dir.parents:
+        if (parent / ".git").exists():
+            return f"skill dir is inside a git work tree: {parent}"
     pin = read_pin(pin_path(skill_dir))
     if pin is not None and not is_our_pin(pin):
         return "SOURCE pin marks a vendored copy"
@@ -228,52 +248,59 @@ def cmd_status(args) -> int:
         emit(result, args.json)
         return 0
 
-    pin = read_pin(pin_path(skill_dir))
+    pf = pin_path(skill_dir)
+    pin = read_pin(pf)
     result["installed_version"] = read_version(skill_dir)
     if pin is not None:
         result["installed_commit"] = pin.get("commit") or None
         result["checked"] = pin.get("checked") or None
 
-    if pin is not None and not args.force and pin.get("checked") and within_window(pin["checked"], args.window_days):
+    if pin and not args.force and pin.get("latest") and within_window(pin.get("checked", ""), args.window_days):
+        ok = pin["latest"] == pin.get("tree")
         result.update(
-            status="fresh",
+            status="fresh" if ok else "stale",
             cached=True,
-            detail=f"fresh (cached, checked {pin['checked']})",
+            upgradeable=not ok,
+            detail=f"{'fresh' if ok else 'stale'} (cached, checked {pin['checked']})",
         )
         emit(result, args.json)
         return 0
 
-    latest, error = remote_head(args.source, args.ref)
-    if error or not latest:
+    tree, head, error = tree_info(args.source, args.ref)
+    if error:
         result.update(status="unknown", detail=f"unknown ({error})")
         emit(result, args.json)
         return 0
 
-    result["latest_commit"] = latest
+    result["latest_commit"] = head
     result["checked"] = utc_today()
 
     if pin is None:
         result.update(
             status="unpinned",
             upgradeable=True,
-            detail=f"unpinned (no {pin_path(skill_dir).name}; run upgrade to adopt)",
+            detail=f"unpinned (no {pf.name}; run upgrade to adopt)",
         )
         emit(result, args.json)
         return 0
 
-    try:
-        set_pin_key(pin_path(skill_dir), "checked", utc_today())
-    except OSError:
-        pass
-
-    installed = pin.get("commit") or ""
-    if installed == latest:
-        result.update(status="fresh", detail=f"fresh ({short(latest)})")
+    keys = {"checked": utc_today(), "latest": tree}
+    if pin.get("tree"):
+        fresh = pin["tree"] == tree
+    else:  # legacy pin: compare commits once; equal commits mean identical content
+        fresh = pin.get("commit") == head
+        if fresh:
+            keys["tree"] = tree
+    if fresh:
+        keys["commit"] = head
+    record(pf, **keys)
+    if fresh:
+        result.update(status="fresh", detail=f"fresh ({short(head)})")
     else:
         result.update(
             status="stale",
             upgradeable=True,
-            detail=f"stale (installed {short(installed)} vs latest {short(latest)})",
+            detail=f"stale (installed {short(pin.get('tree') or pin.get('commit'))} vs latest {short(tree)})",
         )
     emit(result, args.json)
     return 0
@@ -318,6 +345,18 @@ def cmd_upgrade(args) -> int:
             print("aborted")
             return 1
 
+    pf = pin_path(skill_dir)
+    pin = read_pin(pf)
+    timeout = getattr(args, "timeout", 180)
+    tree, head, error = tree_info(args.source, args.ref, timeout=timeout)
+    if error:
+        sys.stderr.write(f"upgrade failed: {error}\n")
+        return 1
+    if pin and pin.get("tree") == tree:
+        record(pf, commit=head, checked=utc_today(), latest=tree)
+        print(f"Already current ({short(head)}); nothing to upgrade")
+        return 0
+
     old_version = read_version(skill_dir)
     backup = Path(str(skill_dir) + ".bak")
     tmp_dir = Path(tempfile.mkdtemp(prefix="epicspine-upgrade-"))
@@ -326,7 +365,7 @@ def cmd_upgrade(args) -> int:
     try:
         proc = git(
             ["clone", "--depth", "1", "--branch", args.ref, "--single-branch", args.source, str(clone)],
-            timeout=180,
+            timeout=timeout,
         )
         if proc.returncode != 0:
             sys.stderr.write(f"upgrade failed: clone error: {proc.stderr.strip()}\n")
@@ -348,6 +387,10 @@ def cmd_upgrade(args) -> int:
             sys.stderr.write("upgrade failed: clone tree does not match MANIFEST.sha256\n")
             return 1
 
+        tree_proc = git(["rev-parse", f"HEAD:{SKILL_REL}"], cwd=clone)
+        if tree_proc.returncode != 0:
+            sys.stderr.write(f"upgrade failed: cannot resolve clone tree: {tree_proc.stderr.strip()}\n")
+            return 1
         digest = hashlib.sha256(expected.encode("utf-8")).hexdigest()
         new_version = read_version(new_skill) or "unknown"
 
@@ -377,6 +420,7 @@ def cmd_upgrade(args) -> int:
                     "version": new_version,
                     "installed": utc_today(),
                     "checked": utc_today(),
+                    "tree": tree_proc.stdout.strip(),
                 },
             )
         except Exception as exc:  # noqa: BLE001 - restore on any failure

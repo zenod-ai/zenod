@@ -33,7 +33,7 @@ A dispatch profile is the per-task set of dispatch choices:
 
 | Field | Meaning |
 |---|---|
-| Mechanism | How the worker runs: T3 `delegate_task`, another delegation tool, or a local agent. |
+| Mechanism | How the worker runs: the harness's native subagent tool, another delegation tool (e.g. T3 `delegate_task`), or a local agent. |
 | Provider | The provider instance offering the chosen model; resolve environment-specific ids live. |
 | Model | The model id and variant. |
 | Reasoning | The reasoning-effort variant. |
@@ -46,10 +46,9 @@ A dispatch profile is the per-task set of dispatch choices:
 
 | Field | Default |
 |---|---|
-| Mechanism | T3 `delegate_task`, asynchronous |
-| Provider | The OpenCode provider instance that offers this model, resolved through `orchestrator_capabilities` (e.g. `opencode_2` in the author's setup) |
-| Model | `opencode-go/deepseek-v4.1-flash` (DeepSeek V4.1 Flash) |
-| Reasoning | `high` |
+| Mechanism | The harness's own native subagent/delegation tool |
+| Model | A lower-cost, faster tier than the manager, chosen from what the harness offers |
+| Reasoning | The harness default |
 | Runtime mode | inherited from the manager |
 | Isolation | worktree-first |
 | Parallelism | disjoint waves only; sequence tasks that may touch the same files |
@@ -60,8 +59,14 @@ A dispatch profile is the per-task set of dispatch choices:
 Highest wins, merged field by field; only the stated fields change:
 
 1. Per-task instruction from the user (a different model, provider, mechanism, parallelism, reasoning, and so on).
-2. Repository declaration: a `Dispatch profile:` line in the root spine or `AGENTS.md`.
-3. The built-in default above.
+2. Repo opt-out `Dispatch profile: local-only` ignores the machine dispatcher. Else env `EPICSPINE_DISPATCHER` decides where the worker runs (`references/machine-dispatcher.md`); the fields below still apply when its `via` takes them.
+3. Repository declaration: a `Dispatch profile:` line in the root spine or `AGENTS.md`; an optional override only.
+4. Machine profile: `~/.agents/epicspine-profile.md`, one line `Dispatch profile: <free text>`, set once per machine and outside the skill dir so upgrades never touch it.
+5. The built-in default above.
+
+## Unset Or Ask
+
+Check with `agents_block.py profile --repo .` (exit 3 = unset). If unset when you first dispatch, ask the user once, recommend the built-in default, and save it with `agents_block.py profile --set "..."`, not the repo. Write a repo line only when the user says the choice is specific to that repo. If the user states a profile or asks to set a default, run `profile --set`. The saved profile is then used without asking. While the machine file is missing, the SessionStart hook adds a warning line and `install-global` prints a notice (`install-global --profile TEXT` writes it); never write a default model for the user.
 
 ## Ready Frontier
 
@@ -69,7 +74,7 @@ Launch only the ready frontier: tickets whose `Depends On` blockers are done and
 
 ## Failure Rule
 
-If T3 delegation is unavailable, or the profile's model is missing from the live catalog, stop and say so, then propose a concrete substitute. Never silently substitute, and never silently implement the work yourself.
+If the profile's mechanism or model is unavailable, stop and say so, then propose a concrete substitute. Never silently substitute, and never silently implement the work yourself.
 
 ## Manager Verification
 

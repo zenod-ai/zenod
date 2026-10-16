@@ -25,6 +25,17 @@ Declare `Ticket backend: github|local` (omission defaults to github). GitHub mod
 - Put deep ticket discussion in the GitHub issue or PR, then summarize only the durable consequence back into the spine.
 - If an issue discussion changes intent, scope, acceptance, dependency, or current state, write that change back into the bound spine.
 
+## Machine-Read Contract
+
+Dashboards and tools read only these; keep them exact, and write everything else for humans:
+
+- `## Definition Of Done` (tickets: `## Acceptance`/`## Acceptance Criteria`): every criterion is `- [ ] <ID> <criterion>` or `- [x] <ID> ...` plus an optional short evidence note. ID `[A-Z][A-Z0-9]*-\d+` (M4-1, X-1), unique in the file, never renumbered; indented lines continue an item, prose and tier labels (`SHIP —`) are not criteria. Say how a measurable criterion is measured (metric, threshold, window, command).
+- `## Current State`: the `Status:` and `Waiting on:` lines.
+- `## Issue Ledger`: the table with columns Issue, Title, Owner (`Owner / Assignment` is fine) and Status; Status is one of draft / ready / active / blocked / done / deferred. A local-backend ledger is reference-only and carries no Status.
+- Other work tables are not read.
+
+Enforcement is `validate_spine.py --trackable` (valid Status, criteria as above, a ledger Status column — or valid ticket-file Status for local), run by the repo's pre-commit hook, which the SessionStart hook installs in EpicSpine repos. The commit fixes what it can without guessing (`validate_spine.py --fix`: criteria to `- [ ] <ID> ...`, alias headings such as `## Exit Test` to `## Definition Of Done`, status synonyms such as in progress to active) and blocks only on a missing Status, Status column or criterion; `--strict` stays advisory there. `validate_spine.py` also warns when Definition Of Done has no checkbox; a github ledger without Status already fails (`references/structural-validation.md`).
+
 ## Authority By Artifact
 
 Do not treat one artifact as authoritative for every kind of truth:

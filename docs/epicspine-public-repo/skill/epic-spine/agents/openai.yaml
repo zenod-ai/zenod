@@ -1,4 +1,0 @@
-interface:
-  display_name: "EpicSpine"
-  short_description: "Connected spine hierarchy for durable delivery"
-  default_prompt: "Use $epic-spine to create or resume a connected root or branch spine, reconcile its execution cursor and backlog, and leave a durable rollup."

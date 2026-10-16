@@ -41,9 +41,9 @@ Delegated spine section: <section + authority, or none>
 
 ## Acceptance Criteria
 
-- [ ] <observable ticket-level criterion>
-- [ ] Method justified by recorded discovery (default 15 minutes in current/named relevant repositories/services); uncertainty and unsearched areas disclosed. PORT/DUPLICATE sources inspected first; required adaptations explained and validated.
-- [ ] <observable ticket-level criterion>
+- [ ] AC-1 <observable ticket-level criterion>
+- [ ] AC-2 Method justified by recorded discovery (default 15 minutes in current/named relevant repositories/services); uncertainty and unsearched areas disclosed. PORT/DUPLICATE sources inspected first; required adaptations explained and validated.
+- [ ] AC-3 <observable ticket-level criterion>
 
 ## Validation
 
