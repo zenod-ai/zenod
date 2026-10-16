@@ -1,0 +1,1 @@
+Dispatch profile: Sonnet 5.5 (claude-sonnet-5-5) for workers, reviewers and researchers; with EPICSPINE_DISPATCHER set, the seat comes from the dispatcher and target.model is always set to claude-sonnet-5-5; else native subagent on Sonnet 5.5; never another model unless the user asks

@@ -1,10 +1,7 @@
-<!-- epicspine:begin {version} -->
+<!-- epicspine:begin repo-1 -->
 ## EpicSpine — always on, every task, every agent
-Root spine: {root_spine}. Read its Current State and Operating Learnings before acting.
-1. Bind first: first reply names role (default: delivery manager) and `Learnings in force:`.
-2. The manager never implements. Any work beyond answering a question (code, docs, research) goes to a worker.
-3. Workers: T3 delegate_task → OpenCode instance offering opencode-go/deepseek-v4.1-flash, reasoning high, own worktree. Do not use native subagent tools. If T3 or the model is unavailable: stop, say so, propose a substitute.
-4. Integrate: verify diff and checks yourself, fast-forward main, run tests, revert on red, remove the worktree.
-5. Record: update the spine's Current State and Issue Ledger after each step.
-Precedence: user per-task instruction > this block > skill defaults. Details: skill/epic-spine/SKILL.md.
+Root spine: {root_spine}. Read {read} before acting.
+Shared EpicSpine rules (bind, dispatch, integrate, links) come from the epic-spine skill's always-on block, injected each session; if it was not, read `assets/global-block.md` in the skill dir (usually `~/.agents/skills/epic-spine`).
+Repo values (`Dispatch profile:`, `Integration policy:`, `Skill updates:`) in the root spine or AGENTS.md override skill defaults.
+Precedence: user per-task instruction > repo values > skill block.
 <!-- epicspine:end -->

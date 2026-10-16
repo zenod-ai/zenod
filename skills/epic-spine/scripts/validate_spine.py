@@ -112,6 +112,12 @@ ACCEPTANCE_SURFACES = {"browser", "cli", "library", "infrastructure", "documenta
 ACTIVE_STATUSES = {"active", "blocked", "review", "testing"}
 LEDGER_STATUSES = {"draft", "ready", "active", "blocked", "review", "testing", "done", "superseded", "deferred"}
 DECISION_OUTCOMES = {"accepted", "rejected", "superseded"}
+CHECKBOX_RE = re.compile(r"(?m)^\s*- \[[ xX]\]")
+TRACKABLE_STATUSES = ("draft", "ready", "active", "blocked", "done", "deferred")
+ID = r"[A-Z][A-Z0-9]*-\d+"
+CRITERION_RE = re.compile(rf"- \[[ xX]\] ({ID})(?=\s|$)")
+ITEM_RE = re.compile(r"(?:[-*]|\d+[.)])[ \t]+\S")
+DOD_ALIAS_RE = re.compile(r"(?i)exit test.*|acceptance( criteria)?|definition of done")
 EMPTY_VALUES = {"", "-", "none", "n/a", "tbd", "<sha>", "<task/thread/agent>"}
 
 
@@ -712,6 +718,8 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
     text = path.read_text(encoding="utf-8")
     fields = parse_fields(text)
     sections = parse_sections(text)
+    if "Status" not in fields and (moved := parse_key_values(sections.get("Current State", "")).get("Status")):
+        fields["Status"] = moved  # --fix moves a header Status into Current State; either place satisfies the field
     profile = normalize(fields.get("Spine profile", "full")).lower()
     compact = profile == "compact"
     if profile not in {"full", "compact"}:
@@ -764,6 +772,8 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
     for name in ("Mission", "Definition Of Done", *(() if compact else ("Validation Evidence",))):
         if name in sections and is_empty(sections[name]):
             warnings.append(f"unresolved required section: {name}")
+    if not is_empty(done := sections.get("Definition Of Done", "")) and not CHECKBOX_RE.search(done):
+        warnings.append("Definition Of Done has no '- [ ]'/'- [x]' checkbox lines; dashboards read only those")
 
     spine_type = normalize(fields.get("Spine Type", "")).lower()
     root_spine = normalize(fields.get("Root spine", "")).lower()
@@ -991,6 +1001,76 @@ def validate(path: Path, *, dialect: str = "auto") -> dict[str, object]:
     return result_for(validate_local(path, dialect=dialect))
 
 
+def trackable_status(value: str) -> bool:
+    word = re.match(r"[a-z]+", value.lower().lstrip("`*_ "))
+    return bool(word) and word.group() in TRACKABLE_STATUSES and "|" not in value
+
+
+def doc_kind(text: str) -> str | None:
+    fields, sections = parse_fields(text), parse_sections(text)
+    return "spine" if "Current State" in sections or "Spine ID" in fields else "ticket" if "Ticket ID" in fields else None
+
+
+def criteria(text: str, names: tuple[str, ...]) -> list[tuple[int, str]]:
+    """Top-level list items (line index, line) under the named ``##`` sections; indented lines continue an item,
+    other prose, tables, HTML comments and code fences are not criteria."""
+    items, section, comment, fence = [], "", False, False
+    for index, line in enumerate(text.split("\n")):
+        if heading := re.match(r"## (.+?)[ \t]*$", line):
+            section = normalize(heading.group(1))
+        elif comment or line.lstrip().startswith("<!--"):
+            comment = "-->" not in line.split("<!--")[-1]
+        elif line.lstrip().startswith("```"):
+            fence = not fence
+        elif section in names and not fence and ITEM_RE.match(line):
+            items.append((index, line))
+    return items
+
+
+def trackable(path: Path) -> dict[str, object]:
+    """Check the machine-read contract (spine-model.md) of a spine or ticket; independent of --strict, tolerant of malformed docs."""
+    if not path.is_file():
+        return {"path": str(path), "trackable": False, "missing": ["file not found"], "warnings": []}
+    text = path.read_text(encoding="utf-8", errors="replace")
+    fields, sections = parse_fields(text), parse_sections(text)
+    kind = doc_kind(text)
+    spine = kind == "spine"
+    alias = next((name for name in sections if DOD_ALIAS_RE.fullmatch(name)), None)
+    names = (alias if alias and "Definition Of Done" not in sections else "Definition Of Done",) if spine else ("Acceptance Criteria", "Acceptance")
+    if not (kind or "Status" in fields or any(name in sections for name in names)):
+        return {"path": str(path), "trackable": False, "missing": ["not a spine or ticket (no ## Current State)"], "warnings": []}
+    status = parse_key_values(sections.get("Current State", "")).get("Status", "") if spine else fields.get("Status", "")
+    where = "Current State Status" if spine else "Status"
+    allowed = "|".join(TRACKABLE_STATUSES)
+    shown = status if len(status) <= 60 else status[:57] + "..."
+    missing = [] if trackable_status(status) else [f"{where} '{shown}': start it with one of {allowed}" if status else f"{where} missing: add 'Status: <{allowed}>'"]
+    if spine and names[0] != "Definition Of Done":
+        missing.append(f"heading '## {alias}' must be '## Definition Of Done'")
+    items, heads = criteria(text, names), "/".join(names)
+    matches = [(index, CRITERION_RE.match(line)) for index, line in items]
+    bad = [index + 1 for index, match in matches if not match]
+    ids = [match.group(1) for _, match in matches if match]
+    if not items:
+        missing.append(f"criteria `- [ ] ID text` under ## {heads}")
+    if bad:
+        missing.append(f"{len(bad)} criteria under ## {heads} not `- [ ] ID text` (lines {', '.join(map(str, bad[:5]))})")
+    if dups := sorted({i for i in ids if ids.count(i) > 1}):
+        missing.append("duplicate criterion IDs: " + ", ".join(dups))
+    if spine and "Issue Ledger" in sections:
+        header, rows = parse_table(sections["Issue Ledger"])
+        if normalize(fields.get("Ticket backend", "github")).lower() != "local":
+            if "Status" not in header:
+                missing.append("Issue Ledger Status column")
+        for row in rows if "Ticket" in header else []:
+            ref = dict(zip(header, row))["Ticket"]
+            target = resolve_local_link(path, ref)
+            ticket = target.read_text(encoding="utf-8", errors="replace") if target and target.is_file() else ""
+            if not trackable_status(parse_fields(ticket).get("Status", "")):
+                missing.append(f"Status in ticket {ref}")
+    doc = validate_local(path) if spine else None
+    return {"path": str(path), "trackable": not missing, "missing": missing, "warnings": doc.errors + doc.warnings if doc else []}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path)
@@ -1002,8 +1082,22 @@ def main() -> int:
         action="store_true",
         help="Validate local parent/root links, reciprocal registration, cycles, IDs, and multiple roots across all paths",
     )
+    parser.add_argument("--trackable", action="store_true", help="Check only the machine-read contract (Status, DoD/acceptance checkbox, ledger Status); exit 0 iff all pass")
+    parser.add_argument("--fix", action="store_true", help="Rewrite the given spines/tickets in place to the trackable contract (see spine_fix.py); never invents Status or criteria")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable results")
     args = parser.parse_args()
+
+    if args.fix:
+        import spine_fix
+        return spine_fix.main(args.paths)
+
+    if args.trackable:
+        results = [trackable(path) for path in args.paths]
+        if args.json:
+            print(json.dumps(results, indent=2))
+        for result in [] if args.json else results:
+            print(f"{result['path']}: " + ("trackable" if result["trackable"] else "not trackable: " + "; ".join(result["missing"])))
+        return int(not all(result["trackable"] for result in results))
 
     documents = [validate_local(path, dialect=args.dialect) for path in args.paths]
     if args.graph:

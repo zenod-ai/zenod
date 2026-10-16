@@ -40,7 +40,7 @@ Evidence: [Protocol draft](../protocol.md#draft)
 
 ## Acceptance
 
-State the observable acceptance here.
+- [ ] AC-1 State the observable acceptance here.
 ```
 
 Ticket ID is stable and case-sensitive, starts with a letter, and otherwise contains letters, digits, underscore, hyphen or dot. IDs must be unique across the board's referenced files. Aggregate consumers scope local IDs by owning spine/board; a file rename does not change its identity. The reader checks referenced records, not an unrestricted folder inventory.

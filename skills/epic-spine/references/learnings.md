@@ -29,26 +29,36 @@ The user's current instruction > deeper (more specific) learning > shallower lea
 
 A newly bound agent's FIRST reply includes `Learnings in force:` — at most 5 lines naming the learnings it will apply to this task. No recital of non-matching learnings.
 
-## Proposing a learning
+## Saving a learning
 
-The agent proposes when (a) the user gives the same correction or instruction twice, (b) the user states a general preference (`always…`, `never…`, `I prefer…`), or (c) the agent just paid a real cost for a pitfall. Append at the END of the reply, max 3 lines:
+Triggers: the user repeats a correction (same correction twice, or "again" / "I told you"), or states a general preference (`always…`, `never…`, `I prefer…`). The agent writes the learning **immediately, without asking**, in the same turn, then announces it in one line at the end of the reply:
 
 ```
-Propose learning (<scope: root | branch X>): <one-line rule> — record it?
+Saved learning L-<n>: <the rule> (say 'undo' to remove)
 ```
 
-The agent never writes a learning silently. Proposals are rare: at most one per reply, and none in consecutive replies.
+- Scope: the deepest spine the rule applies to (a branch spine for work inside it; the root **Always** for a repo-wide rule, the **Scoped index** with a pointer for a trigger-specific one). `L-<n>` is the next number in that section; replace a `- (none yet)` placeholder. If root **Always** would pass 12 lines, move the least useful row to a child spine or the Scoped index.
+- No spine in the repo: write nothing and offer a spine once (global block rule 3).
+- `undo` (or "remove that") deletes the line; no trace. A reversed preference supersedes the old line (`supersedes L-<n>`).
+- Commit it with the next spine update, per `Integration policy:`. Never throttle; one-off task instructions are not learnings.
 
-On **yes**, the spine steward writes the learning at the broadest correct scope; if unsure between root and branch, ask in the same line. On **no**, record a `rejected` row in Decisions so it is not re-proposed.
+## Reversals: sweep the repo for the old rule
+
+Repo text outranks the skill (repo values > global block), so a reversed rule that survives anywhere in the repo keeps steering agents (2026-10-16: a profile still said "always dispatch to DeepSeek" long after the user dropped it). When a saved learning changes or reverses an earlier rule (a model choice, a dispatch target, a process step):
+
+- In the same commit, search the repo (`git grep -i`) for the old rule and fix every **current** instruction that still says it: spines (Next action, Operating Learnings, Current State), operator profiles, `AGENTS.md` / `CLAUDE.md` / `GEMINI.md`, dispatch briefs, templates, scripts' help text.
+- Leave history alone (logs, closed ledger rows, changelog, decision records), but if a history line could read as current guidance, mark it `superseded` or `(historical)`.
+- Vendored copies of the skill itself are not edited by hand; SessionStart flags old ones (`references/session-sync.md`) for the user to update or remove.
+- Name what was fixed in the `Saved learning` reply.
 
 ## Promotion and pruning
 
-- A scoped learning confirmed in 2+ sibling branches is proposed for promotion to the parent.
-- A learning not confirmed for 180 days is proposed for pruning; never auto-delete it.
+- A scoped learning confirmed in 2+ sibling branches is promoted to the parent by the steward.
+- A learning not confirmed for 180 days is flagged to the user for pruning; never auto-delete it.
 
 ## Roles
 
-Any bound agent may PROPOSE; only the spine steward (typically the delivery manager) WRITES. Workers hand learning candidates back in their handoff as `Learning candidates:` lines.
+The agent the user is talking to (typically the delivery manager, the spine steward) writes. A worker that hears a qualifying correction hands it back as a `Learning candidates:` line; the manager writes it without asking and announces it.
 
 ## Worked example
 
