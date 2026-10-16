@@ -111,6 +111,7 @@ Next action: hold the deployed M2 milestone stable and observe ordinary use. Rou
 Auto-deploy: [PR #964](https://github.com/zenod-ai/zenod/pull/964) (`ci/fleet-auto-deploy`, rebased on `main` 2026-10-10, open, not merged) wires push-to-main to roll Zenod production (`zenod-mt`, `cloud.zenod.dev`) per D27. Inert until Jordi adds the repo secrets `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE`; merged code is not deployed proof.
 Blockers: none for the completed M2 basic-memory milestone. Production deployment of newer `main`, real channel sends, live billing, public signup and destructive migrations remain named later human gates. Public signup stays closed.
 Housekeeping: EpicSpine block migrated to thin repo-1 (shared rules from skill) (2026-10-14)
+Branch cleanup (2026-10-16): 23 stale remote branches archived as tags and deleted (plus 6 earlier), 43 → 20 remote branches besides main; index in [docs/BRANCH_ARCHIVE.md](BRANCH_ARCHIVE.md).
 
 ## Execution Cursor
 
@@ -239,6 +240,7 @@ The voice notes are evidence and intent, not a prose dump to duplicate here. The
 - `review` means implementation complete, PR open, and required automated checks passing.
 - `testing` means the exact commit is available on a named test surface and acceptance validation is in progress.
 - `done` means acceptance passed, evidence linked, residual risk recorded, and the spine reconciled.
+- Branch archive: stale branches are kept as `archive/*` tags before deletion; the index and restore commands are in [docs/BRANCH_ARCHIVE.md](BRANCH_ARCHIVE.md).
 
 ## Human Gates
 
