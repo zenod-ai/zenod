@@ -1,6 +1,6 @@
 # Zenod deployments and upgrades
 
-Status: current — bounded production upgrade verified; deployment scope enforced
+Status: active (current) — bounded production upgrade verified; deployment scope enforced
 Updated: 2026-10-10
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
@@ -40,6 +40,10 @@ Approved work: current bounded upgrade completed; future upgrades follow applica
 Next action: retain recovery receipt and disabled unrelated automatic deployments; repository separation and broader acceptance remain follow-ups.
 
 Prior repair `56c815f38aab6790b8afc165a8001e8fc0b5732b` was verified live on `ghcr.io/zenod-ai/zenod@sha256:4baf0239c48c0aba3acbab797d3ba441c5f10bee2bc1c82a1f5bb388a623e342`. Retained job 10083 completed; the queue was empty (zero active/waiting) at verification. Actual container `0ba7100e3ec6` OCI revision matched, with one running task, completed Swarm update, health OK, unchanged mount and 52 non-SHA environment entries. Private Phylax stayed on `sha256:1ae6607fb5cabf059a7058ae0b80abc2a492dab32d034b903dc920b73759b53e`. See the correction below for the cause and permanent trigger pause.
+
+## Definition Of Done
+
+- [ ] TBD — owner to define (added by SPINE-CLEANSE 2026-10-16)
 
 ## Upgrade and undo
 
