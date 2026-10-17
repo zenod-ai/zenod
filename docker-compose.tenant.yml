@@ -36,6 +36,14 @@
 # execution lane (T15/#463), and the X/Reddit/email send connectors for outbound
 # (they stay "not connected" until wired). Neither blocks a tenant booting.
 
+# I2-8: cap container log growth (json-file). §8-safe — self-host benefits too.
+# Without this, chatty agents can fill a small VPS disk over weeks.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 networks:
   # Private per-tenant network — the tenant boundary. Compose creates it; it is
   # NOT external and NOT shared. Only services listed on it can talk.
@@ -57,6 +65,7 @@ x-agent-common: &agent-common
   image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
   pull_policy: always
   restart: unless-stopped
+  logging: *logging
   networks: [tenant-net]
   environment: &agent-env
     ZENOD_DATA_DIR: /data
@@ -77,6 +86,7 @@ services:
     image: ghcr.io/zenod-ai/zenod:${ZENOD_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
+    logging: *logging
     networks: [tenant-net, dokploy-network]
     volumes:
       - console-data:/data
