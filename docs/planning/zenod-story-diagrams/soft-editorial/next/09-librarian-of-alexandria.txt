@@ -1,0 +1,43 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 09 in the soft-editorial storyboard
+
+Primary request: Restyle the Zenodotus / Library of Alexandria origin slide into the approved canonical Zenod soft-editorial identity, keeping the existing composition, narrative and copy.
+
+Input images:
+- Image 1 role: THE canonical visual identity and style anchor. Copy its typography (oversized bold white contemporary sans serif headline, quiet elegant supporting sans serif), its near-black page background with generous dark negative space, its palette (neutral cool white, soft gray graphite, charcoal, electric cyan connectors, one tiny lime accent), and above all its illustration technique: soft flat contemporary editorial drawing, quietly drawn faces with restrained thin contour lines, broad pale planes, gently fading edges, faint architectural and cartographic traces dissolving into the dark page. Do NOT copy its layout, diagram, furniture or wording.
+- Image 2 role: content and composition source (edit target). Keep its scene, its arrangement and its copy, but replace its illustration and typographic treatment with Image 1's canonical identity.
+
+Identity rules, from the canonical set (follow exactly):
+- This is SOFT FLAT CONTEMPORARY EDITORIAL DRAWING. It is not a photograph of a statue, not a 3D bust, not a currency engraving, not a vintage etching.
+- No deep black eye sockets, no sharp stone specular highlights, no dense crosshatching, no worn paper, no patina, no ornate cabinetry, no antique display props.
+- No sepia, salmon, beige, brown, gold or cream. Neutral cool white, soft gray graphite, charcoal, electric cyan, and only a tiny lime accent.
+- Draw the librarian's face with the canonical soft technique: shallow tonal range, fine flowing hair and beard contours, broad flat cool-white robe planes, gently dissolving lower edges.
+- Most of the page stays dark negative space. Any library architecture is drawn as faint line fragments that dissolve into the near-black background rather than filled bright surfaces.
+- Only ONE face in the whole image: the librarian's. Every waiting visitor must have a completely blank, featureless head and body — no eyes, no nose, no mouth, no hair detail, no clothing detail beyond a soft planar shape. No modern clothing, no modern people.
+
+Composition and scene (keep from the content source):
+- 16:9 landscape, near-black page background, premium website-section mockup.
+- Minimal consistent top navigation, same wording and order as the content source: Zenod, Why memory, Examples, The librarian, FAQ, Sign in, Get started.
+- Multi-tone headline on ONE single unbroken line across the top, upper left: "ZENODOTUS" in white, "· THE LIBRARIAN OF ALEXANDRIA" in electric cyan. Never one flat colour, never wrapped onto two lines, never drop or abbreviate a word.
+- Exactly one cool-gray subtitle line directly under the headline.
+- One dominant visual idea: a GATE / threshold across the middle of the composition. The library is beyond the gate, the queue of visitors is on the near side.
+- Zenodotus stands at the gate, turned slightly toward the queue, holding a rolled papyrus. He is the only realised character and the only face. Draw him with the canonical librarian's classical dignity and rendering: upright three-quarter figure, calm face, shallow tonal range, fine flowing hair and beard contours, broad flat cool-white robe planes, gently dissolving lower edge. He must read as the SAME character family as the librarian in Image 1, not a modern cartoon figure.
+- Waiting on the near side: a restrained queue of visitors, quiet, generic, faceless and clearly subordinate — four to six minimal figures reading as a line, not a crowd. Draw them with the same canonical technique as the librarian: pale cool-white and soft-gray planar forms, restrained thin contour lines, softly fading edges. They must NOT be heavy flat black silhouettes or cartoon people.
+- Behind the gate: the library drawn only as faint cool-white shelf-niche and colonnade line work that dissolves into the near-black page. It must read as the library interior without becoming a bright wall of white.
+- Three small legible cyan callouts, each tied to the librarian with a short electric-cyan line:
+  - "INGESTION" — a visitor hands him what they brought, and an explicit electric-cyan arrow WITH A CLEAR ARROWHEAD enters the gate from the left, pointing inward.
+  - "ORGANIZATION" — a small ordered shelf niche behind him where each item is placed in its place.
+  - "RETRIEVAL" — at the end of the queue a visitor receives the exact item back, and an explicit electric-cyan arrow WITH A CLEAR ARROWHEAD leaves the gate to the right, pointing outward.
+- Direction must be unmistakable at a glance: a single clean electric-cyan connector line starts on the left at INGESTION, passes THROUGH the gate, and continues to the right to RETRIEVAL, ending in exactly two clear cyan arrowheads — one pointing in through the gate, one pointing out of the gate. Long straight clean lines, not decorative outlines, not ambiguous, not a loop of lines.
+- One tiny lime accent only, used exactly once: on the returned scroll in RETRIEVAL. Do not use lime anywhere else.
+- No cyan may be spent outlining the gate or the labels; reserve cyan for the two directional connectors and the callout leaders.
+- Keep one dominant visual idea. No cards, no dashboards, no pricing, no competing diagrams.
+
+Text (verbatim):
+Headline: "ZENODOTUS · THE LIBRARIAN OF ALEXANDRIA"
+Subtitle: "The library was the place. The librarian made it usable."
+Required labels, exact, each short and fully legible on one line: "INGESTION", "ORGANIZATION", "RETRIEVAL"
+One small closing line, exact: "This is why the product is named Zenod."
+Tiny footer: "Conceptual illustration"
+
+Avoid: photoreal busts or statues, 3D render, engraved or etched linework, sepia, parchment, gold, brown, beige, cream, salmon, glossy SaaS cards, gradients that overpower the illustration, medieval-book clichés, dense text walls, fake URLs, invented dates, prices or receipts, scrambled or misspelled text, a duplicated or cloned librarian, second face, large crowds, costume drama, bright white filled architecture, or anything that makes the library building the hero instead of the librarian at the gate.
