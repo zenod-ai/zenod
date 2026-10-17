@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1678,initial-scale=1">
+<title>07 — Keep the books. Replace the librarian.</title>
+<link rel="stylesheet" href="../pattern.css">
+<style>
+  main{padding-top:36px}
+  h1{font-size:64px;margin:8px 0 10px;max-width:1180px}
+  .subtitle{font-size:19px;max-width:1040px}
+  .stage{height:540px;margin-top:16px}
+  .timeline{position:absolute;left:70px;right:70px;top:126px;height:1px;background:linear-gradient(90deg,rgba(131,229,237,.1),rgba(131,229,237,.75),rgba(131,229,237,.1))}
+  .timeline:after{content:"";position:absolute;right:0;top:-4px;border:5px solid transparent;border-left-color:var(--cyan)}
+  .timeline-label{position:absolute;right:68px;top:86px;color:#6d8388;font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+  .time-dot{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--ink);border:2px solid var(--cyan);top:120px;box-shadow:0 0 0 5px rgba(131,229,237,.08)}
+  .meaning{position:absolute;top:8px;width:360px;height:224px;border:1px solid var(--line-strong);border-radius:18px;background:linear-gradient(145deg,rgba(19,31,34,.92),rgba(11,18,20,.84));box-shadow:0 24px 60px rgba(0,0,0,.24)}
+  .meaning.marked{border-color:rgba(131,229,237,.62);box-shadow:0 0 0 1px rgba(131,229,237,.08),0 24px 60px rgba(0,0,0,.24)}
+  .meaning .head{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px 8px}
+  .meaning .when{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);font-weight:800}
+  .meaning h2{font-size:19px;line-height:1.06;letter-spacing:-.025em;margin:7px 0 0;color:var(--paper);font-weight:750}
+  .meaning .body{padding:4px 20px 16px}
+  .meaning .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}
+  .chip{border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:#c9d4d5;font-size:11px;background:rgba(255,255,255,.035)}
+  .chip.lime{border-color:rgba(186,255,88,.34);color:var(--lime);background:rgba(186,255,88,.055)}
+  .custodian{width:84px;height:84px;border-radius:50%;border:1px solid rgba(131,229,237,.34);background:radial-gradient(circle at 50% 40%,rgba(131,229,237,.15),rgba(131,229,237,.02) 65%);display:grid;place-items:center}
+  .custodian.next{border-color:rgba(186,255,88,.35)}
+  .custodian svg{width:50px;height:50px;fill:none;stroke:#dce7e5;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+  .custodian.next svg{stroke:var(--lime)}
+  .originals{position:absolute;left:54px;right:54px;top:346px;height:136px;border:2px solid rgba(131,229,237,.62);border-left:0;border-radius:0 22px 22px 0;background:linear-gradient(90deg,rgba(131,229,237,.07),rgba(131,229,237,.012));padding:18px 24px 18px 30px}
+  .originals .boundary-label{position:absolute;left:28px;top:-14px;background:var(--ink);padding:0 9px;color:var(--cyan);font-size:11px;letter-spacing:.15em;text-transform:uppercase;font-weight:800}
+  .artifact-row{display:flex;gap:13px;margin-top:24px}
+  .artifact{flex:1;height:72px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035);padding:11px 13px;display:flex;align-items:center;gap:12px}
+  .artifact .icon{width:34px;height:34px;border-radius:10px;border:1px solid rgba(131,229,237,.3);display:grid;place-items:center;color:var(--cyan);font-size:10px;font-weight:800}
+  .artifact .name{font-size:12px;color:#dce5e5;font-weight:700}.artifact .sub{font-size:10px;color:#74868b;margin-top:3px}
+  .wave{display:flex;align-items:center;gap:3px;height:25px}.wave i{display:block;width:3px;border-radius:3px;background:var(--cyan);height:10px}.wave i:nth-child(2){height:22px}.wave i:nth-child(3){height:15px}.wave i:nth-child(4){height:25px}.wave i:nth-child(5){height:12px}.wave i:nth-child(6){height:19px}.wave i:nth-child(7){height:9px}
+  .source-line{position:absolute;width:1px;border-left:1px dashed rgba(131,229,237,.44);top:232px;height:114px}
+  .source-line .dot{position:absolute;left:-4px;top:0;width:7px;height:7px;border-radius:50%;background:var(--cyan)}
+  .source-line .connect{position:absolute;left:7px;top:50px;color:#7b9296;font-size:10px;white-space:nowrap;letter-spacing:.02em}
+  .caption{position:absolute;left:54px;right:54px;top:500px;color:#95a6aa;font-size:13px;line-height:1.35}
+  .caption strong{color:#dce7e5}
+</style>
+<body>
+<div class="slide">
+  <header><div class="wordmark">ZENOD</div><nav class="nav"><span class="active">Why memory</span><span>Examples</span><span>The librarian</span><span>FAQ</span><span>Sign in</span><span class="cta">Get started</span></nav></header>
+  <main>
+    <div class="eyebrow">YOUR ORIGINALS OUTLIVE THE TOOL</div>
+    <h1>Keep the books. <span class="cyan">Replace the librarian.</span></h1>
+    <p class="subtitle">Your originals stay fixed. Future custodians can build new meaning from them.</p>
+    <div class="stage">
+      <div class="timeline"></div><div class="timeline-label">Time →</div>
+      <div class="time-dot" style="left:388px"></div><div class="time-dot" style="left:1118px"></div>
+
+      <section class="meaning marked" style="left:216px">
+        <div class="head">
+          <div><div class="when">Today</div><h2>Current understanding</h2></div>
+          <div class="custodian" aria-label="Zenod librarian">
+            <svg viewBox="0 0 60 60" aria-hidden="true"><path d="M24 19c0-7 5-12 12-12s12 5 12 12"/><path d="M26 20c0-6 4-10 10-10s10 4 10 10-4 11-10 11-10-5-10-11Z"/><path d="M25 28c-8 4-13 13-14 27h38c-1-14-6-23-14-27"/><path d="M22 35c5 4 13 4 18 0" class="glow"/><path d="M31 10c7 0 12 4 15 9" class="lime"/></svg>
+          </div>
+        </div>
+        <div class="body"><span class="small-caps">Zenod · first custodian</span><div class="chips"><span class="chip">Preferences</span><span class="chip">Projects</span><span class="chip">Open questions</span><span class="chip lime">Grounded in your originals</span></div></div>
+      </section>
+
+      <section class="meaning" style="left:980px">
+        <div class="head">
+          <div><div class="when">In 10 years</div><h2>New understanding</h2></div>
+          <div class="custodian next" aria-label="Future custodian">
+            <svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 8 36 22l15 1-11 10 3 15-13-8-13 8 3-15L9 23l15-1 6-14Z"/><path d="M30 18v22M19 30h22" class="glow"/><circle cx="30" cy="30" r="4" class="lime"/></svg>
+          </div>
+        </div>
+        <div class="body"><span class="small-caps">Next custodian · new meaning state</span><div class="chips"><span class="chip">New connections</span><span class="chip">New priorities</span><span class="chip">New questions</span><span class="chip lime">Same raw data</span></div></div>
+      </section>
+
+      <div class="source-line" style="left:392px"><i class="dot"></i><span class="connect">linked to source</span></div>
+      <div class="source-line" style="left:1122px"><i class="dot"></i><span class="connect">linked to source</span></div>
+
+      <section class="originals">
+        <div class="boundary-label">YOUR ORIGINALS · UNCHANGED</div>
+        <div class="artifact-row">
+          <div class="artifact"><div class="icon"><span class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div><div><div class="name">Voice note</div><div class="sub">original audio</div></div></div>
+          <div class="artifact"><div class="icon">DOC</div><div><div class="name">Transcript</div><div class="sub">exact words preserved</div></div></div>
+          <div class="artifact"><div class="icon">DOC</div><div><div class="name">Source document</div><div class="sub">original file</div></div></div>
+          <div class="artifact"><div class="icon">IMG</div><div><div class="name">Photo</div><div class="sub">original image</div></div></div>
+        </div>
+      </section>
+
+      <p class="caption"><strong>The value of your raw thoughts is maintained by all your future agents.</strong> Zenod is just the first one.</p>
+    </div>
+  </main>
+  <footer><span>Illustrative concept · not a product screenshot</span><span class="concept">Conceptual workflow</span></footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zenod — Soft editorial v2</title>
+<style>
+  :root{--ink:#080d0f;--paper:#f4f6f7;--muted:#9eabb0;--cyan:#83e5ed;--lime:#baff58;--line:rgba(255,255,255,.13)}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--ink);color:var(--paper);font:16px/1.5 "Helvetica Neue",Helvetica,Arial,sans-serif}
+  header,main{max-width:1500px;margin:auto;padding:34px}header{border-bottom:1px solid var(--line)}
+  .eyebrow{color:var(--cyan);font-size:12px;letter-spacing:.18em;text-transform:uppercase;font-weight:700}
+  h1{font-size:clamp(36px,5vw,68px);line-height:1.02;letter-spacing:-.055em;margin:16px 0}p{color:var(--muted);max-width:900px}
+  a{color:var(--cyan)}nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:24px}
+  section{margin:0 0 68px;scroll-margin-top:24px}section img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line)}
+  h2{font-size:24px;letter-spacing:-.025em;margin-bottom:6px}.meta{color:#718389;font-size:12px;margin-top:8px}
+  .links{display:flex;gap:20px;flex-wrap:wrap}.note{color:#8b9a9e;font-size:13px}
+</style>
+<header><div class="eyebrow">Zenod / editable storyboard / v2</div><h1>One story. Eight slides. One pattern.</h1><p>This is the v2 editable iteration of the soft-editorial deck. Each slide is source-controlled HTML rendered to a 1678 × 937 PNG, so the type, labels and diagrams stay exact and can be revised without regenerating the whole image.</p><p class="note">Conceptual workflow only. No live product claims. Storage, orchestration and agent connectivity are illustrative until product validation.</p><div class="links"><a href="PATTERN.md">Pattern</a><a href="SPEC.md">Slide spec</a><a href="../soft-editorial/index.html">Previous storyboard</a></div><nav aria-label="Sections"><a href="#01">1. ownership</a><a href="#02">2. capture</a><a href="#03">3. value</a><a href="#04">4. organize</a><a href="#05">5. recall</a><a href="#06">6. agents</a><a href="#07">7. replace</a><a href="#08">8. choice</a></nav></header>
+<main>
+  <section id="01"><h2>1. Your memory. Your library. Your librarian.</h2><p>Multiple entry points; the user-owned account holds originals and connected knowledge; Zenod stores, organizes and connects.</p><img src="slides/01-ownership.png" alt="Slide 1: ownership"><div class="meta"><a href="slides/01-ownership.png">Full PNG</a> · <a href="slides/01-ownership.html">HTML</a></div></section>
+  <section id="02"><h2>2. One contact. A living memory.</h2><p>Voice note → Zenod → Google Drive original + Obsidian/GitHub connected knowledge → agent retrieves the cited transcript through MCP.</p><img src="slides/02-capture.png" alt="Slide 2: capture"><div class="meta"><a href="slides/02-capture.png">Full PNG</a> · <a href="slides/02-capture.html">HTML</a></div></section>
+  <section id="03"><h2>3. Cultivate your context. Extract more intelligence.</h2><p>Original evidence → connected meaning → useful work and action, with value and intelligence rising upward.</p><img src="slides/03-value.png" alt="Slide 3: value"><div class="meta"><a href="slides/03-value.png">Full PNG</a> · <a href="slides/03-value.html">HTML</a></div></section>
+  <section id="04"><h2>4. Keep the original. Connect the meaning.</h2><p>Voice, picture and text stay as raw evidence while the connected meaning layer grows above them, with source links back to each original.</p><img src="slides/04-organize.png" alt="Slide 4: organize"><div class="meta"><a href="slides/04-organize.png">Full PNG</a> · <a href="slides/04-organize.html">HTML</a></div></section>
+  <section id="05"><h2>5. Ask the librarian. Get back to the source.</h2><p>Ask a vague question, receive a grounded answer, and return to the exact original recording.</p><img src="slides/05-recall.png" alt="Slide 5: recall"><div class="meta"><a href="slides/05-recall.png">Full PNG</a> · <a href="slides/05-recall.html">HTML</a></div></section>
+  <section id="06"><h2>6. Every agent. One gateway. One library.</h2><p>Codex, Claude, Grok and other agents share one MCP gateway into the same user-owned library; retrieve and save are both visible.</p><img src="slides/06-agents.png" alt="Slide 6: agents"><div class="meta"><a href="slides/06-agents.png">Full PNG</a> · <a href="slides/06-agents.html">HTML</a></div></section>
+  <section id="07"><h2>7. Keep the books. Replace the librarian.</h2><p>The originals remain unchanged while future custodians create new meaning states from the same raw data over time.</p><img src="slides/07-replace.png" alt="Slide 7: replace"><div class="meta"><a href="slides/07-replace.png">Full PNG</a> · <a href="slides/07-replace.html">HTML</a></div></section>
+  <section id="08"><h2>8. Your library. Your choice.</h2><p>Google Drive or GitHub; self-host or hosted at $3 per month; the open-source engine stays the same and the library stays yours.</p><img src="slides/08-choice.png" alt="Slide 8: choice"><div class="meta"><a href="slides/08-choice.png">Full PNG</a> · <a href="slides/08-choice.html">HTML</a></div></section>
+</main>
+</body>
+</html>

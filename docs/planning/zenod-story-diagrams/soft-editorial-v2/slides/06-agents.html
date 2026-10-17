@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1678,initial-scale=1">
+<title>06 — Every agent. One gateway. One library.</title>
+<link rel="stylesheet" href="../pattern.css">
+<style>
+  main{padding-top:32px}
+  h1{font-size:60px;margin:10px 0 10px;max-width:1240px}
+  .subtitle{font-size:19px;max-width:1120px}
+  .stage{height:566px;margin-top:14px}
+
+  .wires{position:absolute;left:0;top:0;width:1562px;height:566px;overflow:visible}
+  .wires line{stroke:var(--cyan);stroke-width:1.6;opacity:.72}
+  .wires line.save{stroke:var(--lime);opacity:.6;stroke-dasharray:5 4}
+
+  /* ---------- centre hub ---------- */
+  .hub{position:absolute;left:621px;top:118px;width:320px;height:320px;border:2px solid rgba(131,229,237,.6);border-radius:22px;background:linear-gradient(160deg,rgba(231,246,242,.97),rgba(203,220,216,.92));box-shadow:0 30px 70px rgba(0,0,0,.4);padding:18px 20px;display:flex;flex-direction:column;align-items:center;color:#101b1d}
+  .hub .ring{position:absolute;left:50%;top:60px;transform:translateX(-50%);width:112px;height:112px;border-radius:50%;border:1px dashed rgba(24,52,56,.32)}
+  .hub .librarian{position:relative;width:66px;height:88px;margin-top:6px}
+  .hub .librarian svg{width:100%;height:100%}
+  .hub .librarian path,.hub .librarian circle{stroke:#16262a}
+  .hub .librarian .glow{stroke:#0d7f8c}
+  .hub .gate{margin-top:8px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:850;color:#101b1d}
+  .hub .badge{position:absolute;left:50%;top:-13px;transform:translateX(-50%);background:var(--lime);color:#0b1112;border-radius:999px;padding:5px 13px;font-size:11px;font-weight:850;letter-spacing:.12em}
+  .hublib{width:100%;margin-top:12px;border:1.5px solid rgba(13,127,140,.45);border-radius:14px;padding:12px 14px;background:rgba(255,255,255,.62)}
+  .hublib .t{font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:850;color:#0d7f8c}
+  .hubrow{display:flex;gap:8px;margin-top:9px}
+  .hubrow span{flex:1;border:1px solid rgba(22,38,42,.18);border-radius:9px;padding:7px 9px;font-size:11px;font-weight:700;color:#1b2c2f;background:rgba(255,255,255,.6);text-align:center}
+
+  /* ---------- agent chips ---------- */
+  .agent{position:absolute;width:200px;height:48px;border:1px solid var(--line-strong);border-radius:13px;background:linear-gradient(150deg,rgba(20,30,33,.95),rgba(11,18,20,.9));display:flex;align-items:center;gap:11px;padding:0 14px;box-shadow:0 16px 40px rgba(0,0,0,.3)}
+  .agent .nm{font-size:13px;font-weight:750;color:#e3ebec}
+  .agent .sub{font-size:10px;color:#7f9298;margin-top:2px}
+  .agent .logo{width:28px;height:28px;flex:0 0 28px}
+
+  .legend2{position:absolute;left:0;bottom:0;display:flex;flex-direction:column;gap:9px}
+  .legend2 .li{display:flex;align-items:center;gap:10px;font-size:11px;color:#85989d;letter-spacing:.02em}
+  .legend2 .swatch{width:34px;height:2px;background:var(--cyan);position:relative}
+  .legend2 .swatch:after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--cyan)}
+  .legend2 .swatch.lime{background:repeating-linear-gradient(90deg,var(--lime) 0 5px,transparent 5px 9px)}
+  .legend2 .swatch.lime:after{border-left-color:var(--lime)}
+  .contrib{position:absolute;right:0;bottom:6px;font-size:13px;color:#95a6aa;letter-spacing:.01em}
+  .contrib b{color:var(--lime);font-weight:750}
+</style>
+<body>
+<div class="slide">
+  <header><div class="wordmark">ZENOD</div><nav class="nav"><span>Why memory</span><span>Examples</span><span class="active">The librarian</span><span>FAQ</span><span>Sign in</span><span class="cta">Get started</span></nav></header>
+  <main>
+    <div class="eyebrow">MCP · SHARED CONTEXT</div>
+    <h1>Every agent. <span class="cyan">One gateway.</span> <span class="lime">One library.</span></h1>
+    <p class="subtitle">Your agents retrieve from — and write back to — one shared context through MCP.</p>
+    <div class="stage">
+      <svg class="wires" viewBox="0 0 1562 566" aria-hidden="true">
+        <defs>
+          <marker id="cyanEnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#83e5ed"/></marker>
+          <marker id="limeEnd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#baff58"/></marker>
+        </defs>
+        <line x1="781" y1="118" x2="781" y2="79"  marker-start="url(#cyanEnd)" marker-end="url(#cyanEnd)"/>
+        <line x1="621" y1="190" x2="315" y2="190" marker-start="url(#cyanEnd)" marker-end="url(#cyanEnd)"/>
+        <line x1="621" y1="400" x2="315" y2="400" marker-start="url(#cyanEnd)" marker-end="url(#cyanEnd)"/>
+        <line x1="781" y1="438" x2="781" y2="481" marker-start="url(#cyanEnd)" marker-end="url(#cyanEnd)"/>
+        <line class="save" x1="941" y1="400" x2="1247" y2="400" marker-start="url(#limeEnd)" marker-end="url(#limeEnd)"/>
+        <line class="save" x1="941" y1="190" x2="1247" y2="190" marker-start="url(#limeEnd)" marker-end="url(#limeEnd)"/>
+        <text x="452" y="182" fill="#83e5ed" font-size="11" letter-spacing=".14em" font-family="Helvetica Neue,Helvetica,Arial,sans-serif">RETRIEVE · WRITE</text>
+        <text x="1058" y="182" fill="#baff58" font-size="11" letter-spacing=".14em" font-family="Helvetica Neue,Helvetica,Arial,sans-serif">SAVE BACK</text>
+      </svg>
+
+      <div class="hub">
+        <span class="badge">MCP</span>
+        <span class="ring"></span>
+        <div class="librarian" aria-label="Zenod librarian line drawing">
+          <svg viewBox="0 0 120 160" role="img" aria-hidden="true">
+            <path d="M43 37c0-9 7-16 17-16s17 7 17 16-7 17-17 17-17-8-17-17Z"/>
+            <path d="M47 45c-5 12-5 25 2 34 5 7 12 10 11 18"/>
+            <path d="M73 45c5 12 5 25-2 34-5 7-12 10-11 18"/>
+            <path d="M48 82c-18 7-28 24-30 50h84c-2-26-12-43-30-50"/>
+            <path d="M39 99c12 9 29 9 42 0" class="glow"/>
+          </svg>
+        </div>
+        <div class="gate">Zenod gateway</div>
+        <div class="hublib">
+          <div class="t">Your library</div>
+          <div class="hubrow"><span>Originals</span><span>Connected knowledge</span></div>
+        </div>
+      </div>
+
+      <div class="agent" style="left:681px;top:31px"><span class="logo logo-codex"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5M15 7l5 5-5 5M13 5l-2 14"/></svg></span><span><span class="nm">Codex</span><span class="sub">coding agent</span></span></div>
+      <div class="agent" style="left:115px;top:166px"><span class="logo logo-claude"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg></span><span><span class="nm">Claude</span><span class="sub">desktop + API</span></span></div>
+      <div class="agent" style="left:115px;top:376px"><span class="logo logo-grok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 19 14-14M5 5l4 4M15 15l4 4"/><path d="m9 5 10 10"/></svg></span><span><span class="nm">Grok</span><span class="sub">grok bot</span></span></div>
+      <div class="agent" style="left:681px;top:481px"><span class="logo logo-mcp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4v16M16 4v16M8 8h8M8 16h8"/><path d="M4 12h4M16 12h4"/></svg></span><span><span class="nm">ChatGPT</span><span class="sub">workspace agent</span></span></div>
+      <div class="agent" style="left:1247px;top:166px"><span class="logo logo-obsidian"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 5 4-2 13H9L7 7l5-4Z"/><path d="M7 7 3 12l6 8M17 7l4 5-6 8M12 3v17"/></svg></span><span><span class="nm">Cursor</span><span class="sub">editor agent</span></span></div>
+      <div class="agent" style="left:1247px;top:376px"><span class="logo logo-drive"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 6 0 6 10-3 5H6l-3-5 6-10Z"/><path d="M9 4 3 14M15 4l6 10M6 19l6-10 6 10"/></svg></span><span><span class="nm">Your other agents</span><span class="sub">anything on MCP</span></span></div>
+
+      <div class="legend2">
+        <div class="li"><span class="swatch"></span>Retrieve from your library, and write back to it</div>
+        <div class="li"><span class="swatch lime"></span>Save shared findings into the same context</div>
+      </div>
+      <div class="contrib"><b>Everybody contributes to your context.</b> One gateway, one library, no private copies.</div>
+    </div>
+  </main>
+  <footer><span>Illustrative concept · not a product screenshot</span><span class="concept">Conceptual workflow</span></footer>
+</div>
+</body>
+</html>

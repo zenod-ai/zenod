@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1678,initial-scale=1">
+<title>04 — Keep the original. Connect the meaning.</title>
+<link rel="stylesheet" href="../pattern.css">
+<style>
+  main{padding-top:34px}
+  h1{font-size:62px;margin:10px 0 12px;max-width:1240px}
+  .subtitle{font-size:20px;max-width:1100px}
+  .stage{height:520px;margin-top:16px}
+
+  /* ---------- left: raw inputs ---------- */
+  .inputs{position:absolute;left:0;top:26px;width:352px}
+  .input{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.04);padding:14px 16px}
+  .input + .input{margin-top:13px}
+  .input .glyph{width:42px;height:42px;border-radius:11px;border:1px solid rgba(131,229,237,.32);display:grid;place-items:center;flex:0 0 42px}
+  .input .kind{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#829298;font-weight:750}
+  .input .said{font-size:13px;color:#dce5e5;margin-top:4px;font-weight:650}
+  .inputs-label{position:absolute;left:0;top:0;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#829298;font-weight:750}
+
+  /* ---------- centre: the librarian ---------- */
+  .connector{position:absolute;left:352px;top:190px;width:70px}
+  .connector-two{position:absolute;left:508px;top:190px;width:86px}
+  .libwrap{position:absolute;left:428px;top:96px;width:112px;text-align:center}
+  .libwrap .librarian{margin:0 auto;width:88px;height:118px}
+  .libwrap .who{margin-top:6px;font-size:11px;font-weight:800;letter-spacing:.24em}
+  .libwrap .act{margin-top:6px;font-size:10px;color:#8298a0;letter-spacing:.05em;line-height:1.35}
+
+  /* ---------- right: the two-layer stack ---------- */
+  .stack{position:absolute;left:646px;top:0;width:916px}
+  .layerbox{position:relative;border:1px solid var(--line);border-radius:18px;background:linear-gradient(150deg,rgba(22,33,36,.95),rgba(11,18,20,.86));padding:18px 22px}
+  .layerbox.meaning{border-color:rgba(186,255,88,.34)}
+  .layerbox.raw{margin-top:86px;border-color:rgba(131,229,237,.34);padding:16px 22px 14px}
+  .layerbox .lname{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:800}
+  .layerbox.meaning .lname{color:var(--lime)}
+  .layerbox.raw .lname{color:var(--cyan)}
+  .coll{margin-top:12px;font-size:19px;font-weight:760;letter-spacing:-.02em}
+  .groups{display:flex;gap:12px;margin-top:14px}
+  .group{flex:1;border:1px solid var(--line);border-radius:13px;padding:12px 14px;background:rgba(255,255,255,.035)}
+  .group h3{margin:0 0 9px;font-size:13px;font-weight:750;color:#dde6e6;letter-spacing:-.01em}
+  .group .lines{display:flex;flex-direction:column;gap:7px}
+  .gline{height:5px;border-radius:3px;background:rgba(255,255,255,.13)}
+  .gline.hot{background:rgba(186,255,88,.5)}
+  .prefs{display:flex;gap:8px;margin-top:14px}
+  .pref{border:1px solid rgba(186,255,88,.3);color:var(--lime);background:rgba(186,255,88,.06);border-radius:999px;padding:5px 11px;font-size:11px}
+  .thumbs3{display:flex;gap:14px;margin-top:12px}
+  .th{flex:1;height:66px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);display:flex;align-items:center;gap:11px;padding:0 13px}
+  .th .mini{width:30px;height:30px;border-radius:9px;border:1px solid rgba(131,229,237,.3);display:grid;place-items:center}
+  .th .t{font-size:11px;color:#c9d4d5;line-height:1.3}
+  .th .t b{display:block;font-size:10px;color:#7f9298;letter-spacing:.1em;text-transform:uppercase;font-weight:750;margin-bottom:3px}
+  .srclink{position:absolute;width:1px;border-left:1px dashed rgba(131,229,237,.5);top:232px;height:70px}
+  .srclink .dot{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:var(--cyan)}
+  .caption{position:absolute;left:646px;top:470px;font-size:12px;color:#95a6aa;letter-spacing:.02em}
+  .caption b{color:var(--lime);font-weight:750}
+</style>
+<body>
+<div class="slide">
+  <header><div class="wordmark">ZENOD</div><nav class="nav"><span>Why memory</span><span class="active">Examples</span><span>The librarian</span><span>FAQ</span><span>Sign in</span><span class="cta">Get started</span></nav></header>
+  <main>
+    <div class="eyebrow">GROUNDED BY FACTS</div>
+    <h1>Keep the original. <span class="cyan">Connect the meaning.</span></h1>
+    <p class="subtitle">Raw evidence stays grounded. Connected meaning builds on top of it.</p>
+    <div class="stage">
+      <div class="inputs-label">What you captured</div>
+      <div class="inputs" style="top:26px">
+        <div class="input">
+          <span class="glyph"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <span><span class="kind">Voice</span><span class="said">I loved the light</span></span>
+        </div>
+        <div class="input">
+          <span class="glyph"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#83e5ed" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg></span>
+          <span><span class="kind">Picture</span><span class="said">Flat listing</span></span>
+        </div>
+        <div class="input">
+          <span class="glyph"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#83e5ed" stroke-width="1.5"><path d="M6 3h9l5 5v13H6z"/><path d="M9 12h7M9 16h5M9 8h4"/></svg></span>
+          <span><span class="kind">Text</span><span class="said">The commute matters</span></span>
+        </div>
+      </div>
+
+      <div class="arrow" style="left:352px;top:190px;width:66px"></div>
+      <div class="libwrap">
+        <div class="librarian" aria-label="Zenod librarian line drawing">
+          <div class="halo"></div>
+          <svg viewBox="0 0 120 160" role="img" aria-hidden="true">
+            <path d="M43 37c0-9 7-16 17-16s17 7 17 16-7 17-17 17-17-8-17-17Z"/>
+            <path d="M47 45c-5 12-5 25 2 34 5 7 12 10 11 18"/>
+            <path d="M73 45c5 12 5 25-2 34-5 7-12 10-11 18"/>
+            <path d="M48 82c-18 7-28 24-30 50h84c-2-26-12-43-30-50"/>
+            <path d="M39 99c12 9 29 9 42 0" class="glow"/>
+            <path d="M32 119h18c3 4 5 8 5 13 0 5-5 9-11 9H32c-5 0-8-4-8-9 0-6 3-10 8-13Z" class="lime"/>
+          </svg>
+        </div>
+        <div class="who">ZENOD</div>
+        <div class="act">connects each thought<br>to its original</div>
+      </div>
+      <div class="arrow lime" style="left:536px;top:190px;width:104px"></div>
+
+      <div class="stack">
+        <div class="layerbox meaning">
+          <div class="lname">Connected meaning</div>
+          <div class="coll">Finding a home</div>
+          <div class="groups">
+            <div class="group"><h3>What matters</h3><div class="lines"><span class="gline hot"></span><span class="gline"></span><span class="gline"></span></div></div>
+            <div class="group"><h3>Places considered</h3><div class="lines"><span class="gline"></span><span class="gline"></span><span class="gline"></span></div></div>
+            <div class="group"><h3>Open questions</h3><div class="lines"><span class="gline"></span><span class="gline hot"></span><span class="gline"></span></div></div>
+          </div>
+          <div class="prefs"><span class="pref">Light</span><span class="pref">Commute</span></div>
+        </div>
+        <div class="layerbox raw">
+          <div class="lname">Raw evidence</div>
+          <div class="thumbs3">
+            <div class="th"><span class="mini"><span class="wave"><i></i><i></i><i></i><i></i></span></span><span class="t"><b>Voice</b>I loved the light</span></div>
+            <div class="th"><span class="mini">IMG</span><span class="t"><b>Picture</b>Flat listing</span></div>
+            <div class="th"><span class="mini">TXT</span><span class="t"><b>Text</b>The commute matters</span></div>
+          </div>
+        </div>
+        <div class="srclink" style="left:170px"></div>
+        <div class="srclink" style="left:456px"></div>
+        <div class="srclink" style="left:742px"></div>
+      </div>
+      <p class="caption"><b>Every thought leads back to its source.</b> The originals are never replaced by the meaning built on them.</p>
+    </div>
+  </main>
+  <footer><span>Illustrative concept · not a product screenshot</span><span class="concept">Conceptual workflow</span></footer>
+</div>
+</body>
+</html>
