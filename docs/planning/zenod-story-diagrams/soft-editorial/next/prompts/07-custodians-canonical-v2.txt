@@ -1,0 +1,30 @@
+Use case: precise-object-edit
+Asset type: Zenod website-section mockup / slide 07 canonical identity correction
+
+Primary request: Keep the timeline and labels of Image 2, but replace the Zenod custodian illustration with the canonical soft-sketch librarian language of Image 1.
+
+Input images:
+- Image 1 role: canonical style reference. Study its central librarian specifically: a waist-up soft pencil/charcoal bust with a quiet face, flowing hair and beard contours, broad pale robe planes, and gently dissolving edges.
+- Image 2 role: edit target. Preserve its timeline, relationships, labels, typography, logo, and corrected spelling.
+
+Change only:
+- Replace the Zenod custodian illustration with a waist-up canonical-style librarian bust matching Image 1. The figure must be soft flat contemporary editorial drawing, not a smooth 3D render, carved statue, or full-body figure.
+- Keep the future "Next librarian" custodian as an abstract neutral tool silhouette with no human face.
+- Preserve the timeline, unchanged-originals foundation, "10 years later" transition, meaning states, and all connectors.
+- Correct malformed text while preserving the exact copy below.
+
+Text (verbatim):
+- "Keep the books. Replace the librarian."
+- "Your raw thoughts keep their value. Future custodians can derive new meaning from the same evidence."
+- "YOUR ORIGINALS · UNCHANGED"
+- "time →"
+- "Zenod"
+- "Zenod is the first custodian, not the last."
+- "Meaning today"
+- "10 years later"
+- "Next librarian"
+- "Meaning rebuilt"
+- "Conceptual lifecycle"
+
+Avoid:
+- full-body statue, smooth 3D render, carved stone, deep black eye sockets, sepia, parchment, gold, beige, salmon, duplicated faces, human face on the future custodian, timeline redesign, misspelled "rebuilt", malformed text.
