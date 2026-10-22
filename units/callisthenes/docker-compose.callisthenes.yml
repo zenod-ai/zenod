@@ -47,6 +47,9 @@ services:
         condition: service_started
     networks: [callisthenes-private, dokploy-network]
     restart: unless-stopped
+    # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
+    mem_limit: 256m
+    memswap_limit: 256m
 
   calli-engine:
     build:
@@ -78,3 +81,6 @@ services:
     expose: ["8000"]
     networks: [callisthenes-private]
     restart: unless-stopped
+    # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
+    mem_limit: 192m
+    memswap_limit: 192m

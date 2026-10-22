@@ -59,6 +59,9 @@ services:
     image: zenod-outbound:dokploy
     container_name: zenod-outbound
     restart: unless-stopped
+    # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
+    mem_limit: 256m
+    memswap_limit: 256m
     # dokploy-network (so the Console reaches it) + zenod-x-net (so it reaches the
     # x-mcp POST connector for tweeting). Add zenod-reddit-net once reddit-mcp is
     # deployed (see the networks block above).
