@@ -1,6 +1,14 @@
 # M0 Plan — Self-hosted Zenod
 
-Status: **active**. Scoped 2026-06-11. Companion to [M0-SPEC.md](M0-SPEC.md) (the engine contract this milestone implements) and [ROADMAP.md](ROADMAP.md) (where M0 sits).
+Status: active
+Status note: **active**. Scoped 2026-06-11. Companion to [M0-SPEC.md](M0-SPEC.md) (the engine contract this milestone implements) and [ROADMAP.md](ROADMAP.md) (where M0 sits).
+Spine ID: M0
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+
+## Current State
+
+Status: active
 
 ## Goal
 
@@ -11,11 +19,13 @@ One Docker container, deployed on our own VPS via Dokploy, used daily for a real
 3. **A settings web UI** (React + Vite + shadcn/ui, served by the same container) — first-run setup and ongoing configuration: vault repo, GitHub token, Anthropic key, models, MCP token. No terminal required after `docker run`.
 4. **A Dockerfile** and a Dokploy deployment of it.
 
-**Definition of done** = the six engine acceptance tests in [M0-SPEC.md](M0-SPEC.md) § Definition of done, plus three deployment tests:
+## Definition Of Done
 
-7. The Docker image builds and runs with a single mounted volume; first boot walks through setup in the browser.
-8. All configuration (vault repo, GitHub PAT, Anthropic key) is done through the settings UI, persists across container restarts, and includes a working "test connection" for both GitHub and Anthropic.
-9. Claude Code (and Claude.ai via custom connector) connects to the deployed MCP endpoint with the bearer token, and `store_memory` / `ask_brain` round-trip against the live vault — used daily by user #1.
+The six engine acceptance tests in [M0-SPEC.md](M0-SPEC.md) § Definition of done, plus three deployment tests (numbered 7-9 continuing that list):
+
+- [ ] M0-7 The Docker image builds and runs with a single mounted volume; first boot walks through setup in the browser.
+- [ ] M0-8 All configuration (vault repo, GitHub PAT, Anthropic key) is done through the settings UI, persists across container restarts, and includes a working "test connection" for both GitHub and Anthropic.
+- [ ] M0-9 Claude Code (and Claude.ai via custom connector) connects to the deployed MCP endpoint with the bearer token, and `store_memory` / `ask_brain` round-trip against the live vault — used daily by user #1.
 
 ## Amendments to the original spec
 

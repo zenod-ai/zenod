@@ -5,6 +5,9 @@ Created: 2026-07-09
 Updated: 2026-07-09
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-2.9-EPAMINON-MOVE-0.md`
+Spine ID: E2-9
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Integration branch: `main`
 Active spine steward: Epic 2.9 worker, current Codex thread
 Last reconciled commit: `3848b04c0d0c4485735163be335427550c588f07`
@@ -103,25 +106,25 @@ Implications to resolve before minting worker tickets:
 
 ## Definition Of Done
 
-- [ ] Epaminon has an explicit unit surface (`units/epaminon/` or equivalent) with README,
+- [ ] DOD-1 Epaminon has an explicit unit surface (`units/epaminon/` or equivalent) with README,
       Docker/compose story, SEAM-SURFACE, and headless MCP runbook.
-- [ ] `sites/epaminon/` or equivalent public page exists with test Stripe checkout wired to
+- [ ] DOD-2 `sites/epaminon/` or equivalent public page exists with test Stripe checkout wired to
       `cloud-test.zenod.dev` / `STRIPE_MODE=test` per Epic 2 D-6A.
-- [ ] Test purchase provisions or simulates provisioning a cloud Epaminon instance and lands the user
+- [ ] DOD-3 Test purchase provisions or simulates provisioning a cloud Epaminon instance and lands the user
       on the instance UI.
-- [ ] The cloud instance UI exposes Epaminon settings: MCP URL/token, GitHub auth status, model/CLI
+- [ ] DOD-4 The cloud instance UI exposes Epaminon settings: MCP URL/token, GitHub auth status, model/CLI
       auth status, worker instructions, effort defaults, prewired MCP servers, skills, status, and
       copyable Claude/Codex connection commands.
-- [ ] Standalone MCP exposes a durable public task-dispatch contract that accepts text, effort level,
+- [ ] DOD-5 Standalone MCP exposes a durable public task-dispatch contract that accepts text, effort level,
       optional repo/path/output target, optional MCP/skills context, and returns an execution id.
-- [ ] Epaminon dispatches work to a worker container/harness, tracks queued/running/blocked/review/done,
+- [ ] DOD-6 Epaminon dispatches work to a worker container/harness, tracks queued/running/blocked/review/done,
       and persists status, transcript, result artifact, and evidence after restart.
-- [ ] A research task can be initiated through Ring/Council over WhatsApp and routed to Epaminon,
+- [ ] DOD-7 A research task can be initiated through Ring/Council over WhatsApp and routed to Epaminon,
       with results left in the requested repo/artifact target.
-- [ ] Internal Archus/Epaminon lane tools (`enqueue_execution`, `approve_execution`,
+- [ ] DOD-8 Internal Archus/Epaminon lane tools (`enqueue_execution`, `approve_execution`,
       `apply_execution_event`) remain private and identity-gated; public/aggregate MCP exposes only
       allowed Epaminon tools.
-- [ ] Bare self-hosted mode remains a headless MCP server configured by env/API; it does not require
+- [ ] DOD-9 Bare self-hosted mode remains a headless MCP server configured by env/API; it does not require
       the hosted UI to function.
 
 ## Non-Goals
@@ -138,6 +141,7 @@ Implications to resolve before minting worker tickets:
 
 ## Current State
 
+Status: active
 Phase: cloud-test checkout route live; final acceptance blocked on paid TEST purchase/provisioning proof
 Last verified: 2026-07-09
 Next action: complete one Stripe TEST card checkout at `cloud-test.zenod.dev/buy/epaminon`, verify
@@ -204,7 +208,7 @@ MCP/WhatsApp dispatch → real repo/artifact evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|
-| [#682](https://github.com/zenod-ai/zenod/issues/682) | Epic worker | Current Codex thread | EPM-0 scope and dispatch | in-progress | `codex/reconcile-recovery-to-main-20260709` | `3848b04` | Issues #682..#690 minted. | 2026-07-09 | Reconcile workers and board. |
+| [#682](https://github.com/zenod-ai/zenod/issues/682) | Epic worker | Current Codex thread | EPM-0 scope and dispatch | active | `codex/reconcile-recovery-to-main-20260709` | `3848b04` | Issues #682..#690 minted. | 2026-07-09 | Reconcile workers and board. |
 | [#683](https://github.com/zenod-ai/zenod/issues/683) | Worker | `019f47a5-5442-7352-8b3b-10c910358080` | Unit surface and seam | ready-for-test | reconciliation branch | `3848b04` | `units/epaminon/` docs and compose added. | 2026-07-09 | Tester review. |
 | [#684](https://github.com/zenod-ai/zenod/issues/684) | Worker | `019f47a5-7b61-7372-a076-2476dfab67d7` | Public page and checkout | ready-for-test | reconciliation branch + Cloud `codex/epic25-ring-cloud` | `3848b04`; Cloud `fbdcc01` | Public Epaminon page exists; cloud-test `/buy/epaminon` now redirects to Stripe TEST price. | 2026-07-09 | Complete paid TEST checkout. |
 | [#685](https://github.com/zenod-ai/zenod/issues/685) | Worker | `019f47a5-a363-7731-9bf5-d0e9ca541ef1` | Instance settings UI | ready-for-test | reconciliation branch | `3848b04` | Epaminon executor settings render conditionally. | 2026-07-09 | Test provisioned instance. |

@@ -1,10 +1,14 @@
 # EPIC: Ring ↔ Callisthenes Generic MCP Integration Tests
 
-Status: generic call intent, natural held draft, exact approval, canonical receipt, and replay safety live-passed; residual fixture/tenant cases remain
+Status: active
+Status note: generic call intent, natural held draft, exact approval, canonical receipt, and replay safety live-passed; residual fixture/tenant cases remain
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-RING-CALLISTHENES-INTEGRATION-TESTS.md`
+Spine ID: RCIT
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: draft test/fix lanes completed; residual acceptance remains in this spine
 Integration branch: main
 Active spine steward: `/root`
@@ -51,11 +55,11 @@ Prove that Ring can connect to Callisthenes as an ordinary authenticated MCP ser
 
 ## Definition Of Done
 
-- [x] Every test T01–T24 has a current pass/partial/blocked disposition; blocked items name the missing live input or fixture.
-- [x] At least one real successful mutation is tied to a canonical same-turn receipt, reusing the existing idempotent Callisthenes ledger entry.
-- [x] Zero-action, failed-action, placeholder-receipt, and hostile-model-prose paths are host-gated and covered by live plus deterministic evidence.
-- [ ] Two valid tenants and one invalid credential demonstrate isolation and loud auth failure.
-- [x] Findings distinguish MCP-peer defects from Ring host defects, provider-budget failure, and model-only behavior.
+- [x] DOD-1 Every test T01–T24 has a current pass/partial/blocked disposition; blocked items name the missing live input or fixture.
+- [x] DOD-2 At least one real successful mutation is tied to a canonical same-turn receipt, reusing the existing idempotent Callisthenes ledger entry.
+- [x] DOD-3 Zero-action, failed-action, placeholder-receipt, and hostile-model-prose paths are host-gated and covered by live plus deterministic evidence.
+- [ ] DOD-4 Two valid tenants and one invalid credential demonstrate isolation and loud auth failure.
+- [x] DOD-5 Findings distinguish MCP-peer defects from Ring host defects, provider-budget failure, and model-only behavior.
 
 ## Non-Goals
 
@@ -69,6 +73,7 @@ Historical scope note: this began as a diagnosis-only campaign. Jordi subsequent
 
 ## Current State
 
+Status: active
 Phase: model-routed safe-contract acceptance live-passed; controlled fixture and cross-tenant mutation cases remain
 Last verified: 2026-07-12 19:16 CEST
 Integration target: shared `main` worktree and live Ring at `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`; no repair branch or checkout

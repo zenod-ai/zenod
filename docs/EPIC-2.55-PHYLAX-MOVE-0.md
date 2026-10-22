@@ -5,6 +5,9 @@ Created: 2026-07-09
 Updated: 2026-07-09
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-2.55-PHYLAX-MOVE-0.md`
+Spine ID: E2-55
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: `https://github.com/zenod-ai/zenod/issues?q=is%3Aissue%20label%3Aepic%3A2.55`
 Integration branch: `main`
 Active spine steward: Epic 2.55 Phylax steward (`current Codex task`)
@@ -66,15 +69,15 @@ Deliver Phylax as an independently purchasable, deployable, configurable hosted 
 
 ## Definition Of Done
 
-- [ ] Public Phylax product site has a hosted purchase CTA to `cloud-test.zenod.dev`.
-- [ ] Stripe TEST checkout for unit `phylax` completes through `cloud-test.zenod.dev` and queues/provisions a Phylax tenant automatically.
-- [ ] Paid checkout lands the buyer in Phylax settings through a signed hosted-entry link without creating or revealing an admin password.
-- [ ] Hosted Phylax settings UI configures Ring endpoint/write-only token, managed WhatsApp/provider credentials, Telegram bot settings, sender policy, channel health, test controls, receipts, retry/error state, MCP/API endpoint/token where applicable, and link back to owning Ring settings.
-- [ ] Hosted UI does not expose QR pairing; self-host/dev Phylax may still support QR pairing.
-- [ ] Self-host Phylax unit README, seam contract, compose, and runbook are complete.
-- [ ] Ring/Phylax inbound and outbound integration tests prove same-channel provenance and explicit receipts.
-- [ ] Fresh browser E2E evidence proves public site -> Stripe TEST payment -> provisioning -> signed entry -> channel config -> Ring connection -> inbound test -> outbound delivery -> health/receipt display.
-- [ ] No Phylax work silently broadens Ring routing or Zenod media scope.
+- [ ] DOD-1 Public Phylax product site has a hosted purchase CTA to `cloud-test.zenod.dev`.
+- [ ] DOD-2 Stripe TEST checkout for unit `phylax` completes through `cloud-test.zenod.dev` and queues/provisions a Phylax tenant automatically.
+- [ ] DOD-3 Paid checkout lands the buyer in Phylax settings through a signed hosted-entry link without creating or revealing an admin password.
+- [ ] DOD-4 Hosted Phylax settings UI configures Ring endpoint/write-only token, managed WhatsApp/provider credentials, Telegram bot settings, sender policy, channel health, test controls, receipts, retry/error state, MCP/API endpoint/token where applicable, and link back to owning Ring settings.
+- [ ] DOD-5 Hosted UI does not expose QR pairing; self-host/dev Phylax may still support QR pairing.
+- [ ] DOD-6 Self-host Phylax unit README, seam contract, compose, and runbook are complete.
+- [ ] DOD-7 Ring/Phylax inbound and outbound integration tests prove same-channel provenance and explicit receipts.
+- [ ] DOD-8 Fresh browser E2E evidence proves public site -> Stripe TEST payment -> provisioning -> signed entry -> channel config -> Ring connection -> inbound test -> outbound delivery -> health/receipt display.
+- [ ] DOD-9 No Phylax work silently broadens Ring routing or Zenod media scope.
 
 ## Non-Goals
 
@@ -86,6 +89,7 @@ Deliver Phylax as an independently purchasable, deployable, configurable hosted 
 
 ## Current State
 
+Status: active
 Phase: planning / dispatch
 Last verified: 2026-07-09 23:55 CEST
 Integration target: `main`
@@ -160,10 +164,10 @@ Audit findings on 2026-07-09:
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#702](https://github.com/zenod-ai/zenod/issues/702) | Epic worker | Epic 2.55 Phylax steward | P-0 spine and execution board | review | - | `main` / `7c8dfd4` then follow-up reconciliation | `c8fdb5b` | Spine exists, issue board created, validator passes. | Merged locally to `main`; #702 marked needs-review. | 2026-07-09 23:55 CEST | Review or push from `main` if desired. |
-| [#705](https://github.com/zenod-ai/zenod/issues/705) | Ticket worker | Laplace / phylax-product-page-worker | P-1 public Phylax product page and hosted CTA | paused | #702 | `codex/epic-2.55-phylax-site` | `c8fdb5b` | Public page with cloud-test hosted CTA and correct boundaries. | Partial site work exists in `/Users/jordi/Documents/GitHub/zenod-epic255-phylax-site`; not integrated. | 2026-07-09 23:55 CEST | Resume validation before integration. |
-| [#703](https://github.com/zenod-ai/zenod/issues/703) | Ticket worker | James / phylax-selfhost-unit-worker | P-2 self-host Phylax unit README, seam, compose, runbook | paused | #702 | `codex/epic-2.55-phylax-selfhost-unit` | `c8fdb5b` | Self-host unit docs/compose/runbook complete and legacy wording retired. | Worker was shut down before handoff; no integrated changes. | 2026-07-09 23:55 CEST | Re-dispatch or resume issue. |
-| [#704](https://github.com/zenod-ai/zenod/issues/704) | Ticket worker | Gibbs / phylax-runtime-api-worker | P-3 runtime APIs for hosted config, health, receipts, Ring seam | paused | #702 | `codex/epic-2.55-phylax-runtime-api` | `c8fdb5b` | Runtime API supports hosted Phylax settings, write-only tokens, health, receipts, Ring endpoint. | Partial `packages/server/src/settings.ts` scaffolding exists in `/Users/jordi/Documents/GitHub/zenod-epic255-phylax-runtime-api`; not integrated. | 2026-07-09 23:55 CEST | Resume API/routes/tests before integration. |
+| [#702](https://github.com/zenod-ai/zenod/issues/702) | Epic worker | Epic 2.55 Phylax steward | P-0 spine and execution board | active | - | `main` / `7c8dfd4` then follow-up reconciliation | `c8fdb5b` | Spine exists, issue board created, validator passes. | Merged locally to `main`; #702 marked needs-review. | 2026-07-09 23:55 CEST | Review or push from `main` if desired. |
+| [#705](https://github.com/zenod-ai/zenod/issues/705) | Ticket worker | Laplace / phylax-product-page-worker | P-1 public Phylax product page and hosted CTA | deferred | #702 | `codex/epic-2.55-phylax-site` | `c8fdb5b` | Public page with cloud-test hosted CTA and correct boundaries. | Partial site work exists in `/Users/jordi/Documents/GitHub/zenod-epic255-phylax-site`; not integrated. | 2026-07-09 23:55 CEST | Resume validation before integration. |
+| [#703](https://github.com/zenod-ai/zenod/issues/703) | Ticket worker | James / phylax-selfhost-unit-worker | P-2 self-host Phylax unit README, seam, compose, runbook | deferred | #702 | `codex/epic-2.55-phylax-selfhost-unit` | `c8fdb5b` | Self-host unit docs/compose/runbook complete and legacy wording retired. | Worker was shut down before handoff; no integrated changes. | 2026-07-09 23:55 CEST | Re-dispatch or resume issue. |
+| [#704](https://github.com/zenod-ai/zenod/issues/704) | Ticket worker | Gibbs / phylax-runtime-api-worker | P-3 runtime APIs for hosted config, health, receipts, Ring seam | deferred | #702 | `codex/epic-2.55-phylax-runtime-api` | `c8fdb5b` | Runtime API supports hosted Phylax settings, write-only tokens, health, receipts, Ring endpoint. | Partial `packages/server/src/settings.ts` scaffolding exists in `/Users/jordi/Documents/GitHub/zenod-epic255-phylax-runtime-api`; not integrated. | 2026-07-09 23:55 CEST | Resume API/routes/tests before integration. |
 | [#707](https://github.com/zenod-ai/zenod/issues/707) | Ticket worker | phylax-hosted-settings-ui-worker | P-4 hosted Phylax settings UI in cloud console | ready | #704 | `codex/epic-2.55-phylax-hosted-ui` | cloud `5474802` | Hosted settings UI covers required controls and hides QR. | Issue created. | 2026-07-09 23:55 CEST | Dispatch after or alongside API contract with mocks. |
 | [#709](https://github.com/zenod-ai/zenod/issues/709) | Ticket worker | phylax-checkout-provisioning-worker | P-5 Stripe TEST checkout and automatic provisioning | ready | #703, #704, #705 | `codex/epic-2.55-phylax-checkout-provision` | cloud `5474802` | unit=phylax checkout, status, queue, provisioner, watchdog. | Issue created. | 2026-07-09 23:55 CEST | Dispatch in clean cloud worktree. |
 | [#706](https://github.com/zenod-ai/zenod/issues/706) | Ticket worker | phylax-signed-entry-worker | P-6 signed checkout-to-settings handoff | ready | #707, #709 | `codex/epic-2.55-phylax-signed-entry` | cloud `5474802` | Paid buyer enters Phylax settings via signed link without admin password. | Issue created. | 2026-07-09 23:55 CEST | Dispatch after status/settings route exists. |

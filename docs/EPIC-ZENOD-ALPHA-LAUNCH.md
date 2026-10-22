@@ -5,6 +5,9 @@ Created: 2026-08-16
 Updated: 2026-08-27
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-ZENOD-ALPHA-LAUNCH.md`
+Spine ID: ZAL
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: `main`
 Active spine steward: Zenod Alpha delivery manager (`Jordi + current bound Codex task`)
@@ -63,13 +66,13 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Definition Of Done
 
-- [ ] One evidence-backed current-state matrix reconciles `main`, the deployed immutable SHA, production configuration, landing/legal pages, checkout, onboarding, MCP memory journeys, backup/restore, support, and known defects.
-- [ ] The 2026-08-15 incorrect “what have we been talking about recently?” interaction is reproduced against the current deployed surface, diagnosed, and either fixed with a pinned regression or closed with exact evidence that current behavior passes.
-- [ ] Jordi approves one explicit alpha offer: hosted/self-hosted boundaries, price, whether WhatsApp is included in the launch promise, onboarding path, and support expectation.
-- [ ] Every required item in `docs/PRODUCTION-READINESS.md` is green with current evidence; public paid signup remains fail-closed until the named production gate is approved and passed.
-- [ ] A tester completes one uninterrupted stranger journey from public page through onboarding to a working MCP store/search/get/ask loop, billing portal where applicable, tenant isolation checks, and any approved WhatsApp promise.
-- [ ] The first alpha invitation/promotion draft names only capabilities proved by the accepted journey; nothing public is posted without exact-content approval.
-- [ ] The spine, GitHub issue board, PRs, evidence, owner, blockers, and single next action agree so a fresh delivery manager can continue without chat history.
+- [ ] DOD-1 One evidence-backed current-state matrix reconciles `main`, the deployed immutable SHA, production configuration, landing/legal pages, checkout, onboarding, MCP memory journeys, backup/restore, support, and known defects.
+- [ ] DOD-2 The 2026-08-15 incorrect “what have we been talking about recently?” interaction is reproduced against the current deployed surface, diagnosed, and either fixed with a pinned regression or closed with exact evidence that current behavior passes.
+- [ ] DOD-3 Jordi approves one explicit alpha offer: hosted/self-hosted boundaries, price, whether WhatsApp is included in the launch promise, onboarding path, and support expectation.
+- [ ] DOD-4 Every required item in `docs/PRODUCTION-READINESS.md` is green with current evidence; public paid signup remains fail-closed until the named production gate is approved and passed.
+- [ ] DOD-5 A tester completes one uninterrupted stranger journey from public page through onboarding to a working MCP store/search/get/ask loop, billing portal where applicable, tenant isolation checks, and any approved WhatsApp promise.
+- [ ] DOD-6 The first alpha invitation/promotion draft names only capabilities proved by the accepted journey; nothing public is posted without exact-content approval.
+- [ ] DOD-7 The spine, GitHub issue board, PRs, evidence, owner, blockers, and single next action agree so a fresh delivery manager can continue without chat history.
 
 ## Non-Goals
 
@@ -80,6 +83,7 @@ Bring Zenod from a working founder workflow to a trustworthy alpha product: a ne
 
 ## Current State
 
+Status: active
 Phase: Signup-closed production candidate awaiting Jordi's final voice acceptance
 Last verified: 2026-08-27 CEST
 Integration target: `main`

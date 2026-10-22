@@ -101,6 +101,14 @@ Blockers: none — decisions pre-answered below; inputs have absence-rules.
 | Epic worker | Journey passes clean; test package delivered. | Package posted, or "BLOCKED ON JORDI: <one question>" as entire status. |
 | Ticket worker | Ticket done in own worktree, PR opened. | PR + one-line result. |
 
+## Spine Map
+
+Children registered in the epic log (conformance 2026-10-22).
+
+| Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
+|---|---|---|---|---|---|---|---|---|
+| CF | child | [Callisthenes Hybrid Facade](EPIC-CF-CALLISTHENES-HYBRID-FACADE.md) | Evolve Callisthenes into a hybrid domain agent with a small truthful public facade and deterministic authority for tenancy, approval and exactly-once effects. | draft | Status taken from the doc's own header; not reassessed by the conformance pass. | [Current State](EPIC-CF-CALLISTHENES-HYBRID-FACADE.md#current-state) | 2026-10-22 | Per its Current State next action. |
+
 ## Bootstrap Map
 
 Read in this order:
