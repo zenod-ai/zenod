@@ -5,6 +5,9 @@ Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.7-DECOMMISSION-2X.md`
+Spine ID: E3-7
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 3.7 delivery manager (Codex task `019f4933-a958-79b3-8e16-21841be40c53`)
@@ -64,10 +67,10 @@ Inventory and retire the entire Epic 2.x per-user container fleet — every per-
 
 - [x] DX-1 inventory: the original authoritative inventory and #793 post-probe refresh classify every remaining row, including the new record-only duplicate and the suite-bundled Ring executor.
 - [ ] DX-2 early wins: the approved 17-row batch is complete, but two retained rows are now classified `test` and one new record-only duplicate exists; a new exact packet and approval are required before any additional removal.
-- [ ] DX-3..n retirement waves: per migrated unit (after 3.2/3.3/3.5 cutovers), all its per-user instances retired with per-tenant verification: data present in the multi-tenant instance, old tokened URL answers on the shared hostname, snapshot archived, then container+volume+subdomain+watchdog entry removed.
-- [ ] Provisioner artifacts retired: the 2.x Dokploy provisioning scripts, watchdog registration path (ZD-10), and per-tenant DNS minting removed from the control plane, with tombstone notes in the code.
-- [ ] Final sweep: `docker ps -a` and Dokploy app list show ONLY the canonical fleet (`docs/final-container-map-deck.html` slide 1); watchdog list is the ~6 static checks; zero orphan volumes without an archived snapshot.
-- [x] Rollback proven once: one retired instance restored from its snapshot as a drill, documented as a runbook.
+- [ ] DX-3 DX-3..n retirement waves: per migrated unit (after 3.2/3.3/3.5 cutovers), all its per-user instances retired with per-tenant verification: data present in the multi-tenant instance, old tokened URL answers on the shared hostname, snapshot archived, then container+volume+subdomain+watchdog entry removed.
+- [ ] DX-4 Provisioner artifacts retired: the 2.x Dokploy provisioning scripts, watchdog registration path (ZD-10), and per-tenant DNS minting removed from the control plane, with tombstone notes in the code.
+- [ ] DX-5 Final sweep: `docker ps -a` and Dokploy app list show ONLY the canonical fleet (`docs/final-container-map-deck.html` slide 1); watchdog list is the ~6 static checks; zero orphan volumes without an archived snapshot.
+- [x] DX-6 Rollback proven once: one retired instance restored from its snapshot as a drill, documented as a runbook.
 
 ## Non-Goals
 
@@ -77,6 +80,7 @@ Inventory and retire the entire Epic 2.x per-user container fleet — every per-
 
 ## Current State
 
+Status: active
 Phase: DX-1/DX-2 package complete; cloud recovery fix merged; upstream Zenod pilot rejected at new exact head
 Last verified: 2026-07-10 07:25 CEST
 Integration target: main
@@ -104,6 +108,18 @@ Read in this order:
 | 2 | `docs/EPIC-2.3-ZENOD-MOVE-0.md` | How 2.x instances were provisioned (Dokploy path, subdomains, watchdog). | Worker |
 | 3 | `docs/EPIC-3.2-ZENOD-MULTITENANT.md` (Z-MT-4/6) | Migration + cutover this epic's waves depend on. | Worker |
 | 4 | `docs/Z-5-RESTORE-FROM-REPO-RUNBOOK.md` | Restore doctrine informing the snapshot/rollback drill. | Tester |
+
+## Linked Pages
+
+Inventory, runbooks and audit pages for this epic (pages, not goals; recorded in [looks-like-epic exceptions](spines/LOOKS_LIKE_EPIC_EXCEPTIONS.md)).
+
+- [DX-1 inventory: 2.x fleet classification](EPIC-3.7-DX1-INVENTORY.md)
+- [DX-2 early-wins retirement runbook](EPIC-3.7-DX2-EARLY-WINS-RUNBOOK.md)
+- [DX-3 Zenod retirement wave](EPIC-3.7-DX3-ZENOD-WAVE-RUNBOOK.md)
+- [DX-4 Callisthenes retirement wave runbook](EPIC-3.7-DX4-CALLISTHENES-RUNBOOK.md)
+- [DX-5 Epaminon retirement wave runbook](EPIC-3.7-DX5-EPAMINON-WAVE-RUNBOOK.md)
+- [DX-6 provisioner artifact audit](EPIC-3.7-DX6-PROVISIONER-AUDIT.md)
+- [DX-7 final sweep and restore drill runbook](EPIC-3.7-DX7-FINAL-SWEEP-RUNBOOK.md)
 
 ## Architecture And Context
 
