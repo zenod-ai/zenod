@@ -1,10 +1,15 @@
 # EPIC 3.0 · Chassis Replatform — one multi-tenant container per unit, written once
 
-Status: SUPERSEDED FOR EXECUTION — all active work is defined ONLY by `docs/EPIC-Z-NIGHT-SPRINT.md` (Zenod night sprint; chassis dissolved into Zenod; sign-in is GitHub-only; landing page is the entry point). This document remains the decision history (D1–D21). Do not execute from it.
+Status: done
+Status note: SUPERSEDED FOR EXECUTION — all active work is defined ONLY by `docs/EPIC-Z-NIGHT-SPRINT.md` (Zenod night sprint; chassis dissolved into Zenod; sign-in is GitHub-only; landing page is the entry point). This document remains the decision history (D1–D21). Do not execute from it.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.0-CHASSIS-REPLATFORM.md`
+Spine ID: E3-0
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC Z Zenod Night Sprint](EPIC-Z-NIGHT-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 3.0 planner (Jordi + bound agent task)
@@ -62,13 +67,13 @@ Replace Law-7 instance-per-user hosting with the chassis model: every unit is on
 
 ## Definition Of Done
 
-- [ ] 3.1 chassis exists: transport, tenant auth, tenants table + `/api/tenants`, tenant-scoped storage, vault, metering, settings-UI shell — extracted, tested, documented.
-- [ ] 3.2–3.6 each unit runs as ONE multi-tenant container conforming to SEAM-SPEC vNext, with ≥2 tenants exercised in hosted mode and single-tenant self-host verified from the public image.
-- [ ] Stripe webhook provisions via `POST /api/tenants` end to end; the Dokploy per-tenant provisioner, per-tenant DNS minting, and watchdog registration API are deleted.
-- [ ] Each unit serves its settings UI from the unit container; `zenod-ai/cloud` no longer hosts per-unit settings.
-- [ ] A suite-composition proof: one machine tenant provisioned into two units, configured from an external UI via agent→unit tokens.
-- [ ] GOLDEN PATH E2E (D17) passes for three tenants: ogg in via Phylax (and via webchat) → Ring routes to Zenod ingest → ticket_id + transcript receipt → receipt-driven follow-up calls → ack + final reply through Phylax, with receipts, tenant isolation, and origin_ticket_id traceability verified end to end. This is the replatform's final acceptance test.
-- [ ] Cross-spine updates recorded and adopted by 2.3/2.4/2.5/2.9 stewards (Law 7 amendment in 2.5).
+- [ ] DOD-1 3.1 chassis exists: transport, tenant auth, tenants table + `/api/tenants`, tenant-scoped storage, vault, metering, settings-UI shell — extracted, tested, documented.
+- [ ] DOD-2 3.2–3.6 each unit runs as ONE multi-tenant container conforming to SEAM-SPEC vNext, with ≥2 tenants exercised in hosted mode and single-tenant self-host verified from the public image.
+- [ ] DOD-3 Stripe webhook provisions via `POST /api/tenants` end to end; the Dokploy per-tenant provisioner, per-tenant DNS minting, and watchdog registration API are deleted.
+- [ ] DOD-4 Each unit serves its settings UI from the unit container; `zenod-ai/cloud` no longer hosts per-unit settings.
+- [ ] DOD-5 A suite-composition proof: one machine tenant provisioned into two units, configured from an external UI via agent→unit tokens.
+- [ ] DOD-6 GOLDEN PATH E2E (D17) passes for three tenants: ogg in via Phylax (and via webchat) → Ring routes to Zenod ingest → ticket_id + transcript receipt → receipt-driven follow-up calls → ack + final reply through Phylax, with receipts, tenant isolation, and origin_ticket_id traceability verified end to end. This is the replatform's final acceptance test.
+- [ ] DOD-7 Cross-spine updates recorded and adopted by 2.3/2.4/2.5/2.9 stewards (Law 7 amendment in 2.5).
 
 ## Non-Goals
 
@@ -79,6 +84,7 @@ Replace Law-7 instance-per-user hosting with the chassis model: every unit is on
 
 ## Current State
 
+Status: done
 Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main
@@ -290,3 +296,20 @@ Dispatch order and readiness (D6 pilot-first phasing):
 ### Source survey
 
 - Survey of unit codebases (2026-07-10 session): Zenod/Epaminon/Phylax/Ring = one Node 22 image (`packages/server`, MCP SDK 1.29 + Hono, port 8080, `AGENT` env selects persona); Callisthenes = Python 3.12 FastMCP wrapping upstream `xmcp` (port 8000). `units/*/Dockerfile` for Node units are `FROM scratch` placeholders; real build is the repo-root Dockerfile.
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded for execution by EPIC Z (Zenod night sprint), which dissolved the chassis into Zenod; this document remains the decision history (D1-D21).
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; the document's own Status says do not execute from it.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 3.1 chassis exists: transport, tenant auth, tenants table + `/api/tenants`, tenant-scoped storage, vault, metering, sett... | not recorded |
+| DOD-2 3.2–3.6 each unit runs as ONE multi-tenant container conforming to SEAM-SPEC vNext, with ≥2 tenants exercised in hosted... | not recorded |
+| DOD-3 Stripe webhook provisions via `POST /api/tenants` end to end; the Dokploy per-tenant provisioner, per-tenant DNS minting... | not recorded |
+| DOD-4 Each unit serves its settings UI from the unit container; `zenod-ai/cloud` no longer hosts per-unit settings. | not recorded |
+| DOD-5 A suite-composition proof: one machine tenant provisioned into two units, configured from an external UI via agent→unit... | not recorded |
+| DOD-6 GOLDEN PATH E2E (D17) passes for three tenants: ogg in via Phylax (and via webchat) → Ring routes to Zenod ingest → tick... | not recorded |
+| DOD-7 Cross-spine updates recorded and adopted by 2.3/2.4/2.5/2.9 stewards (Law 7 amendment in 2.5). | not recorded |

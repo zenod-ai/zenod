@@ -5,6 +5,9 @@ Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `zenod-ai/zenod` (engine) + `herald-brain` (config, per D-H3)
 Primary document: `docs/EPIC-4.0-HERALD.md`
+Spine ID: E4-0
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 0 worker for 4.0 (Jordi + current bound Fable session)
@@ -103,13 +106,13 @@ engine — block nothing, build nothing for it yet.
 
 ## Definition Of Done
 
-- [ ] Loop machinery generic: a second loop type (not Herald's) is expressible as briefing + boards + lane YAML with zero engine changes (paper exercise receipted in 4.2).
-- [ ] Herald's briefing negotiated with Jordi to ✓ APPROVED and committed as memory page one.
-- [ ] Morning-N arrives via chat, each proposal citing its memory source; "✓ 1,3 + N more" parses; reactions file to memory and visibly influence the next morning.
-- [ ] Approved posts publish through Callisthenes with permalink receipts; unapproved never send.
-- [ ] Replies handled per briefing reply policy, grounded in repo + memory; lessons filed.
-- [ ] ≥1 weekly scorecard with goal numbers reconciling against receipts.
-- [ ] Herald live as customer #0 on Zenod's own account (D-H1), on his own metered instance, first clean week receipted (H3-5 criteria).
+- [ ] DOD-1 Loop machinery generic: a second loop type (not Herald's) is expressible as briefing + boards + lane YAML with zero engine changes (paper exercise receipted in 4.2).
+- [ ] DOD-2 Herald's briefing negotiated with Jordi to ✓ APPROVED and committed as memory page one.
+- [ ] DOD-3 Morning-N arrives via chat, each proposal citing its memory source; "✓ 1,3 + N more" parses; reactions file to memory and visibly influence the next morning.
+- [ ] DOD-4 Approved posts publish through Callisthenes with permalink receipts; unapproved never send.
+- [ ] DOD-5 Replies handled per briefing reply policy, grounded in repo + memory; lessons filed.
+- [ ] DOD-6 ≥1 weekly scorecard with goal numbers reconciling against receipts.
+- [ ] DOD-7 Herald live as customer #0 on Zenod's own account (D-H1), on his own metered instance, first clean week receipted (H3-5 criteria).
 
 ## Non-Goals
 
@@ -134,6 +137,14 @@ Dependency order: 4.2 is the engine critical path; 4.1 and 4.6-instance can star
 4.3 rides on 4.2; 4.4 needs 4.1+4.2+4.3; 4.5 needs 4.4 posting; 4.6-flip is last and Jordi's.
 4.4 posting additionally blocks on Callisthenes (2.4 C-1) being tester-green — same gate as 2.6's H-4.
 
+## Spine Map
+
+Children registered in the epic log (conformance 2026-10-22). The Child-Spine Map above remains the design decomposition; only 4.2 exists as a spine file.
+
+| Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
+|---|---|---|---|---|---|---|---|---|
+| E4-2 | child | [loop-core PoC](EPIC-4.2-POC-LOOP-CORE.md) | Build a repeatable TypeScript rig in spikes/loop-core that runs the Herald loop mechanics end to end through four ports. | active | Stale? 103d since last commit. Owner: keep or close. | [Current State](EPIC-4.2-POC-LOOP-CORE.md#current-state) | 2026-10-22 | Per its Current State next action. |
+
 ## Bootstrap Map
 
 Read in this order:
@@ -149,6 +160,7 @@ Read in this order:
 
 ## Current State
 
+Status: active
 Phase: planning
 Last verified: 2026-07-10 03:58 CEST
 Integration target: main

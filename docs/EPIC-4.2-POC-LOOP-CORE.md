@@ -6,6 +6,9 @@ Created: 2026-07-10
 Updated: 2026-07-11
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-4.2-POC-LOOP-CORE.md`
+Spine ID: E4-2
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [EPIC 4.0 Herald](EPIC-4.0-HERALD.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: 4.2 delivery manager (current Codex session)
@@ -66,14 +69,14 @@ Build a controlled, repeatable TypeScript rig in `spikes/loop-core/` that compil
 
 ## Definition Of Done
 
-- [ ] Malformed lane YAML is rejected with named errors; unknown toolbelt entries are rejected at load (H3-2 AC1 shape).
-- [ ] A versioned setup fixture compiles into inspectable lane YAML, then validates and executes; golden YAML and run-trace snapshots prove identical output and state transitions across repeated clean runs.
-- [ ] No lane fires without `approved: true` briefing; flipping approval off mid-run halts the next tick with a run-log receipt.
-- [ ] Simulated week of the Herald loop runs: briefing negotiated to approved in terminal, morning-N proposals cite memory sources, CLI approval selects items, fake posts receive permalink anchors, seeded replies are answered per policy, feedback filings appear as memory diffs, and scorecard numbers reconcile against the timeline.
-- [ ] An unapproved item never reaches `timeline.md`, with an absence receipt.
-- [ ] A lane attempting an off-allowlist tool is blocked by the Agent adapter with a receipt (H3-2 AC3 shape, adapter-level).
-- [ ] Newsletter loop runs with config-only changes: zero changes to `core/` or `adapters/` after the Herald loop works.
-- [ ] `core/` has zero imports outside the four ports, enforced by a lint/test.
+- [ ] DOD-1 Malformed lane YAML is rejected with named errors; unknown toolbelt entries are rejected at load (H3-2 AC1 shape).
+- [ ] DOD-2 A versioned setup fixture compiles into inspectable lane YAML, then validates and executes; golden YAML and run-trace snapshots prove identical output and state transitions across repeated clean runs.
+- [ ] DOD-3 No lane fires without `approved: true` briefing; flipping approval off mid-run halts the next tick with a run-log receipt.
+- [ ] DOD-4 Simulated week of the Herald loop runs: briefing negotiated to approved in terminal, morning-N proposals cite memory sources, CLI approval selects items, fake posts receive permalink anchors, seeded replies are answered per policy, feedback filings appear as memory diffs, and scorecard numbers reconcile against the timeline.
+- [ ] DOD-5 An unapproved item never reaches `timeline.md`, with an absence receipt.
+- [ ] DOD-6 A lane attempting an off-allowlist tool is blocked by the Agent adapter with a receipt (H3-2 AC3 shape, adapter-level).
+- [ ] DOD-7 Newsletter loop runs with config-only changes: zero changes to `core/` or `adapters/` after the Herald loop works.
+- [ ] DOD-8 `core/` has zero imports outside the four ports, enforced by a lint/test.
 
 Core acceptance runs offline with a scripted Agent, fixed Clock, resettable fixtures, and golden snapshots. A live Anthropic adapter run is optional integration evidence and cannot gate acceptance.
 
@@ -87,6 +90,7 @@ Core acceptance runs offline with a scripted Agent, fixed Clock, resettable fixt
 
 ## Current State
 
+Status: active
 Phase: planning
 Last verified: 2026-07-10 22:32 CEST
 Integration target: main

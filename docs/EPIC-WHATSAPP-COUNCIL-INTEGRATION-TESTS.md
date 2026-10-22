@@ -1,10 +1,14 @@
 # EPIC: WhatsApp → Phylax → Ring → Council integration tests
 
-Status: ready for owner dispatch; browser acceptance remains blocked by unavailable signed-in Chrome control
+Status: ready
+Status note: ready for owner dispatch; browser acceptance remains blocked by unavailable signed-in Chrome control
 Created: 2026-07-12
 Updated: 2026-07-13
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-WHATSAPP-COUNCIL-INTEGRATION-TESTS.md`
+Spine ID: WJ
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: draft rows below; not yet minted
 Integration branch: `main`
 Active spine steward: `/root`
@@ -49,10 +53,10 @@ Prove four ordinary WhatsApp journeys end-to-end through Phylax and Ring: create
 
 ## Definition Of Done
 
-- [ ] WJ-1..WJ-4 each pass once, uninterrupted, from the real signed-in WhatsApp Web surface.
-- [ ] Every inbound provider message ID joins to one Phylax route, one Ring correlation, the owning-unit evidence, and one outbound provider ID/status.
-- [ ] No raw MCP dump, duplicate reply, silent interruption, invented success, or missing clickable receipt appears.
-- [ ] Exact tested Ring/Phylax/Zenod/Calli SHAs and screenshots are recorded.
+- [ ] DOD-1 WJ-1..WJ-4 each pass once, uninterrupted, from the real signed-in WhatsApp Web surface.
+- [ ] DOD-2 Every inbound provider message ID joins to one Phylax route, one Ring correlation, the owning-unit evidence, and one outbound provider ID/status.
+- [ ] DOD-3 No raw MCP dump, duplicate reply, silent interruption, invented success, or missing clickable receipt appears.
+- [ ] DOD-4 Exact tested Ring/Phylax/Zenod/Calli SHAs and screenshots are recorded.
 
 ## Non-Goals
 
@@ -63,6 +67,7 @@ Prove four ordinary WhatsApp journeys end-to-end through Phylax and Ring: create
 
 ## Current State
 
+Status: ready
 Phase: ready for four owner-agent dispatches
 Last verified: 2026-07-12 20:24 CEST
 Integration target: `main`

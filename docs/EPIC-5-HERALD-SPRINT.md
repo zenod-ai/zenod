@@ -1,10 +1,14 @@
 # EPIC 5 · Herald Sprint — duplicate the Ring, give it an agenda
 
-Status: SHIP candidate — manager journey complete; Jordi test package ready
+Status: active
+Status note: SHIP candidate — manager journey complete; Jordi test package ready
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-5-HERALD-SPRINT.md`
+Spine ID: E5
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Herald delivery manager
@@ -63,18 +67,18 @@ Stand up Herald — "a council member with an agenda" — as the next self-conta
 
 SHIP — the journey, nothing else counts. The manager walks it in a REAL BROWSER on the LIVE deployment, in a loop (walk → first breakage → fix exactly that → deploy → walk again FROM STEP 1), until ONE uninterrupted clean pass, screenshots per step:
 
-- [x] 1. Open `herald.zenod.dev` logged out → a normal landing page: what Herald is ("your project's voice, on a loop — it drafts, you approve, it posts, it learns"), Get started, Pricing, Sign in. No token field anywhere public. (DUPLICATE from ring)
-- [x] 2. Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
-- [x] 3. Sign in with GitHub — same account system as the other units; sign-in returns showing name + Dashboard link. (DUPLICATE)
-- [x] 4. Subscribe (monthly, TEST card): server-side checkout, `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard. (DUPLICATE)
-- [x] 5. Dashboard: Herald's chat front and center (Ring's ported chat); wallet card (add Zenod memory URL+token and Calli mouth URL+token — same wallet UX as Ring, same SSRF rules); **Board panel** (read view: proposed / approved / posted, each item showing its WHY + memory citation + permalink when posted); **Briefing card** showing "no briefing approved — Herald will not loop" until step 6; Herald's own MCP URL + token; usage. NO tabs from other units. (DUPLICATE + board/briefing panels BUILD)
-- [x] 6. Briefing negotiation in chat: Herald interviews for theme, objectives, posting cadence, tone, reply policy; refuses any loop action until the human replies "✓ approve briefing"; on ✓, briefing v1 is committed (versioned row) and filed to the tenant's Zenod memory via the wallet with a commit receipt in chat. (BUILD — conversation state on the ported chat)
-- [x] 7. The wake: the scheduler fires per the briefing cadence (walk uses a "Run now" button on the Board panel — same code path as cron, no simulation); the proposer lane reads memory via the wallet and writes N proposals to the board, EACH carrying a one-line rationale + a citation to the memory page that inspired it. Board panel and chat both show them. No approved briefing → the scheduler visibly refuses (that refusal is part of this step: walk it once before step 6's ✓). (BUILD — the loop organ)
-- [x] 8. Approve in chat: "✓ 1,3" parses; approved items move to approved on the board; rejected/ignored items stay, with the rejection filed to memory via the wallet. (BUILD)
-- [x] 9. Publish: each approved item goes wallet → Calli (draft → `approve_send`, C-22 — Herald never bypasses the mouth's discipline) → **canonical x.com permalink receipt** in chat AND on the board item (state: posted). Test posts deleted after permalink capture, as in EPIC C. (BUILD on existing wallet plumbing — the Calli MCP contract already proven in EPIC R/C)
-- [x] 10. The loop closes: trigger "Run now" again → the new proposals visibly reference the filings from steps 8–9 (e.g. avoid the rejected theme, build on the posted one). Screenshot both boards side by side. (BUILD — this step IS the product)
-- [x] 11. Logout/login persists briefing, board, wallet, receipts. A second tenant provisioned by the manager sees an empty Herald: no briefing, no board items, no wallet entries from tenant one.
-- [x] 12. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
+- [x] DOD-1 Open `herald.zenod.dev` logged out → a normal landing page: what Herald is ("your project's voice, on a loop — it drafts, you approve, it posts, it learns"), Get started, Pricing, Sign in. No token field anywhere public. (DUPLICATE from ring)
+- [x] DOD-2 Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
+- [x] DOD-3 Sign in with GitHub — same account system as the other units; sign-in returns showing name + Dashboard link. (DUPLICATE)
+- [x] DOD-4 Subscribe (monthly, TEST card): server-side checkout, `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard. (DUPLICATE)
+- [x] DOD-5 Dashboard: Herald's chat front and center (Ring's ported chat); wallet card (add Zenod memory URL+token and Calli mouth URL+token — same wallet UX as Ring, same SSRF rules); **Board panel** (read view: proposed / approved / posted, each item showing its WHY + memory citation + permalink when posted); **Briefing card** showing "no briefing approved — Herald will not loop" until step 6; Herald's own MCP URL + token; usage. NO tabs from other units. (DUPLICATE + board/briefing panels BUILD)
+- [x] DOD-6 Briefing negotiation in chat: Herald interviews for theme, objectives, posting cadence, tone, reply policy; refuses any loop action until the human replies "✓ approve briefing"; on ✓, briefing v1 is committed (versioned row) and filed to the tenant's Zenod memory via the wallet with a commit receipt in chat. (BUILD — conversation state on the ported chat)
+- [x] DOD-7 The wake: the scheduler fires per the briefing cadence (walk uses a "Run now" button on the Board panel — same code path as cron, no simulation); the proposer lane reads memory via the wallet and writes N proposals to the board, EACH carrying a one-line rationale + a citation to the memory page that inspired it. Board panel and chat both show them. No approved briefing → the scheduler visibly refuses (that refusal is part of this step: walk it once before step 6's ✓). (BUILD — the loop organ)
+- [x] DOD-8 Approve in chat: "✓ 1,3" parses; approved items move to approved on the board; rejected/ignored items stay, with the rejection filed to memory via the wallet. (BUILD)
+- [x] DOD-9 Publish: each approved item goes wallet → Calli (draft → `approve_send`, C-22 — Herald never bypasses the mouth's discipline) → **canonical x.com permalink receipt** in chat AND on the board item (state: posted). Test posts deleted after permalink capture, as in EPIC C. (BUILD on existing wallet plumbing — the Calli MCP contract already proven in EPIC R/C)
+- [x] DOD-10 The loop closes: trigger "Run now" again → the new proposals visibly reference the filings from steps 8–9 (e.g. avoid the rejected theme, build on the posted one). Screenshot both boards side by side. (BUILD — this step IS the product)
+- [x] DOD-11 Logout/login persists briefing, board, wallet, receipts. A second tenant provisioned by the manager sees an empty Herald: no briefing, no board items, no wallet entries from tenant one.
+- [x] DOD-12 Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
 
 HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Calli — a cross-unit ask routed through Jordi, never built by this epic inside Calli's repo without its own ticket), weekly scorecard lane (reads receipts + briefing goals, reports in chat), approve/reject buttons on the Board panel, briefing re-negotiation ("change the briefing" re-enters setup mode), Phylax as a wallet channel (morning-N arrives on WhatsApp), Herald as customer #0 on Zenod's own X account (D-H1 dogfood — Jordi flips it personally), self-host README.
 
@@ -89,6 +93,7 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 
 ## Current State
 
+Status: active
 Phase: SHIP candidate — clean live journey complete
 Last verified: 2026-07-12T17:24:00+02:00
 Integration target: main

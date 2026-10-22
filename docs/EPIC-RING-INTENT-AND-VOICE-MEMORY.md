@@ -1,10 +1,15 @@
 # EPIC: Ring Typed Intent And Voice-Memory Stabilization
 
-Status: ready for dispatch
+Status: done
+Status note: ready for dispatch
 Created: 2026-07-29
 Updated: 2026-07-29
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-RING-INTENT-AND-VOICE-MEMORY.md`
+Spine ID: RIV
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC Mechanical Capture](EPIC-MECHANICAL-CAPTURE.md)
 GitHub issues: `https://github.com/zenod-ai/zenod/issues`
 Integration branch: main
 Active spine steward: `/root` delivery manager
@@ -70,16 +75,16 @@ Make Ring simple and truthful for ordinary human chat, especially WhatsApp voice
 
 ## Definition Of Done
 
-- [ ] A plain text, link, short voice, or long voice turn with an explicit outer request to save/store/remember produces exactly one authorized private-memory operation and exactly one verified receipt/link.
-- [ ] A representative 20-minute transcript containing questions, tasks, draft posts, and other action-like prose is captured once; embedded actions remain inert.
-- [ ] Ring uses one validated typed turn plan and deterministic policy instead of the universal positive-mutation regex as its authorization boundary.
-- [ ] Private tenant-scoped non-destructive writes may execute from explicit current-turn authority; external, public, destructive, financial, ambiguous, or unknown-risk operations remain held or clarified.
-- [ ] Natural-language approval resolves only to an exact persisted held action; no magic approval phrase is required and no approval can invent state.
-- [ ] One logical mutation has one upstream call identity, survives async polling/resume, and ends in one terminal receipt, failure, cancellation, or honest unknown result.
-- [ ] Mutation rendering is deterministic and concise; no raw tool hashes, MCP envelopes, guard diagnostics, duplicate failure blocks, placeholder URLs, or unsupported success claims reach the user.
-- [ ] Phylax cannot remain HTTP-green while silently stuck in an unbounded WhatsApp connection phase; receive-path health is bounded, observable, and recoverable or terminally alerted.
-- [ ] Two-tenant testing proves no crossing of transcripts, tools, keys, approvals, receipts, jobs, or history.
-- [ ] One uninterrupted real browser and WhatsApp acceptance pass is evidenced at an exact deploy-candidate SHA before Jordi is asked to test.
+- [ ] DOD-1 A plain text, link, short voice, or long voice turn with an explicit outer request to save/store/remember produces exactly one authorized private-memory operation and exactly one verified receipt/link.
+- [ ] DOD-2 A representative 20-minute transcript containing questions, tasks, draft posts, and other action-like prose is captured once; embedded actions remain inert.
+- [ ] DOD-3 Ring uses one validated typed turn plan and deterministic policy instead of the universal positive-mutation regex as its authorization boundary.
+- [ ] DOD-4 Private tenant-scoped non-destructive writes may execute from explicit current-turn authority; external, public, destructive, financial, ambiguous, or unknown-risk operations remain held or clarified.
+- [ ] DOD-5 Natural-language approval resolves only to an exact persisted held action; no magic approval phrase is required and no approval can invent state.
+- [ ] DOD-6 One logical mutation has one upstream call identity, survives async polling/resume, and ends in one terminal receipt, failure, cancellation, or honest unknown result.
+- [ ] DOD-7 Mutation rendering is deterministic and concise; no raw tool hashes, MCP envelopes, guard diagnostics, duplicate failure blocks, placeholder URLs, or unsupported success claims reach the user.
+- [ ] DOD-8 Phylax cannot remain HTTP-green while silently stuck in an unbounded WhatsApp connection phase; receive-path health is bounded, observable, and recoverable or terminally alerted.
+- [ ] DOD-9 Two-tenant testing proves no crossing of transcripts, tools, keys, approvals, receipts, jobs, or history.
+- [ ] DOD-10 One uninterrupted real browser and WhatsApp acceptance pass is evidenced at an exact deploy-candidate SHA before Jordi is asked to test.
 
 ## Non-Goals
 
@@ -95,6 +100,7 @@ Make Ring simple and truthful for ordinary human chat, especially WhatsApp voice
 
 ## Current State
 
+Status: done
 Phase: implementation — Wave 1
 Last verified: 2026-07-29 15:16 CEST
 Integration target: main
@@ -447,3 +453,23 @@ The approved layer-by-layer proposal was drafted locally at:
 `docs/evidence/whatsapp-zenod-stabilization-2026-07-29/ring-phylax-voice-memory-root-cause-and-fix-proposal.html`
 
 This spine is self-contained and authoritative even while that evidence artifact remains outside the planning branch.
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded for execution by EPIC Mechanical Capture (decision D12 there); its typed-intent design is preserved as the blueprint for a future Ring era.
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; the Done means items below were never checked off in this document.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 A plain text, link, short voice, or long voice turn with an explicit outer request to save/store/remember produces exact... | not recorded |
+| DOD-2 A representative 20-minute transcript containing questions, tasks, draft posts, and other action-like prose is captured... | not recorded |
+| DOD-3 Ring uses one validated typed turn plan and deterministic policy instead of the universal positive-mutation regex as its... | not recorded |
+| DOD-4 Private tenant-scoped non-destructive writes may execute from explicit current-turn authority; external, public, destruc... | not recorded |
+| DOD-5 Natural-language approval resolves only to an exact persisted held action; no magic approval phrase is required and no a... | not recorded |
+| DOD-6 One logical mutation has one upstream call identity, survives async polling/resume, and ends in one terminal receipt, fa... | not recorded |
+| DOD-7 Mutation rendering is deterministic and concise; no raw tool hashes, MCP envelopes, guard diagnostics, duplicate failure... | not recorded |
+| DOD-8 Phylax cannot remain HTTP-green while silently stuck in an unbounded WhatsApp connection phase; receive-path health is b... | not recorded |
+| DOD-9 Two-tenant testing proves no crossing of transcripts, tools, keys, approvals, receipts, jobs, or history. | not recorded |
+| DOD-10 One uninterrupted real browser and WhatsApp acceptance pass is evidenced at an exact deploy-candidate SHA before Jordi i... | not recorded |

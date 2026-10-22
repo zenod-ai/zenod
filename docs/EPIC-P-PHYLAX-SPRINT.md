@@ -1,10 +1,14 @@
 # EPIC P · Phylax Sprint — one channel core, integrated or standalone
 
-Status: active — final integrated-independent delivery push
+Status: active
+Status note: active — final integrated-independent delivery push
 Created: 2026-07-11
 Updated: 2026-08-28
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
+Spine ID: P
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: `/root` final-push delivery manager
@@ -71,32 +75,32 @@ Commercially, each service meters the costs it incurs. Phylax maintains the auth
 
 SHIP — the journey, walked on the LIVE deployment with a REAL browser and a REAL phone, loop until ONE uninterrupted clean pass, screenshots (browser + phone) per step:
 
-- [ ] 1. `phylax.zenod.dev` logged out → normal landing ("your agents on WhatsApp & Telegram"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
-- [ ] 2. Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
-- [ ] 3. GitHub sign-in — same account system as the other units. (DUPLICATE)
-- [ ] 4. Subscribe → tenant row in THIS container → dashboard. (DUPLICATE)
-- [ ] 5. ADMIN: `phylax.zenod.dev/admin`, visible ONLY to the hardcoded GitHub login `alfablok` (any other session: 404, not 403) — QR pairing page for the Baileys number (PORT existing pairing screen), session health, paired-numbers list. Manager pairs the TEST number here; Jordi pairs the real one on his pass. (PORT + admin gate)
-- [ ] 6. Tenant dashboard: register MY PHONE NUMBER → the page shows a one-time keyword and instructs "WhatsApp this keyword to <the Phylax number>" → tenant sends it FROM their phone → Phylax receives it, matches, marks the number VERIFIED. (Possession proof in the inbound direction — Jordi's design. BUILD-small: the keyword check; everything around it is ported plumbing.)
-- [ ] 7. Tenant dashboard: set DOWNSTREAM = their Ring MCP URL + token (paste, like the Ring wallet in reverse); TRANSCRIPTION setting (on/off + provider key — PORT the existing transcription settings UI and capability, D18); Telegram bot binding (PORT existing telegram connect); notification prefs. Phylax's own MCP URL + token shown with copy button. (PORT + DUPLICATE)
-- [ ] 8. THE PIPE, text: WhatsApp a text message from the verified phone to the Phylax number → Phylax matches sender→tenant → forwards as a standard MCP call to the tenant's Ring → the council's reply arrives back on WhatsApp. Round trip on a real phone. (PORT of the whole existing WhatsApp⇄brain loop, re-plumbed through the tenant lookup + downstream call)
-- [ ] 9. THE PIPE, voice (D18, lap 2 of the loop — same epic, sequenced after 8 passes): send a voice note → Phylax transcribes at the edge (PORTED transcription) → forwards `{ sender→tenant, transcript, artifact_ref }` → council reply returns to WhatsApp. If the STT provider fails, forward with `transcription_failed` — the conversation never queues. (PORT)
-- [ ] 10. MCP SERVER face: an external MCP client calls `send_message` on the tenant's Phylax URL → message arrives on the tenant's WhatsApp → delivery receipt returned (never a silent ack). Telegram equivalent exercised once. (PORT)
-- [ ] 11. Isolation: a second tenant with a different verified number — messages route to THEIR downstream only; neither tenant can see the other's settings, numbers, or history. Admin page invisible to both.
-- [ ] 12. Test package: "I manually walked the full journey — browser AND phone — and it works. URL + screenshots. Now you test." Jordi's pass: pair the real number, verify his phone, wire his Ring, talk to his council from WhatsApp.
+- [ ] DOD-1 `phylax.zenod.dev` logged out → normal landing ("your agents on WhatsApp & Telegram"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
+- [ ] DOD-2 Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
+- [ ] DOD-3 GitHub sign-in — same account system as the other units. (DUPLICATE)
+- [ ] DOD-4 Subscribe → tenant row in THIS container → dashboard. (DUPLICATE)
+- [ ] DOD-5 ADMIN: `phylax.zenod.dev/admin`, visible ONLY to the hardcoded GitHub login `alfablok` (any other session: 404, not 403) — QR pairing page for the Baileys number (PORT existing pairing screen), session health, paired-numbers list. Manager pairs the TEST number here; Jordi pairs the real one on his pass. (PORT + admin gate)
+- [ ] DOD-6 Tenant dashboard: register MY PHONE NUMBER → the page shows a one-time keyword and instructs "WhatsApp this keyword to <the Phylax number>" → tenant sends it FROM their phone → Phylax receives it, matches, marks the number VERIFIED. (Possession proof in the inbound direction — Jordi's design. BUILD-small: the keyword check; everything around it is ported plumbing.)
+- [ ] DOD-7 Tenant dashboard: set DOWNSTREAM = their Ring MCP URL + token (paste, like the Ring wallet in reverse); TRANSCRIPTION setting (on/off + provider key — PORT the existing transcription settings UI and capability, D18); Telegram bot binding (PORT existing telegram connect); notification prefs. Phylax's own MCP URL + token shown with copy button. (PORT + DUPLICATE)
+- [ ] DOD-8 THE PIPE, text: WhatsApp a text message from the verified phone to the Phylax number → Phylax matches sender→tenant → forwards as a standard MCP call to the tenant's Ring → the council's reply arrives back on WhatsApp. Round trip on a real phone. (PORT of the whole existing WhatsApp⇄brain loop, re-plumbed through the tenant lookup + downstream call)
+- [ ] DOD-9 THE PIPE, voice (D18, lap 2 of the loop — same epic, sequenced after 8 passes): send a voice note → Phylax transcribes at the edge (PORTED transcription) → forwards `{ sender→tenant, transcript, artifact_ref }` → council reply returns to WhatsApp. If the STT provider fails, forward with `transcription_failed` — the conversation never queues. (PORT)
+- [ ] DOD-10 MCP SERVER face: an external MCP client calls `send_message` on the tenant's Phylax URL → message arrives on the tenant's WhatsApp → delivery receipt returned (never a silent ack). Telegram equivalent exercised once. (PORT)
+- [ ] DOD-11 Isolation: a second tenant with a different verified number — messages route to THEIR downstream only; neither tenant can see the other's settings, numbers, or history. Admin page invisible to both.
+- [ ] DOD-12 Test package: "I manually walked the full journey — browser AND phone — and it works. URL + screenshots. Now you test." Jordi's pass: pair the real number, verify his phone, wire his Ring, talk to his council from WhatsApp.
 
 HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day one; admin UI for N numbers later), phone re-verification on change, Google sign-in, cross-unit admin/usage view (separate epic), retirement of the old fused WhatsApp path (3.7 wave).
 
 ### Locked contract acceptance for the reconciled sprint plan
 
-- [ ] One Phylax runtime/core supports integrated Zenod, integrated PM, and native Phylax through explicit product/allowance adapters rather than code forks.
-- [ ] Each Phylax tenant has exactly one named downstream service/adapter; Phylax contains no application routing intelligence.
-- [ ] Integrated browsers authenticate only to Zenod or PM. Their backend authorizes the customer, resolves the mapped channel tenant, and calls a narrow Phylax MCP control surface; no private Phylax token reaches the browser.
-- [ ] Tenant-safe MCP control tools cannot pair/reset shared transports, replace shared credentials, inspect other tenants, or access global journals/capacity.
-- [ ] Text, voice, image and reply context use one versioned media envelope with provider message ID, stable idempotency key, raw artifact reference, duration, transcript when eligible and explicit disposition when not transcribed.
-- [ ] Phylax meters its own transcription/channel costs through one append-only usage ledger. Integrated and standalone products call the same idempotent allowance-grant operation through different allowance issuers.
-- [ ] Customer presentation is product-owned: Zenod/PM show one combined plan projection; standalone Phylax shows the same Phylax metering projection in its own portal; operator P&L preserves service-level truth.
-- [ ] Zenod public-beta implementation proves the shared core first without hard-coding Zenod as the only commercial owner; standalone Phylax and PM later extend the same interfaces.
-- [ ] Deploys, startup reconciliation and UI changes cannot rotate customer MCP tokens, move tenant credentials, reset channel sessions, or change service ownership as an implicit side effect.
+- [ ] DOD-13 One Phylax runtime/core supports integrated Zenod, integrated PM, and native Phylax through explicit product/allowance adapters rather than code forks.
+- [ ] DOD-14 Each Phylax tenant has exactly one named downstream service/adapter; Phylax contains no application routing intelligence.
+- [ ] DOD-15 Integrated browsers authenticate only to Zenod or PM. Their backend authorizes the customer, resolves the mapped channel tenant, and calls a narrow Phylax MCP control surface; no private Phylax token reaches the browser.
+- [ ] DOD-16 Tenant-safe MCP control tools cannot pair/reset shared transports, replace shared credentials, inspect other tenants, or access global journals/capacity.
+- [ ] DOD-17 Text, voice, image and reply context use one versioned media envelope with provider message ID, stable idempotency key, raw artifact reference, duration, transcript when eligible and explicit disposition when not transcribed.
+- [ ] DOD-18 Phylax meters its own transcription/channel costs through one append-only usage ledger. Integrated and standalone products call the same idempotent allowance-grant operation through different allowance issuers.
+- [ ] DOD-19 Customer presentation is product-owned: Zenod/PM show one combined plan projection; standalone Phylax shows the same Phylax metering projection in its own portal; operator P&L preserves service-level truth.
+- [ ] DOD-20 Zenod public-beta implementation proves the shared core first without hard-coding Zenod as the only commercial owner; standalone Phylax and PM later extend the same interfaces.
+- [ ] DOD-21 Deploys, startup reconciliation and UI changes cannot rotate customer MCP tokens, move tenant credentials, reset channel sessions, or change service ownership as an implicit side effect.
 
 ## Non-Goals
 
@@ -112,6 +116,7 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 
 ## Current State
 
+Status: active
 Phase: Source architecture and wave-6 phase-1 release packet complete; allowance/tariff approval pending before gated backups and closed rollout
 Last verified: 2026-08-27 23:12 CEST
 Integration target: main

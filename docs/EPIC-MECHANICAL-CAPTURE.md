@@ -1,10 +1,14 @@
 # EPIC: Mechanical Capture — Phylax Binding Table To Zenod
 
-Status: SHIP-A passed uninterrupted; multimodal image-ingest milestone active under MC-17/MC-18
+Status: active
+Status note: SHIP-A passed uninterrupted; multimodal image-ingest milestone active under MC-17/MC-18
 Created: 2026-07-29
 Updated: 2026-08-01 (generic typed entry retrieval live-proven; see Handoff Journal)
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-MECHANICAL-CAPTURE.md`
+Spine ID: MC
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: mint one issue per MC ticket at dispatch; link back into the Issue Ledger
 Integration branch: `main`
 Pinned base commit: `0fac451` (origin/main at authoring; RIV-1 TurnPlan compiler is merged and inert for this spine)
@@ -71,51 +75,51 @@ MULTIMODAL (authorized by Jordi 2026-07-31): a standalone WhatsApp image follows
 
 ### SHIP-A — capture (walked by the delivery manager on the LIVE deployment, loop: walk → first breakage → fix exactly that → deploy → walk again FROM STEP 1, until one uninterrupted clean pass, screenshot per step; then Jordi walks the identical journey with his two real pending voice notes)
 
-1. Send a fresh long (15–25 min) voice note to the tenant-zero WhatsApp number.
-2. An immediate progress message arrives within seconds ("got it — transcribing").
-3. STT succeeds, or fails loudly within its deadline with an honest reply — never a silent fallback.
-4. Phylax invokes `store_memory` carrying the durable idempotency key (tenant + provider message ID, D14/MC-10); resending the same message creates no second memory.
-5. Phylax persists the returned job ID BEFORE awaiting it, and polling survives a Phylax restart mid-job (restart Phylax during filing on at least one lap; the receipt still arrives).
-6. Only a terminal Zenod receipt renders "Saved": recap, filed page(s), clickable commit link, and filing disposition. Any open filing question stays in the vault (`#filing/uncertain` on the selected page, or an Inbox note) for voluntary later review; it is never relayed as a blocking question. Open the commit link: the verbatim transcript is in the vault Log with evidence anchors.
-7. Reply by text: "what were the open questions in that note?" — Phylax passes the last capture's `evidenceRef` into read-only `ask_brain` (MC-11); the answer cites that note.
-8. Verify the channel token structurally: `tools/list` on the channel binding's token exposes memory tools only — no action tools exist to misuse (D3/D15). No linguistic refusal is claimed or tested.
-9. Kill the WhatsApp socket / stall the connection phase on the VPS. The lifecycle watchdog (D6) detects and restarts within its deadline; a fresh short voice note lands with a receipt.
-10. Leave the tenant idle for a natural quiet window during the pass (or simulate one): NO restart occurs from ordinary human silence — inactivity is healthy (D6).
+- [ ] DOD-1 Send a fresh long (15–25 min) voice note to the tenant-zero WhatsApp number.
+- [ ] DOD-2 An immediate progress message arrives within seconds ("got it — transcribing").
+- [ ] DOD-3 STT succeeds, or fails loudly within its deadline with an honest reply — never a silent fallback.
+- [ ] DOD-4 Phylax invokes `store_memory` carrying the durable idempotency key (tenant + provider message ID, D14/MC-10); resending the same message creates no second memory.
+- [ ] DOD-5 Phylax persists the returned job ID BEFORE awaiting it, and polling survives a Phylax restart mid-job (restart Phylax during filing on at least one lap; the receipt still arrives).
+- [ ] DOD-6 Only a terminal Zenod receipt renders "Saved": recap, filed page(s), clickable commit link, and filing disposition. Any open filing question stays in the vault (`#filing/uncertain` on the selected page, or an Inbox note) for voluntary later review; it is never relayed as a blocking question. Open the commit link: the verbatim transcript is in the vault Log with evidence anchors.
+- [ ] DOD-7 Reply by text: "what were the open questions in that note?" — Phylax passes the last capture's `evidenceRef` into read-only `ask_brain` (MC-11); the answer cites that note.
+- [ ] DOD-8 Verify the channel token structurally: `tools/list` on the channel binding's token exposes memory tools only — no action tools exist to misuse (D3/D15). No linguistic refusal is claimed or tested.
+- [ ] DOD-9 Kill the WhatsApp socket / stall the connection phase on the VPS. The lifecycle watchdog (D6) detects and restarts within its deadline; a fresh short voice note lands with a receipt.
+- [ ] DOD-10 Leave the tenant idle for a natural quiet window during the pass (or simulate one): NO restart occurs from ordinary human silence — inactivity is healthy (D6).
 
 Terminal artifact: "I manually walked steps 1–10 on <deployed SHA>. URL + screenshots. Now you test." Jordi's hand test (including his two real voice notes landing in memory) closes SHIP-A (gate G1). SHIP-A does NOT wait for SHIP-B: the two real voice notes land as soon as SHIP-A passes.
 
 ### SHIP-B — the assistant journey (walked the same way, on the same deployment, after SHIP-A is approved; separate gate G1b)
 
-1. Reply BY VOICE to a capture receipt: "extract the proposed actions from this note and draft the tweet." Phylax transcribes and routes to Ring with that capture's evidenceRef attached (structural reply-context, D17 — no language interpretation in Phylax).
-2. Ring pulls the referenced content from Zenod, and produces a held tweet draft via Callisthenes. Nothing publishes. The reply shows the exact draft and asks.
-3. Reply "yes, publish that." Ring resolves the exact held draft (existing standing-approval contract); Callisthenes publishes; a verified permalink receipt arrives. No other phrasing of success exists (D15 truth boundary).
-4. Reply to the receipt with an ambiguous instruction ("do the thing with the second one"). Ring asks ONE clarifying question instead of guessing (D18).
-5. Send a text action request with no reply context: "post a tweet saying hi." Ring routes it the same way: held draft → approval → receipt. No draft is ever auto-sent.
-6. Send another STANDALONE voice note mid-conversation: it stores mechanically as a new memory (tenant `voiceDefault=capture`) — capture never gets smarter, conversation never gets capture's job.
-7. Catalog fidelity spot-check (MC-16 live): the settings UI lists the actually discovered tools of every connected MCP for this tenant; ask Ring for something no connected tool can do — it says so (honest failure), proposing no invented tool; refresh after disconnecting a test MCP removes its tools.
-8. Kill Ring's process; send a standalone voice note: capture still works, receipt still arrives (capture's independence is preserved even with Ring in the product).
+- [ ] DOD-11 Reply BY VOICE to a capture receipt: "extract the proposed actions from this note and draft the tweet." Phylax transcribes and routes to Ring with that capture's evidenceRef attached (structural reply-context, D17 — no language interpretation in Phylax).
+- [ ] DOD-12 Ring pulls the referenced content from Zenod, and produces a held tweet draft via Callisthenes. Nothing publishes. The reply shows the exact draft and asks.
+- [ ] DOD-13 Reply "yes, publish that." Ring resolves the exact held draft (existing standing-approval contract); Callisthenes publishes; a verified permalink receipt arrives. No other phrasing of success exists (D15 truth boundary).
+- [ ] DOD-14 Reply to the receipt with an ambiguous instruction ("do the thing with the second one"). Ring asks ONE clarifying question instead of guessing (D18).
+- [ ] DOD-15 Send a text action request with no reply context: "post a tweet saying hi." Ring routes it the same way: held draft → approval → receipt. No draft is ever auto-sent.
+- [ ] DOD-16 Send another STANDALONE voice note mid-conversation: it stores mechanically as a new memory (tenant `voiceDefault=capture`) — capture never gets smarter, conversation never gets capture's job.
+- [ ] DOD-17 Catalog fidelity spot-check (MC-16 live): the settings UI lists the actually discovered tools of every connected MCP for this tenant; ask Ring for something no connected tool can do — it says so (honest failure), proposing no invented tool; refresh after disconnecting a test MCP removes its tools.
+- [ ] DOD-18 Kill Ring's process; send a standalone voice note: capture still works, receipt still arrives (capture's independence is preserved even with Ring in the product).
 
 Terminal artifact: "I walked SHIP-B steps 1–8 on <deployed SHA>. Screenshots. Now you test." G1b closes on Jordi's pass.
 
 ### HARDEN — only after Jordi approves SHIP-A and SHIP-B
 
-- MC-9 docs/invariants + supersession hygiene merged.
-- Telegram parity for the binding table (existing Telegram channel path binds through the same table).
-- Retry/outbox behavior when Zenod is unreachable proven by drill (stop Zenod container, send VN, start Zenod, receipt arrives, exactly one memory).
-- Receive-path canary (periodic external self-message with receipt check) — the only true end-to-end inbound proof per D6's honesty clause; evaluate cost/noise after SHIP.
+- [ ] DOD-19 MC-9 docs/invariants + supersession hygiene merged.
+- [ ] DOD-20 Telegram parity for the binding table (existing Telegram channel path binds through the same table).
+- [ ] DOD-21 Retry/outbox behavior when Zenod is unreachable proven by drill (stop Zenod container, send VN, start Zenod, receipt arrives, exactly one memory).
+- [ ] DOD-22 Receive-path canary (periodic external self-message with receipt check) — the only true end-to-end inbound proof per D6's honesty clause; evaluate cost/noise after SHIP.
 
 ### SHIP-C — multimodal image ingest
 
-1. Send a fresh captioned image to the live tenant WhatsApp number; an immediate progress reply arrives.
-2. Phylax invokes `ingest_memory` once with the durable tenant + channel + provider-message idempotency key; Ring is absent from capture.
-3. Zenod fetches the staged bytes through a least-privilege artifact capability; no customer/MCP bearer or transient fetch capability is persisted in memory, receipts, Drive metadata, or logs.
-4. The original binary appears exactly once in the tenant's configured Google Drive archive. A missing/rejected Drive connection fails loudly and never renders Saved.
-5. Zenod's vision path creates a grounded semantic distillation without inventing invisible details.
-6. Git-backed memory contains the durable Drive URL, sha256, MIME/source/timestamp metadata, user caption, and distillation; it contains no binary bytes.
-7. The terminal WhatsApp receipt carries the Drive link, evidence ref, filed pages, commit link, and filing disposition.
-8. Restart/replay of the same provider message returns the original job/receipt and creates neither a second Drive object nor a second memory.
-9. Reply to that receipt with additional user metadata; the exact media evidence is enriched append-only and returns its own verified commit receipt without re-uploading the binary.
-10. Ask a read-only question pinned to the original evidence; the answer uses the original distillation plus its linked enrichment and does not widen to unrelated daily-log entries. Tenant-isolation probes pass for artifact access, Drive custody, jobs, receipts, and enrichments.
+- [ ] DOD-23 Send a fresh captioned image to the live tenant WhatsApp number; an immediate progress reply arrives.
+- [ ] DOD-24 Phylax invokes `ingest_memory` once with the durable tenant + channel + provider-message idempotency key; Ring is absent from capture.
+- [ ] DOD-25 Zenod fetches the staged bytes through a least-privilege artifact capability; no customer/MCP bearer or transient fetch capability is persisted in memory, receipts, Drive metadata, or logs.
+- [ ] DOD-26 The original binary appears exactly once in the tenant's configured Google Drive archive. A missing/rejected Drive connection fails loudly and never renders Saved.
+- [ ] DOD-27 Zenod's vision path creates a grounded semantic distillation without inventing invisible details.
+- [ ] DOD-28 Git-backed memory contains the durable Drive URL, sha256, MIME/source/timestamp metadata, user caption, and distillation; it contains no binary bytes.
+- [ ] DOD-29 The terminal WhatsApp receipt carries the Drive link, evidence ref, filed pages, commit link, and filing disposition.
+- [ ] DOD-30 Restart/replay of the same provider message returns the original job/receipt and creates neither a second Drive object nor a second memory.
+- [ ] DOD-31 Reply to that receipt with additional user metadata; the exact media evidence is enriched append-only and returns its own verified commit receipt without re-uploading the binary.
+- [ ] DOD-32 Ask a read-only question pinned to the original evidence; the answer uses the original distillation plus its linked enrichment and does not widen to unrelated daily-log entries. Tenant-isolation probes pass for artifact access, Drive custody, jobs, receipts, and enrichments.
 
 ## Non-Goals
 
@@ -127,6 +131,7 @@ Terminal artifact: "I walked SHIP-B steps 1–8 on <deployed SHA>. Screenshots. 
 
 ## Current State
 
+Status: active
 - Generic typed memory-entry retrieval is merged and live on Zenod at exact SHA `d4eaac46f3322840c8c28c1bd64929e1fa68cd53`. [#1050](https://github.com/zenod-ai/zenod/pull/1050) extended the existing `search_memory`/`get_memory` seam with source, content type, capture-time bounds, order, limit, exact evidence references, and durable provenance; it did not add a voice-note-specific retrieval tool. The production Zenod catalog no longer exposes the transport-audit `get_recent_conversation_transcript`. [#1051](https://github.com/zenod-ai/zenod/pull/1051) makes exact evidence-ref reads consume the same generic provenance merger as structural lists. A live tenant query returned the 10 newest WhatsApp voice notes in correct order with stable source IDs, and exact retrieval of `Log/2026-08-01.md#^e-9b0c3d` returned only its 4,174-character transcript with matching typed provenance and no neighboring log entry. Evidence: `docs/evidence/generic-entry-retrieval-2026-08-01/`.
 - MC-17 [#1046](https://github.com/zenod-ai/zenod/issues/1046) and MC-18 [#1047](https://github.com/zenod-ai/zenod/issues/1047) are active from `a3bfe8a92a2eb18f6a10a173c72ff7d547c3a21a`. Audit found the reusable pieces already exist: Phylax image download/coalescing and `media→ingest_memory`; Zenod raw-artifact providers including Drive, vision extraction, Git-backed filing, and terminal media receipts. The missing acceptance is concrete: hosted Zenod currently forces per-tenant media archive to local disk; `ingest_memory` does not consume an idempotency key; captions are omitted from `contentHint`; the transport fetch URL uses a customer token and is eligible to enter stored source metadata; and no typed exact-target enrichment contract exists.
 - Capture-first filing is merged and live. [#1042](https://github.com/zenod-ai/zenod/pull/1042) landed the three independently green commits from pinned base `b165e262`: the atomic receipt contract, deterministic uncertain-candidate filing, and non-blocking skill/tool prose. `StoreResult` now carries `filing` and never a question; low-confidence captures with a candidate append a lint-clean, searchable `#filing/uncertain` block to the top candidate, while no-candidate or validation-failure stores fall back to Inbox. Publish run [30559261176](https://github.com/zenod-ai/zenod/actions/runs/30559261176) deployed exact `10f60835c383d0f5ea71a962c414410fb4582b8f` to Zenod MT, Ring, and Phylax. One permitted live ambiguous MT store returned a terminal `Saved — filed to Inbox` receipt with no question property; [#1043](https://github.com/zenod-ai/zenod/pull/1043) persisted the complete acceptance and production evidence at `docs/evidence/capture-first-2026-07-30/`. Main is reconciled through `52612dee94bf85c586ba1397687215b4ab8f8bb2`.
@@ -201,7 +206,7 @@ Two lanes, one thread, one assistant: capture is guaranteed and mechanical; conv
 
 ## Issue Ledger
 
-| Ticket | Wave | Title | Marking | File surface | Budget | Issue | Role | Owner / Assignment | Status | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
+| Issue | Wave | Title | Marking | File surface | Budget | GitHub issue | Role | Owner / Assignment | Status | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | MC-1 | 1 | Per-tenant turn-type → tool binding config (schema + storage + default `chat_with_ring`) | BUILD (verified absent) | `packages/server/src/phylaxTenantSettings.ts` + its tests | 90 min | [#997](https://github.com/zenod-ai/zenod/issues/997) | Ticket worker | `mc-1-binding-config` | Done / integrated | [#1002](https://github.com/zenod-ai/zenod/pull/1002) / `codex/mc-1-binding-config` | `0fac451` | Manager review + CI green; squash merge `3423c1d` | 2026-07-29 18:27 CEST | Integrated; D16 mappings and D17 `voiceDefault` are Wave 2 base inputs. |
 | MC-2 | 1 | Memory-scoped MCP tool profile for channel tokens (per-token tool allowlist enforced at the MCP endpoint) | BUILD; hosted-route trace found no usable scope mechanism, so built the smallest distinct token profile/alias per D3 | minimum chassis token-profile storage/auth-context/wiring + Zenod profile mapping/tests | 90 min | [#994](https://github.com/zenod-ai/zenod/issues/994) | Ticket worker | `mc-2-memory-token` | Done / integrated | [#1011](https://github.com/zenod-ai/zenod/pull/1011) / `codex/mc-2-memory-token` | `0fac451` | Exact-six hosted list/call; profiled credentials MCP-only; escape regression 401; 89+45 focused tests, typechecks, CI, independent review; squash merge `2ace3bd` | 2026-07-29 18:53 CEST | Integrated; D3 scoped-token mechanism is on `main`. |

@@ -1,10 +1,14 @@
 # EPIC 3.5 · Epaminon Multi-Tenant — one API, ephemeral job sandboxes
 
-Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it. Chassis references herein are stale.
+Status: deferred
+Status note: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it. Chassis references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.5-EPAMINON-MULTITENANT.md`
+Spine ID: E3-5
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: unassigned (planner draft by Epic 3.0 planner)
@@ -61,14 +65,14 @@ Split Epaminon into two parts with different lifecycles. The front is a multi-te
 
 ## Definition Of Done
 
-- [ ] Epaminon API boots via `createUnit`; task submission, status, transcript, artifact retrieval all tenant-scoped.
-- [ ] Sandbox runner: per-job container from a pinned worker image; job env carries only that job's credentials and that tenant's scoped tokens; no `CONTROL_PLANE_TOKEN`, no other tenants' secrets.
-- [ ] Lifecycle proven: spawn → run → persist transcript/evidence to `/data/<tenant>/jobs/<job>/` → teardown; no orphan containers after crash tests.
-- [ ] Concurrency + quota: per-tenant concurrent-job cap and metering via chassis; queue fairness under two-tenant load.
-- [ ] `ZENOD_AWAIT_PROVISION` flow removed; provisioning via `/api/tenants`.
-- [ ] Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants run jobs to completion watched through the UI, isolation and sandbox containment proven, no orphans after crash tests — executed autonomously with screenshots in evidence.
-- [ ] Jobs console UI (Jobs, Job detail, Submit, Limits) served from the api container per the UI Surface section.
-- [ ] Self-host parity: same image; single tenant; sandbox spawning works on a plain Docker host.
+- [ ] DOD-1 Epaminon API boots via `createUnit`; task submission, status, transcript, artifact retrieval all tenant-scoped.
+- [ ] DOD-2 Sandbox runner: per-job container from a pinned worker image; job env carries only that job's credentials and that tenant's scoped tokens; no `CONTROL_PLANE_TOKEN`, no other tenants' secrets.
+- [ ] DOD-3 Lifecycle proven: spawn → run → persist transcript/evidence to `/data/<tenant>/jobs/<job>/` → teardown; no orphan containers after crash tests.
+- [ ] DOD-4 Concurrency + quota: per-tenant concurrent-job cap and metering via chassis; queue fairness under two-tenant load.
+- [ ] DOD-5 `ZENOD_AWAIT_PROVISION` flow removed; provisioning via `/api/tenants`.
+- [ ] DOD-6 Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants run jobs to completion watched through the UI, isolation and sandbox containment proven, no orphans after crash tests — executed autonomously with screenshots in evidence.
+- [ ] DOD-7 Jobs console UI (Jobs, Job detail, Submit, Limits) served from the api container per the UI Surface section.
+- [ ] DOD-8 Self-host parity: same image; single tenant; sandbox spawning works on a plain Docker host.
 
 ## Non-Goals
 
@@ -78,6 +82,7 @@ Split Epaminon into two parts with different lifecycles. The front is a multi-te
 
 ## Current State
 
+Status: deferred
 Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main

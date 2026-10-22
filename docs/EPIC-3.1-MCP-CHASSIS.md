@@ -1,10 +1,15 @@
 # EPIC 3.1 · MCP Chassis — extract the write-once scaffold
 
-Status: CLOSED — dissolved into Zenod (2026-07-11, Jordi). The chassis is no longer a separate project; merged code stays as Zenod internal plumbing. No further tickets, merges, or freeze gates. Active work: `docs/EPIC-Z-NIGHT-SPRINT.md` only.
+Status: done
+Status note: CLOSED — dissolved into Zenod (2026-07-11, Jordi). The chassis is no longer a separate project; merged code stays as Zenod internal plumbing. No further tickets, merges, or freeze gates. Active work: `docs/EPIC-Z-NIGHT-SPRINT.md` only.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.1-MCP-CHASSIS.md`
+Spine ID: E3-1
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC Z Zenod Night Sprint](EPIC-Z-NIGHT-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Codex task `019f4932-d428-7021-806a-0003ca946fc6`
@@ -60,20 +65,20 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 
 ## Definition Of Done
 
-- [x] `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup + tokened-URL form + OAuth mapping), durable tenants table, `POST/DELETE /api/tenants` + token rotation guarded by `CONTROL_PLANE_TOKEN`, `storage.db(tenant)`/`storage.dir(tenant)` handles, encrypted per-tenant vault custody, per-tenant usage metering + quota middleware, `/healthz`, and credential-safe pino logs carrying `tenant_id` + `request_id`.
-- [x] Settings-UI shell: token/session login, durable per-tenant settings/key metadata/usage pages, unit-defined authenticated product routes, and unit panel selection. Unit routes take precedence over placeholders while anonymous SPA root/assets remain public.
-- [x] Single-tenant mode: env-seeded token auto-creates one tenant at boot; identical image and UI (self-host contract).
-- [x] A demo unit (`units/demo` or test harness) runs on the chassis with the three-tenant smoke test passing: cross-tenant access fails, per-tenant ledgers isolate.
-- [x] SEAM-SPEC vNext written (`docs/SEAM-SPEC-VNEXT.md`) covering transport, auth, tenancy, provisioning, storage, health, env, container, DNS, deploy, D16 skill-manifest, and D18 transcription rows.
-- [x] Chassis README documents `createUnit` and the migration recipe for an existing agent.
-- [x] OAuth kit (D9): OAuth server for MCP-client sign-in (lifted oauthStore/`.well-known`/consent, tenant-mapped) AND a generic OAuth client framework — a unit declares `providers: [githubApp, googleDrive, xPkce, …]` and gets start/callback routes with per-tenant state binding and vault custody; no unit writes an OAuth dance again.
-- [ ] Billing module (D10): Stripe webhook receiver (`/api/billing/webhook`, signature-verified) that inserts/suspends tenant rows + checkout success/cancel pages; enabled by env; provable with Stripe CLI test events end to end. Deterministic implementation passes; live Stripe CLI evidence remains #764.
-- [x] Conduct kit (parent D12): `createUnit` structurally enforces evidence or loud structured errors for mutations, declared ticket/poll semantics for long tools, safe-to-mutate unknown classification, `origin_ticket_id` propagation, and `depth <= 1` across modern, legacy, and updated MCP registrations. Unexpected handler errors are redacted.
-- [x] D16 unit skill manifest: `createUnit({ skill })` publishes the tenant-neutral versioned card at `/.well-known/atomic-unit-skill.json`; undeclared sensitive fields are stripped and unconfigured units return deterministic 404.
-- [x] D18 shared transcription kit: canonical media/pre-transcribed schemas, authenticated provenance, one-provider-call maximum, explicit Ring usage attribution, per-tenant vault custody, graceful failure, and bounded inline media are exported by the chassis.
-- [x] Standing directives as data (parent D12e): a seam tool to install/update per-unit operating directives (council- or user-authored); the unit re-reads them each turn (turn-preamble) and the UI renders the active set.
-- [x] Rules UI components (parent D12f): "Operating Rules" panel (SEAM conformance status + active directives + conduct receipts), MCP config settings component, skill settings component — shipped in the chassis shell for every unit.
-- [x] Three-tenant browser E2E (Autonomous Validation Protocol below) passes on the demo unit, executed by the worker via browser automation with screenshots in evidence — no human in the loop.
+- [x] DOD-1 `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup + tokened-URL form + OAuth mapping), durable tenants table, `POST/DELETE /api/tenants` + token rotation guarded by `CONTROL_PLANE_TOKEN`, `storage.db(tenant)`/`storage.dir(tenant)` handles, encrypted per-tenant vault custody, per-tenant usage metering + quota middleware, `/healthz`, and credential-safe pino logs carrying `tenant_id` + `request_id`.
+- [x] DOD-2 Settings-UI shell: token/session login, durable per-tenant settings/key metadata/usage pages, unit-defined authenticated product routes, and unit panel selection. Unit routes take precedence over placeholders while anonymous SPA root/assets remain public.
+- [x] DOD-3 Single-tenant mode: env-seeded token auto-creates one tenant at boot; identical image and UI (self-host contract).
+- [x] DOD-4 A demo unit (`units/demo` or test harness) runs on the chassis with the three-tenant smoke test passing: cross-tenant access fails, per-tenant ledgers isolate.
+- [x] DOD-5 SEAM-SPEC vNext written (`docs/SEAM-SPEC-VNEXT.md`) covering transport, auth, tenancy, provisioning, storage, health, env, container, DNS, deploy, D16 skill-manifest, and D18 transcription rows.
+- [x] DOD-6 Chassis README documents `createUnit` and the migration recipe for an existing agent.
+- [x] DOD-7 OAuth kit (D9): OAuth server for MCP-client sign-in (lifted oauthStore/`.well-known`/consent, tenant-mapped) AND a generic OAuth client framework — a unit declares `providers: [githubApp, googleDrive, xPkce, …]` and gets start/callback routes with per-tenant state binding and vault custody; no unit writes an OAuth dance again.
+- [ ] DOD-8 Billing module (D10): Stripe webhook receiver (`/api/billing/webhook`, signature-verified) that inserts/suspends tenant rows + checkout success/cancel pages; enabled by env; provable with Stripe CLI test events end to end. Deterministic implementation passes; live Stripe CLI evidence remains #764.
+- [x] DOD-9 Conduct kit (parent D12): `createUnit` structurally enforces evidence or loud structured errors for mutations, declared ticket/poll semantics for long tools, safe-to-mutate unknown classification, `origin_ticket_id` propagation, and `depth <= 1` across modern, legacy, and updated MCP registrations. Unexpected handler errors are redacted.
+- [x] DOD-10 D16 unit skill manifest: `createUnit({ skill })` publishes the tenant-neutral versioned card at `/.well-known/atomic-unit-skill.json`; undeclared sensitive fields are stripped and unconfigured units return deterministic 404.
+- [x] DOD-11 D18 shared transcription kit: canonical media/pre-transcribed schemas, authenticated provenance, one-provider-call maximum, explicit Ring usage attribution, per-tenant vault custody, graceful failure, and bounded inline media are exported by the chassis.
+- [x] DOD-12 Standing directives as data (parent D12e): a seam tool to install/update per-unit operating directives (council- or user-authored); the unit re-reads them each turn (turn-preamble) and the UI renders the active set.
+- [x] DOD-13 Rules UI components (parent D12f): "Operating Rules" panel (SEAM conformance status + active directives + conduct receipts), MCP config settings component, skill settings component — shipped in the chassis shell for every unit.
+- [x] DOD-14 Three-tenant browser E2E (Autonomous Validation Protocol below) passes on the demo unit, executed by the worker via browser automation with screenshots in evidence — no human in the loop.
 
 ## Non-Goals
 
@@ -83,6 +88,7 @@ Create `packages/mcp-chassis` (`@zenod/mcp-chassis`): the reusable scaffold ever
 
 ## Current State
 
+Status: done
 Phase: final joint proof and release gating
 Last verified: 2026-07-10 05:59 CEST
 Integration target: main
@@ -376,3 +382,27 @@ Links:
 
 - Existing token format `zenod_<48hex>` (`packages/server/src/settings.ts`); keep for continuity.
 - `node:sqlite` `DatabaseSync` wrapper: `packages/core/src/state/sqlite.ts`.
+
+## Outcome
+
+Verdict: superseded
+Outcome: Closed 2026-07-11 (Jordi): the chassis was dissolved into Zenod, merged code stays as Zenod internal plumbing, and no further tickets, merges or freeze gates apply.
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; one Definition Of Done item (billing module) was never checked off in this document.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 `packages/mcp-chassis` exists with: stateless Streamable HTTP `/mcp`, bearer→tenant resolution (`sha256(bearer)` lookup... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-2 Settings-UI shell: token/session login, durable per-tenant settings/key metadata/usage pages, unit-defined authenticated... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-3 Single-tenant mode: env-seeded token auto-creates one tenant at boot; identical image and UI (self-host contract). | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-4 A demo unit (`units/demo` or test harness) runs on the chassis with the three-tenant smoke test passing: cross-tenant ac... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-5 SEAM-SPEC vNext written (`docs/SEAM-SPEC-VNEXT.md`) covering transport, auth, tenancy, provisioning, storage, health, en... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-6 Chassis README documents `createUnit` and the migration recipe for an existing agent. | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-7 OAuth kit (D9): OAuth server for MCP-client sign-in (lifted oauthStore/`.well-known`/consent, tenant-mapped) AND a gener... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-8 Billing module (D10): Stripe webhook receiver (`/api/billing/webhook`, signature-verified) that inserts/suspends tenant... | not recorded |
+| DOD-9 Conduct kit (parent D12): `createUnit` structurally enforces evidence or loud structured errors for mutations, declared... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-10 D16 unit skill manifest: `createUnit({ skill })` publishes the tenant-neutral versioned card at `/.well-known/atomic-uni... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-11 D18 shared transcription kit: canonical media/pre-transcribed schemas, authenticated provenance, one-provider-call maxim... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-12 Standing directives as data (parent D12e): a seam tool to install/update per-unit operating directives (council- or user... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-13 Rules UI components (parent D12f): "Operating Rules" panel (SEAM conformance status + active directives + conduct receip... | ticked in this document (see its Issue Ledger and Validation Evidence) |
+| DOD-14 Three-tenant browser E2E (Autonomous Validation Protocol below) passes on the demo unit, executed by the worker via brow... | ticked in this document (see its Issue Ledger and Validation Evidence) |

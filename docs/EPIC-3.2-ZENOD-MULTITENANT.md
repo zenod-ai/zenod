@@ -1,10 +1,15 @@
 # EPIC 3.2 · Zenod Multi-Tenant — one container, all wiki brains
 
-Status: SUPERSEDED by `docs/EPIC-Z-NIGHT-SPRINT.md` (2026-07-11). All prior directives in this spine are void. Its deployed work is the night sprint's starting material. Do not execute from this document.
+Status: done
+Status note: SUPERSEDED by `docs/EPIC-Z-NIGHT-SPRINT.md` (2026-07-11). All prior directives in this spine are void. Its deployed work is the night sprint's starting material. Do not execute from this document.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.2-ZENOD-MULTITENANT.md`
+Spine ID: E3-2
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC Z Zenod Night Sprint](EPIC-Z-NIGHT-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Codex task `019f4933-5245-7651-9018-9ae342f587ac`
@@ -63,8 +68,8 @@ Run every hosted Zenod tenant from ONE container on the chassis. Tenant-prefix a
 
 SHIP — the ONLY definition of done; nothing below may be traded for anything not on this list (planner + Jordi, 2026-07-10):
 
-- [ ] THE USER JOURNEY works, walked manually by the worker in a real browser on the LIVE site, one uninterrupted clean pass, screenshots per step: open `zenod.zenod.dev` logged out → Sign in with GitHub → Subscribe → Stripe TEST checkout (session created server-side, `client_reference_id` = logged-in account; NO email matching, NO claim links, NO token paste) → land in my provisioned dashboard → every tab renders (Keys & models, Vault, Connections, Transcription, Costs, Chat) → OpenRouter key entered through the UI → ingest a note → receipt visible → logout/login persists.
-- [ ] The worker has personally clicked, in the deployed build, every element it asks Jordi to click. Then Jordi repeats the journey with his own GitHub account and a test card, and it works.
+- [ ] DOD-1 THE USER JOURNEY works, walked manually by the worker in a real browser on the LIVE site, one uninterrupted clean pass, screenshots per step: open `zenod.zenod.dev` logged out → Sign in with GitHub → Subscribe → Stripe TEST checkout (session created server-side, `client_reference_id` = logged-in account; NO email matching, NO claim links, NO token paste) → land in my provisioned dashboard → every tab renders (Keys & models, Vault, Connections, Transcription, Costs, Chat) → OpenRouter key entered through the UI → ingest a note → receipt visible → logout/login persists.
+- [ ] DOD-2 The worker has personally clicked, in the deployed build, every element it asks Jordi to click. Then Jordi repeats the journey with his own GitHub account and a test card, and it works.
 
 HARDEN — only after Jordi approves SHIP, as separate tickets: 2.x tenant migration + rollback (Z-MT-4), subdomain retirement (Z-MT-6 → 3.7 wave), self-host parity re-verification (Z-5 runbook), full isolation/rotation re-certification, repo-token vault custody polish (Z-MT-2).
 
@@ -76,6 +81,7 @@ HARDEN — only after Jordi approves SHIP, as separate tickets: 2.x tenant migra
 
 ## Current State
 
+Status: done
 Phase: implementation and autonomous validation
 Last verified: 2026-07-10 01:46 CEST
 Integration target: main
@@ -159,11 +165,11 @@ The epic worker validates WITHOUT human help, via browser automation against a f
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| [#734](https://github.com/zenod-ai/zenod/issues/734) | Ticket worker | Codex task `019f4933-5245-7651-9018-9ae342f587ac` | Z-MT-1 tenant runtime storage and token routing | in progress | #718 co-development | `codex/epic-3.2-zenod-multitenant` | `8e12ebab` | All DB/paths tenant rooted; token/API/session isolation; WAL/busy timeout. | Server typecheck + 558 tests pass in working tree. | 2026-07-10 01:46 CEST | Add focused tenant proof, review, commit. |
+| [#734](https://github.com/zenod-ai/zenod/issues/734) | Ticket worker | Codex task `019f4933-5245-7651-9018-9ae342f587ac` | Z-MT-1 tenant runtime storage and token routing | active | #718 co-development | `codex/epic-3.2-zenod-multitenant` | `8e12ebab` | All DB/paths tenant rooted; token/API/session isolation; WAL/busy timeout. | Server typecheck + 558 tests pass in working tree. | 2026-07-10 01:46 CEST | Add focused tenant proof, review, commit. |
 | [#735](https://github.com/zenod-ai/zenod/issues/735) | Ticket worker | unassigned | Z-MT-2 repo-token custody in vault | queued | #734, #718 | `codex/z-mt-2-vault-custody` reserved | `8e12ebab` | Repo token per tenant, vault-read only by Zenod. | Dependency hold recorded in issue. | 2026-07-10 01:36 CEST | Dispatch after #734 context integrates. |
-| [#733](https://github.com/zenod-ai/zenod/issues/733) | Ticket worker | Raman / `019f493d-8c95-7a33-ad08-607f5d74ba9e` | Z-MT-3 Zenod settings UI panels | in progress | #720, #734 | `codex/z-mt-3-ui-panels` | `8e12ebab` | Tenant sees repo/ingest/usage panels only for itself. | Dispatch record in #733. | 2026-07-10 01:36 CEST | Integrate web-only handoff; finish server contract on #734/#733. |
-| [#737](https://github.com/zenod-ai/zenod/issues/737) | Ticket worker | Lovelace / `019f493d-8b1b-7d92-ac8a-8530f6a56833` | Z-MT-4 migration script + rollback | in progress | #734 storage contract | `codex/z-mt-4-migration` | `8e12ebab` | Dry-run and rollback on copied volume pass checksums/integrity. | Dispatch record in #737. | 2026-07-10 01:36 CEST | Review migration handoff and synthetic-volume evidence. |
-| [#736](https://github.com/zenod-ai/zenod/issues/736) | Tester | Franklin / `019f493d-8bcc-7930-b2d5-92f4a1dab782` | Z-MT-5 three-tenant E2E + self-host parity | in progress | #734, #735, #733, #737 | `codex/z-mt-5-e2e` | `8e12ebab` | Three-tenant isolation, receipts, migration, self-host parity. | Joint proof dispatch in #736. | 2026-07-10 01:44 CEST | Land harness; execute as prerequisites integrate. |
+| [#733](https://github.com/zenod-ai/zenod/issues/733) | Ticket worker | Raman / `019f493d-8c95-7a33-ad08-607f5d74ba9e` | Z-MT-3 Zenod settings UI panels | active | #720, #734 | `codex/z-mt-3-ui-panels` | `8e12ebab` | Tenant sees repo/ingest/usage panels only for itself. | Dispatch record in #733. | 2026-07-10 01:36 CEST | Integrate web-only handoff; finish server contract on #734/#733. |
+| [#737](https://github.com/zenod-ai/zenod/issues/737) | Ticket worker | Lovelace / `019f493d-8b1b-7d92-ac8a-8530f6a56833` | Z-MT-4 migration script + rollback | active | #734 storage contract | `codex/z-mt-4-migration` | `8e12ebab` | Dry-run and rollback on copied volume pass checksums/integrity. | Dispatch record in #737. | 2026-07-10 01:36 CEST | Review migration handoff and synthetic-volume evidence. |
+| [#736](https://github.com/zenod-ai/zenod/issues/736) | Tester | Franklin / `019f493d-8bcc-7930-b2d5-92f4a1dab782` | Z-MT-5 three-tenant E2E + self-host parity | active | #734, #735, #733, #737 | `codex/z-mt-5-e2e` | `8e12ebab` | Three-tenant isolation, receipts, migration, self-host parity. | Joint proof dispatch in #736. | 2026-07-10 01:44 CEST | Land harness; execute as prerequisites integrate. |
 | [#738](https://github.com/zenod-ai/zenod/issues/738) | Ticket worker | Gibbs / `019f493d-8d3c-7841-a934-0540531463bf` | Z-MT-6 cutover + retire per-user instances | preparation | #737, #736, Jordi gates | `codex/z-mt-6-cutover` | `8e12ebab` | Approved cutover verified; legacy retirement reversible. | Dispatch record in #738. | 2026-07-10 01:36 CEST | Prepare runbook/inventory only; no live mutation. |
 
 ## Branch And Integration
@@ -257,3 +263,15 @@ Links:
 ## Appendix
 
 - Current SQLite set (from `runtime.ts`): zenod, oauth, whatsapp, ingest, tasks, execution, journeys, usage, notifications.
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC Z on 2026-07-11: all prior directives in this spine are void and its deployed work became the night sprint's starting material.
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; the document's own Status says do not execute from it.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 THE USER JOURNEY works, walked manually by the worker in a real browser on the LIVE site, one uninterrupted clean pass,... | not recorded |
+| DOD-2 The worker has personally clicked, in the deployed build, every element it asks Jordi to click. Then Jordi repeats the j... | not recorded |

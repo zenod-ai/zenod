@@ -1,10 +1,14 @@
 # EPIC CF: Callisthenes Hybrid Agentic Façade
 
-Status: draft — architecture amended and accepted by planner 2026-07-12; DISPATCH ONLY AFTER (a) Jordi approves Herald SHIP (EPIC 5) and (b) W-C1/W-C2 of `docs/EPIC-WHATSAPP-COUNCIL-INTEGRATION-TESTS.md` are integrated (CF-S2 PORTs from their result)
+Status: draft
+Status note: draft — architecture amended and accepted by planner 2026-07-12; DISPATCH ONLY AFTER (a) Jordi approves Herald SHIP (EPIC 5) and (b) W-C1/W-C2 of `docs/EPIC-WHATSAPP-COUNCIL-INTEGRATION-TESTS.md` are integrated (CF-S2 PORTs from their result)
 Created: 2026-07-12
 Updated: 2026-07-12
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-CF-CALLISTHENES-HYBRID-FACADE.md`
+Spine ID: CF
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md)
 GitHub issues: same repository; draft ledger only, no tickets minted
 Integration branch: `main`
 Active spine steward: Callisthenes hybrid-façade planner
@@ -65,13 +69,13 @@ Evolve Callisthenes from a mostly low-level MCP proxy into a hybrid domain agent
 
 SHIP:
 
-- [ ] A normal Ring-scoped Calli credential lists only the seven domain façade tools defined in CF-D2; raw X/Reddit and connection-administration tools are absent from that catalog.
-- [ ] `prepare_message` accepts a natural-language brief and returns either one structured held draft or one bounded clarification; it can never publish.
-- [ ] `respond_to_draft` understands natural-language approve/revise/cancel/unclear responses, including short affirmatives and ordinary typos, while negation, edits, ambiguity, expired state, or multiple candidates fail closed without publication.
-- [ ] A valid approval publishes the exact server-stored draft once and returns a provider-derived canonical permalink; replay returns the stored receipt without a second post.
-- [ ] Calli's intelligence cannot mint approval, bypass throttle/custody, call raw mutators directly outside the controller, or create success receipts. Every state transition and receipt is structurally evidenced.
-- [ ] Existing self-host/advanced clients retain an explicit scoped path to the raw connector catalog; the default Ring integration is migrated without a Calli-specific Ring profile.
-- [ ] One exact live build passes the walked journey (CF-S6, the epic worker personally, in Ring chat on the live deployment, walk → fix → deploy → walk again from step 1, screenshots per step):
+- [ ] DOD-1 A normal Ring-scoped Calli credential lists only the seven domain façade tools defined in CF-D2; raw X/Reddit and connection-administration tools are absent from that catalog.
+- [ ] DOD-2 `prepare_message` accepts a natural-language brief and returns either one structured held draft or one bounded clarification; it can never publish.
+- [ ] DOD-3 `respond_to_draft` understands natural-language approve/revise/cancel/unclear responses, including short affirmatives and ordinary typos, while negation, edits, ambiguity, expired state, or multiple candidates fail closed without publication.
+- [ ] DOD-4 A valid approval publishes the exact server-stored draft once and returns a provider-derived canonical permalink; replay returns the stored receipt without a second post.
+- [ ] DOD-5 Calli's intelligence cannot mint approval, bypass throttle/custody, call raw mutators directly outside the controller, or create success receipts. Every state transition and receipt is structurally evidenced.
+- [ ] DOD-6 Existing self-host/advanced clients retain an explicit scoped path to the raw connector catalog; the default Ring integration is migrated without a Calli-specific Ring profile.
+- [ ] DOD-7 One exact live build passes the walked journey (CF-S6, the epic worker personally, in Ring chat on the live deployment, walk → fix → deploy → walk again from step 1, screenshots per step):
   1. "Draft a post about <topic>" → one held draft returned with WHY, no publication.
   2. "Make it shorter, less slang" → revised draft, prior approval invalidated.
   3. "approve" (literal token, CF-D10 fast-path) → exactly one publication, canonical numeric X permalink receipt.
@@ -82,9 +86,9 @@ SHIP:
 
 HARDEN:
 
-- [ ] Add Reddit to the same façade state machine after X passes; email/Instagram remain separate future channel adapters.
-- [ ] Add MCP `notifications/tools/list_changed` and progressive authorization challenges when tenant connection or scopes change.
-- [ ] Evaluate MCP Tasks for long-running channel operations and client sampling fallbacks after the synchronous X journey is stable.
+- [ ] DOD-8 Add Reddit to the same façade state machine after X passes; email/Instagram remain separate future channel adapters.
+- [ ] DOD-9 Add MCP `notifications/tools/list_changed` and progressive authorization challenges when tenant connection or scopes change.
+- [ ] DOD-10 Evaluate MCP Tasks for long-running channel operations and client sampling fallbacks after the synchronous X journey is stable.
 
 ## Non-Goals
 
@@ -98,6 +102,7 @@ HARDEN:
 
 ## Current State
 
+Status: draft
 Phase: planning
 Last verified: 2026-07-12 22:08 CEST
 Integration target: `main`
