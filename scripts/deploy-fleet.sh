@@ -145,6 +145,11 @@ done
 rolled=()
 for row in "${targets[@]}"; do
   IFS=$'\t' read -r app_id app_name current_image <<<"$row"
+  # Dokploy >= v0.30 trims project.all to id/name/status, so read the image and env
+  # from application.one (one call), falling back to project.all's image if present.
+  app_json="$(api_get "application.one?applicationId=$app_id")"
+  current_image="$(jq -r '.dockerImage // ""' <<<"$app_json")"
+  [[ -n "$current_image" ]] || current_image="$(cut -f3 <<<"$row")"
   # Boundary guard: only Zenod production images, never the dedicated phylax image
   # or anything else, even if mistakenly allowlisted.
   [[ "$current_image" == ghcr.io/zenod-ai/zenod:* || "$current_image" == ghcr.io/zenod-ai/zenod@* ]] \
@@ -152,7 +157,7 @@ for row in "${targets[@]}"; do
   # A stale GIT_SHA env line overrides the sha baked into the image and makes
   # /api/health lie about the running build, so detect it from the app's env.
   strip_env=0
-  app_env="$(api_get "application.one?applicationId=$app_id" | jq -r '.env // ""')"
+  app_env="$(jq -r '.env // ""' <<<"$app_json")"
   if grep -q '^GIT_SHA=' <<<"$app_env"; then
     strip_env=1
     log "  $app_name: env has a GIT_SHA override; it will be removed so /api/health reports the image's own baked sha"
