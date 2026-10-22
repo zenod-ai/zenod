@@ -1,10 +1,15 @@
 # EPIC 3.3 · Callisthenes Multi-Tenant — conformance by contract, first proof
 
-Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it (no chassis, no shared-framework work). Chassis/PKCE references herein are stale.
+Status: done
+Status note: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it (no chassis, no shared-framework work). Chassis/PKCE references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.3-CALLISTHENES-MULTITENANT.md`
+Spine ID: E3-3
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: unassigned (planner draft by Epic 3.0 planner)
@@ -61,14 +66,14 @@ Make Callisthenes the first multi-tenant unit and the proof of the pattern — i
 
 ## Definition Of Done
 
-- [ ] Tenants table in `auth/token_store.py`: `tenant_id = sha256(bearer)` lookup; unknown bearer 401; no caller-asserted tenant anywhere (the #645 rule).
-- [ ] `POST /api/tenants` + rotate/suspend, guarded by `CONTROL_PLANE_TOKEN`; Stripe webhook path verified end to end on `cloud-test`.
-- [ ] Throttle (per-hour send cap), draft guard, and usage ledger keyed by tenant; one tenant's cap never starves another.
-- [ ] X OAuth2 PKCE credentials stored per tenant; `/connect` flow binds keys to the requesting tenant only.
-- [ ] Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants provisioned, each connects its own X account through the UI, sends land with per-tenant receipts, cross-tenant send/read provably fails, throttle isolation holds — executed autonomously with screenshots in evidence.
-- [ ] Tenant-scoped UI (connect, throttle, drafts/receipts, usage) served from the unit container per the UI Surface section.
-- [ ] Self-host parity: same image, env-seeded single tenant, connect UI included.
-- [ ] `calli.zenod.dev` (single hostname) serves all tenants; per-tenant instances retired.
+- [ ] DOD-1 Tenants table in `auth/token_store.py`: `tenant_id = sha256(bearer)` lookup; unknown bearer 401; no caller-asserted tenant anywhere (the #645 rule).
+- [ ] DOD-2 `POST /api/tenants` + rotate/suspend, guarded by `CONTROL_PLANE_TOKEN`; Stripe webhook path verified end to end on `cloud-test`.
+- [ ] DOD-3 Throttle (per-hour send cap), draft guard, and usage ledger keyed by tenant; one tenant's cap never starves another.
+- [ ] DOD-4 X OAuth2 PKCE credentials stored per tenant; `/connect` flow binds keys to the requesting tenant only.
+- [ ] DOD-5 Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants provisioned, each connects its own X account through the UI, sends land with per-tenant receipts, cross-tenant send/read provably fails, throttle isolation holds — executed autonomously with screenshots in evidence.
+- [ ] DOD-6 Tenant-scoped UI (connect, throttle, drafts/receipts, usage) served from the unit container per the UI Surface section.
+- [ ] DOD-7 Self-host parity: same image, env-seeded single tenant, connect UI included.
+- [ ] DOD-8 `calli.zenod.dev` (single hostname) serves all tenants; per-tenant instances retired.
 
 ## Non-Goals
 
@@ -78,6 +83,7 @@ Make Callisthenes the first multi-tenant unit and the proof of the pattern — i
 
 ## Current State
 
+Status: done
 Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main
@@ -229,3 +235,21 @@ Links:
 ## Appendix
 
 - Upstream pin: `xdevplatform/xmcp` @ `63d3436`, patches `headless-oauth1.patch`, `relax-response-required.patch`.
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC C (Callisthenes sprint), which names this spine as superseded; its own Status was ON HOLD pending re-specification after Zenod shipped.
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; chassis and PKCE references in this document are stale per its own Status.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 Tenants table in `auth/token_store.py`: `tenant_id = sha256(bearer)` lookup; unknown bearer 401; no caller-asserted tena... | not recorded |
+| DOD-2 `POST /api/tenants` + rotate/suspend, guarded by `CONTROL_PLANE_TOKEN`; Stripe webhook path verified end to end on `clou... | not recorded |
+| DOD-3 Throttle (per-hour send cap), draft guard, and usage ledger keyed by tenant; one tenant's cap never starves another. | not recorded |
+| DOD-4 X OAuth2 PKCE credentials stored per tenant; `/connect` flow binds keys to the requesting tenant only. | not recorded |
+| DOD-5 Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants provisioned, each connects its own... | not recorded |
+| DOD-6 Tenant-scoped UI (connect, throttle, drafts/receipts, usage) served from the unit container per the UI Surface section. | not recorded |
+| DOD-7 Self-host parity: same image, env-seeded single tenant, connect UI included. | not recorded |
+| DOD-8 `calli.zenod.dev` (single hostname) serves all tenants; per-tenant instances retired. | not recorded |

@@ -1,10 +1,14 @@
 # EPIC R · Ring Sprint — duplicate Zenod, the middle is the Council
 
-Status: shipped
+Status: active
+Status note: shipped
 Created: 2026-07-11
 Updated: 2026-07-13
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-R-RING-SPRINT.md`
+Spine ID: R
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Ring delivery manager
@@ -62,16 +66,16 @@ Stand up the Ring — the front door: a web chat with your own Council, wired to
 
 SHIP — the journey, walked in a REAL BROWSER on the LIVE deployment, loop until ONE uninterrupted clean pass, screenshots per step:
 
-- [x] 1. Open `ring.zenod.dev` logged out → normal landing: what the Ring is ("your council — one chat, wired to all your agents"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
-- [x] 2. Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
-- [x] 3. Sign in with GitHub — same account system as Zenod/Callisthenes, one identity across units. (DUPLICATE)
-- [x] 4. Subscribe (TEST card) → `client_reference_id` binding → tenant row in THIS container → land in the dashboard. (DUPLICATE)
-- [x] 5. Dashboard: the COUNCIL CHAT front and center (ported ChatTab); **My Units wallet** panel (add a unit by pasting its MCP URL + token; status per unit); **Keys** (tenant's OpenRouter key via UI — never env); the Ring's own MCP URL + token with copy button (this is what Phylax and external agents will call); usage; back-link to landing. No channel tabs, no other units' panels. (PORT ChatTab + persona; EVOLVE peers→wallet; DUPLICATE the rest)
-- [x] 6. Enter OpenRouter key → chat answers as the council. (PORT — existing chat path)
-- [x] 7. Wallet: paste the tenant's own Zenod MCP URL + token → unit shows connected. Tell the council "remember this: the ring is alive" → council routes to that Zenod → the Zenod commit receipt appears in the chat reply. THE golden-path moment. (PORT peer-call machinery)
-- [x] 8. The Ring's MCP FACE works: an external MCP client `initialize`s against the tenant's Ring URL and one chat tool call gets a council reply — this is the exact contract Phylax will consume. (PORT — existing /mcp plumbing)
-- [x] 9. Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
-- [x] 10. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
+- [x] DOD-1 Open `ring.zenod.dev` logged out → normal landing: what the Ring is ("your council — one chat, wired to all your agents"), Get started, Pricing, Sign in. No public token field. (DUPLICATE)
+- [x] DOD-2 Pricing: Self-hosted (free) / Monthly / Yearly, Stripe TEST. (DUPLICATE)
+- [x] DOD-3 Sign in with GitHub — same account system as Zenod/Callisthenes, one identity across units. (DUPLICATE)
+- [x] DOD-4 Subscribe (TEST card) → `client_reference_id` binding → tenant row in THIS container → land in the dashboard. (DUPLICATE)
+- [x] DOD-5 Dashboard: the COUNCIL CHAT front and center (ported ChatTab); **My Units wallet** panel (add a unit by pasting its MCP URL + token; status per unit); **Keys** (tenant's OpenRouter key via UI — never env); the Ring's own MCP URL + token with copy button (this is what Phylax and external agents will call); usage; back-link to landing. No channel tabs, no other units' panels. (PORT ChatTab + persona; EVOLVE peers→wallet; DUPLICATE the rest)
+- [x] DOD-6 Enter OpenRouter key → chat answers as the council. (PORT — existing chat path)
+- [x] DOD-7 Wallet: paste the tenant's own Zenod MCP URL + token → unit shows connected. Tell the council "remember this: the ring is alive" → council routes to that Zenod → the Zenod commit receipt appears in the chat reply. THE golden-path moment. (PORT peer-call machinery)
+- [x] DOD-8 The Ring's MCP FACE works: an external MCP client `initialize`s against the tenant's Ring URL and one chat tool call gets a council reply — this is the exact contract Phylax will consume. (PORT — existing /mcp plumbing)
+- [x] DOD-9 Logout/login persists chat wallet keys; second tenant sees none of the first tenant's wallet, chat history, or keys.
+- [x] DOD-10 Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test."
 
 HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now approved and tracked as R-H1..R-H5 below. The later Ring experience-convergence lap is tracked as W-R1..W-R4: explicit catalog intent, concise cited MCP reads, logical-call dedupe, and channel-independent standing-approval truth. Multiple-unit routing rules, Google sign-in, and standing-directives remain future work.
 
@@ -84,6 +88,7 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 
 ## Current State
 
+Status: active
 Phase: shipped; Ring exact-tool hardening deployed — generic MCP, truthful receipts/holds, and fail-closed cited reads live
 Last verified: 2026-07-13T02:50:00+02:00
 Integration target: main

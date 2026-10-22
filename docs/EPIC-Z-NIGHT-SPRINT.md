@@ -1,10 +1,14 @@
 # EPIC Z · Zenod Night Sprint — the complete atomic unit, testable by Jordi in the morning
 
-Status: shipped
+Status: active
+Status note: shipped
 Created: 2026-07-11
 Updated: 2026-07-12
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-Z-NIGHT-SPRINT.md`
+Spine ID: Z
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Night-sprint delivery manager (bind on dispatch)
@@ -58,14 +62,14 @@ Ship Zenod as ONE self-contained container that is the entire business: public l
 
 SHIP — the journey, nothing else counts. The manager walks it in a REAL BROWSER on the LIVE deployment, in a loop (walk → first breakage → fix → deploy → walk again from step 1), until ONE uninterrupted clean pass, screenshots per step:
 
-- [x] 1. Open the product domain logged out → a NORMAL LANDING PAGE: what Zenod is, "Get started", "Pricing", "Sign in". No console, no token field anywhere public.
-- [x] 2. Pricing page: exactly three options — Self-hosted (free, links to README/one-liner), Monthly, Yearly. Stripe TEST for the paid two.
-- [x] 3. Sign in with GitHub — the ONLY sign-in method tonight, and it already works on the deployed pilot; reuse that exact flow. Signing in returns you to the landing page, now showing your name + a "Dashboard" link. Registration IS sign-in. No Google button anywhere (future thing, not tonight).
-- [x] 4. Subscribe (monthly, TEST card): checkout session created server-side with `client_reference_id` = account id; webhook inserts the tenant row bound to that account; return lands in the dashboard.
-- [x] 5. Dashboard (`/app` or app subdomain, with a clear link back to the landing): MCP URL + token FRONT AND CENTER with copy button and Claude/Codex snippets; Connect-your-vault (GitHub repo authorize + pick — repo identity may differ from login identity); credit/usage; settings. Tabs REMOVED for Zenod: Transcription, WhatsApp, Telegram, Ring — gone, not hidden behind flags that might flip back.
-- [x] 6. Connect a test vault repo through the UI; MCP `initialize` + one tool call against the minted URL succeeds.
-- [x] 7. Log out, log back in: everything persists. An unsubscribed signed-in account sees the dashboard replaced by an upgrade prompt.
-- [x] 8. Morning package posted: "I walked the full journey myself and it works" + landing URL + per-step screenshots. Every element Jordi will click was clicked by the manager in the same deployed build.
+- [x] DOD-1 Open the product domain logged out → a NORMAL LANDING PAGE: what Zenod is, "Get started", "Pricing", "Sign in". No console, no token field anywhere public.
+- [x] DOD-2 Pricing page: exactly three options — Self-hosted (free, links to README/one-liner), Monthly, Yearly. Stripe TEST for the paid two.
+- [x] DOD-3 Sign in with GitHub — the ONLY sign-in method tonight, and it already works on the deployed pilot; reuse that exact flow. Signing in returns you to the landing page, now showing your name + a "Dashboard" link. Registration IS sign-in. No Google button anywhere (future thing, not tonight).
+- [x] DOD-4 Subscribe (monthly, TEST card): checkout session created server-side with `client_reference_id` = account id; webhook inserts the tenant row bound to that account; return lands in the dashboard.
+- [x] DOD-5 Dashboard (`/app` or app subdomain, with a clear link back to the landing): MCP URL + token FRONT AND CENTER with copy button and Claude/Codex snippets; Connect-your-vault (GitHub repo authorize + pick — repo identity may differ from login identity); credit/usage; settings. Tabs REMOVED for Zenod: Transcription, WhatsApp, Telegram, Ring — gone, not hidden behind flags that might flip back.
+- [x] DOD-6 Connect a test vault repo through the UI; MCP `initialize` + one tool call against the minted URL succeeds.
+- [x] DOD-7 Log out, log back in: everything persists. An unsubscribed signed-in account sees the dashboard replaced by an upgrade prompt.
+- [x] DOD-8 Morning package posted: "I walked the full journey myself and it works" + landing URL + per-step screenshots. Every element Jordi will click was clicked by the manager in the same deployed build.
 
 HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07-11), transcription relocation to Phylax, old-tenant migration, mind.zenod.dev/cloud cleanup beyond what step 5 requires, self-host README polish.
 
@@ -78,6 +82,7 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 
 ## Current State
 
+Status: active
 Phase: shipped; canonical Zenod Agent Skill v1.0.0 advertised and live-imported by Ring
 Last verified: 2026-07-12T01:58:31+02:00
 Integration target: main
@@ -159,7 +164,7 @@ Every decision pre-answered; the manager invents nothing:
 | [#803](https://github.com/zenod-ai/zenod/issues/803) | Ticket worker | Z-N5-worker / Turing | Z-N5 one domain family; re-mint MCP URLs; 301 mind host | done | domain rule resolved | [#812](https://github.com/zenod-ai/zenod/pull/812) / `codex/z-n5-domain` | `43a38a0` | One container serves 1–7; cloud runs nothing | cloud canonical; retired hosts 404; mind path-preserving 301 | 2026-07-10T23:16:00+02:00 | integrated |
 | [#805](https://github.com/zenod-ai/zenod/issues/805) | Epic worker | Night-sprint delivery manager | Z-N6 journey loop to one clean pass + morning package | done | Z-N3, Z-N5 | [#814](https://github.com/zenod-ai/zenod/pull/814), [#815](https://github.com/zenod-ai/zenod/pull/815), [#816](https://github.com/zenod-ai/zenod/pull/816), [#817](https://github.com/zenod-ai/zenod/pull/817) | `43a38a0` | SHIP items 1–8 | uninterrupted Chrome pass on `35f7cd8`; seven screenshots; MCP initialize + tool call | 2026-07-10T23:16:00+02:00 | morning package |
 | [#828](https://github.com/zenod-ai/zenod/pull/828) | Ticket worker | Async receipt fix | Preserve accepted receipts for async MCP tools | done | shipped MT | [#828](https://github.com/zenod-ai/zenod/pull/828) | `6708d5f` | `store_memory`/`ingest_memory`/`task_brain`/`run_task` return accepted ticket contracts | merged `95f9370`; live `F5 banana receipt-fix` stored once and found | 2026-07-11T02:05:00+02:00 | integrated |
-| [#831](https://github.com/zenod-ai/zenod/issues/831) | Tester | Iteration 1 steward | Human-like Zenod MT memory acceptance battery | testing | shipped MT | reports [#832](https://github.com/zenod-ai/zenod/issues/832), [#833](https://github.com/zenod-ai/zenod/issues/833), [#834](https://github.com/zenod-ai/zenod/issues/834) | `95f9370` | write, narrow/broad recall, synthesis, correction, distractors, unknowns, citations | baseline 12 PASS / 5 FAIL; targeted remediation 3/3 PASS on `6352ee1` | 2026-07-11T03:03:00+02:00 | Iteration 2 for two residual failures |
+| [#831](https://github.com/zenod-ai/zenod/issues/831) | Tester | Iteration 1 steward | Human-like Zenod MT memory acceptance battery | active | shipped MT | reports [#832](https://github.com/zenod-ai/zenod/issues/832), [#833](https://github.com/zenod-ai/zenod/issues/833), [#834](https://github.com/zenod-ai/zenod/issues/834) | `95f9370` | write, narrow/broad recall, synthesis, correction, distractors, unknowns, citations | baseline 12 PASS / 5 FAIL; targeted remediation 3/3 PASS on `6352ee1` | 2026-07-11T03:03:00+02:00 | Iteration 2 for two residual failures |
 | [#832](https://github.com/zenod-ai/zenod/issues/832) | Tester | Harvey | L1 durable write + narrow retrieval | test complete / open | #831 | evidence comment | `95f9370` | receipt, terminal write, exact/narrow retrieval, readback, once-only | core 6/6; supplemental multi-term ranking failed, then passed after #843 | 2026-07-11T03:03:00+02:00 | close with parent or carry to Iteration 2 |
 | [#833](https://github.com/zenod-ai/zenod/issues/833) | Tester | Bohr | L2 paraphrase, broad recall, synthesis | partial / open | #831 | evidence comment | `95f9370` | human narrow + broad, marker scope, synthesis | baseline 2/5; human narrow and broad grounding targets now pass; marker-scoped broad isolation remains unrerun | 2026-07-11T03:03:00+02:00 | Iteration 2 marker-isolation replay |
 | [#834](https://github.com/zenod-ai/zenod/issues/834) | Tester | Arendt | L3 correction, distractor, unknown, citations | partial / open | #831 | evidence comment | `95f9370` | correction, near-match, unknown honesty, citation dereference | 4/5; response completeness still omitted requested `Amber-902` | 2026-07-11T03:03:00+02:00 | Iteration 2 completeness replay |

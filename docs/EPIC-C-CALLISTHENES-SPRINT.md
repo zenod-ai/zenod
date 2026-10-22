@@ -1,10 +1,14 @@
 # EPIC C · Callisthenes Sprint — duplicate Zenod, swap the middle, sell the mouth
 
-Status: shipped; HARDEN active
+Status: active
+Status note: shipped; HARDEN active
 Created: 2026-07-11
 Updated: 2026-07-11
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-C-CALLISTHENES-SPRINT.md`
+Spine ID: C
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Callisthenes delivery manager
@@ -61,15 +65,15 @@ Stand up Callisthenes — "one mouth for all your agents" — as the second self
 
 SHIP — the journey, nothing else counts. The manager walks it in a REAL BROWSER on the LIVE deployment, in a loop (walk → first breakage → fix → deploy → walk again from step 1), until ONE uninterrupted clean pass, screenshots per step:
 
-- [x] 1. Open `calli.zenod.dev` logged out → a normal landing page: what Callisthenes is ("one mouth for all your agents — your keys, your throttle, receipts for every send"), Get started, Pricing, Sign in. No token field anywhere public.
-- [x] 2. Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST.
-- [x] 3. Sign in with GitHub — same account system as Zenod (one identity across units), sign-in returns to the landing showing name + Dashboard link.
-- [x] 4. Subscribe (monthly, TEST card): server-side checkout session with `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard.
-- [x] 5. Dashboard: **MCP URL + token front and center** with copy button and Claude/Codex snippets; Connect X card with the EXISTING three-credential inputs + Authorize + PIN flow; Drafts & receipts panel (read view); throttle state; usage; link back to landing. NO tabs from other units.
-- [x] 6. Connect X through the UI: paste the three app credentials → Authorize → approve on X → enter PIN → "Connected ✓", token pair in per-tenant custody.
-- [x] 7. Agent seam: an MCP client using the minted URL creates a post → held as draft (`[draft_not_approved]`, C-22); draft visible in the dashboard; `approve_send` via MCP posts EXACTLY ONCE → **canonical x.com permalink receipt** in the agent reply and dashboard history; throttle counter increments.
-- [x] 8. Logout/login persists everything. Second tenant provisioned by the manager cannot see the first tenant's connection, drafts, or receipts.
-- [x] 9. Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
+- [x] DOD-1 Open `calli.zenod.dev` logged out → a normal landing page: what Callisthenes is ("one mouth for all your agents — your keys, your throttle, receipts for every send"), Get started, Pricing, Sign in. No token field anywhere public.
+- [x] DOD-2 Pricing: exactly three options — Self-hosted (free) / Monthly / Yearly, Stripe TEST.
+- [x] DOD-3 Sign in with GitHub — same account system as Zenod (one identity across units), sign-in returns to the landing showing name + Dashboard link.
+- [x] DOD-4 Subscribe (monthly, TEST card): server-side checkout session with `client_reference_id` = account id → webhook inserts the tenant row in THIS container → land in the dashboard.
+- [x] DOD-5 Dashboard: **MCP URL + token front and center** with copy button and Claude/Codex snippets; Connect X card with the EXISTING three-credential inputs + Authorize + PIN flow; Drafts & receipts panel (read view); throttle state; usage; link back to landing. NO tabs from other units.
+- [x] DOD-6 Connect X through the UI: paste the three app credentials → Authorize → approve on X → enter PIN → "Connected ✓", token pair in per-tenant custody.
+- [x] DOD-7 Agent seam: an MCP client using the minted URL creates a post → held as draft (`[draft_not_approved]`, C-22); draft visible in the dashboard; `approve_send` via MCP posts EXACTLY ONCE → **canonical x.com permalink receipt** in the agent reply and dashboard history; throttle counter increments.
+- [x] DOD-8 Logout/login persists everything. Second tenant provisioned by the manager cannot see the first tenant's connection, drafts, or receipts.
+- [x] DOD-9 Test package: "I manually walked the full journey and it works. URL + screenshots. Now you test." Every element Jordi will click was clicked by the manager in the same deployed build.
 
 HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via MCP `approve_send` — existing code), Reddit/email connectors, Google sign-in, self-host README polish, retirement of the old x-mcp/callisthenes 2.x service (route to 3.7).
 
@@ -81,6 +85,7 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 
 ## Current State
 
+Status: active
 Phase: HARDEN wave 1 complete and live — generic peer readiness handed to Ring; autodeploy bound
 Last verified: 2026-07-11T05:12:00+02:00
 Integration target: main

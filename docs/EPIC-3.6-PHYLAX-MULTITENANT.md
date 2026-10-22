@@ -1,10 +1,15 @@
 # EPIC 3.6 · Phylax — one container per phone number, users are whitelist rows
 
-Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`). Note: transcription moves INTO Phylax when this respawns (Jordi 2026-07-11). Chassis references herein are stale.
+Status: done
+Status note: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`). Note: transcription moves INTO Phylax when this respawns (Jordi 2026-07-11). Chassis references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.6-PHYLAX-MULTITENANT.md`
+Spine ID: E3-6
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC P Phylax Sprint](EPIC-P-PHYLAX-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: unassigned (planner draft by Epic 3.0 planner)
@@ -61,14 +66,14 @@ Make Phylax a full MCP unit, dual-faced (parent D14). It is the channels guy: AL
 
 ## Definition Of Done
 
-- [ ] Provisioning path creates NO Phylax container per customer; buying any product only writes whitelist/pairing rows consumed via the ring/control plane.
-- [ ] MCP SERVER face live and SEAM-conformant: `/mcp` with `send_message`/`notify`/`channel_status` tools returning receipts (delivery id/status — never a silent ack); any tokened agent can post a notification through WhatsApp or Telegram.
-- [ ] MCP CLIENT face live: inbound messages forwarded as standard MCP tool calls (sender-tagged, zero intelligence) to the ONE configured downstream URL+token (default: the Ring, whose pairing table maps sender→tenant); downstream configurable via UI/API; three-sender E2E per the Autonomous Validation Protocol below.
-- [ ] Phylax's own UI live per the UI Surface section: number reveal (whitelisted users only), Telegram bot setup/binding, per-user channel settings, downstream wiring panel; operator `/admin` control-plane-token-guarded.
-- [ ] Phylax config (whitelist, pairing) is runtime-updatable — API or watched config — with zero container restarts on user add/remove.
-- [ ] `/healthz` + one watchdog check; Baileys session state on its own `/data` volume; documented session-recovery runbook.
-- [ ] Contract note added to SEAM-SPEC vNext: channel units are per-resource (phone number); dual-faced (MCP server + MCP client to one configured downstream); users are whitelist/pairing rows.
-- [ ] Second-number playbook documented: standing up phylax-2 for a future dedicated/BSP number is compose + volume + pairing, nothing else.
+- [ ] DOD-1 Provisioning path creates NO Phylax container per customer; buying any product only writes whitelist/pairing rows consumed via the ring/control plane.
+- [ ] DOD-2 MCP SERVER face live and SEAM-conformant: `/mcp` with `send_message`/`notify`/`channel_status` tools returning receipts (delivery id/status — never a silent ack); any tokened agent can post a notification through WhatsApp or Telegram.
+- [ ] DOD-3 MCP CLIENT face live: inbound messages forwarded as standard MCP tool calls (sender-tagged, zero intelligence) to the ONE configured downstream URL+token (default: the Ring, whose pairing table maps sender→tenant); downstream configurable via UI/API; three-sender E2E per the Autonomous Validation Protocol below.
+- [ ] DOD-4 Phylax's own UI live per the UI Surface section: number reveal (whitelisted users only), Telegram bot setup/binding, per-user channel settings, downstream wiring panel; operator `/admin` control-plane-token-guarded.
+- [ ] DOD-5 Phylax config (whitelist, pairing) is runtime-updatable — API or watched config — with zero container restarts on user add/remove.
+- [ ] DOD-6 `/healthz` + one watchdog check; Baileys session state on its own `/data` volume; documented session-recovery runbook.
+- [ ] DOD-7 Contract note added to SEAM-SPEC vNext: channel units are per-resource (phone number); dual-faced (MCP server + MCP client to one configured downstream); users are whitelist/pairing rows.
+- [ ] DOD-8 Second-number playbook documented: standing up phylax-2 for a future dedicated/BSP number is compose + volume + pairing, nothing else.
 
 ## Non-Goals
 
@@ -79,6 +84,7 @@ Make Phylax a full MCP unit, dual-faced (parent D14). It is the channels guy: AL
 
 ## Current State
 
+Status: done
 Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main
@@ -234,3 +240,21 @@ Links:
 ## Appendix
 
 - Phylax has no `units/` folder today; it exists as `docker-compose.phylax.yml` + `AGENT=phylax`. Creating `units/phylax/` docs can ride P-4.
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC P (Phylax sprint), which names this spine as superseded and carries its D14/D18 doctrine forward.
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; chassis references in this document are stale per its own Status.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 Provisioning path creates NO Phylax container per customer; buying any product only writes whitelist/pairing rows consum... | not recorded |
+| DOD-2 MCP SERVER face live and SEAM-conformant: `/mcp` with `send_message`/`notify`/`channel_status` tools returning receipts... | not recorded |
+| DOD-3 MCP CLIENT face live: inbound messages forwarded as standard MCP tool calls (sender-tagged, zero intelligence) to the ON... | not recorded |
+| DOD-4 Phylax's own UI live per the UI Surface section: number reveal (whitelisted users only), Telegram bot setup/binding, per... | not recorded |
+| DOD-5 Phylax config (whitelist, pairing) is runtime-updatable — API or watched config — with zero container restarts on user a... | not recorded |
+| DOD-6 `/healthz` + one watchdog check; Baileys session state on its own `/data` volume; documented session-recovery runbook. | not recorded |
+| DOD-7 Contract note added to SEAM-SPEC vNext: channel units are per-resource (phone number); dual-faced (MCP server + MCP clie... | not recorded |
+| DOD-8 Second-number playbook documented: standing up phylax-2 for a future dedicated/BSP number is compose + volume + pairing,... | not recorded |

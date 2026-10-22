@@ -1,10 +1,15 @@
 # EPIC 3.4 · Ring Multi-Tenant — the door on the chassis
 
-Status: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it. Chassis references herein are stale.
+Status: done
+Status note: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it. Chassis references herein are stale.
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.4-RING-MULTITENANT.md`
+Spine ID: E3-4
+Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC R Ring Sprint](EPIC-R-RING-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: unassigned (planner draft by Epic 3.0 planner)
@@ -62,15 +67,15 @@ Run the Ring — the door/router that authenticates humans and routes them to th
 
 ## Definition Of Done
 
-- [ ] A real `ring` unit definition exists (no silent fallback to Zenod) and boots via `createUnit`.
-- [ ] User→ring auth plane (Law 6a) works per tenant in one container: web login native; channel identity arrives as sender-tagged MCP calls FROM Phylax (parent D14 — no channel code in the ring), mapped by the ring's pairing table.
-- [ ] Agent→unit token wallet per tenant: each ring tenant holds tokens only for the units that tenant enabled; wallet rows tenant-keyed in chassis vault.
-- [ ] Routing verified: tenant A's ring reaches tenant A's Zenod/Callisthenes tenants only (two-tenant smoke test extended to routing).
-- [ ] Ring settings UI panels (My Units wallet, Routing, Usage) tenant-scoped in the unit container per the UI Surface section.
-- [ ] Web chat live as a channel (parent D15): ported `ChatTab` UX; a message or binary sent via webchat traverses the identical inbound pipeline as a Phylax-forwarded message and reaches the same council brain; tool testing works.
-- [ ] Skill-per-unit live (parent D16): wiring a unit into the wallet auto-imports its published skill manifest; the routing brain demonstrably uses it (route-test cites the skill); skill-settings UI renders the installed set.
-- [ ] Self-host parity: single-tenant ring with env token, UI included.
-- [ ] Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants wired to their own downstream unit tenants, messages route only to the correct tenant's units, wallet/pairing isolation proven — executed autonomously with screenshots in evidence.
+- [ ] DOD-1 A real `ring` unit definition exists (no silent fallback to Zenod) and boots via `createUnit`.
+- [ ] DOD-2 User→ring auth plane (Law 6a) works per tenant in one container: web login native; channel identity arrives as sender-tagged MCP calls FROM Phylax (parent D14 — no channel code in the ring), mapped by the ring's pairing table.
+- [ ] DOD-3 Agent→unit token wallet per tenant: each ring tenant holds tokens only for the units that tenant enabled; wallet rows tenant-keyed in chassis vault.
+- [ ] DOD-4 Routing verified: tenant A's ring reaches tenant A's Zenod/Callisthenes tenants only (two-tenant smoke test extended to routing).
+- [ ] DOD-5 Ring settings UI panels (My Units wallet, Routing, Usage) tenant-scoped in the unit container per the UI Surface section.
+- [ ] DOD-6 Web chat live as a channel (parent D15): ported `ChatTab` UX; a message or binary sent via webchat traverses the identical inbound pipeline as a Phylax-forwarded message and reaches the same council brain; tool testing works.
+- [ ] DOD-7 Skill-per-unit live (parent D16): wiring a unit into the wallet auto-imports its published skill manifest; the routing brain demonstrably uses it (route-test cites the skill); skill-settings UI renders the installed set.
+- [ ] DOD-8 Self-host parity: single-tenant ring with env token, UI included.
+- [ ] DOD-9 Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants wired to their own downstream unit tenants, messages route only to the correct tenant's units, wallet/pairing isolation proven — executed autonomously with screenshots in evidence.
 
 ## Non-Goals
 
@@ -80,6 +85,7 @@ Run the Ring — the door/router that authenticates humans and routes them to th
 
 ## Current State
 
+Status: done
 Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main
@@ -228,3 +234,22 @@ Links:
 ## Appendix
 
 - `units/ring/docker-compose.ring.yml` comment: ring-core "boots the deterministic core, NOT a BrainEngine."
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC R (Ring sprint), which names this spine as superseded; its own Status was ON HOLD pending re-specification after Zenod shipped.
+Closed: 2026-10-22 by spine-conform worker
+Risk: Not recorded; chassis references in this document are stale per its own Status.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 A real `ring` unit definition exists (no silent fallback to Zenod) and boots via `createUnit`. | not recorded |
+| DOD-2 User→ring auth plane (Law 6a) works per tenant in one container: web login native; channel identity arrives as sender-ta... | not recorded |
+| DOD-3 Agent→unit token wallet per tenant: each ring tenant holds tokens only for the units that tenant enabled; wallet rows te... | not recorded |
+| DOD-4 Routing verified: tenant A's ring reaches tenant A's Zenod/Callisthenes tenants only (two-tenant smoke test extended to... | not recorded |
+| DOD-5 Ring settings UI panels (My Units wallet, Routing, Usage) tenant-scoped in the unit container per the UI Surface section... | not recorded |
+| DOD-6 Web chat live as a channel (parent D15): ported `ChatTab` UX; a message or binary sent via webchat traverses the identic... | not recorded |
+| DOD-7 Skill-per-unit live (parent D16): wiring a unit into the wallet auto-imports its published skill manifest; the routing b... | not recorded |
+| DOD-8 Self-host parity: single-tenant ring with env token, UI included. | not recorded |
+| DOD-9 Three-tenant browser E2E (Autonomous Validation Protocol below) passes: three tenants wired to their own downstream unit... | not recorded |
