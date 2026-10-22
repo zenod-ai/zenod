@@ -44,6 +44,9 @@ services:
       X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions"
     networks: [zenod-x-net]
     restart: unless-stopped
+    # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
+    mem_limit: 192m
+    memswap_limit: 192m
 
   x-mcp-postread:
     build:
@@ -75,3 +78,6 @@ services:
       X_API_TOOL_ALLOWLIST: "getPostsById,getPostsByIds,searchPostsRecent,getUsersPosts,getUsersById,getUsersByUsername,getUsersMe,getUsersMentions,createPosts,deletePosts,mediaUpload"
     networks: [zenod-x-net]
     restart: unless-stopped
+    # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
+    mem_limit: 192m
+    memswap_limit: 192m

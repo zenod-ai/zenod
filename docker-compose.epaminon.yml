@@ -32,6 +32,9 @@ services:
     image: zenod-epaminon:dokploy
     container_name: zenod-epaminon
     restart: unless-stopped
+    # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
+    mem_limit: 320m
+    memswap_limit: 320m
     networks: [dokploy-network]
     volumes:
       - zenod-epaminon-data:/data
