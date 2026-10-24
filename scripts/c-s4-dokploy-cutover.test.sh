@@ -53,7 +53,6 @@ compose_json="$(env GIT_SHA=abcdef0 GITHUB_OAUTH_CLIENT_ID=x GITHUB_OAUTH_CLIENT
 [[ "$(jq -r '.services["calli-engine"].networks|keys|join(",")' <<<"$compose_json")" == 'callisthenes-private' ]]
 [[ "$(jq -r '.services["calli-front"].ports // [] | length' <<<"$compose_json")" == 0 ]]
 [[ "$(jq -r '.services["calli-front"].expose|join(",")' <<<"$compose_json")" == 8080 ]]
-[[ "$(jq -r '.services["calli-front"].image' <<<"$compose_json")" == ghcr.io/zenod-ai/zenod:sha-2c34984 ]]
-[[ "$(jq -r '.services["calli-front"].build // "none"' <<<"$compose_json")" == none ]]
+[[ "$(jq -r '.services["calli-front"].build.args.GIT_SHA' <<<"$compose_json")" == abcdef0 ]]
 
 echo 'C-S4 guarded cutover contract tests passed'

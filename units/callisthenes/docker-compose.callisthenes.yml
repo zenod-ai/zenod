@@ -11,8 +11,12 @@ volumes:
 
 services:
   calli-front:
-    # pinned GHCR image built by publish.yml (no source build on VPS1, infra-vps S9); bump the sha by PR.
-    image: ${CALLISTHENES_FRONT_IMAGE:-ghcr.io/zenod-ai/zenod:sha-2c34984}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:?required}
+    image: ${CALLISTHENES_FRONT_IMAGE:-zenod-callisthenes-front}
     environment:
       NODE_ENV: production
       PORT: "8080"

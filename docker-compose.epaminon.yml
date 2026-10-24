@@ -24,8 +24,12 @@ volumes:
 
 services:
   zenod-epaminon:
-    # pinned GHCR image built by publish.yml (no source build on VPS1, infra-vps S9); bump the sha by PR.
-    image: ghcr.io/zenod-ai/zenod:sha-2c34984
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: zenod-epaminon:dokploy
     container_name: zenod-epaminon
     restart: unless-stopped
     # S5 (infra-vps EPIC-2): hard memory cap, no swap (memswap_limit = mem_limit).
