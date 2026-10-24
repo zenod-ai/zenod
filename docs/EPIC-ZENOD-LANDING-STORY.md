@@ -19,7 +19,7 @@ Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local i
 ## Current State
 
 Owner: /root landing-story integration worker
-Status: review
+Status: active (review)
 Last attempted: harmonized recall and hosting artwork locally toward the unchanged hero on 2026-09-22; muted ivory/cyan and classical engraving replace bright white/smooth figures
 Result: all ten diagram-led chapters and the corrected Hellenic capture/MCP illustration are live at https://zenod.dev/; original hero preserved. No other service deployment or non-SHA environment/mount changes.
 Evidence: [production receipt](evidence/landing-story-integration/production.md); CI/image publication pass; 17 site tests and build pass; exact running image/OCI/health and live browser desktop/mobile checks verified
