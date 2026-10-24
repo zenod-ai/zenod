@@ -43,7 +43,7 @@ The steps are [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) A0–A5; these ar
 
 Status: active
 Phase: milestone A ([ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md)) revived 2026-10-24, steps A0–A5 defined, none started. Every other spine in this repo is closed ([TIDY-2026-10-24](TIDY-2026-10-24.md)).
-Last attempted: E16-S2 root rewrite and five verdicts (ZMR, ZDU, ZLS, E3-5, CF), 2026-10-24 (Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5).
+Last attempted: agent_team EPIC-16 tree cleanse, 2026-10-24 (Jordi go, deck slide 5): root rewrite + five verdicts (#1428), AGENTS.md routes to open work only (#1429), 107 open rows in 22 closed epics swept to `superseded` and ZDU/ZMR status lines fixed (#1430). `tree_audit.py`: 0 finished epics with open rows, 0 status problems; residual: 58 non-standard row words in closed epics (history), 25 epics over 150 lines.
 Production: `https://cloud.zenod.dev/api/health` reported `687f259` (= `main` HEAD) on 2026-10-24; the Publish image `deploy` job fails on `main` since 2026-10-24 (Dokploy API 404), owned by ZAL A0. Signup and paid checkout opened 2026-09-16 on `83c2752`; live billing never performed.
 Waiting on: nobody at the root. Human gates live in ZAL: A1 voice test, A5 Stripe verification + live €9. The per-plan allowance figure and turning on blocking at the cap (D30) move with A2.
 Next action: ZAL A0, re-check prod end to end (signup → WhatsApp → console), read-only, and fix the push-to-main deploy.
@@ -112,7 +112,7 @@ Older decisions (D1–D21): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.
 
 ## Operating Learnings
 
-EpicSpine skill: 2026.10.09 @ 8c6eef8, checked 2026-10-14
+EpicSpine skill: 2026.10.24.10 @ 1ce5487 (vendored copy re-synced in #1430), checked 2026-10-24
 
 Always:
 - L-1 | any task beyond answering a question | the delivery manager dispatches a worker and never implements itself | Jordi's chosen operating model | confirmed 2026-10-10
