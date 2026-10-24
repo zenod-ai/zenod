@@ -1,6 +1,6 @@
 # EPIC: Zenod Memory Reliability
 
-Status: done — superseded (see Outcome)
+Status: superseded
 Created: 2026-09-06
 Updated: 2026-10-24
 Repository: zenod-ai/zenod
@@ -13,7 +13,7 @@ Additional root rationale: n/a
 Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
-Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
+Former spine steward: ZMR-reconciliation-delivery-manager (current task /root)
 Steward since: 2026-09-13T16:44:41.746725+00:00
 Last reconciled commit: `39fd8d95819f3f91020ab8032f88d9de7f541aa5` on `main` (2026-09-18). Live production source remains `22440b4151289900370b1ed375edc1b7aeaca1a1`, verified via `https://cloud.zenod.dev/api/health` (2026-09-17). `main` contains later docs/tests and unrelated delivery-stream changes; this reconciliation adds only the B13 eval task and does not claim a new runtime deployment.
 Planner: Jordi + ZMR-release-planner
@@ -120,7 +120,7 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
-Status: done — superseded (see Outcome)
+Status: superseded
 Phase: M2 dependable basic store, recall and recent-context conversation is implemented and deployed. Exact candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` passed the frozen isolated suite 36/36 and a representative production MCP smoke 6/6. The bounded reliability milestone is complete; broader transport and presentation work stays separate. M2 evaluation and cost reports (#1324–#1331) and the additive B13 voice-note-inventory regression (#1348/PR #1349) are integrated on `main` `39fd8d95819f3f91020ab8032f88d9de7f541aa5`. Live production runs `22440b4151289900370b1ed375edc1b7aeaca1a1` (verified via `https://cloud.zenod.dev/api/health`, 2026-09-17). Later `main` commits include unrelated delivery-stream changes; no new runtime deployment is claimed by this eval-only reconciliation.
 Last verified: 2026-09-18 Europe/Paris.
 Live production source verified via `https://cloud.zenod.dev/api/health` is `22440b4151289900370b1ed375edc1b7aeaca1a1` (2026-09-17); the earlier M2 candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` remains an ancestor of `main`. The existing one-replica service, `zenod-mt-data:/data` mount and every non-`GIT_SHA` environment value were preserved. Verified pre-deploy restore covered 958 files, 40 JSON files and 79 SQLite databases.
@@ -132,7 +132,7 @@ Human gates: none pending for this milestone. No recurring automation was create
 
 Earlier checkpoints (M1, Sept 7–8 repairs): [ZMR Current State history](archive/ZMR-CURRENT-STATE-HISTORY-2026-10.md).
 
-## Execution Cursor
+## Execution Cursor (history)
 
 ### M2 evaluation report wave — 2026-09-17
 
