@@ -5,7 +5,9 @@ Installed by ``agents_block.py install-global`` (removed by ``uninstall-global``
 re-ensured by rehook.py at session start, so a machine that self-updates gets it without a manual re-run. Only the
 real home is scheduled (``--home`` overrides never touch crontab/launchd). Other crontab entries are preserved; a
 crontab that cannot be read is never overwritten. ``EPICSPINE_SYNC=off`` skips installing. CLI (used by rehook):
-``python3 sync_schedule.py ensure|install|check|uninstall``. Stdlib only; never prompts.
+``python3 sync_schedule.py ensure|install|check|uninstall``. Every path written into a schedule goes through
+``install_guard.install_dir``: from a git worktree it names the main checkout's skill dir (else ``~/.agents/skills/
+epic-spine``), and with neither nothing is written (warning). Stdlib only; never prompts.
 """
 
 from __future__ import annotations
@@ -15,6 +17,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import install_guard as ig  # noqa: E402
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
 MARK = "# epicspine-background-sync"
 LABEL = "dev.epicspine.sync"
@@ -23,7 +28,8 @@ SYSTEM_PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 
 def target(skill_dir: Path) -> str:
-    return str(skill_dir / "scripts" / "background_sync.py")
+    """The script the schedule runs: the durable skill dir, never a linked worktree (callers guard the None case)."""
+    return str((ig.install_dir(skill_dir, report=False) or skill_dir) / "scripts" / "background_sync.py")
 
 
 def cron_line(skill_dir: Path) -> str:
@@ -151,6 +157,8 @@ def apply(action: str, home: Path, skill_dir: Path = SKILL_DIR, env: dict | None
         return "skipped (--home override)", 0
     if how is None:
         return "unsupported here (needs crontab on Linux or launchctl on macOS)", 0
+    if action != "uninstall" and ig.install_dir(skill_dir) is None:  # warns once; never schedule a worktree path
+        return "skipped (skill dir is inside a git worktree with no canonical path)", 1
     if action in ("install", "ensure"):
         if str(env.get("EPICSPINE_SYNC", "")).strip().lower() == "off":
             return "not installed (EPICSPINE_SYNC=off)", 0

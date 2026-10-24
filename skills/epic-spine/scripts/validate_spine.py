@@ -12,6 +12,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import personas  # noqa: E402
+import run_state  # noqa: E402
+import standing  # noqa: E402
+import status_true  # noqa: E402
+
 
 REQUIRED_FIELDS = (
     "Status",
@@ -19,7 +25,6 @@ REQUIRED_FIELDS = (
     "Repository",
     "Primary document",
     "Spine ID",
-    "Spine Type",
     "Root spine",
     "Parent spine",
     "Additional root rationale",
@@ -113,8 +118,9 @@ ACTIVE_STATUSES = {"active", "blocked", "review", "testing"}
 LEDGER_STATUSES = {"draft", "ready", "active", "blocked", "review", "testing", "done", "superseded", "deferred"}
 DECISION_OUTCOMES = {"accepted", "rejected", "superseded"}
 CHECKBOX_RE = re.compile(r"(?m)^\s*- \[[ xX]\]")
-TRACKABLE_STATUSES = ("draft", "ready", "active", "blocked", "done", "deferred")
+TRACKABLE_STATUSES = ("draft", "ready", "active", "blocked", "done", "superseded", "deferred")
 ID = r"[A-Z][A-Z0-9]*-\d+"
+STEP = r"[A-Z][A-Z0-9]*-[A-Z]*\d+"  # `E5-S1`: a step code
 CRITERION_RE = re.compile(rf"- \[[ xX]\] ({ID})(?=\s|$)")
 ITEM_RE = re.compile(r"(?:[-*]|\d+[.)])[ \t]+\S")
 DOD_ALIAS_RE = re.compile(r"(?i)exit test.*|acceptance( criteria)?|definition of done")
@@ -147,7 +153,13 @@ class SpineDocument:
 
     @property
     def spine_type(self) -> str:
-        return normalize(self.fields.get("Spine Type", "")).lower()
+        return lineage(self.fields)
+
+
+def lineage(fields: dict[str, str]) -> str:
+    """``Spine Type`` when written (ignored by Doctrine 2), else inferred: root = ``Root spine: self``; branch = a Root/Parent spine link; "" = none declared."""
+    set_ = lambda k: (x := normalize(fields.get(k, "")).lower()) not in {"", "none", "n/a"} and not x.startswith("<") and "|" not in x  # noqa: E731
+    return normalize(fields.get("Spine Type", "")).lower() or ("root" if normalize(fields.get("Root spine", "")).lower() == "self" else "branch" if set_("Root spine") or set_("Parent spine") else "")
 
 
 def normalize(value: str) -> str:
@@ -369,6 +381,19 @@ def table_rows(section: str) -> list[dict[str, str]]:
     return [dict(zip(header, row)) for row in rows]
 
 
+def row_is_ticket(fields: dict[str, str], header: list[str], rows: list[list[str]]) -> bool:
+    """Compact or Doctrine 2 epic: the ledger row is the ticket, so Issue may stay `draft` or be its step code unless github is declared and a real issue is cited."""
+    if normalize(fields.get("Spine profile", "")).lower() != "compact" and normalize(fields.get("Doctrine", "")) != "2":
+        return False
+    cited = any(is_issue_reference(dict(zip(header, row)).get("Issue", "")) for row in rows)
+    return not (cited and normalize(fields.get("Ticket backend", "")).lower() == "github")
+
+
+def placeholder_issue(issue: str, status: str, template_status: object, row_ticket: bool) -> bool:
+    """`draft` (only for draft rows unless the row is the ticket) or, in a row-as-ticket spine, the step code itself (`E5-S1`)."""
+    return (issue.lower() == "draft" or (row_ticket and re.fullmatch(STEP, issue) is not None)) and bool(status == "draft" or template_status or row_ticket)
+
+
 def read_tickets(path: Path, fields: dict[str, str], sections: dict[str, str]) -> tuple[list[dict[str, str]], list[str]]:
     """Read authoritative local files or explicitly unverified GitHub snapshots.
 
@@ -381,6 +406,7 @@ def read_tickets(path: Path, fields: dict[str, str], sections: dict[str, str]) -
     if backend not in {"github", "local"}:
         return [], [f"unsupported Ticket backend: {backend or '(empty)'}; expected github or local"]
     header, rows = parse_table(sections.get("Issue Ledger", ""))
+    row_ticket = row_is_ticket(fields, header, rows)
     if backend == "github":
         for number, row in enumerate(rows, 1):
             values = dict(zip(header, row))
@@ -389,7 +415,7 @@ def read_tickets(path: Path, fields: dict[str, str], sections: dict[str, str]) -
             template_status = issue.lower() == "draft" and re.fullmatch(r"<[^<>]+>", status)
             if status not in LEDGER_STATUSES and not template_status:
                 errors.append(f"ledger row {number} has invalid Status: {status or '(empty)'}")
-            if issue.lower() == "draft" and (status == "draft" or template_status):
+            if placeholder_issue(issue, status, template_status, row_ticket):
                 continue
             if not is_issue_reference(issue):
                 errors.append(f"ledger row {number} has invalid Issue: expected an HTTPS GitHub issue URL (draft is allowed only for draft rows)")
@@ -521,7 +547,7 @@ def classify_diagnostic(message: str, *, error: bool) -> dict[str, object]:
     lower = message.lower()
     required = any(term in lower for term in ("unresolved", "missing field:", "is empty", "without evidence", "required acceptance", "required evidence"))
     required = required or lower == "updated still contains a template date"
-    required = required or lower.startswith(("v2 discovery missing", "v2 human gates should include column", "v2 issue ledger should include", "v2 definition of done should have"))
+    required = required or lower.startswith(("v2 discovery missing", "v2 human gates should include column", "v2 issue ledger should include", "v2 definition of done should have", "status-true"))
     required = required or bool(re.match(r"v2 ledger row \d+ has no ", lower))
     if error:
         category = "required-data" if required else "structural"
@@ -716,8 +742,13 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
         return SpineDocument(path.resolve(), {}, {}, ["historical snapshot is not an active spine; exclude it from active/graph inventory"], [])
 
     text = path.read_text(encoding="utf-8")
+    if personas.is_file(path, text):
+        return SpineDocument(path.resolve(), {}, {}, personas.file_errors(path, text), [])
     fields = parse_fields(text)
     sections = parse_sections(text)
+    for canon, alias in (("Mission", "goal"), ("Definition Of Done", "done means")):  # Doctrine 2 headings count
+        if canon not in sections and (named := next((k for k in sections if k.lower() == alias), None)):
+            sections[canon] = sections[named]
     if "Status" not in fields and (moved := parse_key_values(sections.get("Current State", "")).get("Status")):
         fields["Status"] = moved  # --fix moves a header Status into Current State; either place satisfies the field
     profile = normalize(fields.get("Spine profile", "full")).lower()
@@ -758,15 +789,17 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
 
     required_fields = COMPACT_FIELDS if compact else REQUIRED_FIELDS
     if compact and any(name in fields for name in ("Spine Type", "Root spine", "Parent spine")):
-        required_fields += ("Spine Type", "Root spine", "Parent spine", "Additional root rationale")
+        required_fields += ("Root spine", "Parent spine", "Additional root rationale")
     for field in required_fields:
         if field not in fields:
             errors.append(f"missing field: {field}")
         elif is_empty(fields[field]) and field not in {"Parent spine", "Additional root rationale"}:
             warnings.append(f"unresolved field: {field}")
 
+    ongoing = standing.is_standing(fields)  # never closes: no Definition Of Done / Outcome demands
+    errors.extend(standing.errors(sections, state.get("status", ""), parse_table) if ongoing else [])
     for section in (COMPACT_SECTIONS if compact else REQUIRED_SECTIONS):
-        if section not in sections:
+        if section not in sections and not (ongoing and section == "Definition Of Done"):
             errors.append(f"missing section: {section}")
 
     for name in ("Mission", "Definition Of Done", *(() if compact else ("Validation Evidence",))):
@@ -775,7 +808,7 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
     if not is_empty(done := sections.get("Definition Of Done", "")) and not CHECKBOX_RE.search(done):
         warnings.append("Definition Of Done has no '- [ ]'/'- [x]' checkbox lines; dashboards read only those")
 
-    spine_type = normalize(fields.get("Spine Type", "")).lower()
+    spine_type = lineage(fields)
     root_spine = normalize(fields.get("Root spine", "")).lower()
     parent_spine = normalize(fields.get("Parent spine", "")).lower()
     if spine_type and spine_type not in {"root", "branch"} and not spine_type.startswith("<") and "|" not in spine_type:
@@ -848,6 +881,7 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
     if not header:
         errors.append("Issue Ledger has no Markdown table")
     elif backend == "github":
+        row_ticket = row_is_ticket(fields, header, rows)
         for column in REQUIRED_LEDGER_COLUMNS:
             if column not in header:
                 errors.append(f"Issue Ledger missing column: {column}")
@@ -865,8 +899,7 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
                 else:
                     errors.append(f"ledger row {row_number} has invalid Status: {status or '(empty)'}")
             if "Issue" in values:
-                draft_reference = issue.lower() == "draft" and (status == "draft" or template_status)
-                if not draft_reference and not is_issue_reference(issue):
+                if not placeholder_issue(issue, status, template_status, row_ticket) and not is_issue_reference(issue):
                     errors.append(f"ledger row {row_number} has invalid Issue: expected an HTTPS GitHub issue URL (draft is allowed only for draft rows)")
             if status in ACTIVE_STATUSES:
                 for column in ("Owner / Assignment", "PR/Branch", "Base", "Last Verified", "Next Action"):
@@ -875,8 +908,13 @@ def validate_local(path: Path, *, dialect: str = "auto", ticket_source: Path | N
             if status == "done" and "Latest Evidence" in values and is_empty(values["Latest Evidence"]):
                 errors.append(f"ledger row {row_number} ({issue}) is done without evidence")
 
+    if "Team" in sections:  # opt-in: Team table shape, persona existence, ledger assignees
+        errors.extend(personas.epic_errors(path, sections, header, [dict(zip(header, r)) for r in rows], parse_table))
+
     tickets, ticket_errors = read_tickets(ticket_source or path, fields, sections)
     errors.extend(ticket_errors)
+    warnings.extend(status_true.issues(text, sections, state.get("status", ""), header, rows))  # status-true strict-promoted (classify_diagnostic); closed-rows advisory
+    warnings.extend(run_state.issues(text, sections, state, header, rows))  # advisory only
 
     if "YYYY-MM-DD" in fields.get("Updated", ""):
         warnings.append("Updated still contains a template date")
@@ -1014,17 +1052,48 @@ def doc_kind(text: str) -> str | None:
 def criteria(text: str, names: tuple[str, ...]) -> list[tuple[int, str]]:
     """Top-level list items (line index, line) under the named ``##`` sections; indented lines continue an item,
     other prose, tables, HTML comments and code fences are not criteria."""
-    items, section, comment, fence = [], "", False, False
+    items, section, comment, fence, wanted = [], "", False, False, {n.lower() for n in names}
     for index, line in enumerate(text.split("\n")):
-        if heading := re.match(r"## (.+?)[ \t]*$", line):
+        if line.startswith("## ") and (heading := re.match(r"## (.+?)[ \t]*$", line)):
             section = normalize(heading.group(1))
         elif comment or line.lstrip().startswith("<!--"):
             comment = "-->" not in line.split("<!--")[-1]
         elif line.lstrip().startswith("```"):
             fence = not fence
-        elif section in names and not fence and ITEM_RE.match(line):
+        elif section.lower() in wanted and not fence and ITEM_RE.match(line):
             items.append((index, line))
     return items
+
+
+VERDICTS = ("accomplished", "partially accomplished", "not accomplished", "superseded")
+
+
+def outcome(text: str) -> dict | None:
+    """``## Outcome`` in the console-contract shape (docs/doctrine/console-contract.md): None when absent; unwritten fields None, evidence []."""
+    if (body := parse_sections(text).get("Outcome")) is None:
+        return None
+    kv = parse_key_values(re.sub(r"(?s)<!--.*?-->", "", body))
+    val = lambda key: None if is_empty(kv.get(key, "")) else kv[key]  # noqa: E731
+    verdict = (val("Verdict") or "").lower()
+    closed = re.match(r"(\S+)(?:\s+by\s+(.+))?$", val("Closed") or "")
+    target = lambda item: m.group(1) if (m := re.fullmatch(r"\[[^\]]*\]\(([^)]+)\)", item)) else item  # noqa: E731
+    items = lambda cell: [target(i.strip()) for i in re.split(r",\s*(?![^\[\]()]*[\])])", cell) if i.strip() and not is_none(i)]  # noqa: E731
+    return {"verdict": verdict if verdict in VERDICTS else None, "sentence": val("Outcome"),
+            "evidence": [{"done_means": r[0], "links": items(r[1])} for r in parse_table(body)[1] if len(r) > 1],
+            "risk": val("Risk"), "closed_at": closed.group(1) if closed else None,
+            "closed_by": by if closed and (by := closed.group(2)) and not by.startswith("<") else None}
+
+
+def outcome_missing(fields: dict[str, str], state: str, text: str) -> list[str]:
+    """A spine closed (Status done/closed/superseded, or ``Superseded by:``) needs a written ``## Outcome`` (spine-model.md)."""
+    word = re.match(r"[a-z]+", state.lower().lstrip("`*_ "))
+    sup = fields.get("Superseded by", "")
+    if not ((word and word.group() in ("done", "closed", "superseded")) or not (is_empty(sup) or is_none(sup))):
+        return []
+    found = outcome(text) or {}
+    if found.get("verdict") and found.get("sentence"):
+        return []
+    return ["closed spine has no usable ## Outcome: write `## Outcome` with `Verdict: " + " | ".join(VERDICTS) + "` and `Outcome: <one sentence>` (plus Closed, Risk, evidence per Done means) before closing"]
 
 
 def trackable(path: Path) -> dict[str, object]:
@@ -1036,7 +1105,8 @@ def trackable(path: Path) -> dict[str, object]:
     kind = doc_kind(text)
     spine = kind == "spine"
     alias = next((name for name in sections if DOD_ALIAS_RE.fullmatch(name)), None)
-    names = (alias if alias and "Definition Of Done" not in sections else "Definition Of Done",) if spine else ("Acceptance Criteria", "Acceptance")
+    done = next((name for name in sections if name.lower() == "done means"), None)  # Doctrine 2 heading, equal to Definition Of Done
+    names = ("Definition Of Done" if "Definition Of Done" in sections else done or alias or "Definition Of Done",) if spine else ("Acceptance Criteria", "Acceptance")
     if not (kind or "Status" in fields or any(name in sections for name in names)):
         return {"path": str(path), "trackable": False, "missing": ["not a spine or ticket (no ## Current State)"], "warnings": []}
     status = parse_key_values(sections.get("Current State", "")).get("Status", "") if spine else fields.get("Status", "")
@@ -1044,13 +1114,16 @@ def trackable(path: Path) -> dict[str, object]:
     allowed = "|".join(TRACKABLE_STATUSES)
     shown = status if len(status) <= 60 else status[:57] + "..."
     missing = [] if trackable_status(status) else [f"{where} '{shown}': start it with one of {allowed}" if status else f"{where} missing: add 'Status: <{allowed}>'"]
-    if spine and names[0] != "Definition Of Done":
+    ongoing = standing.is_standing(fields)  # never closes: no Outcome, no criteria demanded
+    if spine and not ongoing:
+        missing += outcome_missing(fields, status, text)
+    if spine and not ongoing and names[0] not in ("Definition Of Done", done):
         missing.append(f"heading '## {alias}' must be '## Definition Of Done'")
     items, heads = criteria(text, names), "/".join(names)
     matches = [(index, CRITERION_RE.match(line)) for index, line in items]
     bad = [index + 1 for index, match in matches if not match]
     ids = [match.group(1) for _, match in matches if match]
-    if not items:
+    if not items and not ongoing:
         missing.append(f"criteria `- [ ] ID text` under ## {heads}")
     if bad:
         missing.append(f"{len(bad)} criteria under ## {heads} not `- [ ] ID text` (lines {', '.join(map(str, bad[:5]))})")
@@ -1068,7 +1141,8 @@ def trackable(path: Path) -> dict[str, object]:
             if not trackable_status(parse_fields(ticket).get("Status", "")):
                 missing.append(f"Status in ticket {ref}")
     doc = validate_local(path) if spine else None
-    return {"path": str(path), "trackable": not missing, "missing": missing, "warnings": doc.errors + doc.warnings if doc else []}
+    from grants import advisory  # human asks and standing approvals: advisory issues, never `missing`
+    return {"path": str(path), "trackable": not missing, "missing": missing, "warnings": doc.errors + doc.warnings if doc else [], "advisory": advisory(text, path) if spine else []}
 
 
 def main() -> int:
@@ -1097,6 +1171,7 @@ def main() -> int:
             print(json.dumps(results, indent=2))
         for result in [] if args.json else results:
             print(f"{result['path']}: " + ("trackable" if result["trackable"] else "not trackable: " + "; ".join(result["missing"])))
+            print(*(f"  advisory: {a}" for a in result.get("advisory", [])), sep="\n", end="\n" * bool(result.get("advisory")))
         return int(not all(result["trackable"] for result in results))
 
     documents = [validate_local(path, dialect=args.dialect) for path in args.paths]

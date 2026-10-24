@@ -18,11 +18,17 @@ How to create and register a spine, roll up children, keep the execution cursor,
 
 ## Spine Creation And Registration
 
-Creating a spine is a relationship change, not just a file write:
+Creating a spine is a relationship change, not just a file write. Every epic (plan, proposal, goal) is an `EPIC-<n>` file from its first commit, and the scaffold does steps 2-5 and the registration in one command:
+
+`python3 scripts/spine_new.py --repo . --parent <parent spine path or Spine ID> --path <new file> --title "<title>" [--purpose "<p>"]`
+
+It writes a compact epic (Root/Parent spine; no `Spine Type:` or version line) with Goal, Serves, Done means (checkbox placeholders), `Status: draft` (planning, never auto-queued: only the user promotes it to `ready`, `references/spine-model.md` Running), the steps ledger, Decisions and Learnings, and adds the Spine Map row (Purpose is the child's "contributes" sentence; the section is created when missing). It never overwrites an existing file; run again to register an existing spine. `spine_new.py` titles the file `# EPIC-<n>: <title>` with n = highest code in the repo's goal titles (legacy `E4`/`EPIC 0` counted) + 1, never 0 (the root is EPIC-0); `--code N` overrides; `spines.py --active` ends with `next: EPIC-<n>`, that same code, so name it before the file exists; Done means IDs are `E<n>-1`; it copies the parent's `Integration policy:`. **Closing:** a done goal has every box checked and `Status: done` (the parent rolls up); a replaced goal gets a header `Superseded by: [new](path)` and `Status: done` (`spines.py` reports `superseded_by`; the pre-commit gate blocks a link that is no goal doc). **Finding and freshness:** `spines.py --active` lists open goals (`EPIC-<n>: <title> — <status> — <path>`); one active or blocked for 14+ days since its file's last commit is stale (`STALE <n>d`, JSON `stale`; the 15-minute background sync turns it into an `EpicSpine attention:` line shown at SessionStart): report it, never close silently. The gate warns when a goal's Current State exceeds 12 lines.
+
+A goal small enough to be one DoD line in its parent is not a file (`references/spine-model.md`, Epic Log). The steps below are the rules it follows and what you fill in afterwards:
 
 1. Search the existing Spine Maps and choose the narrowest parent whose mission contains the new work.
 2. Prefer branching under the canonical root. Create another root only when the ambition is intentionally independent, and record an Additional Root Rationale.
-3. Assign a stable Spine ID; declare `root` or `branch`; link the root and parent; name the initial steward, acceptance boundary, and integration target.
+3. Assign a stable Spine ID; link the root and parent; name the initial steward, acceptance boundary, and integration target.
 4. Initialize one Current State, Decisions and Issue Ledger from the compact template; add Spine Map for direct children. Do not add a competing live cursor.
 5. Register the new spine in the parent's Spine Map with purpose, status, health/blocker, latest evidence, last rollup time, and next action.
 6. Make the child-to-parent and parent-to-child links part of one reviewed change when write authority permits. Otherwise create the child as `draft`, record `registration pending`, and send an exact proposed update to the parent steward; do not present it as connected yet.
@@ -44,7 +50,7 @@ A rollup contains only:
 - absolute last-rollup time;
 - one next action.
 
-The child remains authoritative for detail. Parents aggregate direct children only; root-level health emerges through recursive one-level rollups. A parent must not mark a child `done` without the child's acceptance evidence.
+The child remains authoritative for detail. Parents aggregate direct children only; root-level health emerges through recursive one-level rollups. A parent must not mark a child `done` without the child's acceptance evidence; when parent and child disagree, mark drift and reconcile, never silently choose the more optimistic status.
 
 ## Execution Cursor And Decision Memory
 

@@ -4,8 +4,9 @@
 Repo text outranks the live skill, so a copy of the skill checked into a repo keeps steering agents with the rules
 it had when it was vendored (2026-10-16: zenod still named DeepSeek that way). A directory under the repo root
 (depth <= 4, bounded count and time; not .git, node_modules, worktrees or nested repos) holding a SKILL.md whose
-frontmatter name is epic-spine plus a VERSION older than the installed skill's gets one ``EpicSpine attention:``
-line. Report only; nothing is changed. Throttled per repo (10 minutes) like the skill sync. Stdlib only; never raises.
+frontmatter name is epic-spine plus a VERSION whose date (YYYY.MM.DD prefix) is more than 7 days older than the installed
+skill's gets one ``EpicSpine attention:`` line (a copy a few releases behind is tolerated). Report only; nothing is
+changed. Throttled per repo (10 minutes) like the skill sync. Stdlib only; never raises.
 """
 
 from __future__ import annotations
@@ -13,13 +14,14 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+from datetime import date
 from pathlib import Path
 
 from session_sync import Clock, due, read_version
 
 SKILL_NAME_RE = re.compile(r"\A---[ \t]*\n(?:[^\n]*\n){0,30}?name:[ \t]*epic-spine[ \t]*\n", re.IGNORECASE)
 SKIP_DIRS = {".git", "node_modules", "wt", "worktrees", ".worktrees", "__pycache__"}
-DEPTH, MAX_DIRS, MAX_LINES = 4, 4000, 3
+DEPTH, MAX_DIRS, MAX_LINES, TOLERANCE_DAYS = 4, 4000, 3, 7
 
 
 def read(path: Path) -> str:
@@ -32,6 +34,14 @@ def read(path: Path) -> str:
 def version_key(version: str) -> tuple[int, ...] | None:
     try:
         return tuple(int(part) for part in version.strip().split("."))
+    except ValueError:
+        return None
+
+
+def release_date(version: str) -> date | None:
+    key = version_key(version)
+    try:
+        return date(*key[:3]) if key and len(key) >= 3 else None
     except ValueError:
         return None
 
@@ -55,15 +65,15 @@ def copies(top: Path, clock: Clock, skill_dir: Path) -> list[Path]:
 
 
 def check(top: Path, clock: Clock, home: Path, skill_dir: Path, throttle: bool = True) -> list[str]:
-    """One attention line per vendored epic-spine copy older than the installed skill (``throttle=False``: always look)."""
-    want = version_key(read_version(skill_dir))
+    """One attention line per vendored epic-spine copy > 7 days older than the installed skill (``throttle=False``: always look)."""
+    want = release_date(read_version(skill_dir))
     stamp = f".agents/epicspine-vendored/{hashlib.sha1(str(top).encode()).hexdigest()[:12]}.stamp"
     if want is None or (throttle and not due(home, name=stamp)):
         return []
     installed, notes = read_version(skill_dir), []
     for copy in copies(top, clock, skill_dir):
-        have = version_key(read_version(copy))
-        if have is not None and have < want:
+        have = release_date(read_version(copy))
+        if have is not None and (want - have).days > TOLERANCE_DAYS:
             notes.append(f"EpicSpine attention: {top.name}: old copy of the epic-spine skill at {copy.relative_to(top).as_posix()} "
                          f"({read_version(copy)}, installed {installed}); agents reading it get stale rules — update or remove it")
     return notes[:MAX_LINES]

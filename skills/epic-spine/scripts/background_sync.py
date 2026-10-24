@@ -3,14 +3,14 @@
 
 Roots: ``EPICSPINE_REPO_ROOTS`` (os.pathsep list) else ``~/github``, ``~/Documents/GitHub``, ``~/code``, ``~/src``
 (existing ones only). Main checkouts at depth <= 2 (linked worktrees and submodules have a ``.git`` file: skipped) with an
-``origin`` and a commit (any ref) in the last 90 days; ``.epicspine-off`` / ``EpicSpine: off`` repos are skipped. Per repo,
-the SessionStart logic: ``repo_sync.sync`` (fetch, ff-only when clean and behind, push committed integration-branch work
-per Integration policy; never force, never commit, never touch dirty files), the pre-commit gate where a spine/AGENTS
-block exists (``global_install.ensure_gate``) and the vendored-copy check. No AGENTS.md blocks are installed here (that
-would leave uncommitted files). Bounded: 20 s per repo, 5 min total, least recently synced first; no prompts; a flock
-lock stops overlap. Writes ``~/.agents/epicspine-sync-status.json``; SessionStart prints ``EpicSpine attention:`` lines
-from it for any repo. ``EPICSPINE_SYNC=off`` disables. Silent (cron mail) unless ``-v``. Stdlib only; never raises.
-"""
+``origin`` and a commit (any ref) in the last 90 days; ``.epicspine-off`` / ``EpicSpine: off`` repos are skipped. Per repo:
+``repo_sync.sync`` (fetch, ff-only when clean and behind, push committed integration-branch work per Integration policy;
+never force/commit, dirty files untouched), the pre-commit gate (``global_install.ensure_gate``), the vendored-copy check and
+local_mess.py (backup-push local-only branches; auto_return.py merges ``Ready: yes`` additive branches and deletes merged ones;
+report idle/merged worktrees, old uncommitted changes, stale servers; repo_state.py counts). No AGENTS.md blocks are installed
+(they would be uncommitted files). 20 s per repo (+40 s local_mess), 5 min total, least recently synced first, no prompts, flock.
+Writes ``~/.agents/epicspine-sync-status.json``; SessionStart prints only the current repo's mess/stale lines from it (never another repo's state: L-18).
+``EPICSPINE_SYNC=off`` disables. Silent (cron mail) unless ``-v``. Stdlib only; never raises."""
 
 from __future__ import annotations
 
@@ -25,8 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import repo_sync  # noqa: E402
-import vendored_skill  # noqa: E402
+import epic_log, local_mess, local_servers, repo_sync, vendored_skill  # noqa: E402
 from session_sync import SKILL_DIR, Clock, git, out, read_version  # noqa: E402
 
 STATUS = ".agents/epicspine-sync-status.json"
@@ -80,7 +79,8 @@ def counts(top: Path, branch: str | None) -> tuple[int | None, int | None]:
     return (int(got[0]), int(got[1])) if len(got) == 2 else (None, None)
 
 
-def sync_repo(top: Path, home: Path, skill_dir: Path, total: Clock) -> dict:
+def sync_repo(top: Path, home: Path, skill_dir: Path, total: Clock, env: dict | None = None, procs: list | None = None,
+              previous: dict | None = None) -> dict:
     clock = Clock(max(0.0, min(REPO_SECONDS, total.cap(REPO_SECONDS))))
     notes: list[str] = []
     for step in (lambda: repo_sync.sync(top, clock, fetch_seconds=15, push_seconds=15),
@@ -94,12 +94,16 @@ def sync_repo(top: Path, home: Path, skill_dir: Path, total: Clock) -> dict:
     ahead, behind = counts(top, branch)
     text = " ".join(notes)
     pulled, pushed = (int(m.group(1)) if m else 0 for m in (re.search(r"fast-forwarded (\d+)", text), re.search(r"pushed (\d+) commit", text)))
-    attention = []
+    mess = {}
+    with contextlib.suppress(Exception):
+        mess = local_mess.guard(top, Clock(max(0.0, min(local_mess.MESS_SECONDS, total.cap(local_mess.MESS_SECONDS)))), env or {}, time.time(), procs or [], previous or {}, online=clock.ok())
+    attention = list(mess.get("attention", []))
     for note in (n for n in notes if n.startswith("EpicSpine attention:")):
         why = re.match(r"EpicSpine attention: repo (\S+) \((.*?)\) needs the user: (.*?)\. Tell the user", note)
         attention.append(f"{why.group(1)} ({why.group(2)}): {why.group(3)}" if why else note.removeprefix("EpicSpine attention: "))
     return {"name": top.name, "last_run": now_iso(), "branch": branch, "ahead": ahead, "behind": behind, "pulled": pulled,
-            "pushed": pushed, "timed_out": not clock.ok(), "attention": attention}
+            "pushed": pushed, "timed_out": not clock.ok(), "attention": attention, "stale": list(filter(None, [epic_log.attention(top)])), "branches_pushed": mess.get("branches_pushed", 0),
+            "mess": mess.get("mess", []), "dirty_since": mess.get("dirty_since"), "auto": mess.get("auto", []), "state": mess.get("state", {})}
 
 
 def load(home: Path) -> dict:
@@ -118,7 +122,7 @@ def save(home: Path, repos: dict, skill_dir: Path) -> None:
     os.replace(tmp, path)
 
 
-def run(env: dict, home: Path, skill_dir: Path = SKILL_DIR, verbose: bool = False) -> int:
+def run(env: dict, home: Path, skill_dir: Path = SKILL_DIR, verbose: bool = False, procs: list | None = None) -> int:
     if str(env.get("EPICSPINE_SYNC", "")).strip().lower() == "off":
         return 0
     lock = None
@@ -135,6 +139,7 @@ def run(env: dict, home: Path, skill_dir: Path = SKILL_DIR, verbose: bool = Fals
     os.environ["PATH"] = os.pathsep.join([*os.environ.get("PATH", "").split(os.pathsep), *(p for p in PATH_EXTRA if p not in os.environ.get("PATH", ""))])
     total, previous, repos = Clock(TOTAL_SECONDS), load(home).get("repos", {}), {}
     now = time.time()
+    procs = local_servers.scan(now) if procs is None else procs
     tops = [t for t in discover(roots(env, home)) if eligible(t, Clock(15), now)]
     for top in sorted(tops, key=lambda t: str(previous.get(str(t), {}).get("last_run", ""))):
         if not total.ok():
@@ -142,7 +147,7 @@ def run(env: dict, home: Path, skill_dir: Path = SKILL_DIR, verbose: bool = Fals
                 repos[str(top)] = previous[str(top)]  # out of time: keep the last known entry, retry first next run
             continue
         try:
-            repos[str(top)] = sync_repo(top, home, skill_dir, total)
+            repos[str(top)] = sync_repo(top, home, skill_dir, total, env, procs, previous.get(str(top)))
         except Exception as exc:  # one bad repo never stops the rest
             repos[str(top)] = {"name": top.name, "last_run": now_iso(), "attention": [f"{top.name}: background sync failed ({exc})"]}
     with contextlib.suppress(OSError):
@@ -150,14 +155,15 @@ def run(env: dict, home: Path, skill_dir: Path = SKILL_DIR, verbose: bool = Fals
     if verbose:
         for top, info in repos.items():
             print(f"{top}: {info.get('branch')} ahead {info.get('ahead')} behind {info.get('behind')} pulled {info.get('pulled')} "
-                  f"pushed {info.get('pushed')}" + "".join(f"\n  attention: {a}" for a in info.get("attention", [])))
+                  f"pushed {info.get('pushed')} branches {info.get('branches_pushed')}" + "".join(f"\n  {key}: {line}" for key in ("attention", "auto") for line in info.get(key, [])))
     if lock:
         lock.close()
     return 0
 
 
 def attention_lines(home: Path, cwd: Path | None = None, now: float | None = None) -> list[str]:
-    """SessionStart: ``EpicSpine attention:`` lines from the status file for any repo but the current one (max 5 + 'N more')."""
+    """SessionStart: ``EpicSpine attention:`` lines for the repo containing cwd (its mess and stale; its live sync check covers ``attention``),
+    plus the job's own health line. Other repos are never shown (L-18); ``scripts/repo_state.py`` prints them on request."""
     data = load(home)
     if not data:
         return []
@@ -173,9 +179,8 @@ def attention_lines(home: Path, cwd: Path | None = None, now: float | None = Non
     here = (cwd or Path.cwd()).resolve()
     for top, info in sorted(data.get("repos", {}).items()):
         if here == Path(top) or Path(top) in here.parents:
-            continue  # the live SessionStart check already covers the current repo
-        lines += [f"EpicSpine attention: {a} (background sync; tell the user which repo and why, change nothing)" for a in info.get("attention", [])]
-    return lines[:SHOWN] + ([f"EpicSpine attention: {len(lines) - SHOWN} more (see ~/{STATUS})"] if len(lines) > SHOWN else [])
+            lines += [f"EpicSpine attention: {a} (background sync; change nothing)" for a in info.get("mess", []) + info.get("stale", [])]
+    return lines[:SHOWN]
 
 
 def main(argv: list[str] | None = None) -> int:
