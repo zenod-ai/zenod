@@ -13,9 +13,9 @@ Skill updates: manual (vendored copy; re-sync per `skills/epic-spine.SOURCE`).
 
 ## Start here
 
-For every repository-level task, read `docs/EPIC-0-FOUNDATION-SPINE.md` first. Its **Current State** and child-spine map are authoritative for project direction, the active delivery surface, human gates, and the next action.
+For every repository-level task, read `docs/EPIC-0-FOUNDATION-SPINE.md` first. Its **Current State** and child-spine map are authoritative for project direction, the open child epics, human gates, and the next action.
 
-The active delivery surface as of 2026-08-27 is `docs/EPIC-P-PHYLAX-SPRINT.md`. It owns the frozen integrated-independent Zenod/PM/Phylax architecture and final-push issue board. Read it before selecting, planning, dispatching, or executing this delivery push. `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` remains read-only historical launch evidence unless the active spine explicitly routes a gate back to it.
+Open work is exactly what `python3 <epic-spine skill dir>/scripts/spines.py --repo . --active` lists (as of 2026-10-24: the root, `docs/EPIC-ZENOD-ALPHA-LAUNCH.md` (ZAL, active) and `docs/EPIC-6-HEALTH-DASHBOARD.md` (EPIC-6, ready)); the root goal is a paying user using Zenod over WhatsApp. Closed epics (`Status: done` or superseded, with an `## Outcome`, e.g. EPIC-P, EPIC-2.55, M0-PLAN) and everything under `docs/archive/` are history only, never selectable work.
 
 Do not infer priority from the repository-wide GitHub issue list. It contains historical, superseded, blocked, and test-only records. Only issues linked from the active child spine's **Issue Ledger** are selectable for that epic.
 
@@ -42,12 +42,7 @@ Independent agents should move to their own repositories and deployment lifecycl
 
 ## Current ready batch
 
-- [ZPF-1 #1103](https://github.com/zenod-ai/zenod/issues/1103): freeze working journeys and architecture invariants.
-- [ZPF-2 #1104](https://github.com/zenod-ai/zenod/issues/1104): create the independent Phylax artifact and isolated instance modes.
-- [ZPF-3 #1105](https://github.com/zenod-ai/zenod/issues/1105): make tenant auth, credentials and sessions deployment-stable.
-- [ZPF-4 #1106](https://github.com/zenod-ai/zenod/issues/1106): implement the issuer-neutral Phylax allowance/usage ledger when a worker slot opens.
-
-The first three may run in parallel only after the control-plane spine commit is available as their common base. All later work is dependency-gated by `docs/EPIC-P-PHYLAX-SPRINT.md`; do not select from the global issue list.
+The ready batch is the **Next action** and Issue Ledger of the open epics listed by `spines.py --active` (see Start here); do not select from the global issue list or from closed epics' boards.
 
 ## Secrets: find before you ask
 Never ask Jordi for a key we already have. Catalog (names only): https://github.com/AlfaBlok/infra-vps/blob/main/docs/secrets-catalog.md. On VPS1 run `secret find <provider>` (from VPS3: `ssh hetzner_vps_1 secret find <provider>`); reuse a shared key with `secret copy <from-app> <your-app> <NAME> --approved E14-G1`. The Dokploy API key, Cloudflare API token and Hetzner Cloud token are already on VPS1 in `~t3agent/.config/alpha9/` (one-liners in the catalog's "Asked most often" table). Ask Jordi only when `find` is empty, via the T3 `request_secret` card, never chat. Never print a value. On the owner's Mac the Dokploy key is in the Keychain (service `alpha9-dokploy-api-key`): `eval "$(dokploy-env)"`; see "Dokploy credentials — where they live" in `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`.
