@@ -61,8 +61,11 @@ def generate_manifest(repo_root: Path | str, rel_skill: str = SKILL_REL) -> str:
     repo_root = Path(repo_root)
     skill_root = repo_root / rel_skill
     entries: list[tuple[str, str]] = []
-    for dirpath, _dirnames, filenames in os.walk(skill_root, followlinks=False):
+    for dirpath, dirnames, filenames in os.walk(skill_root, followlinks=False):
+        dirnames[:] = [d for d in dirnames if d != "__pycache__"]
         for name in filenames:
+            if name.endswith(".pyc"):
+                continue
             full = Path(dirpath) / name
             if full.is_symlink() or not full.is_file():
                 continue

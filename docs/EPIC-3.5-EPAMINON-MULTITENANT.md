@@ -167,13 +167,13 @@ The epic worker validates WITHOUT human help, via browser automation, against a 
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | E-MT-1 API on chassis, tenant job store | draft | 3.1 | - | `f1edc8c` | Jobs CRUD tenant-scoped via chassis handles. | - | 2026-07-10 00:19 CEST | Mint after chassis freeze. |
-| draft | Ticket worker | unassigned | E-MT-2 spawner seam + mechanism | draft | spawner gate | - | `f1edc8c` | `spawnJob` launches/tears down a container. | - | 2026-07-10 00:19 CEST | Blocked on Jordi's spawner decision. |
-| draft | Ticket worker | unassigned | E-MT-3 worker image + job env contract | draft | E-MT-2 | - | `f1edc8c` | Job env audit: only job-scoped creds present. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | E-MT-4 lifecycle + orphan reaping | draft | E-MT-2 | - | `f1edc8c` | Kill-during-run leaves no orphan; evidence persisted. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | E-MT-5 quotas, metering, fairness | draft | E-MT-1 | - | `f1edc8c` | Per-tenant caps enforced under parallel load. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Tester | unassigned | E-MT-6 two-tenant smoke + self-host parity | draft | E-MT-1..5 | - | `f1edc8c` | Isolation + containment proven; plain-Docker self-host run. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | E-MT-7 remove AWAIT_PROVISION, retire instances | draft | E-MT-6 | - | `f1edc8c` | One `e.zenod.dev` hostname; old flow deleted. | - | 2026-07-10 00:19 CEST | Mint issue. |
+| draft | Ticket worker | unassigned | E-MT-1 API on chassis, tenant job store | superseded | 3.1 | - | `f1edc8c` | Jobs CRUD tenant-scoped via chassis handles. | - | 2026-07-10 00:19 CEST | Mint after chassis freeze. · closed with epic 2026-10-24; successor: none |
+| draft | Ticket worker | unassigned | E-MT-2 spawner seam + mechanism | superseded | spawner gate | - | `f1edc8c` | `spawnJob` launches/tears down a container. | - | 2026-07-10 00:19 CEST | Blocked on Jordi's spawner decision. · closed with epic 2026-10-24; successor: none |
+| draft | Ticket worker | unassigned | E-MT-3 worker image + job env contract | superseded | E-MT-2 | - | `f1edc8c` | Job env audit: only job-scoped creds present. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-24; successor: none |
+| draft | Ticket worker | unassigned | E-MT-4 lifecycle + orphan reaping | superseded | E-MT-2 | - | `f1edc8c` | Kill-during-run leaves no orphan; evidence persisted. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-24; successor: none |
+| draft | Ticket worker | unassigned | E-MT-5 quotas, metering, fairness | superseded | E-MT-1 | - | `f1edc8c` | Per-tenant caps enforced under parallel load. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-24; successor: none |
+| draft | Tester | unassigned | E-MT-6 two-tenant smoke + self-host parity | superseded | E-MT-1..5 | - | `f1edc8c` | Isolation + containment proven; plain-Docker self-host run. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-24; successor: none |
+| draft | Ticket worker | unassigned | E-MT-7 remove AWAIT_PROVISION, retire instances | superseded | E-MT-6 | - | `f1edc8c` | One `e.zenod.dev` hostname; old flow deleted. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-24; successor: none |
 
 ## Branch And Integration
 

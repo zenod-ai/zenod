@@ -1,16 +1,28 @@
-# EPIC: <name>
+# EPIC-<n>: <name>
 
 Spine profile: compact
-Ticket backend: github
-Spine dialect: v1
 Repository: <owner/repo>
 Primary document: <path to this file>
 Spine ID: <stable-id>
+Root spine: [<root title>](<path to the root spine>)
+Parent spine: [<parent title>](<path to the parent spine>)
+Additional root rationale: n/a
 Integration branch: main
-Integration policy: main-direct
-<!-- Optional: main-direct (default) or pr-approval. The delivery manager merges verified work to the integration branch itself under ../references/git-doctrine.md. -->
-Dispatch profile: default
-<!-- Optional: overrides merge field by field over the built-in default; `template:<name>` is reserved and not yet defined. See ../references/roles-and-dispatch.md. -->
+<!-- Optional headers: `Integration policy: main-direct` (default) or `pr-approval` (a deploy-triggering path is gated with `Deploy gate:` next to `Deployed from:`, not the whole repo; ../references/git-doctrine.md); `Dispatch profile: default` (../references/roles-and-dispatch.md); `Ticket backend: github|local`; `Spine dialect: v1|v2`. Create the file with `scripts/spine_new.py`, which writes this shape. -->
+
+## Goal
+
+<what the work achieves and why, in plain words; if the why is not written anywhere in the repo, ask the owner>
+
+## Serves
+
+[<parent title>](<path to the parent spine>): <one sentence: how this serves its parent>
+
+## Done means
+<!-- Machine-read contract (`- [ ] <ID> <outcome>` lines here, Status/Waiting on, Issue Ledger columns): ../references/spine-model.md. -->
+
+- [ ] X-1 <observable outcome and the evidence that shows it>
+- [ ] X-2 <a second outcome (2-5 in all), or delete this line>
 
 ## Current State
 
@@ -25,10 +37,6 @@ Next action: <one exact action>
 Source revision: <verified source commit or content hash>
 Verified at: <absolute time with timezone>
 
-## Mission
-
-<one desired outcome>
-
 ## Non-Goals
 
 <explicit scope exclusions>
@@ -38,11 +46,6 @@ Verified at: <absolute time with timezone>
 Optional. One line per learning: `L-<n> | applies when | the rule, imperative | why (≤ 8 words) | confirmed YYYY-MM-DD`. Keep only what applies to this spine; scoped entries point to the branch spine that owns them. Root spines also keep an **Always** list (≤ 12 lines) and a **Scoped index**. See ../references/learnings.md.
 
 - L-1 | <applies when> | <imperative rule> | <why, ≤ 8 words> | confirmed YYYY-MM-DD
-
-## Definition Of Done
-<!-- Machine-read contract (`- [ ] <ID> <criterion>` lines here, Status/Waiting on, Issue Ledger columns): ../references/spine-model.md. -->
-
-- [ ] X-1 <observable acceptance and evidence required>
 
 ## Issue Ledger
 
@@ -56,7 +59,7 @@ Optional. One line per learning: `L-<n> | applies when | the rule, imperative | 
 |---|---|---|---|---|---|
 | <date> | accepted | <choice> | <reason> | <evidence> | <condition> |
 
-<!-- Optional: Phase in Current State; hierarchy fields and Spine Map when connected;
+<!-- Optional: Phase in Current State; `## Outcome` written at close (../references/spine-model.md); hierarchy fields and Spine Map when connected;
 Human Gates, Write Scope, Recovery And Takeover, or Book binding when applicable.
 Use one canonical Waiting on value for blockers/waits; state 'none' explicitly.
 Completed handoffs belong in linked history; never add a competing live cursor. -->

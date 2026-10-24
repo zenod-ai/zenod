@@ -42,7 +42,7 @@ This refines the stop-and-ask rule above; it does not widen it. Ask only about a
 
 Default rule: **stay in `main`; isolate execution, integrate frequently.** See `references/git-doctrine.md` for the full flow.
 
-- **FIRST ACTION:** every dispatched worker/tester creates its dedicated worktree with `git worktree add ../wt-<task> -b wt/<task> main` — a local branch, with no remote branch by default — and works only there. Record the absolute path. The primary checkout always sits on a clean `main` and is read-only; `git checkout`/`git switch` there is a branch-ransom defect equal to editing another agent's spine.
+- **FIRST ACTION:** every dispatched worker/tester whose task edits existing code or config creates its dedicated worktree with `git worktree add ../wt-<task> -b wt/<task> main` — a local branch, pushed only if it is not integrated by task end — and works only there. Record the absolute path. The primary checkout always sits on a clean `main` and is read-only; `git checkout`/`git switch` there is a branch-ransom defect equal to editing another agent's spine.
 - Record the branch, base commit SHA, integration target, owner, and latest verified time at dispatch.
 - One integration line, `main`; test in `main`.
 - The delivery manager integrates verified work to `main` itself under `references/git-doctrine.md`; user approval is required only under `Integration policy: pr-approval` or a per-task reservation. Integrate frequently so new agents bootstrap from the freshest validated base.

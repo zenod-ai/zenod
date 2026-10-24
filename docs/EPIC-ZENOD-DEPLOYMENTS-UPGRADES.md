@@ -54,7 +54,7 @@ Recovery: verified VPS archive, independent checksum-matched Mac copy, encrypted
 Live tests: the V5 hero and optimized WebP render on `zenod.dev`; title, responsive width, pricing truth and fail-closed signup state pass. The prior filing repair and final boundary recall remain passed 3/3. [Landing rollout receipt](evidence/zenod-v5-landing-rollout-2026-09-07/README.md); [memory evidence](evidence/zmr-live-29ddb62/README.md).
 Next action: use this leaf for the next authorized upgrade; no further deployment requested.
 
-## Execution Cursor
+## Execution Cursor (history)
 
 Last attempted: deploy reviewed V5 landing-page PR #1228 after CI/publication, verify runtime and inspect the live desktop/mobile surface.
 Result: actual `006587b8` verified; public site, exact health SHA, fail-closed signup and responsive layout passed. Bounded deployment work complete.

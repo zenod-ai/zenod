@@ -199,9 +199,9 @@ Blockers: none at root level. 4.4 posting pre-blocked on 2.4 C-1 tester-green (2
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Planner | Epic 0 worker 4.0 | Spawn 4.2 lane-runtime child spine | draft | D-4.0-3, loop-core PoC | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi |
-| draft | Ticket worker | unassigned | loop-core PoC per `EPIC-4.2-POC-LOOP-CORE.md` | draft | D-4.0-5 | - | `468095d` | Spec's 7 ACs, incl. config-only newsletter loop + zero-imports-outside-ports lint | - | 2026-07-10 04:15 CEST | Dispatch a worker (spike branch) |
-| draft | Planner | Epic 0 worker 4.0 | Spawn 4.1 briefing child spine | draft | D-4.0-3 | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi |
+| draft | Planner | Epic 0 worker 4.0 | Spawn 4.2 lane-runtime child spine | superseded | D-4.0-3, loop-core PoC | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi · closed with epic 2026-10-24; successor: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md) |
+| draft | Ticket worker | unassigned | loop-core PoC per `EPIC-4.2-POC-LOOP-CORE.md` | superseded | D-4.0-5 | - | `468095d` | Spec's 7 ACs, incl. config-only newsletter loop + zero-imports-outside-ports lint | - | 2026-07-10 04:15 CEST | Dispatch a worker (spike branch) · closed with epic 2026-10-24; successor: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md) |
+| draft | Planner | Epic 0 worker 4.0 | Spawn 4.1 briefing child spine | superseded | D-4.0-3 | - | `468095d` | Child spine exists, validated, worker-bindable | - | 2026-07-10 03:58 CEST | Draft with Jordi · closed with epic 2026-10-24; successor: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md) |
 
 Ticket-level ledgers live in child spines once spawned; this root ledger tracks only root-scope work.
 

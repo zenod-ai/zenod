@@ -17,7 +17,7 @@ L-<n> | applies when | the rule, imperative | why (≤ 8 words) | confirmed YYYY
 - A root `## Operating Learnings` section has two parts:
   - **Always** — applies to every task; read in full at bind; hard cap 12 lines.
   - **Scoped index** — one row per scoped learning: an `applies when` trigger (for example `touching the validator` or `dispatching UI work`) pointing to the child spine or leaf that owns it.
-- A child or branch spine holds its own `## Operating Learnings` in the same one-line format for work inside it.
+- A child or branch spine holds its own `## Operating Learnings` in the same one-line format for work inside it. A learning applies to its spine and everything under it: the ones in force are the bound epic's plus every ancestor's up to the root (follow `Parent spine:`), listed nearest first; never `none` while an ancestor has any.
 
 Navigation: read root **Always**; match the task against the **Scoped index** triggers; follow only matching pointers; descend until no deeper match. Never read learnings for non-matching branches.
 

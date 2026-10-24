@@ -66,7 +66,7 @@ def hook_path(repo: Path) -> Path | None:
 
 
 def hook_text() -> str:
-    skills = " ".join((f'"{SKILL_DIR}"', *HOOK_SKILLS))
+    skills = " ".join((f'"{global_install.ig.install_dir(global_install.SKILL_DIR) or SKILL_DIR}"', *HOOK_SKILLS))  # never a worktree path
     return (f"#!/bin/sh\n{HOOK_MARK} (managed by agents_block.py; logic lives in the skill; commits need --trackable spines/tickets)\n"
             f'for s in {skills}; do\n  [ -f "$s/scripts/pre_commit.py" ] && exec python3 "$s/scripts/pre_commit.py" "$@"\ndone\nexit 0\n')
 

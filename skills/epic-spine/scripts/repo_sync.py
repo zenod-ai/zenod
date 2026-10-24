@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 
 import vendored_skill
+from fetch_guard import fetch
 from session_sync import SKILL_DIR, Clock, git, out
 
 LEARNINGS = ("## Operating Learnings\n\n**Always** (every task; read in full at bind):\n\n- (none yet)\n\n"
@@ -132,8 +133,11 @@ def sync(top: Path, clock: Clock, fetch_seconds: float = 5.0, push_seconds: floa
         return out(git(list(args), top, clock, seconds))
 
     branch = run("symbolic-ref", "--short", "-q", "HEAD")
-    if not branch or run("remote", "get-url", "origin") is None or run("fetch", "--quiet", "origin", seconds=fetch_seconds) is None:
+    if not branch or run("remote", "get-url", "origin") is None:
         return []
+    fetched, notes = fetch(top, clock, fetch_seconds)
+    if not fetched:
+        return notes
     if any((top / (run("rev-parse", "--git-path", name) or "-")).exists() for name in BUSY):
         return []
     counts = (run("rev-list", "--left-right", "--count", f"HEAD...origin/{branch}") or "").split()

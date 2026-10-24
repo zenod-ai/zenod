@@ -1,6 +1,6 @@
 source: https://github.com/AlfaBlok/epicspine-skill
 path: skill/epic-spine
-commit: 70bc9d4208716edceec043f744b50409716fb0b1
+commit: 1ce54874860177e59302b2b094befa935662ae7a
 manifest: skills/epic-spine.manifest.sha256
 
 This directory is a vendored snapshot of the EpicSpine skill.

@@ -20,6 +20,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import install_guard as ig  # noqa: E402
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
 GLOBAL_TEMPLATE = SKILL_DIR / "assets" / "global-block.md"
 BLOCK_RE = re.compile(r"<!-- epicspine:begin [^>]*-->.*?<!-- epicspine:end -->", re.DOTALL)
@@ -52,10 +55,11 @@ def render_global() -> str:
 def render_pointer(hookless: bool = False) -> str:
     """Pasted into instruction files: a pointer to the live block, never a copy. ``hookless``: the harness hook
     may be unregistered or untrusted, so the first command runs the hook by hand (sync included)."""
-    tail = (f"If the block was not injected at session start, run `python3 {SKILL_DIR / 'scripts' / 'agents_block.py'} "
+    skill = ig.install_dir(SKILL_DIR) or SKILL_DIR
+    tail = (f"If the block was not injected at session start, run `python3 {skill / 'scripts' / 'agents_block.py'} "
             "print-hook` first and follow its output (it also syncs the skill and this repo).\n") if hookless else ""
     return ("<!-- epicspine:begin pointer -->\nEpicSpine is installed. Before your first reply, follow "
-            f"`{GLOBAL_TEMPLATE}` (read it unless already injected at session start).\n{tail}<!-- epicspine:end -->\n")
+            f"`{skill / 'assets' / 'global-block.md'}` (read it unless already injected at session start).\n{tail}<!-- epicspine:end -->\n")
 
 
 def profile_missing(home: Path | None = None) -> bool:
@@ -144,6 +148,8 @@ def heal(env: dict) -> None:
     (``CLAUDE_CONFIG_DIR``, else ``~/.claude``) with the current pointer. No block, or current: untouched."""
     try:
         path = Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser() / "CLAUDE.md"
+        if ig.install_dir(SKILL_DIR) is None or ig.outside_home(path.parent):
+            return
         match = BLOCK_RE.search(path.read_text(encoding="utf-8"))
         if match and match.group(0) + "\n" != render_pointer() and os.access(path, os.W_OK):
             upsert(path, render_pointer())
@@ -227,11 +233,9 @@ def _strip_hook(data: dict) -> bool:
 
 
 def _save(settings: Path, data: dict) -> None:
-    if data:
+    if data or settings.exists():
         settings.parent.mkdir(parents=True, exist_ok=True)
         settings.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    elif settings.exists():
-        settings.unlink()
 
 
 def set_hook(settings: Path, on: bool, stop: tuple[str, ...] = ()) -> str:
@@ -242,8 +246,11 @@ def set_hook(settings: Path, on: bool, stop: tuple[str, ...] = ()) -> str:
         return f"error: cannot merge {settings}: {exc}"
     had = _strip_hook(data)
     if on:
-        cmds = [("SessionStart", f'python3 "{Path(__file__).with_name("agents_block.py")}" print-hook')]
-        cmds += [("Stop", f'python3 "{Path(__file__).with_name(name)}"') for name in stop]
+        skill = ig.install_dir(SKILL_DIR)
+        if skill is None:
+            return "skipped: skill dir is inside a git worktree"
+        cmds = [("SessionStart", f'python3 "{skill / "scripts" / "agents_block.py"}" print-hook')]
+        cmds += [("Stop", f'python3 "{skill / "scripts" / name}"') for name in stop]
         for event, command in cmds:
             data.setdefault("hooks", {}).setdefault(event, []).append(
                 {"hooks": [{"type": "command", "command": command}]})
@@ -286,14 +293,17 @@ def has_hook(settings: Path, stop: tuple[str, ...] = ()) -> bool:
 def skill_link(action: str, cdir: Path) -> tuple[str, int]:
     """Make the skill discoverable at ``<cdir>/skills/epic-spine`` (symlink to SKILL_DIR)."""
     link = cdir / "skills" / "epic-spine"
-    ours = link.is_symlink() and link.resolve() == SKILL_DIR
+    want = ig.install_dir(SKILL_DIR)
+    ours = link.is_symlink() and link.resolve() in (SKILL_DIR, want and want.resolve())
     if action == "install":
+        if want is None:
+            return "skipped (worktree)", 0
         if ours:
             return "current", 0
         if link.is_symlink() or link.exists():
             return "foreign, left alone", 0
         link.parent.mkdir(parents=True, exist_ok=True)
-        link.symlink_to(SKILL_DIR, target_is_directory=True)
+        link.symlink_to(want, target_is_directory=True)
         return "linked", 0
     if action == "uninstall":
         if ours:
@@ -308,8 +318,14 @@ def run(action: str, home: Path, env: dict, claude_dirs: list[str], hooks: bool 
     """action: install | check | uninstall. Prints one line per harness (``only``: just these, e.g. ``codex``).
     ``artifact_host`` (install, Claude only): None leaves settings env alone, "" removes it."""
     code, present = 0, 0
+    if action == "install" and ig.install_dir(SKILL_DIR, home) is None:
+        print("install skipped: skill dir is inside a git worktree with no canonical path")
+        return 1
     for label, detect, target, explicit, settings in harnesses(home, env, claude_dirs):
         if only and label.split("[")[0] not in only:
+            continue
+        if ig.outside_home(detect, home):
+            print(f"{label}: skipped ({detect} is outside HOME)")
             continue
         if not (detect.exists() or (explicit and action == "install")):
             print(f"{label}: not detected ({detect} absent)")

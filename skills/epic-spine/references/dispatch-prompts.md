@@ -36,7 +36,8 @@ When spawning or briefing workers, use this shape:
 ```markdown
 Use $epic-spine.
 Identity: Epic 0 worker | epic worker | ticket worker | tester | planner | reviewer | observer
-Bound spine: <path or URL>
+Bound epic: <path to the epic file; for a ticket worker, the epic its step belongs to>
+Learnings: read the Operating Learnings of the bound epic and every `Parent spine:` ancestor up to the root; list their ids in your bind line (never `none` while any exist), then state Goal, Done means open, Next action and where context lives (four short lines) before acting.
 GitHub issue: <URL>
 Role: Epic 0 worker | epic worker | ticket worker | tester | planner
 Spine steward: <task/thread/agent responsible for reconciling the spine>

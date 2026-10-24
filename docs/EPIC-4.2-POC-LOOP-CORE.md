@@ -188,8 +188,8 @@ loop-core (pure)                     ports                PoC adapter           
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | Implement loop-core PoC in `spikes/loop-core/` | draft | D-4.2-1, D-4.2-2, D-4.2-4 | proposed `codex/epic-4.2-loop-core-poc` | pending refresh | All eight Definition Of Done criteria pass with receipts | - | 2026-07-11 00:20 CEST | Refresh base, create/confirm GitHub issue and branch, then dispatch worker |
-| draft | Tester | unassigned | Validate loop-core PoC acceptance | draft | implementation ticket ready for test | - | pending refresh | Independent pass/fail against eight DoD criteria, including deterministic replay and import-purity test | - | 2026-07-11 00:20 CEST | Dispatch after implementation PR is ready |
+| draft | Ticket worker | unassigned | Implement loop-core PoC in `spikes/loop-core/` | superseded | D-4.2-1, D-4.2-2, D-4.2-4 | proposed `codex/epic-4.2-loop-core-poc` | pending refresh | All eight Definition Of Done criteria pass with receipts | - | 2026-07-11 00:20 CEST | Refresh base, create/confirm GitHub issue and branch, then dispatch worker · closed with epic 2026-10-24; successor: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md) |
+| draft | Tester | unassigned | Validate loop-core PoC acceptance | superseded | implementation ticket ready for test | - | pending refresh | Independent pass/fail against eight DoD criteria, including deterministic replay and import-purity test | - | 2026-07-11 00:20 CEST | Dispatch after implementation PR is ready · closed with epic 2026-10-24; successor: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md) |
 
 ## Branch And Integration
 

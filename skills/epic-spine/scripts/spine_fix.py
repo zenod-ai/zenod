@@ -5,7 +5,13 @@ Fixes criteria (numbered/bullet/unchecked/ID-less items under Definition Of Done
 ``- [ ] <ID> <text>``; existing IDs kept, new ones continue the file's most common ID prefix, else DOD/AC),
 spine alias headings (``## Exit Test...``, ``## Acceptance`` -> ``## Definition Of Done``), unambiguous Status
 synonyms (SYNONYMS) and a lone preamble ``Status:`` line with none in Current State (moved there, not copied).
-It never invents a Status line/column or criteria, and leaves unknown statuses alone."""
+It never invents a Status line/column or criteria, and leaves unknown statuses alone.
+
+``spine_fix.py --close [--write] SPINE...``: the sweep on close (references/tree-cleanse.md). In an epic whose Status is done/superseded
+(or with ``Superseded by:``), every open ledger row (draft/ready/active/blocked/review, or a non-standard word that is not done-like)
+becomes ``superseded`` and its Next Action gets ``closed with epic <date>; successor: <link or none>``. Dry run unless ``--write``;
+done/deferred/superseded rows are never touched; idempotent. The row vocabulary lives here (the one place row words are mapped);
+the sweep body is in close_rows.py (this file's 200-line cap)."""
 
 from __future__ import annotations
 
@@ -22,10 +28,13 @@ import validate_spine as v
 SYNONYMS = {
     "active": "in progress|wip|doing|in review|review|testing",
     "ready": "todo|to do|planned|open|backlog",
-    "done": "closed|complete|completed|delivered|superseded|shipped|merged",
+    "done": "closed|complete|completed|delivered|shipped|merged|integrated|resolved",
+    "superseded": "dropped|obsolete|wontfix|wont fix|cancelled|canceled|abandoned",  # closed, not done
     "deferred": "on hold|paused|parked",
     "draft": "proposed",
 }
+ROW_CLOSED = ("done", "deferred", "superseded")  # a ledger row in any other state is open work
+DONE_LIKE = ("live", "deployed", "verified", "accepted", "fixed")  # non-standard row words the close sweep treats as done
 SYNONYM = re.compile(r"(?i)[*_`\s]*(?:" + "|".join(f"(?P<{k}>{p.replace(' ', '[ -]?')})" for k, p in SYNONYMS.items()) + r")(?![A-Za-z])")
 HEADER_STATUS = re.compile(r"(?:\*\*Status:\*\*|\*\*Status\*\*:|Status:)[ \t]*(\S.*)$")
 ITEM = re.compile(r"(?:[-*]|\d+[.)])[ \t]+(?:\[([ xX])\][ \t]+)?(.*)$")
@@ -41,13 +50,32 @@ def synonym(value: str, whole: bool = False) -> tuple[str, str, str] | None:
     return status, value[: match.start(status)] + status + value[match.end():], match.group(status)
 
 
+def row_word(cell: str) -> str:
+    """The canonical (or else leading) status word of a Status cell/line: ``blocked / package merged`` -> blocked."""
+    cell = cell.strip(" \t*_`").lower()
+    if found := synonym(cell):
+        return found[0]
+    return m.group() if (m := re.match(r"[a-z]+", cell)) else ""
+
+
+def row_open(cell: str) -> bool:
+    return (word := row_word(cell)) != "" and word not in ROW_CLOSED + DONE_LIKE
+
+
+def epic_closed(text: str) -> bool:
+    """Status done/superseded (or a synonym), or a ``Superseded by:`` header that is not none."""
+    status = v.parse_key_values(v.parse_sections(text).get("Current State", "")).get("Status", "")
+    sup = v.parse_fields(text).get("Superseded by", "")
+    return row_word(status) in ("done", "superseded") or not (v.is_empty(sup) or v.is_none(sup))
+
+
 def heading_at(lines: list[str], name: str) -> int:
     return next(i for i, line in enumerate(lines) if line.startswith("## ") and v.normalize(line[3:]) == name)
 
 
 def fix_criteria(lines: list[str], spine: bool) -> list[str]:
     done, sections = [], v.parse_sections("\n".join(lines))
-    names = ("Definition Of Done",) if spine else ("Acceptance Criteria", "Acceptance")
+    names = ("Definition Of Done", "Done means") if spine else ("Acceptance Criteria", "Acceptance")
     alias = next((n for n in sections if v.DOD_ALIAS_RE.fullmatch(n)), None)
     if spine and "Definition Of Done" not in sections and alias:
         lines[heading_at(lines, alias)] = "## Definition Of Done"
@@ -137,4 +165,4 @@ def main(paths: list[Path]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main([Path(a) for a in sys.argv[1:]]))
+    sys.exit(__import__("close_rows").main(sys.argv[2:]) if sys.argv[1:2] == ["--close"] else main([Path(a) for a in sys.argv[1:]]))

@@ -1,14 +1,12 @@
 # Ticket backends
 
-Declare `Ticket backend: github` or `Ticket backend: local` in the spine preamble. Omission preserves GitHub mode and all existing URL/status checks. Choosing a backend never migrates records or performs a remote fetch.
+The step row is the ticket (`spine-model.md`); a backend record is optional, linked only when one step needs its own discussion. The optional header `Ticket backend: github|local` selects the kind (omission means GitHub, with all existing URL/status checks). Choosing a backend never migrates records or performs a remote fetch.
 
 ## GitHub
 
-Keep the existing Issue Ledger and concrete HTTPS GitHub/Enterprise issue URLs. Its status, assignment and evidence cells are declared snapshots for coordination; the issue remains authoritative. They are not a second independently maintained board. Update snapshots only from actual reconciliation evidence.
+Keep the Issue Ledger with concrete HTTPS GitHub/Enterprise issue URLs. Its status, assignment and evidence cells are declared snapshots; the issue stays authoritative, and snapshots change only from reconciliation evidence.
 
-Validation remains offline: a syntactically valid URL does not establish that an issue exists, that credentials work, or that a status is current. Normalized records expose `verification: unverified`, `freshness: unknown`, and the ledger's date as `declared_verified_at`. A date alone cannot convert a snapshot into verified remote state. No live-fetch option is implemented here; any later adapter must require explicit opt-in, report unavailable separately from verified results, and preserve verification/freshness provenance.
-
-See the synthetic `examples/EPIC-GITHUB-TICKETS.md` in the package repository. The example's URL is format evidence, not a claim about a live issue.
+Validation is offline: a valid URL does not prove the issue exists, credentials work or a status is current. Normalized records expose `verification: unverified`, `freshness: unknown` and the ledger's date as `declared_verified_at`; a date never makes a snapshot verified. No live fetch exists; a later adapter needs explicit opt-in, must report unavailable apart from verified, and keep provenance. Example: `examples/EPIC-GITHUB-TICKETS.md` (its URL is format evidence only).
 
 ## Local files
 
@@ -55,7 +53,7 @@ Do not repeat local Status, Owner or Evidence in the spine ledger: those extra c
 
 By default Ticket root must remain within the nearest checkout/repository ancestor marked by `.git`; outside a checkout, the spine directory is the boundary. A root such as `../../` cannot authorize arbitrary filesystem access. To use already authorized external files, explicitly declare a bounded absolute `Ticket permitted root` and place Ticket root inside it. Filesystem root `/` is rejected. This declaration records scope; it does not grant an agent new user authorization to read or publish outside its task.
 
-The synthetic `examples/local-research/EPIC-LOCAL-RESEARCH.md` demonstrates the local board, two ticket files and a protocol record. It contains no private data or actual research measurements.
+Example: `examples/local-research/EPIC-LOCAL-RESEARCH.md` (synthetic board, two tickets, a protocol record).
 
 ## Normalized reader API
 
@@ -75,4 +73,4 @@ The synthetic `examples/local-research/EPIC-LOCAL-RESEARCH.md` demonstrates the 
 | source_revision | SHA256 of exact local bytes; empty for unfetched GitHub state |
 | declared_verified_at | Optional declared timestamp; not a fetch attestation |
 
-Verification and freshness are separate: unverified does not mean stale, and reading current file bytes does not prove execution is fresh. Parent rollups must preserve these distinctions and must not turn local-read or an old declared date into verified delivery. This reader adds no competing persistent cache or mutable board; editing a local ticket changes the next normalized read without updating duplicate status cells.
+Verification and freshness are separate: unverified is not stale, and reading current file bytes does not prove execution is fresh. Rollups keep the distinction and never turn local-read or an old declared date into verified delivery. The reader adds no cache or mutable board; editing a ticket changes the next read.
