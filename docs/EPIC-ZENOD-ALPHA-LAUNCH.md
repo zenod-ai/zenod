@@ -42,6 +42,7 @@ Last verified: 2026-10-24
 Last attempted: revived this spine (history moved, A0–A5 ledger, tidy of stale spines: [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Result: plan in place; production facts below are as last recorded, not re-checked today
 Production as last recorded: public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed; the infra-vps cleanup has since changed the hosts, so nothing is assumed working until A0.
+Finding 2026-10-24: push-to-main auto-deploy (root D27) is broken: the `deploy` job of Publish image fails with a Dokploy API 404 on `abd85dd` and `51a3b06` (run 40118507158 family), so `main` publishes images but no longer rolls prod; `cloud.zenod.dev/api/health` reports `abd85dd`, status ok. A0 includes fixing this (likely the app/project moved in the infra-vps cleanup).
 Waiting on: nobody. A1 (Jordi's voice test) is asked only when it is the next step.
 Next action: A0 — re-check prod end to end on today's infra (signup → WhatsApp → console), read-only, and record the deployed SHA from `https://cloud.zenod.dev/api/health`.
 Verified at: 2026-10-24 (spine only)
@@ -50,7 +51,7 @@ Verified at: 2026-10-24 (spine only)
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| A0 | Tester | unassigned | ZAL-A0 · Re-check prod after the infra-vps cleanup | ready | - | - | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded. | 2026-09-16 opening receipt (pre-cleanup) | 2026-10-24 | Dispatch a worker; repair only what the journey breaks. |
+| A0 | Tester | unassigned | ZAL-A0 · Re-check prod after the infra-vps cleanup | ready | - | - | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded; push-to-main deploy rolls prod again (Dokploy 404 fixed). | 2026-09-16 opening receipt (pre-cleanup) | 2026-10-24 | Dispatch a worker; repair only what the journey breaks. |
 | A1 | Tester | Jordi | ZAL-A1 · Jordi's voice test (pending since 2026-08-27) | draft | A0 | - | - | 3 overlapping voice notes, 3 clean Saved receipts, no re-pair. | ZAL-22 #1099 awaiting acceptance | 2026-10-24 | Ask Jordi once A0 is green. |
 | A2 | Ticket worker | unassigned | ZAL-A2 · Metering + caps per plan | draft | A0 | - | - | Every user's usage counted; a cap per plan; at the cap the service stops and asks for a top-up. | Builds on ZAL-10 #1076 (managed cap lifecycle), Phylax usage ledger (root D29) and per-tenant metering (root D30) | 2026-10-24 | Audit what is live vs merged, then close the gap. |
 | A3 | Ticket worker | unassigned | ZAL-A3 · Free-pass code with a capped allowance | draft | A2 | - | - | A code grants a capped free allowance; abuse stops at the cap. | none | 2026-10-24 | After A2. |
