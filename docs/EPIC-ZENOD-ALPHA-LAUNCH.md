@@ -75,3 +75,10 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-08-16 → 2026-09-16 | 21 decisions (alpha milestone, €9 single plan, WhatsApp as Zenod access, Phylax hidden, Ring absent, two-service voice/Drive contract, public opening) | Kept verbatim | [history page](archive/EPIC-ZENOD-ALPHA-LAUNCH-HISTORY-2026-08.md#decisions) and its appendix |
 | 2026-10-24 | Revived as milestone A "Zenod is production-ready" under agent_team EPIC-12, steps A0–A5; plan approved by Jordi 2026-10-24. | One concrete finish line: 10 capped free-pass users and one live €9 payment; testers only after caps work. | agent_team deck slides 3–4; [EPIC-12](https://github.com/AlfaBlok/agent_team/blob/main/docs/spines/epic-12-zenod-live-heard-sold.md) |
 | 2026-10-24 | Old detail moved, not deleted, to the history page; stale sibling spines closed or superseded. | 707-line spine → under the 150-line budget; one active board. | [TIDY-2026-10-24](TIDY-2026-10-24.md) |
+
+
+## Spine Map
+
+| Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
+|---|---|---|---|---|---|---|---|---|
+| HEALTH | child | [EPIC-6: health.zenod.dev — one page that shows whether Zenod is up](EPIC-6-HEALTH-DASHBOARD.md) | Before testers arrive, anyone can see in one page whether the site, the database, the WhatsApp relay and the agents are alive, and when each last did real work. | ready | none | none | 2026-10-24 | dispatch S1 (inventory) |
