@@ -1,9 +1,9 @@
 # EPIC 3.5 · Epaminon Multi-Tenant — one API, ephemeral job sandboxes
 
-Status: deferred
+Status: done — superseded (see Outcome)
 Status note: ON HOLD — do not dispatch. Will be re-specified AFTER Zenod ships (`docs/EPIC-Z-NIGHT-SPRINT.md`) by duplicating the working Zenod unit and adapting it. Chassis references herein are stale.
 Created: 2026-07-10
-Updated: 2026-07-10
+Updated: 2026-10-24
 Repository: `/Users/jordi/Documents/GitHub/zenod`
 Primary document: `docs/EPIC-3.5-EPAMINON-MULTITENANT.md`
 Spine ID: E3-5
@@ -80,9 +80,20 @@ Split Epaminon into two parts with different lifecycles. The front is a multi-te
 - Kubernetes jobs, Fly machines, or remote execution backends (a later option behind the same spawner seam).
 - Worker-CLI product behavior changes (what the agent does inside the job).
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded with no successor in this repo: Epaminon is an independent agent outside zenod's deployment scope (AGENTS.md boundary, 2026-09-07), this spine was on hold since 2026-07-10 and none of its 8 Done means started.
+Closed: 2026-10-24 by E16-S2 worker (Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5)
+Risk: if Epaminon multi-tenancy is wanted again it is re-specified in Epaminon's own repository, not here.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1–8 open | [Current State](#current-state): deferred since 2026-07-10 |
+
 ## Current State
 
-Status: deferred
+Status: done — superseded (see Outcome)
 Phase: planning
 Last verified: 2026-07-10 00:19 CEST
 Integration target: main

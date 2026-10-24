@@ -7,6 +7,7 @@ Acceptance surface: browser
 Repository: zenod-ai/zenod
 Primary document: docs/EPIC-ZENOD-LANDING-STORY.md
 Spine ID: ZLS
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 Spine Type: branch
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
@@ -16,10 +17,22 @@ Active steward: /root landing-story delivery manager
 Steward since: 2026-09-18 15:00 Europe/Paris
 Pinned base: 99f9f228285053d1354474b089691d86fe090fef for the 2026-09-22 local integration; no rebases during this review
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by Zenod Alpha Launch: the diagram-led landing story is live on zenod.dev (source `c1d8357`, SHIP DOD-1–8 checked), the later illustration-only revision never got its exact-version deploy approval, and any further landing/signup work is part of ZAL's launch milestone.
+Closed: 2026-10-24 by E16-S2 worker (Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5)
+Risk: HARDEN DOD-9–12 never started; #1343 (public offer/ownership copy) stays blocked and moves with ZAL's offer work; open ledger rows were not swept (E16-S3).
+
+| Done means | Evidence |
+|---|---|
+| DOD-1–8 checked | [production receipt](evidence/landing-story-integration/production.md) |
+| DOD-9–12 open | HARDEN never dispatched |
+
 ## Current State
 
 Owner: /root landing-story integration worker
-Status: review
+Status: done — superseded (see Outcome)
 Last attempted: harmonized recall and hosting artwork locally toward the unchanged hero on 2026-09-22; muted ivory/cyan and classical engraving replace bright white/smooth figures
 Result: all ten diagram-led chapters and the corrected Hellenic capture/MCP illustration are live at https://zenod.dev/; original hero preserved. No other service deployment or non-SHA environment/mount changes.
 Evidence: [production receipt](evidence/landing-story-integration/production.md); CI/image publication pass; 17 site tests and build pass; exact running image/OCI/health and live browser desktop/mobile checks verified
@@ -48,21 +61,21 @@ Manager execution contract: `/root` personally executes each numbered browser st
 
 The 2026-09-22 approved contract below supersedes the earlier full-slide integration checklist. Checked steps are verified on the local frontend candidate, not production.
 
-- [x] 1. PORT from the current landing hero: preserve its JSX, artwork, animation helpers and existing CSS exactly.
-- [x] 2. BUILD from the approved board diagrams: render all ten chapters below the hero; remove legacy narrative, FAQ and final CTA sections; retain functional footer/legal links.
-- [x] 3. BUILD the diagram-only asset treatment: real HTML headings, introductions, captions and CTAs; no full-slide screenshots. Short diagram labels may remain rasterized.
-- [x] 4. DUPLICATE the approved ownership diagram visual language across the remaining diagram adaptations; preserve each board’s composition and illustrated objects.
-- [x] 5. BUILD corrected MCP arrows, coherent raw/source images, and distinct hosting/storage bands; preserve the current offer with no $3 price in artwork.
-- [x] 6. PORT existing pricing/account behavior: preserve €9/month + VAT, signup readiness gating, sign-in routes and /pricing; embed the native plan controls in chapter 08.
-- [x] 7. BUILD local browser verification: desktop and mobile chapter walkthroughs, loaded assets, working pricing navigation, no horizontal overflow; 17 tests and production build pass.
-- [x] 8. PORT the deployment gate from `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`: deploy only after approval for the exact source SHA, then record production health and live browser evidence.
+- [x] DOD-1 PORT from the current landing hero: preserve its JSX, artwork, animation helpers and existing CSS exactly.
+- [x] DOD-2 BUILD from the approved board diagrams: render all ten chapters below the hero; remove legacy narrative, FAQ and final CTA sections; retain functional footer/legal links.
+- [x] DOD-3 BUILD the diagram-only asset treatment: real HTML headings, introductions, captions and CTAs; no full-slide screenshots. Short diagram labels may remain rasterized.
+- [x] DOD-4 DUPLICATE the approved ownership diagram visual language across the remaining diagram adaptations; preserve each board’s composition and illustrated objects.
+- [x] DOD-5 BUILD corrected MCP arrows, coherent raw/source images, and distinct hosting/storage bands; preserve the current offer with no $3 price in artwork.
+- [x] DOD-6 PORT existing pricing/account behavior: preserve €9/month + VAT, signup readiness gating, sign-in routes and /pricing; embed the native plan controls in chapter 08.
+- [x] DOD-7 BUILD local browser verification: desktop and mobile chapter walkthroughs, loaded assets, working pricing navigation, no horizontal overflow; 17 tests and production build pass.
+- [x] DOD-8 PORT the deployment gate from `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`: deploy only after approval for the exact source SHA, then record production health and live browser evidence.
 
 HARDEN
 
-- [ ] Add alt-text coverage and image-loading budgets for all story assets.
-- [ ] Add automated browser regression coverage for the story section.
-- [ ] Revisit image-generation model choice and prompt history if future retouches cause identity drift.
-- [ ] Add a reusable slide-to-landing asset pipeline if the story deck becomes an ongoing production surface.
+- [ ] DOD-9 Add alt-text coverage and image-loading budgets for all story assets.
+- [ ] DOD-10 Add automated browser regression coverage for the story section.
+- [ ] DOD-11 Revisit image-generation model choice and prompt history if future retouches cause identity drift.
+- [ ] DOD-12 Add a reusable slide-to-landing asset pipeline if the story deck becomes an ongoing production surface.
 
 ## Human Gates
 
@@ -79,10 +92,10 @@ HARDEN
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| [#1340](https://github.com/zenod-ai/zenod/issues/1340) | Ticket worker | image_a | Produce slide 09 librarian at the gate of Alexandria | review | none | [#1347](https://github.com/zenod-ai/zenod/pull/1347) | b0d0c27 | commit `58a37d3`; 4/5 identity match; slightly lighter background | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
-| [#1341](https://github.com/zenod-ai/zenod/issues/1341) | Ticket worker | image_b | Produce slide 10 start your library today | review | none | [#1346](https://github.com/zenod-ai/zenod/pull/1346) | b0d0c27 | commit `015f5e5`; OCR clean; minor cyan endpoint concern | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
-| [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | review | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
-| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root landing-story integration worker | Integrate diagram-led story below unchanged hero (PORT board narrative; BUILD diagram-only assets) | testing | user pattern approval received; current offer retained | `codex/landing-two-section-preview` (local, no PR) | 99f9f22 | [handoff](evidence/landing-story-integration/README.md); 17 tests and build pass | 2026-09-22 | visual review, then separate deployment gate |
+| [#1340](https://github.com/zenod-ai/zenod/issues/1340) | Ticket worker | image_a | Produce slide 09 librarian at the gate of Alexandria | active | none | [#1347](https://github.com/zenod-ai/zenod/pull/1347) | b0d0c27 | commit `58a37d3`; 4/5 identity match; slightly lighter background | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
+| [#1341](https://github.com/zenod-ai/zenod/issues/1341) | Ticket worker | image_b | Produce slide 10 start your library today | active | none | [#1346](https://github.com/zenod-ai/zenod/pull/1346) | b0d0c27 | commit `015f5e5`; OCR clean; minor cyan endpoint concern | 2026-09-18 15:55 Europe/Paris | steward review and integration decision |
+| [#1342](https://github.com/zenod-ai/zenod/issues/1342) | Ticket worker | image_c | Retouch slides 02, 05, 06, 07 and 08 | active | #1343 for slide 08 | [#1350](https://github.com/zenod-ai/zenod/pull/1350) | b0d0c27 | commit `0f74971`; four retouched PNGs + report; slide 08 held | 2026-09-18 15:55 Europe/Paris | full-resolution review of slides 02/05/06/07 |
+| [#1344](https://github.com/zenod-ai/zenod/issues/1344) | Ticket worker | /root landing-story integration worker | Integrate diagram-led story below unchanged hero (PORT board narrative; BUILD diagram-only assets) | active | user pattern approval received; current offer retained | `codex/landing-two-section-preview` (local, no PR) | 99f9f22 | [handoff](evidence/landing-story-integration/README.md); 17 tests and build pass | 2026-09-22 | visual review, then separate deployment gate |
 | [#1343](https://github.com/zenod-ai/zenod/issues/1343) | Planner | /root | Reconcile public offer and ownership copy | blocked | none | docs/EPIC-ZENOD-LANDING-STORY.md | b0d0c27 | issue created | 2026-09-18 15:00 Europe/Paris | receive exact price and copy decision |
 
 ## Decisions
