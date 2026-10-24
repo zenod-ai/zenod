@@ -1,7 +1,7 @@
 # Zenod deployments and upgrades
 
-Status: current — bounded production upgrade verified; deployment scope enforced
-Updated: 2026-10-10
+Status: done
+Updated: 2026-10-24
 Repository: zenod-ai/zenod
 Primary document: `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`
 Spine ID: ZDU
@@ -13,6 +13,29 @@ Integration branch: main
 Active spine steward: ZMR-delivery-manager
 Last reconciled commit: 006587b8d9ee53338625e5b1d9f71c9c9b6fdee2 running
 
+## Outcome
+
+Verdict: accomplished
+Outcome: One documented upgrade/undo procedure, a fixed deployment boundary (Zenod production plus Phylax only when appropriate) and push-to-main auto-roll of Zenod production (#964, merged 2026-10-10) are in place and were each verified live; Zenod Alpha Launch reuses this page for every deploy.
+Closed: 2026-10-24 by E16-S2 worker (Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5)
+Risk: this spine never had a written checklist; the Done means below were reconstructed from its Mission and ticked only where a live receipt exists. Since 2026-10-24 the `deploy` job fails again (Dokploy API 404; owned by ZAL A0), although `/api/health` reported current `main` `687f259` that evening, cause unverified. Repository separation of independent agents stays an unowned follow-up; staging/prod split is root D28 (planned).
+
+| Done means | Evidence |
+|---|---|
+| DOD-1 | [Upgrade and undo](#upgrade-and-undo); V5 rollout receipt `006587b` |
+| DOD-2 | [Mission](#mission) boundary; [2026-09-07 path correction](#2026-09-07--clear-deployment-path-correction) |
+| DOD-3 | [Automatic Zenod production roll](#automatic-zenod-production-roll-2026-10-10-pr-964); PR #964 merged 2026-10-10; Publish+deploy runs green on `main` through 2026-10-16 (last `87938b6`) |
+| DOD-4 | [Dokploy credentials](#dokploy-credentials--where-they-live); [Backup policy](#backup-policy) |
+
+## Definition Of Done
+
+Reconstructed 2026-10-24 from the Mission (no checklist existed before).
+
+- [x] DOD-1 One supported upgrade and undo procedure, reusing Dokploy and the existing backup/operator scripts, verified on a live upgrade with the exact running SHA recorded.
+- [x] DOD-2 Deployment scope fixed and enforced: only Zenod production and, when appropriate, the Phylax companion deploy from this repo; legacy sibling triggers disabled.
+- [x] DOD-3 Push to `main` rolls Zenod production only, verified against `/api/health`, with a documented rollback.
+- [x] DOD-4 Credentials location and backup policy documented so agents never ask the owner for them.
+
 ## Mission
 
 Permanent repository deployment scope, explicitly set by Jordi on 2026-09-07: **live Zenod production images and, when appropriate, the default Phylax/WhatsApp companion only**. No other agent/service may automatically deploy from pushes, merges or releases in this repository. Default Phylax is not a blanket authorization to restart unrelated private services on every release. The four legacy sibling triggers stay disabled.
@@ -21,6 +44,7 @@ Keep one simple, supported upgrade and undo process. Reuse Dokploy and the exist
 
 ## Current State
 
+Status: done
 Phase: V5 public landing-page upgrade complete; live visual and runtime checks passed.
 Running source: `006587b8d9ee53338625e5b1d9f71c9c9b6fdee2`.
 Running image: `ghcr.io/zenod-ai/zenod@sha256:1c34f17a93e370e1379ec19251f3b3b423a2dda5ba22c596fb687da75df589cb`.

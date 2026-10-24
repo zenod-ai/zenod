@@ -1,8 +1,8 @@
 # EPIC: Zenod Memory Reliability
 
-Status: active
+Status: done — superseded (see Outcome)
 Created: 2026-09-06
-Updated: 2026-09-18
+Updated: 2026-10-24
 Repository: zenod-ai/zenod
 Primary document: docs/EPIC-ZENOD-MEMORY-RELIABILITY.md
 Spine ID: ZMR
@@ -10,6 +10,7 @@ Spine Type: branch
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Additional root rationale: n/a
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 GitHub issues: https://github.com/zenod-ai/zenod/issues/1188
 Integration branch: main
 Active spine steward: ZMR-reconciliation-delivery-manager (current task /root)
@@ -18,6 +19,19 @@ Last reconciled commit: `39fd8d95819f3f91020ab8032f88d9de7f541aa5` on `main` (20
 Planner: Jordi + ZMR-release-planner
 Worker: ZMR-24–25 and terminal-provider repair complete; /root retains delivery management
 Tester: /root owns production verification; provider research deferred
+
+## Outcome
+
+Verdict: partially accomplished
+Outcome: The bounded M2 "dependable basics" milestone (store, recall, recent-context chat) was delivered and deployed in September (isolated suite 36/36, production MCP smoke 6/6, live `22440b4`), but the broader SHIP checklists below were never walked or accepted, so the spine closes superseded by Zenod Alpha Launch rather than done.
+Closed: 2026-10-24 by E16-S2 worker (Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5)
+Risk: DOD-1–17 stay unticked; B10–B12 repetitive excerpts and #1348 (voice-note inventory) reopen only on a measured incident, as ZAL work.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1–7 (Sept 13 increment): open | No ZMR-17 live journey receipt; [Current State](#current-state) says broader SHIP remains open |
+| DOD-8–14 (earlier SHIP), DOD-15–17 (HARDEN, deferred): open | M2 replaced this contract: [M2 contract](planning/zenod-basics-m2.md), [scorecard](planning/zenod-recall-scorecard.md) |
+| M2 milestone (not a checkbox): delivered | PRs #1322–#1331; live health `22440b4` (2026-09-17) |
 
 ## Role Bindings
 
@@ -67,13 +81,13 @@ Release name: **Memory Reliability**. No semantic version or launch date is inve
 
 ### SHIP: September 13 reconciliation increment
 
-1. Submit a representative long mixed-topic VN through existing supported production phone ingestion under a designated test identity.
-2. Open the archived audio, separate transcript and exact Log entry; verify identity, timestamps and unchanged source.
-3. Wait for enrichment; inspect all substantive idea outcomes, including explicit uncertainty without blocking clear topics.
-4. Verify existing-idea source linking, a new cited statement and a correction with history on the correct branches.
-5. Replay the capture/job identity and verify no duplicate evidence, claims or source links.
-6. Retrieve beginning/middle/end details and current/prior knowledge in three fresh conversations with exact citations.
-7. Hand Jordi the same deployed build, actual source refs, UI screenshots/MCP traces, measured tokens/cost, rollback and remaining risks after operator pass.
+- [ ] DOD-1 Submit a representative long mixed-topic VN through existing supported production phone ingestion under a designated test identity.
+- [ ] DOD-2 Open the archived audio, separate transcript and exact Log entry; verify identity, timestamps and unchanged source.
+- [ ] DOD-3 Wait for enrichment; inspect all substantive idea outcomes, including explicit uncertainty without blocking clear topics.
+- [ ] DOD-4 Verify existing-idea source linking, a new cited statement and a correction with history on the correct branches.
+- [ ] DOD-5 Replay the capture/job identity and verify no duplicate evidence, claims or source links.
+- [ ] DOD-6 Retrieve beginning/middle/end details and current/prior knowledge in three fresh conversations with exact citations.
+- [ ] DOD-7 Hand Jordi the same deployed build, actual source refs, UI screenshots/MCP traces, measured tokens/cost, rollback and remaining risks after operator pass.
 
 ZMR-15 proves the integrated candidate before ZMR-16 deployment; ZMR-17 owns this live journey. No full-release success claim follows from this increment alone. Existing broader acceptance below remains open.
 
@@ -82,13 +96,13 @@ ZMR-15 proves the integrated candidate before ZMR-16 deployment; ZMR-17 owns thi
 
 SHIP — exercise the exact approved live candidate through direct Zenod MCP, as Jordi explicitly authorized on 2026-09-06. The existing customer portal has no chat composer; a new browser surface or test environment is not a prerequisite. Use isolated conversation keys and clearly named test captures. Reuse existing components; BUILD means a bounded extension where the reviewed implementation lacks the behavior, subject to ZMR-1 current-main verification.
 
-- [ ] 1. Open the existing customer surface and capture a synthetic long, multi-topic memory; wait for the terminal receipt and open its evidence. BUILD extension of existing store/chat surfaces.
-- [ ] 2. Inspect filing: clear subjects reach focused meaning pages; only the ambiguous topic is marked uncertain; raw content remains intact. BUILD extension of existing classifier/composer.
-- [ ] 3. Ask for a detail beyond character 8000 in a long daily log and open the exact cited passage with no neighboring-entry leakage. BUILD extension of existing read tools.
-- [ ] 4. Ask for all captures in an older bounded date range within a seeded 650+ entry test vault; traverse coverage and reconcile exact expected refs/counts. BUILD extension of existing structural search.
-- [ ] 5. Supply an explicit correction, then ask what is true now and what was true before; both answers cite the appropriate evidence. BUILD extension of existing meaning/ask pipeline.
-- [ ] 6. Ask a paraphrase and an unsupported question; recover the supported fact and admit the unknown, with zero fabricated supporting evidence. BUILD extension of existing search/grounding.
-- [ ] 7. Test package: record actual deployed SHA, live MCP inputs/results, source refs, rollback and remaining risks. Claim full acceptance only after the relevant journey passes; screenshots are optional when the tested surface is MCP. Jordi retains final SHIP acceptance.
+- [ ] DOD-8 Open the existing customer surface and capture a synthetic long, multi-topic memory; wait for the terminal receipt and open its evidence. BUILD extension of existing store/chat surfaces.
+- [ ] DOD-9 Inspect filing: clear subjects reach focused meaning pages; only the ambiguous topic is marked uncertain; raw content remains intact. BUILD extension of existing classifier/composer.
+- [ ] DOD-10 Ask for a detail beyond character 8000 in a long daily log and open the exact cited passage with no neighboring-entry leakage. BUILD extension of existing read tools.
+- [ ] DOD-11 Ask for all captures in an older bounded date range within a seeded 650+ entry test vault; traverse coverage and reconcile exact expected refs/counts. BUILD extension of existing structural search.
+- [ ] DOD-12 Supply an explicit correction, then ask what is true now and what was true before; both answers cite the appropriate evidence. BUILD extension of existing meaning/ask pipeline.
+- [ ] DOD-13 Ask a paraphrase and an unsupported question; recover the supported fact and admit the unknown, with zero fabricated supporting evidence. BUILD extension of existing search/grounding.
+- [ ] DOD-14 Test package: record actual deployed SHA, live MCP inputs/results, source refs, rollback and remaining risks. Claim full acceptance only after the relevant journey passes; screenshots are optional when the tested surface is MCP. Jordi retains final SHIP acceptance.
 
 The manager tests, repairs observed failures and repeats affected live checks. Jordi explicitly authorized this production rollout and bounded fixes, including direct MCP testing; do not re-request that approval or restart unrelated checks after each small repair. Local tests do not substitute for actual live evidence.
 
@@ -96,9 +110,9 @@ Mandatory supporting gates: 100% deterministic pagination/identity/isolation cas
 
 HARDEN — deferred until Jordi accepts SHIP:
 
-- ZMR-9: evaluate hybrid retrieval and reranking against the frozen baseline before adopting it.
-- ZMR-10: approved-plan maintenance for historical uncertain filings, duplicate pages and oversized summaries.
-- Bulk historical backfill, automatic restructuring and any new paid embedding service are outside SHIP.
+- [ ] DOD-15 ZMR-9: evaluate hybrid retrieval and reranking against the frozen baseline before adopting it.
+- [ ] DOD-16 ZMR-10: approved-plan maintenance for historical uncertain filings, duplicate pages and oversized summaries.
+- [ ] DOD-17 Out of SHIP: bulk historical backfill, automatic restructuring and any new paid embedding service are outside SHIP.
 
 ## Non-Goals
 
@@ -106,42 +120,17 @@ Replacing Markdown/Git, rebuilding the portal or transport, executing tasks from
 
 ## Current State
 
+Status: done — superseded (see Outcome)
 Phase: M2 dependable basic store, recall and recent-context conversation is implemented and deployed. Exact candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` passed the frozen isolated suite 36/36 and a representative production MCP smoke 6/6. The bounded reliability milestone is complete; broader transport and presentation work stays separate. M2 evaluation and cost reports (#1324–#1331) and the additive B13 voice-note-inventory regression (#1348/PR #1349) are integrated on `main` `39fd8d95819f3f91020ab8032f88d9de7f541aa5`. Live production runs `22440b4151289900370b1ed375edc1b7aeaca1a1` (verified via `https://cloud.zenod.dev/api/health`, 2026-09-17). Later `main` commits include unrelated delivery-stream changes; no new runtime deployment is claimed by this eval-only reconciliation.
 Last verified: 2026-09-18 Europe/Paris.
 Live production source verified via `https://cloud.zenod.dev/api/health` is `22440b4151289900370b1ed375edc1b7aeaca1a1` (2026-09-17); the earlier M2 candidate `620716fcc8ed547fec937d90ad4e9090ba9588d3` remains an ancestor of `main`. The existing one-replica service, `zenod-mt-data:/data` mount and every non-`GIT_SHA` environment value were preserved. Verified pre-deploy restore covered 958 files, 40 JSON files and 79 SQLite databases.
 Owner: /root, sole ZMR spine steward/delivery manager. Harness #1313 is frozen; capture #1316 and answer #1318 are in the release candidate; isolated production adapter #1320 produced the production receipts. [Scorecard](planning/zenod-recall-scorecard.md) and [HTML results](planning/zenod-basics-test-results.html) retain costs, hashes and scope limits.
-Next action: hold this release stable and observe ordinary use. Treat repetitive source/history excerpts in B10–B12 as a bounded presentation follow-up. The 2026-09-18 voice-note inventory incident is pinned as B13 in the merged additive v1.2 eval suite; its product repair remains #1348 and requires a separately approved bounded fix plus live verification. Keep ASR/WhatsApp delivery, B05 production fault injection and the 30 unrun production cells outside this completed basic-memory milestone unless a new measured incident justifies reopening it.
+Next action: none; closed 2026-10-24 (see Outcome). Follow-ups (B10–B12 excerpts, #1348) only on a measured incident, as ZAL work.
 Acceptance: [M2 contract](planning/zenod-basics-m2.md), 12 cases × 3 trials on one candidate, actual chat for conversation tests, cost/coverage and failed attempts retained, critical preservation/isolation/idempotency gates, exact-version production smoke. Isolated suite: 36/36, 235 total requests including one retained incomplete attempt, $0.76876957 and zero unknown costs. Production smoke: B01/B06/B09/B10/B11/B12 all pass, 63 MCP calls, $4.00 reserved exposure and actual cost `null`; 30 production cells remain unrun. MCP and WhatsApp transport evidence stay distinct.
 Known gaps: production answers in B10–B12 are correct but repetitive. B05 deterministic fault injection remains isolated-only. The production smoke does not exercise ASR/WhatsApp delivery or all 36 cells. [Prompt/tool audit and slide](planning/librarian-model/README.md).
 Human gates: none pending for this milestone. No recurring automation was created. Public signup, billing, model experiments and channel/session changes remain outside this authorization.
 
-### M1 checkpoint before the M2 conversation acceptance
-
-Phase: bounded M1 complete and deployed on Luna, with genuine filing review and documented follow-ups; broader ZMR SHIP remains open.
-Last verified: 2026-09-15 Europe/Paris.
-Integration target: main411aba520a7a901f82d56394d5ebf4bb89769b86 (PR1311), identical tree to reviewed/deployed961793e2f81a5ba6c9fa72636d0e3a6ff1592c5a. CI34934705483 and publication34934745173 passed. Exact live image digest2e9d44a65677666ba8ee190e949b5eab4dcbc96c4bc75856a332268000bb1ce1; OCI, baked/runtime SHA, health, mounts and environment verified.
-Active owner: /root, sole deployment operator and spine steward. Ticket assistants implement/review bounded fixes and prepare read-only recovery; root retains dispatch.
-Next action: hand off the working M1 result and retained follow-ups. No additional implementation, retry, provider experiment or deployment is needed for this bounded milestone. Remaining personal creator and travel-life reflections require genuine destination clarification.
-Acceptance boundary: user-authorized organizer model_classify=openai/gpt-5.6-luna and model_classify_reasoning_effort=low are live. Existing OpenRouter key/provider, Grok4.3 ask and all other settings retained. No provider benchmark gate, new service, bulk refiling, sibling deployment, billing/signup or outbound messages. Existing deployment/testing authority persists.
-Initial live evidence, before the selective retry: original recovery job aaf75c90-0c48-4cdb-9ef9-bca01d0ae9c1 is DONE with12filed13uncertain5pending; brain revision8f9d50d6eaa14c7abd98f16a22774a6f91fc8e99. Full original source equals the frozen input byte-for-byte. Corrected hypothetical exit math including paid interest, home requirements and location coverage are present. Financing alternatives and qualifications are retained in sourced unresolved reports; not all eleven conflict labels prove actual contradictions, and some reports overlap. Five pending include creator source_support_invalid, three context-budget failures and one clarification. Salary urgency occurs in an assigned span but is omitted from its persisted statement; retain this explicit limitation.
-Ordinary summary: post-filing chat1ea57c22-d477-4a30-8058-834eab0f0dbe passed with no pinned source: selected the original September14 voice note, read actual contiguous spans14–8014–16014–17321 at one version, and returned a cited housing/life/creator summary distinguishing uncertainty from decisions. The earlier chat63d80767-be40-440f-a185-23774df80ae8 ran during filing and honestly reported busy; it is not passing summary evidence.
-Recovery: protected recovery-accounted-20260915 records fresh827file/12JSON/69SQLite restore proof, offhost archive48f7226e046ff8c50e836c1c40f59ba5550799a416338e5f4635ec86226b4fd7, exact deployment and organizer configuration receipts. A stalled read-only SSH check was terminated and the missing redeploy completed under the original reviewed intent; no duplicate deployment or data restore. See evidence/zmr-live-a43f7ee/README.md. Latest terminal selective retry:15filed13uncertain2pending at f522887e9f129cf602cd809590facc9b326bf764; remote publication verified. Three context-budget pending ideas now filed. Both remaining pending reasons are reconciliation_needs_clarification; no technical source-support/context-budget failures remain. Private before/after comparator passes all13checks with all27 prior completed operations, bullet/citation bytes, raw evidence, original job/capture rows and legacy lines retained. Independent semantic/preservation reviewer accepts bounded M1 with explicit follow-ups: salary urgency and specific Taya visit detail are absent from meaning prose, some unresolved reports overlap, and two destinations require clarification. These limits remain in raw evidence/review; no exhaustive sentence-level filing claim.
-
-### Historical production and repair state
-
-
-2026-09-08 bounded repair: [#1231](https://github.com/zenod-ai/zenod/issues/1231), owner current parent task. PRs [#1232](https://github.com/zenod-ai/zenod/pull/1232), [#1233](https://github.com/zenod-ai/zenod/pull/1233) and [#1234](https://github.com/zenod-ai/zenod/pull/1234) are merged; final implementation source `631f85109dfa45fed95394a1e94d2d709c373fe6`, dedicated worktree `/Users/jordi/Documents/GitHub/wt-voice-note-identity`, branch `codex/voice-note-grounded-recall`. Jordi authorized deployment/testing and required simple source-derived labels and general log-based retrieval. The historical source audit proved 11 PTT notes and three ordinary audio attachments; bounded metadata correction restored all five September VNs without changing transcript bodies. The source capture fix is deployed in default Phylax at `d02493cc0a7cb658ee5eedeea57039dd6fc264cb`. The final public retrieval rollout at `631f851` is verified: actual OCI/health, retained environment/mount, and all three fresh unhinted live recalls return the correct latest five September refs. The source capture companion remains connected/ready. Fresh phone acceptance passed at 19:25:42 UTC: original PTT identity, raw log voice_note/source timestamp, archive/transcription, completed enrichment, one newest entry and exact conversational recall all verified without correction. Remaining limitation: one earlier free-form summary used processing times despite correct source timestamps/order. Next action: retain the narrow prose-time limitation in #1231; no additional deployment is required for this passing capture test. No phrase-specific routing, new storage or separate VN index. [Evidence](evidence/voice-note-recency-2026-09-08/README.md). Prior release state below is historical.
-
-Phase: bounded production upgrade and observed repair loop complete; broader release acceptance remains open
-Last verified: 2026-09-07 00:19 UTC
-Integration target: main
-Fresh base commit: 29ddb62d349d9f3bd9c5b471848a4ef775155827 (PR #1226), actual deployed source
-Pinned-base rule: pin reconciled main at dispatch; re-pin after integrated waves.
-Dispatch condition: ZMR-1–7 integrated; no further production repair dispatched after the passing affected checks.
-Next action: finish the durable handoff; retain broader ZMR-8 acceptance and ZMR-9/10 follow-ups without starting another deployment loop.
-Blockers: none for the bounded upgrade. Full original release benchmarks and human SHIP acceptance are not claimed complete.
-
-Live receipt: source 29ddb62d349d9f3bd9c5b471848a4ef775155827, image sha256:fab0414121a6912ace825f3cdf07fc5f508944afc3cafec7352660db32a83042, actual task/OCI/health verified after update completed 2026-09-07 00:17:23 UTC. All three fresh boundary recalls passed and cited the current saved evidence. Filing had passed on c5da66f and remains included. [Exact final evidence](evidence/zmr-live-29ddb62/README.md). Original rollback and verified backup retained; no storage migration.
+Earlier checkpoints (M1, Sept 7–8 repairs): [ZMR Current State history](archive/ZMR-CURRENT-STATE-HISTORY-2026-10.md).
 
 ## Execution Cursor
 

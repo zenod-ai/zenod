@@ -1,9 +1,9 @@
 # EPIC CF: Callisthenes Hybrid Agentic Façade
 
-Status: draft
+Status: done — superseded (see Outcome)
 Status note: draft — architecture amended and accepted by planner 2026-07-12; DISPATCH ONLY AFTER (a) Jordi approves Herald SHIP (EPIC 5) and (b) W-C1/W-C2 of `docs/EPIC-WHATSAPP-COUNCIL-INTEGRATION-TESTS.md` are integrated (CF-S2 PORTs from their result)
 Created: 2026-07-12
-Updated: 2026-07-12
+Updated: 2026-10-24
 Repository: `zenod-ai/zenod`
 Primary document: `docs/EPIC-CF-CALLISTHENES-HYBRID-FACADE.md`
 Spine ID: CF
@@ -100,9 +100,20 @@ HARDEN:
 - Replacing explicit MCP tools with one opaque `ask_calli` tool.
 - Shipping new channels before the X façade is live-proven.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded with no successor in this repo: parent C closed done on 2026-10-24, Callisthenes is an independent agent outside the Zenod launch, and this draft never reached its dispatch gate (no CF tickets minted).
+Closed: 2026-10-24 by E16-S2 worker (Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5)
+Risk: the accepted façade architecture (CF-D1–CF-D13) remains readable here as design input if Callisthenes revives in its own repository.
+
+| Done means | Evidence |
+|---|---|
+| DOD-1–10 open | [Current State](#current-state): held at the dispatch gate since 2026-07-12 |
+
 ## Current State
 
-Status: draft
+Status: done — superseded (see Outcome)
 Phase: planning
 Last verified: 2026-07-12 22:08 CEST
 Integration target: `main`
