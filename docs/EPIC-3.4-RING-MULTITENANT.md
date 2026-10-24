@@ -160,7 +160,7 @@ The epic worker validates WITHOUT human help, via browser automation, against lo
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Planner | Epic 3.0 planner | Confirm ring-core scope and mint R-MT tickets | draft | 3.1, 3.2, 3.3 done | - | `f1edc8c` | Ticket sketch confirmed against real ring-core. | - | 2026-07-10 00:19 CEST | Revisit after 3.3. |
+| draft | Planner | Epic 3.0 planner | Confirm ring-core scope and mint R-MT tickets | superseded | 3.1, 3.2, 3.3 done | - | `f1edc8c` | Ticket sketch confirmed against real ring-core. | - | 2026-07-10 00:19 CEST | Revisit after 3.3. · closed with epic 2026-10-22; successor: [EPIC R Ring Sprint](EPIC-R-RING-SPRINT.md) |
 
 ## Branch And Integration
 

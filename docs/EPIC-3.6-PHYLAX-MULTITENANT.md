@@ -162,10 +162,10 @@ The epic worker validates WITHOUT human help against local phylax + ring contain
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | P-1 remove per-user provisioning assumptions | draft | - | - | `f1edc8c` | Customer purchase touches no Phylax container. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | P-2 runtime whitelist/pairing, two-sender test | draft | P-1 | - | `f1edc8c` | Add/remove user with zero restarts; senders map to correct tenants. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | P-3 health, watchdog, session-recovery runbook | draft | - | - | `f1edc8c` | Baileys session loss recoverable per runbook. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | P-4 SEAM-SPEC gateway note + second-number playbook | draft | 3.1 C-8 | - | `f1edc8c` | Contract and playbook merged. | - | 2026-07-10 00:19 CEST | Mint issue. |
+| draft | Ticket worker | unassigned | P-1 remove per-user provisioning assumptions | superseded | - | - | `f1edc8c` | Customer purchase touches no Phylax container. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC P Phylax Sprint](EPIC-P-PHYLAX-SPRINT.md) |
+| draft | Ticket worker | unassigned | P-2 runtime whitelist/pairing, two-sender test | superseded | P-1 | - | `f1edc8c` | Add/remove user with zero restarts; senders map to correct tenants. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC P Phylax Sprint](EPIC-P-PHYLAX-SPRINT.md) |
+| draft | Ticket worker | unassigned | P-3 health, watchdog, session-recovery runbook | superseded | - | - | `f1edc8c` | Baileys session loss recoverable per runbook. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC P Phylax Sprint](EPIC-P-PHYLAX-SPRINT.md) |
+| draft | Ticket worker | unassigned | P-4 SEAM-SPEC gateway note + second-number playbook | superseded | 3.1 C-8 | - | `f1edc8c` | Contract and playbook merged. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC P Phylax Sprint](EPIC-P-PHYLAX-SPRINT.md) |
 
 ## Branch And Integration
 

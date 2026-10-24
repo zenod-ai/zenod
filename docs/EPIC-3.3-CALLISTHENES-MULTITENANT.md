@@ -154,12 +154,12 @@ The epic worker validates WITHOUT human help, via browser automation against a f
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | CA-MT-1 tenants table + bearer lookup | draft | SEAM-SPEC draft | - | `f1edc8c` | Two bearers → two tenants; unknown → 401. | - | 2026-07-10 00:19 CEST | Mint after C-8 draft. |
-| draft | Ticket worker | unassigned | CA-MT-2 provisioning API + single-tenant boot | draft | CA-MT-1 | - | `f1edc8c` | Stripe-test webhook provisions a tenant end to end. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | CA-MT-3 tenant-keyed throttle/guard/ledger | draft | CA-MT-1 | - | `f1edc8c` | Caps and receipts isolate per tenant under load. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | CA-MT-4 per-tenant OAuth custody + connect UI | draft | CA-MT-1 | - | `f1edc8c` | PKCE keys bind to requesting tenant only. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Tester | unassigned | CA-MT-5 two-tenant smoke + self-host parity | draft | CA-MT-2..4 | - | `f1edc8c` | Cross-tenant send fails; self-host run passes. | - | 2026-07-10 00:19 CEST | Mint issue. |
-| draft | Ticket worker | unassigned | CA-MT-6 hostname cutover, retire instances | draft | CA-MT-5 | - | `f1edc8c` | One hostname, one watchdog check, old instances gone. | - | 2026-07-10 00:19 CEST | Mint issue. |
+| draft | Ticket worker | unassigned | CA-MT-1 tenants table + bearer lookup | superseded | SEAM-SPEC draft | - | `f1edc8c` | Two bearers → two tenants; unknown → 401. | - | 2026-07-10 00:19 CEST | Mint after C-8 draft. · closed with epic 2026-10-22; successor: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md) |
+| draft | Ticket worker | unassigned | CA-MT-2 provisioning API + single-tenant boot | superseded | CA-MT-1 | - | `f1edc8c` | Stripe-test webhook provisions a tenant end to end. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md) |
+| draft | Ticket worker | unassigned | CA-MT-3 tenant-keyed throttle/guard/ledger | superseded | CA-MT-1 | - | `f1edc8c` | Caps and receipts isolate per tenant under load. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md) |
+| draft | Ticket worker | unassigned | CA-MT-4 per-tenant OAuth custody + connect UI | superseded | CA-MT-1 | - | `f1edc8c` | PKCE keys bind to requesting tenant only. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md) |
+| draft | Tester | unassigned | CA-MT-5 two-tenant smoke + self-host parity | superseded | CA-MT-2..4 | - | `f1edc8c` | Cross-tenant send fails; self-host run passes. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md) |
+| draft | Ticket worker | unassigned | CA-MT-6 hostname cutover, retire instances | superseded | CA-MT-5 | - | `f1edc8c` | One hostname, one watchdog check, old instances gone. | - | 2026-07-10 00:19 CEST | Mint issue. · closed with epic 2026-10-22; successor: [EPIC C Callisthenes Sprint](EPIC-C-CALLISTHENES-SPRINT.md) |
 
 ## Branch And Integration
 

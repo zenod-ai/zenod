@@ -174,8 +174,8 @@ Child spine map:
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | draft | Planner | Epic 3.0 planner | Confirm D4 (DB) | done | - | - | `f1edc8c` | Decisions recorded here; children unblocked. | D4 decided 2026-07-10: SQLite/WAL per unit behind the storage seam. Numbering resolved (Herald→Epic 4). | 2026-07-10 | None. |
-| draft | Epic worker | unassigned | Deliver Epic 3.1 chassis | ready | - | - | `f1edc8c` | 3.1 Definition of Done met. | D4 resolved; Phase 1 unblocked. | 2026-07-10 | Dispatch worker (3.0 appendix prompt). |
-| draft | Planner | Epic 3.0 planner | Record cross-spine amendments in 2.3/2.4/2.5/2.9 | draft | D1–D3 accepted | - | `f1edc8c` | Proposed updates adopted or rejected by target stewards. | Proposals listed below. | 2026-07-10 00:19 CEST | Route via Epic 0. |
+| draft | Epic worker | unassigned | Deliver Epic 3.1 chassis | superseded | - | - | `f1edc8c` | 3.1 Definition of Done met. | D4 resolved; Phase 1 unblocked. | 2026-07-10 | Dispatch worker (3.0 appendix prompt). · closed with epic 2026-10-22; successor: [EPIC Z Zenod Night Sprint](EPIC-Z-NIGHT-SPRINT.md) |
+| draft | Planner | Epic 3.0 planner | Record cross-spine amendments in 2.3/2.4/2.5/2.9 | superseded | D1–D3 accepted | - | `f1edc8c` | Proposed updates adopted or rejected by target stewards. | Proposals listed below. | 2026-07-10 00:19 CEST | Route via Epic 0. · closed with epic 2026-10-22; successor: [EPIC Z Zenod Night Sprint](EPIC-Z-NIGHT-SPRINT.md) |
 
 ## Branch And Integration
 
