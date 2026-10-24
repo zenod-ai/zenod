@@ -1,6 +1,6 @@
 # EPIC 3.7 · Decommission 2.x — turn off the per-user container fleet
 
-Status: active
+Status: done — superseded (see Outcome)
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -8,6 +8,7 @@ Primary document: `docs/EPIC-3.7-DECOMMISSION-2X.md`
 Spine ID: E3-7
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 3.7 delivery manager (Codex task `019f4933-a958-79b3-8e16-21841be40c53`)
@@ -78,9 +79,21 @@ Inventory and retire the entire Epic 2.x per-user container fleet — every per-
 - Retiring Phylax (it is part of the canonical fleet) or the marketing/cloud services.
 - Deleting snapshots/archives (retention is a later, deliberate decision by Jordi).
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded: the 2.x fleet retirement is not provable from this spine (2 of 6 Done means checked, stalled 2026-07-10 on Jordi approvals); Zenod Alpha Launch A0 re-checks production end to end on today's infra after the infra-vps cleanup.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Any surviving 2.x container is found by ZAL A0's end-to-end re-check, not by this spine.
+
+| Done means | Evidence |
+|---|---|
+| 2/6 checked | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: DX-1/DX-2 package complete; cloud recovery fix merged; upstream Zenod pilot rejected at new exact head
 Last verified: 2026-07-10 07:25 CEST
 Integration target: main

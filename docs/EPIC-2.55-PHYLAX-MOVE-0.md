@@ -1,6 +1,6 @@
 # EPIC 2.55 - PHYLAX MOVE 0 - hosted channel gateway
 
-Status: active
+Status: done — superseded (see Outcome)
 Created: 2026-07-09
 Updated: 2026-07-09
 Repository: `zenod-ai/zenod`
@@ -8,6 +8,7 @@ Primary document: `docs/EPIC-2.55-PHYLAX-MOVE-0.md`
 Spine ID: E2-55
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC P Phylax Sprint](EPIC-P-PHYLAX-SPRINT.md)
 GitHub issues: `https://github.com/zenod-ai/zenod/issues?q=is%3Aissue%20label%3Aepic%3A2.55`
 Integration branch: `main`
 Active spine steward: Epic 2.55 Phylax steward (`current Codex task`)
@@ -87,9 +88,21 @@ Deliver Phylax as an independently purchasable, deployable, configurable hosted 
 - Exposing QR pairing in the hosted Phylax UI.
 - Touching live Stripe or production `cloud.zenod.dev` without Jordi's explicit approval.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC P, which took over Phylax as the one channel core; this spine's last state (2026-07-09) was a paused first worker batch (#703-#705), never integrated.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: None: no work from this spine is live that P does not own.
+
+| Done means | Evidence |
+|---|---|
+| All 9 open | [Current State](#current-state); root Spine Map 2026-10-22 'EPIC P covers Phylax' |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: planning / dispatch
 Last verified: 2026-07-09 23:55 CEST
 Integration target: `main`

@@ -1,6 +1,6 @@
 # EPIC 5 · Herald Sprint — duplicate the Ring, give it an agenda
 
-Status: active
+Status: done
 Status note: SHIP candidate — manager journey complete; Jordi test package ready
 Created: 2026-07-11
 Updated: 2026-07-12
@@ -91,9 +91,21 @@ HARDEN (after Jordi approves SHIP): reply lane (requires X read capability in Ca
 - Reply handling, scorecards, or any X *read* path in SHIP.
 - Lane YAML as a user-facing artifact — hosted tenants see the briefing and the board, never config files.
 
+## Outcome
+
+Verdict: accomplished
+Outcome: Herald stood up at herald.zenod.dev: all 12 Done means checked and the manager's clean live journey passed on exact commit `7cf13ae` (2026-07-12); Jordi's own walk and HARDEN never started, and Zenod's social voice now belongs to zenod-ai/zenod-social.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Jordi's own SHIP walk was never recorded; Herald is an independent agent outside Zenod's deployment scope since 2026-09-07.
+
+| Done means | Evidence |
+|---|---|
+| 12/12 checked | [Current State](#current-state) journey result |
+
 ## Current State
 
-Status: active
+Status: done
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: SHIP candidate — clean live journey complete
 Last verified: 2026-07-12T17:24:00+02:00
 Integration target: main

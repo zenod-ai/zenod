@@ -1,6 +1,6 @@
 # EPIC R · Ring Sprint — duplicate Zenod, the middle is the Council
 
-Status: active
+Status: done
 Status note: shipped
 Created: 2026-07-11
 Updated: 2026-07-13
@@ -86,9 +86,21 @@ HARDEN: generic MCP tool discovery plus tenant-attached Agent Skills is now appr
 - Suite composition, Herald, machine tenants.
 - Touching live Zenod/Callisthenes units beyond reading code as template.
 
+## Outcome
+
+Verdict: accomplished
+Outcome: Ring stood up at ring.zenod.dev: all 10 SHIP Done means checked and exact-tool hardening deployed (`fd76aef`, 2026-07-13).
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Ring is not in the Zenod phone path (ZAL 2026-08-25) and is an independent agent outside Zenod's deployment scope since 2026-09-07.
+
+| Done means | Evidence |
+|---|---|
+| 10/10 checked | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: shipped; Ring exact-tool hardening deployed — generic MCP, truthful receipts/holds, and fail-closed cited reads live
 Last verified: 2026-07-13T02:50:00+02:00
 Integration target: main

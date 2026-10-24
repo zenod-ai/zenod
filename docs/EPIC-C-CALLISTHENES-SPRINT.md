@@ -1,6 +1,6 @@
 # EPIC C · Callisthenes Sprint — duplicate Zenod, swap the middle, sell the mouth
 
-Status: active
+Status: done
 Status note: shipped; HARDEN active
 Created: 2026-07-11
 Updated: 2026-07-11
@@ -83,9 +83,21 @@ HARDEN (after Jordi approves SHIP): dashboard Approve button (SHIP approves via 
 - New connectors, new UI design, chassis/framework language.
 - Touching the live Zenod unit beyond reading its code as the template.
 
+## Outcome
+
+Verdict: accomplished
+Outcome: Callisthenes stood up at calli.zenod.dev: all 9 SHIP Done means checked, HARDEN wave 1 live and its own Next action 'none on Calli' (2026-07-11).
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Remaining HARDEN items (Reddit/email connectors, Google sign-in) are unscheduled; Callisthenes is an independent agent outside Zenod's deployment scope since 2026-09-07.
+
+| Done means | Evidence |
+|---|---|
+| 9/9 checked | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: HARDEN wave 1 complete and live — generic peer readiness handed to Ring; autodeploy bound
 Last verified: 2026-07-11T05:12:00+02:00
 Integration target: main

@@ -1,6 +1,6 @@
 # Epic GDV · Google identity and Google Drive-only vaults
 
-Status: ready
+Status: done — superseded (see Outcome)
 Status note: ready for credential-backed human acceptance
 Created: 2026-08-29
 Updated: 2026-08-30
@@ -9,6 +9,7 @@ Primary document: `docs/EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md`
 Spine ID: GDV
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 Integration branch: `main`
 Planning branch: `codex/google-drive-vault-epic` merged by PR #1155
 Planning base: `bcd64987f061a9e622cb88796f1d52781a006109` (`origin/main`)
@@ -106,9 +107,21 @@ The required uninterrupted Hosted journey is:
 - Claiming that all user message content exists only in Drive; this epic makes the **vault files** Drive-authoritative. A stricter operational-data-retention contract would be a separate privacy epic.
 - Changing the existing €9 Hosted offer, managed-usage contract, Zenod/Phylax service boundary or production topology.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by Zenod Alpha Launch: deterministic local acceptance passed (13/13, 2026-08-30) and public Google registration opened in production on 2026-09-16 (ZAL appendix); the credential-backed end-to-end journey is now ZAL A0.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Drive-only vault behaviour is not separately proven live; A0 covers the signup journey only.
+
+| Done means | Evidence |
+|---|---|
+| 13/13 checked (local) | [Current State](#current-state) |
+
 ## Current State
 
-Status: ready
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: Deterministic local release acceptance complete; credential-backed staging requires human approval
 Last verified: 2026-08-30 CEST
 Integration target: `main`

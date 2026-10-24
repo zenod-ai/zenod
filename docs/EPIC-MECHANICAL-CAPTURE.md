@@ -1,6 +1,6 @@
 # EPIC: Mechanical Capture — Phylax Binding Table To Zenod
 
-Status: active
+Status: done — superseded (see Outcome)
 Status note: SHIP-A passed uninterrupted; multimodal image-ingest milestone active under MC-17/MC-18
 Created: 2026-07-29
 Updated: 2026-08-01 (generic typed entry retrieval live-proven; see Handoff Journal)
@@ -9,6 +9,7 @@ Primary document: `docs/EPIC-MECHANICAL-CAPTURE.md`
 Spine ID: MC
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md)
 GitHub issues: mint one issue per MC ticket at dispatch; link back into the Issue Ledger
 Integration branch: `main`
 Pinned base commit: `0fac451` (origin/main at authoring; RIV-1 TurnPlan compiler is merged and inert for this spine)
@@ -129,9 +130,21 @@ Terminal artifact: "I walked SHIP-B steps 1–8 on <deployed SHA>. Screenshots. 
 - Exception authorized 2026-07-31: MC-17 may complete the existing `ingest_memory` contract and per-tenant Drive archive path; MC-18 may add one typed append-only enrichment contract and exact linked-context expansion. Neither ticket changes general librarian classification or evidence immutability.
 - No multitenant billing/provisioning work; this spine changes tenant *configuration surface*, not tenant lifecycle.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by ZMR (memory reliability, M2 deployed 2026-09-17) and Zenod Alpha Launch: capture and typed retrieval went live (`d4eaac4`, 2026-08-01), the Ring assistant lane left the Zenod phone path on 2026-08-25, and the multimodal MC-17/MC-18 milestone was never closed here.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: MC-17/MC-18 image ingest is not proven done; it is not on the Alpha Launch path.
+
+| Done means | Evidence |
+|---|---|
+| 0/32 checked (states in prose) | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 - Generic typed memory-entry retrieval is merged and live on Zenod at exact SHA `d4eaac46f3322840c8c28c1bd64929e1fa68cd53`. [#1050](https://github.com/zenod-ai/zenod/pull/1050) extended the existing `search_memory`/`get_memory` seam with source, content type, capture-time bounds, order, limit, exact evidence references, and durable provenance; it did not add a voice-note-specific retrieval tool. The production Zenod catalog no longer exposes the transport-audit `get_recent_conversation_transcript`. [#1051](https://github.com/zenod-ai/zenod/pull/1051) makes exact evidence-ref reads consume the same generic provenance merger as structural lists. A live tenant query returned the 10 newest WhatsApp voice notes in correct order with stable source IDs, and exact retrieval of `Log/2026-08-01.md#^e-9b0c3d` returned only its 4,174-character transcript with matching typed provenance and no neighboring log entry. Evidence: `docs/evidence/generic-entry-retrieval-2026-08-01/`.
 - MC-17 [#1046](https://github.com/zenod-ai/zenod/issues/1046) and MC-18 [#1047](https://github.com/zenod-ai/zenod/issues/1047) are active from `a3bfe8a92a2eb18f6a10a173c72ff7d547c3a21a`. Audit found the reusable pieces already exist: Phylax image download/coalescing and `media→ingest_memory`; Zenod raw-artifact providers including Drive, vision extraction, Git-backed filing, and terminal media receipts. The missing acceptance is concrete: hosted Zenod currently forces per-tenant media archive to local disk; `ingest_memory` does not consume an idempotency key; captions are omitted from `contentHint`; the transport fetch URL uses a customer token and is eligible to enter stored source metadata; and no typed exact-target enrichment contract exists.
 - Capture-first filing is merged and live. [#1042](https://github.com/zenod-ai/zenod/pull/1042) landed the three independently green commits from pinned base `b165e262`: the atomic receipt contract, deterministic uncertain-candidate filing, and non-blocking skill/tool prose. `StoreResult` now carries `filing` and never a question; low-confidence captures with a candidate append a lint-clean, searchable `#filing/uncertain` block to the top candidate, while no-candidate or validation-failure stores fall back to Inbox. Publish run [30559261176](https://github.com/zenod-ai/zenod/actions/runs/30559261176) deployed exact `10f60835c383d0f5ea71a962c414410fb4582b8f` to Zenod MT, Ring, and Phylax. One permitted live ambiguous MT store returned a terminal `Saved — filed to Inbox` receipt with no question property; [#1043](https://github.com/zenod-ai/zenod/pull/1043) persisted the complete acceptance and production evidence at `docs/evidence/capture-first-2026-07-30/`. Main is reconciled through `52612dee94bf85c586ba1397687215b4ab8f8bb2`.

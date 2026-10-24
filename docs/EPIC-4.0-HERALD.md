@@ -1,6 +1,6 @@
 # EPIC 4.0 · HERALD — root spine: the loop, generalized
 
-Status: active
+Status: done — superseded (see Outcome)
 Created: 2026-07-10
 Updated: 2026-07-10
 Repository: `zenod-ai/zenod` (engine) + `herald-brain` (config, per D-H3)
@@ -8,6 +8,7 @@ Primary document: `docs/EPIC-4.0-HERALD.md`
 Spine ID: E4-0
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: Epic 0 worker for 4.0 (Jordi + current bound Fable session)
@@ -143,7 +144,7 @@ Children registered in the epic log (conformance 2026-10-22). The Child-Spine Ma
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| E4-2 | child | [loop-core PoC](EPIC-4.2-POC-LOOP-CORE.md) | Build a repeatable TypeScript rig in spikes/loop-core that runs the Herald loop mechanics end to end through four ports. | active | Stale? 103d since last commit. Owner: keep or close. | [Current State](EPIC-4.2-POC-LOOP-CORE.md#current-state) | 2026-10-22 | Per its Current State next action. |
+| E4-2 | child | [loop-core PoC](EPIC-4.2-POC-LOOP-CORE.md) | Build a repeatable TypeScript rig in spikes/loop-core that runs the Herald loop mechanics end to end through four ports. | superseded | Closed 2026-10-24 by the E12-S2 tidy; superseded by EPIC 5 (H-D3). [TIDY-2026-10-24](TIDY-2026-10-24.md) | [Current State](EPIC-4.2-POC-LOOP-CORE.md#current-state) | 2026-10-22 | Per its Current State next action. |
 
 ## Bootstrap Map
 
@@ -158,9 +159,21 @@ Read in this order:
 | 5 | `docs/EPIC-2.6-HERALD-MOVE-0.md` | Sibling: nucleus, buy button, `units/herald/` scaffold | When touching container/seams |
 | 6 | `docs/EPIC-2.4-CALLISTHENES-MOVE-0.md` | Posting dependency and its C-1 gate | 4.4 / 4.5 workers, tester |
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC 5, whose decision H-D3 makes the 4.x docs design inheritance only, never executed.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: None.
+
+| Done means | Evidence |
+|---|---|
+| All 7 open | EPIC 5 decision H-D3 |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: planning
 Last verified: 2026-07-10 03:58 CEST
 Integration target: main
