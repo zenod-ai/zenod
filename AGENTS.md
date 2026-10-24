@@ -25,8 +25,6 @@ Jordi explicitly set this boundary on 2026-09-07: this repository deploys **live
 
 Independent agents should move to their own repositories and deployment lifecycles as separate, incremental follow-up work. Their continued presence in this source tree does not grant deployment authority. The durable procedure, exact live state and reversible trigger receipts are in `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`. Preserve running services and data during any later extraction.
 
-Dokploy credentials already exist in the owner's macOS Keychain (service `alpha9-dokploy-api-key`): load them yourself with `eval "$(dokploy-env)"` and never ask the owner for them or print them; see "Dokploy credentials — where they live" in `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`.
-
 ## Command contract
 
 - **“Continue”**: bind as the Epic 0 worker and active child-spine delivery manager. Read the root spine, then the active child spine; reconcile its linked GitHub issues/PRs and current `main`; dispatch the child's single **Next action** to a worker, verify and integrate it; remain the sole spine steward; loop until ready for human test or blocked on a named gate.
@@ -50,3 +48,6 @@ Dokploy credentials already exist in the owner's macOS Keychain (service `alpha9
 - [ZPF-4 #1106](https://github.com/zenod-ai/zenod/issues/1106): implement the issuer-neutral Phylax allowance/usage ledger when a worker slot opens.
 
 The first three may run in parallel only after the control-plane spine commit is available as their common base. All later work is dependency-gated by `docs/EPIC-P-PHYLAX-SPRINT.md`; do not select from the global issue list.
+
+## Secrets: find before you ask
+Never ask Jordi for a key we already have. Catalog (names only): https://github.com/AlfaBlok/infra-vps/blob/main/docs/secrets-catalog.md. On VPS1 run `secret find <provider>` (from VPS3: `ssh hetzner_vps_1 secret find <provider>`); reuse a shared key with `secret copy <from-app> <your-app> <NAME> --approved E14-G1`. The Dokploy API key, Cloudflare API token and Hetzner Cloud token are already on VPS1 in `~t3agent/.config/alpha9/` (one-liners in the catalog's "Asked most often" table). Ask Jordi only when `find` is empty, via the T3 `request_secret` card, never chat. Never print a value. On the owner's Mac the Dokploy key is in the Keychain (service `alpha9-dokploy-api-key`): `eval "$(dokploy-env)"`; see "Dokploy credentials — where they live" in `docs/EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md`.
