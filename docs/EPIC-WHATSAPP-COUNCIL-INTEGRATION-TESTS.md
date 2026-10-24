@@ -1,6 +1,6 @@
 # EPIC: WhatsApp → Phylax → Ring → Council integration tests
 
-Status: ready
+Status: done — superseded (see Outcome)
 Status note: ready for owner dispatch; browser acceptance remains blocked by unavailable signed-in Chrome control
 Created: 2026-07-12
 Updated: 2026-07-13
@@ -9,6 +9,7 @@ Primary document: `docs/EPIC-WHATSAPP-COUNCIL-INTEGRATION-TESTS.md`
 Spine ID: WJ
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 GitHub issues: draft rows below; not yet minted
 Integration branch: `main`
 Active spine steward: `/root`
@@ -65,9 +66,21 @@ Prove four ordinary WhatsApp journeys end-to-end through Phylax and Ring: create
 - Deleting or retrying public X posts without explicit authority.
 - Solving Telegram inside this WhatsApp batch; competing Telegram pollers remain a separate Phylax issue.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by Zenod Alpha Launch: the 2026-08-25 decision removed Ring from the Zenod phone path and ZAL-8 made Phylax call Zenod directly, so the Phylax-to-Ring-to-Council journeys are no longer Zenod's.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: None for Zenod.
+
+| Done means | Evidence |
+|---|---|
+| All 4 open | ZAL Decisions 2026-08-25; ZAL-8 #1074 |
+
 ## Current State
 
-Status: ready
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: ready for four owner-agent dispatches
 Last verified: 2026-07-12 20:24 CEST
 Integration target: `main`

@@ -1,6 +1,6 @@
 # EPIC P · Phylax Sprint — one channel core, integrated or standalone
 
-Status: active
+Status: done — superseded (see Outcome)
 Status note: active — final integrated-independent delivery push
 Created: 2026-07-11
 Updated: 2026-08-28
@@ -9,6 +9,7 @@ Primary document: `docs/EPIC-P-PHYLAX-SPRINT.md`
 Spine ID: P
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: `/root` final-push delivery manager
@@ -114,9 +115,21 @@ HARDEN: multiple Baileys numbers (schema has `number_id` on tenant rows from day
 - Moving Zenod vault/Drive ownership or PM proposal/decision ownership into Phylax.
 - Expanding the current Zenod beta stabilization into the PM adapter or standalone commercial launch before its reconciled sprint tickets are accepted.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by Zenod Alpha Launch: P's only open input was the allowance/tariff values (2026-08-27), which become ZAL A2 (metering + caps per plan); standalone Phylax is not on the current plan.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Phylax's own usage ledger and retention (root D29) stay in force; A2 builds on them.
+
+| Done means | Evidence |
+|---|---|
+| All 21 open | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: Source architecture and wave-6 phase-1 release packet complete; allowance/tariff approval pending before gated backups and closed rollout
 Last verified: 2026-08-27 23:12 CEST
 Integration target: main

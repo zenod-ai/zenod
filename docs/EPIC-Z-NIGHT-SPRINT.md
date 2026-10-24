@@ -1,6 +1,6 @@
 # EPIC Z · Zenod Night Sprint — the complete atomic unit, testable by Jordi in the morning
 
-Status: active
+Status: done
 Status note: shipped
 Created: 2026-07-11
 Updated: 2026-07-12
@@ -80,9 +80,21 @@ HARDEN (not tonight): Google sign-in (future, by explicit Jordi decision 2026-07
 - Transcription in any form (parked for Phylax; remove its tab).
 - Full workspace test suites (targeted tests only; the journey is the gate).
 
+## Outcome
+
+Verdict: accomplished
+Outcome: Zenod shipped as one self-contained container: all 8 SHIP Done means checked and the canonical skill live-imported by Ring (`e7dc215`, 2026-07-12).
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Its follow-ups (iteration 2 memory-test failures, #835) are carried by ZMR and Zenod Alpha Launch.
+
+| Done means | Evidence |
+|---|---|
+| 8/8 checked | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: shipped; canonical Zenod Agent Skill v1.0.0 advertised and live-imported by Ring
 Last verified: 2026-07-12T01:58:31+02:00
 Integration target: main

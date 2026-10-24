@@ -1,14 +1,27 @@
 # M0 Plan — Self-hosted Zenod
 
-Status: active
-Status note: **active**. Scoped 2026-06-11. Companion to [M0-SPEC.md](M0-SPEC.md) (the engine contract this milestone implements) and [ROADMAP.md](ROADMAP.md) (where M0 sits).
+Status: done — superseded (see Outcome)
+Status note: **superseded** 2026-10-24 (see Outcome); was active. Scoped 2026-06-11. Companion to [M0-SPEC.md](M0-SPEC.md) (the engine contract this milestone implements) and [ROADMAP.md](ROADMAP.md) (where M0 sits).
 Spine ID: M0
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
+
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded: self-hosted single-user M0 (scoped 2026-06-11) was folded into the shared Hosted/self-host runtime (ZAL decisions 2026-08-25); this spine records no evidence of its own, so it is closed as superseded rather than done.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: None.
+
+| Done means | Evidence |
+|---|---|
+| 0/3 checked | [Current State](#current-state) |
 
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 
 ## Goal
 

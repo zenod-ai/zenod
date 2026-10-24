@@ -1,6 +1,6 @@
 # EPIC: Ring ↔ Callisthenes Generic MCP Integration Tests
 
-Status: active
+Status: done — superseded (see Outcome)
 Status note: generic call intent, natural held draft, exact approval, canonical receipt, and replay safety live-passed; residual fixture/tenant cases remain
 Created: 2026-07-11
 Updated: 2026-07-12
@@ -9,6 +9,7 @@ Primary document: `docs/EPIC-RING-CALLISTHENES-INTEGRATION-TESTS.md`
 Spine ID: RCIT
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md)
 GitHub issues: draft test/fix lanes completed; residual acceptance remains in this spine
 Integration branch: main
 Active spine steward: `/root`
@@ -71,9 +72,21 @@ Prove that Ring can connect to Callisthenes as an ordinary authenticated MCP ser
 
 Historical scope note: this began as a diagnosis-only campaign. Jordi subsequently authorized a bounded implementation fix lap, deployment, and browser retest, while preserving the prohibition on Callisthenes-specific shortcuts.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded: 4 of 5 Done means passed live on Ring `2ea4dce` (2026-07-12); the remaining controlled-fixture cases (T03/T05/T19-T21/T23) concern Ring and Callisthenes, both now outside Zenod's scope. Zenod's own end-to-end acceptance is Zenod Alpha Launch.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: T23 cross-tenant standing-action consumption remains unproved live.
+
+| Done means | Evidence |
+|---|---|
+| 4/5 checked | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: model-routed safe-contract acceptance live-passed; controlled fixture and cross-tenant mutation cases remain
 Last verified: 2026-07-12 19:16 CEST
 Integration target: shared `main` worktree and live Ring at `2ea4dce2c0aaa6cc2953a8c9b7e2b75b53b4d4ab`; no repair branch or checkout

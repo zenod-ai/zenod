@@ -1,6 +1,6 @@
 # EPIC 2.9: EPAMINON MOVE 0 - the executor unit
 
-Status: active
+Status: done — superseded (see Outcome)
 Created: 2026-07-09
 Updated: 2026-07-09
 Repository: `/Users/jordi/Documents/GitHub/zenod`
@@ -8,6 +8,7 @@ Primary document: `docs/EPIC-2.9-EPAMINON-MOVE-0.md`
 Spine ID: E2-9
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
+Superseded by: [EPIC 3.5 Epaminon Multi-Tenant](EPIC-3.5-EPAMINON-MULTITENANT.md)
 Integration branch: `main`
 Active spine steward: Epic 2.9 worker, current Codex thread
 Last reconciled commit: `3848b04c0d0c4485735163be335427550c588f07`
@@ -139,9 +140,21 @@ Implications to resolve before minting worker tickets:
 - This epic does not make Archus execution tickets the required caller workflow for every Epaminon
   run.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded: Epaminon is an independent agent outside Zenod's deployment scope since 2026-09-07; its own last state (2026-07-09) was blocked on a paid TEST checkout and runner credentials, and EPIC 3.0 had already marked its deployment assumptions superseded. Its successor plan is EPIC 3.5 (deferred).
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: Epaminon work, if resumed, starts in its own repository.
+
+| Done means | Evidence |
+|---|---|
+| All 9 open | [Current State](#current-state) |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: cloud-test checkout route live; final acceptance blocked on paid TEST purchase/provisioning proof
 Last verified: 2026-07-09
 Next action: complete one Stripe TEST card checkout at `cloud-test.zenod.dev/buy/epaminon`, verify

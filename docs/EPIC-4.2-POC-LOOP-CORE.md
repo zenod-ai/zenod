@@ -1,7 +1,7 @@
 # EPIC 4.2 · loop-core PoC — loop mechanics outside the harness
 
 Parent: [EPIC-4.0-HERALD.md](EPIC-4.0-HERALD.md)
-Status: active
+Status: done — superseded (see Outcome)
 Created: 2026-07-10
 Updated: 2026-07-11
 Repository: `zenod-ai/zenod`
@@ -9,6 +9,7 @@ Primary document: `docs/EPIC-4.2-POC-LOOP-CORE.md`
 Spine ID: E4-2
 Root spine: [Foundation](EPIC-0-FOUNDATION-SPINE.md)
 Parent spine: [EPIC 4.0 Herald](EPIC-4.0-HERALD.md)
+Superseded by: [EPIC 5 Herald Sprint](EPIC-5-HERALD-SPRINT.md)
 GitHub issues: same repository
 Integration branch: main
 Active spine steward: 4.2 delivery manager (current Codex session)
@@ -88,9 +89,21 @@ Core acceptance runs offline with a scripted Agent, fixed Clock, resettable fixt
 - General 4.1 setup-mode product work. This PoC owns only the smallest briefing-to-YAML compiler needed for end-to-end testing and hands it to 4.1 as seed code.
 - Editing parent, sibling, or Epic 2 spines from this 4.2 delivery role.
 
+## Outcome
+
+Verdict: superseded
+Outcome: Superseded by EPIC 5, whose decision H-D3 rules out a standalone loop-core engine or PoC; the loop is built inside Herald.
+Closed: 2026-10-24 by E12-S2 tidy worker (Jordi: "you can tidy up for sure")
+Risk: None.
+
+| Done means | Evidence |
+|---|---|
+| All 8 open | EPIC 5 decision H-D3 |
+
 ## Current State
 
-Status: active
+Status: done — superseded (see Outcome)
+Closed: 2026-10-24 — see [Outcome](#outcome) (zenod tidy-up, [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Phase: planning
 Last verified: 2026-07-10 22:32 CEST
 Integration target: main
