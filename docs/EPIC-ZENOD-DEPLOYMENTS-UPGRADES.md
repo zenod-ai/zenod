@@ -52,7 +52,7 @@ Verified: Swarm update completed 2026-09-07 03:41:25 UTC; running task `xa80l38o
 Scope: public Zenod only; private Phylax unchanged. No migration or data restoration.
 Recovery: verified VPS archive, independent checksum-matched Mac copy, encrypted cloud upload and decrypted download comparison complete; original rollback receipt retained.
 Live tests: the V5 hero and optimized WebP render on `zenod.dev`; title, responsive width, pricing truth and fail-closed signup state pass. The prior filing repair and final boundary recall remain passed 3/3. [Landing rollout receipt](evidence/zenod-v5-landing-rollout-2026-09-07/README.md); [memory evidence](evidence/zmr-live-29ddb62/README.md).
-Next action: use this leaf for the next authorized upgrade; no further deployment requested.
+Next action: none; the procedure and live state now live in [DEPLOYMENTS.md](DEPLOYMENTS.md) (this spine is history).
 
 ## Execution Cursor (history)
 
