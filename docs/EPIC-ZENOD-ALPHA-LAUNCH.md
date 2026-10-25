@@ -39,7 +39,7 @@ A real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, and is
 Status: active
 Phase: revived 2026-10-24 as milestone A of agent_team EPIC-12; steps A0–A5 defined, none started
 Last verified: 2026-10-24
-Last attempted: revived this spine (history moved, A0–A5 ledger, tidy of stale spines: [TIDY-2026-10-24](TIDY-2026-10-24.md))
+Last attempted: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched A0 as worker run_f010b4a9; EPIC-6 answered internal-only (EPIC-6-A1); earlier: revived this spine (history moved, A0–A5 ledger, tidy of stale spines: [TIDY-2026-10-24](TIDY-2026-10-24.md))
 Result: plan in place; production facts below are as last recorded, not re-checked today
 Production as last recorded: public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed; the infra-vps cleanup has since changed the hosts, so nothing is assumed working until A0.
 Finding 2026-10-24: push-to-main auto-deploy (root D27) is broken: the `deploy` job of Publish image fails with a Dokploy API 404 on `abd85dd` and `51a3b06` (run 40118507158 family), so `main` publishes images but no longer rolls prod; `cloud.zenod.dev/api/health` reports `abd85dd`, status ok. A0 includes fixing this (likely the app/project moved in the infra-vps cleanup).
@@ -51,7 +51,7 @@ Verified at: 2026-10-24 (spine only)
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| A0 | Tester | unassigned | ZAL-A0 · Re-check prod after the infra-vps cleanup | ready | - | - | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded; push-to-main deploy rolls prod again (Dokploy 404 fixed). | 2026-09-16 opening receipt (pre-cleanup) | 2026-10-24 | Dispatch a worker; repair only what the journey breaks. |
+| A0 | Tester | run_f010b4a9 | ZAL-A0 · Re-check prod after the infra-vps cleanup | active | - | run_f010b4a9 | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded; push-to-main deploy rolls prod again (Dokploy 404 fixed). | 2026-09-16 opening receipt (pre-cleanup) | 2026-10-25 | Worker running; repairs only what the journey breaks. |
 | A1 | Tester | Jordi | ZAL-A1 · Jordi's voice test (pending since 2026-08-27) | draft | A0 | - | - | 3 overlapping voice notes, 3 clean Saved receipts, no re-pair. | ZAL-22 #1099 awaiting acceptance | 2026-10-24 | Ask Jordi once A0 is green. |
 | A2 | Ticket worker | unassigned | ZAL-A2 · Metering + caps per plan | draft | A0 | - | - | Every user's usage counted; a cap per plan; at the cap the service stops and asks for a top-up. | Builds on ZAL-10 #1076 (managed cap lifecycle), Phylax usage ledger (root D29) and per-tenant metering (root D30) | 2026-10-24 | Audit what is live vs merged, then close the gap. |
 | A3 | Ticket worker | unassigned | ZAL-A3 · Free-pass code with a capped allowance | draft | A2 | - | - | A code grants a capped free allowance; abuse stops at the cap. | none | 2026-10-24 | After A2. |
@@ -81,4 +81,4 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
-| HEALTH | child | [EPIC-6: health.zenod.dev — one page that shows whether Zenod is up](EPIC-6-HEALTH-DASHBOARD.md) | Before testers arrive, anyone can see in one page whether the site, the database, the WhatsApp relay and the agents are alive, and when each last did real work. | ready | none | none | 2026-10-24 | dispatch S1 (inventory) |
+| HEALTH | child | [EPIC-6: health.zenod.dev — one page that shows whether Zenod is up](EPIC-6-HEALTH-DASHBOARD.md) | Before testers arrive, anyone can see in one page whether the site, the database, the WhatsApp relay and the agents are alive, and when each last did real work. | active | none | none | 2026-10-25 | S1 (inventory) running; S4 is tailnet-only per EPIC-6-A1 |
