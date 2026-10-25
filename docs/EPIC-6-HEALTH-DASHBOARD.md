@@ -28,8 +28,8 @@ Before testers arrive, anyone can see in one page whether the site, the database
 ## Current State
 
 Owner: unassigned
-Status: ready
-Last attempted: defined on 2026-10-24 from Jordi's ask, after a quick read-only check
+Status: active
+Last attempted: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched S1 as run_661d3443; earlier: defined 2026-10-24 from Jordi's ask, after a quick read-only check
 Result: defined, not started. Check 2026-10-24: `zenod.dev` 200, `cloud.zenod.dev/api/health` ok on `e2930b8` (= `main`), `health.zenod.dev` 404 (does not exist); CI green, but Publish image still reports failure on every push (ZAL finding); no DB, WhatsApp or runner signal is visible from outside today
 Evidence: EPIC-ZENOD-ALPHA-LAUNCH.md
 Waiting on: none (EPIC-6-A1 answered 2026-10-25: internal-only via Tailscale)
@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| S1 | Ticket worker | unassigned | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | ready | none | none | `main` | none | 2026-10-24 | dispatch; output a linked page `docs/health/INVENTORY.md` |
+| S1 | Ticket worker | run_661d3443 | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | active | none | run_661d3443 | `main` | none | 2026-10-25 | worker running; output a linked page `docs/health/INVENTORY.md` |
 | S2 | Ticket worker | unassigned | Health aggregator: one read-only JSON endpoint/service returning per-component status, last activity, last error (no secrets) | draft | S1 | none | `main` | none | 2026-10-24 | after S1 |
 | S3 | Ticket worker | unassigned | Prod smoke battery: one `npm run` command, read-only, scheduled every 15 min, result stored for the page (E6-2) | draft | S1 | none | `main` | none | 2026-10-24 | after S1 |
 | S4 | Ticket worker | unassigned | `health.zenod.dev` (internal, tailnet-only per EPIC-6-A1; no public DNS record, no public exposure): page + Dokploy deploy (E6-1) | draft | S2, S3 | none | `main` | none | 2026-10-24 | after S2/S3 |
