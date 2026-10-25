@@ -60,7 +60,7 @@ Steps: each is independently testable and closes only with evidence.
 
 ## Waiting on
 
-- [answered EPIC-6-A1 2026-10-25 @Jordi] Should `health.zenod.dev` be public? — answer: no, this is only via tailscale for us, or if it's public like zenod.dev we should then password it separately, but goal now is internal only — acted on: S4 is tailnet-only (no public DNS/exposure); a public page would need its own password and its own ask — unblocks: S4
+- [answered EPIC-6-A1 2026-10-25 @Jordi · done 2026-10-25 f9e26a3] Should `health.zenod.dev` be public? — answer: no, this is only via tailscale for us, or if it's public like zenod.dev we should then password it separately, but goal now is internal only — acted on: S4 is tailnet-only (no public DNS/exposure); a public page would need its own password and its own ask — unblocks: S4
 
 ## Decisions
 
