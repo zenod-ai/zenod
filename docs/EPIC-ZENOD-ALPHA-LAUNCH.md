@@ -37,21 +37,21 @@ A real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, and is
 ## Current State
 
 Status: active
-Phase: revived 2026-10-24 as milestone A of agent_team EPIC-12; steps A0–A5 defined, none started
-Last verified: 2026-10-24
-Last attempted: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched A0 as worker run_f010b4a9; EPIC-6 answered internal-only (EPIC-6-A1); earlier: revived this spine (history moved, A0–A5 ledger, tidy of stale spines: [TIDY-2026-10-24](TIDY-2026-10-24.md))
-Result: plan in place; production facts below are as last recorded, not re-checked today
-Production as last recorded: public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed; the infra-vps cleanup has since changed the hosts, so nothing is assumed working until A0.
-Finding 2026-10-24: push-to-main auto-deploy (root D27) is broken: the `deploy` job of Publish image fails with a Dokploy API 404 on `abd85dd` and `51a3b06` (run 40118507158 family), so `main` publishes images but no longer rolls prod; `cloud.zenod.dev/api/health` reports `abd85dd`, status ok. A0 includes fixing this (likely the app/project moved in the infra-vps cleanup).
+Phase: A0 re-check done and proposed done 2026-10-25 (worker run_f010b4a9); A1–A5 not started
+Last verified: 2026-10-25
+Last attempted: 2026-10-25 A0 worker run_f010b4a9: re-checked prod, fixed the push-to-main deploy check ([#1435](https://github.com/zenod-ai/zenod/pull/1435)); before: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched A0 as worker run_f010b4a9; EPIC-6 answered internal-only (EPIC-6-A1); earlier: revived this spine (history moved, A0–A5 ledger, tidy of stale spines: [TIDY-2026-10-24](TIDY-2026-10-24.md))
+Result: prod up on today's infra (health sha `ae3e77a`, signup start, Phylax WhatsApp connected, console shell served); push-to-main rolls prod again (run 40160156776 green, live sha = pushed sha after 93 s). Not exercised: the authenticated console and a live WhatsApp round trip (no customer session without Jordi's Google login), which A1's voice test covers.
+Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
+Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
 Waiting on: nobody. A1 (Jordi's voice test) is asked only when it is the next step.
-Next action: A0 — re-check prod end to end on today's infra (signup → WhatsApp → console), read-only, and record the deployed SHA from `https://cloud.zenod.dev/api/health`.
-Verified at: 2026-10-24 (spine only)
+Next action: Jordi (or the manager) accepts A0 done, then A1: ask Jordi for the voice test; A2 audit can start in parallel (A2 depends only on A0).
+Verified at: 2026-10-25 (health, Dokploy, Phylax health and workflow run read live)
 
 ## Issue Ledger
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Acceptance | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| A0 | Tester | run_f010b4a9 | ZAL-A0 · Re-check prod after the infra-vps cleanup | active | - | run_f010b4a9 | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded; push-to-main deploy rolls prod again (Dokploy 404 fixed). | 2026-09-16 opening receipt (pre-cleanup) | 2026-10-25 | Worker running; repairs only what the journey breaks. |
+| A0 | Tester | worker run_f010b4a9 | ZAL-A0 · Re-check prod after the infra-vps cleanup | proposed done | - | [#1435](https://github.com/zenod-ai/zenod/pull/1435) | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded; push-to-main deploy rolls prod again (Dokploy 404 fixed). | 2026-10-25: prod health ok on `ae3e77a`; WhatsApp connected; push-to-main roll proven by run 40160156776 ([evidence](evidence/zal-a0-2026-10-25.md)); authenticated console not exercised. | 2026-10-25 | Accept as done (or require the authenticated console check with A1). |
 | A1 | Tester | Jordi | ZAL-A1 · Jordi's voice test (pending since 2026-08-27) | draft | A0 | - | - | 3 overlapping voice notes, 3 clean Saved receipts, no re-pair. | ZAL-22 #1099 awaiting acceptance | 2026-10-24 | Ask Jordi once A0 is green. |
 | A2 | Ticket worker | unassigned | ZAL-A2 · Metering + caps per plan | draft | A0 | - | - | Every user's usage counted; a cap per plan; at the cap the service stops and asks for a top-up. | Builds on ZAL-10 #1076 (managed cap lifecycle), Phylax usage ledger (root D29) and per-tenant metering (root D30) | 2026-10-24 | Audit what is live vs merged, then close the gap. |
 | A3 | Ticket worker | unassigned | ZAL-A3 · Free-pass code with a capped allowance | draft | A2 | - | - | A code grants a capped free allowance; abuse stops at the cap. | none | 2026-10-24 | After A2. |
