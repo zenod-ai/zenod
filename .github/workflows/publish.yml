@@ -10,10 +10,22 @@ name: Publish image
 #   ghcr.io/zenod-ai/{zenod,phylax}:sha-<short> — immutable, for pinning/rollback
 #
 # See docs/HOSTED-PLAN-2026-07-02.md (P0.2, epic #448).
+#
+# Docs-only pushes (docs/**, any *.md) neither publish nor deploy; the paths that
+# do are AGENTS.md's `Deploy gate:`. Two docs-tree files are baked into the image
+# and so still trigger: docs/tool-output-schemas.v4.json (Dockerfile COPY) and
+# units/zenod/skill/** (served Zenod skill, *.md). Later patterns override earlier
+# ones, so the re-includes must stay after the excludes.
 
 on:
   push:
     branches: [main]
+    paths:
+      - "**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "docs/tool-output-schemas.v4.json"
+      - "units/zenod/skill/**"
   workflow_dispatch: {}
 
 concurrency:
@@ -21,7 +33,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Full CI (ci.yml) on the exact commit; nothing is published or rolled if it is red.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
