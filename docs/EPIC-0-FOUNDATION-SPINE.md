@@ -43,11 +43,11 @@ The steps are [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) A0–A5; these ar
 
 Status: active
 Phase: milestone A ([ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md)) revived 2026-10-24, steps A0–A5 defined, none started. Every other spine in this repo is closed ([TIDY-2026-10-24](TIDY-2026-10-24.md)).
-Last attempted: agent_team EPIC-16 tree cleanse, 2026-10-24 (Jordi go, deck slide 5): root rewrite + five verdicts (#1428), AGENTS.md routes to open work only (#1429), 107 open rows in 22 closed epics swept to `superseded` and ZDU/ZMR status lines fixed (#1430). `tree_audit.py`: 0 finished epics with open rows, 0 status problems; residual: 58 non-standard row words in closed epics (history), 25 epics over 150 lines.
+Last attempted: docs main-direct, 2026-10-25 (Jordi via agent_team thread): publish.yml skips docs-only pushes and needs `ci` before publish/deploy, AGENTS.md `Integration policy: main-direct` + `Deploy gate:`, required `ci` status check removed from `main` protection ([#1433](https://github.com/zenod-ai/zenod/pull/1433), D34). Before that: agent_team EPIC-16 tree cleanse, 2026-10-24 (#1428–#1430).
 Production: `https://cloud.zenod.dev/api/health` reported `687f259` (= `main` HEAD) on 2026-10-24; the Publish image `deploy` job fails on `main` since 2026-10-24 (Dokploy API 404), owned by ZAL A0. Signup and paid checkout opened 2026-09-16 on `83c2752`; live billing never performed.
 Waiting on: nobody at the root. Human gates live in ZAL: A1 voice test, A5 Stripe verification + live €9. The per-plan allowance figure and turning on blocking at the cap (D30) move with A2.
 Next action: ZAL A0, re-check prod end to end (signup → WhatsApp → console), read-only, and fix the push-to-main deploy.
-Verified at: 2026-10-24 (health endpoint, `spines.py --active`).
+Verified at: 2026-10-25 (this commit pushed main-direct without bypass; Publish image did not run for it). Health endpoint last read 2026-10-24.
 
 ## Spine Map
 
@@ -109,6 +109,7 @@ Older decisions (D1–D21): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.
 | D31 | 2026-10-24 | accepted | Revive Zenod Alpha Launch as milestone A (A0–A5) under agent_team EPIC-12 and tidy the stale spines: done = E5, C, R, Z; superseded = E2-55, E2-9, E3-7, E4-0, E4-2, MC, P, RCIT, WJ, GDV, M0. | Plan approved by Jordi 2026-10-24; tidy approved ("you can tidy up for sure"); each closed spine cites its own evidence in `## Outcome`. | Unclear cases superseded, never done. | [TIDY-2026-10-24](TIDY-2026-10-24.md), [ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md) | When A0 finds a closed spine's work broken in prod. |
 | D32 | 2026-10-24 | accepted | Close the last five old spines: ZMR partially accomplished → superseded by ZAL; ZDU done; ZLS superseded by ZAL; E3-5 and CF superseded, no successor in this repo. | Each carries an Outcome; boxes ticked only with evidence. | Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5 | [TIDY-2026-10-24](TIDY-2026-10-24.md) | n/a |
 | D33 | 2026-10-24 | accepted | Rewrite this root around "a paying user uses Zenod over WhatsApp", serving agent_team EPIC-12; July EpicSpine-adoption content moves verbatim to the history page. | The root now says what Zenod is for; process history stays one link away. | Jordi go 2026-10-24, agent_team EPIC-16 deck slide 5 | [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md); [agent_team EPIC-16](https://github.com/AlfaBlok/agent_team/blob/main/docs/spines/epic-16-clean-spine-trees.md) | n/a |
+| D34 | 2026-10-25 | accepted | Docs main-direct; Deploy gate for code paths; deploy needs ci; required ci check removed — Jordi via agent_team thread. | Every push to `main` used to roll prod, so even a spine edit had to go through a PR, and the agent_team console could not write answers into spines (e.g. EPIC-6-A1). publish.yml now ignores `docs/**` and `*.md`, except the image-baked `docs/tool-output-schemas.v4.json` and `units/zenod/skill/**`. Its first job calls ci.yml, so a red commit is never published or rolled. AGENTS.md: `Integration policy: main-direct` + `Deploy gate:` (every path that still triggers publish). Branch protection keeps everything except the required `ci` status check. | Deploy-gate paths: self-merged PR when `ci` is green, never admin-bypass. Docs and spines: straight to `main`. | [PR #1433](https://github.com/zenod-ai/zenod/pull/1433); `AGENTS.md`; `.github/workflows/publish.yml` | If a docs-tree file starts being read by the image or the deploy, add it to the publish filter and the Deploy gate. |
 
 ## Operating Learnings
 
@@ -117,8 +118,8 @@ EpicSpine skill: 2026.10.24.10 @ 1ce5487 (vendored copy re-synced in #1430), che
 Always:
 - L-1 | any task beyond answering a question | the delivery manager dispatches a worker and never implements itself | Jordi's chosen operating model | confirmed 2026-10-10
 - L-2 | dispatching a worker | use the Claude Code `Agent` tool with `model: sonnet`, in the background, one task per worktree `../wt-<task>` | same subscription, no T3/OpenCode hop | confirmed 2026-10-10
-- L-3 | integrating worker output | verify diff and checks yourself, then merge via your own PR once `ci` is green; never admin-push `main` | protected main requires `ci` | confirmed 2026-10-10
-- L-4 | any push to `main` | it publishes GHCR images; once #964 is merged and its secrets exist (D27) it also auto-deploys Zenod production only, never Phylax or independent agents; before then, deploy stays a human gate | publish.yml pushes GHCR images; D27 | confirmed 2026-10-10, amended 2026-10-10
+- L-3 | integrating worker output | verify diff and checks yourself; paths in AGENTS.md `Deploy gate:` merge via your own PR once `ci` is green, never admin-bypass; docs, spines and other `*.md` push straight to `main` | only gated paths roll production; `main` no longer requires `ci` (D34) | confirmed 2026-10-10, amended 2026-10-25
+- L-4 | any push to `main` touching the Deploy gate | publish.yml runs `ci`, then publishes GHCR images, then auto-deploys Zenod production only (D27), never Phylax or independent agents; docs-only pushes (`docs/**`, `*.md`, except `docs/tool-output-schemas.v4.json` and `units/zenod/skill/**`, which are baked into the image) publish and deploy nothing | publish.yml `paths` filter + `needs: ci`; D27, D34 | confirmed 2026-10-10, amended 2026-10-25
 
 Scoped index:
 - none yet

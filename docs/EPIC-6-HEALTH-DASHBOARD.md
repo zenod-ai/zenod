@@ -8,7 +8,7 @@ Root spine: [EPIC 0 · Foundation Spine — operating behavior and document-cent
 Parent spine: [Zenod Alpha Launch — milestone A: Zenod is production-ready](EPIC-ZENOD-ALPHA-LAUNCH.md)
 Additional root rationale: n/a
 Integration branch: main
-Integration policy: main-direct via self-merged CI-gated PR (`main` requires the `ci` check: push `wt/<task>`, open a PR, merge it yourself when `ci` is green, never bypass with an admin push; remove the worktree and branch; user never merges; production deploy stays a human gate, except the owner-approved push-to-main roll of Zenod production only, root spine D27).
+Integration policy: main-direct (repo `AGENTS.md` Deploy gate applies: gated code paths go via a self-merged PR; this spine and other docs push straight to `main`; root spine D34).
 
 ## Goal
 
