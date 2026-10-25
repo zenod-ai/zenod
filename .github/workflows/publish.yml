@@ -183,40 +183,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Roll hosted ZENOD PRODUCTION (Dokploy app zenod-mt, cloud.zenod.dev) to the sha
-  # we just published, so a merge to main actually deploys instead of leaving the
-  # docker-source app pinned to a stale immutable tag.
+  # Zenod PRODUCTION rolls are made OUTSIDE GitHub: dokploy.polyqu.com was closed on
+  # 2026-10-22 (the Dokploy panel is Tailscale-only), so a GitHub runner can no longer
+  # reach the Dokploy API (it answered 404 here). The outbound deploy poller on VPS1
+  # (infra-vps `infra-vps-deploy-poller.timer`, every 2 min) sees this workflow's
+  # `publish` job succeed on main, re-pins Dokploy app zenod-mt (zenod/production) to
+  # ghcr.io/zenod-ai/zenod:sha-<short> and verifies /api/health, rolling back on failure.
+  # This job only PROVES the roll: it fails red when production does not report this sha.
   #
-  # Boundary (AGENTS.md "Production deployment boundary", 2026-09-07): Zenod
-  # production only. The dedicated Phylax image above is published but NEVER rolled
-  # here, and independent agents (Ring, Herald, Epaminon, ...) are not touched; the
-  # script rolls only the apps in DEPLOY_APPS (default zenod-mt).
-  #
-  # Clean skip until the DOKPLOY_API_KEY / DOKPLOY_API_BASE secrets exist, so this
-  # is safe to merge first. Rollback = re-pin the previous sha (scripts/deploy-fleet.sh).
+  # Boundary (AGENTS.md "Production deployment boundary", 2026-09-07): Zenod production
+  # only; the dedicated Phylax image is published but never rolled, and independent
+  # agents are not touched. No Dokploy secret lives in GitHub. Manual rollback or a
+  # roll by hand: scripts/deploy-fleet.sh over the tailnet (docs/DEPLOYMENTS.md).
   deploy:
     needs: publish
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # deploy-fleet.sh waits up to HEALTH_TIMEOUT_SECONDS (default 900s) for the roll,
-    # which can queue behind unrelated Dokploy builds; keep the job limit well above
-    # that so the script's own, descriptive timeout always fires first.
+    # poller interval (2 min) + Dokploy's shared FIFO queue (up to ~12 min behind an
+    # unrelated build, see scripts/deploy-fleet.sh) + the ~40 s roll; keep the job
+    # limit above the 900 s wait below.
     timeout-minutes: 25
     permissions:
       contents: read
-    # One production roll at a time. A newer push replaces a still-pending run; a
-    # roll already in flight is never cancelled mid-deploy.
+    # A newer push replaces a still-waiting check: only the latest main is expected live.
     concurrency:
       group: deploy-zenod-production
-      cancel-in-progress: false
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
-      - name: Roll Zenod production to the freshly published sha
+      - name: Wait for production to report the published sha
         env:
-          DOKPLOY_API_BASE: ${{ secrets.DOKPLOY_API_BASE }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          VERIFY_URL: https://cloud.zenod.dev/api/health
+          EXPECTED_SHA: ${{ github.sha }}
+          TIMEOUT_SECONDS: "900"
         run: |
-          # metadata-action's `type=sha,format=short` pins the 7-char short sha;
-          # match that here rather than the full 40-char commit.
-          export IMAGE="ghcr.io/zenod-ai/zenod:sha-${GITHUB_SHA::7}"
-          bash scripts/deploy-fleet.sh
+          start=$(date +%s)
+          live=""
+          while :; do
+            live="$(curl --silent --show-error --max-time 10 "$VERIFY_URL" | jq -r '.sha // empty' || true)"
+            if [ "$live" = "$EXPECTED_SHA" ]; then
+              echo "production reports $EXPECTED_SHA after $(( $(date +%s) - start ))s"
+              exit 0
+            fi
+            if [ $(( $(date +%s) - start )) -ge "$TIMEOUT_SECONDS" ]; then
+              echo "::error::production still reports '${live:-<unreachable>}' after ${TIMEOUT_SECONDS}s, expected $EXPECTED_SHA. The VPS1 deploy poller (infra-vps-deploy-poller.timer) rolls zenod-mt; check its journal."
+              exit 1
+            fi
+            sleep 10
+          done
