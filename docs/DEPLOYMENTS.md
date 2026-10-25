@@ -1,12 +1,12 @@
 # Zenod deployments: procedure and live state
 
-The live page for deploying Zenod: the boundary, how production rolls, how to upgrade and undo by hand, where the credentials are, and what is running now. It replaces the closed [Deployments and upgrades spine (ZDU)](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) as the place to look; that spine is history (its Outcome, the 2026-09 rollout receipts and the Phylax-only promotions). Open deploy work is not tracked here: it is a ledger row in an open epic (`spines.py --repo . --active`); today the broken auto-roll is [ZAL A0](EPIC-ZENOD-ALPHA-LAUNCH.md).
+The live page for deploying Zenod: the boundary, how production rolls, how to upgrade and undo by hand, where the credentials are, and what is running now. It replaces the closed [Deployments and upgrades spine (ZDU)](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) as the place to look; that spine is history (its Outcome, the 2026-09 rollout receipts and the Phylax-only promotions). Open deploy work is not tracked here: it is a ledger row in an open epic (`spines.py --repo . --active`); the auto-roll break was fixed under [ZAL A0](EPIC-ZENOD-ALPHA-LAUNCH.md) (#1435).
 
 ## Live state
 
 Update this section whenever a deploy is verified (record the SHA from health, the date and how it was checked).
 
-- **Production health** (`https://cloud.zenod.dev/api/health`, 2026-10-25 ~03:50 UTC): status ok, sha `a544887a6ca1779b8b561e8db9dae7bc9358515a`, the last code-gated push to `main` (later pushes are docs only and do not roll). Dokploy app `zenod-mt` (`2dkayH_eAur427leH64MT`, project zenod/production) runs `ghcr.io/zenod-ai/zenod:sha-a544887`, status done.
+- **Production health** (`https://cloud.zenod.dev/api/health`, 2026-10-25 ~04:20 UTC): status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983` (#1435, the first push-to-main roll proven through the new check). Dokploy app `zenod-mt` (`2dkayH_eAur427leH64MT`, project zenod/production) runs `ghcr.io/zenod-ai/zenod:sha-ae3e77a`, status done.
 - **Push-to-main roll (root D27) runs from VPS1, not from GitHub.** `dokploy.polyqu.com` was closed on 2026-10-22 (the Dokploy panel, `http://100.104.206.10:3000`, is Tailscale-only), so the old CI `deploy` job could not reach Dokploy and failed with `curl: (22) ... 404` on its first call (first red run 2026-10-22, e.g. [40141303027](https://github.com/zenod-ai/zenod/actions/runs/40141303027)). The outbound deploy poller (`infra-vps-deploy-poller.timer` on VPS1, every 2 min, infra-vps EPIC-10-A9) already rolls `zenod-mt` once `publish` succeeds; the `deploy` job is now a check that production reports the published sha (fix: [ZAL A0](EPIC-ZENOD-ALPHA-LAUNCH.md)).
 - **Phylax:** deliberate manual deploys only; last recorded promotion `a5617ab` (2026-10-13, see the [ZDU history](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md#2026-10-13--phylax-only-promotion-to-a5617ab)).
 - Merged code is not deployed proof: confirm the live sha at `/api/health` and record it here.
