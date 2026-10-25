@@ -1,9 +1,14 @@
 name: CI
 
+# Also called by publish.yml (workflow_call) so production is never rolled from a
+# commit whose tests are red. Push runs stay unfiltered: some tests read files
+# under docs/ (e.g. productionReadiness, phylaxBaselineContract), so a docs-only
+# push still gets a ci signal even though it does not publish or deploy.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_call: {}
 
 jobs:
   ci:

@@ -8,7 +8,9 @@ Repo values (`Dispatch profile:`, `Integration policy:`, `Skill updates:`) in th
 Precedence: user per-task instruction > repo values > skill block.
 <!-- epicspine:end -->
 Dispatch profile: mechanism: Claude Code `Agent` tool (background), never T3/OpenCode; model: `sonnet` (Sonnet 5.5, same subscription); reasoning: inherited; isolation: worktree-first (`../wt-<task>` on branch `wt/<task>`); parallelism: disjoint waves (root spine D26).
-Integration policy: main-direct via self-merged CI-gated PR (`main` requires the `ci` check: push `wt/<task>`, open a PR, merge it yourself when `ci` is green, never bypass with an admin push; remove the worktree and branch; user never merges; production deploy stays a human gate, except the owner-approved push-to-main roll of Zenod production only, root spine D27).
+Integration policy: main-direct
+Deploy gate: .claude/**, .dockerignore, .env.tenant.example, .github/**, .gitignore, Dockerfile*, EPIC-ZERO-OVERVIEW.html, LICENSE*, Log/**, alpha-research-deck.html, apps/**, docker-compose.*.yml, docs/tool-output-schemas.v4.json, package-lock.json, package.json, packages/**, pnpm-workspace.yaml, scripts/**, services/**, sites/**, skills/**, spikes/**, tsconfig.base.json, units/**, vendor/**
+Deploy-gate paths go via a self-merged PR (push `wt/<task>`, open a PR, merge it yourself when `ci` is green, never admin-bypass; remove the worktree and branch; user never merges); everything else (docs, spines, *.md outside the gate) goes main-direct. A push to `main` touching the gate (except non-image `*.md`) runs publish.yml: ci, then publish, then the owner-approved push-to-main roll of Zenod production only (root spine D27); docs-only pushes publish and deploy nothing. Production deploy otherwise stays a human gate.
 Skill updates: manual (vendored copy; re-sync per `skills/epic-spine.SOURCE`).
 
 ## Start here
