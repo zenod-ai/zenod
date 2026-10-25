@@ -29,12 +29,12 @@ Before testers arrive, anyone can see in one page whether the site, the database
 
 Owner: unassigned
 Status: active
-Last attempted: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched S1 as run_661d3443; earlier: defined 2026-10-24 from Jordi's ask, after a quick read-only check
-Result: defined, not started. Check 2026-10-24: `zenod.dev` 200, `cloud.zenod.dev/api/health` ok on `e2930b8` (= `main`), `health.zenod.dev` 404 (does not exist); CI green, but Publish image still reports failure on every push (ZAL finding); no DB, WhatsApp or runner signal is visible from outside today
-Evidence: EPIC-ZENOD-ALPHA-LAUNCH.md
+Last attempted: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched S1 as run_661d3443, which finished it (review); earlier: defined 2026-10-24 from Jordi's ask, after a quick read-only check
+Result: S1 inventory done and proposed for acceptance (review): [docs/health/INVENTORY.md](health/INVENTORY.md), PR #1438 (`61e70ad`). Everything runs on VPS1 (site+cloud app = `zenod-mt`, relay = Phylax, DB = SQLite volumes, no agent runner deployed); recommended S5 alert channel: WhatsApp via Phylax `notify`, Telegram fallback. S2–S6 still `draft`. Day-one findings (watchdog targets retired hosts, no scheduled volume backup, one `unavailable` Phylax binding, 353 MB meter DB) are on the inventory page; fixing them is out of this epic (Non-Goals) except repointing the watchdog in S5
+Evidence: [docs/health/INVENTORY.md](health/INVENTORY.md), PR #1438 (`61e70ad`); parent EPIC-ZENOD-ALPHA-LAUNCH.md
 Waiting on: none (EPIC-6-A1 answered 2026-10-25: internal-only via Tailscale)
 Approved work: none
-Next action: S1 (inventory) dispatched 2026-10-25 by Epic Spine health, alongside ZAL A0; then S2/S3 once Jordi stamps them ready
+Next action: Jordi stamps S2 and S3 ready after accepting S1 (S5 follows S2, S4 follows S2/S3); ZAL A0 runs alongside
 Source revision: uncommitted scaffold
 Verified at: 2026-10-25
 
