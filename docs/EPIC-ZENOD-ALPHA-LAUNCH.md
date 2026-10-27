@@ -32,7 +32,7 @@ A real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, and is
 
 - Recruiting or posting from this repo: the call for testers is posted by the zenod-social team ([zenod-ai/zenod-social](https://github.com/zenod-ai/zenod-social), spine recruit-testers).
 - The deferred owner-analytics screens ZAL-11…ZAL-16 (#1077–#1082) and the voice-note-to-Codex lane.
-- Opening testers before caps work (order: A0 → A2/A3 → A4).
+- Opening testers before caps work (order: EPIC-7 T0–T8, then T9).
 
 ## Current State
 
@@ -44,7 +44,7 @@ Result: prod up on today's infra (health sha `ae3e77a`, signup start, Phylax Wha
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
 Waiting on: nobody. A1 (Jordi's voice test) is asked only when it is the next step.
-Next action: Jordi (or the manager) accepts A0 done, then A1: ask Jordi for the voice test; A2 audit can start in parallel (A2 depends only on A0).
+Next action: the real-user test path (checkout back on, caps, tester codes, rehearsal, 5 invites) lives in [EPIC-7](EPIC-7-REAL-USER-TEST.md), waiting for Jordi to stamp it ready; A0 accept and A1 voice test as before (EPIC-7 T7 covers A0's console check).
 Verified at: 2026-10-25 (health, Dokploy, Phylax health and workflow run read live)
 
 ## Issue Ledger
@@ -53,9 +53,9 @@ Verified at: 2026-10-25 (health, Dokploy, Phylax health and workflow run read li
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | A0 | Tester | worker run_f010b4a9 | ZAL-A0 · Re-check prod after the infra-vps cleanup | proposed done | - | [#1435](https://github.com/zenod-ai/zenod/pull/1435) | `main` | Signup → WhatsApp → console journey passes end to end on today's infra; deployed SHA recorded; push-to-main deploy rolls prod again (Dokploy 404 fixed). | 2026-10-25: prod health ok on `ae3e77a`; WhatsApp connected; push-to-main roll proven by run 40160156776 ([evidence](evidence/zal-a0-2026-10-25.md)); authenticated console not exercised. | 2026-10-25 | Accept as done (or require the authenticated console check with A1). |
 | A1 | Tester | Jordi | ZAL-A1 · Jordi's voice test (pending since 2026-08-27) | draft | A0 | - | - | 3 overlapping voice notes, 3 clean Saved receipts, no re-pair. | ZAL-22 #1099 awaiting acceptance | 2026-10-24 | Ask Jordi once A0 is green. |
-| A2 | Ticket worker | unassigned | ZAL-A2 · Metering + caps per plan | draft | A0 | - | - | Every user's usage counted; a cap per plan; at the cap the service stops and asks for a top-up. | Builds on ZAL-10 #1076 (managed cap lifecycle), Phylax usage ledger (root D29) and per-tenant metering (root D30) | 2026-10-24 | Audit what is live vs merged, then close the gap. |
-| A3 | Ticket worker | unassigned | ZAL-A3 · Free-pass code with a capped allowance | draft | A2 | - | - | A code grants a capped free allowance; abuse stops at the cap. | none | 2026-10-24 | After A2. |
-| A4 | Recruiter (zenod-social) | zenod-social team | ZAL-A4 · Recruit 10 test users | draft | A2, A3 | - | - | Reddit call for testers posted by zenod-social (spine recruit-testers); 10 users active on free passes (DOD-1). | none | 2026-10-24 | Signal zenod-social only after A2/A3 pass. |
+| A2 | Ticket worker | - | ZAL-A2 · Metering + caps per plan | moved | - | - | - | Moved to [EPIC-7](EPIC-7-REAL-USER-TEST.md) T3 on 2026-10-27. | - | 2026-10-27 | see EPIC-7 |
+| A3 | Ticket worker | - | ZAL-A3 · Free-pass code with a capped allowance | moved | - | - | - | Moved to [EPIC-7](EPIC-7-REAL-USER-TEST.md) T4 on 2026-10-27. | - | 2026-10-27 | see EPIC-7 |
+| A4 | Recruiter (zenod-social) | - | ZAL-A4 · Recruit test users | moved | - | - | - | First wave of 5 moved to [EPIC-7](EPIC-7-REAL-USER-TEST.md) T9 on 2026-10-27; later waves toward DOD-1 come after it. | - | 2026-10-27 | see EPIC-7 |
 | A5 | Operator | Jordi + worker | ZAL-A5 · Stripe live: business verification + one live €9 payment | draft | A0 | - | - | Stripe business profile verified; one live €9 payment end to end (DOD-2) on price `price_1U8jip80yG7aohEW6tZnFgZq`. | Price approved 2026-08-26 (history) | 2026-10-24 | Ask Jordi for the business verification when next. |
 
 Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-5 #1062 (stranger journey) → A0 + DOD-2; ZAL-6 #1063 (invitation draft) → A4 via zenod-social.
@@ -74,6 +74,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 |---|---|---|---|
 | 2026-08-16 → 2026-09-16 | 21 decisions (alpha milestone, €9 single plan, WhatsApp as Zenod access, Phylax hidden, Ring absent, two-service voice/Drive contract, public opening) | Kept verbatim | [history page](archive/EPIC-ZENOD-ALPHA-LAUNCH-HISTORY-2026-08.md#decisions) and its appendix |
 | 2026-10-24 | Revived as milestone A "Zenod is production-ready" under agent_team EPIC-12, steps A0–A5; plan approved by Jordi 2026-10-24. | One concrete finish line: 10 capped free-pass users and one live €9 payment; testers only after caps work. | agent_team deck slides 3–4; [EPIC-12](https://github.com/AlfaBlok/agent_team/blob/main/docs/spines/epic-12-zenod-live-heard-sold.md) |
+| 2026-10-27 | A2, A3, A4 moved to EPIC-7 (real-user production test, first 5 testers); Jordi: caps before testers, testers never charged, 1-month code extended monthly. | One epic for the whole path to testers. | [EPIC-7](EPIC-7-REAL-USER-TEST.md) |
 | 2026-10-24 | Old detail moved, not deleted, to the history page; stale sibling spines closed or superseded. | 707-line spine → under the 150-line budget; one active board. | [TIDY-2026-10-24](TIDY-2026-10-24.md) |
 
 
@@ -82,3 +83,4 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
 | HEALTH | child | [EPIC-6: health.zenod.dev — one page that shows whether Zenod is up](EPIC-6-HEALTH-DASHBOARD.md) | Before testers arrive, anyone can see in one page whether the site, the database, the WhatsApp relay and the agents are alive, and when each last did real work. | active | none | none | 2026-10-25 | S1 (inventory) running; S4 is tailnet-only per EPIC-6-A1 |
+| real-user-production-test-5-testers-on-free-passes | child | [EPIC-7: Real-user production test — 5 testers on free passes](EPIC-7-REAL-USER-TEST.md) | Five real people use production Zenod as ordinary users, capped and never charged, before Zenod goes truly live. | draft | none | none | 2026-10-27 | fill Goal, Serves and Done means |
