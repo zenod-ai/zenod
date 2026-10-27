@@ -34,7 +34,7 @@ async function fake({ image, env, healthAfterDeploy, rollDelayMs = 0 }) {
       }
       if (url.pathname === "/api/project.all") {
         return send([{ name: "zenod", environments: [{ name: "production", applications: [
-          { applicationId: app.applicationId, name: app.name, dockerImage: app.dockerImage }] }] }]);
+          { applicationId: app.applicationId, name: app.name, applicationStatus: app.applicationStatus }] }] }]);
       }
       if (url.pathname === "/api/application.one") return send(app);
       if (url.pathname === "/health") {
