@@ -1,6 +1,6 @@
 # EPIC-7 T1: new-user path audit, 2026-10-31
 
-Read-only audit for [EPIC-7](../EPIC-7-REAL-USER-TEST.md) T1. Run `run_b7be352f`. Code is `main` at `5a95ff9`. Prod was read live 2026-10-31 23:14–23:25 UTC: Zenod `ae3e77a`, Phylax `dc24572`. Nothing was created or changed. No Stripe objects, accounts or messages were made. The repo is public, so this page leaves out promotion-code strings, Stripe IDs, tenant/user IDs and internal hostnames. Stripe was read with GET calls on VPS1, and the key was never printed.
+Read-only audit for [EPIC-7](../EPIC-7-REAL-USER-TEST.md) T1. Run `run_b7be352f`. Code is `main` at `5a95ff9`. Prod was read live 2026-10-31 23:14–23:23 UTC: Zenod `ae3e77a`, Phylax `dc24572`. Nothing was created or changed. No Stripe objects, accounts or messages were made. The repo is public, so this page leaves out promotion-code strings, Stripe IDs, tenant/user IDs and internal hostnames. Stripe was read with GET calls on VPS1, and the key was never printed.
 
 ## Summary
 
@@ -27,7 +27,7 @@ Read-only audit for [EPIC-7](../EPIC-7-REAL-USER-TEST.md) T1. Run `run_b7be352f`
   - `backup_restore`: 31-day window. Once T0 re-proves it, the proof has to be renewed every month.
   - `google_drive_vault_oauth` (`:86`): verified 2026-08-30, 90-day window, **expires 2026-11-28**. When it expires, checkout closes again.
   - `stripe_profile`: verified 2026-09-15, 90-day window, expires 2026-12-14.
-- Observed while auditing: T0's `zenod-volume-backup.sh` was running (`epic7-t0-20261031`) and had **paused the Phylax container** for over 7 minutes (23:17–23:25+ UTC). Inbound WhatsApp is not received while it is paused. Zenod's `/api/health` showed `eventLoop.maxMs` ≈ 139 s in an earlier window, which matches the same backup pause. This is fine for T0, but the testers' runbook (T6/T10) should know that backups pause the receiver.
+- Observed while auditing: T0's `zenod-volume-backup.sh` was running (`epic7-t0-20261031`) and had **paused the Phylax container** for about 5 minutes (about 23:17–23:22 UTC, running again at 23:22). Inbound WhatsApp is not received while it is paused. Zenod's `/api/health` showed `eventLoop.maxMs` ≈ 139 s in an earlier window, which matches the same backup pause. This is fine for T0, but the testers' runbook (T6/T10) should know that backups pause the receiver.
 
 ### 1. Google signup
 
