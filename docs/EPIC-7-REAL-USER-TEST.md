@@ -28,12 +28,12 @@ Five real people use production Zenod as ordinary users, capped and never charge
 ## Current State
 
 Owner: Delivery manager (zenod)
-Status: draft
+Status: ready
 Last attempted: 2026-10-27 created from Jordi's brief (testers = production users, not charged; caps first; 1-month free code, extended monthly, never charged; Zenod production number; start with 5)
 Result: plan written, not started. Finding 2026-10-27: paid checkout is off in production (`/api/public/production-readiness` ready=false, only blocking check `backup_restore`), so no one can sign up, free code or not, until T0.
 Evidence: [ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md) A0 [evidence](evidence/zal-a0-2026-10-25.md); live readiness read 2026-10-27
-Waiting on: E7-A1 Jordi stamps this epic `ready`; E7-A2 the cap figure (asked at T3, not before)
-Approved work: none until `ready`
+Waiting on: nobody (Jordi stamped `ready` in chat 2026-10-31; the cap figure is asked at T3, not before)
+Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: once `ready`, dispatch T0 and T1 in parallel
 Source revision: see git log
 Verified at: 2026-10-27
@@ -51,8 +51,8 @@ Steps: each is independently testable and closes only with evidence. T0–T6 mus
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T0 | Ticket worker | unassigned | Turn checkout back on: fresh backup-restore proof so `backup_restore` passes and readiness says ready=true | draft | none | - | main | 2026-10-27 readiness: ready=false, only `backup_restore` blocking | 2026-10-27 | restore last backup into an isolated copy, verify, record the proof; read readiness live |
-| T1 | Ticket worker | unassigned | Map the new-user path in code and on prod: Google signup → checkout with a 100% code (€0, no card) → tenant created → user's phone linked to their tenant on the Zenod production number (Phylax) → first Saved reply → console | draft | none | - | main | none | 2026-10-27 | read-only audit; each gap found becomes a T2 row |
+| T0 | Ticket worker | unassigned | Turn checkout back on: fresh backup-restore proof so `backup_restore` passes and readiness says ready=true | ready | none | - | main | 2026-10-27 readiness: ready=false, only `backup_restore` blocking | 2026-10-27 | restore last backup into an isolated copy, verify, record the proof; read readiness live |
+| T1 | Ticket worker | unassigned | Map the new-user path in code and on prod: Google signup → checkout with a 100% code (€0, no card) → tenant created → user's phone linked to their tenant on the Zenod production number (Phylax) → first Saved reply → console | ready | none | - | main | none | 2026-10-27 | read-only audit; each gap found becomes a T2 row |
 | T2 | Ticket worker | unassigned | Close the gaps T1 finds (one row each, added by T1) | draft | T1 | - | main | none | 2026-10-27 | wait for T1 |
 | T3 | Ticket worker | unassigned | Metering + caps per plan (was ZAL A2): every user's usage counted; a cap on the plan; at the cap Zenod stops and tells the user why | draft | T1 | - | main | builds on ZAL-10 #1076, Phylax usage ledger (root D29), per-tenant metering (root D30) | 2026-10-27 | audit what is live vs merged, then close the gap; ask E7-A2 (cap figure) with the audit's numbers |
 | T4 | Ticket worker | unassigned | Tester codes (was ZAL A3): one live Stripe coupon "Zenod tester" 100% off, 1 month; one promotion code per person, single use, unused codes expire in 14 days; month-by-month extension = a fresh 100% coupon on that subscription before renewal; list of who got which code kept private on VPS1, never in a repo | draft | T0 | - | main | checkout already has `allow_promotion_codes` + `payment_method_collection: if_required` (customerBilling.ts) | 2026-10-27 | create coupon + one test code; prove a €0 checkout needs no card and what happens at renewal with no card (must never charge, must not cut the user off unannounced) |
