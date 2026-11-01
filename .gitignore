@@ -15,3 +15,4 @@ coverage/
 # Live eval run artifacts: large, regenerable, and the summary is already
 # captured as a hash-bearing receipt under docs/evidence/jev-classify/.
 scripts/memory-eval/classify-results.json
+__pycache__/
