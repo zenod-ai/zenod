@@ -331,6 +331,9 @@ class FakeRemote implements ZenodPhylaxRemote {
         mutation: { operationId: args.operationId, operation: "whatsapp.challenge", outcome: "succeeded", at: Date.now() },
       } };
     }
+    if (tool === "phylax_management_v1_account_notice") {
+      return { structuredContent: { channel: "whatsapp", mutation: { operationId: args.operationId, outcome: "succeeded" } } };
+    }
     throw new Error(`unexpected ${tool}`);
   }
 }
@@ -585,6 +588,28 @@ describe("Zenod Phylax product adapter", () => {
     await adapter.reconcileAccount("account-alpha");
     expect(toolCalls).toBeGreaterThan(3);
     expect(initializes).toBe(1);
+    adapter.close();
+  });
+
+  it("sends a billing notice only through an active binding and never throws (EPIC-7 T2.1)", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "zenod-phylax-notice-"));
+    dirs.push(dataDir);
+    const remote = new FakeRemote();
+    const adapter = new ZenodPhylaxAdapter(dataDir, config(), remote);
+    adapter.setDownstreamTokenResolver((id) => `memory-${id}`);
+    const customer = account("notice");
+    const notice = {
+      kind: "payment_past_due" as const,
+      operationId: "billing-notice:payment_past_due:notice:1800000000",
+      consoleUrl: "https://cloud.zenod.dev/app",
+    };
+    expect(await adapter.notifyAccount(customer, notice)).toBe("skipped");
+    await adapter.setEntitlement(customer, true);
+    expect(await adapter.notifyAccount(customer, notice)).toBe("sent");
+    expect(remote.calls.filter((call) => call.tool === "phylax_management_v1_account_notice").map((call) => call.args))
+      .toEqual([notice]);
+    remote.unavailable = true;
+    expect(await adapter.notifyAccount(customer, notice)).toBe("failed");
     adapter.close();
   });
 

@@ -240,12 +240,23 @@ export function applyCustomerSubscriptionEvent(
   });
 }
 
+/**
+ * The invoice's subscription. Events rendered at Stripe API 2025-03-31 or later (both accounts send
+ * 2026-06-24.dahlia) move it from `invoice.subscription` to `invoice.parent.subscription_details.subscription`.
+ */
+export function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const parent = (invoice as Stripe.Invoice & {
+    parent?: { subscription_details?: { subscription?: string | { id?: string | null } | null } | null } | null;
+  }).parent;
+  return stripeObjectId(invoice.subscription) ?? stripeObjectId(parent?.subscription_details?.subscription);
+}
+
 export function applyCustomerInvoiceEvent(
   accounts: CustomerAccountStore,
   invoice: Stripe.Invoice,
   paid: boolean,
 ): CustomerAccount | null {
-  const subscriptionId = stripeObjectId(invoice.subscription);
+  const subscriptionId = invoiceSubscriptionId(invoice);
   const account = subscriptionId
     ? accounts.resolveForSubscription(subscriptionId)
     : accounts.resolveForStripeCustomer(stripeObjectId(invoice.customer) ?? "");

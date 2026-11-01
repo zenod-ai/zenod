@@ -725,6 +725,32 @@ export class ZenodPhylaxAdapter {
     });
   }
 
+  /**
+   * EPIC-7 T2.1: tell the user about a billing lapse on their verified WhatsApp/Telegram. Called while the
+   * binding is still active, so an "access suspended" notice lands before the suspension. Best effort.
+   */
+  async notifyAccount(
+    account: CustomerAccount,
+    notice: { kind: "payment_past_due" | "access_suspended"; operationId: string; consoleUrl: string },
+  ): Promise<"sent" | "skipped" | "failed"> {
+    if (!this.config.enabled || this.closed) return "skipped";
+    const binding = this.row(account.account_id);
+    if (!binding || binding.state !== "active") return "skipped";
+    try {
+      const call = await this.remote.call(this.token(binding), "phylax_management_v1_account_notice", notice);
+      if (!call.isError) return "sent";
+      const error = (call.structuredContent as Record<string, unknown> | undefined)?.error as
+        | Record<string, unknown>
+        | undefined;
+      if (error?.code === "not_connected") return "skipped";
+      console.error(`[zenod-phylax] ${notice.kind} notice failed for account ${account.account_id}:`, error?.code);
+      return "failed";
+    } catch (error) {
+      console.error(`[zenod-phylax] ${notice.kind} notice failed for account ${account.account_id}:`, error);
+      return "failed";
+    }
+  }
+
   async bootstrapAccounts(accounts: readonly CustomerAccount[]): Promise<void> {
     if (!this.config.enabled || this.closed) return;
     const accountIds: string[] = [];
