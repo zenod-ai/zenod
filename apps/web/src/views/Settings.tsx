@@ -17,6 +17,7 @@ import { toast } from "sonner"
 
 import { api, errorMessage, type SettingsValues } from "@/lib/api"
 import { PeerAgents } from "@/components/peer-agents"
+import { HostedFreePlanBanner } from "@/components/free-plan-notice"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -247,6 +248,10 @@ export function Settings({
           </Button>
         </div>
       </header>
+
+      {edition === "hosted" && !isPhylax && !isCouncilUnit ? (
+        <HostedFreePlanBanner />
+      ) : null}
 
       {isPhylax ? (
         <main>

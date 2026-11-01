@@ -759,6 +759,7 @@ describe("hosted customer layer", () => {
       consent_collection: { terms_of_service: "required" },
       allow_promotion_codes: true,
       payment_method_collection: "if_required",
+      custom_text: { submit: { message: expect.stringMatching(/you will not be charged/) } },
       success_url: `${DESTINATION}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     });
 
@@ -840,6 +841,52 @@ describe("hosted customer layer", () => {
       monthly: "price_1TrjPC76yJ3p1J6XqXl1QwN8",
       yearly: "price_1TrjPD76yJ3p1J6XZGkcIQ56",
     });
+  });
+
+  it("reports a fully discounted subscription to the console from Stripe's discount, not from who the user is", async () => {
+    (authoritativeSubscription as unknown as Record<string, unknown>).discounts = [
+      {
+        coupon: { id: "c_free_month", object: "coupon", duration: "repeating", percent_off: 100 },
+        end: 1_800_000_000,
+      },
+    ];
+    const app = locallyBoundCustomerApp();
+    const cookie = await signInCookie(app);
+    await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    const completed = await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(await completed.json()).toEqual({ received: true, result: "completed" });
+    expect(stripe.subscriptions!.retrieve).toHaveBeenCalledWith("sub_test_customer", { expand: ["discounts"] });
+
+    const account = await (await app.request("/api/console/account", { headers: { cookie } })).json();
+    expect(account).toMatchObject({
+      subscription_status: "active",
+      fully_discounted: true,
+      free_until: new Date(1_800_000_000 * 1000).toISOString(),
+    });
+
+    (authoritativeSubscription as unknown as Record<string, unknown>).discounts = [];
+    vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+      id: "evt_sub_updated",
+      object: "event",
+      type: "customer.subscription.updated",
+      livemode: false,
+      data: { object: authoritativeSubscription },
+    } as Stripe.Event);
+    await app.request("/webhook", {
+      method: "POST",
+      headers: { "stripe-signature": "valid", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const paid = await (await app.request("/api/console/account", { headers: { cookie } })).json();
+    expect(paid).toMatchObject({ fully_discounted: false, free_until: null });
   });
 
   it("inserts and binds one active local tenant row across webhook retries", async () => {
