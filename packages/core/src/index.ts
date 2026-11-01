@@ -63,6 +63,7 @@ export {
 export { lintTree, lintTreeIndex, type TreeLintIssue, type TreeLintReport, type TreeLintStats } from "./vault/treeLint.js";
 export { AUDIT_TREE_PROPOSAL, seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
 export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryLineage, type MemoryTreeNodeView, type LineageNode } from "./vault/lineage.js";
+export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } from "./engine/treePlacement.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";
 export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "./vault/cleanSlate.js";
 export { githubSourceRef, githubUrl, type VaultLocation } from "./vault/github.js";

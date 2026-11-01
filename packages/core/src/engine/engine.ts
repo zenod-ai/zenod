@@ -57,6 +57,8 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
+import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
+import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
@@ -1764,11 +1766,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
     if (receiptPath) touched.push(receiptPath);
     const pendingChanges = await repo.pendingChanges();
     const revision = pendingChanges.length
-      ? await repo.commitAndPublish(`memory: topic filing ${classification.summary}`, filingPlan && receiptPath ? {
+      ? filingPlan && receiptPath ? await repo.commitAndPublish(`memory: topic filing ${classification.summary}`, {
         expectedRevision: filingPlan.baseRevision, receiptPath,
         expectedFiles: Object.fromEntries([...Object.entries(receipt!.files).map(([path, file]) => [path, file.afterHash]), [receiptPath, publicationContentHash(renderFilingReceipt(receipt!))]]),
         ...(filingPlan.input.assertActive ? { assertActive: filingPlan.input.assertActive } : {}),
-      } : undefined)
+      }) : await commitFiling(`memory: topic filing ${classification.summary}`, { evidenceRef, content })
       : await repo.currentRevision();
     return { evidenceRef, pagesTouched: touched, ...storePublication(revision, logPath, evidenceLine ? `L${evidenceLine}` : undefined, touched), topics: outcomes,
       filing: outcomes.some((outcome) => outcome.status === "pending") ? "pending" : unresolved.length ? "uncertain" : "filed" };
@@ -1834,7 +1836,120 @@ export function createEngine(options: EngineOptions): BrainEngine {
         : receipt.outcomes.some(outcome => outcome.status !== "filed") ? "uncertain" : "filed" };
   }
 
+  /** EPIC-9 E9-2b rule 5: in a vault with a Tree.md, an agent ops report becomes one dated rollup line on its project node. */
+  const rolledUp = new Set<string>();
+  /** Enrichment results that settled without a page after a successful classification (reason by result). */
+  const noPageFilings = new WeakMap<StoreResult, string>();
+  async function fileOpsRollup(content: string, evidenceRef: string): Promise<string | null> {
+    assertVault(repo);
+    if (!isAgentOpsReport(content) || !(await readTree(vaultPath))) return null;
+    const writes = new TrackedWrites(vaultPath);
+    try {
+      const page = await appendOpsRollup(vaultPath, await buildTreeIndex(vaultPath), { content, evidenceRef }, writes);
+      if (!page) return null;
+      const report = await lintVault(vaultPath, [page]);
+      const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+      if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
+      rolledUp.add(evidenceRef);
+      return page;
+    } catch (error) {
+      // The Log entry is not committed yet: undo only the rollup, then file normally.
+      await writes.revert();
+      console.warn(`[librarian] ops rollup unavailable for ${evidenceRef}: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * EPIC-9 E9-2b (audit §5 rules 2, 4, 6): hang every page a filing wrote under a
+   * parent in the tree (a provisional leaf when it reached no page) and append
+   * `- filed:` to its Log entry. Tree changes only happen when the vault has a
+   * Tree.md; a tree-less vault only gains the `filed:` line. Writes stay
+   * uncommitted; a failure undoes only this step's writes (falling back to a plain
+   * `filed:` line) and never fails the filing itself.
+   */
+  async function placeFiling(evidenceRef: string, content: string, plan: PlacementPlan): Promise<string[]> {
+    assertVault(repo);
+    const writes = new TrackedWrites(vaultPath);
+    const input = { content, evidenceRef, today: todayString(now()) };
+    const validate = async (touched: string[]) => {
+      const report = await lintVault(vaultPath, touched);
+      const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+      if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
+    };
+    try {
+      const placement = await placeCapture(vaultPath, input, plan, writes);
+      if (placement.treeIssues.length > 0) {
+        throw new Error(placement.treeIssues.map((issue) => `${issue.path} [${issue.rule}] ${issue.message}`).join("; "));
+      }
+      await validate(placement.pagesTouched);
+      return writes.paths;
+    } catch (error) {
+      await writes.revert();
+      console.warn(`[librarian] tree placement unavailable for ${evidenceRef}: ${(error as Error).message}`);
+      try {
+        const targets = plan.pages.length ? plan.pages.map(path => filedTarget({ path })) : [filedTarget({ logOnly: plan.reason ?? "no page written" })];
+        await appendFiledLines(vaultPath, evidenceRef, targets, writes);
+        await validate([]);
+        return writes.paths;
+      } catch (fallbackError) {
+        await writes.revert();
+        console.warn(`[librarian] filed line unavailable for ${evidenceRef}: ${(fallbackError as Error).message}`);
+        return [];
+      }
+    }
+  }
+
+  /** One durable revision per filing: unguarded filing commits carry their tree placement and `filed:` line. */
+  async function commitFiling(message: string, placement: { evidenceRef: string; content: string }): Promise<VaultRevision> {
+    assertVault(repo);
+    if (/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]+$/.test(placement.evidenceRef)) {
+      const plan = planFromChanges(await repo.pendingChanges(), rolledUp.delete(placement.evidenceRef));
+      if (plan) await placeFiling(placement.evidenceRef, placement.content, plan);
+    }
+    return repo.commitAndPublish(message);
+  }
+
+  /**
+   * Guarded (receipt-planned) and no-commit enrichment outcomes cannot carry extra
+   * files, so their placement is one follow-up commit; the result then reports
+   * that revision, which is the one holding the whole filing.
+   */
+  async function recordPlacement(result: StoreResult, content: string, assertActive?: () => void): Promise<StoreResult> {
+    if (!repo || result.queued || !/^Log\/\d{4}-\d{2}-\d{2}\.md#\^e-[0-9a-f]+$/.test(result.evidenceRef)) return result;
+    const topics = result.topics ?? [];
+    const pages = [...new Set([...result.pagesTouched, ...topics.flatMap(topic => [...topic.filedPages, ...(topic.uncertainPages ?? [])])])]
+      .filter(path => !!MEANING_FOLDERS[path.split("/")[0] ?? ""]);
+    const noPage = noPageFilings.get(result);
+    // Pending filings are retried; they record `filed:` once they settle.
+    if (result.filing === "pending" && pages.length === 0 && noPage === undefined) return result;
+    if ((await repo.pendingChanges()).length > 0) return result;
+    const plan: PlacementPlan = {
+      pages,
+      reason: noPage ?? topics.find(topic => topic.reason)?.reason ?? (result.filing === "filed" ? "evidence only: nothing new for a page" : `filing ${result.filing}`),
+      rollup: rolledUp.delete(result.evidenceRef),
+      leafAllowed: result.filing === "inbox" || noPage !== undefined
+        || (result.filing === "uncertain" && topics.some(topic => topic.status === "uncertain" && topic.disposition !== "evidence_only")),
+    };
+    const written = await placeFiling(result.evidenceRef, content, plan);
+    if (written.length === 0) return result;
+    try {
+      assertActive?.();
+      const revision = await repo.commitAndPublish(`memory: filed ${result.evidenceRef.split("#^")[1]}`);
+      return { ...result, ...storePublication(revision, result.evidenceRef.split("#^")[0]!, undefined, result.pagesTouched) };
+    } catch (error) {
+      await repo.discardChanges();
+      console.warn(`[librarian] filed commit unavailable for ${result.evidenceRef}: ${(error as Error).message}`);
+      return result;
+    }
+  }
+
   async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
+    const result = await enrichEvidenceFiling(input);
+    return queue.run(() => recordPlacement(result, input.content, input.assertActive), "background");
+  }
+
+  async function enrichEvidenceFiling(input: EnrichEvidenceInput): Promise<StoreResult> {
     assertVault(repo);
     return queue.run(async () => {
       input.assertActive?.();
@@ -1888,6 +2003,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (input.content.trimEnd() !== evidence.content) return evidenceResult(evidence, capturedRevision);
       prior = await loadReceipt();
       if (prior?.phase === "ready" && !prior.outcomes.some(outcome => outcome.status === "pending")) return receiptFilingResult(prior, capturedRevision, recoveredPaths);
+      if (!prior) {
+        const rollup = await fileOpsRollup(input.content, input.evidenceRef);
+        if (rollup) {
+          input.assertActive?.();
+          const revision = await commitFiling(`memory: ops rollup ${input.evidenceRef.split("#^")[1]}`, { evidenceRef: input.evidenceRef, content: input.content });
+          return { evidenceRef: input.evidenceRef, pagesTouched: [rollup], ...storePublication(revision, evidence.path, undefined, [rollup]), filing: "filed" };
+        }
+      }
       const config = await loadBrainConfig(vaultPath);
       const snapshot = await scanVault(vaultPath);
       let classification: Classification;
@@ -1928,7 +2051,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }));
 
       if (disposition === "evidence_only" || disposition === "needs_clarification" || classification.pages.length === 0) {
-        return evidenceResult(evidence, capturedRevision, disposition === "evidence_only" ? "filed" : "pending");
+        const settled = await evidenceResult(evidence, capturedRevision, disposition === "evidence_only" ? "filed" : "pending");
+        // Classified, but no page fitted: not a transient failure, so rule 4 may place it as a provisional leaf.
+        if (disposition !== "evidence_only") noPageFilings.set(settled, classification.question ?? `${disposition}: no page fitted`);
+        return settled;
       }
 
       const citationDate = evidence.path.slice("Log/".length, -".md".length);
@@ -1994,7 +2120,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const report = await lintVault(vaultPath, touched);
         const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
         if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
-        const revision = await repo.commitAndPublish(`memory: enrich ${classification.summary}`);
+        const revision = await commitFiling(`memory: enrich ${classification.summary}`, { evidenceRef: input.evidenceRef, content: input.content });
         return {
           evidenceRef: input.evidenceRef,
           pagesTouched: touched,
@@ -2038,6 +2164,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const citation = `[[${evidence.date}#^${evidence.anchor}]]`;
       const evidenceRef = `${evidence.logPath}#^${evidence.anchor}`;
 
+      const rollup = await fileOpsRollup(input.content, evidenceRef);
+      if (rollup) {
+        const revision = await commitFiling(`memory: ops rollup ${evidence.anchor}`, { evidenceRef, content: input.content });
+        return {
+          evidenceRef,
+          pagesTouched: [rollup],
+          ...storePublication(revision, evidence.logPath, `L${evidence.line}`, [rollup]),
+          filing: "filed",
+        };
+      }
+
       // 3. Classify. Long voice notes keep one immutable evidence entry but
       // are classified in bounded topic-sized segments so later subjects are
       // not silently dropped from a large prompt.
@@ -2057,7 +2194,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         // diagnostic codes; the user's vault receives only this stable reason.
         const question = `Saved, but automatic filing is pending (classification_unavailable) after ${CLASSIFY_RETRIES + 1} attempts.`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
-        const revision = await repo.commitAndPublish("memory: (inbox) classification pending");
+        const revision = await commitFiling("memory: (inbox) classification pending", { evidenceRef: retriedRef, content: input.content });
         return {
           evidenceRef: retriedRef,
           pagesTouched: [stubPath],
@@ -2079,7 +2216,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const question =
           classification.question ?? "Where should this memory be filed? I could not classify it confidently.";
         const stubPath = await writeInboxStub(input.content, question, evidenceRef);
-        const revision = await repo.commitAndPublish(`memory: (inbox) ${classification.summary}`);
+        const revision = await commitFiling(`memory: (inbox) ${classification.summary}`, { evidenceRef, content: input.content });
         return {
           evidenceRef,
           pagesTouched: [stubPath],
@@ -2114,7 +2251,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             );
           }
 
-          const revision = await repo.commitAndPublish(`memory: (uncertain) ${classification.summary}`);
+          const revision = await commitFiling(`memory: (uncertain) ${classification.summary}`, { evidenceRef, content: input.content });
           return {
             evidenceRef,
             pagesTouched: [page.path],
@@ -2127,7 +2264,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           const retriedRef = `${retried.logPath}#^${retried.anchor}`;
           const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
           const stubPath = await writeInboxStub(input.content, question, retriedRef);
-          const revision = await repo.commitAndPublish(`memory: (inbox) ${classification.summary}`);
+          const revision = await commitFiling(`memory: (inbox) ${classification.summary}`, { evidenceRef: retriedRef, content: input.content });
           return {
             evidenceRef: retriedRef,
             pagesTouched: [stubPath],
@@ -2196,7 +2333,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const retriedRef = `${retried.logPath}#^${retried.anchor}`;
         const question = `I recorded the evidence but could not file it (${(err as Error).message}). Where should it go?`;
         const stubPath = await writeInboxStub(input.content, question, retriedRef);
-        const revision = await repo.commitAndPublish(`memory: (inbox) ${classification.summary}`);
+        const revision = await commitFiling(`memory: (inbox) ${classification.summary}`, { evidenceRef: retriedRef, content: input.content });
         return {
           evidenceRef: retriedRef,
           pagesTouched: [stubPath],
@@ -2206,7 +2343,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
 
       // 7-8. One durable revision per store.
-      const revision = await repo.commitAndPublish(`memory: ${classification.summary}`);
+      const revision = await commitFiling(`memory: ${classification.summary}`, { evidenceRef, content: input.content });
       const result: StoreResult = {
         evidenceRef,
         pagesTouched: touched,

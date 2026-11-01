@@ -37,6 +37,13 @@ import type {
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/vault", import.meta.url));
 
+/** Filing never rewrites evidence: the Log keeps its bytes and may only gain `- filed:` lines (EPIC-9 E9-2b). */
+function expectEvidenceUnchanged(after: string, before: string): void {
+  expect(after.startsWith(before.endsWith("\n") ? before : `${before}\n`) || after === before).toBe(true);
+  const added = after.slice(before.length).split("\n").filter(line => line.trim());
+  expect(added.every(line => /^- filed(?: e-[0-9a-f]+)?: /.test(line))).toBe(true);
+}
+
 /** Deterministic fake LLM: files insurance content onto Areas/Insurance.md. */
 class FakeLlm implements BrainLlm {
   classifyCalls = 0;
@@ -1278,7 +1285,10 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
       verbatim: true,
     });
 
-    expect(result).toMatchObject({ filing: "filed", pagesTouched: [], commitSha: captured.commitSha });
+    // Evidence-only still records where the capture went (EPIC-9 E9-2b): one `filed:` line, nothing else.
+    expect(result).toMatchObject({ filing: "filed", pagesTouched: [] });
+    expect(result.commitSha).not.toBe(captured.commitSha);
+    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toMatch(/\n- filed: log only \(evidence only: nothing new for a page\)\n$/);
     expect(llm.classifyCalls).toBe(1);
     expect(llm.composeCalls).toBe(0);
   });
@@ -1870,7 +1880,7 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect(recovered.topics![0]!.appliedOperationIds).toHaveLength(1);
     const page = await readFile(join(repo.path, "Areas/Insurance.md"), "utf8");
     expect(page.match(/<!-- zenod-op:/g)).toHaveLength(1);
-    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(rawBefore);
+    expectEvidenceUnchanged(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8"), rawBefore);
     const replay = await e.enrichEvidence!(input);
     expect(replay.commitSha).toBe(recovered.commitSha); expect(reconcile).toHaveBeenCalledTimes(1);
     expect((await repo.currentPublishedRevision()).id).toBe(recovered.revision!.id);
@@ -1979,7 +1989,7 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     const result = await e.enrichEvidence!({ content, source: "whatsapp", evidenceRef: captured.evidenceRef });
     expect(result.evidenceRef).toBe(captured.evidenceRef);
     expect(result.topics!.map((topic) => topic.status)).toEqual(["filed", "filed", "uncertain"]);
-    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+    expectEvidenceUnchanged(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8"), before);
   });
 
   it("classifies semantic transcript without media wrapper and addresses repeated occurrences independently", async () => {
@@ -2014,7 +2024,7 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect(spans.map((span) => content.slice(span.start, span.end))).toEqual(["La red crece.", "La red crece."]);
     expect(spans[0]!.start).not.toBe(spans[1]!.start);
     expect(result.topics!.flatMap((topic) => topic.sourceSpans).every((span) => span.start >= prefix.length)).toBe(true);
-    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+    expectEvidenceUnchanged(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8"), before);
   });
 
   it("keeps beginning and tail ideas when middle classification fails and source identity is retried", async () => {
@@ -2051,7 +2061,7 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect(resumed.topics!.some(topic => topic.reason === "classification_unavailable")).toBe(false);
     expect(resumed.topics!.filter(topic => topic.status === "filed").map(topic => topic.topic)).toEqual(["Network education", "English caption release", "Budget"]);
     for (const previous of result.topics!.filter(topic => topic.status === "filed")) expect(resumed.topics!.find(topic => topic.ideaId === previous.ideaId)).toEqual(previous);
-    expect(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8")).toBe(before);
+    expectEvidenceUnchanged(await readFile(join(repo.path, captured.evidenceRef.split("#")[0]!), "utf8"), before);
   });
 
   it.each([true, false])("separates minimal support from passage review coverage (addressed review: %s)", async (reviewed) => {
