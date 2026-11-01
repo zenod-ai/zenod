@@ -1,0 +1,16 @@
+# Installed by scripts/readiness-keeper/install.sh (EPIC-7 T2.3).
+[Unit]
+Description=zenod-readiness-keeper: monthly backup-restore drill + Stripe profile re-check, renews readiness proofs
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/zenod-readiness-keeper.env
+ExecStart=/usr/bin/python3 /usr/local/lib/zenod-readiness-keeper/keeper.py run
+StateDirectory=zenod-readiness-keeper
+# The drill pauses zenod-mt and Phylax for the tar; keep it at normal priority so the pause stays short.
+Nice=5
+TimeoutStartSec=3h
+SyslogIdentifier=zenod-readiness-keeper

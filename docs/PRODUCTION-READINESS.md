@@ -199,6 +199,8 @@ At a future pricing-corrected deployment gate, remove the current service-level 
 
 Do not set any `*_VERIFIED_AT` value prospectively. Set it to the UTC completion time only after the corresponding proof succeeds:
 
+Renewal: `scripts/readiness-keeper/` on VPS1 renews `ZENOD_BACKUP_RESTORE_VERIFIED_AT` (monthly drill) and `ZENOD_STRIPE_PROFILE_VERIFIED_AT` (read-only Stripe check) only after the proof passes, and alerts the HQ thread 7 days before any dated blocking proof expires or when readiness turns false. The Drive OAuth review stays with Jordi.
+
 - `ZENOD_BACKUP_RESTORE_VERIFIED_AT`: **both** public and private Channels volumes were cold-backed up, restored into isolated temporary volumes, verified, and copied to the approved independent destination. Use the later actual completion time.
 - `ZENOD_STRIPE_WEBHOOK_VERIFIED_AT`: a signed live event reached the deployed handler successfully.
 - `ZENOD_STRIPE_PORTAL_VERIFIED_AT`: a live customer opened the configured portal and saw invoices, payment-method update, and cancel-at-period-end controls.
