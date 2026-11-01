@@ -80,6 +80,7 @@ Verified at: 2026-10-25 (this commit pushed main-direct without bypass; Publish 
 | GDV | child | [Google identity and Drive-only vaults](EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md) | Let a person with no GitHub account sign in with Google, subscribe and use the full Zenod memory loop on a user-owned Google Drive vault. | superseded | Closed: the E12-S2 tidy, 2026-10-24 | none; [Outcome](EPIC-ZENOD-GOOGLE-DRIVE-VAULT.md#outcome) |
 | M0 | child | [M0 Plan self-hosted Zenod](M0-PLAN.md) | Ship self-hosted Zenod: one Docker container on Dokploy, used daily against a real vault. | superseded | Closed: the E12-S2 tidy, 2026-10-24 | none; [Outcome](M0-PLAN.md#outcome) |
 | web3-venice-angle-research-line | child | [EPIC-8: Web3 / Venice angle — research line](EPIC-8-WEB3-VENICE-RESEARCH.md) | none | draft | none | fill Goal, Serves and Done means |
+| memory-as-a-tree-audit-how-zenod-structures-memory-working-vs-long-term | child | [EPIC-9: Memory as a tree: audit how Zenod structures memory, working vs long-term](EPIC-9-MEMORY-AS-A-TREE.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
