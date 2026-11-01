@@ -22,6 +22,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { McpTokensCard } from "@/components/mcp-tokens-card"
+import { FreePlanNotice } from "@/components/free-plan-notice"
+import { isFreePlan } from "@/lib/free-plan"
 import type { VaultCapabilityProjection, VaultStatus } from "@/lib/api"
 
 // Transplanted from zenod-ai/cloud services/console/src/App.tsx and api.ts @ 6bdb318.
@@ -46,6 +48,8 @@ type Account = {
     | null
   cancel_at_period_end: boolean
   current_period_end: string | null
+  fully_discounted?: boolean
+  free_until?: string | null
   mcp_url: string | null
   token: string | null
   token_hint: string | null
@@ -292,6 +296,10 @@ export function HostedAccount() {
             WhatsApp included. Checkout stays bound to this Zenod account;
             GitHub is not required.
           </p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            Have a code? Add it at checkout. If it covers the full price, the
+            total is €0: no card is needed and you will not be charged.
+          </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button asChild className="rounded-none">
               <a href="/buy?tier=monthly">Subscribe for €9/month + VAT</a>
@@ -312,6 +320,12 @@ export function HostedAccount() {
                 <p className="text-sm font-medium capitalize">
                   {account.subscription_status?.replace("_", " ") ?? "Pending"}
                 </p>
+                {isFreePlan(account) ? (
+                  <FreePlanNotice
+                    className="mt-3"
+                    freeUntil={account.free_until ?? null}
+                  />
+                ) : null}
                 {account.cancel_at_period_end && account.current_period_end ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Access remains active until{" "}

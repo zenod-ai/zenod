@@ -19,7 +19,7 @@ export interface CustomerStripeClient {
     };
   };
   subscriptions?: {
-    retrieve(id: string): Promise<Stripe.Subscription>;
+    retrieve(id: string, params?: Stripe.SubscriptionRetrieveParams): Promise<Stripe.Subscription>;
   };
   webhooks: {
     constructEvent(payload: string | Buffer, signature: string, secret: string): Stripe.Event;
@@ -135,6 +135,15 @@ export function resolveCheckoutTier(
   return { tier, price };
 }
 
+/**
+ * EPIC-7 T5: shown above Stripe's pay button. Written for everyone, since only the price
+ * differs between users: a 100% promotion code makes the total €0, and
+ * `payment_method_collection: "if_required"` then asks for no card.
+ */
+export const ZENOD_CHECKOUT_SUBMIT_MESSAGE =
+  "Have a Zenod code? Add it under \"Add promotion code\". If it covers the full price, your total is €0: " +
+  "no card or payment details are needed and you will not be charged.";
+
 export async function createCustomerCheckout(
   stripe: CustomerStripeClient,
   accounts: CustomerAccountStore,
@@ -157,7 +166,13 @@ export async function createCustomerCheckout(
     billing_address_collection: "required",
     tax_id_collection: { enabled: true },
     consent_collection: { terms_of_service: "required" },
-    ...(product.product === "zenod" ? { allow_promotion_codes: true, payment_method_collection: "if_required" } : {}),
+    ...(product.product === "zenod"
+      ? {
+          allow_promotion_codes: true,
+          payment_method_collection: "if_required",
+          custom_text: { submit: { message: ZENOD_CHECKOUT_SUBMIT_MESSAGE } },
+        }
+      : {}),
     ...(config.automaticTax ? { automatic_tax: { enabled: true } } : {}),
     success_url: `${config.domain}/checkout/complete?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${config.domain}/pricing?checkout=cancelled`,
@@ -218,6 +233,54 @@ function accountStatusForStripe(status: Stripe.Subscription.Status): CustomerSub
   return "canceled";
 }
 
+type DiscountLike = {
+  end?: number | null;
+  coupon?: Stripe.Coupon | string | null;
+  source?: { coupon?: Stripe.Coupon | string | null } | null;
+};
+
+/** The end of the period after the current one, stepping whole calendar months like Stripe's billing anchor. */
+function nextPeriodEnd(start: number | null | undefined, end: number): number {
+  const from = new Date((start ?? end) * 1000);
+  const to = new Date(end * 1000);
+  const months = Math.max(1, (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + to.getUTCMonth() - from.getUTCMonth());
+  const next = new Date(to);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return Math.floor(next.getTime() / 1000);
+}
+
+/**
+ * EPIC-7 T5: whether the subscription is free right now, from its own discounts (no tester flag).
+ * Free means a 100%-off coupon is attached. `free_until` is the last day known to be free:
+ * null for a `forever` coupon, the discount end for `repeating`, and one more period after the
+ * current one for `once` (it covers the next renewal invoice). Reads both the legacy single
+ * `discount` and the expanded `discounts` list; coupon ids that are not expanded count as unknown.
+ */
+export function subscriptionFreePeriod(
+  subscription: Stripe.Subscription,
+): { fully_discounted: boolean; free_until: string | null } {
+  const legacy = (subscription as Stripe.Subscription & { discount?: DiscountLike | null }).discount;
+  const listed = ((subscription as { discounts?: Array<DiscountLike | string> | null }).discounts ?? [])
+    .filter((discount): discount is DiscountLike => typeof discount === "object" && discount !== null);
+  const discounts = [...(legacy ? [legacy] : []), ...listed];
+  let free = false;
+  let until: number | null = null;
+  for (const discount of discounts) {
+    const coupon = discount.coupon ?? discount.source?.coupon ?? null;
+    if (!coupon || typeof coupon === "string" || coupon.percent_off !== 100) continue;
+    if (coupon.duration === "forever") return { fully_discounted: true, free_until: null };
+    let end: number | null = null;
+    if (coupon.duration === "repeating") end = discount.end ?? null;
+    if (coupon.duration === "once" && subscription.current_period_end) {
+      end = nextPeriodEnd(subscription.current_period_start, subscription.current_period_end);
+    }
+    if (end === null) continue;
+    free = true;
+    until = Math.max(until ?? 0, end);
+  }
+  return { fully_discounted: free, free_until: free && until ? new Date(until * 1000).toISOString() : null };
+}
+
 export function applyCustomerSubscriptionEvent(
   accounts: CustomerAccountStore,
   subscription: Stripe.Subscription,
@@ -231,6 +294,7 @@ export function applyCustomerSubscriptionEvent(
     stripe_subscription_id: subscription.id,
     stripe_customer_id: stripeObjectId(subscription.customer),
     cancel_at_period_end: subscription.cancel_at_period_end,
+    ...subscriptionFreePeriod(subscription),
     current_period_start: subscription.current_period_start
       ? new Date(subscription.current_period_start * 1000).toISOString()
       : null,

@@ -422,7 +422,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       throw new Error("authoritative Stripe subscription retrieval is unavailable");
     }
     const previousStatus = account?.subscription_status ?? null;
-    const refreshed = applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(id));
+    const refreshed = applyCustomerSubscriptionEvent(
+      accounts,
+      await stripe.subscriptions.retrieve(id, { expand: ["discounts"] }),
+    );
     await sendBillingNotice(previousStatus, refreshed);
     return refreshed;
   };
@@ -1285,6 +1288,8 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       subscription_status: account.subscription_status,
       cancel_at_period_end: account.cancel_at_period_end,
       current_period_end: account.current_period_end,
+      fully_discounted: account.fully_discounted ?? false,
+      free_until: account.free_until ?? null,
       tenant_id: account.tenant_id,
       slug: account.tenant_slug,
       mcp_url: hasAccess ? `${billing.domain}/mcp` : null,

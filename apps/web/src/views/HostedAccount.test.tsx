@@ -305,3 +305,94 @@ describe("Hosted account plan contract", () => {
     expect(screen.getByRole("link", { name: "octocat/brain" })).not.toBeNull()
   })
 })
+
+describe("Hosted account free-plan wording (EPIC-7 T5)", () => {
+  function stubAccount(extra: Record<string, unknown>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me") return Response.json(me)
+        if (path === "/api/console/account")
+          return Response.json({
+            account_id: "user-ada",
+            tier: "monthly",
+            subscription_status: "active",
+            cancel_at_period_end: false,
+            current_period_end: "2026-12-01T00:00:00.000Z",
+            mcp_url: null,
+            token: null,
+            token_hint: null,
+            vault_repo: null,
+            vault_repo_url: null,
+            usage: { percentageUsed: 0, state: "normal", resetsAt: null },
+            ...extra,
+          })
+        if (path === "/api/vault/provider")
+          return Response.json(unselectedVault)
+        if (path === "/api/vault")
+          return Response.json({ cloned: false, cloneError: null })
+        throw new Error(`Unexpected request: ${path}`)
+      })
+    )
+  }
+
+  it("tells a fully discounted subscriber no card is needed, nothing is charged, and when the free period ends", async () => {
+    stubAccount({
+      fully_discounted: true,
+      free_until: "2026-12-01T12:00:00.000Z",
+    })
+    render(<HostedAccount />)
+
+    expect(
+      await screen.findByText("Free: your code covers the full price.")
+    ).not.toBeNull()
+    const text = document.body.textContent ?? ""
+    expect(text).toMatch(/No card or payment details are needed/)
+    expect(text).toMatch(/you will not be charged/)
+    expect(text).toMatch(/runs until .*2026/)
+    expect(text).toMatch(/we extend it month by month/)
+    expect(text).not.toMatch(/tester/i)
+  })
+
+  it("says an open-ended full discount has no end date", async () => {
+    stubAccount({ fully_discounted: true, free_until: null })
+    render(<HostedAccount />)
+
+    expect(await screen.findByText("It has no end date.")).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(/runs until/)
+  })
+
+  it("shows no free wording for a paying subscriber", async () => {
+    stubAccount({ fully_discounted: false, free_until: null })
+    render(<HostedAccount />)
+
+    expect(
+      await screen.findByText("Zenod Hosted monthly subscription")
+    ).not.toBeNull()
+    expect(document.body.textContent).not.toMatch(
+      /your code covers|will not be charged/
+    )
+  })
+
+  it("tells a new customer before checkout that a full-price code needs no card", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        if (path === "/api/me") return Response.json(me)
+        if (path === "/api/console/account")
+          return Response.json({ error: "no_account" }, { status: 404 })
+        if (path === "/api/vault/provider")
+          return Response.json({ error: "no_account" }, { status: 404 })
+        throw new Error(`Unexpected request: ${path}`)
+      })
+    )
+    render(<HostedAccount />)
+
+    expect(await screen.findByText(/Have a code\?/)).not.toBeNull()
+    expect(document.body.textContent).toMatch(
+      /the total is €0: no card is needed and you will not be charged/
+    )
+  })
+})

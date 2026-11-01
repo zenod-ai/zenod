@@ -27,6 +27,10 @@ export interface CustomerAccount {
   cancel_at_period_end: boolean;
   current_period_start: string | null;
   current_period_end: string | null;
+  /** EPIC-7 T5: a 100%-off coupon is on the subscription (any user with a full discount, no tester flag). */
+  fully_discounted?: boolean;
+  /** Last day the full discount is known to cover; null when open-ended or not discounted. */
+  free_until?: string | null;
   github_id: number | null;
   github_login: string | null;
   github_email: string | null;
