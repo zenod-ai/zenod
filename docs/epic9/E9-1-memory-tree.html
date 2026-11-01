@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jordi's memory as a tree: proposed levels 0 and 1 (EPIC-9 · E9-1)</title>
+<style>
+  :root { --bg:#fbfaf7; --fg:#1d1d1f; --mute:#6b6b70; --line:#dcd8cf; --work:#2f6fdf; --work-bg:#eaf1fd; --long:#5b6b4f; --long-bg:#eef1ea; --ev:#8a6d3b; --ev-bg:#f7f0e3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#151517; --fg:#ececef; --mute:#a0a0a8; --line:#34343a; --work:#7aa7f5; --work-bg:#1b2536; --long:#a9bb98; --long-bg:#1f251b; --ev:#d8b77a; --ev-bg:#2a2418; } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px 20px 48px; background:var(--bg); color:var(--fg); font:15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  main { max-width:1100px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--mute); margin:0 0 22px; }
+  .cols { display:grid; grid-template-columns: 1fr 1fr; gap:22px; }
+  @media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+  section.half { border:1px solid var(--line); border-radius:12px; padding:16px 16px 6px; }
+  section.work { background:var(--work-bg); border-color:color-mix(in srgb, var(--work) 35%, var(--line)); }
+  section.long { background:var(--long-bg); border-color:color-mix(in srgb, var(--long) 35%, var(--line)); }
+  h2 { font-size:13px; letter-spacing:.06em; text-transform:uppercase; margin:0 0 2px; }
+  .work h2 { color:var(--work); } .long h2 { color:var(--long); }
+  .rule { color:var(--mute); font-size:13px; margin:0 0 12px; }
+  details { border-top:1px solid var(--line); padding:8px 0; }
+  details:first-of-type { border-top:none; }
+  summary { cursor:pointer; font-weight:600; list-style:none; display:flex; gap:8px; align-items:baseline; }
+  summary::-webkit-details-marker { display:none; }
+  summary::before { content:"▸"; color:var(--mute); width:12px; flex:none; }
+  details[open] > summary::before { content:"▾"; }
+  .why { font-weight:400; color:var(--mute); font-size:13px; }
+  ul { margin:6px 0 4px 20px; padding:0; }
+  li { margin:3px 0; }
+  .src { color:var(--mute); font-size:12px; }
+  .ev { margin-top:22px; border:1px dashed var(--line); background:var(--ev-bg); border-radius:12px; padding:12px 16px; }
+  .ev h2 { color:var(--ev); }
+  .legend { margin-top:18px; color:var(--mute); font-size:13px; }
+  code { font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Jordi's memory as a tree: levels 0 and 1</h1>
+  <p class="sub">Proposal from the EPIC-9 E9-1 audit (2026-11-01), built from what Zenod has filed in <code>AlfaBlok/obsidian-brain</code> at <code>5c9ad9f</code>. E9-2 would build this tree and E9-3 would return lineage from it. Click a root to see level 1.</p>
+
+  <div class="cols">
+    <section class="half work">
+      <h2>Working memory: what is ongoing now</h2>
+      <p class="rule">Few roots (your four, plus anything you open). Each root has a one-line Current State. When it ends, it gets an Outcome line and moves to long-term memory.</p>
+
+      <details open>
+        <summary>Launching Epic Social <span class="why">X and Reddit posting, a pipeline from idea to post, testers in a week</span></summary>
+        <ul>
+          <li>Pipeline: idea → draft → approved (with feedback) → posted</li>
+          <li>Topic list for posts (Scout's <code>data/topics.md</code>, ranked by how strong each one is)</li>
+          <li>Post ideas: brain-dump voice notes → a tree of goals; EpicSpine doctrine; personas that wake up</li>
+          <li>Agent Team underneath it: console, Team desk, milestones, multi-tenant, email</li>
+          <li>Brand: EpicSpine · Epic Team · Epic Social, epicspine.dev</li>
+          <li>Launch: Reddit and X, about $10 a month for testers</li>
+        </ul>
+        <p class="src">Seen in: Log 2026-10-28 to 2026-11-01 (EPIC-34, E34-S19/S21, zenod-social Scout and Reporter), voice note 2026-11-01</p>
+      </details>
+
+      <details>
+        <summary>Launching Zenod <span class="why">a paying user on WhatsApp; memory that builds structure</span></summary>
+        <ul>
+          <li>Alpha launch (ZAL): signup → WhatsApp → console, live €9</li>
+          <li>Memory as a tree (EPIC-9): this audit</li>
+          <li>Production health: incidents E15-R9, E15-R10 (fixed 2026-11-01)</li>
+          <li>Positioning: memory you own, filed for agents</li>
+        </ul>
+        <p class="src">Seen in: Projects/Zenod.md, Projects/Zenod/ (32 pages), Log 2026-10-30/11-01</p>
+      </details>
+
+      <details>
+        <summary>Hair transplant <span class="why">started 2026-10-31, repo hair_flow</span></summary>
+        <ul>
+          <li>Options dossier (hair_flow EPIC-1)</li>
+          <li>2023 Barcelona clinic quotes (from Gmail, prices 3 years old)</li>
+          <li>Open: budget, destinations, timing, current stage</li>
+        </ul>
+        <p class="src">Seen in: Log 2026-10-31 (3 captures). Today these exist only as filing receipts in Inbox; no page was written.</p>
+      </details>
+
+      <details>
+        <summary>House decision <span class="why">where to buy and why</span></summary>
+        <ul>
+          <li>Location shortlist: Maresme vs Cerdanya (€550k), higher altitude, Sardinia</li>
+          <li>Rules and legal exposure (rent index, LAU 17.7, homes over 150 m²)</li>
+          <li>Yield, liquidity and financing</li>
+          <li>Data sources: Idealista, IdeaScraper, property digests</li>
+        </ul>
+        <p class="src">Seen in: Areas/Housing.md, Projects/Idealista Data Relationship/ (30+ pages), voice notes 2026-10-12, 2026-10-28</p>
+      </details>
+    </section>
+
+    <section class="half long">
+      <h2>Long-term memory: what lasts</h2>
+      <p class="rule">Stable domains, no status. Notes here hold durable facts, each linked back to the capture it came from. Finished work lands here with its Outcome.</p>
+
+      <details open>
+        <summary>Ventures and work <span class="why">Alpha9 and side projects, past and dormant</span></summary>
+        <ul>
+          <li>Alpha9 company: tax and AEAT, gestorías, Google Workspace</li>
+          <li>Trading: Poly-Maker, Polymarket experiments, volatility regimes</li>
+          <li>Altamira2050 / PatronBTC (Bitcoin video and simulator)</li>
+          <li>RepoMiningFunding, OpenProp legal, dividend analytics</li>
+          <li>Zenod history: scope, past epics, workflow learnings</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Ideas and knowledge <span class="why">things worth finding again</span></summary>
+        <ul>
+          <li>Markets and finance: asset growth vs inflation, convex hedges, power laws</li>
+          <li>AI and agents: EpicSpine doctrine, operating models, talks and skills</li>
+          <li>Story and positioning</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Infrastructure and runbooks <span class="why">how my machines and accounts work</span></summary>
+        <ul>
+          <li>VPS fleet: VPS1 Dokploy, VPS2 Helsinki, VPS3; incident lessons</li>
+          <li>Accounts and access: GitHub across accounts, Gmail connector, browser automation</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Life admin <span class="why">ongoing areas without a finish line</span></summary>
+        <ul>
+          <li>Housing (general), insurance, hardware and devices</li>
+          <li>Health, travel preferences</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>People and family <span class="why">private; detail stays in the notes</span></summary>
+        <ul>
+          <li>Family</li>
+          <li>Contacts and collaborators</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+
+  <div class="ev">
+    <h2>Evidence: the daily Log (not a branch of the tree)</h2>
+    <p class="rule" style="margin:4px 0 6px">Every voice note, message and MCP capture stays in <code>Log/YYYY-MM-DD.md</code> as it was received. Each tree node cites the captures it came from (<code>Log/…#^e-…</code>), so asking "where did this come from?" returns the path, for example <em>Working › Hair transplant › 2023 Barcelona quotes ← Log 2026-10-31 ^e-c64e3b</em>.</p>
+  </div>
+
+  <p class="legend">Today (audit): 413 markdown notes; 79% of non-Log notes have no inbound link; 146 unresolved filing or clarification receipts sit in Inbox; the Areas index has 0 links and the Projects index 4. Full audit: <code>docs/epic9/E9-1-memory-structure-audit.md</code> in zenod-ai/zenod.</p>
+</main>
+</body>
+</html>
