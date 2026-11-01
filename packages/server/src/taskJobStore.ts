@@ -422,6 +422,22 @@ export class TaskJobStore {
     return rows.map(rowToJob);
   }
 
+  /**
+   * This tenant's newest capture jobs (`store`, `media_ingest`), excluding
+   * Zenod's own self-tests — the console's "Recent saves" index (EPIC-7 T2.5).
+   */
+  recentCaptures(limit = 20): TaskJob[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM task_jobs
+         WHERE tenant_id=? AND kind IN ('store', 'media_ingest')
+           AND COALESCE(json_extract(input_json, '$.source'), '') <> 'selftest'
+         ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(this.tenantId, limit) as unknown as Row[];
+    return rows.map(rowToJob);
+  }
+
   update(id: string, patch: TaskJobPatch, now: number = Date.now()): void {
     this.applyPatch(id, patch, now);
   }

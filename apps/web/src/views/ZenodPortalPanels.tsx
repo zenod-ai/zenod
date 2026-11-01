@@ -30,6 +30,10 @@ import {
   HostedUsageCard,
   type HostedCustomerUsage,
 } from "@/components/hosted-usage-card"
+import {
+  RecentSavesCard,
+  type RecentSave,
+} from "@/components/recent-saves-card"
 import type { DashboardOverviewData } from "@/views/DashboardOverview"
 import type { ZenodEdition, ZenodPortalSection } from "@/views/zenod-edition"
 import {
@@ -67,6 +71,29 @@ export function HostedUsagePanel({ compact = false }: { compact?: boolean }) {
       compact={compact}
     />
   )
+}
+
+export function RecentSavesPanel() {
+  const [saves, setSaves] = React.useState<RecentSave[] | null>(null)
+  const [loaded, setLoaded] = React.useState(false)
+
+  React.useEffect(() => {
+    let cancelled = false
+    api<{ saves: RecentSave[] }>("/api/console/recent-saves")
+      .then((result) => {
+        if (!cancelled) setSaves(result.saves)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (!loaded) return <Skeleton className="h-48 w-full" />
+  return <RecentSavesCard saves={saves ?? []} unavailable={saves === null} />
 }
 
 export function HostedChannelsPanel() {
@@ -222,7 +249,10 @@ export function ZenodOverview({
         </Card>
       </div>
       {hosted ? (
-        <HostedUsagePanel compact />
+        <>
+          <HostedUsagePanel compact />
+          <RecentSavesPanel />
+        </>
       ) : (
         <Card>
           <CardHeader>
