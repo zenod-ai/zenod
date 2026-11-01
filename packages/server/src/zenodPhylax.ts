@@ -4,6 +4,7 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -156,6 +157,98 @@ function exactOrigin(value: string | undefined, allowed: string | undefined): st
     return allowlist.includes(parsed.origin) ? parsed.origin : null;
   } catch {
     return null;
+  }
+}
+
+/** Binding tokens in zenod-phylax-adapter.sqlite are sealed under sha256 of the vault master key string. */
+export function zenodPhylaxTokenKey(vaultSecret: string): Buffer {
+  return createHash("sha256").update(vaultSecret.trim(), "utf8").digest();
+}
+
+export interface ZenodPhylaxTokenRekeyReport {
+  tokens: number;
+  verified: number;
+  rekeyed: number;
+  failed: number;
+}
+
+/**
+ * Offline key rotation for the binding tokens (unit stopped): re-seals every token from
+ * `previousSecret` to `secret`; tokens already under `secret` are left alone; without
+ * `previousSecret` it only verifies. Counts only, never values.
+ */
+export function rekeyZenodPhylaxAdapterTokens(
+  dataDir: string,
+  secret: string,
+  previousSecret?: string,
+): ZenodPhylaxTokenRekeyReport {
+  const report: ZenodPhylaxTokenRekeyReport = { tokens: 0, verified: 0, rekeyed: 0, failed: 0 };
+  const path = join(dataDir, "zenod-phylax-adapter.sqlite");
+  if (!existsSync(path)) return report;
+  const db = openZenodSqlite(path);
+  try {
+    const hasTable = db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'zenod_phylax_bindings'",
+    ).get();
+    if (!hasTable) return report;
+    const key = zenodPhylaxTokenKey(secret);
+    const previous = previousSecret ? zenodPhylaxTokenKey(previousSecret) : null;
+    const open = (row: { token_iv: string; token_ciphertext: string; token_auth_tag: string }, k: Buffer) => {
+      try {
+        const decipher = createDecipheriv("aes-256-gcm", k, Buffer.from(row.token_iv, "base64url"));
+        decipher.setAuthTag(Buffer.from(row.token_auth_tag, "base64url"));
+        return Buffer.concat([
+          decipher.update(Buffer.from(row.token_ciphertext, "base64url")),
+          decipher.final(),
+        ]).toString("utf8");
+      } catch {
+        return null;
+      }
+    };
+    const rows = db.prepare(
+      "SELECT account_id, token_iv, token_ciphertext, token_auth_tag FROM zenod_phylax_bindings",
+    ).all() as Array<{ account_id: string; token_iv: string; token_ciphertext: string; token_auth_tag: string }>;
+    const updates: Array<{ accountId: string; iv: string; ciphertext: string; authTag: string }> = [];
+    for (const row of rows) {
+      report.tokens += 1;
+      if (open(row, key) !== null) {
+        report.verified += 1;
+        continue;
+      }
+      const token = previous ? open(row, previous) : null;
+      if (token === null) {
+        report.failed += 1;
+        continue;
+      }
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+      updates.push({
+        accountId: row.account_id,
+        iv: iv.toString("base64url"),
+        ciphertext: ciphertext.toString("base64url"),
+        authTag: cipher.getAuthTag().toString("base64url"),
+      });
+    }
+    if (updates.length) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const update = db.prepare(
+          "UPDATE zenod_phylax_bindings SET token_iv = ?, token_ciphertext = ?, token_auth_tag = ? WHERE account_id = ?",
+        );
+        for (const u of updates) update.run(u.iv, u.ciphertext, u.authTag, u.accountId);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
+      report.rekeyed += updates.length;
+      report.verified += updates.length;
+    }
+    return report;
+  } finally {
+    db.close();
   }
 }
 
@@ -504,7 +597,7 @@ export class ZenodPhylaxAdapter {
     remote?: ZenodPhylaxRemote,
   ) {
     this.db = openZenodSqlite(join(dataDir, "zenod-phylax-adapter.sqlite"));
-    this.key = createHash("sha256").update(config.vaultSecret, "utf8").digest();
+    this.key = zenodPhylaxTokenKey(config.vaultSecret);
     this.remote = remote ?? new HttpZenodPhylaxRemote(config);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS zenod_phylax_bindings (
