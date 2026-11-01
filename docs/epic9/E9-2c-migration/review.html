@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E9-2c · your vault, tidied into the tree (proposal)</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6475; --line:#d9dee7; --work:#2f6fdb; --long:#2a8c6a; --warn:#b5541c; --bg:#fbfcfe; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 30px 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .lede { background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 16px; }
+  .tree { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .group { background:#fff; border:1px solid var(--line); border-radius:10px; padding: 12px 14px; }
+  .group h3 { margin:0 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:.04em; }
+  .work h3 { color: var(--work); } .long h3 { color: var(--long); }
+  .node { display:grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); }
+  .node:first-of-type { border-top: 0; }
+  .node b { font-weight: 600; }
+  .node small { display:block; color: var(--muted); font-size: 12.5px; }
+  .pill { font-variant-numeric: tabular-nums; font-size: 12.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .p { background:#eef2f8; } .c { background:#f6efe6; }
+  .bar { height: 6px; border-radius: 3px; margin-top: 4px; }
+  .work .bar { background: var(--work); } .long .bar { background: var(--long); }
+  table { border-collapse: collapse; width: 100%; background:#fff; border:1px solid var(--line); border-radius: 10px; overflow:hidden; }
+  th, td { text-align:left; padding: 7px 10px; border-top:1px solid var(--line); vertical-align: top; }
+  th { background:#f2f4f8; border-top:0; font-size: 13px; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  ol li { margin: 4px 0; }
+  .risk li::marker { color: var(--warn); font-weight: 700; }
+  .go { background:#fff; border:1px solid var(--line); border-left: 4px solid var(--work); border-radius: 10px; padding: 10px 16px; }
+  code { font-size: 13px; background:#eef1f6; padding: 0 4px; border-radius: 4px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 720px) { .tree { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Your vault, tidied into the tree</h1>
+  <p class="sub">EPIC-9 · E9-2c · proposal only: nothing in your vault has moved · built on <code>AlfaBlok/obsidian-brain</code> @ <code>617ad03</code> (2026-11-01 22:31Z)</p>
+  <p class="lede">Every page gets a parent. Pages are <b>moved or merged, never deleted</b>, and anything unsure goes to <code>Archive/</code>. The <b>Log is untouched</b>. The whole change is <b>one commit</b>, and reverting that commit undoes all of it (tested).</p>
+
+  <h2>The tree as it would look (levels 0 and 1)</h2>
+  <p class="sub">Pages = existing pages hung under the node. Captures = Inbox captures Zenod never filed, now listed on the node as one dated line each, linking to their Log entry.</p>
+  <div class="tree">
+    <section class="group work">
+      <h3>Working memory</h3>
+      <div class="node"><div><b>Launching Epic Social</b><small>EpicSpine, the daily-post council; the captures are mostly Agent Team reports</small><div class="bar" style="width:6%"></div></div><span class="pill p">2 pages</span><span class="pill c">54 captures</span></div>
+      <div class="node"><div><b>Launching Zenod</b><small><code>Zenod</code> (30 pages below it), Positioning &amp; Story</small><div class="bar" style="width:100%"></div></div><span class="pill p">34 pages</span><span class="pill c">18 captures</span></div>
+      <div class="node"><div><b>Hair transplant</b><small>your 3 October captures finally have a home</small><div class="bar" style="width:1%"></div></div><span class="pill p">0 pages</span><span class="pill c">3 captures</span></div>
+      <div class="node"><div><b>House decision</b><small>Housing, Maresme vs Cerdanya, the property spine, buy-location reports</small><div class="bar" style="width:21%"></div></div><span class="pill p">7 pages</span><span class="pill c">10 captures</span></div>
+    </section>
+    <section class="group long">
+      <h3>Long-term memory</h3>
+      <div class="node"><div><b>Ventures and work</b><small>Idealista data venture (14), Poly-Maker trading (6), Altamira2050, Alpha9 tax, Nectary</small><div class="bar" style="width:76%"></div></div><span class="pill p">26 pages</span><span class="pill c">8 captures</span></div>
+      <div class="node"><div><b>Ideas and knowledge</b><small>markets research, power laws, The Pen, explainer-script skills</small><div class="bar" style="width:24%"></div></div><span class="pill p">8 pages</span><span class="pill c">14 captures</span></div>
+      <div class="node"><div><b>Infrastructure and runbooks</b><small>VPS runbooks, GitHub auth, browser automation, email MCP</small><div class="bar" style="width:18%"></div></div><span class="pill p">6 pages</span><span class="pill c">11 captures</span></div>
+      <div class="node"><div><b>Life admin</b><small>hardware, insurance, travel</small><div class="bar" style="width:9%"></div></div><span class="pill p">3 pages</span><span class="pill c">2 captures</span></div>
+      <div class="node"><div><b>People and family</b><small>private; the page stays where it is</small><div class="bar" style="width:3%"></div></div><span class="pill p">1 page</span><span class="pill c">1 capture</span></div>
+    </section>
+  </div>
+
+  <h2>Before → after</h2>
+  <table>
+    <tr><th>Measure (<code>zenod tree lint</code>)</th><th>Before</th><th>After</th></tr>
+    <tr><td>Pages with a parent</td><td class="n">0 of 104</td><td class="n">96 of 96 · 0 errors</td></tr>
+    <tr><td>Duplicate-title groups</td><td class="n">6</td><td class="n">0</td></tr>
+    <tr><td>Machine files in Inbox</td><td class="n">192</td><td class="n">0</td></tr>
+    <tr><td><code>zenod lint</code> errors (all already there; 5 only show now because those pages had no frontmatter)</td><td class="n">78</td><td class="n">61</td></tr>
+  </table>
+
+  <h2>The 10 riskiest changes</h2>
+  <ol class="risk">
+    <li><b>Merge the two "Zenod Workflow Learnings" pages.</b> The 9 KB copy in <code>Projects/Zenod/</code> is appended to the 34 KB page. Its <code>memoryFacts</code> stay only on the archived copy.</li>
+    <li><b>Merge the two "Positioning &amp; Story" pages</b> into the Areas copy (the one with 5 links), under Launching Zenod.</li>
+    <li><b>Move 6 house pages</b> out of <code>Projects/Idealista Data Relationship/</code> into <code>Projects/House decision/</code>. Links to them are rewritten. Zenod has to pick up the new paths after "go".</li>
+    <li><b>Archive 11 email drafts</b> (email_comercial v1–v7 and v2_1–v2_3, plus the first director email). v8 and director_v2 stay and link to the drafts.</li>
+    <li><b><code>Areas/Housing</code> hangs under House decision</b> (working memory), not Life admin. It is your live buying strategy.</li>
+    <li><b>Merge the two "Hosted Zenod M3" plans.</b> The names are almost the same, but the text differs. The 4 KB one is appended to the 10 KB one.</li>
+    <li><b>Merge the two "Hardware &amp; Devices" pages</b> (Notes copy into Areas).</li>
+    <li><b>127 Inbox captures are re-filed by keyword.</b> 54 land on Epic Social, mostly agent_team console reports. A wrong line costs nothing: it only links to the Log entry.</li>
+    <li><b>13 pages without frontmatter get a header.</b> The title comes from the first heading and the dates from git; the body is unchanged.</li>
+    <li><b>Some pages hang outside their folder</b> (Zenot Council under Epic Social, the email MCP runbook under Infrastructure). Only the parent changes, never the path. X runbook: low confidence.</li>
+  </ol>
+
+  <h2>What goes to <code>Archive/</code> (moved, never deleted)</h2>
+  <table>
+    <tr><th>What</th><th>Count</th></tr>
+    <tr><td>Inbox machine files → <code>Archive/Inbox/</code>, all of them (127 re-filed first)</td><td class="n">192</td></tr>
+    <tr><td>· of which archived without re-filing: test or canary captures</td><td class="n">32</td></tr>
+    <tr><td>· no node clearly matches / tied between two nodes / already filed</td><td class="n">25 / 4 / 4</td></tr>
+    <tr><td>Superseded email drafts</td><td class="n">11</td></tr>
+    <tr><td>Originals of merged duplicates (each marked <code>merged-into:</code>)</td><td class="n">7</td></tr>
+    <tr><td><code>Council/</code> July launch docs + <code>index_old_archive.md</code></td><td class="n">4</td></tr>
+  </table>
+  <p class="sub">Left alone: your own Inbox notes, <code>Index.md</code>/<code>index.md</code> (they collide on a Mac, so you choose), <code>docs/</code>, <code>_templates/</code>, <code>AGENTS.md</code>, <code>Log/</code>, <code>_attachments/</code>.</p>
+
+  <h2>What "go" does, exactly</h2>
+  <div class="go">
+    <ol>
+      <li><b>Re-check:</b> re-run the plan on a fresh copy of your vault's <code>main</code>. If a new page appeared since <code>617ad03</code>, the plan stops and I place it first.</li>
+      <li><b>Rehearse:</b> a dry run, then <code>zenod tree lint</code>, which must show 0 errors.</li>
+      <li><b>Apply:</b> <b>one commit</b> on <code>e9-2c-tree-migration</code>, fast-forwarded to <code>main</code>. It adds Tree.md plus 10 node pages, edits 81 files and moves 220. Nothing is deleted.</li>
+      <li><b>Check after:</b> confirm Zenod's production copy is lint-clean and the next capture files normally.</li>
+    </ol>
+    <p><b>Undo:</b> <code>git revert &lt;that commit&gt;</code>. Tested: it restores the vault byte for byte.</p>
+  </div>
+
+  <footer>Full plan: <code>docs/epic9/E9-2c-migration/plan.json</code> and <code>REVIEW.md</code> in zenod-ai/zenod · script <code>scripts/e9-2c-vault-tree-migration.mjs</code></footer>
+</main>
+</body>
+</html>
