@@ -768,6 +768,37 @@ describe("hosted customer layer", () => {
 
   });
 
+  it("shows browsers a signup-paused page and keeps JSON for API clients when checkout is closed", async () => {
+    env.ZENOD_ALLOW_TEST_CHECKOUT = "0";
+    const app = customerApp();
+    const cookie = await signInCookie(app);
+
+    const browser = await app.request("/buy?tier=monthly", {
+      headers: { cookie, accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
+    });
+    expect(browser.status).toBe(503);
+    expect(browser.headers.get("content-type")).toMatch(/^text\/html/);
+    expect(browser.headers.get("retry-after")).toBe("3600");
+    const page = await browser.text();
+    expect(page).toContain("Signup is paused for a moment");
+    expect(page).toContain("try again");
+    expect(page).toContain("mailto:");
+    expect(page).not.toMatch(/readiness|backup_restore|paid signup is not open/i);
+
+    const api = await app.request("/buy?tier=monthly", { headers: { cookie, accept: "application/json" } });
+    expect(api.status).toBe(503);
+    expect(await api.json()).toEqual({ error: "paid signup is not open" });
+
+    const fetchClient = await app.request("/create-checkout-session", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ tier: "monthly" }),
+    });
+    expect(fetchClient.status).toBe(503);
+    expect(await fetchClient.json()).toEqual({ error: "paid signup is not open" });
+    expect(createdParams).toBeNull();
+  });
+
   it("rejects retired aliases and yearly for new Zenod checkout before calling Stripe", async () => {
     const app = customerApp();
     const cookie = await signInCookie(app);
