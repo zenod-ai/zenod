@@ -14,7 +14,7 @@ It installs `/usr/local/lib/zenod-tester-watch/tester_watch.py` and the `/usr/lo
 
 ## Who is a tester
 
-T4's private ledger, `/home/t3agent/.local/state/zenod-testers/live-codes.tsv` (`scripts/stripe-testers.mjs issue <label>` appends `label code promotion_code created expires`). Override with `--testers FILE`, `TESTER_WATCH_TESTERS` or `ZENOD_TESTERS_LEDGER_DIR`. A row matches an account by promotion code (or its `promo_` id), account/tenant/user id or email. Codes not redeemed yet show as `not signed up` with the code's state. With no ledger, every live account with a tenant is shown (`--all` forces that; canceled accounts are left out).
+T4's private ledger, `/root/.local/state/zenod-testers/live-codes.tsv`, mode 0600 (the runbook runs `scripts/stripe-testers.mjs issue <label>` as root on VPS1; it appends `label code promotion_code created expires`). Override with `--testers FILE`, `TESTER_WATCH_TESTERS` or `ZENOD_TESTERS_LEDGER_DIR`. A row matches an account by promotion code (or its `promo_` id), account/tenant/user id or email. Codes not redeemed yet show as `not signed up` with the code's state. With no ledger, every live account with a tenant is shown (`--all` forces that; canceled accounts are left out).
 
 ## Columns and sources (all read-only)
 

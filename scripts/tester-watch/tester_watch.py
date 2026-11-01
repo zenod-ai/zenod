@@ -14,7 +14,7 @@ Per tester it shows:
   errors     failed captures, AI/Phylax cap hits, past_due, failed billing notices (zenod-mt log)
 
 Who is a tester: the private label->code ledger T4 keeps on VPS1 (scripts/stripe-testers.mjs,
-default /home/t3agent/.local/state/zenod-testers/live-codes.tsv; --testers or TESTER_WATCH_TESTERS
+default /root/.local/state/zenod-testers/live-codes.tsv; --testers or TESTER_WATCH_TESTERS
 override). Each line is `label<TAB or comma>token[,token...]`; a token is a promotion code (or its
 promo_ id), account id, tenant id, user id or email; a `label ...` header line is skipped. JSON is accepted too ({"label": "CODE"} or [{"label":..,"code":..}]). With no
 file every account with a tenant is shown (--all forces that).
@@ -51,8 +51,8 @@ DEFAULTS = {
     "TESTER_WATCH_PHYLAX_VOLUME": "phylax-data",
 }
 # T4's private ledger (scripts/stripe-testers.mjs: $ZENOD_TESTERS_LEDGER_DIR/live-codes.tsv,
-# default ~/.local/state/zenod-testers of the user who issues codes on VPS1: t3agent).
-LEDGER_DIR = os.environ.get("ZENOD_TESTERS_LEDGER_DIR", "/home/t3agent/.local/state/zenod-testers")
+# default ~/.local/state/zenod-testers of the user who issues codes on VPS1: root, per docs/runbooks/epic7-tester-codes.md).
+LEDGER_DIR = os.environ.get("ZENOD_TESTERS_LEDGER_DIR", "/root/.local/state/zenod-testers")
 DEFAULT_TESTERS = os.path.join(LEDGER_DIR, "live-codes.tsv")
 DAY_MS = 86_400_000
 SAVE_TOOLS = ("store_memory", "ingest_memory")
