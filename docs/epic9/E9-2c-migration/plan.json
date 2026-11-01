@@ -4,7 +4,7 @@
  "date": "2026-11-01",
  "vault": {
   "repo": "AlfaBlok/obsidian-brain",
-  "baseCommit": "617ad0381f21a84edec6ae1f038e035407bfbc4c"
+  "baseCommit": "0eaac45c65cff14fdb5b313e3dd94a527d4a2860"
  },
  "rules": {
   "archiveRoot": "Archive",
@@ -1392,6 +1392,15 @@
    "action": "archive",
    "confidence": "high",
    "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-31db57.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-31db57",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
   },
   {
    "path": "Inbox/filing-2026-11-01-e-35f0ab.md",
