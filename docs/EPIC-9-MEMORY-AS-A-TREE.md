@@ -28,7 +28,7 @@ Zenod builds and keeps structure as well as EpicSpine does: what Jordi drops bec
 
 Owner: Delivery manager
 Status: active
-Last attempted: 2026-11-01 wake run_a917c19e: E9-1 audit row M1 readied on Jordi's note and dispatched; before: scaffolded with spine_new.py on 2026-11-01
+Last attempted: 2026-11-01 wake run_85ebce2b: E9-A1 approved; dispatched E9-2a (run_6401cf9d) and E9-3a (run_285d73f4); before: 2026-11-01 wake run_a917c19e: E9-1 audit row M1 readied on Jordi's note and dispatched; before: scaffolded with spine_new.py on 2026-11-01
 Result: E9-1 audit done 2026-11-01 ([page](epic9/E9-1-memory-structure-audit.md)): Zenod keeps no tree, parent or working/long-term split; proposed level-0/1 tree, 7 filing rules, 6 build rows (draft)
 Evidence: [E9-1 audit](epic9/E9-1-memory-structure-audit.md) 718acaa
 Waiting on: nobody (E9-A1 approved 2026-11-01; E9-2c comes back to Jordi as a reviewed proposal)
@@ -52,11 +52,11 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | M1 | Research worker | worker run_fb4e5e13 | E9-1 audit: how Zenod structures Jordi's memory today (real vault examples), where it gets untidy, what EpicSpine's discipline would change, plus a proposed level-0/1 tree (working vs long-term) | done | none | - | main | [E9-1 audit](epic9/E9-1-memory-structure-audit.md) 718acaa + [tree page](epic9/E9-1-memory-tree.html): vault is AlfaBlok/obsidian-brain, 413 notes, 79% unlinked, 146 unresolved Inbox stubs; no tree/parent/working split; proposed level-0/1 tree + 7 filing rules | 2026-11-01 | Jordi reads it (E9-A1) |
-| E9-2a | Ticket worker | unassigned | Tree file and node schema: `Tree.md` (levels 0/1, one line per node) + page frontmatter `parent:`, `memory: working\|long-term` | ready | M1 | - | main | audit §5 | 2026-11-01 | lint passes on a fixture vault; every meaning page has a resolvable parent |
+| E9-2a | Ticket worker | worker run_6401cf9d | Tree file and node schema: `Tree.md` (levels 0/1, one line per node) + page frontmatter `parent:`, `memory: working\|long-term` | active | M1 | - | main | audit §5 | 2026-11-01 | lint passes on a fixture vault; every meaning page has a resolvable parent |
 | E9-2b | Ticket worker | unassigned | Librarian places every capture as a leaf under a parent, writes `- filed:` back on the Log entry | ready | E9-2a | - | main | audit §5 rules 2–6 | 2026-11-01 | replay of 20 real-shaped captures: 0 receipt-only, 100% filed + parent |
 | E9-2c | Ticket worker | unassigned | One-time reviewed migration of Jordi's vault into the tree (moves/merges, Inbox re-filed or archived, never deletes, Log untouched) | draft | E9-2a; Jordi OK on the tree | - | main | audit §6 Q3 | 2026-11-01 | Jordi recognises his world at levels 0–1 (E9-2) |
 | E9-2d | Ticket worker | unassigned | Weekly sweep: stale working roots → offer closure, pending receipts → re-file, duplicate titles → merge proposal | ready | E9-2b | - | main | audit §4 | 2026-11-01 | one prod sweep report, tree lint-clean |
-| E9-3a | Ticket worker | unassigned | Retrieval returns lineage: `search_memory`/`get_memory` hits carry node path + evidence anchor; a node returns parent + children | ready | E9-2a schema (audit §5; runs alongside) | - | main | audit §5 | 2026-11-01 | schema updated; test asserts the path on 5 hits |
+| E9-3a | Ticket worker | worker run_285d73f4 | Retrieval returns lineage: `search_memory`/`get_memory` hits carry node path + evidence anchor; a node returns parent + children | active | E9-2a schema (audit §5; runs alongside) | - | main | audit §5 | 2026-11-01 | schema updated; test asserts the path on 5 hits |
 | E9-3b | Ticket worker | unassigned | `ask_brain` briefs from the tree and cites the path; 10 real questions from Jordi's history (E9-3) | ready | E9-3a, E9-2c | - | main | audit §5 | 2026-11-01 | 10 real questions answered with the right lineage |
 
 ## Decisions
