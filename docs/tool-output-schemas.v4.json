@@ -776,6 +776,22 @@
         "text": {
           "type": "string"
         },
+        "lineage": {
+          "$comment": "EPIC-9 E9-3b: where the answer's sources sit in the memory tree; absent when none is placed. text is the cited path, e.g. 'Working memory › House decision › Maresme ← Log/2026-10-14.md#^e-…'.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "page", "lineage", "text"],
+            "properties": {
+              "source": { "type": "string" },
+              "page": { "type": "string" },
+              "lineage": { "type": "array", "items": { "$ref": "#/$defs/MemoryLineageNode" } },
+              "evidence": { "type": "string" },
+              "text": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
         "sources": {
           "type": "array",
           "items": {

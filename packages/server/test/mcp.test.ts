@@ -912,6 +912,40 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
+  it("ask_brain carries the tree lineage of its sources (E9-3b)", async () => {
+    const original = fakeEngine.ask;
+    const path = "Working memory › Hair transplant › Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b";
+    fakeEngine.ask = async () => ({
+      text: `About 4,000 euros.\n\nWhere this sits in your memory:\n- ${path}`,
+      sources: [{ path: "Notes/Barcelona quotes.md", url: "", provider: "github" }],
+      lineage: [{
+        source: "Notes/Barcelona quotes.md",
+        page: "Notes/Barcelona quotes.md",
+        lineage: [
+          { path: null, title: "Working memory", memory: "working" },
+          { path: "Projects/Hair transplant.md", title: "Hair transplant", memory: "working" },
+          { path: "Notes/Barcelona quotes.md", title: "Barcelona quotes", memory: "working" },
+        ],
+        evidence: "Log/2026-10-31.md#^e-c64e3b",
+        text: path,
+      }],
+    });
+    const client = await connect();
+    try {
+      const result = await client.callTool({ name: "ask_brain", arguments: { question: "where did the quote come from?" } });
+      const answer = result.structuredContent as { lineage: Array<{ text: string }> };
+      expect(answer.lineage.map((item) => item.text)).toEqual([path]);
+      expect(result.content.map((item) => (item as { text: string }).text).join("\n")).toContain(`- ${path}`);
+      expect(validateToolResponse("zenod.ask_brain", result.structuredContent)).toBeTruthy();
+      fakeEngine.ask = original;
+      const plain = await client.callTool({ name: "ask_brain", arguments: { question: "what insurance do I have?" } });
+      expect(plain.structuredContent).not.toHaveProperty("lineage");
+    } finally {
+      fakeEngine.ask = original;
+      await client.close();
+    }
+  });
+
   it("ask_brain accepts evidence contextRefs and remains read-only", async () => {
     const client = await connect();
     const askSpy = vi.spyOn(fakeEngine, "ask");

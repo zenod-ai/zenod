@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { basenameOf } from "./files.js";
 import { CITATION_RE } from "./pages.js";
-import { buildTreeIndex, GROUP_HEADINGS, type MemoryKind } from "./tree.js";
+import { buildTreeIndex, GROUP_HEADINGS, readTree, type MemoryKind, type ParsedTree } from "./tree.js";
 
 /**
  * Retrieval lineage (EPIC-9 E9-3a): where a memory sits in the tree, root → leaf,
@@ -37,9 +37,26 @@ export interface MemoryTreeNodeView extends MemoryLineage {
   children: LineageNode[];
 }
 
+/** Where one answer source sits in the tree (E9-3b): what `ask_brain` cites next to its answer. */
+export interface AnswerLineage {
+  /** The answer source, as returned in `sources[].path` (a page, or `Log/….md#^e-…`). */
+  source: string;
+  /** The placed page holding it: the source page itself, or the deepest placed page citing a Log entry. */
+  page: string;
+  lineage: LineageNode[];
+  /** The Log evidence the path is anchored to, when known. */
+  evidence?: string;
+  /** `Working memory › House decision › Maresme ← Log/2026-10-14.md#^e-…` */
+  text: string;
+}
+
 export interface MemoryTreeIndex {
   lineageOf(path: string): Promise<MemoryLineage>;
   nodeView(path: string): Promise<MemoryTreeNodeView>;
+  /** Placed pages citing a Log evidence ref (`Log/2026-10-31.md#^e-c64e3b`), deepest first. */
+  placedCitersOf(evidenceRef: string): Promise<string[]>;
+  /** Tree paths for answer sources, deduplicated by page, at most `max`; unplaced sources are skipped. */
+  answerLineage(sources: readonly string[], max?: number): Promise<AnswerLineage[]>;
 }
 
 function evidenceRefs(body: string): string[] {
@@ -89,7 +106,74 @@ export async function loadMemoryTree(vaultPath: string): Promise<MemoryTreeIndex
     return { ...own, parent: own.lineage.at(-2) ?? null, children };
   }
 
-  return { lineageOf, nodeView };
+  let citers: Promise<Map<string, string[]>> | undefined;
+  async function placedCitersOf(evidenceRef: string): Promise<string[]> {
+    citers ??= (async () => {
+      const map = new Map<string, string[]>();
+      for (const path of index.fields.keys()) {
+        if (!index.lineage(path).ok) continue;
+        const body = await readFile(join(vaultPath, path), "utf8").catch(() => "");
+        for (const match of body.matchAll(CITATION_RE)) {
+          const ref = `Log/${match[1]}.md#^${match[2]}`;
+          const list = map.get(ref) ?? [];
+          if (!list.includes(path)) list.push(path);
+          map.set(ref, list);
+        }
+      }
+      // The deepest page is the most specific place the capture was filed.
+      const depth = (path: string) => { const found = index.lineage(path); return found.ok ? found.steps.length : 0; };
+      for (const list of map.values()) list.sort((a, b) => depth(b) - depth(a) || a.localeCompare(b));
+      return map;
+    })();
+    return (await citers).get(evidenceRef) ?? [];
+  }
+
+  async function answerLineage(sources: readonly string[], max = MAX_ANSWER_LINEAGE): Promise<AnswerLineage[]> {
+    const out: AnswerLineage[] = [];
+    for (const source of sources) {
+      if (out.length >= max) break;
+      const [base = "", anchor] = source.split("#");
+      let page: string | undefined;
+      let evidence: string | undefined;
+      if (base.startsWith("Log/")) {
+        if (!anchor?.startsWith("^e-")) continue;
+        evidence = `${base}#${anchor}`;
+        page = (await placedCitersOf(evidence))[0];
+      } else {
+        page = base;
+      }
+      if (!page || out.some((item) => item.page === page)) continue;
+      const found = await lineageOf(page);
+      if (found.placement !== "placed") continue;
+      const anchored = { ...found, evidence: evidence ? [evidence] : found.evidence };
+      out.push({ source, page, lineage: found.lineage, ...(anchored.evidence[0] ? { evidence: anchored.evidence[0] } : {}), text: formatMemoryLineage(anchored) });
+    }
+    return out;
+  }
+
+  return { lineageOf, nodeView, placedCitersOf, answerLineage };
+}
+
+const MAX_ANSWER_LINEAGE = 5;
+
+/**
+ * Levels 0–1 of the tree as a compact briefing map (E9-3b): one line per root,
+ * grouped working / long-term. "" when the vault has no tree or no roots yet.
+ */
+export function formatTreeBriefing(tree: ParsedTree | null): string {
+  if (!tree?.nodes.length) return "";
+  const groups = (["working", "long-term"] as const).map((kind) => {
+    const nodes = tree.nodes.filter((node) => node.kind === kind);
+    if (!nodes.length) return "";
+    const label = kind === "working" ? "ongoing now" : "what lasts";
+    return [`${GROUP_HEADINGS[kind]} (${label})`, ...nodes.map((node) => `- ${node.name} → ${node.path}: ${node.summary}`)].join("\n");
+  });
+  return groups.filter(Boolean).join("\n");
+}
+
+/** Read `<vault>/Tree.md` and format it for the briefing; "" when absent or unreadable. */
+export async function memoryTreeBriefing(vaultPath: string): Promise<string> {
+  return formatTreeBriefing(await readTree(vaultPath).catch(() => null));
 }
 
 /** `Working memory › Hair transplant › 2023 Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b`; "" when unplaced. */

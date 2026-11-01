@@ -1252,6 +1252,7 @@ export function buildMcpServer(
         text: answer.text,
         sources: answer.sources,
         ...(answer.coverage ? { coverage: answer.coverage } : {}),
+        ...(answer.lineage?.length ? { lineage: answer.lineage } : {}),
       };
       const sources = answerContent.sources.map((s) => `- ${s.path}${s.url ? ` (${s.url})` : ""}`).join("\n");
       const status = {

@@ -131,6 +131,8 @@ export interface Answer {
   text: string;
   sources: SourceRef[];
   coverage?: import("./engine/retrievalCoverage.js").AnswerCoverage;
+  /** Where the answer's sources sit in the memory tree (EPIC-9 E9-3b); absent when none is placed. */
+  lineage?: import("./vault/lineage.js").AnswerLineage[];
 }
 
 export interface AskOptions {

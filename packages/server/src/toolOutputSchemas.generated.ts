@@ -1988,6 +1988,40 @@ export const TOOL_OUTPUT_SCHEMAS = (
       "text": {
         "type": "string"
       },
+      "lineage": {
+        "$comment": "EPIC-9 E9-3b: where the answer's sources sit in the memory tree; absent when none is placed. text is the cited path, e.g. 'Working memory › House decision › Maresme ← Log/2026-10-14.md#^e-…'.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "source",
+            "page",
+            "lineage",
+            "text"
+          ],
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "page": {
+              "type": "string"
+            },
+            "lineage": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MemoryLineageNode"
+              }
+            },
+            "evidence": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
       "sources": {
         "type": "array",
         "items": {
@@ -2404,7 +2438,36 @@ export const TOOL_OUTPUT_SCHEMAS = (
         ]
       }
     ],
-    "$defs": {}
+    "$defs": {
+      "MemoryLineageNode": {
+        "$comment": "EPIC-9 E9-3a: one node on a memory's tree path. path is null for a Tree.md node with no page.",
+        "type": "object",
+        "required": [
+          "path",
+          "title",
+          "memory"
+        ],
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "memory": {
+            "enum": [
+              "working",
+              "long-term",
+              null
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
   },
   "zenod.store_memory": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
