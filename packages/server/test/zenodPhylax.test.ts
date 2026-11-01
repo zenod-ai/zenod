@@ -1487,6 +1487,11 @@ describe("Zenod Phylax product adapter", () => {
       percentageUsed: 42,
       state: "normal",
       resetsAt: "2026-10-01T00:00:00.000Z",
+      // EPIC-7 T3: per-meter breakdown for the console card (percentages only reach the customer).
+      breakdown: {
+        ai: { spendUsd: null, allowanceUsd: null, percentageUsed: 50, paused: false },
+        channel: { usedUnits: 250_000, allowanceUnits: 1_000_000, percentageUsed: 25, paused: false },
+      },
     });
     expect(adapter.operatorProjection(customer, local)).toMatchObject({
       masterAllowanceUnits: 3_000_000,

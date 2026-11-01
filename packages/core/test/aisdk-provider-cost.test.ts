@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {createBrainLlm} from '../src/llm/aisdk.js';
+import {createBrainLlm,LlmAllowanceExceededError} from '../src/llm/aisdk.js';
 
 const classified={passageReviews:[],topics:[{topic:'Synthetic',facts:[],evidenceQuotes:['Synthetic proposition.'],evidenceAssignments:[],confidence:1,disposition:'evidence_only',pages:[],summary:'Synthetic',question:null}],disposition:'evidence_only',confidence:1,summary:'Synthetic',tags:[],pages:[],question:null};
 afterEach(()=>vi.unstubAllGlobals());
@@ -48,4 +48,12 @@ it('sends the OpenRouter user field on every call and runs the before-call hook 
  await llm.classify({content:'Synthetic proposition.',context:'',pageIndex:[],hints:[],tagVocabulary:[]});
  expect(requestBody.user).toBe('tenant-a');
  expect(hooks).toBe(1);
+});
+
+it('an enforced allowance stop aborts the call before the provider is contacted (EPIC-7 T3)',async()=>{
+ const fetchSpy=vi.fn(async()=>{throw new Error('provider must not be called');});
+ vi.stubGlobal('fetch',fetchSpy);
+ const llm=createBrainLlm({provider:'openrouter',apiKey:'offline-unused',classifyModel:'synthetic/model',user:'tenant-a',onBeforeCall:()=>{throw new LlmAllowanceExceededError('allowance used up','2026-12-01T00:00:00.000Z');}});
+ await expect(llm.classify({content:'Synthetic proposition.',context:'',pageIndex:[],hints:[],tagVocabulary:[]})).rejects.toMatchObject({name:'LlmAllowanceExceededError',code:'llm_allowance_exceeded',message:'allowance used up'});
+ expect(fetchSpy).not.toHaveBeenCalled();
 });

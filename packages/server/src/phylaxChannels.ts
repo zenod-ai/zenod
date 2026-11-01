@@ -1000,7 +1000,7 @@ function transcriptPreview(value: string): string {
     : `${value.slice(0, maxChars).trimEnd()} […continues in the filed Zenod memory]`;
 }
 
-function terminalCaptureReceipt(
+export function terminalCaptureReceipt(
   result: PeerToolResult,
   expectedJobId: string,
   tool: string,
@@ -1035,6 +1035,18 @@ function terminalCaptureReceipt(
       state: "done",
       text: reply || "Zenod finished the request, but returned no reply text.",
       evidenceRef,
+    };
+  }
+  if (payload.code === "ai_allowance_exhausted" && typeof payload.message === "string" && payload.message.trim()) {
+    // Zenod stopped at the tenant's AI allowance: relay its reason as-is, never a "Saved" receipt.
+    const archive = objectValue(payload.rawArtifact)?.archiveUrl;
+    return {
+      state: "done",
+      evidenceRef: null,
+      text: sanitizePhylaxCustomerReply([
+        payload.message.trim(),
+        ...(typeof archive === "string" && archive.trim() ? [`Original: ${archive.trim()}`] : []),
+      ].join("\n")),
     };
   }
   const digest = objectValue(payload.digest);

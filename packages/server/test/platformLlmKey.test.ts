@@ -110,7 +110,7 @@ describe("per-tenant metering and shadow allowance", () => {
     }
   });
 
-  it("ledger usage projection never pauses (shadow) and warns near the allowance", () => {
+  it("ledger usage projection never pauses in shadow mode and warns near the allowance", () => {
     expect(projectLedgerUsage(1, null)).toMatchObject({ state: "normal", percentageUsed: 0, monthSpendUsd: 1 });
     expect(projectLedgerUsage(null, 5)).toMatchObject({ state: "normal", percentageUsed: 0 });
     expect(projectLedgerUsage(1, 5)).toMatchObject({ state: "normal", percentageUsed: 20 });
@@ -120,13 +120,14 @@ describe("per-tenant metering and shadow allowance", () => {
 });
 
 describe("Runtime.checkTenantAllowance", () => {
-  it("logs llm.allowance.exceeded at most once per hour and never throws", () => {
+  it("shadow mode logs llm.allowance.exceeded at most once per hour and never throws", () => {
     const dir = mkdtempSync(join(tmpdir(), "zenod-allowance-"));
     const runtime = new Runtime(dir, undefined, {
       seedFromEnv: false,
       tenantId: "tenant-a",
       platformLlm: { apiKey: PLATFORM_KEY },
       tenantMonthlyAllowanceUsd: 1,
+      tenantAllowanceEnforced: false,
     });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const exceeded = () => warn.mock.calls.filter((c) => String(c[0]).includes("llm.allowance.exceeded"));

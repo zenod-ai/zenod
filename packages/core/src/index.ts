@@ -145,6 +145,8 @@ export { SqliteStateStore } from "./state/sqlite.js";
 export {
   AiSdkBrainLlm,
   createBrainLlm,
+  LlmAllowanceExceededError,
+  isLlmAllowanceExceededError,
   PROVIDER_DEFAULTS,
   type AiLlmOptions,
   type LlmOperation,

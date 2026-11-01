@@ -88,7 +88,7 @@ export interface TaskJobInput {
 
 export interface MediaIngestReceipt {
   status: "done" | "error";
-  code?: "media_ingest_processor_unavailable" | "unsupported_media_type";
+  code?: "media_ingest_processor_unavailable" | "unsupported_media_type" | "ai_allowance_exhausted";
   message: string;
   mediaType: string;
   source: {

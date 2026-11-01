@@ -168,9 +168,27 @@ export interface AiLlmOptions {
   user?: string;
   /**
    * Called synchronously before each model call (one per generateText/streamText
-   * invocation). Used for shadow-mode spend checks; it must never throw into the call path.
+   * invocation). Used for per-tenant spend checks. Any error is swallowed except an
+   * LlmAllowanceExceededError, which aborts the call before the provider is contacted.
    */
   onBeforeCall?: () => void;
+}
+
+/**
+ * Thrown by an `onBeforeCall` hook when the tenant's monthly AI allowance is used up and
+ * enforcement is on. Its message is user-facing: callers may relay it verbatim.
+ */
+export class LlmAllowanceExceededError extends Error {
+  readonly code = "llm_allowance_exceeded";
+  constructor(message: string, readonly resetsAt: string | null = null) {
+    super(message);
+    this.name = "LlmAllowanceExceededError";
+  }
+}
+
+export function isLlmAllowanceExceededError(error: unknown): error is LlmAllowanceExceededError {
+  return error instanceof LlmAllowanceExceededError
+    || (error instanceof Error && (error as { code?: unknown }).code === "llm_allowance_exceeded");
 }
 
 /** Per-provider default models. All are user-overridable in settings. */
@@ -784,7 +802,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     this.onUsage = options.onUsage;
     const beforeCall = options.onBeforeCall;
     const metered = (factory: ModelFactory): ModelFactory =>
-      beforeCall ? (id: string) => { try { beforeCall(); } catch { /* shadow check never breaks a call */ } return factory(id); } : factory;
+      beforeCall ? (id: string) => {
+        try { beforeCall(); } catch (error) {
+          // Only an enforced allowance stops the call; any other metering failure never breaks a turn.
+          if (isLlmAllowanceExceededError(error)) throw error;
+        }
+        return factory(id);
+      } : factory;
     this.model = metered(createModelFactory(options.provider, options.apiKey, undefined, (u) => this.providerUsage.push(u), options.baseUrl, options.headers, options.apiFormat, options.user));
     const order = options.organizerProviderOrder;
     if (order !== undefined && (options.provider !== "openrouter" || !Array.isArray(order) || order.length < 1 || order.length > 3
@@ -1026,6 +1050,8 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         .join("\n\n"),
       });
     } catch (err) {
+      // The tenant's AI allowance stopped the call before the provider: keep that reason intact.
+      if (isLlmAllowanceExceededError(err)) throw err;
       const structured = NoObjectGeneratedError.isInstance(err);
       this.reportUsage("classify", this.classifyModelId, structured ? err.usage : undefined, undefined, {
         status: "failed",

@@ -1,4 +1,12 @@
-import { VaultPublicationError, type BrainEngine, type StoreResult } from "zenod";
+import {
+  LlmAllowanceExceededError,
+  VaultPublicationError,
+  isLlmAllowanceExceededError,
+  type BrainEngine,
+  type Reply,
+  type StoreResult,
+} from "zenod";
+import { aiAllowanceArchivedMediaMessage } from "./customerMetering.js";
 import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchive.js";
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
@@ -36,6 +44,13 @@ export class TaskJobQueue {
     private readonly getEngine: () => Promise<BrainEngine>,
     private readonly settings?: Settings,
     private readonly onCaptureComplete?: (result: StoreResult) => Promise<unknown> | void,
+    /**
+     * The tenant's enforced AI allowance stop (null while AI work may run). Checked when a job starts so a
+     * capped tenant gets the reason as the job's answer, with no model call: chat completes with the
+     * message as its reply text (what a channel delivers verbatim), media is archived raw but not read or
+     * filed, and other kinds fail with the message.
+     */
+    private readonly aiAllowanceBlock?: () => { message: string; resetsAt: string } | null,
   ) {}
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
@@ -129,7 +144,10 @@ export class TaskJobQueue {
     leaseHeartbeat.unref?.();
     try {
       let completed = false;
-      if (job.kind === "chat") {
+      const allowanceBlock = this.aiAllowanceBlock?.() ?? null;
+      if (allowanceBlock) {
+        completed = await this.completeOverAllowance(job, allowanceBlock);
+      } else if (job.kind === "chat") {
         const engine = await this.getEngine();
         const result = await engine.chat(
           job.input.text ?? "",
@@ -213,6 +231,14 @@ export class TaskJobQueue {
       if (completed) console.log(`[task-job] ${job.id} ${this.store.get(job.id)?.status ?? "updated"}: ${job.kind}`);
       else console.warn(`[task-job] ${job.id} result ignored after claim ownership changed`);
     } catch (err) {
+      if (job.kind === "chat" && isLlmAllowanceExceededError(err)) {
+        // The allowance ran out mid-turn: answer with the reason instead of a generic failure.
+        const reply: Reply = { text: err.message, sources: [] };
+        if (this.store.updateClaimed(job, { status: "done", result: reply })) {
+          console.warn(`[task-job] ${job.id} stopped at the AI allowance: chat`);
+          return;
+        }
+      }
       console.error(`[task-job] ${job.id} failed:`, err);
       if (job.kind === "enrich_memory" && err instanceof VaultPublicationError && err.failure.retryable
         && this.store.resumePublicationFailure(job, err.message)) return;
@@ -222,6 +248,28 @@ export class TaskJobQueue {
     } finally {
       clearInterval(leaseHeartbeat);
     }
+  }
+
+  private async completeOverAllowance(job: TaskJob, block: { message: string; resetsAt: string }): Promise<boolean> {
+    console.warn(`[task-job] ${job.id} stopped at the AI allowance: ${job.kind}`);
+    if (job.kind === "chat") {
+      const reply: Reply = { text: block.message, sources: [] };
+      return this.store.updateClaimed(job, { status: "done", result: reply });
+    }
+    if (job.kind === "media_ingest" && this.settings) {
+      // Raw custody needs no AI: keep the original safe, skip transcription/extraction/filing.
+      let archived: ArchivedMediaInput | null = null;
+      try {
+        if (!this.admit(job.kind, job.input)) archived = await archiveMediaInput(this.settings, job.input);
+      } catch (error) {
+        console.warn(`[task-job] ${job.id} raw archive failed while over the AI allowance:`, (error as Error).message);
+      }
+      return this.store.updateClaimed(job, {
+        status: "done",
+        result: allowanceExhaustedMediaReceipt(job.input, archived?.handle ?? null, block),
+      });
+    }
+    throw new LlmAllowanceExceededError(block.message, block.resetsAt);
   }
 
   private scheduleLeaseRecovery(): void {
@@ -683,6 +731,31 @@ function isTextMimeType(mediaType: string): boolean {
 
 function stripKnownExtension(filename: string): string {
   return filename.replace(/\.[A-Za-z0-9]{1,8}$/, "") || "artifact";
+}
+
+function allowanceExhaustedMediaReceipt(
+  input: TaskJobInput,
+  rawArtifact: ArtifactArchiveHandle | null,
+  block: { message: string; resetsAt: string },
+): MediaIngestReceipt {
+  return {
+    status: "done",
+    code: "ai_allowance_exhausted",
+    message: rawArtifact
+      ? aiAllowanceArchivedMediaMessage(block.resetsAt)
+      : block.message,
+    mediaType: input.mediaType ?? "unknown",
+    source: {
+      ...(input.filename ? { filename: input.filename } : {}),
+      ...(input.sourceHint ? { sourceHint: input.sourceHint } : {}),
+      ...(input.senderTimestamp ? { senderTimestamp: input.senderTimestamp } : {}),
+      ...(input.contentHint ? { contentHint: input.contentHint } : {}),
+      ...(input.mediaHints ? { hints: input.mediaHints } : {}),
+    },
+    rawArtifact: { handle: rawArtifact?.uri ?? null, archiveUrl: rawArtifact?.url ?? null },
+    extraction: { handle: null, provider: null },
+    digest: { evidenceRef: null, pagesTouched: [], revision: null, urls: [] },
+  };
 }
 
 function mediaIngestUnavailableReceipt(input: TaskJobInput, rawArtifact: ArtifactArchiveHandle | null = null): MediaIngestReceipt {
