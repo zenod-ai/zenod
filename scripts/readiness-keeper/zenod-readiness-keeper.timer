@@ -1,0 +1,13 @@
+# Daily check; the drill itself only runs when the backup proof is >= 24 days old (monthly in
+# effect), so a failed night retries the next night, 7 nights before the 31-day proof lapses.
+[Unit]
+Description=zenod-readiness-keeper daily at 04:30 Europe/Madrid (off-peak for WhatsApp)
+
+[Timer]
+# After the 03:17 pg0 backup and 03:40 pg1 dump; before the morning WhatsApp traffic.
+OnCalendar=*-*-* 04:30:00 Europe/Madrid
+RandomizedDelaySec=0
+Persistent=false
+
+[Install]
+WantedBy=timers.target

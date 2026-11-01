@@ -1,0 +1,15 @@
+# Installed by scripts/readiness-keeper/install.sh (EPIC-7 T2.3).
+[Unit]
+Description=zenod-readiness-watch: alert when checkout readiness is false or a dated proof is within 7 days of expiry
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/zenod-readiness-keeper.env
+ExecStart=/usr/bin/python3 /usr/local/lib/zenod-readiness-keeper/keeper.py watch
+StateDirectory=zenod-readiness-keeper
+Nice=10
+TimeoutStartSec=5min
+SyslogIdentifier=zenod-readiness-watch
