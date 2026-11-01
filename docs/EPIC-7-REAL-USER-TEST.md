@@ -32,12 +32,15 @@ Status: active
 Last attempted: 2026-10-31 T0 (run_af659956) and T1 (run_b7be352f) finished and integrated; before: 2026-10-31 Delivery Manager wake run_b793ac36 dispatched T0 (run_af659956) and T1 (run_b7be352f) in parallel on seat1; before: 2026-10-27 created from Jordi's brief (testers = production users, not charged; caps first; 1-month free code, extended monthly, never charged; Zenod production number; start with 5)
 Result: T1 done 2026-10-31 ([map](evidence/epic7-t1-new-user-path-2026-10-31.md)): signup, €0 checkout and tenant creation work live (2 €0 subscriptions); phone link, Saved reply and console view never seen for a checkout-created user; renewal with no card bills €9 then suspends silently; AI spend cap is log-only and the Phylax allowance is effectively uncapped (T3 input). 7 gaps added as draft T2.1–T2.7. T0 done 2026-10-31 ([proof](evidence/epic7-t0-2026-10-31.md)): fresh backup-restore drill, live readiness ready=true, checkout open again (until the proof expires 2026-12-01, tracked in T2.3). Finding 2026-10-27: paid checkout is off in production (`/api/public/production-readiness` ready=false, only blocking check `backup_restore`), so no one can sign up, free code or not, until T0.
 Evidence: [T0 proof](evidence/epic7-t0-2026-10-31.md), [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md); live readiness ready=true read 2026-10-31
-Waiting on:
-- [ask E7-A3: approve @Jordi since 2026-10-31 row T2] Stamp T2.1–T2.7 and T3 `ready` so workers can start them — context: T1 mapped the signup path and found 7 gaps (renewal with no card, the open free-forever code, checkout closing again on 2026-11-28, phone link/Saved never proven, console has no list of saved replies, raw-JSON closed page, backups pausing WhatsApp); they and T3 (caps) are draft, and only you can ready a row — impact: T0 and T1 are done, so nothing in EPIC-7 can run until these are ready; each day waiting delays the tester invites — risk: low, each row is reversible code/docs work; live Stripe changes (T2.2) still come back as their own ask — recommend: ready all eight now; T2.5 can wait for your call on what 'visible in console' means — why Jordi: only Jordi stamps rows ready — details: [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md)
+Waiting on: Jordi, ask E7-A3 (below)
 Approved work: T0..T9 as planned (Jordi readied the epic 2026-10-31)
 Next action: on E7-A3, dispatch T2.x and T3 (T3 starts from the T1 metering findings)
 Source revision: see git log
 Verified at: 2026-10-31 (readiness ready=true and backup_restore ok read live; health sha ae3e77a)
+
+## Waiting on
+
+- [ask E7-A3: approve @Jordi since 2026-10-31 row T2] Stamp T2.1–T2.7 and T3 `ready` so workers can start them — context: T1 mapped the signup path and found 7 gaps (renewal with no card, the open free-forever code, checkout closing again on 2026-11-28, phone link/Saved never proven, console has no list of saved replies, raw-JSON closed page, backups pausing WhatsApp); they and T3 (caps) are draft, and only you can ready a row — impact: T0 and T1 are done, so nothing in EPIC-7 can run until these are ready; each day waiting delays the tester invites — risk: low, each row is reversible code/docs work; live Stripe changes (T2.2) still come back as their own ask — recommend: ready all eight now; T2.5 can wait for your call on what 'visible in console' means — why Jordi: only Jordi stamps rows ready — details: [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md)
 
 ## Non-Goals
 
