@@ -49,6 +49,7 @@ import { CustomerTokenVault } from "./customerTokenVault.js";
 import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
+import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1252,6 +1253,20 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       vault,
       usage,
     });
+  });
+
+  // EPIC-7 T2.5: the signed-in customer's own recent captures and their
+  // Saved replies. The runtime is resolved from the session's account only,
+  // and its task-job store is scoped to that tenant.
+  app.get("/api/console/recent-saves", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const limit = Number(c.req.query("limit") ?? RECENT_SAVES_DEFAULT_LIMIT);
+    return c.json({ saves: recentSaves(runtime.taskJobStore, limit) });
   });
 
   if (capabilities.managedAiApplication) {

@@ -48,6 +48,23 @@ describe("Hosted Zenod overview vault authority", () => {
           state: "normal",
           resetsAt: null,
         })
+      if (path === "/api/console/recent-saves")
+        return Promise.resolve({
+          saves: [
+            {
+              id: "job-1",
+              savedAt: "2026-11-01T10:00:00.000Z",
+              channel: "whatsapp",
+              kind: "voice",
+              channelLabel: "WhatsApp voice",
+              snippet: "Buy oat milk",
+              status: "saved",
+              reply: "Saved.",
+              notePath: "Inbox/groceries.md",
+              noteUrl: "https://drive.google.com/file/d/abc/view",
+            },
+          ],
+        })
       return Promise.reject(new Error(`Unexpected API call: ${path}`))
     })
 
@@ -62,6 +79,12 @@ describe("Hosted Zenod overview vault authority", () => {
     expect(
       await screen.findByText(/Google Drive is the durable authority/i)
     ).not.toBeNull()
+    expect(await screen.findByText("Recent saves")).not.toBeNull()
+    expect(screen.getByText("Buy oat milk")).not.toBeNull()
+    expect(screen.getByText("WhatsApp voice")).not.toBeNull()
+    expect(
+      screen.getByRole("link", { name: /Inbox\/groceries\.md/ })
+    ).toHaveProperty("href", "https://drive.google.com/file/d/abc/view")
     expect(document.body.textContent).not.toMatch(
       /Drive is an optional archive/i
     )
