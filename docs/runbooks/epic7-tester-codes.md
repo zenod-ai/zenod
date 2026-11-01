@@ -1,6 +1,6 @@
 # Runbook: tester codes in live Stripe (EPIC-7 T4, T2.2, T10)
 
-Who runs it: the EPIC-7 agent, on VPS1. **Run the live steps only once Jordi has approved ask E7-A6** in [EPIC-7](../EPIC-7-REAL-USER-TEST.md); cite `under E7-A6` in Decisions. Tool: [`scripts/stripe-testers.mjs`](../../scripts/stripe-testers.mjs) (PR #1451). Sandbox proof: [T4 evidence](../evidence/epic7-t4-2026-11-01.md). Why a `once` coupon each month: [T2.1](../evidence/epic7-t2-1-2026-11-01.md) and [monthly extension](epic7-tester-monthly-extension.md).
+Who runs it: the EPIC-7 agent, on VPS1. **Run the live steps only once Jordi has approved ask E7-A6** in [EPIC-7](../EPIC-7-REAL-USER-TEST.md); cite `under E7-A6` in Decisions. Tool: [`scripts/stripe-testers.mjs`](../../scripts/stripe-testers.mjs) (PR #1451). Sandbox proof: [T4 evidence](../evidence/epic7-t4-2026-11-01.md). Live run of §1–§3 (2026-11-01): [T4 live evidence](../evidence/epic7-t4-live-2026-11-01.md). Why a `once` coupon each month: [T2.1](../evidence/epic7-t2-1-2026-11-01.md) and [monthly extension](epic7-tester-monthly-extension.md).
 
 Rules: testers are ordinary Zenod subscribers at €0 and are never charged. One code per person, single use. Unused codes stop working after 14 days. The list of who got which code lives only in the private ledger on VPS1, `/root/.local/state/zenod-testers/live-codes.tsv` (mode 0600). **Never put a code, a tester's name or the ledger into GitHub, a spine, chat or a log.** Never print the key.
 
