@@ -1,0 +1,105 @@
+{
+ "clock": "clock_1UWswg76yJ3p1J6XZvHyCkYO",
+ "customer": "cus_VXyuTljvGwxjed",
+ "subscription": "sub_1UWswh76yJ3p1J6XzZHgguqC",
+ "steps": [
+  {
+   "step": "0 subscribed €0, no card",
+   "clock": "2026-11-01T07:12",
+   "stripe": "active",
+   "invoice": "0 paid",
+   "zenod": "active",
+   "tenant": "active",
+   "webhooks": [],
+   "zenodLog": []
+  },
+  {
+   "step": "renewal +2h, not extended",
+   "clock": "2026-12-01T09:12",
+   "stripe": "past_due",
+   "invoice": "900 open",
+   "zenod": "past_due",
+   "tenant": "active",
+   "webhooks": [
+    "invoice.paid→200:past_due",
+    "customer.subscription.updated→200:past_due",
+    "customer.subscription.updated→200:past_due",
+    "invoice.payment_failed→200:past_due"
+   ],
+   "zenodLog": [
+    "NOTICE payment_past_due sent while tenant=active op=billing-notice:payment_past_due:acct-t21:1798787570",
+    "entitlement entitled=true (status past_due)",
+    "entitlement entitled=true (status past_due)",
+    "entitlement entitled=true (status past_due)",
+    "entitlement entitled=true (status past_due)"
+   ]
+  },
+  {
+   "step": "renewal +4d",
+   "clock": "2026-12-05T07:12",
+   "stripe": "past_due",
+   "invoice": "900 open",
+   "zenod": "past_due",
+   "tenant": "active",
+   "webhooks": [
+    "invoice.payment_failed→200:past_due",
+    "invoice.payment_failed→200:past_due"
+   ],
+   "zenodLog": [
+    "entitlement entitled=true (status past_due)",
+    "entitlement entitled=true (status past_due)"
+   ]
+  },
+  {
+   "step": "renewal +9d",
+   "clock": "2026-12-10T07:12",
+   "stripe": "past_due",
+   "invoice": "900 open",
+   "zenod": "past_due",
+   "tenant": "active",
+   "webhooks": [
+    "invoice.payment_failed→200:past_due",
+    "invoice.payment_failed→200:past_due",
+    "invoice.payment_failed→200:past_due"
+   ],
+   "zenodLog": [
+    "entitlement entitled=true (status past_due)",
+    "entitlement entitled=true (status past_due)",
+    "entitlement entitled=true (status past_due)"
+   ]
+  },
+  {
+   "step": "renewal +13d",
+   "clock": "2026-12-14T07:12",
+   "stripe": "past_due",
+   "invoice": "900 open",
+   "zenod": "past_due",
+   "tenant": "active",
+   "webhooks": [
+    "invoice.payment_failed→200:past_due"
+   ],
+   "zenodLog": [
+    "entitlement entitled=true (status past_due)"
+   ]
+  },
+  {
+   "step": "renewal +16d",
+   "clock": "2026-12-17T07:12",
+   "stripe": "canceled",
+   "invoice": "900 open",
+   "zenod": "canceled",
+   "tenant": "suspended",
+   "webhooks": [
+    "invoice.payment_failed→200:canceled",
+    "invoice.payment_failed→200:canceled",
+    "customer.subscription.deleted→200:canceled"
+   ],
+   "zenodLog": [
+    "NOTICE access_suspended sent while tenant=active op=billing-notice:access_suspended:acct-t21:1798787570",
+    "entitlement entitled=false (status canceled)",
+    "entitlement entitled=false (status canceled)",
+    "entitlement entitled=false (status canceled)"
+   ]
+  }
+ ]
+}

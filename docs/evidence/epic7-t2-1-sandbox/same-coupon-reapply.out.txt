@@ -1,0 +1,14 @@
+{"clock": "clock_1UWslH76yJ3p1J6XO7LXopDw", "customer": "cus_VXyiR2YrDJgzr7", "subscription": "sub_1UWslI76yJ3p1J6X8D3o07Mw", "status": "active"}
+{"step": "0 checkout \u20ac0 no card", "clock": "2026-11-01 07:01", "sub_status": "active", "zenod_status": "active", "zenod_tenant": "tenant active", "period_end": "2026-12-01", "discount": "T21_FREE_1M", "discount_end": "2026-12-01 07:01", "latest_invoice": "in_1UWslI76yJ3p1J6XJAZ9u4SO", "inv_total": 0, "inv_amount_due": 0, "inv_status": "paid", "attempts": 0, "next_attempt": null}
+{"step": "m1 extend 3 days before renewal", "clock": "2026-11-28 07:01", "sub_status": "active", "zenod_status": "active", "zenod_tenant": "tenant active", "period_end": "2026-12-01", "discount": "T21_FREE_1M", "discount_end": "2026-12-01 07:01", "latest_invoice": "in_1UWslI76yJ3p1J6XJAZ9u4SO", "inv_total": 0, "inv_amount_due": 0, "inv_status": "paid", "attempts": 0, "next_attempt": null}
+{"step": "m1 renewal +2h", "clock": "2026-12-01 09:01", "sub_status": "past_due", "zenod_status": "past_due", "zenod_tenant": "tenant active", "period_end": "2027-01-01", "discount": null, "discount_end": null, "latest_invoice": "in_1UWslS76yJ3p1J6XSlJlAowd", "inv_total": 900, "inv_amount_due": 900, "inv_status": "open", "attempts": 1, "next_attempt": "2026-12-03 02:05"}
+POST subscriptions/sub_1UWslI76yJ3p1J6X8D3o07Mw: 400 {
+  "error": {
+    "code": "invalid_canceled_subscription_fields",
+    "doc_url": "https://stripe.com/docs/error-codes/invalid-canceled-subscription-fields",
+    "message": "A canceled subscription can only update its cancellation_details and metadata.",
+    "request_log_url": "https://dashboard.stripe.com/acct_1TpJpk76yJ3p1J6X/test/workbench/logs?object=req_29w5Vy4S7BOuNC",
+    "type": "invalid_request_error"
+  }
+}
+

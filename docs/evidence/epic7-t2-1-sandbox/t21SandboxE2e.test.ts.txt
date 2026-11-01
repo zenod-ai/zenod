@@ -1,0 +1,104 @@
+// EPIC-7 T2.1 sandbox harness (not committed): a real Stripe test clock drives real, signed events into the
+// real customer layer, which re-reads the subscription from the Stripe sandbox as it does in production.
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Stripe from "stripe";
+import { SqliteTenantStore } from "@zenod/mcp-chassis";
+import { expect, it } from "vitest";
+import { createCustomerLayer } from "../src/customerLayer.js";
+
+const KEY_FILE = process.env.T21_KEY_FILE;
+it.skipIf(!KEY_FILE)("T2.1 sandbox: lapse → Zenod notices before suspension", async () => {
+  const key = (await readFile(KEY_FILE!, "utf8")).trim();
+  expect(key.startsWith("sk_test_")).toBe(true);
+  const stripe = new Stripe(key, { apiVersion: "2025-02-24.acacia" as Stripe.LatestApiVersion });
+  const whsec = "whsec_t21_local_harness";
+  const dir = await mkdtemp(join(tmpdir(), "t21-e2e-"));
+  const tenants = new SqliteTenantStore({ dataDir: dir });
+  tenants.provisionTenant({ tenant: { id: "t21tenant" } });
+  const out: Array<Record<string, unknown>> = [];
+  const notices: string[] = [];
+  const layer = createCustomerLayer(
+    { dataDir: dir, runtimeForAccount: () => null },
+    {
+      env: {
+        NODE_ENV: "test",
+        GITHUB_OAUTH_CLIENT_ID: "x", GITHUB_OAUTH_CLIENT_SECRET: "x",
+        GITHUB_OAUTH_CALLBACK_URL: "https://cloud.zenod.dev/auth/callback",
+        CUSTOMER_APP_URL: "https://cloud.zenod.dev", ACCOUNT_STATE_SECRET: "x",
+        STRIPE_SECRET_KEY: key, STRIPE_WEBHOOK_SECRET: whsec, STRIPE_MODE: "test", ZENOD_ALLOW_TEST_CHECKOUT: "1",
+        PRICE_MONTHLY: "price_x", PRICE_YEARLY: "price_y",
+      },
+      tenantStore: tenants,
+      async onEntitlementChanged(account, input) {
+        notices.push(`entitlement entitled=${input.entitled} (status ${account.subscription_status})`);
+      },
+      async onBillingNotice(account, notice) {
+        const tenant = tenants.snapshot().find((row) => row.tenant.id === account.tenant_id)?.status;
+        notices.push(`NOTICE ${notice.kind} sent while tenant=${tenant} op=${notice.operationId}`);
+      },
+    },
+  );
+  const price = process.env.T21_PRICE!;
+  const t0 = Math.floor(Date.now() / 1000);
+  const clock = await stripe.testHelpers.testClocks.create({ frozen_time: t0, name: "t21-e2e" });
+  const customer = await stripe.customers.create({ test_clock: clock.id, email: "t21-e2e@example.com", address: { country: "ES" } });
+  const sub = await stripe.subscriptions.create({
+    customer: customer.id, items: [{ price }], discounts: [{ coupon: "T21_FREE_1M" }],
+    collection_method: "charge_automatically", metadata: { product: "zenod", account_id: "acct-t21" },
+  });
+  layer.accounts.upsert("cs_t21", {
+    session_id: "cs_t21", account_id: "acct-t21", user_id: "usr_t21", product: "zenod", tier: "monthly", tenant_id: "t21tenant",
+    stripe_customer_id: customer.id, stripe_subscription_id: sub.id, subscription_status: "active",
+    current_period_end: new Date(sub.current_period_end * 1000).toISOString(), checkout_completed_at: new Date().toISOString(),
+  } as never);
+  const seen = new Set<string>();
+  const types = ["customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_failed"];
+  const step = async (label: string, frozen: number) => {
+    if (frozen > 0) {
+      await stripe.testHelpers.testClocks.advance(clock.id, { frozen_time: frozen });
+      for (let i = 0; i < 120; i += 1) {
+        if ((await stripe.testHelpers.testClocks.retrieve(clock.id)).status === "ready") break;
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    const events = (await stripe.events.list({ limit: 100, types, created: { gte: t0 - 60 } })).data
+      .filter((e) => {
+        const o = e.data.object as { customer?: string };
+        return o.customer === customer.id && !seen.has(e.id);
+      })
+      .reverse();
+    const delivered: string[] = [];
+    for (const event of events) {
+      seen.add(event.id);
+      const payload = JSON.stringify(event);
+      const header = stripe.webhooks.generateTestHeaderString({ payload, secret: whsec });
+      const res = await layer.app.request("/webhook", { method: "POST", headers: { "stripe-signature": header }, body: payload });
+      delivered.push(`${event.type}→${res.status}:${(await res.json() as { result?: string }).result}`);
+    }
+    const s = await stripe.subscriptions.retrieve(sub.id, { expand: ["latest_invoice"] });
+    const inv = s.latest_invoice as Stripe.Invoice;
+    const row = {
+      step: label, clock: new Date((frozen || t0) * 1000).toISOString().slice(0, 16), stripe: s.status,
+      invoice: `${inv.total} ${inv.status}`, zenod: layer.accounts.get("cs_t21")?.subscription_status,
+      tenant: tenants.snapshot().find((r) => r.tenant.id === "t21tenant")?.status,
+      webhooks: delivered, zenodLog: notices.splice(0),
+    };
+    out.push(row);
+    console.log(JSON.stringify(row));
+  };
+  const day = 86_400;
+  await step("0 subscribed €0, no card", 0);
+  const pe = sub.current_period_end;
+  await step("renewal +2h, not extended", pe + 7200);
+  for (const d of [4, 9, 13, 16]) await step(`renewal +${d}d`, pe + d * day);
+  await writeFile(process.env.T21_OUT ?? join(dir, "out.json"), JSON.stringify({ clock: clock.id, customer: customer.id, subscription: sub.id, steps: out }, null, 1));
+  layer.close();
+  const all = out.flatMap((r) => r.zenodLog as string[]);
+  const past = all.findIndex((l) => l.startsWith("NOTICE payment_past_due"));
+  const susp = all.findIndex((l) => l.startsWith("NOTICE access_suspended"));
+  expect(past).toBeGreaterThan(-1);
+  expect(susp).toBeGreaterThan(past);
+  expect(all.findIndex((l) => l.startsWith("entitlement entitled=false"))).toBeGreaterThan(susp);
+}, 900_000);

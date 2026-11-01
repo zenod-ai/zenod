@@ -1,0 +1,106 @@
+{
+ "clock": "clock_1UWsnF76yJ3p1J6Xx97bf3TE",
+ "customer": "cus_VXykugEqnR7bQF",
+ "subscription": "sub_1UWsnG76yJ3p1J6XuYtwDCGd",
+ "log": [
+  {
+   "step": "0 checkout \u20ac0 no card (1-month 100% coupon)",
+   "clock": "2026-11-01 07:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2026-12-01",
+   "discount": "T21_FREE_1M",
+   "latest_invoice": "in_1UWsnG76yJ3p1J6XKS5l8Ctn",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m1 extend (once coupon) on day 10",
+   "clock": "2026-11-11 07:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2026-12-01",
+   "discount": "T21_EXTEND_ONCE",
+   "latest_invoice": "in_1UWsnG76yJ3p1J6XKS5l8Ctn",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m1 extend again day 11 (idempotent?)",
+   "clock": "2026-11-12 07:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2026-12-01",
+   "discount": "T21_EXTEND_ONCE",
+   "latest_invoice": "in_1UWsnG76yJ3p1J6XKS5l8Ctn",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m1 renewal +2h",
+   "clock": "2026-12-01 09:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2027-01-01",
+   "discount": null,
+   "latest_invoice": "in_1UWsnY76yJ3p1J6XbrxVFUJF",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m2 extend the day after renewal",
+   "clock": "2026-12-02 09:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2027-01-01",
+   "discount": "T21_EXTEND_ONCE",
+   "latest_invoice": "in_1UWsnY76yJ3p1J6XbrxVFUJF",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m2 renewal +2h",
+   "clock": "2027-01-01 09:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2027-02-01",
+   "discount": null,
+   "latest_invoice": "in_1UWsnm76yJ3p1J6X2FWJovH1",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m3 extend 1 day before renewal",
+   "clock": "2027-01-31 07:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2027-02-01",
+   "discount": "T21_EXTEND_ONCE",
+   "latest_invoice": "in_1UWsnm76yJ3p1J6X2FWJovH1",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m3 renewal +2h",
+   "clock": "2027-02-01 09:03",
+   "sub_status": "active",
+   "zenod_status": "active",
+   "period_end": "2027-03-01",
+   "discount": null,
+   "latest_invoice": "in_1UWso176yJ3p1J6X7Q7AykEZ",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "m4 renewal +2h, NOT extended (control)",
+   "clock": "2027-03-01 09:03",
+   "sub_status": "past_due",
+   "zenod_status": "past_due",
+   "period_end": "2027-04-01",
+   "discount": null,
+   "latest_invoice": "in_1UWso976yJ3p1J6X0E98hijd",
+   "inv_total": 900,
+   "inv_status": "open"
+  }
+ ]
+}

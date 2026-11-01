@@ -1,0 +1,43 @@
+{
+ "clock": "clock_1UWszz76yJ3p1J6XxTyqIjdS",
+ "customer": "cus_VXyxrddIE94do9",
+ "subscription": "sub_1UWt0076yJ3p1J6XE7kYefBP",
+ "log": [
+  {
+   "step": "0 \u20ac0 no card",
+   "clock": "2026-11-01 07:16",
+   "sub_status": "active",
+   "discount": "T21_FREE_1M",
+   "latest_invoice": "in_1UWt0076yJ3p1J6XdyTVibh5",
+   "inv_total": 0,
+   "inv_status": "paid"
+  },
+  {
+   "step": "renewal +2h, forgot to extend",
+   "clock": "2026-12-01 09:16",
+   "sub_status": "past_due",
+   "discount": null,
+   "latest_invoice": "in_1UWt0476yJ3p1J6XgrtBtMiB",
+   "inv_total": 900,
+   "inv_status": "open"
+  },
+  {
+   "step": "+1d recover: once coupon + void open invoice",
+   "clock": "2026-12-02 09:16",
+   "sub_status": "active",
+   "discount": "T21_EXTEND_ONCE",
+   "latest_invoice": "in_1UWt0476yJ3p1J6XgrtBtMiB",
+   "inv_total": 900,
+   "inv_status": "void"
+  },
+  {
+   "step": "next renewal +2h",
+   "clock": "2027-01-01 09:16",
+   "sub_status": "active",
+   "discount": null,
+   "latest_invoice": "in_1UWt0L76yJ3p1J6XT9Kq8ILR",
+   "inv_total": 0,
+   "inv_status": "paid"
+  }
+ ]
+}
