@@ -5,6 +5,7 @@ import { ConfigError, loadBrainConfig, type BrainConfig } from "./config.js";
 import { parseNote } from "./frontmatter.js";
 import { basenameOf, isIndexFile, MEANING_FOLDERS, tierOf } from "./files.js";
 import { extractCitations, extractPageLinks, scanVault, SUMMARY_MAX_CHARS, type VaultSnapshot } from "./pages.js";
+import { TREE_PATH } from "./tree.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -128,12 +129,12 @@ function lintMeaningPage(
     }
   }
 
-  // No orphans: at least one wikilink resolving to another meaning page or an index note.
+  // No orphans: at least one wikilink resolving to another meaning page, an index note or the Tree.
   const links = extractPageLinks(body);
   const resolvesToPage = links.some((target) => {
     const resolved = snapshot.linkTargets.get(target.toLowerCase());
     if (!resolved || resolved === file) return false;
-    return tierOf(resolved) === "meaning" || isIndexFile(resolved) || basenameOf(resolved) === "Index";
+    return tierOf(resolved) === "meaning" || isIndexFile(resolved) || basenameOf(resolved) === "Index" || resolved === TREE_PATH;
   });
   if (!resolvesToPage) {
     errors.push({

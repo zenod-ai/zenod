@@ -37,12 +37,29 @@ Anti-slop answer: **provenance is first-class.** Human-authored vs agent-written
 
 1. **Two tiers.** Immutable captures (`Inbox/`, `Log/`, `_attachments/` — append-only, never edited, source-linked) and distilled pages (`Areas/`, `Projects/`, `Notes/` — entity-centric, regenerable, every claim citing its captures).
 2. **Shallow purpose folders only.** Folders are coarse routing; deep hierarchy fails agents.
-3. **Links over folders.** Every distilled page links to related pages; orphans fail validation.
+3. **Links over folders.** Every distilled page links to related pages (or the `Tree`); orphans fail validation. Each page also names its `parent` in the memory tree (below).
 4. **Minimal enforced frontmatter**: title, type, tags (controlled vocabulary), created, updated, summary. New/rewritten pages also carry OKF-compatible `description` and `timestamp` aliases. Enables cheap two-pass retrieval: scan titles/tags/summaries first, open bodies only when needed.
 5. **Schema doc at root** (AGENTS.md) — the agent reads it first; validation code enforces it regardless.
 6. **Meta-schema fixed; taxonomy evolves by proposal.** Folder set, frontmatter keys, naming, linking rules change only via versioned migrations. Tags/MOCs evolve through explicit, logged proposals. Zenod is a strict OKF profile: OKF compatibility is an interoperability layer, not permission to weaken Zenod lint.
 7. **Entity pages are the primary write target.** Distillation lands on interlinked entity/topic pages, not a journal — the Log stays as a raw source, so knowledge compounds instead of accumulating.
 8. **Write distilled pages for LLM readers**: dense, self-contained, explicit links — a page must survive being dropped cold into a context window with no implicit shared context.
+
+## Memory tree (EPIC-9, schema v1)
+
+Pages hang in a tree so that a memory's path from the root *is* its context ([E9-1 audit](epic9/E9-1-memory-structure-audit.md) §4–§5). Code: `packages/core/src/vault/tree.ts` (schema, parsing, lineage), `treeLint.ts` (lint), `treeSeed.ts` (seed).
+
+- **Level 0** is fixed: two groups, **working memory** (ongoing now: a plan, a decision in progress) and **long-term memory** (durable facts, preferences, runbooks, finished things). The Log is the evidence underneath, not a branch.
+- **Level 1** is the vault-root `Tree.md`: one line per root node under a `## Working memory` or `## Long-term memory` heading, in the form
+  `- <name> | working|long-term | [[<page path without .md>]] | <one-line summary>`.
+  Tree.md never holds deeper levels; nested bullets fail lint.
+- **Page frontmatter** carries the rest of the tree:
+  - `parent:` a wikilink or vault path to the parent page (`"[[Hair transplant]]"`, `"[[Areas/Life admin]]"`; quote it in YAML). A level-1 root page carries `parent: "[[Tree]]"`.
+  - `memory: working | long-term`. Required on root pages and equal to their Tree.md group; optional below, and when present it must match the root the page hangs under (a page inherits its root's group, so closing a working root and moving it under a long-term node needs no rewrite of its children).
+  - `provisional: true` (optional) marks a node created because nothing fitted (filing rule 4); the sweep reviews it.
+- **Scope.** Every meaning page (`Areas/`, `Projects/`, `Notes/`, minus index pages) is placed. Log entries, Inbox files and `_attachments/` are not tree pages.
+- **Lint (`zenod tree lint`, `lintTree()`).** Errors: Tree.md missing or malformed; a node whose page is missing, or whose page lacks `parent: "[[Tree]]"` and the matching `memory:`; a page without `parent`, with a parent that does not resolve to a meaning page, or with `parent: "[[Tree]]"` but not listed in Tree.md; a cycle; a page deeper than level 6; a `memory:` that disagrees with its root. A page below a broken ancestor is not reported twice. Duplicate titles are warnings. The report also counts Inbox machine files (needs-filing stubs, receipts) and markdown outside the schema folders.
+- **Lineage (`buildTreeIndex().lineage(path)`)** returns the steps root → leaf and the group; `formatLineage` renders `Working › Hair transplant › 2023 Barcelona quotes`. `children(path)` lists a node's direct children. Retrieval (E9-3a), the librarian (E9-2b) and the sweep (E9-2d) use these, not their own parsing.
+- **Seed (`zenod tree seed`).** Prints the audit's proposed Tree.md, or with `--out <dir>` writes Tree.md plus one lint-clean root page per node into an empty directory. It never overwrites; moving an existing vault into the tree is a reviewed migration (E9-2c), not a seed.
 
 ## Human-in-the-loop points
 
