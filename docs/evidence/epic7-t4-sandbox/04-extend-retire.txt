@@ -1,0 +1,81 @@
+## 12 month 3 on time: 5 days before renewal, no discount left (only the zenod_tester tag finds it)
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "renewal": "2027-02-01T09:27:44.000Z",
+ "now": "2027-01-27T09:27:44.000Z"
+}
+stripe-testers: TEST MODE (sandbox)
+dry run: nothing is changed; add --apply to extend
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2027-02-01T09:27:44.000Z  next_invoice_before=900  action=would extend (dry run)
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2027-02-01T09:27:44.000Z  next_invoice_before=900  next_invoice_after=0  action=extended
+(again)
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2027-02-01T09:27:44.000Z  next_invoice_before=0  action=skip: next invoice already €0
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=active  next_renewal=2027-02-01T09:27:44.000Z  next_invoice=0  card_on_file=no
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "renewal": "2027-02-01T09:27:44.000Z",
+ "now": "2027-02-02T09:27:44.000Z"
+}
+2026-11-01 0 paid subscription_create
+2026-12-01 900 void subscription_cycle
+2027-01-01 0 paid subscription_cycle
+2027-02-01 0 paid subscription_cycle
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=active  next_renewal=2027-03-01T09:27:44.000Z  next_invoice=900  card_on_file=no
+## 13 month 4 on time, 2 days before renewal
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "renewal": "2027-03-01T09:27:44.000Z",
+ "now": "2027-02-27T09:27:44.000Z"
+}
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2027-03-01T09:27:44.000Z  next_invoice_before=900  next_invoice_after=0  action=extended
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "renewal": "2027-03-01T09:27:44.000Z",
+ "now": "2027-03-02T09:27:44.000Z"
+}
+2026-11-01 0 paid subscription_create
+2026-12-01 900 void subscription_cycle
+2027-01-01 0 paid subscription_cycle
+2027-02-01 0 paid subscription_cycle
+2027-03-01 0 paid subscription_cycle
+active payment_methods= 0
+## 14 retire-code: the redeemed tester code, then a replica of the live free-forever code (T2.2 rehearsal)
+stripe-testers: TEST MODE (sandbox)
+promotion_code=promo_1UWv2s76yJ3p1J6XJZGYygfS  coupon=ZENOD_TESTER_1M  times_redeemed=1  was_active=false  active=false  note=subscriptions that already redeemed it keep their discount
+tester sub after retire: active
+{
+ "promotion_code": "promo_1UWvFr76yJ3p1J6XW6YU50aW",
+ "code": "T4FOREVER47242",
+ "subscription": "sub_1UWvFs76yJ3p1J6X6Pxov14W",
+ "status": "active"
+}
+stripe-testers: TEST MODE (sandbox)
+promotion_code=promo_1UWvFr76yJ3p1J6XW6YU50aW  coupon=T4_FREE_FOREVER_REPLICA  times_redeemed=1  was_active=true  active=false  note=subscriptions that already redeemed it keep their discount
+(again, idempotent)
+stripe-testers: TEST MODE (sandbox)
+promotion_code=promo_1UWvFr76yJ3p1J6XW6YU50aW  coupon=T4_FREE_FOREVER_REPLICA  times_redeemed=1  was_active=false  active=false  note=subscriptions that already redeemed it keep their discount
+{
+ "id": "sub_1UWvFs76yJ3p1J6X6Pxov14W",
+ "status": "active",
+ "current_period_end": "2027-04-02T09:27:44.000Z",
+ "discounts": [
+  "T4_FREE_FOREVER_REPLICA"
+ ],
+ "metadata": {},
+ "payment_methods": 0,
+ "default_payment_method": null
+}
+{
+ "error": "POST checkout/sessions: 400 This promotion code is inactive."
+}
+## 15 live-mode guard (live key, the write is refused after one read-only GET /v1/account)
+!!!!!!!! LIVE STRIPE (real customers, real money) !!!!!!!!
+stripe-testers: LIVE Stripe write refused: pass --confirm-live acct_<live> (Zenod) once the live change is approved
+stripe-testers: --test-clock is sandbox only
+2027-03-02 0 paid subscription_create
+2027-04-02 0 paid subscription_cycle

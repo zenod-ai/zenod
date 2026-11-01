@@ -1,0 +1,74 @@
+## 10 recover the lapsed tester (extension missed in run 02; clock 2026-12-14, past_due, open €9 invoice)
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=past_due  next_renewal=2027-01-01T09:27:44.000Z  next_invoice=900  card_on_file=no
+label=t4-sandbox-expiry  code=ZT-KR2DCM9N  code_state=expired  redeemed=0/1  expires=2026-11-01T09:37:18.000Z  subscription=-
+stripe-testers: TEST MODE (sandbox)
+dry run: nothing is changed; add --apply to extend
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=past_due  renews=2027-01-01T09:27:44.000Z  next_invoice_before=900  action=would extend + void in_1UWvD276yJ3p1J6XK9fY7ZGE (900) (dry run)
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=past_due  renews=2027-01-01T09:27:44.000Z  next_invoice_before=900  next_invoice_after=0  status_after=active  action=extended + voided in_1UWvD276yJ3p1J6XK9fY7ZGE (900)
+{
+ "id": "sub_1UWv7w76yJ3p1J6X6sOQeZyt",
+ "status": "active",
+ "current_period_end": "2027-01-01T09:27:44.000Z",
+ "discounts": [
+  "ZENOD_TESTER_NEXT_MONTH_FREE"
+ ],
+ "metadata": {
+  "account_id": "t4-sandbox",
+  "product": "zenod",
+  "tier": "monthly",
+  "unit": "zenod",
+  "zenod_tester": "1",
+  "zenod_tester_promo": "promo_1UWv2s76yJ3p1J6XJZGYygfS"
+ },
+ "payment_methods": 0,
+ "default_payment_method": null
+}
+[
+ {
+  "id": "in_1UWv7w76yJ3p1J6Xej8UsQ27",
+  "created": "2026-11-01T09:27:44.000Z",
+  "total": 0,
+  "status": "paid",
+  "reason": "subscription_create"
+ },
+ {
+  "id": "in_1UWvD276yJ3p1J6XK9fY7ZGE",
+  "created": "2026-12-01T09:27:44.000Z",
+  "total": 900,
+  "status": "void",
+  "reason": "subscription_cycle"
+ }
+]
+## 11 next renewal after the recovery
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "renewal": "2027-01-01T09:27:44.000Z",
+ "now": "2027-01-02T09:27:44.000Z"
+}
+[
+ {
+  "id": "in_1UWv7w76yJ3p1J6Xej8UsQ27",
+  "created": "2026-11-01T09:27:44.000Z",
+  "total": 0,
+  "status": "paid",
+  "reason": "subscription_create"
+ },
+ {
+  "id": "in_1UWvD276yJ3p1J6XK9fY7ZGE",
+  "created": "2026-12-01T09:27:44.000Z",
+  "total": 900,
+  "status": "void",
+  "reason": "subscription_cycle"
+ },
+ {
+  "id": "in_1UWvEn76yJ3p1J6XqhEbrsT0",
+  "created": "2027-01-01T09:27:44.000Z",
+  "total": 0,
+  "status": "paid",
+  "reason": "subscription_cycle"
+ }
+]
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=active  next_renewal=2027-02-01T09:27:44.000Z  next_invoice=900  card_on_file=no

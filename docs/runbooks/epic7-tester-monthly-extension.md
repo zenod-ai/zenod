@@ -2,6 +2,8 @@
 
 Who runs it: the EPIC-7 Delivery Manager, every month while the testers are testing (from [T10](../EPIC-7-REAL-USER-TEST.md)). Proof that it works: [T2.1 evidence](../evidence/epic7-t2-1-2026-11-01.md).
 
+**Tool (T4):** `stripe-testers.mjs extend` does every step below for all testers, including recovering a lapse. See [epic7-tester-codes.md](epic7-tester-codes.md) §5. The manual commands below remain the fallback.
+
 Jordi's rules: testers are never charged. Their free month is extended month by month while they test. Nobody is cut off without warning. There is no tester mode in code: a tester is an ordinary Zenod subscriber whose price happens to be €0.
 
 ## The one thing to know

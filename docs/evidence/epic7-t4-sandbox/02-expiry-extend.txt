@@ -1,0 +1,114 @@
+## 5 unredeemed code expires (sandbox-only --ttl-seconds 90 stands in for 14 days)
+stripe-testers: TEST MODE (sandbox)
+ledger: /root/.local/state/zenod-testers/test-codes.tsv (600)
+label=t4-sandbox-expiry  code=ZT-KR2DCM9N  promotion_code=promo_1UWvB376yJ3p1J6XnXVzC5ly  created=2026-11-01T09:35:49.000Z  expires=2026-11-01T09:37:18.000Z
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-expiry  code=ZT-KR2DCM9N  code_state=open  redeemed=0/1  expires=2026-11-01T09:37:18.000Z  subscription=-
+(100 s later)
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-expiry  code=ZT-KR2DCM9N  code_state=retired  redeemed=0/1  expires=2026-11-01T09:37:18.000Z  subscription=-
+{
+ "error": "POST checkout/sessions: 400 This promotion code has expired."
+}
+## 6 advance the clock to 5 days before the first renewal
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "frozen_time": 1794390000,
+ "at": "2026-11-11T09:40:00.000Z"
+}
+stripe-testers: TEST MODE (sandbox)
+dry run: nothing is changed; add --apply to extend
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2026-12-01T09:27:44.000Z  action=skip: not due
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2026-12-01T09:27:44.000Z  action=skip: not due (tagged)
+(again, idempotent)
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2026-12-01T09:27:44.000Z  action=skip: not due
+{
+ "id": "sub_1UWv7w76yJ3p1J6X6sOQeZyt",
+ "status": "active",
+ "current_period_end": "2026-12-01T09:27:44.000Z",
+ "discounts": [
+  "ZENOD_TESTER_1M"
+ ],
+ "metadata": {
+  "account_id": "t4-sandbox",
+  "product": "zenod",
+  "tier": "monthly",
+  "unit": "zenod",
+  "zenod_tester": "1",
+  "zenod_tester_promo": "promo_1UWv2s76yJ3p1J6XJZGYygfS"
+ },
+ "payment_methods": 0,
+ "default_payment_method": null
+}
+## 7 advance past the first renewal
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "frozen_time": 1794650000,
+ "at": "2026-11-14T09:53:20.000Z"
+}
+{
+ "id": "sub_1UWv7w76yJ3p1J6X6sOQeZyt",
+ "status": "active",
+ "current_period_end": "2026-12-01T09:27:44.000Z",
+ "discounts": [
+  "ZENOD_TESTER_1M"
+ ],
+ "metadata": {
+  "account_id": "t4-sandbox",
+  "product": "zenod",
+  "tier": "monthly",
+  "unit": "zenod",
+  "zenod_tester": "1",
+  "zenod_tester_promo": "promo_1UWv2s76yJ3p1J6XJZGYygfS"
+ },
+ "payment_methods": 0,
+ "default_payment_method": null
+}
+[
+ {
+  "id": "in_1UWv7w76yJ3p1J6Xej8UsQ27",
+  "created": "2026-11-01T09:27:44.000Z",
+  "total": 0,
+  "status": "paid",
+  "reason": "subscription_create"
+ }
+]
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=active  next_renewal=2026-12-01T09:27:44.000Z  next_invoice=900  card_on_file=no
+## 8 month 2: the discount is gone, the tag still finds the tester
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "frozen_time": 1796983000,
+ "at": "2026-12-11T09:56:40.000Z"
+}
+stripe-testers: TEST MODE (sandbox)
+dry run: nothing is changed; add --apply to extend
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=past_due  renews=2027-01-01T09:27:44.000Z  action=skip: not due
+stripe-testers: TEST MODE (sandbox)
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=past_due  renews=2027-01-01T09:27:44.000Z  action=skip: not due
+## 9 advance past the second renewal
+{
+ "clock": "clock_1UWv3E76yJ3p1J6Xfw562jex",
+ "frozen_time": 1797250000,
+ "at": "2026-12-14T12:06:40.000Z"
+}
+[
+ {
+  "id": "in_1UWv7w76yJ3p1J6Xej8UsQ27",
+  "created": "2026-11-01T09:27:44.000Z",
+  "total": 0,
+  "status": "paid",
+  "reason": "subscription_create"
+ },
+ {
+  "id": "in_1UWvD276yJ3p1J6XK9fY7ZGE",
+  "created": "2026-12-01T09:27:44.000Z",
+  "total": 900,
+  "status": "open",
+  "reason": "subscription_cycle"
+ }
+]
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=past_due  next_renewal=2027-01-01T09:27:44.000Z  next_invoice=900  card_on_file=no

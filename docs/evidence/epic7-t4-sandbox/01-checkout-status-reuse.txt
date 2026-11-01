@@ -1,0 +1,37 @@
+## 1 subscription after the €0 checkout
+{
+ "id": "sub_1UWv7w76yJ3p1J6X6sOQeZyt",
+ "status": "active",
+ "current_period_end": "2026-12-01T09:27:44.000Z",
+ "discounts": [
+  "ZENOD_TESTER_1M"
+ ],
+ "metadata": {
+  "account_id": "t4-sandbox",
+  "product": "zenod",
+  "tier": "monthly",
+  "unit": "zenod"
+ },
+ "payment_methods": 0,
+ "default_payment_method": null
+}
+[
+ {
+  "id": "in_1UWv7w76yJ3p1J6Xej8UsQ27",
+  "created": "2026-11-01T09:27:44.000Z",
+  "total": 0,
+  "status": "paid",
+  "reason": "subscription_create"
+ }
+]
+## 2 status
+stripe-testers: TEST MODE (sandbox)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  code_state=used  redeemed=1/1  expires=2026-11-15T09:27:21.000Z  subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  sub_status=active  next_renewal=2026-12-01T09:27:44.000Z  next_invoice=900  card_on_file=no
+## 3 reuse: second checkout with the same promotion code
+{
+ "error": "POST checkout/sessions: 400 This promotion code has been used up."
+}
+## 4 extend dry run, day 0 (renewal in ~30 d, outside the 7-day window)
+stripe-testers: TEST MODE (sandbox)
+dry run: nothing is changed; add --apply to extend
+subscription=sub_1UWv7w76yJ3p1J6X6sOQeZyt  status=active  renews=2026-12-01T09:27:44.000Z  action=skip: not due

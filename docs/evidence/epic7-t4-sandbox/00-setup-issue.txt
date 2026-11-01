@@ -1,0 +1,12 @@
+# node stripe-testers.mjs setup --key-file <sandbox key>   (twice), then issue, then ls of the ledger dir (VPS1, 2026-11-01)
+stripe-testers: TEST MODE (sandbox)
+coupon=ZENOD_TESTER_1M  name=Zenod tester  duration=repeating  created=true
+coupon=ZENOD_TESTER_NEXT_MONTH_FREE  name=Zenod tester: next month free  duration=once  created=true
+stripe-testers: TEST MODE (sandbox)
+coupon=ZENOD_TESTER_1M  name=Zenod tester  duration=repeating  created=false
+coupon=ZENOD_TESTER_NEXT_MONTH_FREE  name=Zenod tester: next month free  duration=once  created=false
+stripe-testers: TEST MODE (sandbox)
+ledger: /root/.local/state/zenod-testers/test-codes.tsv (600)
+label=t4-sandbox-tester-1  code=ZT-FC6W87HA  promotion_code=promo_1UWv2s76yJ3p1J6XJZGYygfS  created=2026-11-01T09:27:22.000Z  expires=2026-11-15T09:27:21.000Z
+drwx------ 2 root root 4096 Nov  1 10:27 .
+-rw------- 1 root root  155 Nov  1 10:27 test-codes.tsv
