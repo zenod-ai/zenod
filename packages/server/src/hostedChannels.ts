@@ -62,7 +62,8 @@ export type HostedChannelMutationName =
   | "management.credit_grant"
   | "management.credit_adjust"
   | "management.suspend"
-  | "management.resume";
+  | "management.resume"
+  | "management.account_notice";
 export interface HostedChannelMutationOutcome {
   operationId: string;
   operation: HostedChannelMutationName;

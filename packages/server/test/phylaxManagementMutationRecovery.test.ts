@@ -17,6 +17,7 @@ import {
 import { phylaxArtifactCapabilitySecret } from "../src/phylaxArtifactCapability.js";
 import {
   PHYLAX_MANAGEMENT_PROFILES,
+  phylaxAccountNoticeText,
   phylaxManagementConnectOperationProof,
 } from "../src/phylaxManagementMcp.js";
 import type { PhylaxDeliveryReceipt, PhylaxTenantDelivery } from "../src/phylaxChannels.js";
@@ -514,6 +515,76 @@ describe("Phylax management mutation recovery", () => {
       expect(sends).toBe(1);
     } finally {
       await client.close();
+      await unit.close();
+    }
+  });
+
+  it("sends one fixed billing notice to the verified WhatsApp per operation and refuses without a channel", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "phylax-management-account-notice-"));
+    dirs.push(dataDir);
+    const tenants = new SqliteTenantStore({ dataDir });
+    tenants.provisionTenant({ tenant: { id: "alpha" } });
+    tenants.provisionTenant({ tenant: { id: "beta" } });
+    const token = tenants.provisionTenantToken("alpha", PHYLAX_MANAGEMENT_PROFILES.zenod)!.token;
+    const unlinked = tenants.provisionTenantToken("beta", PHYLAX_MANAGEMENT_PROFILES.zenod)!.token;
+    const { unit, base } = await startUnit(dataDir, tenants);
+    configureConnectedTenant(unit);
+    unit.phylaxTenantSettings.ensureManagementBinding({
+      tenantId: "beta",
+      commercialOwner: "zenod",
+      externalTenantId: "zenod-beta",
+      downstreamUrl: "https://cloud.zenod.dev/mcp/beta",
+      downstreamToken: "downstream-secret",
+      expectedRevision: "0",
+    });
+    const sent: Array<{ channel: string; recipient: string; text: string }> = [];
+    stubDelivery(unit, async (channel, recipient, text) => {
+      sent.push({ channel, recipient, text });
+      return {
+        channel,
+        recipient,
+        sentMessageId: `wamid.notice-${sent.length}`,
+        status: "sent",
+        at: "2026-12-01T09:00:00.000Z",
+      } as PhylaxDeliveryReceipt;
+    });
+    const client = await clientFor(base, token);
+    const other = await clientFor(base, unlinked);
+    const args = {
+      operationId: "billing-notice:payment_past_due:acct-alpha:1798794061",
+      kind: "payment_past_due",
+      consoleUrl: "https://cloud.zenod.dev/app",
+    };
+    try {
+      const first = await client.callTool({ name: "phylax_management_v1_account_notice", arguments: args });
+      expect(first.isError).not.toBe(true);
+      expect(structured(first)).toMatchObject({ channel: "whatsapp", mutation: { outcome: "succeeded" } });
+      const replay = await client.callTool({ name: "phylax_management_v1_account_notice", arguments: args });
+      expect(structured(replay)).toEqual(structured(first));
+      expect(sent).toEqual([{
+        channel: "whatsapp",
+        recipient: "34611111111",
+        text: phylaxAccountNoticeText("zenod", "payment_past_due", "https://cloud.zenod.dev/app"),
+      }]);
+      expect(sent[0]!.text).toContain("past due");
+      expect(sent[0]!.text).toContain("https://cloud.zenod.dev/app");
+
+      const arbitrary = await client.callTool({
+        name: "phylax_management_v1_account_notice",
+        arguments: { ...args, operationId: "billing-notice:other-0001", consoleUrl: "http://evil.test/" },
+      });
+      expect(arbitrary.isError).toBe(true);
+
+      const none = await other.callTool({
+        name: "phylax_management_v1_account_notice",
+        arguments: { ...args, operationId: "billing-notice:access_suspended:acct-beta:1", kind: "access_suspended" },
+      });
+      expect(none.isError).toBe(true);
+      expect(structured(none)).toMatchObject({ error: { code: "not_connected" } });
+      expect(sent).toHaveLength(1);
+    } finally {
+      await client.close();
+      await other.close();
       await unit.close();
     }
   });

@@ -792,6 +792,10 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
         await options.customer?.onEntitlementChanged?.(account, input);
         await zenodPhylax?.setEntitlement(account, input.entitled);
       },
+      async onBillingNotice(account, notice) {
+        await options.customer?.onBillingNotice?.(account, notice);
+        await zenodPhylax?.notifyAccount(account, notice);
+      },
       async projectUsage(account, local) {
         const productLocal = options.customer?.projectUsage
           ? await options.customer.projectUsage(account, local)

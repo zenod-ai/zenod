@@ -14,6 +14,7 @@ import {
   createCustomerPortalSession,
   applyCustomerInvoiceEvent,
   applyCustomerSubscriptionEvent,
+  invoiceSubscriptionId,
   loadCustomerBillingConfig,
   newCheckoutPolicyForProduct,
   resolveCheckoutTier,
@@ -59,6 +60,13 @@ import {
 // Customer HTTP layer transplanted from zenod-ai/cloud services/webhook/src/server.ts
 // and services/console/src/api.ts @ 6bdb318.
 
+export interface CustomerBillingNotice {
+  kind: "payment_past_due" | "access_suspended";
+  /** Stable per account, kind and billing period, so retried webhooks send one notice. */
+  operationId: string;
+  consoleUrl: string;
+}
+
 export interface CustomerLayerOptions {
   env?: NodeJS.ProcessEnv;
   /** Legacy test/integration seam for the GitHub identity provider. */
@@ -73,6 +81,12 @@ export interface CustomerLayerOptions {
     account: CustomerAccount,
     input: { entitled: boolean },
   ) => Promise<void> | void;
+  /**
+   * Product-owned user notice for a billing lapse (EPIC-7 T2.1): once when a subscription first turns
+   * past_due (it stays entitled while Stripe retries), and once more, before local and sidecar suspension,
+   * when it stops being entitled. Best effort: a failed notice never blocks billing reconciliation.
+   */
+  onBillingNotice?: (account: CustomerAccount, notice: CustomerBillingNotice) => Promise<void> | void;
   /** Product-owned composition of the local usage projection with an independent service. */
   projectUsage?: (
     account: CustomerAccount,
@@ -361,16 +375,40 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const onCheckoutCompleted = async (account: CustomerAccount, session: Stripe.Checkout.Session) => {
     await bindCheckout(account, session);
   };
+  const isEntitledStatus = (status: CustomerAccount["subscription_status"]) =>
+    status === "active" || status === "past_due";
   const reconcileEntitlement = async (account: CustomerAccount | null): Promise<CustomerAccount | null> => {
     if (!account?.tenant_id || account.subscription_status === "checkout_pending" || account.subscription_status === null) {
       return account;
     }
-    const entitled = account.subscription_status === "active" || account.subscription_status === "past_due";
+    const entitled = isEntitledStatus(account.subscription_status);
     if (options.tenantStore) {
       await options.tenantStore.setTenantStatus(account.tenant_id, entitled ? "active" : "suspended");
     }
     await options.onEntitlementChanged?.(account, { entitled });
     return accounts.get(account.session_id) ?? account;
+  };
+  const sendBillingNotice = async (
+    previousStatus: CustomerAccount["subscription_status"],
+    account: CustomerAccount | null,
+  ): Promise<void> => {
+    if (!options.onBillingNotice || !account?.tenant_id || !isEntitledStatus(previousStatus)) return;
+    const kind = !isEntitledStatus(account.subscription_status)
+      ? "access_suspended"
+      : previousStatus === "active" && account.subscription_status === "past_due"
+        ? "payment_past_due"
+        : null;
+    if (!kind) return;
+    const period = account.current_period_end ? Date.parse(account.current_period_end) / 1000 : 0;
+    try {
+      await options.onBillingNotice(account, {
+        kind,
+        operationId: `billing-notice:${kind}:${account.account_id}:${period}`.slice(0, 160),
+        consoleUrl: `${customerDestination(env, product.defaultDomain)}/app`,
+      });
+    } catch (error) {
+      console.error(`[customer] ${kind} notice failed for account ${account.account_id}:`, error);
+    }
   };
   const refreshAuthoritativeSubscription = async (
     account: CustomerAccount | null,
@@ -382,7 +420,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if (product.product !== "zenod") return account;
       throw new Error("authoritative Stripe subscription retrieval is unavailable");
     }
-    return applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(id));
+    const previousStatus = account?.subscription_status ?? null;
+    const refreshed = applyCustomerSubscriptionEvent(accounts, await stripe.subscriptions.retrieve(id));
+    await sendBillingNotice(previousStatus, refreshed);
+    return refreshed;
   };
   const reconcileBillingEntitlement = async (
     account: CustomerAccount | null,
@@ -1515,9 +1556,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
     if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
       const invoice = event.data.object as Stripe.Invoice;
-      const subscriptionId = typeof invoice.subscription === "string"
-        ? invoice.subscription
-        : invoice.subscription?.id;
+      const subscriptionId = invoiceSubscriptionId(invoice);
       const account = subscriptionId && (!stripe.subscriptions && product.product !== "zenod")
         ? applyCustomerInvoiceEvent(accounts, invoice, event.type === "invoice.paid")
         : subscriptionId

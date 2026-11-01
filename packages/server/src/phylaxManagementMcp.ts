@@ -38,6 +38,7 @@ export const PHYLAX_MANAGEMENT_TOOL_NAMES = [
   "phylax_management_v1_credit_query",
   "phylax_management_v1_suspend",
   "phylax_management_v1_resume",
+  "phylax_management_v1_account_notice",
 ] as const;
 
 export const PHYLAX_MANAGEMENT_PROFILES = {
@@ -669,6 +670,98 @@ function registerChannelMutationTools(
   );
 }
 
+export type PhylaxAccountNoticeKind = "payment_past_due" | "access_suspended";
+
+/** Fixed copy, so the management surface stays free of an arbitrary send-message primitive. */
+export function phylaxAccountNoticeText(
+  owner: PhylaxCommercialOwner,
+  kind: PhylaxAccountNoticeKind,
+  consoleUrl: string,
+): string {
+  const product = owner === "zenod" ? "Zenod" : "Phylax";
+  return kind === "payment_past_due"
+    ? `${product}: your renewal could not be charged, so your subscription is past due. ` +
+      `${product} keeps working while the payment is retried over the next days; if it is not sorted out, ` +
+      `${product} will stop. Manage billing in your console: ${consoleUrl}`
+    : `${product}: your subscription has ended, so ${product} has stopped saving your messages. ` +
+      `Your notes stay in your vault. To start again, open ${consoleUrl}`;
+}
+
+/**
+ * EPIC-7 T2.1: the commercial owner tells its user about their account (a billing lapse) on the channel they
+ * verified, before it suspends them. Account notices are not optional notifications, so they ignore
+ * notificationPrefs; one operationId sends at most once.
+ */
+function registerAccountNoticeTool(
+  server: McpServer,
+  tenantId: string,
+  owner: PhylaxCommercialOwner,
+  dependencies: ManagementDependencies,
+) {
+  server.registerTool(
+    "phylax_management_v1_account_notice",
+    {
+      description: "Send one fixed account notice (billing lapse) to this tenant's verified channel.",
+      inputSchema: {
+        operationId,
+        kind: z.enum(["payment_past_due", "access_suspended"]),
+        consoleUrl: z.string().trim().url().max(200).refine((value) => value.startsWith("https://"), "https only"),
+      },
+      annotations: { destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (input) => {
+      try {
+        assertBound(dependencies.settings, tenantId, owner);
+      } catch (error) {
+        return errorResult("binding_required", error instanceof Error ? error.message : "Binding is unavailable.");
+      }
+      const operation = "management.account_notice" as const;
+      const settings = dependencies.settings.get(tenantId);
+      const channel = settings.verified && settings.phoneNumber
+        ? "whatsapp" as const
+        : settings.telegramBinding
+          ? "telegram" as const
+          : null;
+      const recipient = channel === "whatsapp" ? settings.phoneNumber : channel ? settings.telegramBinding : null;
+      const response = await executeHostedChannelMutation(
+        dependencies.audit,
+        {
+          operationId: input.operationId,
+          tenantId,
+          authorityScope: managementAuthorityScope(owner),
+          operation,
+          requestBody: { kind: input.kind, consoleUrl: input.consoleUrl },
+          target: recipient,
+          bindingRevision: () => channel ? dependencies.settings.bindingRevision(tenantId, channel) : "none",
+        },
+        async () => {
+          if (!channel || !recipient) {
+            return mutationFailure(input.operationId, operation, "not_connected", "No verified channel.");
+          }
+          try {
+            const receipt = await dependencies.runtime.delivery(tenantId).send(
+              channel,
+              recipient,
+              phylaxAccountNoticeText(owner, input.kind, input.consoleUrl),
+            );
+            return {
+              status: 200,
+              body: {
+                channel,
+                receipt,
+                mutation: { operationId: input.operationId, operation, outcome: "succeeded", at: Date.now() },
+              },
+            };
+          } catch {
+            return mutationFailure(input.operationId, operation, "channels_unavailable", "Account notice delivery failed.");
+          }
+        },
+      );
+      return mutationToolResult(response);
+    },
+  );
+}
+
 function registerLedgerMutationTool(
   server: McpServer,
   tenantId: string,
@@ -961,4 +1054,5 @@ export function registerPhylaxManagementTools(
   });
   registerControlTool(server, tenantId, owner, dependencies, "suspend");
   registerControlTool(server, tenantId, owner, dependencies, "resume");
+  registerAccountNoticeTool(server, tenantId, owner, dependencies);
 }

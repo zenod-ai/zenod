@@ -1203,6 +1203,91 @@ describe("hosted customer layer", () => {
     }
   });
 
+  it("tells the user once when renewal lapses and again before suspending them (EPIC-7 T2.1 sandbox sequence)", async () => {
+    const log: string[] = [];
+    const notices: Array<{ kind: string; operationId: string; consoleUrl: string }> = [];
+    const localStatus = (account: { tenant_id: string | null }) =>
+      tenants.snapshot().find((item) => item.tenant.id === account.tenant_id)?.status ?? null;
+    const layer = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env,
+        stripe,
+        tenantStore: tenants,
+        identity: {
+          authorizeUrl: (state) => `https://github.test/authorize?state=${encodeURIComponent(state)}`,
+          exchangeAndGetUser: async () => ({ id: 42, login: "octocat", email: "customer@example.com" }),
+        },
+        async onEntitlementChanged(account, input) {
+          log.push(`entitlement:${account.subscription_status}:${input.entitled}`);
+        },
+        async onBillingNotice(account, notice) {
+          log.push(`notice:${notice.kind}:tenant-${localStatus(account)}`);
+          notices.push(notice);
+        },
+      },
+    );
+    const deliver = async (type: string, status: Stripe.Subscription.Status, periodEnd = 1_800_000_000) => {
+      authoritativeSubscription = { ...authoritativeSubscription, status, current_period_end: periodEnd };
+      vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
+        type,
+        livemode: false,
+        data: {
+          // Both Stripe accounts render events at 2026-06-24.dahlia: no top-level invoice.subscription.
+          object: type.startsWith("invoice.")
+            ? { parent: { subscription_details: { subscription: authoritativeSubscription.id } } }
+            : authoritativeSubscription,
+        },
+      } as Stripe.Event);
+      const response = await layer.app.request("/webhook", {
+        method: "POST",
+        headers: { "stripe-signature": "valid" },
+        body: "{}",
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ received: true, result: status === "canceled" ? "canceled" : status });
+    };
+    try {
+      const cookie = await signInCookie(layer.app);
+      await layer.app.request("/create-checkout-session", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "monthly" }),
+      });
+      await layer.app.request("/webhook", { method: "POST", headers: { "stripe-signature": "valid" }, body: "{}" });
+      expect(notices).toEqual([]);
+
+      // Renewal with no card and no extension: Stripe finalizes €9, the charge fails, it retries for ~2 weeks.
+      await deliver("customer.subscription.updated", "past_due");
+      await deliver("invoice.payment_failed", "past_due");
+      await deliver("invoice.payment_failed", "past_due");
+      // The operator recovers it (fresh coupon + void the open invoice): no notice for going back to active.
+      await deliver("customer.subscription.updated", "active");
+      // Next month lapses again, and this time the retries run out and Stripe cancels.
+      await deliver("invoice.payment_failed", "past_due", 1_802_678_400);
+      await deliver("customer.subscription.deleted", "canceled", 1_802_678_400);
+      await deliver("customer.subscription.deleted", "canceled", 1_802_678_400);
+
+      expect(notices.map((notice) => notice.kind)).toEqual([
+        "payment_past_due",
+        "payment_past_due",
+        "access_suspended",
+      ]);
+      expect(new Set(notices.map((notice) => notice.operationId)).size).toBe(3);
+      expect(notices[0]).toMatchObject({
+        operationId: `billing-notice:payment_past_due:${NEW_GITHUB_ACCOUNT_ID}:1800000000`,
+        consoleUrl: `${DESTINATION}/app`,
+      });
+      // The suspension notice goes out while the tenant is still active, before local and sidecar suspension.
+      const suspendedNotice = log.indexOf("notice:access_suspended:tenant-active");
+      expect(suspendedNotice).toBeGreaterThan(-1);
+      expect(log.indexOf("entitlement:canceled:false")).toBeGreaterThan(suspendedNotice);
+      expect(tenants.snapshot().find((row) => row.tenant.id === NEW_GITHUB_ACCOUNT_ID)?.status).toBe("suspended");
+    } finally {
+      layer.close();
+    }
+  });
+
   it("opens the Stripe customer portal for the signed-in billing owner", async () => {
     const app = locallyBoundCustomerApp();
     const cookie = await signInCookie(app);
