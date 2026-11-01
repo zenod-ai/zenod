@@ -50,7 +50,7 @@ import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
-import { loadMemoryTree } from "../vault/lineage.js";
+import { formatMemoryLineage, loadMemoryTree, memoryTreeBriefing, type MemoryTreeIndex } from "../vault/lineage.js";
 import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
@@ -594,7 +594,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     });
   }
 
-  async function vaultBriefing(): Promise<Briefing> {
+  async function vaultBriefing(briefingOptions: { tree?: boolean } = {}): Promise<Briefing> {
     if (!repo) {
       // Vaultless (Console shell): no vault to map and no TOOL CONTRACT to enforce —
       // just the persona. The chat loop runs as plain assistant chat.
@@ -608,6 +608,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       };
     }
     const agents = await readFile(join(vaultPath, "AGENTS.md"), "utf8").catch(() => "");
+    const tree = briefingOptions.tree ? await memoryTreeBriefing(vaultPath) : "";
     const snapshot = await scanVault(vaultPath);
     const allLogFiles = snapshot.files.filter((f) => f.startsWith("Log/"));
     const allAttachmentFiles = await listAttachmentFiles(vaultPath);
@@ -655,6 +656,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       "Cite sources inline as vault paths. Be direct and concise.",
       "Beyond the vault, you can call search_chats to search your own past conversations with the user across every channel (WhatsApp, web, CLI, MCP) — not just this thread. Use it when the user refers to something discussed earlier ('the issue we talked about', 'we were speaking about…', 'what did I say yesterday'), especially when it may have happened on a different channel than the one you're replying on. The current thread's recent turns are already in context; search_chats reaches older turns and other channels. The vault holds durable knowledge; chats are the running conversation — check both when a question could be answered by either.",
       agents ? `Vault doctrine:\n${agents}` : "",
+      tree ? `MAP — memory tree, levels 0–1. Start here: pick the root a question belongs to, then search/read the pages under it. Search hits show their tree path; the host cites the path of every source you rely on.\n${tree}` : "",
       `MAP — meaning pages (${meaningPages.length}/${snapshot.pages.length}). A table of contents only; call search_vault/read_note to use any of these, and search_vault to reach the omitted ones:\n${index || "(none yet)"}`,
       `MAP — recent evidence logs (${logFiles.length}/${allLogFiles.length}). Filenames only; call read_note to see a log's contents, search_vault to reach older logs:\n${logs || "(none yet)"}`,
       `MAP — recent attachments (${attachmentFiles.length}/${allAttachmentFiles.length}). Paths only; search_vault reaches the omitted ones:\n${attachments || "(none yet)"}`,
@@ -2242,7 +2244,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function ask(question: string, askOptions: AskOptions = {}): Promise<Answer> {
     assertVault(repo);
     await syncForRead();
-    const briefing = await vaultBriefing();
+    const briefing = await vaultBriefing({ tree: true });
     const contextRefs = [...new Set(askOptions.contextRefs ?? [])];
     if (contextRefs.length > MAX_ASK_CONTEXT_REFS) {
       throw new ContextRefError(`At most ${MAX_ASK_CONTEXT_REFS} evidence context refs are allowed.`);
@@ -2296,6 +2298,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
     const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch);
     const pinnedSupports = pinnedPassages.map(passage => ({ ref: passage.identity, ...session.registerPinned(passage) }));
+    // EPIC-9 E9-3b: search hits carry their tree path and the answer cites the path of
+    // each source it relies on. Any tree error leaves the answer exactly as before.
+    const tree = await loadMemoryTree(vaultPath).catch((error: unknown) => {
+      console.warn(`[zenod] memory tree unavailable for ask: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    });
+    const search = session.tools.searchVault;
+    const askTools: VaultReadTools = tree && search ? { ...session.tools, searchVault: async (query: string) => annotateHitLineage(await search(query), tree) } : session.tools;
     const result = await llm.answer(
       {
         question,
@@ -2311,9 +2321,37 @@ export function createEngine(options: EngineOptions): BrainEngine {
             }
           : {}),
       },
-      session.tools,
+      askTools,
     );
-    return session.finalize(result);
+    const answer = await session.finalize(result);
+    return tree ? withAnswerLineage(answer, tree) : answer;
+  }
+
+  /** Append `· tree: <path>` to each placed page hit of a search_vault result. */
+  async function annotateHitLineage(text: string, tree: MemoryTreeIndex): Promise<string> {
+    const lines = await Promise.all(text.split("\n").map(async (line) => {
+      const hit = /^(.+?\.md) \(score [^)]*\) — /.exec(line);
+      if (!hit || hit[1]!.startsWith("Log/")) return line;
+      const path = await tree.lineageOf(hit[1]!).then(formatMemoryLineage, () => "");
+      return path ? `${line} · tree: ${path}` : line;
+    }));
+    return lines.join("\n");
+  }
+
+  async function withAnswerLineage(answer: Answer, tree: MemoryTreeIndex): Promise<Answer> {
+    if (answer.sources.length === 0) return answer;
+    try {
+      const lineage = await tree.answerLineage(answer.sources.map((source) => source.path));
+      if (lineage.length === 0) return answer;
+      return {
+        ...answer,
+        text: `${answer.text}\n\nWhere this sits in your memory:\n${lineage.map((item) => `- ${item.text}`).join("\n")}`,
+        lineage,
+      };
+    } catch (error) {
+      console.warn(`[zenod] answer lineage failed: ${error instanceof Error ? error.message : String(error)}`);
+      return answer;
+    }
   }
 
   // A single retrieval/finalization session is shared by ask and customer chat.
