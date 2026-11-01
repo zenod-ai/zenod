@@ -16,8 +16,9 @@ This host tool on VPS1 renews the two an agent can renew and alerts on everythin
   and 03:40 pg1 dump). `keeper.py run` does nothing unless a proof is due. When the backup proof is due it:
   1. preflight: both services 1/1 and healthy, ≥ 12 GB free;
   2. `zenod-volume-backup.sh` on `zenod-mt-data` (Zenod) then `phylax-data` (Phylax; verifier image = the Zenod
-     image): pause, tar, resume, checksum, restore into a disposable volume, JSON + SQLite `integrity_check`,
-     health probe;
+     image), live mode: online copy (SQLite backup API), a ~1 s pause for the last changed files, resume,
+     tar, checksum, restore into a disposable volume, JSON + SQLite `integrity_check`, health probe; the run
+     record keeps `mode` and `pausedMs` (EPIC-7 T2.7);
   3. waits for Phylax WhatsApp `state: connected`;
   4. copies both archives + `.sha256` to Hetzner object storage
      `s31:vps-archives/archives/vps-a9-1/zenod-backups/<yyyymmdd>-keeper/{public,channels}/` with the shared
@@ -57,8 +58,9 @@ python3 scripts/readiness-keeper/keeper.test.py         # unit tests (also asser
 ```
 
 Settings are overridable in `/etc/zenod-readiness-keeper.env` (`KEEPER_*`, see `DEFAULTS` in `keeper.py`).
-The Phylax pause is owned by `scripts/zenod-volume-backup.sh` (EPIC-7 T2.7 is reducing it); the keeper only calls
-that script, so a better script needs just `install.sh` again. Change the time in `zenod-readiness-keeper.timer`.
+The Phylax pause is owned by `scripts/zenod-volume-backup.sh` (live mode since EPIC-7 T2.7: 725 ms measured on
+Phylax, WhatsApp stayed connected); the keeper only calls that script and its helper
+`scripts/zenod-live-snapshot.mjs`, so a better script needs just `install.sh` again. Change the time in `zenod-readiness-keeper.timer`.
 
 ## Drive login check (`google_drive_vault_oauth`)
 
