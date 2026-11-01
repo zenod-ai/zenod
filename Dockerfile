@@ -55,7 +55,14 @@ FROM node:22-alpine
 # vendor/whisper/whisper-ref.txt, runtime-verified against libstdc++/libgomp) is
 # COPY'd straight in. No build stage, no compile, no network — just the binary, per
 # Jordi's directive. Overridable via ZENOD_WHISPER_BINARY; still ENOENT-graceful.
-RUN apk add --no-cache git ripgrep ffmpeg libstdc++ libgomp
+RUN apk add --no-cache git ripgrep ffmpeg libstdc++ libgomp tini
+# Zombie git fix (infra-vps EPIC-2-A27): every git commit/fetch/pull runs
+# `git maintenance run --auto --detach`, which forks and orphans a git child even
+# when there is nothing to do; node as PID 1 never reaps it, so zombies piled up
+# (~53/h on zenod-mt). Run auto-maintenance in the foreground (simple-git awaits
+# it) and put tini in front as PID 1 to reap any other orphan.
+RUN git config --system maintenance.autoDetach false \
+  && git config --system gc.autoDetach false
 COPY vendor/whisper/whisper-cli-musl-amd64 /usr/local/bin/whisper-cli
 RUN chmod +x /usr/local/bin/whisper-cli && whisper-cli --help >/dev/null 2>&1 \
   && echo "whisper-cli present" || (echo "whisper-cli FAILED to load" && exit 1)
@@ -96,4 +103,6 @@ VOLUME /data
 EXPOSE 8080
 
 # The vault clone and SQLite state live on /data — one volume, whole state.
+# tini is PID 1: reaps orphans and forwards SIGTERM to node (E15-R10 shutdown grace).
+ENTRYPOINT ["/sbin/tini", "--", "docker-entrypoint.sh"]
 CMD ["node", "packages/server/dist/main.js"]
