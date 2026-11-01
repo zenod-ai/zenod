@@ -60,7 +60,10 @@ describe("supported queue filing replay", () => {
       for (const path of paths) expect((await readFile(join(repo.path, path), "utf8")).match(/<!-- zenod-op:/g)).toHaveLength(mixed ? 2 : 1);
       const receiptPath = `Inbox/filing-${captured.evidenceRef.slice(4, 14)}-${captured.evidenceRef.split("#^")[1]}.md`;
       expect(await readFile(join(repo.path, receiptPath), "utf8")).toContain("status: filing-resolved");
-      expect(await readFile(logPath, "utf8")).toBe(raw);
+      // Evidence keeps its bytes; filing may only append `- filed:` lines (EPIC-9 E9-2b).
+      const log = await readFile(logPath, "utf8");
+      expect(log.startsWith(raw)).toBe(true);
+      expect(log.slice(raw.length).split("\n").filter(line => line.trim()).every(line => /^- filed(?: e-[0-9a-f]+)?: /.test(line))).toBe(true);
       const published = await repo.currentPublishedRevision();
       expect(queue.enqueue("enrich_memory", input, "enrich:tenant-a:queue-fixture").id).toBe(job.id);
       await queue.close();
