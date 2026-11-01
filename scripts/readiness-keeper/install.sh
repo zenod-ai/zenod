@@ -10,7 +10,7 @@ DEST=/usr/local/lib/zenod-readiness-keeper
 install -d -m 0755 "$DEST"
 install -m 0755 "$SRC/keeper.py" "$DEST/keeper.py"
 install -m 0755 "$SRC/../zenod-volume-backup.sh" "$DEST/zenod-volume-backup.sh"
-git -C "$SRC" rev-parse HEAD > "$DEST/SOURCE_SHA" 2>/dev/null || true
+git -c safe.directory="*" -C "$SRC" rev-parse HEAD > "$DEST/SOURCE_SHA" 2>/dev/null || true
 for u in zenod-readiness-keeper.service zenod-readiness-keeper.timer zenod-readiness-watch.service zenod-readiness-watch.timer; do
   install -m 0644 "$SRC/$u" "/etc/systemd/system/$u"
 done
