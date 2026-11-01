@@ -3,7 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   ContextRefError,
+  formatMemoryLineage,
   memoryEntrySummaries,
+  type MemoryTreeIndex,
   type EntrySearchInput,
   type EntrySearchResult,
   isGithubAuthorizationRevoked,
@@ -930,6 +932,23 @@ export function buildMcpServer(
   const searchEntryPage = (engine: BrainEngine, input: EntrySearchInput): Promise<EntrySearchResult> =>
     searchMemoryEntryPage(engine, taskJobs, input);
 
+  // Lineage is additive context (EPIC-9 E9-3a): it never changes ranking and never fails
+  // a read. No tree, an engine without one, or any tree error → every memory is unplaced.
+  const loadTree = async (engine: BrainEngine): Promise<MemoryTreeIndex | null> => {
+    if (!engine.memoryTree) return null;
+    try {
+      return await engine.memoryTree();
+    } catch (error) {
+      console.warn(`[memory-tree] lineage unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  };
+  const unplaced = { placement: "unplaced" as const, lineage: [], evidence: [], parent: null, children: [] };
+  const lineageFields = async (tree: MemoryTreeIndex | null, path: string) => {
+    const found = tree ? await tree.nodeView(path).catch(() => unplaced) : unplaced;
+    return { placement: found.placement, lineage: found.lineage, evidenceRefs: found.evidence, parent: found.parent, children: found.children };
+  };
+
   server.registerTool(
     "search_memory",
     {
@@ -941,7 +960,12 @@ export function buildMcpServer(
     },
     async ({ query, source, sourceId, contentType, capturedAfter, capturedBefore, order, limit, cursor }) => {
       const engine = await getEngine();
-      const hits = query ? await engine.search(query) : [];
+      const rankedHits = query ? await engine.search(query) : [];
+      const tree = rankedHits.length ? await loadTree(engine) : null;
+      const hits = await Promise.all(rankedHits.map(async (hit) => {
+        const { placement, lineage, evidenceRefs } = await lineageFields(tree, hit.path);
+        return { ...hit, placement, lineage, evidenceRefs };
+      }));
       const structuralQuery = Boolean(source || sourceId || contentType || capturedAfter || capturedBefore || cursor || order === "newest" || order === "oldest" || !query);
       let entries: ReturnType<typeof memoryEntrySummaries> = [];
       let pagination: Record<string, unknown> | null = null;
@@ -959,7 +983,10 @@ export function buildMcpServer(
       const output = { hits, entries, pagination };
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
-        : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}`).join("\n");
+        : hits.map((hit) => {
+            const path = formatMemoryLineage({ placement: hit.placement, lineage: hit.lineage, evidence: hit.evidenceRefs });
+            return `${hit.path} (score ${hit.score}) — ${hit.snippet}${path ? `\n  path: ${path}` : ""}${hit.url ? `\n  ${hit.url}` : ""}`;
+          }).join("\n");
       const entryText = entries.length === 0
         ? structuralQuery ? "No memory entries match the structural filters." : ""
         : entries.map((entry) => [
@@ -1000,14 +1027,18 @@ export function buildMcpServer(
         };
       }
       const note = await engine.get(path);
+      const tree = await loadTree(engine);
+      const placement = await lineageFields(tree, note.path);
+      const lineageText = formatMemoryLineage({ placement: placement.placement, lineage: placement.lineage, evidence: placement.evidenceRefs });
+      const treeText = `${lineageText ? `path: ${lineageText}\n` : ""}${placement.children.length ? `children: ${placement.children.map((child) => child.path ?? child.title).join(", ")}\n` : ""}`;
       return {
         content: [
           {
             type: "text",
-            text: `# ${note.path}\nfrontmatter: ${JSON.stringify(note.frontmatter)}\n${note.url ? `source: ${note.url}\n` : ""}\n${note.body}`,
+            text: `# ${note.path}\nfrontmatter: ${JSON.stringify(note.frontmatter)}\n${note.url ? `source: ${note.url}\n` : ""}${treeText}\n${note.body}`,
           },
         ],
-        structuredContent: { ...note },
+        structuredContent: { ...note, ...placement },
       };
     },
   );

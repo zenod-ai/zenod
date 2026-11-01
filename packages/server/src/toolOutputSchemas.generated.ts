@@ -736,6 +736,68 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "githubUrl": {
             "type": "string"
+          },
+          "placement": {
+            "enum": [
+              "placed",
+              "unplaced"
+            ]
+          },
+          "lineage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MemoryLineageNode"
+            }
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MemoryLineageNode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MemoryLineageNode"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MemoryLineageNode": {
+        "$comment": "EPIC-9 E9-3a: one node on a memory's tree path. path is null for a Tree.md node with no page.",
+        "type": "object",
+        "required": [
+          "path",
+          "title",
+          "memory"
+        ],
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "memory": {
+            "enum": [
+              "working",
+              "long-term",
+              null
+            ]
           }
         },
         "additionalProperties": false
@@ -1475,7 +1537,30 @@ export const TOOL_OUTPUT_SCHEMAS = (
       "hits": {
         "type": "array",
         "items": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "placement": {
+              "enum": [
+                "placed",
+                "unplaced"
+              ]
+            },
+            "lineage": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MemoryLineageNode"
+              }
+            },
+            "evidenceRefs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         }
       },
       "entries": {
@@ -1617,7 +1702,36 @@ export const TOOL_OUTPUT_SCHEMAS = (
       }
     },
     "additionalProperties": false,
-    "$defs": {}
+    "$defs": {
+      "MemoryLineageNode": {
+        "$comment": "EPIC-9 E9-3a: one node on a memory's tree path. path is null for a Tree.md node with no page.",
+        "type": "object",
+        "required": [
+          "path",
+          "title",
+          "memory"
+        ],
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "memory": {
+            "enum": [
+              "working",
+              "long-term",
+              null
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
   },
   "zenod.get_memory": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1771,6 +1885,68 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "githubUrl": {
             "type": "string"
+          },
+          "placement": {
+            "enum": [
+              "placed",
+              "unplaced"
+            ]
+          },
+          "lineage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MemoryLineageNode"
+            }
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MemoryLineageNode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MemoryLineageNode"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MemoryLineageNode": {
+        "$comment": "EPIC-9 E9-3a: one node on a memory's tree path. path is null for a Tree.md node with no page.",
+        "type": "object",
+        "required": [
+          "path",
+          "title",
+          "memory"
+        ],
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "memory": {
+            "enum": [
+              "working",
+              "long-term",
+              null
+            ]
           }
         },
         "additionalProperties": false
@@ -7189,6 +7365,68 @@ export const TOOL_OUTPUT_SCHEMAS = (
           },
           "githubUrl": {
             "type": "string"
+          },
+          "placement": {
+            "enum": [
+              "placed",
+              "unplaced"
+            ]
+          },
+          "lineage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MemoryLineageNode"
+            }
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/MemoryLineageNode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MemoryLineageNode"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MemoryLineageNode": {
+        "$comment": "EPIC-9 E9-3a: one node on a memory's tree path. path is null for a Tree.md node with no page.",
+        "type": "object",
+        "required": [
+          "path",
+          "title",
+          "memory"
+        ],
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "memory": {
+            "enum": [
+              "working",
+              "long-term",
+              null
+            ]
           }
         },
         "additionalProperties": false
