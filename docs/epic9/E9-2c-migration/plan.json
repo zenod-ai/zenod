@@ -1,0 +1,2550 @@
+{
+ "schema": "zenod.vault-tree-migration/v1",
+ "ticket": "E9-2c",
+ "date": "2026-11-01",
+ "vault": {
+  "repo": "AlfaBlok/obsidian-brain",
+  "baseCommit": "617ad0381f21a84edec6ae1f038e035407bfbc4c"
+ },
+ "rules": {
+  "archiveRoot": "Archive",
+  "neverWrite": [
+   "Log/",
+   "_attachments/",
+   ".git/"
+  ],
+  "deletes": 0
+ },
+ "create": [
+  {
+   "path": "Areas/Ideas and knowledge.md",
+   "content": "---\ntitle: Ideas and knowledge\ntype: area\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"Reusable thinking: markets and finance research, AI and agents (EpicSpine doctrine), story and positioning.\"\ndescription: \"Reusable thinking: markets and finance research, AI and agents (EpicSpine doctrine), story and positioning.\"\nparent: \"[[Tree]]\"\nmemory: long-term\n---\n\n# Ideas and knowledge\n\nReusable thinking: markets and finance research, AI and agents (EpicSpine doctrine), story and positioning.\n\nA level-1 node of long-term memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Areas/Infrastructure and runbooks.md",
+   "content": "---\ntitle: Infrastructure and runbooks\ntype: area\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"How the machines and accounts work: the VPS fleet and incident lessons, accounts and access (GitHub, Gmail, browser).\"\ndescription: \"How the machines and accounts work: the VPS fleet and incident lessons, accounts and access (GitHub, Gmail, browser).\"\nparent: \"[[Tree]]\"\nmemory: long-term\n---\n\n# Infrastructure and runbooks\n\nHow the machines and accounts work: the VPS fleet and incident lessons, accounts and access (GitHub, Gmail, browser).\n\nA level-1 node of long-term memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Areas/Life admin.md",
+   "content": "---\ntitle: Life admin\ntype: area\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"Running life: housing in general, insurance, hardware, health and travel.\"\ndescription: \"Running life: housing in general, insurance, hardware, health and travel.\"\nparent: \"[[Tree]]\"\nmemory: long-term\n---\n\n# Life admin\n\nRunning life: housing in general, insurance, hardware, health and travel.\n\nA level-1 node of long-term memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Areas/People and family.md",
+   "content": "---\ntitle: People and family\ntype: area\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: The people in Jordi's life; private, detail stays in the notes.\ndescription: The people in Jordi's life; private, detail stays in the notes.\nparent: \"[[Tree]]\"\nmemory: long-term\n---\n\n# People and family\n\nThe people in Jordi's life; private, detail stays in the notes.\n\nA level-1 node of long-term memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Areas/Ventures and work.md",
+   "content": "---\ntitle: Ventures and work\ntype: area\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"The businesses and projects over time: Alpha9 (tax, gestorías), trading (Poly-Maker, Polymarket), Altamira2050/PatronBTC, RepoMiningFunding, OpenProp legal and Zenod's history.\"\ndescription: \"The businesses and projects over time: Alpha9 (tax, gestorías), trading (Poly-Maker, Polymarket), Altamira2050/PatronBTC, RepoMiningFunding, OpenProp legal and Zenod's history.\"\nparent: \"[[Tree]]\"\nmemory: long-term\n---\n\n# Ventures and work\n\nThe businesses and projects over time: Alpha9 (tax, gestorías), trading (Poly-Maker, Polymarket), Altamira2050/PatronBTC, RepoMiningFunding, OpenProp legal and Zenod's history.\n\nA level-1 node of long-term memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Projects/Hair transplant.md",
+   "content": "---\ntitle: Hair transplant\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"Deciding on a hair transplant: the options dossier and 2023 Barcelona quotes; open on budget, destination and timing.\"\ndescription: \"Deciding on a hair transplant: the options dossier and 2023 Barcelona quotes; open on budget, destination and timing.\"\nparent: \"[[Tree]]\"\nmemory: working\n---\n\n# Hair transplant\n\nDeciding on a hair transplant: the options dossier and 2023 Barcelona quotes; open on budget, destination and timing.\n\nA level-1 node of working memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Projects/House decision.md",
+   "content": "---\ntitle: House decision\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"Choosing where to buy a house: Maresme vs Cerdanya vs Sardinia, legal exposure, yield and financing, and the Idealista/IdeaScraper data.\"\ndescription: \"Choosing where to buy a house: Maresme vs Cerdanya vs Sardinia, legal exposure, yield and financing, and the Idealista/IdeaScraper data.\"\nparent: \"[[Tree]]\"\nmemory: working\n---\n\n# House decision\n\nChoosing where to buy a house: Maresme vs Cerdanya vs Sardinia, legal exposure, yield and financing, and the Idealista/IdeaScraper data.\n\nA level-1 node of working memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Projects/Launching Epic Social.md",
+   "content": "---\ntitle: Launching Epic Social\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"Getting Epic Social out: the idea→draft→approved→posted pipeline, post topics, Agent Team, the EpicSpine/Epic Team/Epic Social brand, the Reddit and X launch and testers.\"\ndescription: \"Getting Epic Social out: the idea→draft→approved→posted pipeline, post topics, Agent Team, the EpicSpine/Epic Team/Epic Social brand, the Reddit and X launch and testers.\"\nparent: \"[[Tree]]\"\nmemory: working\n---\n\n# Launching Epic Social\n\nGetting Epic Social out: the idea→draft→approved→posted pipeline, post topics, Agent Team, the EpicSpine/Epic Team/Epic Social brand, the Reddit and X launch and testers.\n\nA level-1 node of working memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Projects/Launching Zenod.md",
+   "content": "---\ntitle: Launching Zenod\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"Getting Zenod to paying users: the alpha launch, memory as a tree, production health and positioning.\"\ndescription: \"Getting Zenod to paying users: the alpha launch, memory as a tree, production health and positioning.\"\nparent: \"[[Tree]]\"\nmemory: working\n---\n\n# Launching Zenod\n\nGetting Zenod to paying users: the alpha launch, memory as a tree, production health and positioning.\n\nA level-1 node of working memory in the [[Tree]]. Pages about this subject name it as their `parent`.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Tree.md",
+   "content": "---\ntitle: Tree\nupdated: 2026-11-01\n---\n\n# Memory tree\n\nLevels 0 and 1 of this vault's memory. One line per node: `name | working|long-term | [[page]] | one-line summary`.\nDeeper pages name their parent in frontmatter (`parent:`); the Log is the evidence underneath, not a branch.\n\n## Working memory\n\n- Launching Epic Social | working | [[Projects/Launching Epic Social]] | Getting Epic Social out: the idea→draft→approved→posted pipeline, post topics, Agent Team, the EpicSpine/Epic Team/Epic Social brand, the Reddit and X launch and testers.\n- Launching Zenod | working | [[Projects/Launching Zenod]] | Getting Zenod to paying users: the alpha launch, memory as a tree, production health and positioning.\n- Hair transplant | working | [[Projects/Hair transplant]] | Deciding on a hair transplant: the options dossier and 2023 Barcelona quotes; open on budget, destination and timing.\n- House decision | working | [[Projects/House decision]] | Choosing where to buy a house: Maresme vs Cerdanya vs Sardinia, legal exposure, yield and financing, and the Idealista/IdeaScraper data.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | The businesses and projects over time: Alpha9 (tax, gestorías), trading (Poly-Maker, Polymarket), Altamira2050/PatronBTC, RepoMiningFunding, OpenProp legal and Zenod's history.\n- Ideas and knowledge | long-term | [[Areas/Ideas and knowledge]] | Reusable thinking: markets and finance research, AI and agents (EpicSpine doctrine), story and positioning.\n- Infrastructure and runbooks | long-term | [[Areas/Infrastructure and runbooks]] | How the machines and accounts work: the VPS fleet and incident lessons, accounts and access (GitHub, Gmail, browser).\n- Life admin | long-term | [[Areas/Life admin]] | Running life: housing in general, insurance, hardware, health and travel.\n- People and family | long-term | [[Areas/People and family]] | The people in Jordi's life; private, detail stays in the notes.\n",
+   "source": "E9-2a seed"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "content": "---\ntitle: \"Idealista Data Relationship\"\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-01\nsummary: \"The Idealista data venture: IdeaScraper ingestion and flat scoring, the OpenProp Telegram bot, and the commercial relationship with Idealista.\"\ndescription: \"The Idealista data venture: IdeaScraper ingestion and flat scoring, the OpenProp Telegram bot, and the commercial relationship with Idealista.\"\nparent: \"[[Areas/Ventures and work]]\"\n---\n\n# Idealista Data Relationship\n\nThe Idealista data venture: IdeaScraper ingestion and flat scoring, the OpenProp Telegram bot, and the commercial relationship with Idealista.\n\nA branch node created by the E9-2c clean-up to group the pages below it.\n",
+   "source": "E9-2c branch node"
+  }
+ ],
+ "pages": [
+  {
+   "path": "Areas/Alpha9 Tax and AEAT.md",
+   "action": "keep",
+   "parent": "Areas/Ventures and work",
+   "confidence": "high",
+   "reason": "Alpha9 company tax and AEAT work is part of the ventures domain."
+  },
+  {
+   "pathHash": "sha256:e7f5b750fddd5215",
+   "private": true,
+   "action": "keep",
+   "parent": "Areas/People and family",
+   "confidence": "high",
+   "reason": "Private family page; stays where it is, hung under People and family."
+  },
+  {
+   "path": "Areas/Hardware & Devices.md",
+   "action": "keep",
+   "parent": "Areas/Life admin",
+   "confidence": "high",
+   "reason": "Hardware inventory is life admin; also the merge target for the Notes duplicate."
+  },
+  {
+   "path": "Areas/Housing.md",
+   "action": "keep",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "Despite its general name the page is the live house-buying strategy (altitude, Sardinia, yield), so it hangs under House decision; path unchanged."
+  },
+  {
+   "path": "Areas/Insurance.md",
+   "action": "keep",
+   "parent": "Areas/Life admin",
+   "confidence": "high",
+   "reason": "Insurance is life admin."
+  },
+  {
+   "path": "Areas/Positioning & Story.md",
+   "action": "keep",
+   "parent": "Projects/Launching Zenod",
+   "confidence": "medium",
+   "reason": "Standing Zenod narrative (5 inbound links); kept as the positioning page under Launching Zenod and merge target for the Projects duplicate."
+  },
+  {
+   "path": "Notes/Alpha9 Dokploy VPS.md",
+   "action": "keep",
+   "parent": "Areas/Infrastructure and runbooks",
+   "confidence": "high",
+   "reason": "VPS fleet runbook."
+  },
+  {
+   "path": "Notes/Alpha9 Google Workspace Takeout S3.md",
+   "action": "keep",
+   "parent": "Areas/Infrastructure and runbooks",
+   "confidence": "high",
+   "reason": "Accounts and backups runbook."
+  },
+  {
+   "path": "Notes/Asset Growth and Inflation Sensitivities.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "high",
+   "reason": "Markets and finance research."
+  },
+  {
+   "path": "Notes/Boris Cherny - Anthropic Engineers Think in Exponentials.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "high",
+   "reason": "AI and agents knowledge."
+  },
+  {
+   "path": "Notes/Browser Automation and Jev.md",
+   "action": "keep",
+   "parent": "Areas/Infrastructure and runbooks",
+   "confidence": "medium",
+   "reason": "Machine-wide browser automation setup; accounts and access runbook."
+  },
+  {
+   "path": "Notes/GitHub Auth Cross-Account Runbook.md",
+   "action": "keep",
+   "parent": "Areas/Infrastructure and runbooks",
+   "confidence": "high",
+   "reason": "Accounts and access runbook."
+  },
+  {
+   "path": "Notes/Hardware & Devices.md",
+   "action": "merge-into",
+   "target": "Areas/Hardware & Devices.md",
+   "confidence": "medium",
+   "reason": "Same title as the Areas page (duplicate group); its inventory text is appended to the Areas page, the original goes to Archive."
+  },
+  {
+   "path": "Notes/Hetzner VPS 2 (Helsinki).md",
+   "action": "keep",
+   "parent": "Areas/Infrastructure and runbooks",
+   "confidence": "high",
+   "reason": "VPS fleet runbook."
+  },
+  {
+   "path": "Notes/Memory Mining and Queue Drainage.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "medium",
+   "reason": "Concept note on the Zenod/Miner/Nectary loop; reusable agent thinking rather than a Zenod launch task."
+  },
+  {
+   "path": "Notes/Pinax as Semantic Index.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "medium",
+   "reason": "Zenod design concept (the Pinax index)."
+  },
+  {
+   "path": "Notes/Poly-Maker Runbook (extension).md",
+   "action": "merge-into",
+   "target": "Projects/Poly-Maker Runbook (extension).md",
+   "confidence": "high",
+   "reason": "Same title as the larger Projects runbook (duplicate group); appended there, original archived."
+  },
+  {
+   "path": "Notes/Power-Law Self-Similarity Explanation Design.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "high",
+   "reason": "Reusable explanation design; ideas and knowledge."
+  },
+  {
+   "path": "Notes/Travel Bag Preferences.md",
+   "action": "keep",
+   "parent": "Areas/Life admin",
+   "confidence": "high",
+   "reason": "Travel preference; life admin."
+  },
+  {
+   "path": "Notes/Tripwire Convex Hedge Research.md",
+   "action": "keep",
+   "parent": "Projects/Polymarket Trading Experiments",
+   "confidence": "high",
+   "reason": "Research leaf of poly-maker trading."
+  },
+  {
+   "path": "Notes/YouTube Explainer Script Skills.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "medium",
+   "reason": "Research on explainer-script skills; reusable knowledge (could also sit under Epic Social)."
+  },
+  {
+   "path": "Notes/Zenod Model Audit and Positive UX Feedback 2026-06-15.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product note."
+  },
+  {
+   "path": "Notes/Zeno Operational Incident - Flawed Vault Cleanup Proposal.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod operating lesson (cleanup is proposal-first, which this migration follows)."
+  },
+  {
+   "path": "Projects/Altamira2050 Bitcoin Network Effects Simulator.md",
+   "action": "keep",
+   "parent": "Projects/Altamira2050 PatronBTC",
+   "confidence": "high",
+   "reason": "Part of the Altamira2050 project."
+  },
+  {
+   "path": "Projects/Altamira2050 PatronBTC.md",
+   "action": "keep",
+   "parent": "Areas/Ventures and work",
+   "confidence": "high",
+   "reason": "Altamira2050/PatronBTC venture; hub for its pages."
+  },
+  {
+   "path": "Projects/dividend_analytics.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "medium",
+   "reason": "Dividend screening research; markets and finance knowledge."
+  },
+  {
+   "path": "Projects/EpicSpine.md",
+   "action": "keep",
+   "parent": "Projects/Launching Epic Social",
+   "confidence": "medium",
+   "reason": "EpicSpine is the brand and method behind Epic Social / Agent Team."
+  },
+  {
+   "path": "Projects/IdeaScraper Source Repo & Project Origins.md",
+   "action": "merge-into",
+   "target": "Projects/Idealista Data Relationship/IdeaScraper Source Repo & Project Origins.md",
+   "confidence": "high",
+   "reason": "Same title as the fuller page inside the Idealista folder; appended there, original archived."
+  },
+  {
+   "path": "Projects/OpenProp Legal Spine 2026-07-29.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "medium",
+   "reason": "OpenProp is the Telegram bot selling the Idealista analytics; legal spine of that venture."
+  },
+  {
+   "path": "Projects/Phylax Multi-Agent Notification Gateway & PM-Agent Remote Dispatch.md",
+   "action": "merge-into",
+   "target": "Projects/Zenod/Phylax Multi-Agent Notification Gateway & PM-Agent Remote Dispatch.md",
+   "confidence": "high",
+   "reason": "Same title as the fuller page in Projects/Zenod; appended there, original archived."
+  },
+  {
+   "path": "Projects/Poly-Maker AWS↔Hetzner Postgres Runbook.md",
+   "action": "keep",
+   "parent": "Projects/Polymarket Trading Experiments",
+   "confidence": "high",
+   "reason": "Poly-maker trading infrastructure."
+  },
+  {
+   "path": "Projects/Poly-Maker Campaign July 2026.md",
+   "action": "keep",
+   "parent": "Projects/Polymarket Trading Experiments",
+   "confidence": "high",
+   "reason": "Poly-maker trading campaign."
+  },
+  {
+   "path": "Projects/Poly-Maker GitHub Tools Inventory 2026-08-06.md",
+   "action": "keep",
+   "parent": "Projects/Polymarket Trading Experiments",
+   "confidence": "high",
+   "reason": "Poly-maker research inventory."
+  },
+  {
+   "path": "Projects/Poly-maker Reporting Preferences.md",
+   "action": "keep",
+   "parent": "Projects/Polymarket Trading Experiments",
+   "confidence": "high",
+   "reason": "Poly-maker reporting preferences."
+  },
+  {
+   "path": "Projects/Poly-Maker Runbook (extension).md",
+   "action": "keep",
+   "parent": "Projects/Polymarket Trading Experiments",
+   "confidence": "high",
+   "reason": "Poly-maker runbook; merge target for the Notes duplicate."
+  },
+  {
+   "path": "Projects/Polymarket Trading Experiments.md",
+   "action": "keep",
+   "parent": "Areas/Ventures and work",
+   "confidence": "high",
+   "reason": "Trading venture; hub for the Poly-Maker pages."
+  },
+  {
+   "path": "Projects/Positioning & Story.md",
+   "action": "merge-into",
+   "target": "Areas/Positioning & Story.md",
+   "confidence": "medium",
+   "reason": "Same title as the Areas page (duplicate group); appended there, original archived."
+  },
+  {
+   "path": "Projects/RepoMiningFunding.md",
+   "action": "keep",
+   "parent": "Areas/Ventures and work",
+   "confidence": "medium",
+   "reason": "Nectary (formerly RepoMiningFunding) venture."
+  },
+  {
+   "path": "Projects/Story & Slides.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "medium",
+   "reason": "Network-effects / preferential-attachment framework; ideas and knowledge (not the Zenod deck of the same name, titles differ)."
+  },
+  {
+   "path": "Projects/Zenod.md",
+   "action": "keep",
+   "parent": "Projects/Launching Zenod",
+   "confidence": "high",
+   "reason": "The Zenod product page; hub for Projects/Zenod/*."
+  },
+  {
+   "path": "Projects/Zenod Context Maintenance UX Feedback.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product feedback."
+  },
+  {
+   "path": "Projects/Zenod Workflow Learnings.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod workflow learnings (9 inbound links); merge target for the Projects/Zenod duplicate."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Housing Decision Sub-Strategies 2026-08.md",
+   "action": "move",
+   "target": "Projects/House decision/Housing Decision Sub-Strategies 2026-08.md",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "House-buying strategy page filed under a data-supplier folder; moves to the House decision branch."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Jordi Property Decision EpicSpine 2026-08.md",
+   "action": "move",
+   "target": "Projects/House decision/Jordi Property Decision EpicSpine 2026-08.md",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "The house decision's own spine; moves to the House decision branch."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Maresme vs Cerdanya €550k House Decision 2026-07-24.md",
+   "action": "move",
+   "target": "Projects/House decision/Maresme vs Cerdanya €550k House Decision 2026-07-24.md",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "House decision record; moves to the House decision branch."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Spain Buy-Location Opportunity Report 2026-07-23.md",
+   "action": "move",
+   "target": "Projects/House decision/Spain Buy-Location Opportunity Report 2026-07-23.md",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "Buy-location report for the house decision; moves to the House decision branch."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Mansions On IG Property Digest 2026-07-30.md",
+   "action": "move",
+   "target": "Projects/House decision/Mansions On IG Property Digest 2026-07-30.md",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "Property digest feeding the house shortlist; moves to the House decision branch."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Property & Income Decision Real-Estate Voice-Note Briefing System 2026-08-01.md",
+   "action": "move",
+   "target": "Projects/House decision/Property & Income Decision Real-Estate Voice-Note Briefing System 2026-08-01.md",
+   "parent": "Projects/House decision",
+   "confidence": "medium",
+   "reason": "Briefing system for the property decision voice notes; moves to the House decision branch."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Desirability (Fast-Sale) Score Analysis - June 2026.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Idealista data analysis."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/External Data Sources & Cross-References.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Idealista data sources."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/IdeaScraper Source Repo & Project Origins.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "IdeaScraper origins; merge target for the flat duplicate."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/InfoHomes Historical KPI Archive & Warehouse Promotion.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Idealista/InfoHomes data warehouse."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Ingestion Daily Report.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "IdeaScraper ingestion report."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Ingestion Scheduler Architecture & Incident Learnings.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "IdeaScraper ingestion architecture."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Integrated Scoring (OVR) Sprint.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Flat scoring model on Idealista data."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Investment Score v1 Sprint.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Flat scoring model on Idealista data."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Outreach to Idealista — Pilot Concession Lane.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Commercial outreach to Idealista."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/Privacy-First Monetization Test - Telegram Stars + TON.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Monetization test for the Idealista analytics bot."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/notas_estrategia.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "high",
+   "reason": "Strategy notes for the Idealista outreach emails."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v8.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "medium",
+   "reason": "Latest draft of the email to Idealista; earlier drafts are archived and linked from here."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_director_v2.md",
+   "action": "keep",
+   "parent": "Projects/Idealista Data Relationship/Idealista Data Relationship",
+   "confidence": "medium",
+   "reason": "Latest draft of the email to the director; the first draft is archived and linked from here."
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v2.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v2_1.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v2_2.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v2_3.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v3.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v4.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v5.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v6.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_comercial_v7.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded draft of the email to Idealista (latest is v8); archived, linked from v8.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_comercial_v8.md"
+  },
+  {
+   "path": "Projects/Idealista Data Relationship/email_director_general.md",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "Superseded first draft of the email to the director (latest is email_director_v2); archived, linked from it.",
+   "linkFrom": "Projects/Idealista Data Relationship/email_director_v2.md"
+  },
+  {
+   "path": "Projects/Zenod/Agent Suite Architecture.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/AI SDK 7 Selective Adoption Memo.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Archus-Epaminon Fusion Spike Discrepancy.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Backlog System Vision & Planning Source.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Capture Lane Acceptance Spec 2026-07-29.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Epic 2.3 · Zenod Move 0 Launch — 2026-07-05 Snapshot.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Herald Briefing v1.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/IntakeEvent UserJourney Stabilization Epic 2026-06-24.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Librarian Doctrine.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/M0 Spec.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Market Landscape.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Memory Retrieval Reliability & Audit Workflow.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Miner Market Landscape.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Multi-Agent Orchestration Landscape (D-2).md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Naming.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Persona and Archetypes.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Phylax Multi-Agent Notification Gateway & PM-Agent Remote Dispatch.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Story & Slides.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Vercel Eve as Execution Substrate (D-2).md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/WhatsApp Connector — Forensics & Observability.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Worktrees & Multi-Agent Execution.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Zenod Agent Handoff.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Zenod MT Memory Acceptance Tests — Iteration 1 (2026-07-11).md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Zenod Scope.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "high",
+   "reason": "Zenod product page in the Zenod folder."
+  },
+  {
+   "path": "Projects/Zenod/Codex Gmail Connector & Email MCP Runbook.md",
+   "action": "keep",
+   "parent": "Areas/Infrastructure and runbooks",
+   "confidence": "medium",
+   "reason": "Email MCP runbook; infrastructure rather than Zenod product (path unchanged)."
+  },
+  {
+   "path": "Projects/Zenod/X (Twitter) Integration Runbook.md",
+   "action": "keep",
+   "parent": "Projects/Zenod",
+   "confidence": "low",
+   "reason": "@ZenodAgent X posting runbook; could instead sit under Launching Epic Social (the X launch)."
+  },
+  {
+   "path": "Projects/Zenod/Zenot Council — Two Sub-Agents for Daily Voice Posts.md",
+   "action": "keep",
+   "parent": "Projects/Launching Epic Social",
+   "confidence": "medium",
+   "reason": "Daily voice-post council design; part of the post pipeline (path unchanged)."
+  },
+  {
+   "path": "Projects/Zenod/Document-Driven Operating Protocol — 'The Pen'.md",
+   "action": "keep",
+   "parent": "Areas/Ideas and knowledge",
+   "confidence": "medium",
+   "reason": "Reusable multi-agent coordination doctrine; AI and agents knowledge (path unchanged)."
+  },
+  {
+   "path": "Projects/Zenod/assets/deck/DECK.md",
+   "action": "keep",
+   "parent": "Projects/Zenod/Story & Slides",
+   "confidence": "high",
+   "reason": "Deck source for the Zenod story deck."
+  },
+  {
+   "path": "Projects/Zenod/assets/deck/GALLERY.md",
+   "action": "keep",
+   "parent": "Projects/Zenod/Story & Slides",
+   "confidence": "high",
+   "reason": "Gallery for the Zenod story deck."
+  },
+  {
+   "path": "Projects/Zenod/Hosted Zenod (M3 Multi-Tenant) Plan.md",
+   "action": "merge-into",
+   "target": "Projects/Zenod/Hosted Zenod (M3) Multi-Tenant Plan.md",
+   "confidence": "medium",
+   "reason": "Near-duplicate of the larger M3 multi-tenant plan; appended there, original archived."
+  },
+  {
+   "path": "Projects/Zenod/Zenod Workflow Learnings.md",
+   "action": "merge-into",
+   "target": "Projects/Zenod Workflow Learnings.md",
+   "confidence": "medium",
+   "reason": "Same title as the larger, more linked page (duplicate group); appended there, original archived."
+  }
+ ],
+ "inbox": [
+  {
+   "path": "Inbox/filing-2026-09-07-e-038090.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-07.md#^e-038090",
+   "action": "refile",
+   "target": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Idealista Data Relationship over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-09-07-e-575ead.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-07.md#^e-575ead",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-09-07-e-77c11c.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-07.md#^e-77c11c",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-09-07-e-ec07e3.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-07.md#^e-ec07e3",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Idealista Data Relationship"
+  },
+  {
+   "path": "Inbox/filing-2026-09-08-e-09f0e5.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-08.md#^e-09f0e5",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/filing-2026-09-08-e-330306.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-08.md#^e-330306",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/filing-2026-09-08-e-4a2a19.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-08.md#^e-4a2a19",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-09-08-e-791b98.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-08.md#^e-791b98",
+   "action": "refile",
+   "target": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Idealista Data Relationship over Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-09-08-e-7b5f93.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-08.md#^e-7b5f93",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/filing-2026-09-09-e-1a70b4.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-09.md#^e-1a70b4",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-09-13-e-0bf52b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-13.md#^e-0bf52b",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-09-13-e-c7a30a.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-13.md#^e-c7a30a",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-09-14-e-cd4853.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-14.md#^e-cd4853",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-15-e-a4deb3.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-15.md#^e-a4deb3",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-16-e-195bfa.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-16.md#^e-195bfa",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-16-e-36d059.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-16.md#^e-36d059",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-16-e-454c94.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-16.md#^e-454c94",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-09-16-e-4ad4f3.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-16.md#^e-4ad4f3",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-09-16-e-6c0c96.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-16.md#^e-6c0c96",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-17-e-ae8664.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-17.md#^e-ae8664",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/filing-2026-09-17-e-be1dea.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-17.md#^e-be1dea",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "capture already filed (0 pages); the receipt is history"
+  },
+  {
+   "path": "Inbox/filing-2026-09-18-e-161d62.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-18.md#^e-161d62",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "capture already filed (0 pages); the receipt is history"
+  },
+  {
+   "path": "Inbox/filing-2026-09-18-e-24faab.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-18.md#^e-24faab",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-09-18-e-26d8d2.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-18.md#^e-26d8d2",
+   "action": "archive",
+   "confidence": "low",
+   "suggested": "Projects/Launching Epic Social.md",
+   "reason": "tie between Launching Epic Social and Infrastructure and runbooks; unsure, so Archive"
+  },
+  {
+   "path": "Inbox/filing-2026-09-24-e-b3754b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-24.md#^e-b3754b",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-09-25-e-2319ab.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-25.md#^e-2319ab",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-25-e-674ffb.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-25.md#^e-674ffb",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "capture already filed (1 page); the receipt is history"
+  },
+  {
+   "path": "Inbox/filing-2026-09-25-e-a7f49b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-25.md#^e-a7f49b",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-09-29-e-abdd01.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-29.md#^e-abdd01",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-09-29-e-f001b5.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-09-29.md#^e-f001b5",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-10-02-e-d2a6ce.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-02.md#^e-d2a6ce",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-10-07-e-558753.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-07.md#^e-558753",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-10-12-e-e47f11.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-12.md#^e-e47f11",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "capture already filed (1 page); the receipt is history"
+  },
+  {
+   "path": "Inbox/filing-2026-10-13-e-33aa67.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-13.md#^e-33aa67",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-13-e-6bf319.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-13.md#^e-6bf319",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "medium",
+   "reason": "unfiled capture; matches Launching Epic Social over Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-10-13-e-aa640b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-13.md#^e-aa640b",
+   "action": "refile",
+   "target": "Areas/People and family.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches People and family"
+  },
+  {
+   "path": "Inbox/filing-2026-10-19-e-790811.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-19.md#^e-790811",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-10-22-e-85ca11.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-22.md#^e-85ca11",
+   "action": "refile",
+   "target": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Idealista Data Relationship over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-23-e-40938a.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-23.md#^e-40938a",
+   "action": "refile",
+   "target": "Areas/Life admin.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Life admin"
+  },
+  {
+   "path": "Inbox/filing-2026-10-24-e-122564.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-24.md#^e-122564",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-25-e-9ea1d0.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-25.md#^e-9ea1d0",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge"
+  },
+  {
+   "path": "Inbox/filing-2026-10-26-e-886fe6.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-26.md#^e-886fe6",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-26-e-de7b54.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-26.md#^e-de7b54",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "medium",
+   "reason": "unfiled capture; matches Ideas and knowledge over Idealista Data Relationship"
+  },
+  {
+   "path": "Inbox/filing-2026-10-27-e-3289ac.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-27.md#^e-3289ac",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-10-28-e-8c080e.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-28.md#^e-8c080e",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-10-28-e-92c38e.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-28.md#^e-92c38e",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over House decision"
+  },
+  {
+   "path": "Inbox/filing-2026-10-28-e-b86668.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-28.md#^e-b86668",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-10-29-e-0b2c7a.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-29.md#^e-0b2c7a",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-29-e-11f06b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-29.md#^e-11f06b",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-10-29-e-c258c4.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-29.md#^e-c258c4",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-10-29-e-efaee3.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-29.md#^e-efaee3",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-30-e-52b128.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-30.md#^e-52b128",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-10-30-e-adc958.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-30.md#^e-adc958",
+   "action": "archive",
+   "confidence": "low",
+   "suggested": "Projects/Launching Zenod.md",
+   "reason": "tie between Launching Zenod and Infrastructure and runbooks; unsure, so Archive"
+  },
+  {
+   "path": "Inbox/filing-2026-10-31-e-70a449.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-31.md#^e-70a449",
+   "action": "refile",
+   "target": "Projects/Hair transplant.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Hair transplant over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-10-31-e-8b5114.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-31.md#^e-8b5114",
+   "action": "refile",
+   "target": "Projects/Hair transplant.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Hair transplant over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-10-31-e-c64e3b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-31.md#^e-c64e3b",
+   "action": "refile",
+   "target": "Projects/Hair transplant.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Hair transplant over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-10-31-e-f760bf.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-10-31.md#^e-f760bf",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-074873.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-074873",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-0bc842.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-0bc842",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-13ef67.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-13ef67",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-162f7a.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-162f7a",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-199dcc.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-199dcc",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-1d25f9.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-1d25f9",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-1d9fd8.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-1d9fd8",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-288e04.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-288e04",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-35f0ab.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-35f0ab",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-389df4.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-389df4",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-3b92ee.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-3b92ee",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-3d91da.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-3d91da",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-3dae87.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-3dae87",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-3e479d.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-3e479d",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-4ca545.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-4ca545",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-5366c2.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-5366c2",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-559339.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-559339",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Ventures and work"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-5f1191.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-5f1191",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-608b7b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-608b7b",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-666915.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-666915",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-6ceff5.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-6ceff5",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-722da4.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-722da4",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-792a61.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-792a61",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-82a369.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-82a369",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-83415d.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-83415d",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-84e013.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-84e013",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-86406b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-86406b",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-876431.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-876431",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-893921.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-893921",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-8ce39e.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-8ce39e",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-8d587d.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-8d587d",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-914395.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-914395",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-965732.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-965732",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-96cbdc.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-96cbdc",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-981a51.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-981a51",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-9d1bc8.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-9d1bc8",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-a0355e.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-a0355e",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "medium",
+   "reason": "unfiled capture; matches Launching Zenod over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-a075b7.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-a075b7",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-a2a634.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-a2a634",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-a50c50.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-a50c50",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-a63578.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-a63578",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-ade038.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-ade038",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-b7afc2.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-b7afc2",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-bef32a.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-bef32a",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-c2e430.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-c2e430",
+   "action": "archive",
+   "confidence": "low",
+   "suggested": "Projects/Launching Epic Social.md",
+   "reason": "tie between Launching Epic Social and Launching Zenod; unsure, so Archive"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-c487db.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-c487db",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-c63e7b.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-c63e7b",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-c689c6.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-c689c6",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-cc9fcc.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-cc9fcc",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-dca4d6.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-dca4d6",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-e2f340.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-e2f340",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-e96021.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-e96021",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Launching Zenod"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-ecf331.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-ecf331",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-f2468d.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-f2468d",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "medium",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-f8cc97.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-f8cc97",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-fa01bf.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-fa01bf",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-fbc197.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-fbc197",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/filing-2026-11-01-e-fcc2fe.md",
+   "kind": "receipt",
+   "evidence": "Log/2026-11-01.md#^e-fcc2fe",
+   "action": "refile",
+   "target": "Areas/Infrastructure and runbooks.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Infrastructure and runbooks over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-11T00-39-19.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-11.md#^e-632840",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-11T01-00-14.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-11.md#^e-6c4c55",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-12T17-13-40.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-12.md#^e-e1157d",
+   "action": "refile",
+   "target": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Idealista Data Relationship"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-12T17-15-30.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-12.md#^e-fa6e84",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Idealista Data Relationship"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-12T19-04-15.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-12.md#^e-989013",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-13T13-00-56.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-13.md#^e-cee54f",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over Ventures and work"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-14T05-31-38.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-14.md#^e-ce1046",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-16T16-50-49.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-16.md#^e-1c3f87",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-16T18-48-16.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-16.md#^e-a9b716",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-16T18-54-34.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-16.md#^e-080434",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-16T19-23-28.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-16.md#^e-fcfec9",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-17T01-38-47.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-17.md#^e-1b34cb",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-17T01-51-34.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-17.md#^e-bee5c4",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-19T19-36-08.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-19.md#^e-ee8ae2",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-19T19-44-35.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-19.md#^e-1bab67",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-19T19-48-27.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-19.md#^e-3dc8ef",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-06-21T16-06-29.md",
+   "kind": "stub",
+   "evidence": "Log/2026-06-21.md#^e-d55a89",
+   "action": "archive",
+   "confidence": "low",
+   "suggested": "Projects/Launching Epic Social.md",
+   "reason": "tie between Launching Epic Social and Launching Zenod; unsure, so Archive"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-02T21-38-38.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-02.md#^e-d76b2d",
+   "action": "refile",
+   "target": "Areas/Life admin.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Life admin"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-02T21-39-20.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-02.md#^e-405a9c",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-02T23-30-32.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-02.md#^e-4bae76",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T15-27-52.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-58ed5a",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T15-31-26.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-9f6e4c",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T22-08-48.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-10d50c",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T22-47-41.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-af50e0",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T22-49-19.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-f8ee75",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T23-39-50.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-9bcb92",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-04T23-39-56.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-04.md#^e-d13f49",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-07T17-31-22.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-07.md#^e-bb6f0b",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-09T12-24-05.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-09.md#^e-d05c87",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Ventures and work"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-09T12-24-14.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-09.md#^e-d622fc",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Ventures and work"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-09T13-20-33.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-09.md#^e-dcfe86",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-10T23-25-05.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-10.md#^e-26f813",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-10T23-25-33.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-10.md#^e-71b250",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-14-56.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-c7c5d9",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-15-11.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-4db2bb",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-15-18.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-9df1ff",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-16-12.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-84c055",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-16-36.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-06dada",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-17-37.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-cda107",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-18-34.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-ab7512",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T00-18-58.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-051610",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T01-44-27.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-d3fcff",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T02-13-59.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-fe296d",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T02-40-19.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-5bd965",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T03-20-18.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-7de454",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T03-40-12.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-d72b30",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T03-43-59.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-7281ac",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-11T19-29-20.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-11.md#^e-4265fc",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-12T18-14-10.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-12.md#^e-4c776b",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-19T14-52-47.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-19.md#^e-cf6249",
+   "action": "refile",
+   "target": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Idealista Data Relationship over House decision"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-20T16-20-44.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-20.md#^e-ec60d7",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Infrastructure and runbooks"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-24T01-08-07.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-24.md#^e-61066c",
+   "action": "refile",
+   "target": "Projects/Idealista Data Relationship/Idealista Data Relationship.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Idealista Data Relationship over House decision"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-28T15-04-43.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-28.md#^e-ecc5ce",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-28T16-34-40.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-28.md#^e-638f3f",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Launching Epic Social"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-29T23-26-35.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-29.md#^e-45a608",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T00-00-44.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-1d0d28",
+   "action": "refile",
+   "target": "Projects/House decision.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches House decision over Ventures and work"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T00-02-22.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-454112",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T11-02-19.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-e09e41",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T11-22-38.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-9ce34e",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T12-14-00.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-23ece7",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T12-15-09.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-3ffa72",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-30T16-15-18.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-30.md#^e-aa9b9d",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-07-31T20-38-54.md",
+   "kind": "stub",
+   "evidence": "Log/2026-07-31.md#^e-62dcd2",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-03T14-28-24.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-03.md#^e-4f36c7",
+   "action": "refile",
+   "target": "Projects/Launching Epic Social.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Epic Social over House decision"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-24T22-29-05.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-24.md#^e-fb1a6c",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-24T22-31-30.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-24.md#^e-82a68d",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-26T20-02-39.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-26.md#^e-e8128b",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-26T23-08-37.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-26.md#^e-509824",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-26T23-08-50.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-26.md#^e-18df6a",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "test or canary capture, not Jordi's memory"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-27T11-40-24.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-27.md#^e-1eb266",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-27T11-40-53.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-27.md#^e-4b171e",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-28T10-26-40.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-28.md#^e-358be8",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-08-28T10-37-43.md",
+   "kind": "stub",
+   "evidence": "Log/2026-08-28.md#^e-e4fb1e",
+   "action": "archive",
+   "confidence": "medium",
+   "reason": "no node matches; unsure, so Archive (the Log entry stays the evidence)"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-09-06T20-07-29.md",
+   "kind": "stub",
+   "evidence": "Log/2026-09-06.md#^e-0b7779",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-09-06T22-17-03.md",
+   "kind": "stub",
+   "evidence": "Log/2026-09-06.md#^e-8c74f6",
+   "action": "refile",
+   "target": "Projects/Launching Zenod.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Launching Zenod"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-09-13T15-16-30.md",
+   "kind": "stub",
+   "evidence": "Log/2026-09-13.md#^e-f58439",
+   "action": "refile",
+   "target": "Areas/Ideas and knowledge.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ideas and knowledge over Ventures and work"
+  },
+  {
+   "path": "Inbox/needs-filing-2026-09-13T15-19-55.md",
+   "kind": "stub",
+   "evidence": "Log/2026-09-13.md#^e-2fdf31",
+   "action": "refile",
+   "target": "Areas/Ventures and work.md",
+   "confidence": "high",
+   "reason": "unfiled capture; matches Ventures and work over Ideas and knowledge"
+  }
+ ],
+ "other": [
+  {
+   "path": "Council/EPIC-1-SYSTEM-STABILITY.md",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "July launch-control doc outside the schema, superseded by the zenod repo spines."
+  },
+  {
+   "path": "Council/EPIC-2-HOSTED-READINESS.md",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "July launch-control doc outside the schema, superseded."
+  },
+  {
+   "path": "Council/LAUNCH-CONTROL.md",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "July launch-control doc outside the schema, superseded."
+  },
+  {
+   "path": "index_old_archive.md",
+   "action": "archive",
+   "confidence": "high",
+   "reason": "An old index already named as archive."
+  },
+  {
+   "path": "Index.md",
+   "action": "keep",
+   "confidence": "medium",
+   "reason": "Obsidian home note; collides with index.md on a case-insensitive checkout, left for Jordi to choose."
+  },
+  {
+   "path": "index.md",
+   "action": "keep",
+   "confidence": "medium",
+   "reason": "Zenod OKF root index."
+  },
+  {
+   "path": "Databases.md",
+   "action": "keep",
+   "confidence": "high",
+   "reason": "Obsidian Bases views."
+  },
+  {
+   "path": "README.md",
+   "action": "keep",
+   "confidence": "high",
+   "reason": "Vault readme."
+  },
+  {
+   "path": "docs/BACKLOG-SYSTEM-PLAN.md",
+   "action": "keep",
+   "confidence": "medium",
+   "reason": "The vault's own EpicSpine docs; vault upkeep, not memory, left alone."
+  },
+  {
+   "path": "docs/EPIC-0-OBSIDIAN-BRAIN.md",
+   "action": "keep",
+   "confidence": "medium",
+   "reason": "The vault's EpicSpine root, referenced by its AGENTS.md; left alone."
+  }
+ ]
+}
