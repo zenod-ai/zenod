@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { accessSync } from "node:fs";
 import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
+import { createGracefulShutdown } from "./gracefulShutdown.js";
 import { createApp } from "./app.js";
 import { Runtime } from "./runtime.js";
 import { resolveAgent } from "./agent.js";
@@ -97,38 +98,10 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   );
 });
 
-let closing = false;
-function shutdown(): void {
-  if (closing) return;
-  closing = true;
-  const serverClosed = new Promise<void>((resolve, reject) => {
-    server.close((error?: Error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-  if ("closeIdleConnections" in server && typeof server.closeIdleConnections === "function") {
-    server.closeIdleConnections();
-  }
-  const resourcesClosed = Promise.resolve(unit?.close() ?? runtime?.close());
-  const forceTimer = setTimeout(() => {
-    console.error("shutdown exceeded 10 seconds; closing remaining HTTP connections");
-    process.exitCode = 1;
-    if ("closeAllConnections" in server && typeof server.closeAllConnections === "function") {
-      server.closeAllConnections();
-    }
-  }, 10_000);
-  void Promise.allSettled([serverClosed, resourcesClosed]).then((results) => {
-    clearTimeout(forceTimer);
-    const failures = results
-      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-      .map((result) => result.reason);
-    if (failures.length > 0) {
-      console.error("shutdown failed:", new AggregateError(failures, "Server shutdown failed"));
-      process.exitCode = 1;
-    }
-  });
-}
+const shutdown = createGracefulShutdown({
+  server,
+  closeResources: () => unit?.close() ?? runtime?.close(),
+});
 
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
