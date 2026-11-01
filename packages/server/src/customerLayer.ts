@@ -1374,6 +1374,14 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     });
   });
 
+  function wantsHtml(c: Context<{ Bindings: HttpBindings }>): boolean {
+    return (c.req.header("accept") ?? "").toLowerCase().includes("text/html");
+  }
+
+  function signupPausedPage(): string {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signup is paused — Zenod</title><style>:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0a;color:#fafafa;font:16px system-ui}.card{max-width:420px;padding:28px;background:#141414;border:1px solid #303030;border-radius:12px}h1{font-size:24px}p{color:#aaa}a{color:#fafafa}a.button{display:block;margin-top:16px;padding:12px;background:#fafafa;color:#111;text-align:center;text-decoration:none;border-radius:8px}</style></head><body><main class="card"><h1>Signup is paused for a moment</h1><p>We are not taking new subscriptions right now. Nothing was charged. Please try again a little later.</p><p>Questions? Write to <a href="mailto:jordi@alpha9.io">jordi@alpha9.io</a>.</p><a class="button" href="/">Back to Zenod</a></main></body></html>`;
+  }
+
   async function startCheckout(c: Context<{ Bindings: HttpBindings }>, tierInput: unknown) {
     const owner = readCustomerSession(c, env);
     if (!owner) return c.json({ error: "sign in before subscribing" }, 401);
@@ -1389,6 +1397,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.json({ error: "Google signup is not open" }, 503);
     }
     if (!checkoutEnabledForOwner(principal, env)) {
+      if (wantsHtml(c)) return c.html(signupPausedPage(), 503, { "Retry-After": "3600" });
       return c.json({ error: "paid signup is not open" }, 503);
     }
     if (existing?.subscription_status === "active" || existing?.subscription_status === "past_due") {
