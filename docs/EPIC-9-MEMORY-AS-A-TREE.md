@@ -27,13 +27,13 @@ Zenod builds and keeps structure as well as EpicSpine does: what Jordi drops bec
 ## Current State
 
 Owner: Delivery manager
-Status: ready
-Last attempted: scaffolded with spine_new.py on 2026-11-01
+Status: active
+Last attempted: 2026-11-01 wake run_a917c19e: E9-1 audit row M1 readied on Jordi's note and dispatched; before: scaffolded with spine_new.py on 2026-11-01
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
-Approved work: none
-Next action: Jordi marks ready; then the Delivery manager starts with the E9-1 audit
+Approved work: E9-1 audit (Jordi's note 2026-11-01)
+Next action: integrate the M1 audit; from its proposal, plan E9-2 (tree build) and E9-3 (retrieval with lineage) rows
 Source revision: uncommitted scaffold
 Verified at: 2026-11-01
 
@@ -47,7 +47,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| draft | Delivery manager | Delivery manager | E9-1 audit of Zenod's memory structure | draft | Jordi marks ready | none | main | none | 2026-11-01 | plan steps |
+| M1 | Research worker | unassigned | E9-1 audit: how Zenod structures Jordi's memory today (real vault examples), where it gets untidy, what EpicSpine's discipline would change, plus a proposed level-0/1 tree (working vs long-term) | ready | none | - | main | none | 2026-11-01 | dispatch (Jordi's note 2026-11-01: start with E9-1, finished first version before asking) |
 
 ## Decisions
 
@@ -56,6 +56,7 @@ One line per decision; detail goes to a linked page.
 | Date | Outcome | Decision / Attempt | Durable Summary | Evidence | Revisit When |
 |---|---|---|---|---|---|
 | 2026-11-01 | accepted | Created by Team desk from Jordi's 2026-11-01 voice note, placed under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
+| 2026-11-01 | accepted | Jordi's note via Team desk: go on EPIC-9, start with the E9-1 audit, deliver a first finished version before asking | ledger row M1 ready | console note run_a917c19e | — |
 | 2026-11-01 | accepted | stamped ready by Jordi 2026-11-01 (desk chat: "Okay man, just like I said in the voice note, mark us ready all of this and the ones that are ready to go and go.") | Jordi released it for delivery by asking the Team desk: the next standing wake may start it | console commit | — |
 
 ## Operating Learnings
