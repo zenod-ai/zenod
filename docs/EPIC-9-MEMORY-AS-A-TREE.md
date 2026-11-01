@@ -20,7 +20,7 @@ Zenod builds and keeps structure as well as EpicSpine does: what Jordi drops bec
 
 ## Done means
 
-- [ ] E9-1 Audit: one page on how Zenod structures memory today (with real examples from Jordi's vault), where it gets untidy, and what EpicSpine's structure discipline would change.
+- [x] E9-1 Audit: one page on how Zenod structures memory today (with real examples from Jordi's vault), where it gets untidy, and what EpicSpine's structure discipline would change. Evidence: [E9-1 audit](epic9/E9-1-memory-structure-audit.md) (718acaa).
 - [ ] E9-2 Jordi's memory has a top-level tree (working memory: what is ongoing now; long-term: the rest) that a new memory is placed into, and he can read it at levels 0-1 and recognise his world.
 - [ ] E9-3 Retrieval uses the tree: a question returns the item with its lineage, tested on 10 real questions from Jordi's history.
 
@@ -29,13 +29,17 @@ Zenod builds and keeps structure as well as EpicSpine does: what Jordi drops bec
 Owner: Delivery manager
 Status: active
 Last attempted: 2026-11-01 wake run_a917c19e: E9-1 audit row M1 readied on Jordi's note and dispatched; before: scaffolded with spine_new.py on 2026-11-01
-Result: E9-1 audit in flight (M1)
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Result: E9-1 audit done 2026-11-01 ([page](epic9/E9-1-memory-structure-audit.md)): Zenod keeps no tree, parent or working/long-term split; proposed level-0/1 tree, 7 filing rules, 6 build rows (draft)
+Evidence: [E9-1 audit](epic9/E9-1-memory-structure-audit.md) 718acaa
+Waiting on: Jordi, ask E9-A1 (below)
 Approved work: E9-1 audit (Jordi's note 2026-11-01)
-Next action: integrate the M1 audit; from its proposal, plan E9-2 (tree build) and E9-3 (retrieval with lineage) rows
+Next action: on E9-A1 dispatch E9-2a and E9-3a in parallel, then E9-2b, E9-2d, E9-3b; E9-2c as a reviewed proposal
 Source revision: uncommitted scaffold
 Verified at: 2026-11-01
+
+## Waiting on
+
+- [ask E9-A1: approve @Jordi since 2026-11-01 row E9-2a] Build the memory tree as proposed in the audit? (ready E9-2a, E9-2b, E9-2d, E9-3a, E9-3b; E9-2c, the clean-up of your existing vault, comes back to you as a reviewed proposal before anything moves) — context: the E9-1 audit is done: Zenod files every capture into the daily Log but keeps no tree, no parent and no ongoing-vs-long-term split; 79% of your non-Log notes have nothing linking to them and 146 Inbox stubs were never resolved — impact: yes starts the build now; waiting leaves new captures landing untidily — risk: low; the build changes how new captures are filed and what answers cite, nothing in your vault is moved or deleted until you OK E9-2c; rollback: revert the librarian change — recommend: yes, with the audit's three defaults (working roots = Epic Social, Zenod, Hair transplant, House decision, then proposed from the last 30 days; agent ops reports become one dated rollup line per project; the clean-up is one reviewed proposal that never deletes) — why Jordi: only you ready rows, and the tree is your world to recognise — details: [E9-1 audit](epic9/E9-1-memory-structure-audit.md), [tree picture](http://vps3.taild81fbb.ts.net:54189/E9-1-memory-tree.html)
 
 ## Non-Goals
 
@@ -47,7 +51,13 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| M1 | Research worker | worker run_fb4e5e13 | E9-1 audit: how Zenod structures Jordi's memory today (real vault examples), where it gets untidy, what EpicSpine's discipline would change, plus a proposed level-0/1 tree (working vs long-term) | active | none | - | main | none | 2026-11-01 | dispatch (Jordi's note 2026-11-01: start with E9-1, finished first version before asking) |
+| M1 | Research worker | worker run_fb4e5e13 | E9-1 audit: how Zenod structures Jordi's memory today (real vault examples), where it gets untidy, what EpicSpine's discipline would change, plus a proposed level-0/1 tree (working vs long-term) | done | none | - | main | [E9-1 audit](epic9/E9-1-memory-structure-audit.md) 718acaa + [tree page](epic9/E9-1-memory-tree.html): vault is AlfaBlok/obsidian-brain, 413 notes, 79% unlinked, 146 unresolved Inbox stubs; no tree/parent/working split; proposed level-0/1 tree + 7 filing rules | 2026-11-01 | Jordi reads it (E9-A1) |
+| E9-2a | Ticket worker | unassigned | Tree file and node schema: `Tree.md` (levels 0/1, one line per node) + page frontmatter `parent:`, `memory: working\|long-term` | draft | M1 | - | main | audit §5 | 2026-11-01 | lint passes on a fixture vault; every meaning page has a resolvable parent |
+| E9-2b | Ticket worker | unassigned | Librarian places every capture as a leaf under a parent, writes `- filed:` back on the Log entry | draft | E9-2a | - | main | audit §5 rules 2–6 | 2026-11-01 | replay of 20 real-shaped captures: 0 receipt-only, 100% filed + parent |
+| E9-2c | Ticket worker | unassigned | One-time reviewed migration of Jordi's vault into the tree (moves/merges, Inbox re-filed or archived, never deletes, Log untouched) | draft | E9-2a; Jordi OK on the tree | - | main | audit §6 Q3 | 2026-11-01 | Jordi recognises his world at levels 0–1 (E9-2) |
+| E9-2d | Ticket worker | unassigned | Weekly sweep: stale working roots → offer closure, pending receipts → re-file, duplicate titles → merge proposal | draft | E9-2b | - | main | audit §4 | 2026-11-01 | one prod sweep report, tree lint-clean |
+| E9-3a | Ticket worker | unassigned | Retrieval returns lineage: `search_memory`/`get_memory` hits carry node path + evidence anchor; a node returns parent + children | draft | E9-2a | - | main | audit §5 | 2026-11-01 | schema updated; test asserts the path on 5 hits |
+| E9-3b | Ticket worker | unassigned | `ask_brain` briefs from the tree and cites the path; 10 real questions from Jordi's history (E9-3) | draft | E9-3a, E9-2c | - | main | audit §5 | 2026-11-01 | 10 real questions answered with the right lineage |
 
 ## Decisions
 
