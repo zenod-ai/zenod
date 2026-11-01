@@ -29,7 +29,7 @@ Zenod builds and keeps structure as well as EpicSpine does: what Jordi drops bec
 Owner: Delivery manager
 Status: active
 Last attempted: 2026-11-01 wake run_a917c19e: E9-1 audit row M1 readied on Jordi's note and dispatched; before: scaffolded with spine_new.py on 2026-11-01
-Result: created, not started
+Result: E9-1 audit in flight (M1)
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
 Approved work: E9-1 audit (Jordi's note 2026-11-01)
@@ -47,7 +47,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| M1 | Research worker | unassigned | E9-1 audit: how Zenod structures Jordi's memory today (real vault examples), where it gets untidy, what EpicSpine's discipline would change, plus a proposed level-0/1 tree (working vs long-term) | ready | none | - | main | none | 2026-11-01 | dispatch (Jordi's note 2026-11-01: start with E9-1, finished first version before asking) |
+| M1 | Research worker | worker run_fb4e5e13 | E9-1 audit: how Zenod structures Jordi's memory today (real vault examples), where it gets untidy, what EpicSpine's discipline would change, plus a proposed level-0/1 tree (working vs long-term) | active | none | - | main | none | 2026-11-01 | dispatch (Jordi's note 2026-11-01: start with E9-1, finished first version before asking) |
 
 ## Decisions
 
