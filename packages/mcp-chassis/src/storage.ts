@@ -4,8 +4,8 @@ import {
   hkdfSync,
   randomBytes,
 } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { mkdirSync, readdirSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const DEFAULT_DATA_DIR = "/data";
@@ -637,5 +637,198 @@ function ensureContained(rootDir: string, target: string): void {
   const rel = relative(rootDir, target);
   if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new Error("tenant storage path escaped data root");
+  }
+}
+
+export interface ChassisRekeyOptions {
+  /** Unit data root holding /<tenant_id>/... directories. */
+  dataDir: string;
+  /** Key every envelope must decrypt under when done (the new key). */
+  key: string | Uint8Array;
+  /** Key the envelopes are currently encrypted under; omit to only verify. */
+  previousKey?: string | Uint8Array;
+}
+
+export interface ChassisRekeyReport {
+  /** SQLite files that hold at least one envelope. */
+  files: number;
+  /** Envelopes found by a full scan of every text column of every SQLite file. */
+  envelopes: number;
+  /** Envelopes that decrypt under `key` after the run. */
+  verified: number;
+  /** Envelopes re-encrypted from `previousKey` to `key` in this run. */
+  rekeyed: number;
+  /** Envelopes that decrypt under neither key, or that no known store accounts for. */
+  failed: number;
+}
+
+interface EnvelopeRef {
+  table: string;
+  column: string;
+  rowid: number;
+  aadKey: string;
+  value: string;
+}
+
+/**
+ * Re-encrypts every tenant vault and settings envelope under `key` (offline,
+ * with the unit stopped). Idempotent: envelopes already under `key` are left
+ * as they are. Without `previousKey` it only verifies. Refuses to write
+ * anything if a full scan finds an envelope outside the known stores, so a
+ * rotation can never strand a ciphertext under the retired key. Reports
+ * counts only, never values.
+ */
+export function rekeyChassisDataDir(options: ChassisRekeyOptions): ChassisRekeyReport {
+  const dataDir = resolve(options.dataDir);
+  const key = normalizeVaultMasterKey(options.key);
+  const previousKey =
+    options.previousKey === undefined ? null : normalizeVaultMasterKey(options.previousKey);
+  const report: ChassisRekeyReport = { files: 0, envelopes: 0, verified: 0, rekeyed: 0, failed: 0 };
+  const plans: Array<{ path: string; tenantId: string; identity: string; refs: EnvelopeRef[] }> = [];
+  let unaccounted = 0;
+  for (const path of listSqliteFiles(dataDir)) {
+    const rel = relative(dataDir, path).split(sep);
+    const tenantId = rel.length > 1 && TENANT_ID_RE.test(rel[0]!) ? rel[0]! : null;
+    const db = openSqlite(path);
+    try {
+      const total = countEnvelopes(db);
+      if (!total) continue;
+      report.files += 1;
+      report.envelopes += total;
+      const refs = tenantId ? knownEnvelopes(db, tenantId) : [];
+      if (refs.length !== total) unaccounted += total - refs.length;
+      plans.push({ path, tenantId: tenantId ?? "", identity: rel.slice(1).join("/"), refs });
+    } finally {
+      db.close();
+    }
+  }
+  if (unaccounted) {
+    report.failed = unaccounted;
+    return report;
+  }
+  for (const plan of plans) {
+    const db = openSqlite(plan.path);
+    try {
+      const newFileKey = deriveTenantVaultKey(key, plan.tenantId, plan.identity);
+      const oldFileKey = previousKey
+        ? deriveTenantVaultKey(previousKey, plan.tenantId, plan.identity)
+        : null;
+      const updates: Array<{ ref: EnvelopeRef; value: string }> = [];
+      for (const ref of plan.refs) {
+        const aad = vaultAad(plan.tenantId, plan.identity, ref.aadKey);
+        if (tryDecryptVaultValue(ref.value, newFileKey, aad) !== null) {
+          report.verified += 1;
+          continue;
+        }
+        const plaintext = oldFileKey ? tryDecryptVaultValue(ref.value, oldFileKey, aad) : null;
+        if (plaintext === null) {
+          report.failed += 1;
+          continue;
+        }
+        updates.push({ ref, value: encryptVaultValue(plaintext, newFileKey, aad) });
+      }
+      if (!updates.length) continue;
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        for (const { ref, value } of updates) {
+          db.prepare(`UPDATE "${ref.table}" SET "${ref.column}" = ? WHERE rowid = ? AND "${ref.column}" = ?`)
+            .run(value, ref.rowid, ref.value);
+        }
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      // Old-key ciphertext must not survive in free pages or the WAL.
+      securelyRewriteSqlite(db);
+      report.rekeyed += updates.length;
+      report.verified += updates.length;
+    } finally {
+      db.close();
+    }
+  }
+  return report;
+}
+
+function listSqliteFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listSqliteFiles(path));
+    else if (entry.isFile() && entry.name.endsWith(".sqlite")) out.push(path);
+  }
+  return out.sort();
+}
+
+function quotedTables(db: DatabaseSync): string[] {
+  return (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>)
+    .map((row) => row.name)
+    .filter((name) => !name.startsWith("sqlite_"));
+}
+
+function countEnvelopes(db: DatabaseSync): number {
+  let total = 0;
+  for (const table of quotedTables(db)) {
+    for (const column of tableColumns(db, `"${table}"`)) {
+      const row = db
+        .prepare(
+          `SELECT count(*) AS n FROM "${table}" WHERE typeof("${column}") = 'text' AND substr("${column}", 1, ?) = ?`,
+        )
+        .get(VAULT_ENVELOPE_PREFIX.length, VAULT_ENVELOPE_PREFIX) as { n: number };
+      total += Number(row.n);
+    }
+  }
+  return total;
+}
+
+function knownEnvelopes(db: DatabaseSync, tenantId: string): EnvelopeRef[] {
+  const tables = new Set(quotedTables(db));
+  const refs: EnvelopeRef[] = [];
+  const isEnvelope = (value: unknown): value is string =>
+    typeof value === "string" && value.startsWith(VAULT_ENVELOPE_PREFIX);
+  if (tables.has("vault_entries")) {
+    for (const row of db
+      .prepare("SELECT rowid, key, encrypted_value FROM vault_entries WHERE tenant_id = ?")
+      .all(tenantId) as Array<{ rowid: number; key: string; encrypted_value: unknown }>) {
+      if (isEnvelope(row.encrypted_value)) {
+        refs.push({ table: "vault_entries", column: "encrypted_value", rowid: row.rowid, aadKey: normalizeVaultKey(row.key), value: row.encrypted_value });
+      }
+    }
+  }
+  if (tables.has("vault_metadata")) {
+    const row = db
+      .prepare("SELECT rowid, value FROM vault_metadata WHERE key = ?")
+      .get(`key_verifier:${tenantId}`) as { rowid: number; value: unknown } | undefined;
+    if (row && isEnvelope(row.value)) {
+      refs.push({ table: "vault_metadata", column: "value", rowid: row.rowid, aadKey: VAULT_KEY_VERIFIER_KEY, value: row.value });
+    }
+  }
+  if (tables.has("tenant_settings")) {
+    for (const row of db
+      .prepare("SELECT rowid, setting_key, stored_value FROM tenant_settings")
+      .all() as Array<{ rowid: number; setting_key: string; stored_value: unknown }>) {
+      if (isEnvelope(row.stored_value)) {
+        refs.push({ table: "tenant_settings", column: "stored_value", rowid: row.rowid, aadKey: normalizeVaultKey(row.setting_key), value: row.stored_value });
+      }
+    }
+  }
+  if (tables.has("settings_metadata")) {
+    const row = db
+      .prepare("SELECT rowid, value FROM settings_metadata WHERE key = 'secret_key_verifier'")
+      .get() as { rowid: number; value: unknown } | undefined;
+    if (row && isEnvelope(row.value)) {
+      refs.push({ table: "settings_metadata", column: "value", rowid: row.rowid, aadKey: SETTINGS_KEY_VERIFIER_CIPHER_KEY, value: row.value });
+    }
+  }
+  return refs;
+}
+
+const SETTINGS_KEY_VERIFIER_CIPHER_KEY = "__chassis_settings_key_verifier__";
+
+function tryDecryptVaultValue(value: string, key: Buffer, aad: Buffer): string | null {
+  try {
+    return decryptVaultValue(value, key, aad);
+  } catch {
+    return null;
   }
 }

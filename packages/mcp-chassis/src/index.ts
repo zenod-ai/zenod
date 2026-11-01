@@ -2062,10 +2062,12 @@ function toProvisionTenantResponse(result: ProvisionTenantResult): {
 }
 
 export * from "./conduct.js";
-export { ChassisStorage, openSqlite } from "./storage.js";
+export { ChassisStorage, openSqlite, rekeyChassisDataDir } from "./storage.js";
 export { ChassisUsageStore, TenantUsageMeter } from "./usage.js";
 export { TokenBucketLimiter, rateLimitFromEnv, DEFAULT_MCP_RATE_LIMIT, type RateLimitOptions } from "./rateLimit.js";
 export type {
+  ChassisRekeyOptions,
+  ChassisRekeyReport,
   ChassisStorageOptions,
   TenantStorage,
   TenantValueCipher,
