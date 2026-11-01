@@ -27,7 +27,7 @@ Zenod builds and keeps structure as well as EpicSpine does: what Jordi drops bec
 ## Current State
 
 Owner: Delivery manager
-Status: draft
+Status: ready
 Last attempted: scaffolded with spine_new.py on 2026-11-01
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
@@ -56,6 +56,7 @@ One line per decision; detail goes to a linked page.
 | Date | Outcome | Decision / Attempt | Durable Summary | Evidence | Revisit When |
 |---|---|---|---|---|---|
 | 2026-11-01 | accepted | Created by Team desk from Jordi's 2026-11-01 voice note, placed under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
+| 2026-11-01 | accepted | stamped ready by Jordi 2026-11-01 (desk chat: "Okay man, just like I said in the voice note, mark us ready all of this and the ones that are ready to go and go.") | Jordi released it for delivery by asking the Team desk: the next standing wake may start it | console commit | — |
 
 ## Operating Learnings
 
