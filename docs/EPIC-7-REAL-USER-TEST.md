@@ -40,7 +40,7 @@ Verified at: 2026-10-31 (readiness ready=true and backup_restore ok read live; h
 
 ## Waiting on
 
-- [ask E7-A3: approve @Jordi since 2026-10-31 row T2] Stamp T2.1–T2.7 and T3 `ready` so workers can start them — context: T1 mapped the signup path and found 7 gaps (renewal with no card, the open free-forever code, checkout closing again on 2026-11-28, phone link/Saved never proven, console has no list of saved replies, raw-JSON closed page, backups pausing WhatsApp); they and T3 (caps) are draft, and only you can ready a row — impact: T0 and T1 are done, so nothing in EPIC-7 can run until these are ready; each day waiting delays the tester invites — risk: low, each row is reversible code/docs work; live Stripe changes (T2.2) still come back as their own ask — recommend: ready all eight now; T2.5 can wait for your call on what 'visible in console' means — why Jordi: only Jordi stamps rows ready — details: [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md)
+- [answered E7-A3 2026-11-01 @Jordi] Stamp T2.1–T2.7 and T3 `ready` so workers can start them — context: T1 mapped the signup path and found 7 gaps (renewal with no card, the open free-forever code, checkout closing again on 2026-11-28, phone link/Saved never proven, console has no list of saved replies, raw-JSON closed page, backups pausing WhatsApp); they and T3 (caps) are draft, and only you can ready a row — impact: T0 and T1 are done, so nothing in EPIC-7 can run until these are ready; each day waiting delays the tester invites — risk: low, each row is reversible code/docs work; live Stripe changes (T2.2) still come back as their own ask — recommend: ready all eight now; T2.5 can wait for your call on what 'visible in console' means — why Jordi: only Jordi stamps rows ready — details: [T1 map](evidence/epic7-t1-new-user-path-2026-10-31.md) — answer: APPROVED — Approved by the agent_team manager thread on Jordi's word 2026-10-31 ("mark ready whatever needs to be marked ready"; EPIC-7 Approved work T0..T9). Stamp T2.1-T2.7 and T3 ready and dispatch them. T2.5 too, with the reading "saved replies listed in the console". Live Stripe changes (T2.2) still come back as their own ask. (given in the console 2026-11-01, written in by Unblocker)
 
 ## Non-Goals
 
@@ -85,6 +85,7 @@ One line per decision; detail goes to a linked page.
 | 2026-10-27 | accepted | Jordi: free code lasts 1 month, extended month by month while they test and give feedback; testers are told no payment details, never charged | T4/T5 | chat 2026-10-27 | when the test ends |
 | 2026-10-27 | accepted | Jordi: use the Zenod production number for WhatsApp; start with 5 users once ready | T1/T7/T9 | chat 2026-10-27 | after wave 1 |
 | 2026-10-27 | accepted | ZAL A2, A3, A4 moved here as T3, T4, T9 | one place for the whole path | EPIC-ZENOD-ALPHA-LAUNCH.md | never |
+| 2026-11-01 | accepted | Jordi (E7-A3, via the agent_team manager thread 2026-10-31): stamp T2.1–T2.7 and T3 ready and dispatch them; T2.5 reads E7-3 as "saved replies listed in the console"; live Stripe changes (T2.2) come back as their own ask | Delivery manager stamps the eight rows ready on this answer | console answer jr_2bf7e47b, Waiting on E7-A3 | if Jordi reverses the card |
 
 ## Operating Learnings
 
