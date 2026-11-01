@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-import { join } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { simpleGit } from "simple-git";
 import { VERSION } from "./index.js";
 import { getNote, NoteNotFoundError } from "./ops/get.js";
 import { searchVault } from "./ops/search.js";
 import { lintVault } from "./vault/lint.js";
+import { lintTree } from "./vault/treeLint.js";
+import { AUDIT_TREE_PROPOSAL, seedTreeFiles } from "./vault/treeSeed.js";
+import { buildTreeIndex, formatLineage } from "./vault/tree.js";
 import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
@@ -15,7 +18,7 @@ import { createBrainLlm, type Provider } from "./llm/aisdk.js";
 import { SqliteStateStore } from "./state/sqlite.js";
 import type { BrainEngine } from "./types.js";
 
-const COMMANDS = ["store", "ask", "chat", "search", "get", "lint", "clean-slate"] as const;
+const COMMANDS = ["store", "ask", "chat", "search", "get", "lint", "tree", "clean-slate"] as const;
 type Command = (typeof COMMANDS)[number];
 
 function usage(): string {
@@ -31,6 +34,9 @@ function usage(): string {
     "  search <query>  deterministic search, no LLM",
     "  get <path>      fetch one note, no LLM",
     "  lint [paths..]  validate the vault against the schema",
+    "  tree lint [--json]        check the memory tree (parents, Tree.md roots, cycles, depth, duplicate titles)",
+    "  tree lineage <path>       print a page's path root → leaf",
+    "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print the audit's proposed Tree.md, or write Tree.md + root pages into <dir>",
     "  clean-slate <path> [--push]  initialize an empty vault in two commits",
     "",
     "Environment:",
@@ -167,6 +173,61 @@ async function main(): Promise<number> {
       }
       console.log(`${report.ok ? "ok" : `${report.errors.length} error(s)`} — ${report.checkedFiles} file(s) checked`);
       return report.ok ? 0 : 1;
+    }
+
+    case "tree": {
+      const [sub, ...rest] = args;
+      if (sub === "lint") {
+        const report = await lintTree(vaultPath());
+        if (rest.includes("--json")) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          for (const issue of report.issues) {
+            console.error(`${issue.path}${issue.line ? `:${issue.line}` : ""}  [${issue.rule}]  ${issue.severity === "warning" ? "warning: " : ""}${issue.message}`);
+          }
+          const s = report.stats;
+          console.log([
+            `tree pages ${s.treePages} · rooted ${s.rooted} · roots working ${s.rootNodes.working} / long-term ${s.rootNodes["long-term"]}`,
+            `without parent ${s.withoutParent} · unresolved parent ${s.unresolvedParent} · parent not in Tree.md ${s.parentNotInTree} · cycles ${s.cycles} · too deep ${s.tooDeep} · memory mismatch ${s.memoryMismatch}`,
+            `duplicate titles ${s.duplicateTitleGroups} group(s) / ${s.duplicateTitlePages} page(s) · Inbox machine files ${s.inboxMachineFiles} · outside schema ${s.outsideSchema}`,
+            report.ok ? "ok" : `${report.issues.filter(i => i.severity === "error").length} error(s)`,
+          ].join("\n"));
+        }
+        return report.ok ? 0 : 1;
+      }
+      if (sub === "lineage" && rest[0]) {
+        const result = (await buildTreeIndex(vaultPath())).lineage(rest[0]);
+        if (!result.ok) {
+          console.error(`${rest[0]}: ${result.reason} at ${result.at}`);
+          return 1;
+        }
+        console.log(formatLineage(result));
+        return 0;
+      }
+      if (sub === "seed") {
+        const flag = (name: string) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
+        const files = seedTreeFiles(AUDIT_TREE_PROPOSAL, flag("--date"));
+        const out = flag("--out");
+        if (!out) {
+          process.stdout.write(files[0]!.content);
+          return 0;
+        }
+        for (const file of files) {
+          const target = join(out, file.path);
+          if (await access(target).then(() => true, () => false)) {
+            console.error(`${target} already exists; seed never overwrites`);
+            return 1;
+          }
+        }
+        for (const file of files) {
+          await mkdir(dirname(join(out, file.path)), { recursive: true });
+          await writeFile(join(out, file.path), file.content, { flag: "wx" });
+          console.log(`wrote ${join(out, file.path)}`);
+        }
+        return 0;
+      }
+      console.error(usage());
+      return 2;
     }
 
     case "clean-slate": {

@@ -1,0 +1,10 @@
+schema_version: 1
+tags:
+  - insurance
+  - vehicle
+  - travel
+  - housing
+  - finance
+  - health
+  - work
+confidence_threshold: 0.7

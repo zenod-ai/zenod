@@ -53,6 +53,15 @@ export { parseNote, serializeNote, type ParsedNote } from "./vault/frontmatter.j
 export { listMarkdownFiles, tierOf, basenameOf, isIndexFile, MEANING_FOLDERS, type Tier, type MeaningType } from "./vault/files.js";
 export { scanVault, extractPageLinks, extractCitations, type PageIndexEntry, type VaultSnapshot } from "./vault/pages.js";
 export { lintVault } from "./vault/lint.js";
+export {
+  TREE_PATH, PARENT_FIELD, MEMORY_FIELD, TREE_PARENT, MAX_TREE_DEPTH, MEMORY_KINDS, GROUP_HEADINGS,
+  parseTree, readTree, formatTreeNode, pagePathFromRef, pageTreeFields, isTreeParentRef, isTreePage,
+  buildTreeIndex, createTreeIndex, formatLineage,
+  type MemoryKind, type TreeNode, type ParsedTree, type TreeParseProblem, type PageTreeFields,
+  type LineageStep, type LineageResult, type TreeIndex,
+} from "./vault/tree.js";
+export { lintTree, lintTreeIndex, type TreeLintIssue, type TreeLintReport, type TreeLintStats } from "./vault/treeLint.js";
+export { AUDIT_TREE_PROPOSAL, seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";
 export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "./vault/cleanSlate.js";
 export { githubSourceRef, githubUrl, type VaultLocation } from "./vault/github.js";
