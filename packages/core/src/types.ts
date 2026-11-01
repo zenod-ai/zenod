@@ -1,3 +1,4 @@
+import type { MemoryTreeIndex } from "./vault/lineage.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
  * (later) the WhatsApp gateway are all thin adapters over `BrainEngine`.
@@ -506,6 +507,11 @@ export interface BrainEngine {
   getEntry(evidenceRef: string): Promise<MemoryEntry>;
   /** Deterministic note fetch. No LLM. */
   get(path: string): Promise<Note>;
+  /**
+   * Deterministic memory-tree index (Tree.md + page `parent:`) for retrieval lineage.
+   * Optional: engines without it report every memory as unplaced.
+   */
+  memoryTree?(): Promise<MemoryTreeIndex>;
   /** Deterministic vault validation. No LLM. */
   lint(): Promise<LintReport>;
 }

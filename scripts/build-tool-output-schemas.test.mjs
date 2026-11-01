@@ -104,3 +104,14 @@ test("search_memory describes its additive direct entries pagination contract", 
   }
   assert.ok(schema.properties.entries.items.properties.evidenceRef);
 });
+
+test("search_memory hits and get_memory notes carry additive tree lineage (EPIC-9 E9-3a)", () => {
+  const search = bundleTool("zenod.search_memory", registry);
+  const hit = search.properties.hits.items;
+  assert.equal(hit.required, undefined);
+  for (const field of ["placement", "lineage", "evidenceRefs"]) assert.ok(hit.properties[field]);
+  assert.deepEqual(Object.keys(search.$defs), ["MemoryLineageNode"]);
+  const note = bundleTool("zenod.get_memory", registry).$defs.Ev_memory_note;
+  assert.deepEqual(note.required, ["kind", "path", "content", "url", "provider"]);
+  for (const field of ["placement", "lineage", "evidenceRefs", "parent", "children"]) assert.ok(note.properties[field]);
+});

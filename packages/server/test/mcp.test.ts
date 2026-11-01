@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -6,7 +6,7 @@ import { serve, type ServerType } from "@hono/node-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { ContextRefError, appendEvidence, getEvidenceEntry, searchEvidenceEntries, type BrainEngine } from "zenod";
+import { ContextRefError, appendEvidence, getEvidenceEntry, getNote, loadMemoryTree, searchEvidenceEntries, searchVault, type BrainEngine } from "zenod";
 import { ARCHUS_AGENT, EPAMINON_AGENT } from "../src/agent.js";
 import { createApp } from "../src/app.js";
 import { Runtime } from "../src/runtime.js";
@@ -535,11 +535,77 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
+  it("search_memory and get_memory return tree lineage with evidence anchors (E9-3a)", async () => {
+    const vault = await mkdtemp(join(tmpdir(), "zenod-mcp-lineage-"));
+    const files: Record<string, string> = {
+      "Tree.md": "# Memory tree\n\n## Working memory\n\n- Hair transplant | working | [[Projects/Hair transplant]] | Options.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | Businesses.\n",
+      "Projects/Hair transplant.md": "---\ntitle: Hair transplant\nparent: \"[[Tree]]\"\nmemory: working\n---\nOptions.\n",
+      "Notes/Barcelona quotes.md": "---\ntitle: Barcelona quotes\nparent: \"[[Hair transplant]]\"\n---\nLineageword quote [[2026-10-31#^e-c64e3b]].\n",
+      "Notes/Turkey clinics.md": "---\ntitle: Turkey clinics\nparent: \"[[Hair transplant]]\"\n---\nLineageword clinics.\n",
+      "Areas/Ventures and work.md": "---\ntitle: Ventures and work\nparent: \"[[Tree]]\"\nmemory: long-term\n---\nLineageword companies.\n",
+      "Notes/Alpha9 tax.md": "---\ntitle: Alpha9 tax\nparent: \"[[Ventures and work]]\"\n---\nLineageword AEAT.\n",
+      "Notes/AEAT filing.md": "---\ntitle: AEAT filing\nparent: \"[[Alpha9 tax]]\"\n---\nLineageword Q3.\n",
+      "Notes/Legacy.md": "---\ntitle: Legacy\n---\nLineageword old.\n",
+    };
+    for (const [path, content] of Object.entries(files)) {
+      await mkdir(join(vault, path, ".."), { recursive: true });
+      await writeFile(join(vault, path), content);
+    }
+    const original = { search: fakeEngine.search, get: fakeEngine.get };
+    fakeEngine.search = (query) => searchVault(vault, query);
+    fakeEngine.get = (path) => getNote(vault, path);
+    fakeEngine.memoryTree = () => loadMemoryTree(vault);
+    const client = await connect();
+    try {
+      const search = await client.callTool({ name: "search_memory", arguments: { query: "lineageword" } });
+      const hits = (search.structuredContent as { hits: Array<{ path: string; placement: string; lineage: Array<{ title: string }>; evidenceRefs: string[] }> }).hits;
+      const paths = Object.fromEntries(hits.map((hit) => [hit.path, hit.lineage.map((node) => node.title).join(" › ")]));
+      expect(paths).toEqual({
+        "Notes/Barcelona quotes.md": "Working memory › Hair transplant › Barcelona quotes",
+        "Notes/Turkey clinics.md": "Working memory › Hair transplant › Turkey clinics",
+        "Areas/Ventures and work.md": "Long-term memory › Ventures and work",
+        "Notes/Alpha9 tax.md": "Long-term memory › Ventures and work › Alpha9 tax",
+        "Notes/AEAT filing.md": "Long-term memory › Ventures and work › Alpha9 tax › AEAT filing",
+        "Notes/Legacy.md": "",
+      });
+      expect(hits.find((hit) => hit.path === "Notes/Legacy.md")).toMatchObject({ placement: "unplaced", lineage: [] });
+      expect(hits.find((hit) => hit.path === "Notes/Barcelona quotes.md")?.evidenceRefs).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
+      const text = search.content.map((item) => (item as { text: string }).text).join("\n");
+      expect(text).toContain("path: Working memory › Hair transplant › Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b");
+      expect(validateToolResponse("zenod.search_memory", search.structuredContent)).toBeTruthy();
+
+      const node = await client.callTool({ name: "get_memory", arguments: { path: "Projects/Hair transplant.md" } });
+      expect(node.structuredContent).toMatchObject({
+        placement: "placed",
+        parent: { path: null, title: "Working memory", memory: "working" },
+        children: [
+          { path: "Notes/Barcelona quotes.md", title: "Barcelona quotes" },
+          { path: "Notes/Turkey clinics.md", title: "Turkey clinics" },
+        ],
+      });
+      const legacy = await client.callTool({ name: "get_memory", arguments: { path: "Notes/Legacy.md" } });
+      expect(legacy.isError).toBeFalsy();
+      expect(legacy.structuredContent).toMatchObject({ placement: "unplaced", lineage: [], parent: null, children: [] });
+    } finally {
+      fakeEngine.search = original.search;
+      fakeEngine.get = original.get;
+      delete fakeEngine.memoryTree;
+      await client.close();
+      await rm(vault, { recursive: true, force: true });
+    }
+  });
+
   it("search_memory and store_memory round-trip", async () => {
     const client = await connect();
 
     const search = await client.callTool({ name: "search_memory", arguments: { query: "insurance" } });
     expect(JSON.stringify(search.structuredContent)).toContain("Areas/Insurance.md");
+    // An engine without a memory tree (and every vault before E9-2c) reports unplaced hits, unchanged ranking.
+    expect((search.structuredContent as { hits: unknown[] }).hits).toEqual([
+      { path: "Areas/Insurance.md", snippet: "about insurance", score: 9, githubUrl: "", placement: "unplaced", lineage: [], evidenceRefs: [] },
+    ]);
+    const plain = await client.callTool({ name: "get_memory", arguments: { path: "Areas/Insurance.md" } });
+    expect(plain.structuredContent).toMatchObject({ path: "Areas/Insurance.md", placement: "unplaced", lineage: [], parent: null, children: [] });
 
     const stored = (await runAsyncTool(client, "store_memory", {
       content: "I renewed my insurance",

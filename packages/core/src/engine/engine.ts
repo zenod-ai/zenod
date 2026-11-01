@@ -50,6 +50,7 @@ import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
 import { getNote } from "../ops/get.js";
+import { loadMemoryTree } from "../vault/lineage.js";
 import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
@@ -3016,6 +3017,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       assertVault(repo);
       await syncForRead();
       return getNote(vaultPath, path, sourceResolver);
+    },
+    memoryTree: async () => {
+      assertVault(repo);
+      await syncForRead();
+      return loadMemoryTree(vaultPath);
     },
     lint: async (): Promise<LintReport> => {
       assertVault(repo);
