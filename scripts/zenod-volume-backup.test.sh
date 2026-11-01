@@ -11,6 +11,7 @@ export MOCK_VERIFY_FAILS=0
 export MOCK_ARCHIVE_FAILS=0
 export MOCK_MOUNTED_VOLUME=zenod-mt-data
 export MOCK_REPLICAS=1
+export MOCK_DELTA_FAILS=0
 
 docker() {
   printf '%s\n' "$*" >>"$MOCK_CALL_LOG"
@@ -50,7 +51,24 @@ docker() {
         return 1
       fi
       ;;
-    pause|unpause|start|stop) : ;;
+    exec)
+      case "$*" in
+        *'zenod-live-snapshot.mjs full'*) printf '%s\n' '{"command":"full","started_ms":1700000000000}' ;;
+        *'zenod-live-snapshot.mjs delta'*)
+          # fail the paused pass (the one after the catch-up pass)
+          [[ "$MOCK_DELTA_FAILS" == "0" || "$*" != *" 1700000000500" ]] || return 1
+          printf '%s\n' '{"command":"delta","copied":3,"started_ms":1700000000500}'
+          ;;
+        *'zenod-live-snapshot.mjs repair'*) printf '%s\n' '{"command":"repair","copied":0}' ;;
+        *'tar -czf /archive/'*)
+          [[ "$*" =~ tar\ -czf\ /archive/([^[:space:]]+) ]]
+          mkdir -p "$MOCK_ARCHIVE_DIR"
+          /usr/bin/tar -czf "$MOCK_ARCHIVE_DIR/${BASH_REMATCH[1]}" --files-from /dev/null
+          [[ "$MOCK_ARCHIVE_FAILS" == "0" ]] || return 1
+          ;;
+      esac
+      ;;
+    pause|unpause|start|stop|rm) : ;;
   esac
 }
 
@@ -66,7 +84,8 @@ new_case() {
   MOCK_ARCHIVE_FAILS=0
   MOCK_MOUNTED_VOLUME=zenod-mt-data
   MOCK_REPLICAS=1
-  export MOCK_ARCHIVE_DIR MOCK_CALL_LOG MOCK_VERIFY_RESOLVES MOCK_VERIFY_FAILS MOCK_ARCHIVE_FAILS MOCK_MOUNTED_VOLUME MOCK_REPLICAS
+  MOCK_DELTA_FAILS=0
+  export MOCK_ARCHIVE_DIR MOCK_CALL_LOG MOCK_VERIFY_RESOLVES MOCK_VERIFY_FAILS MOCK_ARCHIVE_FAILS MOCK_MOUNTED_VOLUME MOCK_REPLICAS MOCK_DELTA_FAILS
   mkdir -p "$(dirname "$MOCK_CALL_LOG")"
   : >"$MOCK_CALL_LOG"
 }
@@ -88,8 +107,8 @@ assert_private_file() {
   }
 }
 
-new_case default
-output=$(ZENOD_HEALTH_URL=https://cloud.zenod.dev/healthz \
+new_case cold
+output=$(ZENOD_BACKUP_MODE=cold ZENOD_HEALTH_URL=https://cloud.zenod.dev/healthz \
   bash "$repo_root/scripts/zenod-volume-backup.sh" \
   zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR")
 
@@ -119,7 +138,7 @@ assert_private_file "$checksum_path"
 
 new_case pinned
 pinned_image='ghcr.io/zenod-ai/zenod@sha256:verifier'
-output=$(ZENOD_VERIFY_IMAGE="$pinned_image" \
+output=$(ZENOD_BACKUP_MODE=cold ZENOD_VERIFY_IMAGE="$pinned_image" \
   bash "$repo_root/scripts/zenod-volume-backup.sh" \
   zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR")
 
@@ -185,7 +204,7 @@ fi
 new_case archive_failure
 MOCK_ARCHIVE_FAILS=1
 export MOCK_ARCHIVE_FAILS
-if bash "$repo_root/scripts/zenod-volume-backup.sh" \
+if ZENOD_BACKUP_MODE=cold bash "$repo_root/scripts/zenod-volume-backup.sh" \
   zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR" \
   >"$test_root/archive-failure.out" 2>"$test_root/archive-failure.err"; then
   echo 'Archive failure must fail the backup command' >&2
@@ -205,7 +224,7 @@ fi
 new_case verify_failure
 MOCK_VERIFY_FAILS=1
 export MOCK_VERIFY_FAILS
-if ZENOD_VERIFY_IMAGE="$pinned_image" \
+if ZENOD_BACKUP_MODE=cold ZENOD_VERIFY_IMAGE="$pinned_image" \
   bash "$repo_root/scripts/zenod-volume-backup.sh" \
   zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR" \
   >"$test_root/verify-failure.out" 2>"$test_root/verify-failure.err"; then
@@ -229,5 +248,70 @@ archive_path=$(find "$MOCK_ARCHIVE_DIR" -name '*.tar.gz' -print -quit)
 [[ -n "$archive_path" && -f "${archive_path}.sha256" ]]
 assert_private_file "$archive_path"
 assert_private_file "${archive_path}.sha256"
+
+new_case live
+output=$(ZENOD_VERIFY_IMAGE="$pinned_image" ZENOD_HEALTH_URL=https://phylax.zenod.dev/healthz \
+  bash "$repo_root/scripts/zenod-volume-backup.sh" \
+  zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR")
+
+grep -q '^mode=live$' <<<"$output"
+grep -Eq '^paused_ms=[0-9]+$' <<<"$output"
+helper_line=$(line_number '^run --detach --name zenod-backup-snapshot-')
+full_line=$(line_number 'zenod-live-snapshot.mjs full /source')
+down_line=$(line_number '^pause zenod-task-container$')
+catchup_line=$(line_number 'zenod-live-snapshot.mjs delta /source .* 1700000000000$')
+delta_line=$(line_number 'zenod-live-snapshot.mjs delta /source .* 1700000000500$')
+up_line=$(line_number '^unpause zenod-task-container$')
+repair_line=$(line_number 'zenod-live-snapshot.mjs repair /source')
+archive_line=$(line_number 'tar -czf /archive/')
+helper_rm_line=$(line_number '^rm -f zenod-backup-snapshot-')
+verify_line=$(line_number 'verify-zenod-data.mjs')
+[[ "$helper_line" -lt "$full_line" && "$full_line" -lt "$catchup_line" && "$catchup_line" -lt "$down_line" && "$down_line" -lt "$delta_line" \
+  && "$delta_line" -lt "$up_line" && "$up_line" -lt "$repair_line" && "$repair_line" -lt "$archive_line" && "$archive_line" -lt "$helper_rm_line" \
+  && "$helper_rm_line" -lt "$verify_line" ]] || {
+  echo 'Live backup must copy, pause only for the delta pass, then archive and verify' >&2
+  exit 1
+}
+[[ "$(grep -c '^pause ' "$MOCK_CALL_LOG")" == "1" && "$(grep -c '^unpause ' "$MOCK_CALL_LOG")" == "1" ]]
+if grep -q '^stop ' "$MOCK_CALL_LOG"; then
+  echo 'Live backup must never stop the workload' >&2
+  exit 1
+fi
+grep -Eq -- "^run --detach --name zenod-backup-snapshot-[^ ]+ --network none --user 0 --volume zenod-mt-data:/source --volume $MOCK_ARCHIVE_DIR:/archive .*--entrypoint sleep $pinned_image infinity$" "$MOCK_CALL_LOG"
+[[ "$(grep -c 'zenod-mt-data:/source' "$MOCK_CALL_LOG")" == "1" ]] || {
+  echo 'Only the snapshot helper may mount the live volume' >&2
+  exit 1
+}
+if find "$MOCK_ARCHIVE_DIR" -name '.snapshot-*' -print -quit | grep -q '^'; then
+  echo 'Live backup must remove its staging snapshot' >&2
+  exit 1
+fi
+archive_path=$(sed -n 's/^backup=//p' <<<"$output")
+assert_private_file "$archive_path"
+assert_private_file "$(sed -n 's/^checksum=//p' <<<"$output")"
+
+new_case live_delta_failure
+MOCK_DELTA_FAILS=1
+export MOCK_DELTA_FAILS
+if bash "$repo_root/scripts/zenod-volume-backup.sh" \
+  zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR" \
+  >"$test_root/live-delta-failure.out" 2>"$test_root/live-delta-failure.err"; then
+  echo 'Live delta failure must fail the backup command' >&2
+  exit 1
+fi
+[[ "$(grep -c '^unpause zenod-task-container$' "$MOCK_CALL_LOG")" == "1" ]]
+grep -q '^rm -f zenod-backup-snapshot-' "$MOCK_CALL_LOG"
+if find "$MOCK_ARCHIVE_DIR" -mindepth 1 -print -quit | grep -q '^'; then
+  echo 'Live delta failure must leave no snapshot or archive behind' >&2
+  exit 1
+fi
+
+new_case bad_mode
+if ZENOD_BACKUP_MODE=warm bash "$repo_root/scripts/zenod-volume-backup.sh" \
+  zenod-task-container zenod-mt-data "$MOCK_ARCHIVE_DIR" >/dev/null 2>&1; then
+  echo 'Unknown backup mode must fail' >&2
+  exit 1
+fi
+[[ ! -s "$MOCK_CALL_LOG" ]]
 
 echo 'zenod-volume-backup verifier and Swarm safety tests passed'

@@ -201,7 +201,7 @@ Do not set any `*_VERIFIED_AT` value prospectively. Set it to the UTC completion
 
 Renewal: `scripts/readiness-keeper/` on VPS1 renews `ZENOD_BACKUP_RESTORE_VERIFIED_AT` (monthly drill) and `ZENOD_STRIPE_PROFILE_VERIFIED_AT` (read-only Stripe check) only after the proof passes, and alerts the HQ thread 7 days before any dated blocking proof expires or when readiness turns false. The Drive OAuth review stays with Jordi.
 
-- `ZENOD_BACKUP_RESTORE_VERIFIED_AT`: **both** public and private Channels volumes were cold-backed up, restored into isolated temporary volumes, verified, and copied to the approved independent destination. Use the later actual completion time.
+- `ZENOD_BACKUP_RESTORE_VERIFIED_AT`: **both** public and private Channels volumes were backed up (live mode by default, see the drill below), restored into isolated temporary volumes, verified, and copied to the approved independent destination. Use the later actual completion time.
 - `ZENOD_STRIPE_WEBHOOK_VERIFIED_AT`: a signed live event reached the deployed handler successfully.
 - `ZENOD_STRIPE_PORTAL_VERIFIED_AT`: a live customer opened the configured portal and saw invoices, payment-method update, and cancel-at-period-end controls.
 - `ZENOD_STRIPE_PROFILE_VERIFIED_AT`: Stripe checkout/portal show the correct legal business, support email, website, Terms and Privacy links.
@@ -221,9 +221,13 @@ The 2026-08-27 release used this sequence. Reuse it for future compatible code c
 
 Both services must report the same full future merge SHA. Reject or roll back a version-skewed rollout.
 
-## Two-volume cold backup and restore drill
+## Two-volume backup and restore drill
 
-First define and approve the independent encrypted destination, retention, restore owner and copy/verification procedure without pausing anything. Then request a separate backup-quiesce approval. Only after that approval may an operator run these commands on the VPS. Resolve the exact one-replica container names immediately before each command. The script verifies that the named container owns the named `/data` volume, pauses the exact Swarm task, atomically finalizes the archive, resumes the workload, creates a mode-0600 checksum, restores into a disposable writable volume, parses every JSON file, runs SQLite `integrity_check`, and probes health.
+First define and approve the independent encrypted destination, retention, restore owner and copy/verification procedure without pausing anything. Resolve the exact one-replica container names immediately before each command. The script verifies that the named container owns the named `/data` volume, takes the archive, creates a mode-0600 checksum, restores into a disposable writable volume, parses every JSON file, runs SQLite `integrity_check`, and probes health.
+
+**Live mode (default, `ZENOD_BACKUP_MODE=live`)** keeps the workload running, so the Phylax WhatsApp receiver stays connected (EPIC-7 T2.7, [evidence](evidence/epic7-t2-7-2026-11-01.md)). A disposable helper container (verifier image, `--network none`) runs `scripts/zenod-live-snapshot.mjs`: a live pass copies every SQLite database with the online backup API (one read transaction each, so WAL writers keep committing) and every other file into a staging directory under the archive directory; a live catch-up pass re-copies what changed meanwhile; then the exact task is `docker pause`d only while a final pass re-copies the non-SQLite files changed in the last seconds (about 1-2 s on Phylax, a few seconds on `zenod-mt`); after resuming, any JSON a writer was frozen halfway through is re-copied until it parses; the staging copy is archived and removed. The helper is the only container that mounts the live volume writable (a read-only SQLite connection still needs the shared `-shm` lock file); it never writes database content. The output adds `mode=` and `paused_ms=`.
+
+Measured: a pause of about 30 s already dropped the WhatsApp socket (408, reconnected in ~4 s), so never pause Phylax for long. The old 5-minute pause is available only as **cold mode** (`ZENOD_BACKUP_MODE=cold`: pause the Swarm task or stop a plain container for the whole tar); use it only off-peak and only with a separate quiesce approval.
 
 Use separate archive directories:
 

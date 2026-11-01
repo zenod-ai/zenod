@@ -353,7 +353,8 @@ def backup_volume(service: str, volume: str, archive_dir: Path, health: str, ver
     sha = Path(res["checksum"]).read_text().split()[0]
     return {"service": service, "container": container, "volume": volume, "archive": res["backup"],
             "bytes": Path(res["backup"]).stat().st_size, "sha256": sha, "verifier": verifier,
-            "restoreVerifiedAt": res["restore_verified_at"], "seconds": round(time.time() - t0)}
+            "restoreVerifiedAt": res["restore_verified_at"], "seconds": round(time.time() - t0),
+            "mode": res.get("mode", "cold"), "pausedMs": int(res["paused_ms"]) if res.get("paused_ms", "").isdigit() else None}
 
 
 def wait_phylax_connected(timeout_s=180) -> str:
