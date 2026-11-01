@@ -263,6 +263,14 @@ export function tenantMonthlyAllowanceFromEnv(env: NodeJS.ProcessEnv): number | 
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+/**
+ * ZENOD_TENANT_ALLOWANCE_MODE: `shadow` keeps the D30 log-only behaviour (measure without blocking);
+ * anything else (default) enforces the allowance once ZENOD_TENANT_MONTHLY_ALLOWANCE_USD is set.
+ */
+export function tenantAllowanceEnforcedFromEnv(env: NodeJS.ProcessEnv): boolean {
+  return env.ZENOD_TENANT_ALLOWANCE_MODE?.trim().toLowerCase() !== "shadow";
+}
+
 export class Settings {
   constructor(
     private readonly store: SqliteStateStore,

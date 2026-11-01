@@ -1220,7 +1220,7 @@ describe("WhatsAppGateway", () => {
       await gateway.pair();
       await gateway.handleEvent(event);
       expect(socket.sent.map((message) => message.text)).toEqual([
-        expect.stringContaining("Your Phylax credit has run out"),
+        expect.stringContaining("message and voice allowance on your plan"),
       ]);
       await gateway.handleEvent({ ...event, messageId: `${event.messageId}-again` });
       expect(socket.sent).toHaveLength(1);

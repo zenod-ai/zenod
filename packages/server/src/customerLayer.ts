@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { tenantMonthlyAllowanceFromEnv } from "./settings.js";
+import { tenantAllowanceEnforcedFromEnv, tenantMonthlyAllowanceFromEnv } from "./settings.js";
 import type { Runtime } from "./runtime.js";
 import { McpTokenStore, type McpTokenRecord } from "./mcpTokens.js";
 import { CustomerAccountStore, customerAccountIdForUser, customerVaultBinding, type CustomerAccount } from "./customerAccounts.js";
@@ -345,9 +345,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       tokenVault,
     });
   // Platform-key mode (D30): one host OpenRouter key serves every tenant, so there is no per-tenant key to
-  // police and usage comes from each tenant's own ledger against the shadow allowance.
+  // police and usage comes from each tenant's own ledger against its AI allowance.
   const platformKeyMode = product.product === "zenod" && Boolean(env.ZENOD_PLATFORM_OPENROUTER_KEY?.trim());
   const tenantAllowanceUsd = tenantMonthlyAllowanceFromEnv(env);
+  const tenantAllowanceEnforced = tenantAllowanceEnforcedFromEnv(env);
   /** Non-Stripe accounts follow the current UTC month as their billing window (comped accounts use a fixed one in Phylax). */
   const refreshNonStripePeriod = (account: CustomerAccount): CustomerAccount => {
     if (account.stripe_subscription_id) return account;
@@ -401,7 +402,7 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     } catch {
       spend = null;
     }
-    return projectLedgerUsage(spend, tenantAllowanceUsd);
+    return projectLedgerUsage(spend, tenantAllowanceUsd, undefined, undefined, tenantAllowanceEnforced);
   };
   const usageForAccount = async (account: CustomerAccount) => {
     const local = await localUsageForAccount(account);

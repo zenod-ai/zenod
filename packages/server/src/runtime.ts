@@ -36,7 +36,9 @@ import {
   type VaultRepository,
   isKnownTool,
   toolKind,
+  LlmAllowanceExceededError,
 } from "zenod";
+import { aiAllowanceExhaustedMessage, nextUtcMonthlyReset } from "./customerMetering.js";
 import {
   GithubApiError,
   GithubConnectionRequiredError,
@@ -280,6 +282,7 @@ export class Runtime {
   private repoAuthorityKey: string | null = null;
   private readonly tenantId: string;
   private readonly tenantMonthlyAllowanceUsd: number | null;
+  private readonly tenantAllowanceEnforced: boolean;
   private allowanceCache: { at: number; spendUsd: number } | null = null;
   private allowanceLoggedAt = 0;
   private readonly vaultBindingSource?: VaultProviderBindingSource;
@@ -320,8 +323,10 @@ export class Runtime {
       settingFallbacks?: Readonly<Record<string, string>>;
       /** Host platform LLM key (hosted tenants). Authoritative over any stored tenant key. */
       platformLlm?: PlatformLlm | null;
-      /** Per-tenant monthly LLM allowance in USD. Shadow mode: crossing it logs, never blocks. */
+      /** Per-tenant monthly LLM allowance in USD (platform key only). Unset = no cap. */
       tenantMonthlyAllowanceUsd?: number | null;
+      /** Block AI work once the allowance is used up (default true); false = log-only shadow mode. */
+      tenantAllowanceEnforced?: boolean;
       googleDriveOAuthAuthority?: GoogleDriveOAuthAuthoritySource;
       vaultProviderBinding?: VaultProviderBindingSource;
       onVaultBindingUpdate?: (input: {
@@ -358,6 +363,7 @@ export class Runtime {
       options.platformLlm ? { ...options.platformLlm, user: this.tenantId } : null,
     );
     this.tenantMonthlyAllowanceUsd = options.tenantMonthlyAllowanceUsd ?? null;
+    this.tenantAllowanceEnforced = options.tenantAllowanceEnforced ?? true;
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
@@ -394,7 +400,7 @@ export class Runtime {
       text: formatFilingReceipt(result),
       severity: "info",
       dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
-    }));
+    }), () => this.aiAllowanceBlock());
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
@@ -650,7 +656,8 @@ export class Runtime {
       ...(this.settings.llmBaseUrl() ? { baseUrl: this.settings.llmBaseUrl()! } : {}),
       ...(this.settings.get("model_vision") ? { visionModel: this.settings.get("model_vision")! } : {}),
       ...(this.settings.maxSteps() !== undefined ? { maxSteps: this.settings.maxSteps() } : {}),
-      // Hosted platform key: attribute every OpenRouter call to this tenant, and run the shadow allowance check.
+      // Hosted platform key: attribute every OpenRouter call to this tenant, and run the allowance check
+      // (throws LlmAllowanceExceededError before the provider is called once an enforced allowance is used up).
       ...(this.settings.platformLlmActive() && this.settings.openrouterUser()
         ? { user: this.settings.openrouterUser()!, onBeforeCall: () => this.checkTenantAllowance() }
         : {}),
@@ -915,25 +922,67 @@ export class Runtime {
   }
 
   /**
-   * SHADOW allowance check (ZENOD_TENANT_MONTHLY_ALLOWANCE_USD): logs `llm.allowance.exceeded` at most once
-   * per tenant per hour when month-to-date spend is over the allowance. It never blocks or throws; blocking
-   * is a separate, human-gated decision. Spend is cached for 60s so the hot path stays one cheap read.
+   * This tenant's AI allowance (ZENOD_TENANT_MONTHLY_ALLOWANCE_USD) against its month-to-date spend, or null
+   * when no allowance applies (unset, or not on the hosted platform key). Spend is cached for 60s so the
+   * hot path stays one cheap read; a tenant can overrun by at most that window's calls.
+   */
+  aiAllowanceStatus(now: number = Date.now()): {
+    allowanceUsd: number;
+    spendUsd: number;
+    exhausted: boolean;
+    enforced: boolean;
+    resetsAt: string;
+  } | null {
+    const allowance = this.tenantMonthlyAllowanceUsd;
+    if (allowance === null || !Number.isFinite(allowance) || allowance <= 0) return null;
+    if (!this.settings.platformLlmActive()) return null;
+    if (!this.allowanceCache || now - this.allowanceCache.at > 60_000 || now < this.allowanceCache.at) {
+      this.allowanceCache = { at: now, spendUsd: this.monthToDateSpendUsd(now) };
+    }
+    const spend = this.allowanceCache.spendUsd;
+    return {
+      allowanceUsd: allowance,
+      spendUsd: spend,
+      exhausted: spend >= allowance,
+      enforced: this.tenantAllowanceEnforced,
+      resetsAt: nextUtcMonthlyReset(now),
+    };
+  }
+
+  /** The user-facing stop when an enforced allowance is used up; null while AI work may run. Fails open. */
+  aiAllowanceBlock(now: number = Date.now()): { message: string; resetsAt: string } | null {
+    try {
+      const status = this.aiAllowanceStatus(now);
+      if (!status?.enforced || !status.exhausted) return null;
+      return { message: aiAllowanceExhaustedMessage(status.resetsAt), resetsAt: status.resetsAt };
+    } catch {
+      // A metering read failure must never stop a user's turn.
+      return null;
+    }
+  }
+
+  /**
+   * Allowance check run before every platform-key model call. Over the allowance it logs
+   * `llm.allowance.exceeded` at most once per tenant per hour, and in enforce mode (the default once an
+   * allowance is set) throws LlmAllowanceExceededError so the provider is never called. Shadow mode
+   * (ZENOD_TENANT_ALLOWANCE_MODE=shadow) only logs. Any metering read failure fails open.
    */
   checkTenantAllowance(now: number = Date.now()): void {
-    const allowance = this.tenantMonthlyAllowanceUsd;
-    if (allowance === null || !Number.isFinite(allowance) || allowance <= 0) return;
+    let status: ReturnType<Runtime["aiAllowanceStatus"]>;
     try {
-      if (!this.allowanceCache || now - this.allowanceCache.at > 60_000) {
-        this.allowanceCache = { at: now, spendUsd: this.monthToDateSpendUsd(now) };
-      }
-      const spend = this.allowanceCache.spendUsd;
-      if (spend <= allowance || now - this.allowanceLoggedAt < 3_600_000) return;
+      status = this.aiAllowanceStatus(now);
+    } catch {
+      return;
+    }
+    if (!status || status.spendUsd < status.allowanceUsd) return;
+    if (now - this.allowanceLoggedAt >= 3_600_000) {
       this.allowanceLoggedAt = now;
       console.warn(
-        `[llm.allowance.exceeded] tenant=${this.tenantId} month_to_date_usd=${spend.toFixed(4)} allowance_usd=${allowance} mode=shadow`,
+        `[llm.allowance.exceeded] tenant=${this.tenantId} month_to_date_usd=${status.spendUsd.toFixed(4)} allowance_usd=${status.allowanceUsd} mode=${status.enforced ? "enforce" : "shadow"}`,
       );
-    } catch {
-      // A metering failure must never break a chat turn.
+    }
+    if (status.enforced) {
+      throw new LlmAllowanceExceededError(aiAllowanceExhaustedMessage(status.resetsAt), status.resetsAt);
     }
   }
 

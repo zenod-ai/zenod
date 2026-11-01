@@ -10,6 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CustomerAccount } from "./customerAccounts.js";
 import type {
+  CustomerUsageBreakdown,
   CustomerUsageProjection,
   CustomerUsageState,
 } from "./customerMetering.js";
@@ -190,6 +191,17 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
       Math.max(1, Math.round(unitsPerUsd / 10)),
     ),
   );
+  const localAllowanceUsd = tenantMonthlyAllowanceFromEnv(env);
+  const localCapacityUnits = Math.round((localAllowanceUsd ?? 0) * unitsPerUsd);
+  if (localCapacityUnits + phylaxAllowanceUnits > masterAllowanceUnits) {
+    // The AI allowance is carved out of the master first; Phylax refills past the remainder are refused and
+    // its wallet is reclaimed, which pauses WhatsApp. Raise ZENOD_MASTER_ALLOWANCE_UNITS together with the AI figure.
+    console.warn(
+      `[zenod-phylax] allowance config: AI ${localCapacityUnits} + Phylax ${phylaxAllowanceUnits} units exceed `
+      + `ZENOD_MASTER_ALLOWANCE_UNITS ${masterAllowanceUnits}; channel allowance is limited to `
+      + `${Math.max(0, masterAllowanceUnits - localCapacityUnits)} units per period`,
+    );
+  }
   const tariffVersion = env.ZENOD_PHYLAX_TARIFF_VERSION?.trim() || "";
   const warnPercent = Math.min(99, integerEnv(env.ZENOD_USAGE_WARN_PERCENT, 80));
   const reconcileIntervalMs = integerEnv(
@@ -218,7 +230,7 @@ export function loadZenodPhylaxConfig(env: NodeJS.ProcessEnv): ZenodPhylaxConfig
     phylaxWalletTargetUnits,
     phylaxWalletLowWaterUnits,
     unitsPerUsd,
-    localAllowanceUsd: tenantMonthlyAllowanceFromEnv(env),
+    localAllowanceUsd,
     tariffVersion: tariffVersion || "unconfigured",
     downstreamUrl: (
       env.ZENOD_PHYLAX_DOWNSTREAM_URL?.trim() ||
@@ -1429,7 +1441,36 @@ export class ZenodPhylaxAdapter {
     const resets = [local.resetsAt, phylaxReset]
       .filter((value): value is string => Boolean(value))
       .sort();
-    return { percentageUsed, state, resetsAt: resets[0] ?? null };
+    // The channel can never be allocated past its service cap or what the master leaves after AI capacity.
+    const channelCapUnits = Math.max(0, Math.min(
+      this.config.phylaxAllowanceUnits,
+      this.config.masterAllowanceUnits - localCapacity,
+    ));
+    const breakdown: CustomerUsageBreakdown = {
+      ai: {
+        spendUsd: local.monthSpendUsd ?? null,
+        allowanceUsd: local.allowanceUsd ?? null,
+        // An explicit null allowance means no AI cap, so there is no percentage to show.
+        percentageUsed: local.allowanceUsd === null ? null : local.percentageUsed,
+        paused: local.state === "paused",
+      },
+      channel: {
+        usedUnits: phylax.usedUnits,
+        allowanceUnits: channelCapUnits,
+        percentageUsed: channelCapUnits > 0
+          ? Math.min(100, Math.max(0, Math.round(phylax.usedUnits / channelCapUnits * 100)))
+          : 100,
+        paused: phylax.state === "paused" || phylax.state === "suspended",
+      },
+    };
+    return {
+      percentageUsed,
+      state,
+      resetsAt: resets[0] ?? null,
+      ...(local.monthSpendUsd !== undefined ? { monthSpendUsd: local.monthSpendUsd } : {}),
+      ...(local.allowanceUsd !== undefined ? { allowanceUsd: local.allowanceUsd } : {}),
+      breakdown,
+    };
   }
 
   operatorProjection(account: CustomerAccount, local: CustomerUsageProjection) {

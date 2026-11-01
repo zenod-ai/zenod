@@ -1558,14 +1558,19 @@ describe("hosted customer layer", () => {
     layer.close();
   });
 
-  it("platform-key mode skips the per-tenant key check and reports ledger usage, never paused", async () => {
+  it("platform-key mode skips the per-tenant key check and reports ledger usage; shadow mode never pauses", async () => {
     const request = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       throw new Error("no OpenRouter call expected in platform-key mode");
     });
     const layer = createCustomerLayer(
       { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
       {
-        env: { ...env, ZENOD_PLATFORM_OPENROUTER_KEY: "platform-key", ZENOD_TENANT_MONTHLY_ALLOWANCE_USD: "10" },
+        env: {
+          ...env,
+          ZENOD_PLATFORM_OPENROUTER_KEY: "platform-key",
+          ZENOD_TENANT_MONTHLY_ALLOWANCE_USD: "10",
+          ZENOD_TENANT_ALLOWANCE_MODE: "shadow",
+        },
         stripe,
         tenantStore: tenants,
       },
@@ -1595,6 +1600,18 @@ describe("hosted customer layer", () => {
     expect(await layer.usageForAccount(account)).toMatchObject({ state: "warn", percentageUsed: 100, monthSpendUsd: 12 });
     expect(request).not.toHaveBeenCalled();
     layer.close();
+
+    // EPIC-7 T3: with the allowance enforced (the default), the same overrun reads as paused.
+    const enforced = createCustomerLayer(
+      { dataDir: runtime.dataDir, runtimeForAccount: () => runtime },
+      {
+        env: { ...env, ZENOD_PLATFORM_OPENROUTER_KEY: "platform-key", ZENOD_TENANT_MONTHLY_ALLOWANCE_USD: "10" },
+        stripe,
+        tenantStore: tenants,
+      },
+    );
+    expect(await enforced.usageForAccount(account)).toMatchObject({ state: "paused", percentageUsed: 100, allowanceUsd: 10 });
+    enforced.close();
   });
 
   it("leaves a legacy row unchanged when no authoritative Stripe provider exists", async () => {

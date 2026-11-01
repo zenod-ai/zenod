@@ -25,9 +25,18 @@ export type CustomerUsageState = "normal" | "warn" | "paused" | "setting_up" | "
 export interface CustomerUsageProjection {
   /** UTC month-to-date spend from the tenant's own ledger (platform-key mode only). */
   monthSpendUsd?: number | null;
+  /** The tenant's monthly AI allowance in USD (platform-key mode); null = no cap set. */
+  allowanceUsd?: number | null;
+  /** Per-meter breakdown for the console card: AI processing and WhatsApp messages/voice. */
+  breakdown?: CustomerUsageBreakdown;
   percentageUsed: number | null;
   state: CustomerUsageState;
   resetsAt: string | null;
+}
+
+export interface CustomerUsageBreakdown {
+  ai: { spendUsd: number | null; allowanceUsd: number | null; percentageUsed: number | null; paused: boolean };
+  channel: { usedUnits: number; allowanceUnits: number; percentageUsed: number; paused: boolean } | null;
 }
 
 export function balanceState(input: { limit: number | null; limit_remaining: number | null }): BalanceState {
@@ -124,9 +133,32 @@ export async function customerMetering(
   };
 }
 
-function nextUtcMonthlyReset(now: number): string {
+export function nextUtcMonthlyReset(now: number): string {
   const current = new Date(now);
   return new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 1, 1, 0, 0, 0, 0)).toISOString();
+}
+
+function resetDateLabel(resetsAt: string | null): string | null {
+  if (!resetsAt) return null;
+  const date = new Date(resetsAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/** What a capped user is told (WhatsApp reply, MCP tool error, console) when their AI allowance is used up. */
+export function aiAllowanceExhaustedMessage(resetsAt: string | null): string {
+  const reset = resetDateLabel(resetsAt);
+  return "⚠️ You have used this month's AI allowance on your Zenod plan, so I can't process this message. "
+    + "It was not saved. "
+    + (reset ? `Your allowance resets on ${reset}; please send it again then.` : "Please send it again once your allowance resets.");
+}
+
+/** Media variant: the original is archived (no AI needed), but not transcribed, read or filed. */
+export function aiAllowanceArchivedMediaMessage(resetsAt: string | null): string {
+  const reset = resetDateLabel(resetsAt);
+  return "⚠️ You have used this month's AI allowance on your Zenod plan. "
+    + "I archived the original file, but did not read or file it into your memory. "
+    + (reset ? `Your allowance resets on ${reset}.` : "Filing resumes once your allowance resets.");
 }
 
 export function projectCustomerUsage(
@@ -177,28 +209,28 @@ export async function customerUsageProjection(
 }
 
 /**
- * Platform-key (D30) usage projection: this tenant's UTC month-to-date ledger spend against the shadow
- * allowance. It is informational and never reports "paused" (blocking is a later, human-gated decision),
- * so hosted admission is never gated on it. Unset allowance or an unreadable ledger = 0%, state normal.
+ * Platform-key (D30) usage projection: this tenant's UTC month-to-date ledger spend against its AI allowance.
+ * With the allowance enforced, reaching it reports "paused" (AI work stops until the reset); in shadow mode it
+ * only warns. Unset allowance or an unreadable ledger = 0%, state normal, so hosted admission is never gated
+ * on a missing figure.
  */
 export function projectLedgerUsage(
   spendUsd: number | null,
   allowanceUsd: number | null,
   warnPercent = 80,
   now = Date.now(),
+  enforced = false,
 ): CustomerUsageProjection {
   const resetsAt = nextUtcMonthlyReset(now);
-  // Shadow mode fails open: the combined Zenod+Phylax projection and hosted admission treat a null
+  // A missing figure fails open: the combined Zenod+Phylax projection and hosted admission treat a null
   // percentage as "unavailable" and queue paid requests, so report 0% when there is nothing to compare.
-  if (spendUsd === null) return { percentageUsed: 0, state: "normal", resetsAt, monthSpendUsd: null };
+  if (spendUsd === null) return { percentageUsed: 0, state: "normal", resetsAt, monthSpendUsd: null, allowanceUsd };
   if (allowanceUsd === null || allowanceUsd <= 0) {
-    return { percentageUsed: 0, state: "normal", resetsAt, monthSpendUsd: spendUsd };
+    return { percentageUsed: 0, state: "normal", resetsAt, monthSpendUsd: spendUsd, allowanceUsd: null };
   }
   const percentageUsed = Math.min(100, Math.max(0, Math.round(spendUsd / allowanceUsd * 100)));
-  return {
-    percentageUsed,
-    state: percentageUsed >= warnPercent ? "warn" : "normal",
-    resetsAt,
-    monthSpendUsd: spendUsd,
-  };
+  const state: CustomerUsageState = enforced && spendUsd >= allowanceUsd
+    ? "paused"
+    : percentageUsed >= warnPercent ? "warn" : "normal";
+  return { percentageUsed, state, resetsAt, monthSpendUsd: spendUsd, allowanceUsd };
 }

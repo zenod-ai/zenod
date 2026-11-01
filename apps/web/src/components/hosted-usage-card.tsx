@@ -10,6 +10,34 @@ export type HostedCustomerUsage = {
   percentageUsed: number | null
   state: "normal" | "warn" | "paused" | "unavailable"
   resetsAt: string | null
+  breakdown?: {
+    ai: {
+      spendUsd: number | null
+      allowanceUsd: number | null
+      percentageUsed: number | null
+      paused: boolean
+    }
+    channel: {
+      usedUnits: number
+      allowanceUnits: number
+      percentageUsed: number
+      paused: boolean
+    } | null
+  }
+}
+
+function aiLine(ai: NonNullable<HostedCustomerUsage["breakdown"]>["ai"]): string | null {
+  if (ai.paused) return "AI processing: this month's allowance is used up"
+  if (ai.percentageUsed === null) return null
+  return `AI processing: ${ai.percentageUsed}% of this month's allowance`
+}
+
+function channelLine(
+  channel: NonNullable<HostedCustomerUsage["breakdown"]>["channel"],
+): string | null {
+  if (!channel) return null
+  if (channel.paused) return "Messages and voice: this month's allowance is used up"
+  return `Messages and voice: ${channel.percentageUsed}% of this month's allowance`
 }
 
 function usageHeading(usage: HostedCustomerUsage): string {
@@ -71,14 +99,25 @@ export function HostedUsageCard({
             <p className="text-sm font-medium">{percentage}% used</p>
           </>
         )}
+        {usage.breakdown ? (
+          <ul className="space-y-1 text-sm" data-testid="hosted-usage-breakdown">
+            {[aiLine(usage.breakdown.ai), channelLine(usage.breakdown.channel)]
+              .filter((line): line is string => Boolean(line))
+              .map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+          </ul>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           {resetLabel(usage.resetsAt)}
         </p>
         {usage.state === "paused" && !compact ? (
           <p className="text-sm text-muted-foreground">
-            {usage.resetsAt
-              ? "Your raw evidence remains safe. Paid AI processing resumes after the reset."
-              : "Your raw evidence remains safe. Processing resumes when managed access is restored."}
+            {usage.breakdown?.ai.paused
+              ? "You have used this month's AI allowance, so Zenod is not reading or filing new messages and tells you so in WhatsApp. Original files you send are still archived. AI processing resumes after the reset."
+              : usage.resetsAt
+                ? "Your raw evidence remains safe. Paid AI processing resumes after the reset."
+                : "Your raw evidence remains safe. Processing resumes when managed access is restored."}
           </p>
         ) : null}
       </CardContent>

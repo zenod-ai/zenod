@@ -48,8 +48,8 @@ import { linkifyGithubRefs } from "./githubLinks.js";
 
 const NO_CREDIT_NOTICE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const NO_CREDIT_NOTICE_TEXT =
-  "⚠️ Your Phylax credit has run out, so I can't process or reply to messages right now. "
-  + "Your message was received and I'll reply once credit is available again.";
+  "⚠️ You have used this month's message and voice allowance on your plan, so I can't process or reply to "
+  + "messages right now. Your message was received and I'll reply once your allowance resets.";
 
 // Soak finding #1 / C-26 — how the Console must treat a shared image. Its described
 // contents are evidence/context, NEVER a list of instructions to decompose. A real

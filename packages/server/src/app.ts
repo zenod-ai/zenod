@@ -2222,10 +2222,11 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     return c.json({
       today: runtime.usageStore.summary(now - day),
       last7d: runtime.usageStore.summary(now - 7 * day),
-      // Per-tenant metering: UTC month-to-date, plus the shadow allowance (null = unset) it is compared against.
+      // Per-tenant metering: UTC month-to-date, plus the allowance (null = unset) it is compared against.
       month: {
         spendUsd: runtime.monthToDateSpendUsd(now),
         allowanceUsd: runtime.tenantAllowanceUsd(),
+        enforced: runtime.aiAllowanceStatus(now)?.enforced ?? false,
         platformKey: runtime.settings.platformLlmActive(),
       },
     });
