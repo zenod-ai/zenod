@@ -69,6 +69,19 @@ export interface VaultRepository {
   discardChanges(): Promise<void>;
   commitAndPublish(message: string, guard?: VaultPublicationGuard): Promise<VaultRevision>;
   urlFor(path: string, anchor?: string): string | null;
+  /** Newest-first commits on the vault branch with the paths each touched (Git vaults; E9-5e undo). */
+  recentCommits?(limit: number): Promise<VaultCommit[]>;
+  /**
+   * Stage the inverse of one commit in the working tree, uncommitted (`git revert --no-commit`).
+   * False, with the tree left clean, when it does not apply cleanly. The caller commits and publishes.
+   */
+  stageRevert?(commitId: string): Promise<boolean>;
+}
+
+export interface VaultCommit {
+  id: string;
+  subject: string;
+  paths: string[];
 }
 
 const GITHUB_HOST_FAMILIES = ["github.com", "githubusercontent.com"] as const;
