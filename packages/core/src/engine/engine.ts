@@ -597,7 +597,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return (await timedSearch(query)).hits;
   }
 
-  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number }> {
+  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number } }> {
     const started = performance.now();
     const ms = () => Math.round((performance.now() - started) * 10) / 10;
     const index = openMemoryIndex();
@@ -605,7 +605,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
       try {
         const hits = await index.search(query);
         if (hits.length > 0) {
-          return { tier: "index", ms: ms(), hits: hits.map((hit) => {
+          const elapsed = ms();
+          const { rows, bytes } = index.stats();
+          return { tier: "index", ms: elapsed, index: { rows, bytes }, hits: hits.map((hit) => {
             const [base, anchor] = hit.path.split("#^");
             return {
               snippet: hit.snippet || hit.title,

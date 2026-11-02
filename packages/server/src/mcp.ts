@@ -1000,7 +1000,7 @@ export function buildMcpServer(
         content: [
           {
             type: "text",
-            text: [noteText + (timed?.ms != null && rankedHits.length ? `\nSearch: ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms` : ""), entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
+            text: [noteText + (timed?.ms != null && rankedHits.length ? `\nSearch: ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB)` : ""}` : ""), entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
           },
         ],
         structuredContent: output,
