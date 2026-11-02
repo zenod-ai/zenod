@@ -1255,3 +1255,72 @@ body:has(.v5-site) {
     gap: 0.75rem;
   }
 }
+
+/* zenod.dev/connect: MCP connector guide (EPIC-10 R2) */
+.zc-page main { padding-top: 66px; }
+.zc-intro {
+  padding-block: clamp(4rem, 8vw, 7rem) 3rem;
+  border-bottom: 1px solid var(--v5-line);
+}
+.zc-intro h1 {
+  max-width: 900px;
+  margin-bottom: 1.5rem;
+  font-size: clamp(2.6rem, 6vw, 5rem);
+  font-weight: 540;
+  line-height: 1;
+}
+.zc-icon { width: 72px; height: 72px; margin-bottom: 2rem; border: 1px solid var(--v5-line-2); }
+.zc-server {
+  display: grid;
+  max-width: 690px;
+  gap: 0.5rem;
+  margin-top: 2rem;
+  border: 1px solid var(--v5-line-2);
+  background: var(--v5-panel);
+  padding: 1.1rem 1.2rem;
+}
+.zc-server code { color: var(--v5-acid); font-family: var(--font-mono); font-size: clamp(1rem, 2.4vw, 1.35rem); word-break: break-all; }
+.zc-server small, .zc-note { color: var(--v5-muted); font-size: 0.82rem; line-height: 1.55; }
+.zc-section { padding-block: clamp(3.5rem, 7vw, 6rem); border-bottom: 1px solid var(--v5-line); scroll-margin-top: 66px; }
+.zc-section h2 { margin-bottom: 2rem; font-size: clamp(2rem, 4vw, 3rem); font-weight: 540; line-height: 1.05; }
+.zc-section a:not(.v5-button), .zc-note a { color: var(--v5-cyan); text-decoration: underline; text-underline-offset: 3px; }
+.zc-jump { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+.zc-jump a { border: 1px solid var(--v5-line-2); padding: 0.4rem 0.75rem; color: var(--v5-ink) !important; font-size: 0.75rem; text-decoration: none !important; }
+.zc-jump a:hover { border-color: var(--v5-acid); }
+.zc-clients { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.zc-client {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+  border: 1px solid var(--v5-line);
+  background: var(--v5-panel);
+  padding: 1.4rem;
+  scroll-margin-top: 80px;
+}
+.zc-client h3 { font-size: 1.15rem; font-weight: 700; }
+.zc-client ol { display: grid; gap: 0.6rem; padding-left: 1.2rem; list-style: decimal; color: #bbc3c9; font-size: 0.9rem; line-height: 1.55; }
+.zc-client > p { color: #bbc3c9; font-size: 0.9rem; line-height: 1.55; }
+.zc-client b { color: var(--v5-ink); font-weight: 650; }
+.zc-client code, .zc-help code { color: var(--v5-gold); font-family: var(--font-mono); font-size: 0.8em; }
+.zc-install { justify-self: start; }
+.zc-code { min-width: 0; border: 1px solid var(--v5-line-2); background: var(--v5-bg); }
+.zc-code-bar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--v5-line); padding: 0.35rem 0.6rem; color: var(--v5-muted); font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; }
+.zc-code-bar button { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--v5-ink); cursor: pointer; font-size: 0.62rem; }
+.zc-code-bar svg { width: 12px; height: 12px; }
+.zc-code pre { overflow-x: auto; margin: 0; padding: 0.8rem; }
+.zc-code pre code { color: var(--v5-ink); font-family: var(--font-mono); font-size: 0.75rem; font-variant-ligatures: none; white-space: pre; }
+.zc-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.zc-tools article { display: grid; align-content: start; gap: 0.45rem; border: 1px solid var(--v5-line); background: var(--v5-panel); padding: 1.1rem; }
+.zc-tools h3 { font-size: 1rem; font-weight: 700; }
+.zc-tools code { color: var(--v5-gold); font-family: var(--font-mono); font-size: 0.72rem; }
+.zc-tools p { color: #bbc3c9; font-size: 0.85rem; line-height: 1.5; }
+.zc-prompts { display: grid; gap: 0.6rem; }
+.zc-prompts li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; border-bottom: 1px solid var(--v5-line); padding-block: 0.9rem; }
+.zc-prompts q { color: var(--v5-ink); font-size: clamp(1rem, 2vw, 1.2rem); }
+.zc-prompts code { color: var(--v5-muted); font-family: var(--font-mono); font-size: 0.72rem; }
+.zc-help > p:not(.v5-kicker) { max-width: 760px; margin-bottom: 1rem; color: #bbc3c9; line-height: 1.6; }
+
+@media (max-width: 860px) {
+  .zc-clients { grid-template-columns: 1fr; }
+}

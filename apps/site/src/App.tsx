@@ -12,6 +12,7 @@ import {
 import heroLibrarian from "@/assets/zenod-v5-hero-librarian.webp";
 import { cn } from "@/lib/utils";
 import { StorySections } from "@/components/story-sections";
+import { ConnectPage } from "@/components/connect-page";
 import {
   consumePendingHostedTier,
   createHostedCheckout,
@@ -144,6 +145,7 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
           <a href="/#journey">Examples</a>
           <a href="/#alexandria">The librarian</a>
           <a href="/#start">Run it your way</a>
+          <a href="/connect">Connect</a>
         </nav>
         <div className="v5-nav-actions">
           {customer.session ? (
@@ -305,6 +307,30 @@ function MemoryRoll() {
   );
 }
 
+function SiteFooter() {
+  return (
+    <footer className="v5-footer">
+      <div>
+        <b>ZENOD</b>
+        <span>THE LIBRARIAN FOR YOUR AGENTS</span>
+      </div>
+      <nav>
+        <a href={DOCS_URL}>
+          <BookOpenIcon /> Docs
+        </a>
+        <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+          <GithubIcon /> GitHub
+        </a>
+        <a href={PRIVACY_URL}>Privacy</a>
+        <a href={TERMS_URL}>Terms</a>
+        <a href="/legal/legal-notice.html">Legal notice</a>
+        <a href="/legal/cookies.html">Cookies</a>
+        <a href={DATA_URL}>Data</a>
+      </nav>
+    </footer>
+  );
+}
+
 function LandingPage({ customer }: { customer: CustomerJourney }) {
   return (
     <div className="v5-site">
@@ -364,25 +390,7 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
 
         <StorySections pricing={<PricingSection customer={customer} embedded />} />
         <div className="v5-wrap">
-          <footer className="v5-footer">
-            <div>
-              <b>ZENOD</b>
-              <span>THE LIBRARIAN FOR YOUR AGENTS</span>
-            </div>
-            <nav>
-              <a href={DOCS_URL} target="_blank" rel="noreferrer">
-                <BookOpenIcon /> Docs
-              </a>
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                <GithubIcon /> GitHub
-              </a>
-              <a href={PRIVACY_URL}>Privacy</a>
-              <a href={TERMS_URL}>Terms</a>
-              <a href="/legal/legal-notice.html">Legal notice</a>
-              <a href="/legal/cookies.html">Cookies</a>
-              <a href={DATA_URL}>Data</a>
-            </nav>
-          </footer>
+          <SiteFooter />
         </div>
       </main>
     </div>
@@ -414,9 +422,14 @@ function PricingPage({ customer }: { customer: CustomerJourney }) {
 
 export default function App() {
   const customer = useCustomerJourney();
-  return window.location.pathname === "/pricing" ? (
-    <PricingPage customer={customer} />
-  ) : (
-    <LandingPage customer={customer} />
-  );
+  const path = window.location.pathname;
+  if (path === "/pricing") return <PricingPage customer={customer} />;
+  if (path === "/connect")
+    return (
+      <ConnectPage
+        header={<SiteHeader customer={customer} />}
+        footer={<SiteFooter />}
+      />
+    );
+  return <LandingPage customer={customer} />;
 }

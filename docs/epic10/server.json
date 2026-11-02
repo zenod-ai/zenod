@@ -4,7 +4,30 @@
   "title": "Zenod Memory",
   "description": "Memory you own: capture on WhatsApp, filed into your Markdown vault, recalled with citations.",
   "version": "0.1.0",
-  "websiteUrl": "https://zenod.dev",
+  "websiteUrl": "https://zenod.dev/connect",
+  "icons": [
+    {
+      "src": "https://zenod.dev/brand/zenod-icon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    },
+    {
+      "src": "https://zenod.dev/brand/zenod-icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    },
+    {
+      "src": "https://zenod.dev/brand/zenod-icon-1024.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "1024x1024"
+      ]
+    }
+  ],
   "repository": {
     "url": "https://github.com/zenod-ai/zenod",
     "source": "github",
