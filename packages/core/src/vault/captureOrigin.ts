@@ -29,31 +29,56 @@ const PERSON_SOURCES = new Set(["whatsapp", "telegram", "web", "drive"]);
 const MACHINE_SOURCES = new Set(["selftest"]);
 
 /**
- * Markers of an agent report: ticket and epic ids, run ids, commit shas next to
- * a deploy word, PR numbers, wake/Watcher reads. A person asking an assistant
- * "remember that..." over MCP writes none of these.
+ * Markers of an agent report: ticket and epic ids (also in parentheses, `(T3)`,
+ * `(E7-A12)`, `C9-15`, `L-38`, `P-0004`), run ids, commit shas next to a deploy
+ * word, PR numbers, wake/Watcher reads, delivery-manager and console vocabulary.
+ * A person asking an assistant "remember that..." over MCP writes none of these.
  */
 const AGENT_MARK_RE = new RegExp([
   String.raw`\bEPIC-\d`,
-  String.raw`\bE\d+-[A-Z]{0,3}\d`,
+  String.raw`\b[A-Z]\d{1,3}-[A-Z]{0,3}\d`,
   String.raw`\bZAL-?\d`,
+  String.raw`\b(?:L|P|DOD)-\d{1,4}\b`,
+  String.raw`\(\s*T\d+(?:\.\d+)?\s*\)`,
   String.raw`\brun_[0-9a-f]{6,}`,
-  String.raw`\bagent[_ ]team\b`,
+  String.raw`\bagent_team\b`,
   String.raw`\bcommit [0-9a-f]{7,40}\b`,
   String.raw`\b[0-9a-f]{7,40}\b[^\n]{0,40}\b(?:live|deployed|merged)\b`,
+  String.raw`\b(?:live|deployed|merged)(?: on| at)?(?: \w+)? [0-9a-f]{7,40}\b`,
   String.raw`\bPR #?\d+`,
   String.raw`(?:^|\s)#\d{3,}\b`,
   String.raw`\bwake\b`,
   String.raw`\bWatcher\b`,
   String.raw`\bdispatched\b`,
+  String.raw`\bDelivery Manager\b`,
+  String.raw`\bReady: yes\b`,
 ].join("|"), "i");
+
+/**
+ * The first words name an agent, repo or host rather than a subject: a lowercase
+ * slug (`zenod-social,`, `infra-vps`, `hair_flow`, `es-prod-tester-aec5 (`), a
+ * host (`VPS1 2026-10-30:`), or a `Run:`/`[agent]` header. People do not open a
+ * note that way. Case-sensitive on purpose.
+ */
+const AGENT_HEAD_RE = /^\s*(?:\d{4}-\d{2}-\d{2}:?\s+)?(?:[a-z0-9]+(?:[-_][a-z0-9]+)+(?:\s*[,(]|\s+(?:\d{4}-\d{2}-\d{2}|EPIC-|[A-Z]+\d|console\b|Watcher\b|Scout\b|Writer\b|Publisher\b|Reporter\b))|VPS\d+\b|Run:\s|\[[\w -]{2,30}\]\s)/;
+
+/** Text that reads as an agent report, whatever surface carried it (first 800 characters). */
+export function readsAsAgentReport(text: string): boolean {
+  const head = text.slice(0, 800);
+  return AGENT_HEAD_RE.test(head) || AGENT_MARK_RE.test(head);
+}
+
+/** Surfaces a person types or speaks into directly. */
+export function isPersonSource(source: string | null | undefined): boolean {
+  return PERSON_SOURCES.has((source ?? "").trim().toLowerCase());
+}
 
 export function captureOrigin(source: string | null | undefined, text: string): CaptureOrigin {
   const surface = (source ?? "").trim().toLowerCase();
   if (PERSON_SOURCES.has(surface)) return "user";
   if (MACHINE_SOURCES.has(surface)) return "agent";
   // mcp, cli and legacy entries without a source: an agent report only when it reads as one.
-  return AGENT_MARK_RE.test(text.slice(0, 800)) ? "agent" : "user";
+  return readsAsAgentReport(text) ? "agent" : "user";
 }
 
 /** Body without the `## Ops rollup` section (E9-2b rule 5): agent traffic is not what a page is about, nor anyone's activity. */

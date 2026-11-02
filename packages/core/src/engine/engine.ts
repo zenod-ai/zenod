@@ -1855,9 +1855,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
   const rolledUp = new Set<string>();
   /** Enrichment results that settled without a page after a successful classification (reason by result). */
   const noPageFilings = new WeakMap<StoreResult, string>();
-  async function fileOpsRollup(content: string, evidenceRef: string): Promise<string | null> {
+  async function fileOpsRollup(content: string, evidenceRef: string, source: string | null | undefined): Promise<string | null> {
     assertVault(repo);
-    if (!isAgentOpsReport(content) || !(await readTree(vaultPath))) return null;
+    if (!isAgentOpsReport(content, source) || !(await readTree(vaultPath))) return null;
     const writes = new TrackedWrites(vaultPath);
     try {
       const page = await appendOpsRollup(vaultPath, await buildTreeIndex(vaultPath), { content, evidenceRef }, writes);
@@ -1993,8 +1993,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         input.assertActive?.();
         const c = report.counts;
         const roots = c.discoveredWorking !== undefined ? `, roots ${c.discoveredWorking} working / ${c.discoveredLongTerm} long-term` : "";
+        const agentLeaves = c.agentLeavesRefiled ? `, agent-report leaves to ops ${c.agentLeavesRefiled}` : "";
         const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
         );
         return { report, committed: true, revision };
       } catch (error) {
@@ -2065,7 +2066,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       prior = await loadReceipt();
       if (prior?.phase === "ready" && !prior.outcomes.some(outcome => outcome.status === "pending")) return receiptFilingResult(prior, capturedRevision, recoveredPaths);
       if (!prior) {
-        const rollup = await fileOpsRollup(input.content, input.evidenceRef);
+        const rollup = await fileOpsRollup(input.content, input.evidenceRef, input.source);
         if (rollup) {
           input.assertActive?.();
           const revision = await commitFiling(`memory: ops rollup ${input.evidenceRef.split("#^")[1]}`, { evidenceRef: input.evidenceRef, content: input.content });
@@ -2225,7 +2226,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const citation = `[[${evidence.date}#^${evidence.anchor}]]`;
       const evidenceRef = `${evidence.logPath}#^${evidence.anchor}`;
 
-      const rollup = await fileOpsRollup(input.content, evidenceRef);
+      const rollup = await fileOpsRollup(input.content, evidenceRef, input.source);
       if (rollup) {
         const revision = await commitFiling(`memory: ops rollup ${evidence.anchor}`, { evidenceRef, content: input.content });
         return {

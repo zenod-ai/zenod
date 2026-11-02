@@ -13,6 +13,7 @@ import {
 } from "../vault/tree.js";
 import { lintTreeIndex, type TreeLintIssue } from "../vault/treeLint.js";
 import { entryHeading } from "./evidence.js";
+import { isPersonSource, readsAsAgentReport } from "../vault/captureOrigin.js";
 
 /**
  * Tree placement (EPIC-9 E9-2b; audit §5 filing rules 2–6, docs/LIBRARIAN-DOCTRINE.md
@@ -84,16 +85,23 @@ export function tokens(text: string): Set<string> {
 }
 
 const OPS_HEAD_RE = /^\s*(?:\[[^\]]{1,40}\]\s*)?[\w.-]{2,40}\s+(?:console\s+|watcher\s+)?(?:EPIC-[\w.]+|E\d+[\w.]*-[\w.-]+|ZAL-?\d+)\b/i;
-const OPS_WORD_RE = /\b(?:watcher|console|wake|run_[0-9a-f]{6,}|report|decision|decided|dispatched|merged|deployed|health sha|ci green)\b/i;
+/** A ticket, epic or run id anywhere on the first line, bare or in parentheses: `(agent_team E46-S9 …)`, `(T3)`, `Run: run_…`. */
+const OPS_ID_RE = /\b(?:EPIC-\d[\w.]*|[A-Z]\d{1,3}-[A-Z]{0,3}\d[\w.-]*|ZAL-?\d+|run_[0-9a-f]{6,})\b|\(\s*T\d+(?:\.\d+)?\s*\)/;
+const OPS_WORD_RE = /\b(?:watcher|console|wake|run_[0-9a-f]{6,}|report|decision|decided|dispatched|merged|deployed|health sha|ci green|agent_team|delivery manager|production[- ]proof|ready: yes)\b/i;
 
 /**
- * An agent ops report (Watcher read, console decision, wake report) rather than
- * something the person said: first line names a repo/agent and an epic or ticket
- * id, and the text reads as telemetry. Conservative: anything else files normally.
+ * An agent ops report (Watcher read, console decision, wake report, ticket or
+ * test-campaign report) rather than something the person said. From a surface a
+ * person speaks into (WhatsApp, Telegram, web, Drive) only a forwarded report
+ * counts: its first line carries an epic/ticket/run id and the text reads as
+ * telemetry. From MCP, the CLI or an unknown surface, anything the capture-origin
+ * check reads as an agent report counts too (E9-2h: parenthesised ids and
+ * `repo-name, date:` heads used to slip through and become provisional leaves).
  */
-export function isAgentOpsReport(content: string): boolean {
+export function isAgentOpsReport(content: string, source?: string | null): boolean {
   const first = content.trimStart().split("\n")[0] ?? "";
-  return OPS_HEAD_RE.test(first) && OPS_WORD_RE.test(content);
+  if ((OPS_HEAD_RE.test(first) || OPS_ID_RE.test(first.slice(0, 200))) && OPS_WORD_RE.test(content)) return true;
+  return !isPersonSource(source) && readsAsAgentReport(content);
 }
 
 export interface NodeChoice {

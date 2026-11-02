@@ -70,6 +70,7 @@ export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } f
 export {
   runTreeSweep,
   rediscoverTree,
+  refileAgentLeaves,
   renderSweepReport,
   findStaleRoots,
   findDuplicateTitles,
