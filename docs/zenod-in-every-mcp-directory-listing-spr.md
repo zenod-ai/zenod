@@ -60,3 +60,10 @@ One line per decision; detail goes to a linked page.
 ## Operating Learnings
 
 None yet: one line each, `L-<n> | applies when | rule | why | confirmed <date>` (references/learnings.md).
+
+
+## Spine Map
+
+| Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
+|---|---|---|---|---|---|---|---|---|
+| webmcp-on-zenod-dev-agents-in-chrome-can-read-the-offer-and-start-sign-up | child | [EPIC-11: WebMCP on zenod.dev: agents in Chrome can read the offer and start sign-up](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) | makes zenod.dev itself callable by browser agents, one more place agents find Zenod | draft | none | none | 2026-11-02 | fill Goal, Serves and Done means |
