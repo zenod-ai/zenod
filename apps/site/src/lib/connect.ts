@@ -45,7 +45,7 @@ export const MEMORY_TOOLS: ReadonlyArray<{
   { name: "get_memory", title: "Get memory", does: "Opens one note from your vault.", access: "Reads" },
   { name: "ask_brain", title: "Ask the brain", does: "Answers a question across many notes and cites the vault pages it used.", access: "Reads" },
   { name: "store_memory", title: "Store memory", does: "Saves something new: keeps the original as evidence and files it onto the right page.", access: "Writes" },
-  { name: "ingest_memory", title: "Ingest memory artifact", does: "Files a longer source, such as a transcript or an email, into the right pages.", access: "Writes" },
+  { name: "ingest_memory", title: "Ingest memory artifact", does: "Files a voice note, screenshot, PDF or link: keeps the original and files what it says onto the right pages.", access: "Writes" },
   { name: "get_ingest_result", title: "Get ingest result", does: "Reports what an ingest filed, and where.", access: "Reads" },
   { name: "get_task_result", title: "Get task result", does: "Returns the receipt of a save or ingest once it finishes: the pages touched and the saved revision.", access: "Reads" },
 ]
