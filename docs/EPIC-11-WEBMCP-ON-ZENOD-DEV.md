@@ -31,7 +31,7 @@ Status: active
 Last attempted: 2026-11-02 E11-S1 dispatched to a Sonnet worker (WebMCP tools in apps/site on wt/e11-s1-webmcp, PR)
 Result: worker running
 Evidence: zenod-in-every-mcp-directory-listing-spr.md
-Waiting on: Jordi: E11-A1 (S1 does not wait on it)
+Waiting on: Jordi signs operations@alpha9.io into the agent browser once (waits on EPIC-7/E7-A11); S1 does not wait on it
 Approved work: readied by Jordi 2026-11-02 ("do epicspine and zenod dev")
 Next action: worker builds and tests the tools on a branch; Delivery manager verifies and integrates
 Source revision: uncommitted scaffold
@@ -39,7 +39,7 @@ Verified at: 2026-11-02
 
 ## Waiting on
 
-- [answered E11-A1 2026-11-02 @Jordi] Register zenod.dev for Chrome's WebMCP origin trial and give us the token — context: Chrome only shows WebMCP tools to ordinary visitors on sites that carry a trial token; without it the tools work only with a testing flag — impact: unblocks E11-S2, the tools reach real visitors' Chrome (trial runs Chrome 149-156) — risk: none; a wrong or expired token only hides the tools — recommend: do it, because it is the only step between the shipped tools and visitors — why Jordi: it needs a Google account sign-in on the origin-trial page — steps: open https://developer.chrome.com/origintrials, pick WebMCP, Register, origin https://zenod.dev, then paste the token via the T3 secret card or in chat (it is public, it ships in the page) — unblocks: E11-S2 — effort: ~5 min — answer: Why can't you do it yourself? Can you not use the browser? What's stopping you?
+- [answered E11-A1 2026-11-02 @Jordi · research 2026-11-02 → waits on EPIC-7/E7-A11] Register zenod.dev for Chrome's WebMCP origin trial and give us the token — context: Chrome only shows WebMCP tools to ordinary visitors on sites that carry a trial token; without it the tools work only with a testing flag — impact: unblocks E11-S2, the tools reach real visitors' Chrome (trial runs Chrome 149-156) — risk: none; a wrong or expired token only hides the tools — recommend: do it, because it is the only step between the shipped tools and visitors — why Jordi: it needs a Google account sign-in on the origin-trial page — steps: open https://developer.chrome.com/origintrials, pick WebMCP, Register, origin https://zenod.dev, then paste the token via the T3 secret card or in chat (it is public, it ships in the page) — unblocks: E11-S2 — effort: ~5 min — answer: Why can't you do it yourself? Can you not use the browser? What's stopping you? — research: agents can do the registration themselves in their own browser (T3's browser on VPS3); the only thing stopping them is that Chrome's origin-trial page needs a signed-in Google account, and no agent browser has one (checked 2026-11-02: the shared browser profile is signed out; the team browser holds no Google login). EPIC-7's ask E7-A11 already asks you to sign operations@alpha9.io into that browser once (it is open in the Delivery Manager thread's browser panel); that one sign-in unblocks both T7 and this — recommend: sign in once there; an agent then registers zenod.dev for the WebMCP trial, accepts the trial terms as Alpha9, adds the token and ships it (E11-S2), with no further step for you
 
 ## Non-Goals
 
@@ -52,7 +52,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | E11-S1 | Ticket worker | Sonnet subagent | Register WebMCP tools in apps/site, feature-detected, with a vitest | active | none | wt/e11-s1-webmcp | main | none | 2026-11-02 | build on branch, open PR (apps/** is under the Deploy gate), report |
-| E11-S2 | Ticket worker | Delivery manager | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, E11-A1 | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | add the token once Jordi provides it |
+| E11-S2 | Ticket worker | Delivery manager (agent registers via T3 browser) | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, waits on EPIC-7/E7-A11 (one Google sign-in) | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | after the sign-in: register the trial in the browser, add the token meta tag via PR |
 
 ## Decisions
 
