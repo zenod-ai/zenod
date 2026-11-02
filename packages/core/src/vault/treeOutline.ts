@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parseNote } from "./frontmatter.js";
 import { basenameOf } from "./files.js";
 import { CITATION_RE } from "./pages.js";
+import { readLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
 import { buildTreeIndex, GROUP_HEADINGS, MAX_TREE_DEPTH, MEMORY_KINDS, type MemoryKind } from "./tree.js";
 
 /**
@@ -13,7 +14,7 @@ import { buildTreeIndex, GROUP_HEADINGS, MAX_TREE_DEPTH, MEMORY_KINDS, type Memo
  */
 
 export interface MemoryTreeCapture {
-  /** YYYY-MM-DD: the newest Log citation on the page, else its `updated:`/`created:` date. */
+  /** YYYY-MM-DD: the newest citation of the person's own capture on the page, else its `updated:`/`created:` date. */
   date: string;
   title: string;
   path: string;
@@ -61,12 +62,22 @@ function frontmatterDate(value: unknown): string | null {
   return null;
 }
 
-/** Newest date a page records a capture: its Log citations, else its frontmatter dates. */
-export function pageCaptureDate(raw: string): string | null {
+/**
+ * Newest date a page records one of the person's own captures: its Log citations
+ * (outside the ops rollup, and never an agent report: E9-2g), else its frontmatter
+ * dates. A page whose only citations are agent reports has no date: agent activity
+ * never makes a node look fresh.
+ */
+export function pageCaptureDate(raw: string, isAgentCapture: (key: string) => boolean = () => false): string | null {
+  const { frontmatter, body } = parseNote(raw);
   let newest: string | null = null;
-  for (const match of raw.matchAll(CITATION_RE)) if (!newest || match[1]! > newest) newest = match[1]!;
-  if (newest) return newest;
-  const { frontmatter } = parseNote(raw);
+  let cited = false;
+  for (const match of withoutOpsRollup(body).matchAll(CITATION_RE)) {
+    cited = true;
+    if (isAgentCapture(`${match[1]}#^${match[2]}`)) continue;
+    if (!newest || match[1]! > newest) newest = match[1]!;
+  }
+  if (newest || cited) return newest;
   return frontmatterDate(frontmatter?.updated) ?? frontmatterDate(frontmatter?.created);
 }
 
@@ -83,9 +94,11 @@ export async function memoryTreeOutline(vaultPath: string, options: MemoryTreeOu
       return null;
     }
   };
+  const captures = await readLogCaptures(vaultPath);
+  const isAgentCapture = (key: string) => captures.get(key)?.origin === "agent";
   const dates = new Map<string, string | null>();
   await Promise.all([...index.fields.keys()].map(async (path) => {
-    dates.set(path, pageCaptureDate(await readFile(join(vaultPath, path), "utf8").catch(() => "")));
+    dates.set(path, pageCaptureDate(await readFile(join(vaultPath, path), "utf8").catch(() => ""), isAgentCapture));
   }));
 
   const seen = new Set<string>();

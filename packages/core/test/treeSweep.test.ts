@@ -103,7 +103,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
     const attachmentsBefore = await snapshotRaw(dir, "_attachments/");
     const filesBefore = await listMarkdownFiles(dir);
 
-    const report = await runTreeSweep(dir, { today: "2026-11-02" });
+    const report = await runTreeSweep(dir, { today: "2026-11-02", discover: false });
 
     // Stale roots: only "Old trip" (Garden has a capture 8 days ago through its child).
     expect(report.staleRoots.map(r => r.name)).toEqual(["Old trip"]);
@@ -159,7 +159,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
   it("is a no-op on a vault without Tree.md", async () => {
     await mkdir(join(dir, "Inbox"), { recursive: true });
     await writeFile(join(dir, "Inbox/filing-2026-10-20-e-111111.md"), receipt("Log/2026-10-20.md#^e-111111", []));
-    const report = await runTreeSweep(dir, { today: "2026-11-02" });
+    const report = await runTreeSweep(dir, { today: "2026-11-02", discover: false });
     expect(report.hasTree).toBe(false);
     expect(report.changedPaths).toEqual([]);
   });
@@ -167,7 +167,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
   it("writes no proposals page when it only archives receipts", async () => {
     await writeFixture(dir);
     await rm(join(dir, "Notes/Kitchen/Recipes.md"));
-    const report = await runTreeSweep(dir, { today: "2026-11-02", staleDays: 1000 });
+    const report = await runTreeSweep(dir, { today: "2026-11-02", staleDays: 1000, discover: false });
     expect(report.counts.proposals).toBe(0);
     expect(report.counts.receiptsArchived + report.counts.receiptsRefiled).toBeGreaterThan(0);
     expect(await readFile(join(dir, TREE_SWEEP_REPORT_PATH), "utf8").catch(() => null)).toBeNull();
@@ -175,7 +175,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
 
   it("skips receipts whose filing job is still queued", async () => {
     await writeFixture(dir);
-    const report = await runTreeSweep(dir, { today: "2026-11-02", skipEvidenceRefs: new Set(["Log/2026-10-21.md#^e-222222"]) });
+    const report = await runTreeSweep(dir, { today: "2026-11-02", discover: false, skipEvidenceRefs: new Set(["Log/2026-10-21.md#^e-222222"]) });
     expect(report.receipts.find(r => r.path === "Inbox/filing-2026-10-21-e-222222.md")!.outcome).toBe("skipped");
   });
 

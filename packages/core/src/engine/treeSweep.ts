@@ -6,7 +6,9 @@ import type { FileChange } from "../vault/immutability.js";
 import { CITATION_RE as LOG_CITATION_RE, scanVault } from "../vault/pages.js";
 import { buildTreeIndex, readTree, type TreeIndex } from "../vault/tree.js";
 import { lintTreeIndex } from "../vault/treeLint.js";
+import { lintVault } from "../vault/lint.js";
 import { getEvidenceEntry } from "./evidence.js";
+import { applyTreeDiscovery, discoverTree, type DiscoveredRoot } from "./treeDiscover.js";
 import {
   chooseTreeNode,
   citeOnLeaf,
@@ -31,6 +33,9 @@ import {
  * - a Log entry cited only by a level-1 root (outside its ops rollup) is also cited
  *   on the deepest page under that root that matches it (E9-2f), so lineage reaches
  *   the leaf; the root keeps its citation;
+ * - the roots are re-derived from the pages' content and the person's own recent
+ *   captures (E9-2g, treeDiscover.ts): Tree.md is rewritten, `parent:`/`memory:`
+ *   lines follow; topics move between working and long-term with hysteresis;
  * - pages sharing a title get a merge proposal line; nothing is merged;
  * - tree lint must not get worse.
  *
@@ -53,6 +58,8 @@ export interface TreeSweepOptions {
   receiptMinAgeDays?: number;
   /** Evidence refs with a filing job still queued or running: their receipts are skipped. */
   skipEvidenceRefs?: ReadonlySet<string>;
+  /** Re-derive the roots (E9-2g). Default true. */
+  discover?: boolean;
 }
 
 export interface StaleRoot {
@@ -103,6 +110,13 @@ export interface TreeSweepCounts {
   filesChanged: number;
   treeLintErrorsBefore: number;
   treeLintErrorsAfter: number;
+  /** E9-2g: roots after re-deriving them (0 when discovery did not run). */
+  discoveredWorking?: number;
+  discoveredLongTerm?: number;
+  /** Roots that were not in Tree.md (same name and group) before this sweep. */
+  rootsNew?: number;
+  /** Tree pages whose `parent:` or `memory:` changed. */
+  pagesReparented?: number;
 }
 
 export interface TreeSweepReport {
@@ -115,8 +129,37 @@ export interface TreeSweepReport {
   duplicates: DuplicateProposal[];
   receipts: ReceiptResult[];
   deepened: DeepenedCitation[];
+  /** E9-2g roots after this sweep; private to the user's vault/console. */
+  roots: DiscoveredRoot[];
   /** Vault paths written or removed by this sweep (uncommitted). */
   changedPaths: string[];
+  /**
+   * `path|rule|message` of every `zenod lint` error the vault had before this sweep
+   * wrote anything: the caller rejects only errors the sweep introduced.
+   */
+  lintErrorsBefore: string[];
+}
+
+/** One `zenod lint` error as a comparable key. */
+export const lintErrorKey = (error: { path: string; rule: string; message: string }) => `${error.path}|${error.rule}|${error.message}`;
+
+/** Discovery runs to a fixed point (its parent edges feed the next pass); a pass that writes nothing ends it. */
+const MAX_DISCOVERY_PASSES = 3;
+
+export async function rediscoverTree(vaultPath: string, today: string, writes: TrackedWrites, fresh = false): Promise<{ roots: DiscoveredRoot[]; changed: string[]; rootsNew: number } | null> {
+  const before = new Set((await readTree(vaultPath))?.nodes.map(n => `${n.name}|${n.kind}`) ?? []);
+  let roots: DiscoveredRoot[] | null = null;
+  const changed = new Set<string>();
+  for (let pass = 0; pass < MAX_DISCOVERY_PASSES; pass++) {
+    // `fresh` applies to the first pass only; later passes continue what it wrote.
+    const plan = await discoverTree(vaultPath, { today, ...(fresh && pass === 0 ? { fresh: true } : {}) });
+    if (!plan) return null;
+    roots = plan.roots;
+    const written = await applyTreeDiscovery(vaultPath, plan, writes);
+    for (const path of written) changed.add(path);
+    if (!written.length) break;
+  }
+  return roots ? { roots, changed: [...changed].sort(), rootsNew: roots.filter(r => !before.has(`${r.name}|${r.kind}`)).length } : null;
 }
 
 const DAY_MS = 86_400_000;
@@ -435,8 +478,9 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
     rootOnlyCitations: 0, citationsDeepened: 0, duplicateGroups: 0, proposals: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0,
   };
   if (!(await readTree(vaultPath))) {
-    return { hasTree: false, today: options.today, staleDays, counts: empty, staleRoots: [], duplicates: [], receipts: [], deepened: [], changedPaths: [] };
+    return { hasTree: false, today: options.today, staleDays, counts: empty, staleRoots: [], duplicates: [], receipts: [], deepened: [], roots: [], changedPaths: [], lintErrorsBefore: [] };
   }
+  const lintErrorsBefore = (await lintVault(vaultPath)).errors.map(lintErrorKey);
 
   const before = await scanVault(vaultPath);
   const lintBefore = lintTreeIndex(await buildTreeIndex(vaultPath, before), before.files);
@@ -448,6 +492,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
   }
 
   const { rootOnly, deepened } = await deepenRootCitations(vaultPath, writes);
+  const discovery = options.discover === false ? null : await rediscoverTree(vaultPath, options.today, writes);
 
   const snapshot = await scanVault(vaultPath);
   const index = await buildTreeIndex(vaultPath, snapshot);
@@ -490,12 +535,20 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
       filesChanged: changedPaths.length,
       treeLintErrorsBefore: errorsBefore,
       treeLintErrorsAfter: errorsAfter,
+      ...(discovery ? {
+        discoveredWorking: discovery.roots.filter(r => r.kind === "working").length,
+        discoveredLongTerm: discovery.roots.filter(r => r.kind === "long-term").length,
+        rootsNew: discovery.rootsNew,
+        pagesReparented: discovery.changed.filter(p => p !== "Tree.md").length,
+      } : {}),
     },
     staleRoots: stale,
     duplicates,
     receipts,
     deepened,
+    roots: discovery?.roots ?? [],
     changedPaths,
+    lintErrorsBefore,
   };
 }
 
