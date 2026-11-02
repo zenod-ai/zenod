@@ -20,20 +20,20 @@ An AI agent running in a visitor's Chrome can ask zenod.dev what Zenod is, compa
 
 ## Done means
 
-- [ ] E11-1 zenod.dev (apps/site) registers WebMCP tools (what Zenod is, plans and price, open docs, go to sign-in) when `document.modelContext` exists; sign-in only navigates, never signs in or pays; covered by a vitest with a stubbed modelContext.
-- [ ] E11-2 Without WebMCP the site behaves exactly as before (build, lint, tests green).
+- [x] E11-1 zenod.dev (apps/site) registers WebMCP tools (what Zenod is, plans and price, open docs, go to sign-in) when `document.modelContext` exists; sign-in only navigates, never signs in or pays; covered by a vitest with a stubbed modelContext.
+- [x] E11-2 Without WebMCP the site behaves exactly as before (build, lint, tests green).
 - [ ] E11-3 Visitors' Chrome sees the tools without a flag: origin-trial token for zenod.dev in index.html (needs Jordi to register the trial, E11-A1).
 
 ## Current State
 
 Owner: Delivery manager
 Status: active
-Last attempted: 2026-11-02 E11-S1 dispatched to a Sonnet worker (WebMCP tools in apps/site on wt/e11-s1-webmcp, PR)
-Result: worker running
+Last attempted: 2026-11-02 E11-S1 merged (PR #1475, 9b5d18d): describe_zenod, get_plans, open_docs, go_to_sign_in in apps/site/src/lib/webmcp.ts
+Result: tools registered behind feature detection, tested with a stubbed modelContext; not yet tried in a real WebMCP Chrome; awaiting image publish to reach zenod.dev
 Evidence: zenod-in-every-mcp-directory-listing-spr.md
 Waiting on: Jordi signs operations@alpha9.io into the agent browser once (waits on EPIC-7/E7-A11); S1 does not wait on it
 Approved work: readied by Jordi 2026-11-02 ("do epicspine and zenod dev")
-Next action: worker builds and tests the tools on a branch; Delivery manager verifies and integrates
+Next action: confirm describe_zenod in the live zenod.dev bundle after Publish image; then E11-S2 once Jordi sends the token (E11-A1)
 Source revision: uncommitted scaffold
 Verified at: 2026-11-02
 
@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| E11-S1 | Ticket worker | Sonnet subagent | Register WebMCP tools in apps/site, feature-detected, with a vitest | active | none | wt/e11-s1-webmcp | main | none | 2026-11-02 | build on branch, open PR (apps/** is under the Deploy gate), report |
+| E11-S1 | Ticket worker | Sonnet subagent | Register WebMCP tools in apps/site, feature-detected, with a vitest | done | none | PR #1475 merged 9b5d18d | main | CI pass run 41477574557; site vitest 24/24, typecheck, build green; lint red only on pre-existing story-sections.tsx:39 | 2026-11-02 | publish + live check
 | E11-S2 | Ticket worker | Delivery manager (agent registers via T3 browser) | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, waits on EPIC-7/E7-A11 (one Google sign-in) | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | after the sign-in: register the trial in the browser, add the token meta tag via PR |
 
 ## Decisions
