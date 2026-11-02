@@ -86,6 +86,30 @@ describe("ask_brain cites the memory tree (E9-3b)", { timeout: 20_000 }, () => {
     expect(answer.text).toContain(`- ${QUOTES_PATH}`);
   });
 
+  it("retries once when the model answers without any tool call", async () => {
+    let calls = 0;
+    const { engine, inputs } = await engineFor(TREE_FIXTURE, async (_input, tools) => {
+      if (++calls === 1) return { text: "From the map: about 4,000 euros.", readPaths: [] };
+      await tools.readNote!(QUOTES);
+      return { text: "The 2023 Barcelona quotes were around 4,000 euros.", readPaths: [QUOTES] };
+    });
+    const answer = await engine.ask("What were the Barcelona quotes?");
+    expect(inputs).toHaveLength(2);
+    expect(inputs[0]!.hostInstruction).toBeUndefined();
+    expect(inputs[1]!.hostInstruction).toContain("made no tool call");
+    expect(answer.sources.map((source) => source.path)).toContain(QUOTES);
+    expect(answer.text).toContain(`- ${QUOTES_PATH}`);
+  });
+
+  it("does not retry when the model searched and found nothing", async () => {
+    const { engine, inputs } = await engineFor(TREE_FIXTURE, async (_input, tools) => {
+      await tools.searchVault!("zzqx nothing matches");
+      return { text: "Nothing found.", readPaths: [] };
+    });
+    await engine.ask("What about zzqx?");
+    expect(inputs).toHaveLength(1);
+  });
+
   it("leaves a vault without a tree exactly as before", async () => {
     let searchText = "";
     const { engine, inputs } = await engineFor(FLAT_FIXTURE, async (_input, tools) => {

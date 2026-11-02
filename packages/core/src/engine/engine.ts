@@ -392,6 +392,7 @@ const MAX_BRIEFING_LOG_FILES = 20;
 const MAX_BRIEFING_ATTACHMENTS = 40;
 const MAX_BRIEFING_SUMMARY_CHARS = 240;
 const MAX_ASK_CONTEXT_REFS = 10;
+const ASK_NO_TOOL_RETRY_INSTRUCTION = "Your previous reply made no tool call, so it could not be verified and was discarded. Call search_vault now (or read_note on a page from the map), then answer only from what you read.";
 const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
 
 function verbatimEntityCandidates(content: string): string[] {
@@ -2489,8 +2490,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     });
     const search = session.tools.searchVault;
     const askTools: VaultReadTools = tree && search ? { ...session.tools, searchVault: async (query: string) => annotateHitLineage(await search(query), tree) } : session.tools;
-    const result = await llm.answer(
-      {
+    const answerInput: AnswerInput = {
         question,
         answerSupportContract: "v1",
         answerSupportRead: pinnedSupports.length > 0,
@@ -2503,9 +2503,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
                 "The host already resolved and read the exact tenant-local contextRefs shown in PINNED EVIDENCE CONTEXT. Treat those blocks as the primary read result and answer directly from the pinned evidence. Search or read broader vault material only if the pinned evidence explicitly leaves the question unresolved.",
             }
           : {}),
-      },
-      askTools,
-    );
+    };
+    let result = await llm.answer(answerInput, askTools);
+    // Some providers ignore the forced first tool round and answer from the briefing
+    // map alone; the host then refuses that unread prose. Retry once, search first.
+    if (!pinnedBriefing && !session.toolAttempted()) {
+      result = await llm.answer({ ...answerInput, hostInstruction: ASK_NO_TOOL_RETRY_INSTRUCTION }, askTools);
+    }
     const answer = await session.finalize(result);
     return tree ? withAnswerLineage(answer, tree) : answer;
   }
@@ -2821,6 +2825,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const answerSupports = supportRegistry.addPassage(passage);
         return { answerSupports, answerSupportPartial: supportRegistry.lastPassageSelectionPartial };
       },
+      toolAttempted: () => attempted,
       required: (readPaths: string[]) => readBusy || attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {
