@@ -719,6 +719,8 @@ export class Runtime {
     const engine: BrainEngine = createEngine({
       entrySearch: input => searchMemoryEntryPage(engine, this.taskJobStore, input),
       ...(repo ? { repo } : {}),
+      // Tier-0 index (EPIC-9 E9-5a): derived from the vault, kept beside it in this tenant's data dir.
+      ...(repo ? { memoryIndex: { path: join(this.dataDir, "memory-index.sqlite"), tenantId: this.tenantId } } : {}),
       llm,
       state: this.state,
       // Front-end routing agents get the project registry appended so they resolve the

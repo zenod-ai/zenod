@@ -984,7 +984,8 @@ export function buildMcpServer(
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
         : hits.map((hit) => {
-            const path = formatMemoryLineage({ placement: hit.placement, lineage: hit.lineage, evidence: hit.evidenceRefs });
+            // A Log entry hit from the tier-0 index (E9-5a) carries the path of the page it was filed on.
+            const path = formatMemoryLineage({ placement: hit.placement, lineage: hit.lineage, evidence: hit.evidenceRefs }) || hit.treePath || "";
             return `${hit.path} (score ${hit.score}) — ${hit.snippet}${path ? `\n  path: ${path}` : ""}${hit.url ? `\n  ${hit.url}` : ""}`;
           }).join("\n");
       const entryText = entries.length === 0

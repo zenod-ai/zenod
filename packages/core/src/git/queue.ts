@@ -15,7 +15,8 @@ import { withVaultWriteLock } from "./vaultWriteLock.js";
 export type QueuePriority = "interactive" | "background";
 
 export class WriteQueue {
-  constructor(private readonly vaultPath?: string) {}
+  /** `onSettled` runs after every task, success or not: the vault may have changed (E9-5a index freshness). */
+  constructor(private readonly vaultPath?: string, private readonly onSettled?: () => void) {}
   private running = false;
   private readonly lanes: Record<QueuePriority, Array<() => void>> = {
     interactive: [],
@@ -39,6 +40,7 @@ export class WriteQueue {
           .then(resolve, reject)
           .finally(() => {
             this.running = false;
+            this.onSettled?.();
             this.dequeue();
           });
       };
