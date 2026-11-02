@@ -34,6 +34,11 @@ import {
   RecentSavesCard,
   type RecentSave,
 } from "@/components/recent-saves-card"
+import {
+  MemoryTreeCard,
+  type MemoryTree,
+  type MemoryTreeState,
+} from "@/components/memory-tree-card"
 import type { DashboardOverviewData } from "@/views/DashboardOverview"
 import type { ZenodEdition, ZenodPortalSection } from "@/views/zenod-edition"
 import {
@@ -94,6 +99,29 @@ export function RecentSavesPanel() {
 
   if (!loaded) return <Skeleton className="h-48 w-full" />
   return <RecentSavesCard saves={saves ?? []} unavailable={saves === null} />
+}
+
+export function MemoryTreePanel() {
+  const [state, setState] = React.useState<MemoryTreeState | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    api<{ status: "ready"; tree: MemoryTree } | { status: "empty" }>(
+      "/api/console/memory-tree"
+    )
+      .then((result) => {
+        if (!cancelled) setState(result)
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: "unavailable" })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (!state) return <Skeleton className="h-64 w-full" />
+  return <MemoryTreeCard state={state} />
 }
 
 export function HostedChannelsPanel() {

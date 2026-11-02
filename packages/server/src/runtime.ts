@@ -30,6 +30,7 @@ import {
   type ExternalTaskingTools,
   type LintReport,
   type LlmUsageReport,
+  type MemoryTreeOutline,
   type PeerTools,
   type TaskingInput,
   type TokenCostMeasurement,
@@ -2480,6 +2481,12 @@ export class Runtime {
         : result.message,
       snapshot: result.snapshot,
     };
+  }
+
+  /** The vault's memory tree for the console Memory tab (EPIC-9 E9-2e); null without Tree.md. */
+  async memoryTreeOutline(): Promise<MemoryTreeOutline | null> {
+    const engine = await this.getEngine();
+    return engine.memoryTreeOutline ? engine.memoryTreeOutline() : null;
   }
 
   async close(): Promise<void> {

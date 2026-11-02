@@ -62,6 +62,7 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
+import { memoryTreeOutline } from "../vault/treeOutline.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
 import { explicitMemoryRequest, RetrievalCoverage } from "./retrievalCoverage.js";
@@ -3243,6 +3244,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       assertVault(repo);
       await syncForRead();
       return loadMemoryTree(vaultPath);
+    },
+    memoryTreeOutline: async () => {
+      assertVault(repo);
+      await syncForRead();
+      return memoryTreeOutline(vaultPath, { urlFor: (path) => repositoryUrl(path) || null });
     },
     lint: async (): Promise<LintReport> => {
       assertVault(repo);

@@ -12,6 +12,7 @@ export type ZenodCapability =
 
 export type ZenodPortalSection =
   | "overview"
+  | "memory"
   | "connect"
   | "channels"
   | "vault"
@@ -28,6 +29,7 @@ export type ZenodEditionProfile = {
 
 const HOSTED_SECTIONS = Object.freeze([
   { id: "overview", label: "Overview" },
+  { id: "memory", label: "Memory" },
   { id: "connect", label: "Connect / MCP" },
   { id: "channels", label: "Channels" },
   { id: "vault", label: "Vault & sources" },

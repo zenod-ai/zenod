@@ -1,4 +1,5 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
+import type { MemoryTreeOutline } from "./vault/treeOutline.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
  * (later) the WhatsApp gateway are all thin adapters over `BrainEngine`.
@@ -521,6 +522,8 @@ export interface BrainEngine {
    * background write lane, so never concurrently with a live filing. No LLM.
    */
   sweepTree?(input?: TreeSweepInput): Promise<TreeSweepResult>;
+  /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
+  memoryTreeOutline?(): Promise<MemoryTreeOutline | null>;
   /** Deterministic vault validation. No LLM. */
   lint(): Promise<LintReport>;
 }
