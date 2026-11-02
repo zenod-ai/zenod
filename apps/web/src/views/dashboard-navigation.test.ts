@@ -25,6 +25,7 @@ describe("Zenod dashboard navigation", () => {
   it("uses one capability-driven profile for both approved editions", () => {
     expect(dashboardSectionsForEdition("hosted").map(({ id }) => id)).toEqual([
       "overview",
+      "memory",
       "connect",
       "channels",
       "vault",
@@ -63,6 +64,8 @@ describe("Zenod dashboard navigation", () => {
     expect(dashboardSectionForTab("settings", "hosted")).toBe("overview")
     expect(dashboardSectionForTab("account", "self-hosted")).toBe("overview")
     expect(dashboardSectionForTab("account", "hosted")).toBe("account")
+    expect(dashboardSectionForTab("memory", "hosted")).toBe("memory")
+    expect(dashboardSectionForTab("memory", "self-hosted")).toBe("overview")
   })
 
   it("links back to the canonical public landing", () => {

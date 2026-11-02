@@ -92,6 +92,7 @@ describe("Zenod edition portal", () => {
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: "Overview" })).not.toBeNull()
     })
+    expect(screen.getByRole("tab", { name: "Memory" })).not.toBeNull()
     expect(screen.getByRole("tab", { name: "Connect / MCP" })).not.toBeNull()
     expect(screen.getByRole("tab", { name: "Channels" })).not.toBeNull()
     expect(screen.getByRole("tab", { name: "Vault & sources" })).not.toBeNull()
@@ -119,6 +120,7 @@ describe("Zenod edition portal", () => {
       expect(screen.getByRole("tab", { name: "Settings" })).not.toBeNull()
     })
     expect(screen.queryByRole("tab", { name: "Account" })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Memory" })).toBeNull()
     expect(
       screen.getByRole("heading", { name: "AI configuration" })
     ).not.toBeNull()

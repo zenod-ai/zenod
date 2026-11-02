@@ -52,6 +52,7 @@ import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
 import { treeSweepSuggestion } from "./treeSweepSchedule.js";
+import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1328,6 +1329,24 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
     const limit = Number(c.req.query("limit") ?? RECENT_SAVES_DEFAULT_LIMIT);
     return c.json({ saves: recentSaves(runtime.taskJobStore, limit) });
+  });
+
+  // EPIC-9 E9-2e: the signed-in customer's memory tree (Tree.md + page parents),
+  // read-only from their own vault. Same account-only tenant resolution as above.
+  const memoryTrees = new ConsoleMemoryTreeCache();
+  app.get("/api/console/memory-tree", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      return c.json(await memoryTrees.get(account.tenant_id, runtime));
+    } catch (error) {
+      console.warn(`[memory-tree] console tree unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "memory tree unavailable" }, 503);
+    }
   });
 
   if (capabilities.managedAiApplication) {

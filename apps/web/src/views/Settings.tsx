@@ -3,6 +3,7 @@ import * as React from "react"
 import {
   ArrowLeftIcon,
   BrainIcon,
+  NetworkIcon,
   FolderGit2Icon,
   GaugeIcon,
   KeyRoundIcon,
@@ -49,12 +50,14 @@ import { TelegramConnect } from "@/components/telegram-connect"
 import {
   HostedChannelsPanel,
   HostedUsagePanel,
+  MemoryTreePanel,
   ZenodOverview,
 } from "@/views/ZenodPortalPanels"
 import type { ZenodEdition } from "@/views/zenod-edition"
 
 const SECTION_ICONS = {
   overview: GaugeIcon,
+  memory: NetworkIcon,
   connect: PlugZapIcon,
   channels: MessageCircleIcon,
   vault: FolderGit2Icon,
@@ -326,6 +329,9 @@ export function Settings({
               overview={overview}
               onNavigate={setSection}
             />
+          </TabsContent>
+          <TabsContent value="memory" className="mt-4">
+            <MemoryTreePanel />
           </TabsContent>
           <TabsContent value="connect" className="mt-4">
             <DashboardOverview overview={overview} showSupportCards={false} hosted={edition === "hosted"} />

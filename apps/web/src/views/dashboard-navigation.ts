@@ -21,6 +21,7 @@ export function dashboardSectionForTab(
     editionProfile(edition).sections.map(({ id }) => id)
   )
   if (tab === "overview" && available.has("overview")) return "overview"
+  if (tab === "memory" && available.has("memory")) return "memory"
   if (tab === "connect" && available.has("connect")) return "connect"
   if (tab === "connections" && available.has("connect")) return "connect"
   if (tab === "channels" && available.has("channels")) return "channels"
