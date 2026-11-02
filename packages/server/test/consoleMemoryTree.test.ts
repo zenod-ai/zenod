@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { memoryTreeOutline, steerTreeRoot } from "zenod";
+import { memoryTreeOutline } from "zenod";
 import { createSqliteTenantStore } from "@zenod/mcp-chassis";
 import { ConsoleMemoryTreeCache } from "../src/consoleMemoryTree.js";
 import type { CustomerAccount } from "../src/customerAccounts.js";
@@ -159,7 +159,7 @@ describe("console memory tree (EPIC-9 E9-2e)", () => {
     await expect(cache.get("t4", unconfigured)).resolves.toEqual({ status: "empty", tree: null });
   });
 
-  it("pins and renames a root of the signed-in customer's own tree only (E9-5b)", async () => {
+  it("is read-only: no pin or rename route, no steering fields (E9-5i)", async () => {
     const runtimes = new Map<string, Runtime>();
     const vaults = new Map<string, string>();
     for (const [tenant, label] of [["tenant-a", "alpha"], ["tenant-b", "beta"]] as const) {
@@ -169,10 +169,6 @@ describe("console memory tree (EPIC-9 E9-2e)", () => {
       vaults.set(tenant, vault);
       const runtime = new Runtime(join(dir, tenant), undefined, { tenantId: tenant, seedFromEnv: false });
       vi.spyOn(runtime, "memoryTreeOutline").mockImplementation(async () => memoryTreeOutline(vault));
-      // The engine path (write lock, lint, commit) is covered in core; here the vault is written directly.
-      vi.spyOn(runtime, "steerMemoryTree").mockImplementation(async (input) => steerTreeRoot(vault, { ...input, today: "2026-11-02" }, {
-        write: async (path: string, content: string) => writeFile(join(vault, path), content),
-      } as never));
       runtimes.set(tenant, runtime);
     }
     const tenants = createSqliteTenantStore({ dataDir: dir });
@@ -214,34 +210,16 @@ describe("console memory tree (EPIC-9 E9-2e)", () => {
     const get = async (user: CustomerPrincipal) => (await layer.app.request("/api/console/memory-tree", { headers: { cookie: await cookieFor(user) } })).json();
     const treeOf = (tenant: string) => readFile(join(vaults.get(tenant)!, "Tree.md"), "utf8");
     try {
-      const bobBefore = await treeOf("tenant-b");
-      expect((await post({ action: "pin", root: "Projects/alpha project.md" }, ada, "https://evil.example")).status).toBe(403);
-      expect((await post({ action: "pin", root: "Projects/alpha project.md" })).status).toBe(401);
-      expect((await post({ action: "fly", root: "x" }, ada)).status).toBe(400);
-
-      // Warm the cache, pin, and the next read shows the pin.
-      expect((await get(ada)).tree.groups[0].children[0].pinned).toBeUndefined();
-      const pinned = await post({ action: "pin", root: "Projects/alpha project.md" }, ada);
-      expect(pinned.status).toBe(200);
-      expect(await pinned.json()).toMatchObject({ ok: true, changed: true, note: "K-1", root: { name: "alpha project", path: "Projects/alpha project.md" } });
-      expect((await get(ada)).tree.groups[0].children[0]).toMatchObject({ title: "alpha project", pinned: true, nameLocked: true });
-      expect(await treeOf("tenant-a")).toContain("- K-1 | alpha project | pinned |");
-
-      // Rename: the new name is in Tree.md and in a Keeper note; a bad or taken name is refused.
-      const renamed = await post({ action: "rename", root: "Areas/alpha archive.md", name: "Alpha history" }, ada);
-      expect(renamed.status).toBe(200);
-      expect((await get(ada)).tree.groups[1].children[0]).toMatchObject({ title: "Alpha history", nameLocked: true });
-      expect((await post({ action: "rename", root: "Areas/alpha archive.md", name: "alpha PROJECT" }, ada)).status).toBe(409);
-      const invalid = await post({ action: "rename", root: "Areas/alpha archive.md", name: "a | b" }, ada);
-      expect(invalid.status).toBe(400);
-      expect(await invalid.json()).toMatchObject({ code: "invalid_name" });
-
-      // Tenant isolation: Ada cannot reach Bob's roots, and Bob's vault never changed.
-      const cross = await post({ action: "pin", root: "Projects/beta project.md" }, ada);
-      expect(cross.status).toBe(404);
-      expect(JSON.stringify(await cross.json())).not.toContain("beta");
-      expect(await treeOf("tenant-b")).toBe(bobBefore);
-      expect(JSON.stringify(await get(bob))).not.toContain("pinned");
+      const before = await treeOf("tenant-a");
+      // The Memory tab is read-only (E9-5i, root L-7): no steer route, and the tree carries no pin or rename flags.
+      for (const body of [{ action: "pin", root: "Projects/alpha project.md" }, { action: "rename", root: "Areas/alpha archive.md", name: "Mine" }]) {
+        expect((await post(body, ada)).status).toBe(404);
+      }
+      const tree = JSON.stringify(await get(ada));
+      expect(tree).toContain("alpha project");
+      for (const field of ["pinned", "nameLocked", "keeperNotes"]) expect(tree).not.toContain(field);
+      expect(await treeOf("tenant-a")).toBe(before);
+      expect(JSON.stringify(await get(bob))).not.toContain("alpha");
     } finally {
       tenants.close();
       for (const runtime of runtimes.values()) await runtime.close();

@@ -4,8 +4,7 @@ import { parseNote } from "./frontmatter.js";
 import { basenameOf } from "./files.js";
 import { CITATION_RE } from "./pages.js";
 import { readLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
-import { buildTreeIndex, GROUP_HEADINGS, MAX_TREE_DEPTH, MEMORY_KINDS, TREE_PATH, type MemoryKind } from "./tree.js";
-import { pageSteering, parseKeeperNotes } from "./treeSteering.js";
+import { buildTreeIndex, GROUP_HEADINGS, MAX_TREE_DEPTH, MEMORY_KINDS, type MemoryKind } from "./tree.js";
 
 /**
  * Whole-tree outline for the console Memory tab (EPIC-9 E9-2e). Read live from
@@ -33,10 +32,6 @@ export interface MemoryTreeOutlineNode {
   summary?: string;
   /** Stable root id (roots only, E9-5b). */
   rootId?: string;
-  /** The person pinned this root: never demoted or renamed (roots only, E9-5b). */
-  pinned?: boolean;
-  /** The person named this root; the keeper keeps the name (roots only, E9-5b). */
-  nameLocked?: boolean;
   provisional?: boolean;
   /** Pages in this subtree, the node's own page included. */
   pages: number;
@@ -55,8 +50,6 @@ export interface MemoryTreeOutline {
   placed: number;
   /** Tree pages whose lineage does not reach a root (shown as a count, not listed). */
   unplaced: number;
-  /** Keeper notes in Tree.md (E9-5b). */
-  keeperNotes: number;
 }
 
 export interface MemoryTreeOutlineOptions {
@@ -104,24 +97,11 @@ export async function memoryTreeOutline(vaultPath: string, options: MemoryTreeOu
     }
   };
   const captures = await readLogCaptures(vaultPath);
-  const treeRaw = await readFile(join(vaultPath, TREE_PATH), "utf8").catch(() => "");
-  const { notes } = parseKeeperNotes(treeRaw);
-  const steeringOf = new Map<string, { pinned: boolean; nameLocked: boolean }>();
   const isAgentCapture = (key: string) => captures.get(key)?.origin === "agent";
   const dates = new Map<string, string | null>();
   await Promise.all([...index.fields.keys()].map(async (path) => {
-    const raw = await readFile(join(vaultPath, path), "utf8").catch(() => "");
-    dates.set(path, pageCaptureDate(raw, isAgentCapture));
-    if (index.rootsByPath.has(path.toLowerCase())) {
-      const flags = pageSteering(parseNote(raw).frontmatter);
-      steeringOf.set(path, { pinned: flags.pinned, nameLocked: flags.nameLocked });
-    }
+    dates.set(path, pageCaptureDate(await readFile(join(vaultPath, path), "utf8").catch(() => ""), isAgentCapture));
   }));
-  // A root a Keeper note pins or names counts as steered even before discovery mirrors the flag onto its page.
-  const noted = (node: { id?: string; name: string }, kind: "pinned" | "name") => notes.some(note => note.rule.kind === kind
-    && note.targets.some(t => (t.id && t.id === node.id) || t.name.toLowerCase() === node.name.toLowerCase()
-      || (note.rule.kind === "name" && note.rule.name.toLowerCase() === node.name.toLowerCase())));
-
   const seen = new Set<string>();
   const pageNode = (path: string, memory: MemoryKind, depth: number): MemoryTreeOutlineNode | null => {
     if (seen.has(path) || depth > MAX_TREE_DEPTH) return null;
@@ -154,12 +134,9 @@ export async function memoryTreeOutline(vaultPath: string, options: MemoryTreeOu
       if (node.kind !== memory) continue;
       const page = pageNode(index.resolveRef(node.path) ?? node.path, memory, 1);
       if (!page) continue;
-      const flags = steeringOf.get(page.path ?? "");
-      const pinned = Boolean(flags?.pinned) || noted(node, "pinned");
-      const nameLocked = pinned || Boolean(flags?.nameLocked) || noted(node, "name");
       roots.push({
         ...page, kind: "root", title: node.name, summary: node.summary,
-        ...(node.id ? { rootId: node.id } : {}), ...(pinned ? { pinned } : {}), ...(nameLocked ? { nameLocked } : {}),
+        ...(node.id ? { rootId: node.id } : {}),
       });
     }
     return {
@@ -180,6 +157,5 @@ export async function memoryTreeOutline(vaultPath: string, options: MemoryTreeOu
     roots: groups.reduce((sum, group) => sum + group.children.length, 0),
     placed,
     unplaced: [...index.fields.keys()].filter((path) => !seen.has(path)).length,
-    keeperNotes: notes.length,
   };
 }

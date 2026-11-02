@@ -4,7 +4,7 @@ import { parseNote } from "../vault/frontmatter.js";
 import { basenameOf, isFilingReceiptPath, tierOf } from "../vault/files.js";
 import type { FileChange } from "../vault/immutability.js";
 import { CITATION_RE as LOG_CITATION_RE, scanVault } from "../vault/pages.js";
-import { buildTreeIndex, readTree, type TreeIndex } from "../vault/tree.js";
+import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { lintTreeIndex } from "../vault/treeLint.js";
 import { lintVault } from "../vault/lint.js";
 import { getEvidenceEntry } from "./evidence.js";
@@ -15,7 +15,6 @@ import {
   appendOpsRollup,
   chooseTreeNode,
   citeOnLeaf,
-  FILED_PREFIX,
   isAgentOpsReport,
   OPS_ROLLUP_HEADING,
   parseFiledLines,
@@ -27,10 +26,9 @@ import {
 /**
  * The weekly tree sweep (EPIC-9 E9-2d; audit §4–§5 rule 7; the "compactor" in
  * docs/LIBRARIAN-DOCTRINE.md). It keeps a vault's memory tree tidy without
- * deciding anything for the person:
+ * deciding anything for the person and without asking them anything: no proposals,
+ * no closure offers, no merge suggestions (E9-5i, root L-7). It only re-files:
  *
- * - a working-memory root with no capture in `staleDays` gets ONE proposal line
- *   (keep, close, or fold); the sweep never moves a root;
  * - a pending filing receipt (`Inbox/filing-…`, `Inbox/needs-filing-…`) is re-filed
  *   under the right node with E9-2b's placement, then moved to `Archive/Inbox/`;
  * - a provisional leaf made only of agent reports (a test-campaign or wake report the
@@ -42,7 +40,6 @@ import {
  * - the roots are re-derived from the pages' content and the person's own recent
  *   captures (E9-2g, treeDiscover.ts): Tree.md is rewritten, `parent:`/`memory:`
  *   lines follow; topics move between working and long-term with hysteresis;
- * - pages sharing a title get a merge proposal line; nothing is merged;
  * - tree lint must not get worse.
  *
  * Safety (E9-A2, "raw data stays safe"): nothing is deleted (a receipt is copied to
@@ -51,37 +48,20 @@ import {
  * Writes stay uncommitted; on any error the caller reverts them.
  */
 
-export const TREE_SWEEP_REPORT_PATH = "Inbox/Tree sweep.md";
 export const ARCHIVE_INBOX_DIR = "Archive/Inbox";
 /** Where the sweep keeps a leaf that only ever held agent reports (E9-2h): out of the tree, never deleted. */
 export const ARCHIVE_AGENT_LEAVES_DIR = "Archive/Agent reports";
-export const DEFAULT_STALE_DAYS = 30;
 /** A receipt younger than this may still be settling through its own retry; leave it alone. */
 export const DEFAULT_RECEIPT_MIN_AGE_DAYS = 2;
 
 export interface TreeSweepOptions {
   /** YYYY-MM-DD, the sweep's day. */
   today: string;
-  staleDays?: number;
   receiptMinAgeDays?: number;
   /** Evidence refs with a filing job still queued or running: their receipts are skipped. */
   skipEvidenceRefs?: ReadonlySet<string>;
   /** Re-derive the roots (E9-2g). Default true. */
   discover?: boolean;
-}
-
-export interface StaleRoot {
-  name: string;
-  path: string;
-  /** Latest capture date anywhere under the root (YYYY-MM-DD), or null when none was found. */
-  lastCapture: string | null;
-  days: number | null;
-}
-
-export interface DuplicateProposal {
-  title: string;
-  keep: string;
-  fold: string[];
 }
 
 /** A Log entry only a root cited, now also cited on a deeper page (E9-2f). */
@@ -104,7 +84,6 @@ export interface ReceiptResult {
 
 export interface TreeSweepCounts {
   workingRoots: number;
-  staleRoots: number;
   receiptsSeen: number;
   receiptsRefiled: number;
   receiptsArchived: number;
@@ -113,8 +92,6 @@ export interface TreeSweepCounts {
   rootOnlyCitations: number;
   /** Of those, how many are now also cited on a deeper page. */
   citationsDeepened: number;
-  duplicateGroups: number;
-  proposals: number;
   filesChanged: number;
   treeLintErrorsBefore: number;
   treeLintErrorsAfter: number;
@@ -135,11 +112,7 @@ export interface TreeSweepCounts {
 export interface TreeSweepReport {
   hasTree: boolean;
   today: string;
-  staleDays: number;
   counts: TreeSweepCounts;
-  /** Private to the user's vault/console: never copied to public evidence. */
-  staleRoots: StaleRoot[];
-  duplicates: DuplicateProposal[];
   receipts: ReceiptResult[];
   deepened: DeepenedCitation[];
   /** E9-2g roots after this sweep; private to the user's vault/console. */
@@ -181,16 +154,9 @@ export async function rediscoverTree(vaultPath: string, today: string, writes: T
 }
 
 const DAY_MS = 86_400_000;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
-}
-
-function maxDate(a: string | null, b: string | null): string | null {
-  if (!a) return b;
-  if (!b) return a;
-  return a > b ? a : b;
 }
 
 /** Body without the `## Ops rollup` section: ops traffic never makes a node look ongoing (rule 5). */
@@ -200,101 +166,6 @@ function withoutOpsRollup(body: string): string {
   const rest = body.slice(start + OPS_ROLLUP_HEADING.length + 2);
   const next = rest.search(/^## /m);
   return body.slice(0, start) + (next < 0 ? "" : `\n${rest.slice(next)}`);
-}
-
-const CITATION_RE = /(?:\[\[|Log\/)(\d{4}-\d{2}-\d{2})(?:\.md)?#\^e-[0-9a-f]+/g;
-
-/** Latest Log date a page cites, outside its ops rollup; falls back to `created:` when it cites nothing. */
-async function pageLastCapture(vaultPath: string, path: string): Promise<string | null> {
-  const raw = await readFile(join(vaultPath, path), "utf8").catch(() => "");
-  const { frontmatter, body } = parseNote(raw);
-  let latest: string | null = null;
-  for (const match of withoutOpsRollup(body).matchAll(CITATION_RE)) latest = maxDate(latest, match[1]!);
-  if (latest) return latest;
-  const created = frontmatter?.created;
-  return typeof created === "string" && DATE_RE.test(created.trim()) ? created.trim() : null;
-}
-
-/** Latest `filed:` date per page across the Log (rule 6 lines), ops rollups excluded. */
-async function filedDates(vaultPath: string, files: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const file of files) {
-    const match = /^Log\/(\d{4}-\d{2}-\d{2})\.md$/.exec(file);
-    if (!match) continue;
-    const raw = await readFile(join(vaultPath, file), "utf8").catch(() => "");
-    if (!raw.includes(FILED_PREFIX)) continue;
-    for (const line of raw.split("\n")) {
-      if (!line.startsWith(FILED_PREFIX) || line.includes("· ops rollup")) continue;
-      const link = /\[\[([^\]|#]+)/.exec(line)?.[1];
-      if (!link) continue;
-      const page = `${link.replace(/\.md$/, "")}.md`;
-      out.set(page, maxDate(out.get(page) ?? null, match[1]!)!);
-    }
-  }
-  return out;
-}
-
-function subtree(index: TreeIndex, root: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const queue = [root];
-  while (queue.length) {
-    const path = queue.shift()!;
-    if (seen.has(path)) continue;
-    seen.add(path);
-    out.push(path);
-    queue.push(...index.children(path));
-  }
-  return out;
-}
-
-/** Working roots whose whole subtree has had no capture for `staleDays`. */
-export async function findStaleRoots(vaultPath: string, index: TreeIndex, files: string[], today: string, staleDays: number): Promise<{ working: number; stale: StaleRoot[] }> {
-  const filed = await filedDates(vaultPath, files);
-  const stale: StaleRoot[] = [];
-  let working = 0;
-  for (const node of index.tree?.nodes ?? []) {
-    if (node.kind !== "working") continue;
-    working++;
-    const rootPath = index.resolveRef(node.path);
-    if (!rootPath || !index.fields.has(rootPath)) continue;
-    let last: string | null = null;
-    for (const path of subtree(index, rootPath)) {
-      last = maxDate(last, await pageLastCapture(vaultPath, path));
-      last = maxDate(last, filed.get(path) ?? null);
-    }
-    const days = last ? daysBetween(last, today) : null;
-    if (days === null || days >= staleDays) stale.push({ name: node.name, path: rootPath, lastCapture: last, days });
-  }
-  return { working, stale };
-}
-
-function normalizedTitle(title: string): string {
-  return title.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-/** Groups of tree pages sharing a title; keeps the placed, shallowest page and proposes folding the rest into it. */
-export function findDuplicateTitles(index: TreeIndex): DuplicateProposal[] {
-  const groups = new Map<string, string[]>();
-  for (const [path, fields] of index.fields) {
-    const key = normalizedTitle(fields.title);
-    groups.set(key, [...(groups.get(key) ?? []), path]);
-  }
-  const out: DuplicateProposal[] = [];
-  for (const paths of groups.values()) {
-    if (paths.length < 2) continue;
-    const rank = (path: string) => {
-      const lineage = index.lineage(path);
-      return [index.rootsByPath.has(path.toLowerCase()) ? 0 : 1, lineage.ok ? 0 : 1, path.split("/").length, path.length] as const;
-    };
-    const sorted = [...paths].sort((a, b) => {
-      const ra = rank(a), rb = rank(b);
-      for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return (ra[i] as number) - (rb[i] as number);
-      return a.localeCompare(b);
-    });
-    out.push({ title: index.fields.get(sorted[0]!)!.title, keep: sorted[0]!, fold: sorted.slice(1) });
-  }
-  return out.sort((a, b) => a.title.localeCompare(b.title));
 }
 
 const isPendingReceiptPath = (path: string) => isFilingReceiptPath(path) || /^Inbox\/needs-filing-[^/]+\.md$/.test(path);
@@ -492,50 +363,19 @@ export async function deepenRootCitations(vaultPath: string, writes: TrackedWrit
   return { rootOnly, deepened };
 }
 
-/** The vault page that carries the sweep's proposals; null when there is nothing to propose and no page yet. */
-export function renderSweepReport(report: Pick<TreeSweepReport, "staleRoots" | "duplicates" | "staleDays">): string {
-  const lines = [
-    "---",
-    "title: Tree sweep",
-    "status: tree-sweep",
-    "---",
-    "",
-    "# Tree sweep",
-    "",
-    "Proposals from Zenod's weekly memory sweep. Nothing here has been moved or merged: each line waits for your call. Say it in chat (for example \"close House decision\") or edit the tree yourself.",
-    "",
-    `## Working roots with no capture in ${report.staleDays} days`,
-    "",
-  ];
-  if (!report.staleRoots.length) lines.push("None.");
-  for (const root of report.staleRoots) {
-    const since = root.lastCapture ? `no capture since ${root.lastCapture}` : "no capture found";
-    lines.push(`- Close "${root.name}"? ${since}. Keep it, close it (one Outcome line, then it moves under Long-term memory), or fold it into another root. [[${root.path.replace(/\.md$/, "")}]]`);
-  }
-  lines.push("", "## Pages with the same title", "");
-  if (!report.duplicates.length) lines.push("None.");
-  for (const dup of report.duplicates) {
-    lines.push(`- Merge "${dup.title}"? Keep [[${dup.keep.replace(/\.md$/, "")}]] and fold in ${dup.fold.map(p => `[[${p.replace(/\.md$/, "")}]]`).join(", ")}.`);
-  }
-  // Static on purpose: a sweep with nothing new to say leaves this page (and the vault) unchanged.
-  lines.push("", "## Filing receipts", "", `Leftover filing receipts are re-filed under the tree, then kept under ${ARCHIVE_INBOX_DIR}/ (never deleted). Each sweep's counts are in its vault commit message.`, "");
-  return lines.join("\n");
-}
-
 /**
  * Run one sweep over a vault working tree. Writes go through `writes` and stay
  * uncommitted; throws (after which the caller reverts) when the sweep would leave
  * tree lint worse than it found it.
  */
 export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions, writes: TrackedWrites = new TrackedWrites(vaultPath)): Promise<TreeSweepReport> {
-  const staleDays = options.staleDays ?? DEFAULT_STALE_DAYS;
   const receiptMinAgeDays = options.receiptMinAgeDays ?? DEFAULT_RECEIPT_MIN_AGE_DAYS;
   const empty: TreeSweepCounts = {
-    workingRoots: 0, staleRoots: 0, receiptsSeen: 0, receiptsRefiled: 0, receiptsArchived: 0, receiptsSkipped: 0,
-    rootOnlyCitations: 0, citationsDeepened: 0, duplicateGroups: 0, proposals: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0,
+    workingRoots: 0, receiptsSeen: 0, receiptsRefiled: 0, receiptsArchived: 0, receiptsSkipped: 0,
+    rootOnlyCitations: 0, citationsDeepened: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0,
   };
   if (!(await readTree(vaultPath))) {
-    return { hasTree: false, today: options.today, staleDays, counts: empty, staleRoots: [], duplicates: [], receipts: [], deepened: [], roots: [], changedPaths: [], lintErrorsBefore: [] };
+    return { hasTree: false, today: options.today, counts: empty, receipts: [], deepened: [], roots: [], changedPaths: [], lintErrorsBefore: [] };
   }
   const lintErrorsBefore = (await lintVault(vaultPath)).errors.map(lintErrorKey);
 
@@ -552,19 +392,9 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
   const { rootOnly, deepened } = await deepenRootCitations(vaultPath, writes);
   const discovery = options.discover === false ? null : await rediscoverTree(vaultPath, options.today, writes);
 
-  const snapshot = await scanVault(vaultPath);
-  const index = await buildTreeIndex(vaultPath, snapshot);
-  const { working, stale } = await findStaleRoots(vaultPath, index, snapshot.files, options.today, staleDays);
-  const duplicates = findDuplicateTitles(index);
+  const working = ((await readTree(vaultPath))?.nodes ?? []).filter(node => node.kind === "working").length;
   const refiled = receipts.filter(r => r.outcome === "refiled").length;
   const archived = receipts.filter(r => r.outcome === "archived").length;
-
-  const existingReport = await readFile(join(vaultPath, TREE_SWEEP_REPORT_PATH), "utf8").catch(() => null);
-  const nextReport = renderSweepReport({ staleRoots: stale, duplicates, staleDays });
-  // Write the proposals page when there is something to propose, or to update one that exists.
-  if ((existingReport !== null || stale.length || duplicates.length) && existingReport !== nextReport) {
-    await writes.write(TREE_SWEEP_REPORT_PATH, nextReport);
-  }
 
   const after = await scanVault(vaultPath);
   const lintAfter = lintTreeIndex(await buildTreeIndex(vaultPath, after), after.files);
@@ -578,18 +408,14 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
   return {
     hasTree: true,
     today: options.today,
-    staleDays,
     counts: {
       workingRoots: working,
-      staleRoots: stale.length,
       receiptsSeen: receipts.length,
       receiptsRefiled: refiled,
       receiptsArchived: archived,
       receiptsSkipped: receipts.filter(r => r.outcome === "skipped").length,
       rootOnlyCitations: rootOnly,
       citationsDeepened: deepened.length,
-      duplicateGroups: duplicates.length,
-      proposals: stale.length + duplicates.length,
       filesChanged: changedPaths.length,
       treeLintErrorsBefore: errorsBefore,
       treeLintErrorsAfter: errorsAfter,
@@ -603,8 +429,6 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
       } : {}),
       agentLeavesRefiled: agentLeaves.length,
     },
-    staleRoots: stale,
-    duplicates,
     receipts,
     deepened,
     roots: discovery?.roots ?? [],

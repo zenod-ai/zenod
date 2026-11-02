@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
-import { assertSweepChangesSafe, runTreeSweep, TREE_SWEEP_REPORT_PATH } from "../src/engine/treeSweep.js";
+import { assertSweepChangesSafe, runTreeSweep } from "../src/engine/treeSweep.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import { listMarkdownFiles } from "../src/vault/files.js";
@@ -96,7 +96,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
   beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "zenod-e92d-")); });
   afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 
-  it("proposes closure for a stale working root, re-files receipts, proposes merges, and keeps lint clean", async () => {
+  it("only re-files: receipts re-filed, no closure or merge proposals, nothing moved or merged, lint clean (E9-5i)", async () => {
     await writeFixture(dir);
     expect((await lintTree(dir)).issues.filter(i => i.severity === "error")).toEqual([]);
     const logsBefore = await snapshotRaw(dir, "Log/");
@@ -105,16 +105,14 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
 
     const report = await runTreeSweep(dir, { today: "2026-11-02", discover: false });
 
-    // Stale roots: only "Old trip" (Garden has a capture 8 days ago through its child).
-    expect(report.staleRoots.map(r => r.name)).toEqual(["Old trip"]);
-    expect(report.staleRoots[0]!.lastCapture).toBe("2026-08-01");
+    // A working root with no capture since August ("Old trip") is left alone: no offer to close it.
     expect(report.counts.workingRoots).toBe(2);
-    // Never moved: the root is still a working node in Tree.md.
+    expect(Object.keys(report.counts)).not.toEqual(expect.arrayContaining(["staleRoots"]));
     const index = await buildTreeIndex(dir);
     expect(index.tree!.nodes.find(n => n.name === "Old trip")!.kind).toBe("working");
 
-    // Duplicates: one merge proposal, nothing merged.
-    expect(report.duplicates).toEqual([{ title: "Recipes", keep: "Notes/Recipes.md", fold: ["Notes/Kitchen/Recipes.md"] }]);
+    // Two pages share a title: no merge proposal, nothing merged.
+    expect(Object.keys(report)).not.toEqual(expect.arrayContaining(["duplicates", "staleRoots"]));
     expect(await readFile(join(dir, "Notes/Kitchen/Recipes.md"), "utf8")).toContain("Older recipe list");
 
     // Receipts.
@@ -123,7 +121,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
     expect(byPath["Inbox/filing-2026-10-21-e-222222.md"]!.outcome).toBe("refiled");
     expect(byPath["Inbox/filing-2026-11-02-e-333333.md"]!.outcome).toBe("skipped");
     expect(byPath["Inbox/needs-filing-2026-10-22T11-00-00.md"]!.outcome).toBe("refiled");
-    expect(report.counts).toMatchObject({ receiptsSeen: 4, receiptsRefiled: 2, receiptsArchived: 1, receiptsSkipped: 1, duplicateGroups: 1, staleRoots: 1, proposals: 2 });
+    expect(report.counts).toMatchObject({ receiptsSeen: 4, receiptsRefiled: 2, receiptsArchived: 1, receiptsSkipped: 1 });
 
     // The re-filed capture is a provisional leaf under Garden, citing its Log entry.
     const leafPath = byPath["Inbox/filing-2026-10-21-e-222222.md"]!.pages![0]!;
@@ -146,10 +144,9 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
     expect(await snapshotRaw(dir, "_attachments/")).toEqual(attachmentsBefore);
     expect(report.changedPaths.some(p => p.startsWith("Log/") || p.startsWith("_attachments/"))).toBe(false);
 
-    // One proposals page with one line per proposal.
-    const proposals = await readFile(join(dir, TREE_SWEEP_REPORT_PATH), "utf8");
-    expect(proposals.split("\n").filter(l => l.startsWith("- Close "))).toHaveLength(1);
-    expect(proposals.split("\n").filter(l => l.startsWith("- Merge "))).toHaveLength(1);
+    // No proposals page, nothing written to Inbox for the person to decide.
+    expect(await readFile(join(dir, "Inbox/Tree sweep.md"), "utf8").catch(() => null)).toBeNull();
+    expect(report.changedPaths.filter(p => p.startsWith("Inbox/") && !/^Inbox\/(?:needs-)?filing-/.test(p))).toEqual([]);
 
     // Lint after: 0 tree errors.
     expect(report.counts.treeLintErrorsAfter).toBe(0);
@@ -164,14 +161,7 @@ describe("E9-2d weekly tree sweep", { timeout: 60_000 }, () => {
     expect(report.changedPaths).toEqual([]);
   });
 
-  it("writes no proposals page when it only archives receipts", async () => {
-    await writeFixture(dir);
-    await rm(join(dir, "Notes/Kitchen/Recipes.md"));
-    const report = await runTreeSweep(dir, { today: "2026-11-02", staleDays: 1000, discover: false });
-    expect(report.counts.proposals).toBe(0);
-    expect(report.counts.receiptsArchived + report.counts.receiptsRefiled).toBeGreaterThan(0);
-    expect(await readFile(join(dir, TREE_SWEEP_REPORT_PATH), "utf8").catch(() => null)).toBeNull();
-  });
+
 
   it("skips receipts whose filing job is still queued", async () => {
     await writeFixture(dir);
