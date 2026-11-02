@@ -74,7 +74,7 @@ DEFAULTS = {
     "KEEPER_S3_ENDPOINT": "https://hel1.your-objectstorage.com",
     "KEEPER_RCLONE_IMAGE": "rclone/rclone:1.68.2",
     "KEEPER_DOKPLOY_ENV": "/home/t3agent/.config/alpha9/dokploy.env",
-    "KEEPER_DOKPLOY_KEY_FILE": "/home/t3agent/.config/alpha9/dokploy-api-key",
+    "KEEPER_DOKPLOY_KEY_FILE": "/etc/alpha9-secrets/alpha9-config/DOKPLOY_API_KEY",  # root-only store copy (EPIC-7 T3.3)
     "KEEPER_ALERT_DIR": "/home/t3agent/agent_team_m0/alerts.pending",
     "KEEPER_STATE_DIR": "/var/lib/zenod-readiness-keeper",
     "KEEPER_DRILL_MIN_AGE_DAYS": "24",
