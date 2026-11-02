@@ -33,7 +33,7 @@ Result: E9-1 audit done 2026-11-01 ([page](epic9/E9-1-memory-structure-audit.md)
 Evidence: [E9-1 audit](epic9/E9-1-memory-structure-audit.md) 718acaa
 Waiting on: nobody (E9-A4 answered: roots must be found bottom-up → E9-2g)
 Approved work: E9-1 audit (Jordi's note 2026-11-01)
-Next action: E9-2h polish (filter, root names, duplicate roots); then ask E9-A5: Jordi opens the Memory tab again
+Next action: E9-2h polish (queued 2026-11-02: no seat, VPS3 load high; the next wake dispatches it); then ask E9-A5: Jordi opens the Memory tab again
 Source revision: uncommitted scaffold
 Verified at: 2026-11-01
 
