@@ -22,7 +22,7 @@ An AI agent running in a visitor's Chrome can ask zenod.dev what Zenod is, compa
 
 - [x] E11-1 zenod.dev (apps/site) registers WebMCP tools (what Zenod is, plans and price, open docs, go to sign-in) when `document.modelContext` exists; sign-in only navigates, never signs in or pays; covered by a vitest with a stubbed modelContext.
 - [x] E11-2 Without WebMCP the site behaves exactly as before (build, lint, tests green).
-- [ ] E11-3 Visitors' Chrome sees the tools without a flag: origin-trial token for zenod.dev in index.html (needs Jordi to register the trial, E11-A1).
+- [ ] E11-3 Visitors' Chrome sees the tools without a flag: origin-trial token for zenod.dev in index.html (an agent registers the trial in the signed-in agent browser, E11-A1 answered).
 
 ## Current State
 
@@ -33,7 +33,7 @@ Result: tools registered behind feature detection, tested with a stubbed modelCo
 Evidence: zenod-in-every-mcp-directory-listing-spr.md
 Waiting on: Jordi signs operations@alpha9.io into the agent browser once (waits on EPIC-7/E7-A11); S1 does not wait on it
 Approved work: readied by Jordi 2026-11-02 ("do epicspine and zenod dev")
-Next action: confirm describe_zenod in the live zenod.dev bundle after Publish image; then E11-S2 once Jordi sends the token (E11-A1)
+Next action: confirm describe_zenod in the live zenod.dev bundle after Publish image; then E11-S2: an agent registers the trial in the signed-in agent browser (E11-A1 answered, waits on EPIC-7/E7-A11) and adds the token via PR
 Source revision: uncommitted scaffold
 Verified at: 2026-11-02
 
