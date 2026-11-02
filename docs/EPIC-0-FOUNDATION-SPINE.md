@@ -88,6 +88,7 @@ Verified at: 2026-11-02 (child Current States read from `main` e4886b3; health e
 | M0 | child | [M0 Plan self-hosted Zenod](M0-PLAN.md) | Ship self-hosted Zenod: one Docker container on Dokploy, used daily against a real vault. | superseded | Closed: the E12-S2 tidy, 2026-10-24 | none; [Outcome](M0-PLAN.md#outcome) |
 | web3-venice-angle-research-line | child | [EPIC-8: Web3 / Venice angle — research line](EPIC-8-WEB3-VENICE-RESEARCH.md) | none | draft | none | fill Goal, Serves and Done means |
 | memory-as-a-tree-audit-how-zenod-structures-memory-working-vs-long-term | child | [EPIC-9: Memory as a tree: audit how Zenod structures memory, working vs long-term](EPIC-9-MEMORY-AS-A-TREE.md) | none | draft | none | fill Goal, Serves and Done means |
+| zenod-in-every-mcp-directory-listing-sprint-and-mcp-seo | child | [EPIC-10: Zenod in every MCP directory: listing sprint and MCP SEO](zenod-in-every-mcp-directory-listing-spr.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
