@@ -123,8 +123,9 @@ export function productionReadinessReport(
     },
     {
       id: "stripe_key",
-      ok: Boolean(env.STRIPE_SECRET_KEY?.startsWith("sk_live_")),
-      detail: env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "Live Stripe key is configured" : "Live Stripe key is missing",
+      // EPIC-7 T3.4: a live restricted key (rk_live_) is the intended production key; the full sk_live_ still counts.
+      ok: /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY ?? ""),
+      detail: /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY ?? "") ? "Live Stripe key is configured" : "Live Stripe key is missing",
     },
     {
       id: "stripe_webhook_secret",
