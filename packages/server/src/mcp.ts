@@ -954,7 +954,7 @@ export function buildMcpServer(
     {
       title: "Search memory",
       description:
-        "Deterministic model-free memory search. Use contentType for a requested category and order=newest for recency. Omit query for a category-only list; query matches literal subject/transcript words. Use the requested limit and add date/source filters only when requested. Use entry capturedAt as the source capture time; raw Log headings can reflect processing time. hits are independent ranked lexical note paths, NOT constrained by entry filters. Structural filters/order or a cursor enable paginated entries: query terms are ANDed case-insensitive whitespace substrings in entry title/content, with all metadata filters applied before the page limit. Repeat query/filters/order with nextCursor until hasMore=false. A changed snapshot or process requires restarting and discarding prior pages. Coverage describes the complete local vault plus available retained receipts, not remote unsynced/deleted history. Pass exact evidenceRef to get_memory and read it before summarizing.",
+        "Search the user's memory vault and return matching notes and captured entries, each with its vault path, capture time, source and evidence reference. A query matches literal words in titles and text; filters narrow results by source, content type and capture date, and order sorts them by newest, oldest or relevance. Without a query, entries are listed by filters alone. Each entry's capturedAt is the original capture time; Log headings can show the later processing time. Entries are paginated: hasMore and nextCursor return the next page for the same query, filters and order, until the vault changes or the server restarts. Note hits are a separate ranked top 20 that ignores entry filters. Each result carries its place in the memory tree, and its evidence reference opens with get_memory.",
       inputSchema: SEARCH_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -1013,7 +1013,7 @@ export function buildMcpServer(
     {
       title: "Get memory",
       description:
-        "Read one memory by a vault-relative note path or an exact immutable evidenceRef returned by search_memory (for example Log/2026-08-01.md#^e-123abc). Evidence refs return only that entry, never neighboring entries from the same daily log.",
+        "Read one memory: a vault note by its vault-relative path (for example Areas/Insurance.md), or one captured entry by the exact evidence reference that search_memory returns (for example Log/2026-08-01.md#^e-123abc). An evidence reference returns only that entry, with its source, content type, capture time and source URL, without neighboring entries from the same daily log. A path returns the note's text, frontmatter and place in the memory tree.",
       inputSchema: GET_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -1050,7 +1050,7 @@ export function buildMcpServer(
     {
       title: "Store memory",
       description:
-        "Store a memory in the user's vault through the librarian pipeline: records immutable evidence in the Log, files the meaning onto the right page(s) with citations, validates, and durably saves through the configured vault provider. Filing always completes: uncertainty is logged in the vault for voluntary later review, never returned as a question to relay or answer. Use for anything the user wants remembered: facts, decisions, events, preferences. ASYNC: the librarian pipeline runs classify + compose LLM calls and a durable vault save, so it returns a jobId immediately (status 'queued') and does NOT wait — poll get_task_result with that jobId until status is 'done' to read the saved revision receipt, evidence ref, pages touched, URLs, and filing disposition.",
+        "Save something the user wants remembered, such as a fact, decision, event or preference, to their vault. Zenod records the exact words as evidence in the dated Log, files the meaning onto the right page or pages with citations back to that evidence, and saves the change to the user's GitHub repository or Google Drive. Filing completes in every case: anything uncertain is noted in the vault for later review, not returned as a question. Runs in the background: the call returns a jobId at once, and get_task_result with that jobId returns the receipt (evidence reference, pages touched, saved revision, links and filing disposition) when the job is done.",
       inputSchema: STORE_MEMORY_SHAPE,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -1099,8 +1099,8 @@ export function buildMcpServer(
     {
       title: "Ingest memory artifact",
       description: hostedArchiveOnlyDrive
-        ? "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, or staged transport handles that the user wants remembered. Hosted Google Drive is archive/export-only, so Drive file references are not accepted as sources. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, durable revision, and provider URLs."
-        : "Queue a raw memory-bound artifact for Zenod's evidence-to-memory pipeline. Use this for audio, screenshots/images, PDFs/documents, links, Drive file refs, or staged transport handles that the user wants remembered. ASYNC: returns a jobId immediately and does not wait. Poll get_task_result until terminal. Terminal receipts include raw artifact archive handle/URL, extraction or transcript archive handle, filed evidence ref, pages touched, durable revision, and provider URLs. Opaque transport handles that Zenod cannot resolve fail loudly with media_ingest_processor_unavailable.",
+        ? "Queue a file or link for the user's memory: audio and voice notes, screenshots and images, PDFs and documents, or web links, given as a fetchable URL or a handle the caller has already staged. Zenod archives the original, transcribes or extracts its content, records that as evidence and files the meaning into the vault. Google Drive file references are not accepted on Zenod Hosted, where Drive is the archive. Runs in the background: the call returns a jobId at once, and get_task_result returns the receipt (archived original, transcript or extraction, evidence reference, pages touched, saved revision and links) or a structured error."
+        : "Queue a file or link for the user's memory: audio and voice notes, screenshots and images, PDFs and documents, or web links, given as a fetchable URL, a Google Drive file ID or a handle the caller has already staged. Zenod archives the original, transcribes or extracts its content, records that as evidence and files the meaning into the vault. Runs in the background: the call returns a jobId at once, and get_task_result returns the receipt (archived original, transcript or extraction, evidence reference, pages touched, saved revision and links) or a structured error. A handle Zenod cannot resolve fails with media_ingest_processor_unavailable.",
       inputSchema: hostedArchiveOnlyDrive
         ? {
             ...INGEST_MEMORY_SHAPE,
@@ -1202,7 +1202,7 @@ export function buildMcpServer(
     {
       title: "Get ingest result",
       description:
-        "Poll an ingest_memory background job. Returns queued/running progress, a terminal receipt with raw artifact handle + transcript evidence + pages + commit + URLs, or a loud structured error.",
+        "Check an audio ingest job from the Google Drive inbox by its jobId. Returns its progress while queued or running, then the receipt (archived original, transcript evidence, pages touched, commit and links) or a structured error.",
       inputSchema: GET_INGEST_RESULT_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -1229,7 +1229,7 @@ export function buildMcpServer(
     {
       title: "Ask the brain",
       description:
-        "Ask the user's memory agent a free-form question. It runs its own read-only research loop over the vault and returns a synthesized answer with cited sources (vault paths + GitHub URLs). Use for fuzzy or cross-note questions ('what do I know about X?', 'when does my policy renew?') where search_memory alone is not enough. Slower than search_memory (runs an LLM loop).",
+        "Answer a free-form question from the user's memory, such as 'what do I know about X?' or 'when does my policy renew?'. Zenod reads across the vault with a read-only research loop and returns a written answer that cites the vault pages and source links it used. Suited to questions that span several notes; slower than search_memory because it runs a language model.",
       inputSchema: ASK_BRAIN_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -1328,7 +1328,7 @@ export function buildMcpServer(
       {
         title: "Get task result",
         description:
-          "Poll a background job started by task_brain, run_task, store_memory, or ingest_memory, by its jobId. Returns the current status: 'queued' or 'running' (not finished — poll again shortly), 'done' (the result is included: the tasking reply + actions for a task_brain job, the plan/execution result for a run_task job, the evidence ref + pages + durable revision for a store_memory job, or the media ingest receipt/error contract for an ingest_memory job), 'error' (with the message), or 'interrupted' (a server restart killed it — re-issue the original call). Jobs run one at a time, so a queued job may wait behind earlier ones.",
+          "Check a background job started by another Zenod tool, such as store_memory or ingest_memory, by its jobId. Returns its status: queued or running while in progress; done with the job's result (for a save: the evidence reference, pages touched and saved revision; for an ingest: the media receipt or error); error with a message; or interrupted when a server restart stopped the job, in which case the original call can be sent again. Jobs run one at a time, so a queued job may wait behind earlier ones.",
         inputSchema: {
           ticket_id: z.string().min(1).optional().describe("The canonical ticket_id returned by an async tool"),
           jobId: z.string().min(1).optional().describe("Compatibility alias for ticket_id"),

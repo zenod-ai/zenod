@@ -1,0 +1,83 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`hosted customer MCP tool surface > gives an OAuth directory connector only the seven memory tools, each with a title, hints and a describing description 1`] = `
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Answer a free-form question from the user's memory, such as 'what do I know about X?' or 'when does my policy renew?'. Zenod reads across the vault with a read-only research loop and returns a written answer that cites the vault pages and source links it used. Suited to questions that span several notes; slower than search_memory because it runs a language model.",
+    "name": "ask_brain",
+    "title": "Ask the brain",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Check an audio ingest job from the Google Drive inbox by its jobId. Returns its progress while queued or running, then the receipt (archived original, transcript evidence, pages touched, commit and links) or a structured error.",
+    "name": "get_ingest_result",
+    "title": "Get ingest result",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Read one memory: a vault note by its vault-relative path (for example Areas/Insurance.md), or one captured entry by the exact evidence reference that search_memory returns (for example Log/2026-08-01.md#^e-123abc). An evidence reference returns only that entry, with its source, content type, capture time and source URL, without neighboring entries from the same daily log. A path returns the note's text, frontmatter and place in the memory tree.",
+    "name": "get_memory",
+    "title": "Get memory",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Check a background job started by another Zenod tool, such as store_memory or ingest_memory, by its jobId. Returns its status: queued or running while in progress; done with the job's result (for a save: the evidence reference, pages touched and saved revision; for an ingest: the media receipt or error); error with a message; or interrupted when a server restart stopped the job, in which case the original call can be sent again. Jobs run one at a time, so a queued job may wait behind earlier ones.",
+    "name": "get_task_result",
+    "title": "Get task result",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+    },
+    "description": "Queue a file or link for the user's memory: audio and voice notes, screenshots and images, PDFs and documents, or web links, given as a fetchable URL or a handle the caller has already staged. Zenod archives the original, transcribes or extracts its content, records that as evidence and files the meaning into the vault. Google Drive file references are not accepted on Zenod Hosted, where Drive is the archive. Runs in the background: the call returns a jobId at once, and get_task_result returns the receipt (archived original, transcript or extraction, evidence reference, pages touched, saved revision and links) or a structured error.",
+    "name": "ingest_memory",
+    "title": "Ingest memory artifact",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Search the user's memory vault and return matching notes and captured entries, each with its vault path, capture time, source and evidence reference. A query matches literal words in titles and text; filters narrow results by source, content type and capture date, and order sorts them by newest, oldest or relevance. Without a query, entries are listed by filters alone. Each entry's capturedAt is the original capture time; Log headings can show the later processing time. Entries are paginated: hasMore and nextCursor return the next page for the same query, filters and order, until the vault changes or the server restarts. Note hits are a separate ranked top 20 that ignores entry filters. Each result carries its place in the memory tree, and its evidence reference opens with get_memory.",
+    "name": "search_memory",
+    "title": "Search memory",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "Save something the user wants remembered, such as a fact, decision, event or preference, to their vault. Zenod records the exact words as evidence in the dated Log, files the meaning onto the right page or pages with citations back to that evidence, and saves the change to the user's GitHub repository or Google Drive. Filing completes in every case: anything uncertain is noted in the vault for later review, not returned as a question. Runs in the background: the call returns a jobId at once, and get_task_result with that jobId returns the receipt (evidence reference, pages touched, saved revision, links and filing disposition) when the job is done.",
+    "name": "store_memory",
+    "title": "Store memory",
+  },
+]
+`;

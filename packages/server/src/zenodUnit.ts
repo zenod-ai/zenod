@@ -78,6 +78,39 @@ export const MEMORY_CHANNEL_MCP_TOOLS = Object.freeze([
   "store_memory",
 ] as const);
 
+/**
+ * EPIC-10 R1: the MCP surface a hosted customer's own clients see (Claude, ChatGPT and
+ * other directory connectors over OAuth, or a `zmt_` token): the memory tools only.
+ * Operator tools (backlog, issues, tasking, vault reorganisation, usage) stay on the
+ * operator's tenant and on self-hosted and control-plane tenants.
+ */
+export const HOSTED_CUSTOMER_MCP_TOOLS = Object.freeze([
+  "ask_brain",
+  "get_ingest_result",
+  "get_memory",
+  "get_task_result",
+  "ingest_memory",
+  "search_memory",
+  "store_memory",
+] as const);
+
+/**
+ * The tenant's canonical credential is the one Phylax holds to deliver WhatsApp and
+ * Telegram turns; it also needs the durable chat tool those channels call.
+ */
+export const HOSTED_CHANNEL_MCP_TOOLS = Object.freeze([
+  ...HOSTED_CUSTOMER_MCP_TOOLS,
+  "chat_with_zenod",
+] as const);
+
+function requestCredential(request: Request): string | null {
+  const authorization = request.headers.get("authorization");
+  if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length).trim() || null;
+  const path = new URL(request.url).pathname;
+  if (!path.startsWith("/mcp/")) return null;
+  return decodeURIComponent(path.slice("/mcp/".length).split("/")[0] ?? "") || null;
+}
+
 export class ZenodRuntimePool {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly apps = new Map<string, ReturnType<typeof createApp>>();
@@ -627,6 +660,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
   const sharedGithubApp = loadSharedGithubApp(storage.dataDir, env);
   let managedTelegramAdmission: ((tenantId: string, input: TelegramManagedInbound) => Promise<void>) | null = null;
   let isHostedCustomerTenant: (tenantId: string) => boolean = () => false;
+  let isOperatorTenant: (tenantId: string) => boolean = () => false;
   let googleDriveOAuthAuthorityForTenant: (
     tenantId: string,
   ) => GoogleDriveOAuthAuthority = () => ({ mode: "self-hosted" });
@@ -682,6 +716,16 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       ],
       ...(options.additionalToolProfiles ?? {}),
     },
+    ...(agent.name === "zenod" ? {
+      async tenantToolAllowlist({ tenant, request }) {
+        if (!isHostedCustomerTenant(tenant.id) || isOperatorTenant(tenant.id)) return null;
+        const token = requestCredential(request);
+        const record = token ? await tenantStore.resolveTokenHash(hashToken(token)) : null;
+        return record && !record.profile?.trim() && record.tenant.id === tenant.id
+          ? HOSTED_CHANNEL_MCP_TOOLS
+          : HOSTED_CUSTOMER_MCP_TOOLS;
+      },
+    } : {}),
     // Enable the RFC 7591 dynamic-client-registration authorization server so MCP
     // connectors can self-register (POST /oauth/register) and complete the OAuth
     // handshake. Without it, discovery falls through to the SPA and connectors fall
@@ -868,6 +912,15 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     });
   }
   isHostedCustomerTenant = (tenantId) => customer.accounts.resolveForTenantId(tenantId) !== null;
+  // The operator's tenant is the one bound to the customer admin's GitHub login.
+  isOperatorTenant = (tenantId) => {
+    const admin = options.customerAdmin?.githubLogin.trim().toLowerCase();
+    if (!admin) return false;
+    return customer.accounts.list().some((account) =>
+      account.tenant_id === tenantId &&
+      (account.github_login?.toLowerCase() === admin ||
+        customer.identities.resolveUser(account.user_id)?.github_login?.toLowerCase() === admin));
+  };
   googleDriveOAuthAuthorityForTenant = (tenantId) => {
     const allAccounts = customer.accounts.list();
     const accounts = allAccounts.filter(
