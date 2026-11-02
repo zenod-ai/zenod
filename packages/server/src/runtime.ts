@@ -40,6 +40,8 @@ import {
   isKnownTool,
   toolKind,
   LlmAllowanceExceededError,
+  KEEPER_WEEKLY_BUDGET,
+  KEEPER_WEEKLY_CAP_USD,
 } from "zenod";
 import { aiAllowanceExhaustedMessage, nextUtcMonthlyReset } from "./customerMetering.js";
 import {
@@ -68,11 +70,11 @@ import { DriveClient, driveVaultAuthFromSettings } from "./drive.js";
 import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
-import { UsageStore } from "./usageStore.js";
+import { DIGESTION_OPERATIONS, UsageStore } from "./usageStore.js";
 import { NotificationStore } from "./notificationStore.js";
 import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
-import { TaskJobStore, type TaskJob, type TreeSweepJobResult } from "./taskJobStore.js";
+import { TaskJobStore, type KeeperWakeJobResult, type TaskJob, type TreeSweepJobResult } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
 import { createEntryHook, entryHookConfigFromEnv } from "./entryHook.js";
 import { ExecutionStore } from "./executionStore.js";
@@ -131,6 +133,10 @@ import {
   TREE_SWEEP_KEY_PREFIX,
   TREE_SWEEP_SCHEDULE_TEXT,
   treeSweepWeekKey,
+  KEEPER_DAILY_SCHEDULE_TEXT,
+  keeperDayKey,
+  keeperEarlyKey,
+  nextKeeperWakeAt,
 } from "./treeSweepSchedule.js";
 
 export interface TreeSweepStatus {
@@ -147,6 +153,16 @@ export interface TreeSweepStatus {
     error?: string;
     result?: TreeSweepJobResult;
   } | null;
+  /** E9-5c: the memory-keeper's daily light wake and weekly limits. */
+  keeper: {
+    dailySchedule: string;
+    nextDailyWakeAt: string | null;
+    weeklyBudget: number;
+    weeklyCapUsd: number;
+    /** Digestion model spend this keeper week (USD), from the usage ledger. */
+    digestionSpentUsd: number;
+    lastDailyWake: { id: string; status: TaskJob["status"]; updatedAt: string; result?: KeeperWakeJobResult } | null;
+  };
 }
 
 export class NotConfiguredError extends Error {
@@ -429,6 +445,7 @@ export class Runtime {
       severity: "info",
       dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
     }), () => this.aiAllowanceBlock(), createEntryHook(entryHookConfigFromEnv(), this.tenantId));
+    this.taskJobQueue.digestionSpentUsd = () => this.digestionSpentThisWeekUsd();
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
@@ -723,6 +740,8 @@ export class Runtime {
       ...(repo ? { repo } : {}),
       // Tier-0 index (EPIC-9 E9-5a): derived from the vault, kept beside it in this tenant's data dir.
       ...(repo ? { memoryIndex: { path: join(this.dataDir, "memory-index.sqlite"), tenantId: this.tenantId } } : {}),
+      // Memory-keeper state (E9-5c: pending sightings, the week's change count), beside the vault too.
+      ...(repo ? { keeperStatePath: join(this.dataDir, "memory-keeper.json") } : {}),
       llm,
       state: this.state,
       // Front-end routing agents get the project registry appended so they resolve the
@@ -886,11 +905,34 @@ export class Runtime {
    */
   maybeEnqueueTreeSweep(now: number = Date.now()): TaskJob | null {
     if (this.agent.vaultless === true || !this.settings.vaultConfigured() || !inTreeSweepWindow(now)) return null;
+    // E9-5c: the keeper's $0 daily light wake first (same lane, so Sunday's digestion runs after it).
+    const dayKey = keeperDayKey(now);
+    if (!this.taskJobStore.getByIdempotencyKey(dayKey)) {
+      const wake = this.taskJobQueue.enqueue("keeper_wake", {}, dayKey);
+      console.log(`[keeper] tenant=${this.tenantId} queued daily wake ${wake.id} (${dayKey})`);
+    }
     const key = treeSweepWeekKey(now);
-    if (this.taskJobStore.getByIdempotencyKey(key)) return null;
-    const job = this.taskJobQueue.enqueue("tree_sweep", {}, key);
-    console.log(`[tree-sweep] tenant=${this.tenantId} queued ${job.id} (${key})`);
-    return job;
+    if (!this.taskJobStore.getByIdempotencyKey(key)) {
+      const job = this.taskJobQueue.enqueue("tree_sweep", { digestionMode: "weekly" }, key);
+      console.log(`[tree-sweep] tenant=${this.tenantId} queued ${job.id} (${key})`);
+      return job;
+    }
+    // The daily wake found a backlog waiting for a topic: one early digestion today.
+    const wake = this.taskJobStore.getByIdempotencyKey(dayKey);
+    const wakeResult = wake?.status === "done" ? wake.result as KeeperWakeJobResult | null : null;
+    const earlyKey = keeperEarlyKey(now);
+    if (wakeResult?.kind === "keeper_wake" && wakeResult.earlyDigestion && !this.taskJobStore.getByIdempotencyKey(earlyKey)) {
+      const job = this.taskJobQueue.enqueue("tree_sweep", { digestionMode: "early" }, earlyKey);
+      console.log(`[keeper] tenant=${this.tenantId} queued early digestion ${job.id} (${earlyKey})`);
+      return job;
+    }
+    return null;
+  }
+
+  /** E9-5c: digestion model spend since the start of this keeper week (Sunday 00:00 UTC). */
+  digestionSpentThisWeekUsd(now: number = Date.now()): number {
+    const midnight = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
+    return this.usageStore.spendSince(midnight - new Date(midnight).getUTCDay() * 86_400_000, DIGESTION_OPERATIONS);
   }
 
   private treeSweepTimer: NodeJS.Timeout | null = null;
@@ -922,6 +964,8 @@ export class Runtime {
   treeSweepStatus(now: number = Date.now()): TreeSweepStatus {
     const thisWeek = this.taskJobStore.getByIdempotencyKey(treeSweepWeekKey(now));
     const last = this.taskJobStore.latestOfKind("tree_sweep");
+    const today = this.taskJobStore.getByIdempotencyKey(keeperDayKey(now));
+    const lastWake = this.taskJobStore.latestOfKind("keeper_wake");
     const enabled = this.agent.vaultless !== true && this.settings.vaultConfigured();
     return {
       enabled,
@@ -938,6 +982,21 @@ export class Runtime {
             ...(last.result && (last.result as { kind?: string }).kind === "tree_sweep" ? { result: last.result as TreeSweepJobResult } : {}),
           }
         : null,
+      keeper: {
+        dailySchedule: KEEPER_DAILY_SCHEDULE_TEXT,
+        nextDailyWakeAt: enabled ? nextKeeperWakeAt(now, today !== null).toISOString() : null,
+        weeklyBudget: KEEPER_WEEKLY_BUDGET,
+        weeklyCapUsd: KEEPER_WEEKLY_CAP_USD,
+        digestionSpentUsd: this.digestionSpentThisWeekUsd(now),
+        lastDailyWake: lastWake
+          ? {
+              id: lastWake.id,
+              status: lastWake.status,
+              updatedAt: new Date(lastWake.updatedAt).toISOString(),
+              ...(lastWake.result && (lastWake.result as { kind?: string }).kind === "keeper_wake" ? { result: lastWake.result as KeeperWakeJobResult } : {}),
+            }
+          : null,
+      },
     };
   }
 

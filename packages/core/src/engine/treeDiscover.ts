@@ -130,6 +130,9 @@ export interface DiscoveredRoot {
   nameLocked: boolean;
   /** Keeper-note aliases of this root (mirrored into its page's `aliases:`). */
   aliases: string[];
+  /** The person closed this root (E9-5e) / made it a root of its own: the keeper lands what follows at once (E9-5c). */
+  closed?: boolean;
+  ownRoot?: boolean;
 }
 
 export interface TreeSteeringReport {
@@ -1130,6 +1133,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       terms: titlePhrases(pages).filter(p => p.terms.length === 1).slice(0, 5).map(p => p.phrase),
       id: "", members: pages.map(i => docs[i]!.path).sort(),
       pinned: pinned.has(rootIndex), nameLocked: locked !== undefined,
+      ...(pages.some(i => closed.has(i)) ? { closed: true } : {}), ...(ownRoots.has(rootIndex) ? { ownRoot: true } : {}),
       aliases: (aliasesOf.get(rootIndex) ?? []).filter(alias => alias.toLowerCase() !== name.toLowerCase()),
     });
   };

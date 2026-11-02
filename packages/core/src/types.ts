@@ -532,6 +532,8 @@ export interface BrainEngine {
    * background write lane, so never concurrently with a live filing. No LLM.
    */
   sweepTree?(input?: TreeSweepInput): Promise<TreeSweepResult>;
+  /** E9-5c: the memory-keeper's $0 daily light wake (no model call, no vault write). */
+  keeperDaily?(input?: KeeperDailyInput): Promise<KeeperDailyResult>;
   /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
   memoryTreeOutline?(): Promise<MemoryTreeOutline | null>;
   /**
@@ -661,6 +663,10 @@ export interface TreeSweepInput {
   /** Evidence refs whose filing job is still queued or running; their receipts are left alone. */
   skipEvidenceRefs?: string[];
   assertActive?: () => void;
+  /** E9-5c: the scheduled Sunday digestion, or an early one the daily wake asked for. */
+  mode?: "weekly" | "early";
+  /** E9-5c: digestion model spend already metered this week (USD); at the cap no model call is made. */
+  digestionSpentUsd?: number;
 }
 
 export interface TreeSweepResult {
@@ -668,4 +674,42 @@ export interface TreeSweepResult {
   /** True when the sweep published one revision; false when there was nothing to change. */
   committed: boolean;
   revision: VaultRevision | null;
+  /** E9-5c: the keeper's own accounting for this digestion (counts only). */
+  keeper?: KeeperDigestionReceipt;
+}
+
+/** One keeper digestion, counts only (E9-5c): what the console and the run ledger keep. */
+export interface KeeperDigestionReceipt {
+  mode: "weekly" | "early";
+  budget: number;
+  changes: number;
+  /** Of `changes`, the person's own word (close, pin, name, own root): outside the budget. */
+  steered: number;
+  /** Changes skipped because the person undid them in the last 8 weeks. */
+  refused: number;
+  waiting: number;
+  rootsBefore: number;
+  rootsAfter: number;
+  stable: number;
+  recentLines: number;
+  /** Digestion model calls this run made, and their cost (E9-5c makes none; E9-5d's "Now" lines will). */
+  modelCalls: number;
+  costUsd: number;
+  capUsd: number;
+  capReached: boolean;
+}
+
+export interface KeeperDailyInput {
+  assertActive?: () => void;
+}
+
+export interface KeeperDailyResult {
+  day: string;
+  ownCapturesSinceDigestion: number;
+  waitingForTopic: number;
+  /** The backlog asks for an early digestion today (the caller queues it). */
+  earlyDigestion: boolean;
+  /** Tier-0 index rows refreshed against the vault (null without an index). */
+  indexChanged: number | null;
+  modelCalls: 0;
 }

@@ -43,6 +43,8 @@ export type MemoryTree = {
   roots: number
   placed: number
   unplaced: number
+  /** The memory keeper's latest changes, newest first ("2026-11-08 · new House"). */
+  recentChanges?: string[]
 }
 
 /** A pin or rename the person asks for on a root (POST /api/console/memory-tree/steer). */
@@ -471,6 +473,18 @@ export function MemoryTreeCard({
                 />
               ))}
             </ul>
+            {(state.tree.recentChanges?.length ?? 0) > 0 && (
+              <div data-testid="memory-tree-recent" className="grid gap-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Recent changes
+                </p>
+                <ul className="grid gap-0.5 text-xs text-muted-foreground">
+                  {state.tree.recentChanges!.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
       </CardContent>

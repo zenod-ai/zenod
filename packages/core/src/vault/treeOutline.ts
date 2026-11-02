@@ -6,6 +6,7 @@ import { CITATION_RE } from "./pages.js";
 import { readLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
 import { buildTreeIndex, GROUP_HEADINGS, MAX_TREE_DEPTH, MEMORY_KINDS, TREE_PATH, type MemoryKind } from "./tree.js";
 import { pageSteering, parseKeeperNotes } from "./treeSteering.js";
+import { recentChangeLines } from "../engine/treeKeeper.js";
 
 /**
  * Whole-tree outline for the console Memory tab (EPIC-9 E9-2e). Read live from
@@ -57,6 +58,8 @@ export interface MemoryTreeOutline {
   unplaced: number;
   /** Keeper notes in Tree.md (E9-5b). */
   keeperNotes: number;
+  /** The memory-keeper's `## Recent changes` lines in Tree.md, newest first (E9-5c), at most 5. */
+  recentChanges: string[];
 }
 
 export interface MemoryTreeOutlineOptions {
@@ -181,5 +184,6 @@ export async function memoryTreeOutline(vaultPath: string, options: MemoryTreeOu
     placed,
     unplaced: [...index.fields.keys()].filter((path) => !seen.has(path)).length,
     keeperNotes: notes.length,
+    recentChanges: recentChangeLines(treeRaw).slice(0, 5).map((line) => line.replace(/^- /, "")),
   };
 }

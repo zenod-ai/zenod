@@ -4,12 +4,23 @@ import { parseNote } from "../vault/frontmatter.js";
 import { basenameOf, isFilingReceiptPath, tierOf } from "../vault/files.js";
 import type { FileChange } from "../vault/immutability.js";
 import { CITATION_RE as LOG_CITATION_RE, scanVault } from "../vault/pages.js";
-import { buildTreeIndex, readTree, type TreeIndex } from "../vault/tree.js";
+import { buildTreeIndex, readTree, TREE_PATH, type TreeIndex } from "../vault/tree.js";
 import { lintTreeIndex } from "../vault/treeLint.js";
 import { lintVault } from "../vault/lint.js";
 import { getEvidenceEntry } from "./evidence.js";
 import { applyTreeDiscovery, discoverTree, type DiscoveredRoot } from "./treeDiscover.js";
 import { materializeNamedSubjects, type MaterializedSubject } from "./treeSubjects.js";
+import {
+  applyKeeperSelection,
+  carryIds,
+  classifyChanges,
+  KEEPER_FIRST_BUDGET,
+  readKeeperTreeState,
+  selectChanges,
+  type KeeperChange,
+  type KeeperRoot,
+  type PendingChange,
+} from "./treeKeeper.js";
 import { readLogCaptures } from "../vault/captureOrigin.js";
 import {
   appendOpsRollup,
@@ -68,6 +79,39 @@ export interface TreeSweepOptions {
   skipEvidenceRefs?: ReadonlySet<string>;
   /** Re-derive the roots (E9-2g). Default true. */
   discover?: boolean;
+  /**
+   * The memory-keeper's gate on re-derivation (E9-5c, treeKeeper.ts): at most `budget` structural
+   * changes land, changes other than promote/demote need `pending` (last digestion's sightings) to
+   * confirm them, and each landed change is a `## Recent changes` line. Absent: discovery's whole
+   * proposal is applied, as the E9-2d sweep did.
+   */
+  keeper?: { budget: number; pending: readonly PendingChange[]; refused?: readonly string[] };
+}
+
+/** What the keeper did in this run (E9-5c). Labels name roots: private to the vault and console. */
+export interface KeeperRunReport {
+  budget: number;
+  /** True on a tree discovery never wrote (first digestion: bigger budget, no confirmation). */
+  first: boolean;
+  applied: string[];
+  /** Of `applied`, the person's own word (close, pin, name, own root): outside the budget. */
+  steered: number;
+  /** Changes skipped because the person undid them in the last 8 weeks. */
+  refused: number;
+  /** First sightings: they land next digestion if seen again. */
+  unconfirmed: string[];
+  /** Confirmed but past the week's budget. */
+  overBudget: string[];
+  /** Pending sightings to carry to the next digestion. */
+  pending: PendingChange[];
+  /** `## Recent changes` lines this run added. */
+  recentLines: number;
+  rootsBefore: number;
+  rootsAfter: number;
+  /** Roots of the tree before this run that kept their id and name. */
+  stable: number;
+  /** Roots whose page had left the vault before this run (dropped from Tree.md, logged as retired). */
+  missing: number;
 }
 
 export interface StaleRoot {
@@ -130,6 +174,10 @@ export interface TreeSweepCounts {
   /** Pages made for names the person keeps saying (E9-2i), and pages of theirs given new captures. */
   subjectPagesCreated?: number;
   subjectPagesUpdated?: number;
+  /** E9-5c keeper: structural changes landed, seen but waiting, and roots that kept id and name. */
+  keeperChanges?: number;
+  keeperWaiting?: number;
+  keeperStable?: number;
 }
 
 export interface TreeSweepReport {
@@ -151,6 +199,8 @@ export interface TreeSweepReport {
    * wrote anything: the caller rejects only errors the sweep introduced.
    */
   lintErrorsBefore: string[];
+  /** E9-5c: present when the keeper gated this run's re-derivation. */
+  keeper?: KeeperRunReport;
 }
 
 /** One `zenod lint` error as a comparable key. */
@@ -550,7 +600,40 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
 
   const agentLeaves = await refileAgentLeaves(vaultPath, writes);
   const { rootOnly, deepened } = await deepenRootCitations(vaultPath, writes);
+  const keeperBefore = options.discover !== false && options.keeper ? await readKeeperTreeState(vaultPath) : null;
+  const treeRawBefore = keeperBefore ? await readFile(join(vaultPath, TREE_PATH), "utf8") : "";
   const discovery = options.discover === false ? null : await rediscoverTree(vaultPath, options.today, writes);
+  let keeper: KeeperRunReport | undefined;
+  if (discovery && keeperBefore && options.keeper) {
+    const proposed = (await readKeeperTreeState(vaultPath))!;
+    carryIds(keeperBefore, proposed);
+    const first = !keeperBefore.generated;
+    const steer = new Map(discovery.roots.map(r => [r.path, { pinned: r.pinned, nameLocked: r.nameLocked, closed: r.closed === true, ownRoot: r.ownRoot === true }]));
+    const changes = classifyChanges(keeperBefore, proposed, first, steer);
+    const selection = selectChanges(changes, options.keeper.pending, first ? Math.max(options.keeper.budget, KEEPER_FIRST_BUDGET) : options.keeper.budget, new Set(options.keeper.refused ?? []));
+    const applied = await applyKeeperSelection(vaultPath, { before: keeperBefore, proposed, proposedRoots: discovery.roots, selection, today: options.today, treeRawBefore }, writes);
+    const kept = new Map(applied.roots.map(r => [r.id, r]));
+    const pending = [...selection.unconfirmed, ...selection.overBudget].map((c): PendingChange => ({ kind: c.kind, key: c.key, ...(c.members.length ? { members: c.members } : {}), firstSeen: options.today }));
+    const label = (c: KeeperChange) => c.label;
+    keeper = {
+      budget: selection.budget,
+      first,
+      applied: selection.applied.map(label),
+      steered: selection.applied.filter(c => c.steered).length,
+      refused: selection.refused.length,
+      unconfirmed: selection.unconfirmed.map(label),
+      overBudget: selection.overBudget.map(label),
+      pending,
+      recentLines: applied.recent.length,
+      rootsBefore: keeperBefore.roots.length,
+      rootsAfter: applied.roots.length,
+      stable: keeperBefore.roots.filter(r => kept.get(r.id)?.name === r.name).length,
+      missing: keeperBefore.missing.length,
+    };
+    discovery.roots = discovery.roots.filter(r => kept.has(r.id)).map(r => ({ ...r, ...pick(kept.get(r.id)!) }));
+    for (const root of applied.roots) if (!discovery.roots.some(r => r.id === root.id)) discovery.roots.push(keeperOnlyRoot(root));
+    discovery.rootsNew = applied.roots.filter(r => !keeperBefore.roots.some(b => b.id === r.id)).length;
+  }
 
   const snapshot = await scanVault(vaultPath);
   const index = await buildTreeIndex(vaultPath, snapshot);
@@ -601,6 +684,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
         subjectPagesCreated: discovery.subjects.filter(s => s.created).length,
         subjectPagesUpdated: discovery.subjects.filter(s => !s.created).length,
       } : {}),
+      ...(keeper ? { keeperChanges: keeper.applied.length, keeperWaiting: keeper.unconfirmed.length + keeper.overBudget.length, keeperStable: keeper.stable } : {}),
       agentLeavesRefiled: agentLeaves.length,
     },
     staleRoots: stale,
@@ -610,6 +694,18 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
     roots: discovery?.roots ?? [],
     changedPaths,
     lintErrorsBefore,
+    ...(keeper ? { keeper } : {}),
+  };
+}
+
+const pick = (root: KeeperRoot) => ({ name: root.name, kind: root.kind, path: root.path, members: root.members });
+
+/** A root the keeper kept from the old tree that discovery no longer proposes (its retirement waits). */
+function keeperOnlyRoot(root: KeeperRoot): DiscoveredRoot {
+  return {
+    name: root.name, kind: root.kind, path: root.path, summary: root.summary, pages: root.members.length, heat: 0, ownCaptures: 0,
+    lastOwnCapture: null, topics: [root.name], terms: [], continues: root.name, id: root.id, members: root.members,
+    pinned: false, nameLocked: false, aliases: [],
   };
 }
 

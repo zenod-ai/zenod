@@ -5,8 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrainEngine, TreeSweepInput, TreeSweepResult } from "zenod";
 
 import { TaskJobQueue } from "../src/taskJobQueue.js";
-import { TaskJobStore, type TreeSweepJobResult } from "../src/taskJobStore.js";
+import { TaskJobStore, type KeeperWakeJobResult, type TreeSweepJobResult } from "../src/taskJobStore.js";
 import {
+  keeperDayKey,
+  keeperEarlyKey,
+  nextKeeperWakeAt,
   inTreeSweepWindow,
   nextTreeSweepAt,
   treeSweepSuggestion,
@@ -154,6 +157,55 @@ describe("E9-2d tree sweep job", () => {
       expect((jobs.get(sweep.id)!.result as TreeSweepJobResult).status).toBe("skipped");
     } finally {
       release();
+      await queue.close();
+    }
+  });
+});
+
+describe("E9-5c memory-keeper wakes", () => {
+  const dirs: string[] = [];
+  afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
+  async function store(): Promise<TaskJobStore> {
+    const dir = await mkdtemp(join(tmpdir(), "zenod-e95c-job-"));
+    dirs.push(dir);
+    return new TaskJobStore(join(dir, "tasks.sqlite"), "tenant-a");
+  }
+  async function waitFor(check: () => boolean): Promise<void> {
+    for (let i = 0; i < 200 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  it("keys one daily wake and at most one early digestion per UTC day; next wake is tonight's window", () => {
+    expect(keeperDayKey(at("2026-11-03T02:10:00Z"))).toBe("keeper:day:2026-11-03");
+    expect(keeperEarlyKey(at("2026-11-03T02:10:00Z"))).toBe("tree-sweep:early:2026-11-03");
+    expect(nextKeeperWakeAt(at("2026-11-02T18:00:00Z"), false).toISOString()).toBe("2026-11-03T02:00:00.000Z");
+    expect(nextKeeperWakeAt(at("2026-11-03T01:00:00Z"), false).toISOString()).toBe("2026-11-03T02:00:00.000Z");
+    expect(nextKeeperWakeAt(at("2026-11-03T03:00:00Z"), false).toISOString()).toBe("2026-11-03T03:00:00.000Z");
+    expect(nextKeeperWakeAt(at("2026-11-03T03:00:00Z"), true).toISOString()).toBe("2026-11-04T02:00:00.000Z");
+  });
+
+  it("runs the daily wake past the AI allowance, counts only; digestion gets its mode and the cap reading", async () => {
+    const jobs = await store();
+    const keeperDaily = vi.fn(async () => ({ day: "2026-11-03", ownCapturesSinceDigestion: 12, waitingForTopic: 11, earlyDigestion: true, indexChanged: 4, modelCalls: 0 as const }));
+    const sweepTree = vi.fn(async (input?: TreeSweepInput): Promise<TreeSweepResult> => ({
+      committed: false, revision: null,
+      keeper: { mode: input?.mode ?? "weekly", budget: 3, changes: 0, waiting: 2, rootsBefore: 5, rootsAfter: 5, stable: 5, recentLines: 0, modelCalls: 0, costUsd: 0, capUsd: 0.05, capReached: (input?.digestionSpentUsd ?? 0) >= 0.05 },
+      report: { hasTree: true, today: "2026-11-03", staleDays: 30, counts: { workingRoots: 3, staleRoots: 0, receiptsSeen: 0, receiptsRefiled: 0, receiptsArchived: 0, receiptsSkipped: 0,
+        duplicateGroups: 0, proposals: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0 }, staleRoots: [], duplicates: [], receipts: [], changedPaths: [] },
+    } as unknown as TreeSweepResult));
+    const engine = { keeperDaily, sweepTree } as unknown as BrainEngine;
+    const queue = new TaskJobQueue(jobs, async () => engine, undefined, undefined, () => ({ message: "over allowance", resetsAt: "x" }));
+    queue.digestionSpentUsd = () => 0.01;
+    try {
+      const wake = queue.enqueue("keeper_wake", {}, "keeper:day:2026-11-03");
+      const early = queue.enqueue("tree_sweep", { digestionMode: "early" }, "tree-sweep:early:2026-11-03");
+      await waitFor(() => jobs.get(wake.id)?.status === "done" && jobs.get(early.id)?.status === "done");
+      expect(jobs.get(wake.id)!.result as KeeperWakeJobResult).toEqual({ kind: "keeper_wake", status: "woke", day: "2026-11-03", ownCapturesSinceDigestion: 12, waitingForTopic: 11, earlyDigestion: true, indexChanged: 4, modelCalls: 0 });
+      expect(queue.enqueue("keeper_wake", {}, "keeper:day:2026-11-03").id).toBe(wake.id);
+
+      // At the AI allowance the digestion still runs (structure is free) but reads as capped: no model call.
+      expect(sweepTree.mock.calls[0]![0]).toMatchObject({ mode: "early", digestionSpentUsd: Number.POSITIVE_INFINITY });
+      expect((jobs.get(early.id)!.result as TreeSweepJobResult).keeper).toMatchObject({ mode: "early", capReached: true, costUsd: 0 });
+    } finally {
       await queue.close();
     }
   });

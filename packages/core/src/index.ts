@@ -45,6 +45,9 @@ export type {
   TokenCostOperation,
   TreeSweepInput,
   TreeSweepResult,
+  KeeperDailyInput,
+  KeeperDailyResult,
+  KeeperDigestionReceipt,
   WorkInput,
   WorkResult,
 } from "./types.js";
@@ -86,6 +89,14 @@ export {
   type TreeSweepCounts,
   type TreeSweepOptions,
 } from "./engine/treeSweep.js";
+export {
+  KEEPER_WEEKLY_BUDGET,
+  KEEPER_WEEKLY_CAP_USD,
+  keeperWeekKey,
+  loadKeeperState,
+  recentChangeLines,
+  type KeeperState,
+} from "./engine/treeKeeper.js";
 export { discoverTree, applyTreeDiscovery, type DiscoveredRoot, type TreeDiscoveryPlan, type TreeDiscoveryOptions } from "./engine/treeDiscover.js";
 export { captureOrigin, readLogCaptures, type CaptureOrigin, type LogCapture } from "./vault/captureOrigin.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";

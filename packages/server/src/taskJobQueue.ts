@@ -21,6 +21,7 @@ import {
   type TaskJobKind,
   type TaskJobStore,
   type TreeSweepJobResult,
+  type KeeperWakeJobResult,
 } from "./taskJobStore.js";
 import type { EntryHook } from "./entryHook.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
@@ -57,6 +58,12 @@ export class TaskJobQueue {
     /** agent_team E42-S20: told (best effort, never awaited) when a capture is durably stored; see entryHook.ts. */
     private readonly onEntryStored?: EntryHook,
   ) {}
+
+  /**
+   * E9-5c: digestion model spend this keeper week (USD), for the $0.05 cap. The runtime sets it from the
+   * tenant's usage ledger; a tenant at its AI allowance reports the cap, so digestion makes no model call.
+   */
+  digestionSpentUsd?: () => number;
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
   enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob {
@@ -126,7 +133,7 @@ export class TaskJobQueue {
   private requestDurableDrain(): void {
     if (this.activeDurableDrain) return;
     // The weekly tree sweep shares this serial lane, so it never runs alongside a live filing.
-    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory", "tree_sweep"]);
+    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory", "tree_sweep", "keeper_wake"]);
     this.activeDurableDrain = active;
     void active
       .catch((error) => console.error("[task-job] durable lane failed:", error))
@@ -159,10 +166,13 @@ export class TaskJobQueue {
     leaseHeartbeat.unref?.();
     try {
       let completed = false;
-      // The tree sweep calls no model, so the AI allowance does not stop it.
-      const allowanceBlock = job.kind === "tree_sweep" ? null : this.aiAllowanceBlock?.() ?? null;
+      // The keeper's wakes call no model for structure (digestion's model step has its own cap), so the
+      // AI allowance does not stop them.
+      const allowanceBlock = job.kind === "tree_sweep" || job.kind === "keeper_wake" ? null : this.aiAllowanceBlock?.() ?? null;
       if (job.kind === "tree_sweep") {
         completed = this.store.updateClaimed(job, { status: "done", result: await this.runTreeSweep(job) });
+      } else if (job.kind === "keeper_wake") {
+        completed = this.store.updateClaimed(job, { status: "done", result: await this.runKeeperWake(job) });
       } else if (allowanceBlock) {
         completed = await this.completeOverAllowance(job, allowanceBlock);
       } else if (job.kind === "chat") {
@@ -283,10 +293,12 @@ export class TaskJobQueue {
     const result = await engine.sweepTree({
       skipEvidenceRefs: this.store.activeFilingEvidenceRefs(),
       assertActive: () => this.store.assertClaim(job),
+      mode: job.input.digestionMode ?? "weekly",
+      digestionSpentUsd: this.aiAllowanceBlock?.() ? Number.POSITIVE_INFINITY : this.digestionSpentUsd?.() ?? 0,
     });
     if (!result.report.hasTree) return { kind: "tree_sweep", status: "skipped", reason: "vault has no Tree.md", committed: false, revision: null };
     const c = result.report.counts;
-    console.log(`[tree-sweep] ${job.id} swept: receipts seen=${c.receiptsSeen} refiled=${c.receiptsRefiled} archived=${c.receiptsArchived} skipped=${c.receiptsSkipped}; root-only citations=${c.rootOnlyCitations} deepened=${c.citationsDeepened}; stale roots=${c.staleRoots}/${c.workingRoots}; duplicate groups=${c.duplicateGroups}; tree lint errors ${c.treeLintErrorsBefore}→${c.treeLintErrorsAfter}; ${result.committed ? `one commit ${result.revision?.id.slice(0, 12) ?? "?"}` : "no changes"}`);
+    console.log(`[tree-sweep] ${job.id} swept: receipts seen=${c.receiptsSeen} refiled=${c.receiptsRefiled} archived=${c.receiptsArchived} skipped=${c.receiptsSkipped}; root-only citations=${c.rootOnlyCitations} deepened=${c.citationsDeepened}; stale roots=${c.staleRoots}/${c.workingRoots}; duplicate groups=${c.duplicateGroups}; tree lint errors ${c.treeLintErrorsBefore}→${c.treeLintErrorsAfter}; ${result.keeper ? `keeper ${result.keeper.mode}: changes=${result.keeper.changes}/${result.keeper.budget} waiting=${result.keeper.waiting} stable=${result.keeper.stable}/${result.keeper.rootsBefore} cost=$${result.keeper.costUsd.toFixed(4)}; ` : ""}${result.committed ? `one commit ${result.revision?.id.slice(0, 12) ?? "?"}` : "no changes"}`);
     return {
       kind: "tree_sweep",
       status: "swept",
@@ -294,7 +306,22 @@ export class TaskJobQueue {
       committed: result.committed,
       revision: result.revision?.id ?? null,
       ...(result.report.counts.proposals > 0 ? { proposalsPage: TREE_SWEEP_REPORT_PATH } : {}),
+      ...(result.keeper ? { keeper: result.keeper } : {}),
     };
+  }
+
+  /** E9-5c: the keeper's $0 daily light wake (index refresh, backlog count); never a model call or a vault write. */
+  private async runKeeperWake(job: TaskJob): Promise<KeeperWakeJobResult> {
+    let engine: BrainEngine;
+    try {
+      engine = await this.getEngine();
+    } catch (error) {
+      return { kind: "keeper_wake", status: "skipped", reason: `no vault: ${(error as Error).message}`, modelCalls: 0 };
+    }
+    if (!engine.keeperDaily) return { kind: "keeper_wake", status: "skipped", reason: "engine has no keeper", modelCalls: 0 };
+    const wake = await engine.keeperDaily({ assertActive: () => this.store.assertClaim(job) });
+    console.log(`[keeper] ${job.id} daily wake ${wake.day}: own captures since digestion=${wake.ownCapturesSinceDigestion} waiting for a topic=${wake.waitingForTopic} index rows refreshed=${wake.indexChanged ?? "n/a"}${wake.earlyDigestion ? "; early digestion due" : ""}`);
+    return { kind: "keeper_wake", status: "woke", day: wake.day, ownCapturesSinceDigestion: wake.ownCapturesSinceDigestion, waitingForTopic: wake.waitingForTopic, earlyDigestion: wake.earlyDigestion, indexChanged: wake.indexChanged, modelCalls: 0 };
   }
 
   private async completeOverAllowance(job: TaskJob, block: { message: string; resetsAt: string }): Promise<boolean> {

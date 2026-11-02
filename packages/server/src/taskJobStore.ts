@@ -16,7 +16,7 @@ import { openZenodSqlite } from "./sqlite.js";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory" | "tree_sweep";
+export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory" | "tree_sweep" | "keeper_wake";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -32,6 +32,8 @@ const MAX_FILING_RESUME_ATTEMPTS = 1;
 export const TASK_JOB_LEASE_MS = 4 * 60_000;
 
 export interface TaskJobInput {
+  /** tree_sweep (E9-5c): the scheduled Sunday digestion, or an early one the daily wake asked for. */
+  digestionMode?: "weekly" | "early";
   /** Only conversational capture jobs request the existing filing notification. */
   notifyCaptureCompletion?: boolean;
   /** chat/task: the instruction sent through the shared conversational/tasking loop. */
@@ -128,7 +130,20 @@ export interface MediaIngestReceipt {
   nextAdapterIssues?: string[];
 }
 
-export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt | TreeSweepJobResult;
+export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt | TreeSweepJobResult | KeeperWakeJobResult;
+
+/** The memory-keeper's $0 daily light wake (EPIC-9 E9-5c): counts only, no model call, no vault write. */
+export interface KeeperWakeJobResult {
+  kind: "keeper_wake";
+  status: "woke" | "skipped";
+  reason?: string;
+  day?: string;
+  ownCapturesSinceDigestion?: number;
+  waitingForTopic?: number;
+  earlyDigestion?: boolean;
+  indexChanged?: number | null;
+  modelCalls: 0;
+}
 
 /**
  * Weekly tree sweep receipt (EPIC-9 E9-2d). Counts and the vault revision only:
@@ -142,6 +157,8 @@ export interface TreeSweepJobResult {
   committed: boolean;
   revision: string | null;
   proposalsPage?: string;
+  /** E9-5c: the keeper's accounting for this digestion (counts and cost only). */
+  keeper?: import("zenod").KeeperDigestionReceipt;
 }
 
 export interface TaskJob {
@@ -305,8 +322,8 @@ export class TaskJobStore {
     if (normalizedKey && normalizedKey.length > 512) {
       throw new Error("idempotencyKey must be at most 512 characters");
     }
-    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest" && kind !== "enrich_memory" && kind !== "tree_sweep") {
-      throw new Error("idempotencyKey is only supported for durable channel/capture jobs and the weekly tree sweep");
+    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest" && kind !== "enrich_memory" && kind !== "tree_sweep" && kind !== "keeper_wake") {
+      throw new Error("idempotencyKey is only supported for durable channel/capture jobs and the memory keeper's wakes");
     }
 
     const id = randomUUID();

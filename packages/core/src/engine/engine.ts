@@ -39,6 +39,9 @@ import type {
   TokenCostOperation,
   TreeSweepInput,
   TreeSweepResult,
+  KeeperDailyInput,
+  KeeperDailyResult,
+  KeeperDigestionReceipt,
   WorkInput,
   WorkResult,
 } from "../types.js";
@@ -75,6 +78,15 @@ import {
   steerUnchangedReply,
   undoReply,
 } from "./steerMessage.js";
+import {
+  KEEPER_WEEKLY_BUDGET,
+  KEEPER_WEEKLY_CAP_USD,
+  keeperDailyWake,
+  keeperWeekKey,
+  loadKeeperState,
+  refusedChanges,
+  saveKeeperState,
+} from "./treeKeeper.js";
 import { lintTree } from "../vault/treeLint.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
@@ -366,6 +378,11 @@ export interface EngineOptions {
    */
   messageSteering?: boolean;
   /**
+   * The memory-keeper's state (E9-5c: pending sightings, the week's change count, run records), a
+   * JSON file beside the vault, never inside it. Omitted → `<vault>/.git/zenod-keeper.json`.
+   */
+  keeperStatePath?: string;
+  /**
    * The vault repo. Optional: when omitted the engine runs "vaultless" — no
    * sync, no vault briefing, no vault read/write tools — for the Console shell
    * (the suite's base minus the vault capability). Vault-only methods (store,
@@ -519,6 +536,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
   const location = options.location ?? {};
   const now = options.now ?? (() => new Date());
+  // E9-5c keeper state lives beside the vault (default: inside .git, which is never committed).
+  const keeperStatePath = repo ? options.keeperStatePath ?? join(vaultPath, ".git", "zenod-keeper.json") : undefined;
   // Tier-0 index (E9-5a), opened on first search. Any write or pull through the queue
   // marks it dirty; the next search re-reads only the files that changed.
   let memoryIndex: MemoryIndex | null | undefined = repo && options.memoryIndex ? undefined : null;
@@ -2064,15 +2083,50 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await repo.pull().catch(() => {});
       lastSyncMs = now().getTime();
       const writes = new TrackedWrites(vaultPath);
+      const today = todayString(now());
+      const mode = input.mode ?? "weekly";
+      // E9-5c: the keeper's budget is per week; an early digestion spends from the same week.
+      const state = await loadKeeperState(keeperStatePath);
+      const week = keeperWeekKey(today);
+      const spent = state.week?.key === week ? state.week.changes : 0;
+      const capUsd = KEEPER_WEEKLY_CAP_USD;
+      const digestionSpentUsd = input.digestionSpentUsd ?? 0;
+      // A keeper change the person undid ("that's wrong", E9-5e) is not proposed again for 8 weeks.
+      const subjects = repo.recentCommits ? (await repo.recentCommits(400).catch(() => [])).map(c => c.subject) : [];
+      const refused = refusedChanges(state, subjects, today);
       try {
         const report = await runTreeSweep(vaultPath, {
-          today: todayString(now()),
+          today,
           ...(input.staleDays !== undefined ? { staleDays: input.staleDays } : {}),
           ...(input.receiptMinAgeDays !== undefined ? { receiptMinAgeDays: input.receiptMinAgeDays } : {}),
           skipEvidenceRefs: new Set(input.skipEvidenceRefs ?? []),
+          keeper: { budget: Math.max(0, KEEPER_WEEKLY_BUDGET - spent), pending: state.pending, refused: refused.map(r => r.label) },
         }, writes);
+        const k = report.keeper;
+        const keeper: KeeperDigestionReceipt | undefined = k ? {
+          mode, budget: k.budget, changes: k.applied.length, steered: k.steered, refused: k.refused, waiting: k.unconfirmed.length + k.overBudget.length,
+          rootsBefore: k.rootsBefore, rootsAfter: k.rootsAfter, stable: k.stable, recentLines: k.recentLines,
+          // Structure is deterministic: this digestion calls no model (E9-5d's "Now" lines will, under the cap).
+          modelCalls: 0, costUsd: 0, capUsd, capReached: digestionSpentUsd >= capUsd,
+        } : undefined;
+        const saveState = async () => {
+          if (!k) return;
+          await saveKeeperState(keeperStatePath, {
+            ...state,
+            // The person's own word (steered changes) spends no budget.
+            week: { key: week, changes: spent + k.applied.length - k.steered },
+            pending: k.pending,
+            refused,
+            lastDigestion: today,
+            ...(mode === "early" ? { lastEarlyWake: today } : {}),
+            runs: [...state.runs, { day: today, mode, changes: k.applied.length, waiting: keeper!.waiting, roots: k.rootsAfter, stable: k.stable, costUsd: 0 }],
+          }).catch((error: Error) => console.warn(`[keeper] state not saved: ${error.message}`));
+        };
         const changes = await repo.pendingChanges();
-        if (changes.length === 0) return { report, committed: false, revision: null };
+        if (changes.length === 0) {
+          await saveState();
+          return { report, committed: false, revision: null, ...(keeper ? { keeper } : {}) };
+        }
         assertSweepChangesSafe(changes);
         const written = changes.filter(change => change.after !== null && change.path.endsWith(".md")).map(change => change.path);
         // Only errors the sweep introduced count: re-rooting touches old pages that may carry lint debt (E9-2g).
@@ -2085,16 +2139,37 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const roots = c.discoveredWorking !== undefined ? `, roots ${c.discoveredWorking} working / ${c.discoveredLongTerm} long-term` : "";
         const agentLeaves = c.agentLeavesRefiled ? `, agent-report leaves to ops ${c.agentLeavesRefiled}` : "";
         const subjects = c.subjectPagesCreated ? `, subject pages ${c.subjectPagesCreated}` : "";
-        const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${subjects}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
-        );
-        return { report, committed: true, revision };
+        const tidy = `re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${subjects}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"}`;
+        const landed = k?.applied.length ? `: ${k.applied.join("; ")}` : "";
+        const revision = await repo.commitAndPublish(k
+          ? `memory: keeper (${mode} digestion, ${k.applied.length} change${k.applied.length === 1 ? "" : "s"}${landed}; ${tidy})`
+          : `memory: weekly tree sweep (${tidy})`);
+        await saveState();
+        return { report, committed: true, revision, ...(keeper ? { keeper } : {}) };
       } catch (error) {
         await writes.revert();
         await repo.discardChanges().catch(() => {});
         throw error;
       }
     }, "background");
+  }
+
+  /**
+   * EPIC-9 E9-5c: the keeper's $0 daily light wake. No model call and no vault write: it refreshes
+   * the tier-0 index against the vault, counts the person's own captures still waiting for a topic,
+   * and says whether that backlog asks for an early digestion today (the caller queues it).
+   */
+  async function keeperDaily(input: KeeperDailyInput = {}): Promise<KeeperDailyResult> {
+    assertVault(repo);
+    input.assertActive?.();
+    await syncForRead();
+    const today = todayString(now());
+    const state = await loadKeeperState(keeperStatePath);
+    const index = openMemoryIndex();
+    const refreshed = index ? await index.refresh().catch(() => null) : null;
+    const report = await keeperDailyWake(vaultPath, state, today);
+    await saveKeeperState(keeperStatePath, { ...state, lastDailyWake: today }).catch((error: Error) => console.warn(`[keeper] state not saved: ${error.message}`));
+    return { ...report, indexChanged: refreshed ? refreshed.changed + refreshed.removed : null };
   }
 
   /**
@@ -3571,6 +3646,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       return getNote(vaultPath, path, sourceResolver);
     },
     sweepTree,
+    keeperDaily,
     steerTree,
     memoryTree: async () => {
       assertVault(repo);

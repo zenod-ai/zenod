@@ -82,7 +82,7 @@ const OPENAI_COMPATIBLE_BASE_URLS: Partial<Record<Provider, string>> = {
 };
 
 /** LLM operations, tagged on every usage report for cost analytics. */
-export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog" | "describeImage" | "turnPlan" | "transcribe";
+export type LlmOperation = "classify" | "compose" | "answer" | "work" | "extractBacklog" | "describeImage" | "turnPlan" | "transcribe" | "digest";
 
 /**
  * Real, provider-billed token usage for one LLM call — read from the AI SDK

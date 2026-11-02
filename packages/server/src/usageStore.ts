@@ -66,6 +66,28 @@ export function estimateCostUsd(report: LlmUsageReport): number {
   return usd;
 }
 
+/**
+ * What each LLM operation is for, so the ledger splits cost by purpose (EPIC-9 E9-5c): filing a capture
+ * into memory (topic classification and page composition) apart from the memory-keeper's digestion
+ * (`digest`, capped at $0.05 a week), answers, work and media reading. Unknown operations are "other".
+ */
+export type UsageCategory = "filing" | "digestion" | "answers" | "work" | "media" | "other";
+const CATEGORY_OF: Record<string, UsageCategory> = {
+  classify: "filing",
+  compose: "filing",
+  digest: "digestion",
+  answer: "answers",
+  turnPlan: "answers",
+  work: "work",
+  extractBacklog: "work",
+  describeImage: "media",
+  transcribe: "media",
+};
+export const usageCategory = (operation: string): UsageCategory => CATEGORY_OF[operation] ?? "other";
+export const operationsOf = (category: UsageCategory): string[] => Object.keys(CATEGORY_OF).filter((op) => CATEGORY_OF[op] === category);
+/** Operations the keeper's weekly cap counts. */
+export const DIGESTION_OPERATIONS: readonly string[] = operationsOf("digestion");
+
 export interface UsageBucket {
   key: string;
   calls: number;
@@ -89,6 +111,8 @@ export interface UsageSummary {
   providerCostUsd: number;
   byOperation: UsageBucket[];
   byModel: UsageBucket[];
+  /** The same spend by purpose (E9-5c): filing, digestion, answers, work, media, other. */
+  byCategory: UsageBucket[];
 }
 
 /** One recorded LLM call, as returned by `UsageStore.timeline`. */
@@ -139,6 +163,23 @@ function rowToBucket(row: AggRow): UsageBucket {
     cacheCreationInputTokens: row.cache_creation_input_tokens,
     costUsd: row.cost_usd ?? 0,
   };
+}
+
+/** Fold per-operation buckets into per-category ones, most expensive first. */
+export function byCategory(operations: readonly UsageBucket[]): UsageBucket[] {
+  const out = new Map<string, UsageBucket>();
+  for (const bucket of operations) {
+    const key = usageCategory(bucket.key);
+    const into = out.get(key) ?? { key, calls: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheCreationInputTokens: 0, costUsd: 0 };
+    into.calls += bucket.calls;
+    into.inputTokens += bucket.inputTokens;
+    into.outputTokens += bucket.outputTokens;
+    into.cachedInputTokens += bucket.cachedInputTokens;
+    into.cacheCreationInputTokens += bucket.cacheCreationInputTokens;
+    into.costUsd += bucket.costUsd;
+    out.set(key, into);
+  }
+  return [...out.values()].sort((a, b) => b.costUsd - a.costUsd);
 }
 
 export class UsageStore {
@@ -343,12 +384,14 @@ export class UsageStore {
    * Spend since `since` (one index-range SUM): the gateway's real charge when reported, else the
    * token-price estimate. This is the per-tenant metering figure (month-to-date, allowance readout).
    */
-  spendSince(since: number): number {
+  spendSince(since: number, operations?: readonly string[]): number {
+    if (operations && operations.length === 0) return 0;
+    const only = operations ? ` AND operation IN (${operations.map(() => "?").join(", ")})` : "";
     const row = this.db
       .prepare(
-        "SELECT COALESCE(SUM(COALESCE(provider_cost_usd, cost_usd)), 0) AS spend FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded'",
+        `SELECT COALESCE(SUM(COALESCE(provider_cost_usd, cost_usd)), 0) AS spend FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ? AND status = 'succeeded'${only}`,
       )
-      .get(since) as unknown as { spend: number };
+      .get(since, ...(operations ?? [])) as unknown as { spend: number };
     return row.spend ?? 0;
   }
 
@@ -376,6 +419,7 @@ export class UsageStore {
       providerCostUsd: (totals as unknown as { provider_cost_usd?: number }).provider_cost_usd ?? 0,
       byOperation: this.aggregate("operation", since),
       byModel: this.aggregate("model", since),
+      byCategory: byCategory(this.aggregate("operation", since)),
     };
   }
 

@@ -140,4 +140,14 @@ describe("MemoryTreeCard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Barcelona quotes 2023" }))
     expect(screen.queryByTestId("memory-root-steering")).toBeNull()
   })
+
+  it("shows the memory keeper's recent changes under the tree (E9-5c), and nothing when there are none", () => {
+    render(<MemoryTreeCard state={{ status: "ready", tree: { ...TREE, recentChanges: ["2026-11-08 · new House", "2026-11-08 · moved Trip: working → long-term"] } }} />)
+    const recent = screen.getByTestId("memory-tree-recent")
+    expect(within(recent).getByText("Recent changes")).not.toBeNull()
+    expect(within(recent).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["2026-11-08 · new House", "2026-11-08 · moved Trip: working → long-term"])
+    cleanup()
+    render(<MemoryTreeCard state={{ status: "ready", tree: TREE }} />)
+    expect(screen.queryByTestId("memory-tree-recent")).toBeNull()
+  })
 })

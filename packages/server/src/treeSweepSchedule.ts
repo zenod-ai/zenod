@@ -54,6 +54,35 @@ export function nextTreeSweepAt(now: number, ranThisWeek: boolean): Date {
 export const TREE_SWEEP_SCHEDULE_TEXT = "weekly, from Sunday 02:00 UTC, in the first 02:00–06:00 UTC off-peak window the tenant is awake";
 
 /**
+ * The memory-keeper's daily light wake (EPIC-9 E9-5c): once per UTC day, at the first per-tenant tick
+ * inside the same 02:00–06:00 UTC window. $0: no model call, no vault write. When it finds ten or more of
+ * the person's own captures waiting for a topic, it asks for an early digestion that same day (at most
+ * one a day; it spends from the same weekly change budget as Sunday's).
+ */
+export const KEEPER_DAY_KEY_PREFIX = "keeper:day:";
+export const KEEPER_EARLY_KEY_PREFIX = "tree-sweep:early:";
+export const KEEPER_DAILY_SCHEDULE_TEXT = "daily, in the first 02:00–06:00 UTC off-peak window the tenant is awake ($0: no model call, no vault write)";
+
+const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** Idempotency key of today's daily wake, e.g. `keeper:day:2026-11-03`. */
+export function keeperDayKey(now: number): string {
+  return `${KEEPER_DAY_KEY_PREFIX}${utcDay(now)}`;
+}
+
+/** Idempotency key of today's early digestion, e.g. `tree-sweep:early:2026-11-03`. */
+export function keeperEarlyKey(now: number): string {
+  return `${KEEPER_EARLY_KEY_PREFIX}${utcDay(now)}`;
+}
+
+/** Next daily wake: now inside today's window when today's has not run, else the next window start. */
+export function nextKeeperWakeAt(now: number, ranToday: boolean): Date {
+  if (!ranToday && inTreeSweepWindow(now)) return new Date(now);
+  const today = utcMidnight(now) + TREE_SWEEP_WINDOW_START_HOUR_UTC * HOUR_MS;
+  return new Date(!ranToday && today > now ? today : today + DAY_MS);
+}
+
+/**
  * The one line the console shows after a sweep that left proposals: counts only,
  * pointing at the vault page that holds them. Null when there is nothing to decide.
  */
