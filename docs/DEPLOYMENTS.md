@@ -71,6 +71,10 @@ The Dokploy API credentials already exist on the owner's Mac. Agents must load t
 - **GitHub repo secrets:** none. `DOKPLOY_API_KEY` and `DOKPLOY_API_BASE` were removed from `zenod-ai/zenod` on 2026-10-25 (Dokploy is Tailscale-only and the poller rolls from VPS1; infra-vps EPIC-10-A9 leftover), so the Dokploy key no longer lives in GitHub.
 - **Rule:** an agent that needs Dokploy runs `eval "$(dokploy-env)"` itself. If the loader fails, report the exact error (missing profile, missing Keychain item, HTTP status); do not ask the owner to supply or paste the key.
 
+## Entry hook (agent_team E42-S20)
+
+`zenod-mt` can tell one operator-configured listener that a voice note was stored, so the listener reads it instead of polling `search_memory` every minute (`packages/server/src/entryHook.ts`). Off unless all of `ZENOD_ENTRY_HOOK_URL`, `ZENOD_ENTRY_HOOK_SECRET` and `ZENOD_ENTRY_HOOK_TENANTS` are set on the app (optional `ZENOD_ENTRY_HOOK_CONTENT_TYPES`, default `voice_note`). The body is a pointer only (`evidenceRef`, tenant), signed `X-Zenod-Signature: t=<unix>,v1=<HMAC-SHA256 of "t.body">`; the first listener is the agent_team console on the same host (`http://100.104.206.10:8750/api/hooks/zenod/voice-note`, reached over the docker bridge rule that already serves Traefik). Setting the env is a credential change: it needs the owner's recorded approval. Rollback: `dokploy env-unset zenod-mt ZENOD_ENTRY_HOOK_URL` and redeploy; the console falls back to its minute poll by itself.
+
 ## Backup policy
 
 The current mechanism is `scripts/zenod-volume-backup.sh`: quiesce, archive, resume, checksum, then restore into a disposable volume and verify JSON/SQLite. This rollout paused public Zenod approximately three minutes (19:56–19:59 UTC): 1.6 GB source produced a 1.4 GB archive. Restore passed at 20:01:48 UTC with 1,127 files, 10 JSON files and 69 SQLite databases. Full backup and encrypted transfer dominated preparation time; the image update itself completed in seconds.

@@ -22,6 +22,7 @@ import {
   type TaskJobStore,
   type TreeSweepJobResult,
 } from "./taskJobStore.js";
+import type { EntryHook } from "./entryHook.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 
 /**
@@ -53,6 +54,8 @@ export class TaskJobQueue {
      * filed, and other kinds fail with the message.
      */
     private readonly aiAllowanceBlock?: () => { message: string; resetsAt: string } | null,
+    /** agent_team E42-S20: told (best effort, never awaited) when a capture is durably stored; see entryHook.ts. */
+    private readonly onEntryStored?: EntryHook,
   ) {}
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
@@ -67,6 +70,15 @@ export class TaskJobQueue {
 
   get(id: string): TaskJob | null {
     return this.store.get(id);
+  }
+
+  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined): void {
+    if (!evidenceRef || !this.onEntryStored) return;
+    try {
+      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}) });
+    } catch {
+      console.warn("[entry-hook] notification failed after durable capture");
+    }
   }
 
   recent(limit?: number): TaskJob[] {
@@ -182,6 +194,7 @@ export class TaskJobQueue {
         });
         assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job, { status: "done", result });
+        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source);
       } else if (job.kind === "media_ingest") {
         const rejection = this.admit(job.kind, job.input);
         if (rejection) throw new Error(rejection.message);
@@ -201,6 +214,9 @@ export class TaskJobQueue {
             (input, idempotencyKey) => this.enqueue("enrich_memory", input, idempotencyKey),
           );
           completed = this.store.updateClaimed(job, { status: "done", result });
+          if (completed && result.status === "done" && result.digest.evidenceRef) {
+            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint));
+          }
         }
       } else if (job.kind === "enrich_memory") {
         const engine = await this.getEngine();
