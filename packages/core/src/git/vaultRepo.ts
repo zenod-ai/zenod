@@ -6,7 +6,6 @@ import type { FileChange } from "../vault/immutability.js";
 import { githubUrl } from "../vault/github.js";
 import {
   githubVaultRevision,
-  type VaultCommit,
   type VaultRepository,
   type VaultRevision,
   type VaultPublicationGuard,
@@ -160,28 +159,6 @@ export class VaultRepo implements VaultRepository {
     for (const file of [...status.modified, ...status.created, ...status.not_added]) await record(file, false);
     for (const file of status.deleted) await record(file, true);
     return changes;
-  }
-
-  async recentCommits(limit: number): Promise<VaultCommit[]> {
-    const out = await this.git.raw(["log", `--max-count=${Math.max(1, Math.floor(limit))}`, "--no-merges", "--format=%x1e%H%x1f%s", "--name-only", "HEAD"]);
-    return out.split("\x1e").filter(chunk => chunk.trim()).map((chunk) => {
-      const [head, ...rest] = chunk.split("\n");
-      const [id, subject] = head!.split("\x1f");
-      return { id: id!.trim(), subject: (subject ?? "").trim(), paths: rest.map(line => line.trim()).filter(Boolean) };
-    });
-  }
-
-  async stageRevert(commitId: string): Promise<boolean> {
-    try {
-      await this.git.raw(["revert", "--no-commit", "--no-edit", commitId]);
-    } catch {
-      await this.git.raw(["revert", "--abort"]).catch(() => {});
-      await this.discardChanges();
-      return false;
-    }
-    // Keep the staged inverse, drop the in-progress revert state: the engine commits it as its own change.
-    await this.git.raw(["revert", "--quit"]).catch(() => {});
-    return true;
   }
 
   /** Discard all uncommitted changes — the never-half-apply escape hatch. */

@@ -62,19 +62,7 @@ import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEv
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
-import { loadSteerRoots, steerTreeRoot, TreeSteerError, type TreeSteerInput, type TreeSteerResult } from "./treeSteer.js";
-import {
-  isUndoableSteerReply,
-  KEEPER_COMMIT_RE,
-  nothingToUndoReply,
-  parseSteerMessage,
-  planSteer,
-  revertOf,
-  steerAppliedReply,
-  steerFailedReply,
-  steerUnchangedReply,
-  undoReply,
-} from "./steerMessage.js";
+import { steerTreeRoot, type TreeSteerInput, type TreeSteerResult } from "./treeSteer.js";
 import { lintTree } from "../vault/treeLint.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
@@ -106,19 +94,6 @@ import {
 } from "../approvalTokens.js";
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
-/** How far back "that's wrong" looks for the keeper's most recent change (E9-5e). */
-const UNDO_LOOKBACK_COMMITS = 200;
-
-/** A steer in words for its commit subject: "pin Agent Team", "aliases Agent Team: agentine". */
-function steerInWords(input: Omit<TreeSteerInput, "today">, result: TreeSteerResult): string {
-  switch (input.action) {
-    case "pin": return `pin ${result.root.name}`;
-    case "rename": return `rename to ${result.root.name}`;
-    case "alias": return `aliases ${result.root.name}: ${(input.aliases ?? []).join(", ")}`;
-    case "keep-apart": return `keep apart ${[result.root.name, ...(result.others ?? [])].join(", ")}`;
-    case "close": return `close ${result.root.name}`;
-  }
-}
 const ZENOD_DIGEST_TOOL = "zenod_digest_message";
 const GROUNDED_STANDING_ACTION_RETRY = [
   "Host retry: the previous answer claimed an action was held for approval, but no action-producing tool result exists, so no standing action exists.",
@@ -360,11 +335,6 @@ export interface EngineOptions {
    * never inside it. Omitted → search uses the two-pass scan only.
    */
   memoryIndex?: { path: string; tenantId: string };
-  /**
-   * Steering by message (EPIC-9 E9-5e): "pin X", "rename X to Y", "that's wrong"… become Keeper
-   * notes or an undo before the model runs. On by default; false turns it off.
-   */
-  messageSteering?: boolean;
   /**
    * The vault repo. Optional: when omitted the engine runs "vaultless" — no
    * sync, no vault briefing, no vault read/write tools — for the Console shell
@@ -2124,99 +2094,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const pages = result.paths.filter(path => path !== "Tree.md");
         const errors = [...(await lintVault(vaultPath, pages)).errors.map(lintErrorKey), ...(await treeErrors()).filter(key => !before.has(key))];
         if (errors.length > 0) throw new Error(`tree_steer_lint: ${errors.join("; ")}`);
-        await repo.commitAndPublish(`memory: keeper note ${result.note} (${steerInWords(input, result)})`);
+        const what = input.action === "pin" ? `pin ${result.root.name}` : `rename to ${result.root.name}`;
+        await repo.commitAndPublish(`memory: keeper note ${result.note} (${what})`);
         return result;
       } catch (error) {
         await writes.revert();
-        await repo.discardChanges().catch(() => {});
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * EPIC-9 E9-5e: steering by message. A short "pin X", "rename X to Y", "X is Y", "X is not Y",
-   * "yes, close X" or "that's wrong" (English, Spanish, Catalan) is read before the model and before
-   * any filing, so it is never filed as a memory. It becomes one Keeper note (one commit, through
-   * steerTree under the vault write lock) or an undo of the keeper's most recent change (a revert
-   * commit, never a force-push). Unknown or ambiguous roots get a short question; a message that only
-   * looks like a steer ("Zenod is great") returns null and is handled as usual. No LLM.
-   */
-  async function messageSteer(message: string, surface: Surface, cid: string): Promise<{ text: string; action: TaskingAction } | null> {
-    if (!repo || options.messageSteering === false) return null;
-    const parsed = parseSteerMessage(message);
-    if (!parsed) return null;
-    if (parsed.intent.kind === "undo" && !parsed.intent.explicit) {
-      // A bare "that's wrong" is about the tree only right after a steer reply; otherwise it is about the answer.
-      const last = [...await state.recentWindow(cid)].reverse().find(m => m.role === "assistant");
-      if (!last || !isUndoableSteerReply(last.text)) return null;
-    }
-    const plan = planSteer(parsed, await loadSteerRoots(vaultPath));
-    if (plan.type === "pass") return null;
-    const record = (text: string, result: Record<string, unknown>) => ({
-      text,
-      action: { tool: "steer_memory_tree", input: { message, surface }, result: JSON.stringify(result) } satisfies TaskingAction,
-    });
-    if (plan.type === "reply") return record(plan.text, { status: "clarify" });
-    if (plan.type === "undo") {
-      try {
-        const undone = await undoKeeperChange();
-        if (!undone) return record(nothingToUndoReply(parsed.lang), { status: "nothing_to_undo" });
-        const { redo, what } = revertOf(undone.subject, undone.id.slice(0, 7));
-        return record(undoReply(what, undone.id.slice(0, 7), parsed.lang, redo), { status: redo ? "redone" : "undone", commit: undone.id, revision: undone.revision.id });
-      } catch (error) {
-        const code = error instanceof Error ? error.message : "";
-        const reason = code === "tree_undo_unsupported" ? "unsupported" : code === "tree_undo_conflict" ? "conflict" : "error";
-        return record(steerFailedReply(parsed.lang, reason), { status: "failed", reason });
-      }
-    }
-    const { apply } = plan;
-    try {
-      const result = await steerTree({
-        action: apply.action,
-        root: apply.root.node.id ?? apply.root.path,
-        ...(apply.name !== undefined ? { name: apply.name } : {}),
-        ...(apply.aliases ? { aliases: apply.aliases } : {}),
-        ...(apply.others ? { others: apply.others.map(o => o.node.id ?? o.path) } : {}),
-        source: `by message on ${surface}`,
-      });
-      const text = result.changed && result.note ? steerAppliedReply(apply, result.note, parsed.lang) : steerUnchangedReply(apply, parsed.lang);
-      return record(text, { status: result.changed ? "changed" : "unchanged", note: result.note, root: result.root.name });
-    } catch (error) {
-      const code = error instanceof TreeSteerError ? error.code : "";
-      const reason = code === "invalid_name" ? "invalid_name" : code === "name_taken" ? "name_taken" : "error";
-      return record(steerFailedReply(parsed.lang, reason, apply.name ?? ""), { status: "failed", reason });
-    }
-  }
-
-  /**
-   * Undo the keeper's most recent change (E9-5e "that's wrong"): the newest vault commit that is a
-   * Keeper note, a weekly tidy, a keeper wake or an earlier undo, reverted as one new commit under the
-   * vault write lock. Never a force-push, never Log/ or _attachments/. Null when there is none.
-   */
-  async function undoKeeperChange(): Promise<{ id: string; subject: string; revision: VaultRevision } | null> {
-    assertVault(repo);
-    if (!repo.recentCommits || !repo.stageRevert) throw new Error("tree_undo_unsupported");
-    return queue.run(async () => {
-      await assertNoInterruptedFiling();
-      if ((await repo.pendingChanges()).length > 0) throw new Error("tree_undo_dirty_worktree");
-      await repo.pull().catch(() => {});
-      lastSyncMs = now().getTime();
-      const target = (await repo.recentCommits!(UNDO_LOOKBACK_COMMITS)).find(c => KEEPER_COMMIT_RE.test(c.subject));
-      if (!target) return null;
-      if (target.paths.some(path => path.startsWith("Log/") || path.startsWith("_attachments/"))) throw new Error("tree_undo_conflict");
-      const treeErrors = async () => (await lintTree(vaultPath)).issues.filter(issue => issue.severity === "error" && issue.path === "Tree.md").map(lintErrorKey);
-      const before = new Set(await treeErrors());
-      if (!(await repo.stageRevert!(target.id))) throw new Error("tree_undo_conflict");
-      try {
-        const changes = await repo.pendingChanges();
-        if (!changes.length) return null;
-        if (changes.some(change => !target.paths.includes(change.path))) throw new Error("tree_undo_unexpected_change");
-        const errors = (await treeErrors()).filter(key => !before.has(key));
-        if (errors.length > 0) throw new Error(`tree_undo_lint: ${errors.join("; ")}`);
-        const revision = await repo.commitAndPublish(revertOf(target.subject, target.id.slice(0, 7)).subject);
-        return { id: target.id, subject: target.subject, revision };
-      } catch (error) {
         await repo.discardChanges().catch(() => {});
         throw error;
       }
@@ -3316,13 +3198,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
         : (onDeltaOrOptions ?? {});
     await syncForRead();
     const cid = conversationId(surface, chatOptions.conversationKey);
-    const steer = await messageSteer(message, surface, cid);
-    if (steer) {
-      await state.appendMessage(cid, "user", message, surface);
-      await state.appendMessage(cid, "assistant", steer.text, surface);
-      chatOptions.onDelta?.(steer.text);
-      return { text: steer.text, sources: [] };
-    }
     const approvalCid = await prepareApprovalTurn(cid, message);
     const window = await state.recentWindow(cid);
     const captureContext = await state.recentCaptureTickets?.(cid);
@@ -3434,12 +3309,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function handleTasking(input: TaskingInput): Promise<TaskingReply> {
     await syncForRead();
     const cid = conversationId(input.surface, input.conversationKey);
-    const steer = await messageSteer(input.text, input.surface, cid);
-    if (steer) {
-      await state.appendMessage(cid, "user", input.text, input.surface);
-      await state.appendMessage(cid, "assistant", steer.text, input.surface);
-      return { text: steer.text, actions: [steer.action] };
-    }
     const approvalCid = await prepareApprovalTurn(cid, input.text);
     const window = await state.recentWindow(cid);
     const captureContext = await state.recentCaptureTickets?.(cid);
