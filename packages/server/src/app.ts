@@ -308,6 +308,8 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   runtime.taskJobQueue.resume();
   // Mark any delegated journey steps whose callback deadline has expired.
   runtime.journeyMonitor.start();
+  // EPIC-9 E9-2d: weekly memory tree sweep clock (idempotent; hosted tenants start it at runtime creation).
+  runtime.startTreeSweepSchedule();
   // Saved Ring wallets refresh their authenticated MCP catalogs on process boot.
   if (isWalletAgent) void runtime.ensureWalletPeerTools().catch((err: unknown) => {
     console.error("[wallet] startup discovery failed:", err);
@@ -2207,6 +2209,13 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // can see what concurrent MCP callers queued, and in what state, instead of
   // the jobs being invisible (only the LLM-usage ledger hinted at them before).
   app.get("/api/tasks/jobs", (c) => c.json({ jobs: runtime.taskJobQueue.recent() }));
+
+  // EPIC-9 E9-2d: weekly memory tree sweep: schedule + last run (counts only), and run-now.
+  app.get("/api/memory/sweep", (c) => c.json(runtime.treeSweepStatus()));
+  app.post("/api/memory/sweep/run", (c) => {
+    const job = runtime.enqueueTreeSweepNow();
+    return c.json({ job: { id: job.id, kind: job.kind, status: job.status } }, 202);
+  });
 
   app.get("/api/tasks/jobs/:id", (c) => {
     const job = runtime.taskJobQueue.get(c.req.param("id"));

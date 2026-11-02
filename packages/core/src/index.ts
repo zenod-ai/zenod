@@ -43,6 +43,8 @@ export type {
   TaskingSurface,
   TokenCostMeasurement,
   TokenCostOperation,
+  TreeSweepInput,
+  TreeSweepResult,
   WorkInput,
   WorkResult,
 } from "./types.js";
@@ -64,6 +66,19 @@ export { lintTree, lintTreeIndex, type TreeLintIssue, type TreeLintReport, type 
 export { AUDIT_TREE_PROPOSAL, seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
 export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryLineage, type MemoryTreeNodeView, type LineageNode } from "./vault/lineage.js";
 export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } from "./engine/treePlacement.js";
+export {
+  runTreeSweep,
+  renderSweepReport,
+  findStaleRoots,
+  findDuplicateTitles,
+  assertSweepChangesSafe,
+  TREE_SWEEP_REPORT_PATH,
+  ARCHIVE_INBOX_DIR,
+  DEFAULT_STALE_DAYS,
+  type TreeSweepReport,
+  type TreeSweepCounts,
+  type TreeSweepOptions,
+} from "./engine/treeSweep.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";
 export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "./vault/cleanSlate.js";
 export { githubSourceRef, githubUrl, type VaultLocation } from "./vault/github.js";

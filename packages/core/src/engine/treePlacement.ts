@@ -42,6 +42,12 @@ export class TrackedWrites {
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, content);
   }
+  /** Remove a file, keeping its bytes so revert() can restore it (the sweep only removes after copying to Archive/). */
+  async remove(path: string): Promise<void> {
+    const absolute = join(this.vaultPath, path);
+    if (!this.originals.has(path)) this.originals.set(path, await readFile(absolute, "utf8").catch(() => null));
+    await rm(absolute, { force: true });
+  }
   get paths(): string[] {
     return [...this.originals.keys()];
   }

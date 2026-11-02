@@ -69,7 +69,7 @@ import { UsageStore } from "./usageStore.js";
 import { NotificationStore } from "./notificationStore.js";
 import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
-import { TaskJobStore } from "./taskJobStore.js";
+import { TaskJobStore, type TaskJob, type TreeSweepJobResult } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
 import { ExecutionStore } from "./executionStore.js";
 import { TranscriptStore } from "./transcriptStore.js";
@@ -121,6 +121,29 @@ import { TelegramGateway } from "./telegramGateway.js";
 import type { TelegramManagedInboundHandler } from "./telegramGateway.js";
 import { evidence, type ToolResponse, toolResponse } from "./toolOutput.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
+import {
+  inTreeSweepWindow,
+  nextTreeSweepAt,
+  TREE_SWEEP_KEY_PREFIX,
+  TREE_SWEEP_SCHEDULE_TEXT,
+  treeSweepWeekKey,
+} from "./treeSweepSchedule.js";
+
+export interface TreeSweepStatus {
+  enabled: boolean;
+  schedule: string;
+  /** Sunday (UTC date) that keys the current sweep week. */
+  thisWeek: string;
+  nextRunAt: string | null;
+  last: {
+    id: string;
+    status: TaskJob["status"];
+    createdAt: string;
+    updatedAt: string;
+    error?: string;
+    result?: TreeSweepJobResult;
+  } | null;
+}
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -846,6 +869,69 @@ export class Runtime {
       console.error(`[exec-ingest] get_task_result failed for ${jobId}: ${(err as Error).message}`);
       return null;
     }
+  }
+
+  /**
+   * EPIC-9 E9-2d: queue this week's tree sweep when it is due: vault agents only,
+   * inside the off-peak window, once per week (the week key is the job's
+   * idempotency key, so restarts and repeated ticks never queue a second one).
+   * The job runs on the durable lane behind any live filing, under the vault lock.
+   */
+  maybeEnqueueTreeSweep(now: number = Date.now()): TaskJob | null {
+    if (this.agent.vaultless === true || !this.settings.vaultConfigured() || !inTreeSweepWindow(now)) return null;
+    const key = treeSweepWeekKey(now);
+    if (this.taskJobStore.getByIdempotencyKey(key)) return null;
+    const job = this.taskJobQueue.enqueue("tree_sweep", {}, key);
+    console.log(`[tree-sweep] tenant=${this.tenantId} queued ${job.id} (${key})`);
+    return job;
+  }
+
+  private treeSweepTimer: NodeJS.Timeout | null = null;
+
+  /**
+   * Start this tenant's weekly sweep clock (idempotent). It lives on the runtime,
+   * which exists whenever the tenant is active on any surface (WhatsApp, MCP,
+   * console), not only when the web API is open. The first check is one interval
+   * after start, so a boot never sweeps immediately.
+   */
+  startTreeSweepSchedule(intervalMs = 5 * 60_000): void {
+    if (this.treeSweepTimer || this.agent.vaultless === true) return;
+    this.treeSweepTimer = setInterval(() => {
+      try {
+        this.maybeEnqueueTreeSweep();
+      } catch (error) {
+        console.error("[tree-sweep] schedule check failed:", error);
+      }
+    }, intervalMs);
+    this.treeSweepTimer.unref();
+  }
+
+  /** Run a tree sweep now (operator/console action); same durable lane and lock as the weekly one. */
+  enqueueTreeSweepNow(): TaskJob {
+    return this.taskJobQueue.enqueue("tree_sweep", {});
+  }
+
+  /** Schedule and last run of the tree sweep; counts only, no vault content. */
+  treeSweepStatus(now: number = Date.now()): TreeSweepStatus {
+    const thisWeek = this.taskJobStore.getByIdempotencyKey(treeSweepWeekKey(now));
+    const last = this.taskJobStore.latestOfKind("tree_sweep");
+    const enabled = this.agent.vaultless !== true && this.settings.vaultConfigured();
+    return {
+      enabled,
+      schedule: TREE_SWEEP_SCHEDULE_TEXT,
+      thisWeek: treeSweepWeekKey(now).slice(TREE_SWEEP_KEY_PREFIX.length),
+      nextRunAt: enabled ? nextTreeSweepAt(now, thisWeek !== null).toISOString() : null,
+      last: last
+        ? {
+            id: last.id,
+            status: last.status,
+            createdAt: new Date(last.createdAt).toISOString(),
+            updatedAt: new Date(last.updatedAt).toISOString(),
+            ...(last.error ? { error: last.error } : {}),
+            ...(last.result && (last.result as { kind?: string }).kind === "tree_sweep" ? { result: last.result as TreeSweepJobResult } : {}),
+          }
+        : null,
+    };
   }
 
   /**
@@ -2420,6 +2506,7 @@ export class Runtime {
     close(() => this.taskJobStore.close());
     close(() => this.executionStore.close());
     close(() => this.journeyMonitor.stop());
+    close(() => { if (this.treeSweepTimer) clearInterval(this.treeSweepTimer); this.treeSweepTimer = null; });
     close(() => this.journeyStore.close());
     close(() => this.usageStore.close());
     close(() => this.notificationStore.close());
