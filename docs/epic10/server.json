@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.zenod/memory",
+  "title": "Zenod Memory",
+  "description": "Memory you own: capture on WhatsApp, filed into your Markdown vault, recalled with citations.",
+  "version": "0.1.0",
+  "websiteUrl": "https://zenod.dev",
+  "repository": {
+    "url": "https://github.com/zenod-ai/zenod",
+    "source": "github",
+    "subfolder": "units/zenod"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://cloud.zenod.dev/mcp"
+    }
+  ]
+}
