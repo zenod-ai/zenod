@@ -1,5 +1,6 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
 import type { MemoryTreeOutline } from "./vault/treeOutline.js";
+import type { TreeSteerInput, TreeSteerResult } from "./engine/treeSteer.js";
 import type { MemoryIndexStats } from "./vault/memoryIndex.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
@@ -533,6 +534,12 @@ export interface BrainEngine {
   sweepTree?(input?: TreeSweepInput): Promise<TreeSweepResult>;
   /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
   memoryTreeOutline?(): Promise<MemoryTreeOutline | null>;
+  /**
+   * EPIC-9 E9-5b: pin or rename a root (Memory tab). One Keeper note in Tree.md plus the
+   * root page's flag, one revision under the vault write lock. Throws TreeSteerError on a
+   * bad root or name. No LLM.
+   */
+  steerTree?(input: Omit<TreeSteerInput, "today">): Promise<TreeSteerResult>;
   /** Deterministic vault validation. No LLM. */
   lint(): Promise<LintReport>;
 }

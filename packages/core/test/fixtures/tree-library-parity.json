@@ -1,0 +1,26 @@
+{
+ "about": "Parity fixture for the shared tree library (references/tree-library.md). Inputs and expected outputs of scripts/spine_tree.py; Zenod's TypeScript port (packages/core/src/engine, EPIC-9) tests against a copy of this file. Regenerate only when the contract changes, and change both sides together.",
+ "constants": {"HALF_LIFE_DAYS": 14, "HORIZON_DAYS": 120, "MATCH_THRESHOLD": 0.5, "RECENT_CHANGES_KEEP": 20},
+ "heat": [
+  {"name": "one event today", "events": ["2026-11-02"], "today": "2026-11-02", "expected": 1.0},
+  {"name": "one half-life old", "events": ["2026-10-19"], "today": "2026-11-02", "expected": 0.5},
+  {"name": "two half-lives old", "events": ["2026-10-05"], "today": "2026-11-02", "expected": 0.25},
+  {"name": "future and beyond the horizon add nothing", "events": ["2026-11-03", "2026-07-04"], "today": "2026-11-02", "expected": 0.0},
+  {"name": "at the horizon still counts", "events": ["2026-07-05"], "today": "2026-11-02", "expected": 0.003},
+  {"name": "shared capture: weight is the share", "events": [["2026-11-02", 0.5], ["2026-10-26", 1]], "today": "2026-11-02", "expected": 1.207},
+  {"name": "rounds half up like Math.round", "events": [["2026-11-02", 0.0625]], "today": "2026-11-02", "expected": 0.063},
+  {"name": "custom half-life", "events": ["2026-10-26", "2026-10-26"], "today": "2026-11-02", "half_life": 7, "expected": 1.0}
+ ],
+ "match_ids": [
+  {"name": "same members keep the id (a rename changes nothing)", "previous": {"r-house": ["a", "b", "c"]}, "current": [["a", "b", "c"]], "expected": ["r-house"]},
+  {"name": "two of three shared (0.5) keeps the id", "previous": {"r-house": ["a", "b", "c"]}, "current": [["a", "b", "d"]], "expected": ["r-house"]},
+  {"name": "one of three shared (0.2) gets a new id", "previous": {"r-house": ["a", "b", "c"]}, "current": [["a", "x", "y"]], "expected": ["n-99c8ee65"]},
+  {"name": "a split: the larger part keeps the id, one-to-one", "previous": {"r-house": ["a", "b", "c", "d"]}, "current": [["d"], ["a", "b", "c"]], "expected": ["n-3c363836", "r-house"]},
+  {"name": "a merge: the closer old id wins, the other retires", "previous": {"r-a": ["a", "b", "c"], "r-b": ["d"]}, "current": [["a", "b", "c", "d"]], "expected": ["r-a"]},
+  {"name": "swap stays stable", "previous": {"r-1": ["a", "b"], "r-2": ["c", "d"]}, "current": [["c", "d"], ["a", "b"]], "expected": ["r-2", "r-1"]}
+ ],
+ "recent_changes": [
+  {"name": "one weekly run", "previous": {"r-house": {"name": "House", "kind": "working", "members": ["a", "b", "c"]}, "r-trip": {"name": "Trip", "kind": "working", "members": ["t"]}, "r-kids": {"name": "Kids", "kind": "long-term", "members": ["k"]}}, "current": {"r-house": {"name": "Housing", "kind": "working", "members": ["a", "b", "c", "d"]}, "r-kids": {"name": "Kids", "kind": "working", "members": ["k"]}, "n-1234abcd": {"name": "Agentine", "kind": "working", "members": ["g"]}}, "day": "2026-11-02", "existing": ["- 2026-10-26 · new House"], "expected_changes": [{"op": "added", "id": "n-1234abcd", "name": "Agentine"}, {"op": "retired", "id": "r-trip", "name": "Trip"}, {"op": "renamed", "id": "r-house", "name": "Housing", "from": "House", "to": "Housing"}, {"op": "moved", "id": "r-kids", "name": "Kids", "from": "long-term", "to": "working"}, {"op": "regrouped", "id": "r-house", "name": "Housing", "gained": 1, "lost": 0}], "expected_section": ["- 2026-11-02 · new Agentine", "- 2026-11-02 · retired Trip", "- 2026-11-02 · renamed House → Housing", "- 2026-11-02 · moved Kids: long-term → working", "- 2026-11-02 · regrouped Housing (+1 −0)", "- 2026-10-26 · new House"]},
+  {"name": "NOOP run keeps the section", "previous": {"r-house": {"name": "House", "kind": "working", "members": ["a", "b", "c"]}, "r-trip": {"name": "Trip", "kind": "working", "members": ["t"]}, "r-kids": {"name": "Kids", "kind": "long-term", "members": ["k"]}}, "current": {"r-house": {"name": "House", "kind": "working", "members": ["a", "b", "c"]}, "r-trip": {"name": "Trip", "kind": "working", "members": ["t"]}, "r-kids": {"name": "Kids", "kind": "long-term", "members": ["k"]}}, "day": "2026-11-02", "existing": ["- 2026-10-26 · new House"], "expected_changes": [], "expected_section": ["- 2026-10-26 · new House"]}
+ ]
+}

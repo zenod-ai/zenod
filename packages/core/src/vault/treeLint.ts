@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { parseKeeperNotes } from "./treeSteering.js";
 import { basenameOf, isFilingReceiptPath, isIndexFile, tierOf } from "./files.js";
 import { scanVault, type VaultSnapshot } from "./pages.js";
 import {
@@ -57,7 +60,12 @@ export interface TreeLintReport {
 export async function lintTree(vaultPath: string, options: { snapshot?: VaultSnapshot; index?: TreeIndex } = {}): Promise<TreeLintReport> {
   const snapshot = options.snapshot ?? (await scanVault(vaultPath));
   const index = options.index ?? (await buildTreeIndex(vaultPath, snapshot));
-  return lintTreeIndex(index, snapshot.files);
+  const report = lintTreeIndex(index, snapshot.files);
+  // Keeper notes (E9-5b) are steering the keeper obeys: a malformed one would be silently ignored.
+  const raw = index.tree ? await readFile(join(vaultPath, TREE_PATH), "utf8").catch(() => "") : "";
+  for (const p of parseKeeperNotes(raw).problems) report.issues.push({ path: TREE_PATH, line: p.line, rule: p.rule, severity: "error", message: p.message });
+  report.ok = !report.issues.some(i => i.severity === "error");
+  return report;
 }
 
 /** Pure lint over an already-built index; `files` is every vault-relative markdown path. */
@@ -83,7 +91,10 @@ export function lintTreeIndex(index: TreeIndex, files: string[]): TreeLintReport
     for (const p of tree.problems) error(TREE_PATH, p.rule, p.message, p.line);
     const names = new Map<string, number>();
     const paths = new Map<string, number>();
+    const ids = new Map<string, number>();
     for (const node of tree.nodes) {
+      if (node.id && ids.has(node.id)) error(TREE_PATH, "tree/node-duplicate", `root id ^${node.id} repeats line ${ids.get(node.id)}`, node.line);
+      else if (node.id) ids.set(node.id, node.line);
       stats.rootNodes[node.kind]++;
       const nameKey = node.name.toLowerCase();
       if (names.has(nameKey)) error(TREE_PATH, "tree/node-duplicate", `node name "${node.name}" repeats line ${names.get(nameKey)}`, node.line);

@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { MemoryTreeCard, type MemoryTree, type MemoryTreeNode } from "./memory-tree-card"
 
 afterEach(cleanup)
@@ -99,5 +99,45 @@ describe("MemoryTreeCard", () => {
     cleanup()
     render(<MemoryTreeCard state={{ status: "unavailable" }} />)
     expect(screen.getByText(/temporarily unavailable/)).not.toBeNull()
+  })
+
+  it("pins and renames a root (E9-5b), shows the pin, and never offers it on a page", async () => {
+    const steered: MemoryTreeNode = { ...hair, rootId: "n-1a2b3c4d" }
+    const pinnedVentures: MemoryTreeNode = { ...ventures, rootId: "n-99c8ee65", pinned: true, nameLocked: true }
+    const tree: MemoryTree = {
+      ...TREE,
+      groups: [
+        { ...TREE.groups[0]!, children: [steered] },
+        { ...TREE.groups[1]!, children: [pinnedVentures] },
+      ],
+    }
+    const onSteer = vi.fn(async () => {})
+    render(<MemoryTreeCard state={{ status: "ready", tree }} onSteer={onSteer} />)
+    expect(within(row("Areas/Ventures.md")).getByText("pinned")).not.toBeNull()
+
+    await userEvent.click(screen.getByRole("button", { name: "Hair transplant" }))
+    await userEvent.click(screen.getByRole("button", { name: /Pin/ }))
+    expect(onSteer).toHaveBeenLastCalledWith({ action: "pin", root: "n-1a2b3c4d" })
+
+    await userEvent.click(screen.getByRole("button", { name: /Rename/ }))
+    const input = screen.getByRole("textbox", { name: "New name for Hair transplant" })
+    await userEvent.clear(input)
+    await userEvent.type(input, "Hair")
+    await userEvent.click(screen.getByRole("button", { name: "Save name" }))
+    expect(onSteer).toHaveBeenLastCalledWith({ action: "rename", root: "n-1a2b3c4d", name: "Hair" })
+
+    // A refused rename shows why and keeps the form open.
+    onSteer.mockRejectedValueOnce(new Error("Another branch already has that name."))
+    await userEvent.click(screen.getByRole("button", { name: /Rename/ }))
+    await userEvent.type(screen.getByRole("textbox", { name: "New name for Hair transplant" }), "x")
+    await userEvent.click(screen.getByRole("button", { name: "Save name" }))
+    expect(screen.getByRole("alert").textContent).toBe("Another branch already has that name.")
+
+    // A pinned root offers no second pin; a page offers neither.
+    await userEvent.click(screen.getByRole("button", { name: "Ventures and work" }))
+    expect(within(screen.getByTestId("memory-node-detail")).queryByRole("button", { name: /Pin/ })).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Expand Hair transplant" }))
+    await userEvent.click(screen.getByRole("button", { name: "Barcelona quotes 2023" }))
+    expect(screen.queryByTestId("memory-root-steering")).toBeNull()
   })
 })

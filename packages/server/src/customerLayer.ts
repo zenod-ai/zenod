@@ -52,7 +52,7 @@ import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
 import { treeSweepSuggestion } from "./treeSweepSchedule.js";
-import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
+import { ConsoleMemoryTreeCache, parseConsoleMemorySteer, steerConsoleMemoryTree } from "./consoleMemoryTree.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1346,6 +1346,28 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     } catch (error) {
       console.warn(`[memory-tree] console tree unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: "memory tree unavailable" }, 503);
+    }
+  });
+
+  // EPIC-9 E9-5b: pin or rename a root of the signed-in customer's own tree. Same-origin
+  // mutation; the tenant comes from the session's account only, never from the body.
+  app.post("/api/console/memory-tree/steer", async (c) => {
+    if (!customerMutationOriginAllowed(c, env, product)) return c.json({ error: "invalid request origin" }, 403);
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const request = parseConsoleMemorySteer(await c.req.json().catch(() => null));
+    if (!request) return c.json({ error: "action pin or rename, a root and (for rename) a name are required", code: "invalid" }, 400);
+    try {
+      const response = await steerConsoleMemoryTree(runtime, request);
+      if (response.status === 200 && response.body.changed) memoryTrees.invalidate(account.tenant_id);
+      return c.json(response.body, response.status);
+    } catch (error) {
+      console.warn(`[memory-tree] steer failed for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "Your memory tree could not be changed right now. Nothing was changed.", code: "unavailable" }, 503);
     }
   });
 

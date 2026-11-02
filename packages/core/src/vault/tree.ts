@@ -37,6 +37,11 @@ export const GROUP_HEADINGS: Record<MemoryKind, string> = {
 export interface TreeNode {
   /** Display name, unique in the tree (case-insensitive). */
   name: string;
+  /**
+   * Stable root id (E9-5b): `^n-1a2b3c4d` at the end of the line, an Obsidian block id (hidden when
+   * reading). Discovery keeps it across re-derivations while the root keeps half its pages.
+   */
+  id?: string;
   kind: MemoryKind;
   /** Vault-relative path of the node's page, with `.md`. */
   path: string;
@@ -60,6 +65,17 @@ export interface ParsedTree {
 const NODE_LINE_RE = /^- (.+)$/;
 const NESTED_LINE_RE = /^\s+[-*+] /;
 const HEADING_RE = /^## (.+?)\s*$/;
+/** Trailing Obsidian block id that carries a root's stable id. */
+const NODE_ID_RE = /\s+\^([A-Za-z0-9][A-Za-z0-9-]*)$/;
+
+/**
+ * Tree.md sections that are not level-0 groups (E9-5b): the person's steering (`## Keeper notes`,
+ * one line each, see treeSteering.ts) and the keeper's change log (`## Recent changes`, E9-5c).
+ * Their lines are never nodes.
+ */
+export const KEEPER_NOTES_HEADING = "Keeper notes";
+export const RECENT_CHANGES_HEADING = "Recent changes";
+export const TREE_NOTE_HEADINGS: readonly string[] = [KEEPER_NOTES_HEADING, RECENT_CHANGES_HEADING];
 
 /**
  * Parse a Tree.md file. Node line format (one line per level-1 node):
@@ -69,7 +85,8 @@ const HEADING_RE = /^## (.+?)\s*$/;
  * under a `## Working memory` or `## Long-term memory` heading. The page may
  * also be written as a plain path (`Projects/X.md`). Anything else between
  * headings (prose, blank lines, frontmatter) is ignored; nested bullets are
- * rejected because Tree.md holds levels 0 and 1 only.
+ * rejected because Tree.md holds levels 0 and 1 only. A trailing ` ^id` is the
+ * root's stable id. Lines under `## Keeper notes` and `## Recent changes` are not nodes.
  */
 export function parseTree(raw: string): ParsedTree {
   const nodes: TreeNode[] = [];
@@ -78,6 +95,7 @@ export function parseTree(raw: string): ParsedTree {
   const offset = raw.length > body.length ? raw.slice(0, raw.length - body.length).split("\n").length - 1 : 0;
   const lines = body.split("\n");
   let group: MemoryKind | null = null;
+  let notes = false;
 
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i]!.replace(/\r$/, "");
@@ -85,10 +103,13 @@ export function parseTree(raw: string): ParsedTree {
     const heading = HEADING_RE.exec(text);
     if (heading) {
       const title = heading[1]!.toLowerCase();
+      notes = TREE_NOTE_HEADINGS.some(h => h.toLowerCase() === title);
+      if (notes) { group = null; continue; }
       group = (Object.entries(GROUP_HEADINGS).find(([, h]) => h.toLowerCase() === title)?.[0] as MemoryKind | undefined) ?? null;
       if (!group) problems.push({ line, rule: "tree/group", message: `unknown level-0 group "${heading[1]}"; use "${GROUP_HEADINGS.working}" or "${GROUP_HEADINGS["long-term"]}"` });
       continue;
     }
+    if (notes) continue;
     if (NESTED_LINE_RE.test(text)) {
       problems.push({ line, rule: "tree/level", message: "Tree.md holds levels 0 and 1 only; deeper nodes name their parent in page frontmatter" });
       continue;
@@ -103,7 +124,10 @@ export function parseTree(raw: string): ParsedTree {
     const [name, kindRaw, pageRaw, ...rest] = fields.map(f => f.trim());
     const kind = kindRaw as MemoryKind;
     const path = pagePathFromRef(pageRaw!);
-    const summary = rest.join(" | ").trim();
+    let summary = rest.join(" | ").trim();
+    const idMatch = NODE_ID_RE.exec(summary);
+    const id = idMatch?.[1];
+    if (idMatch) summary = summary.slice(0, idMatch.index).trim();
     if (!MEMORY_KINDS.includes(kind)) {
       problems.push({ line, rule: "tree/node-kind", message: `kind "${kindRaw}" must be working or long-term` });
       continue;
@@ -117,14 +141,14 @@ export function parseTree(raw: string): ParsedTree {
     } else if (group !== kind) {
       problems.push({ line, rule: "tree/node-kind", message: `node "${name}" is ${kind} but sits under "${GROUP_HEADINGS[group]}"` });
     }
-    nodes.push({ name, kind, path, summary, line });
+    nodes.push({ name, kind, path, summary, line, ...(id ? { id } : {}) });
   }
   return { nodes, problems };
 }
 
 /** Render one node line (inverse of parseTree for a single node). */
-export function formatTreeNode(node: Pick<TreeNode, "name" | "kind" | "path" | "summary">): string {
-  return `- ${node.name} | ${node.kind} | [[${node.path.replace(/\.md$/, "")}]] | ${node.summary.replace(/\s*\n\s*/g, " ")}`;
+export function formatTreeNode(node: Pick<TreeNode, "name" | "kind" | "path" | "summary" | "id">): string {
+  return `- ${node.name} | ${node.kind} | [[${node.path.replace(/\.md$/, "")}]] | ${node.summary.replace(/\s*\n\s*/g, " ")}${node.id ? ` ^${node.id}` : ""}`;
 }
 
 /** Read and parse `<vault>/Tree.md`; null when the vault has no tree yet. */
