@@ -9,7 +9,7 @@ import { KEEPER_NOTES_HEADING, RECENT_CHANGES_HEADING, TREE_NOTE_HEADINGS } from
  * - `## Keeper notes` in Tree.md: one line per note, the vault's Operating Learnings —
  *   `- K-<n> | <applies to> | <rule> | <why> | confirmed <YYYY-MM-DD>`. "Applies to" names one or
  *   more roots (comma-separated), each optionally with its stable id (`House ^n-1a2b3c4d`).
- *   Rules: `pinned`, `name: <Name>`, `aliases: a, b, c`, `keep apart`, `own root`.
+ *   Rules: `pinned`, `name: <Name>`, `aliases: a, b, c`, `keep apart`, `own root`, `closed` (E9-5e).
  * - Root page frontmatter mirrors them (`pinned: true`, `name-locked: true`, `aliases: [...]`), and a
  *   person may set those flags in Obsidian themselves.
  *
@@ -27,6 +27,8 @@ export type KeeperRule =
   | { kind: "aliases"; aliases: string[] }
   | { kind: "keep-apart" }
   | { kind: "own-root" }
+  /** The person closed the root (E9-5e): it is held long-term until a later pin reopens it. */
+  | { kind: "closed" }
   /** A rule this version does not act on: kept verbatim, never dropped. */
   | { kind: "other"; text: string };
 
@@ -66,6 +68,7 @@ export function parseKeeperRule(text: string): KeeperRule {
   if (/^pin(?:ned)?$/i.test(clean)) return { kind: "pinned" };
   if (/^keep[ -]apart$/i.test(clean)) return { kind: "keep-apart" };
   if (/^own[ -]root$/i.test(clean)) return { kind: "own-root" };
+  if (/^closed?$/i.test(clean)) return { kind: "closed" };
   const name = /^name:\s*(.+)$/i.exec(clean);
   if (name) return { kind: "name", name: name[1]!.trim() };
   const aliases = /^alias(?:es)?:\s*(.+)$/i.exec(clean);
@@ -78,6 +81,7 @@ export function formatKeeperRule(rule: KeeperRule): string {
     case "pinned": return "pinned";
     case "keep-apart": return "keep apart";
     case "own-root": return "own root";
+    case "closed": return "closed";
     case "name": return `name: ${rule.name}`;
     case "aliases": return `aliases: ${rule.aliases.join(", ")}`;
     case "other": return rule.text;

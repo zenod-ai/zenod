@@ -59,7 +59,8 @@ import {
  * 7. Steering (E9-5b, treeSteering.ts): the person's Keeper notes and root-page flags win over
  *    everything above. A pinned root is never demoted and keeps its name and page; a renamed
  *    (name-locked) root keeps the person's name; `keep apart` roots are never merged; an `own root`
- *    is a topic of its own; aliases are read as the name they stand for.
+ *    is a topic of its own; aliases are read as the name they stand for; a `closed` root (E9-5e)
+ *    stays long-term until a later pin note reopens it.
  *
  * Never deletes, never moves a file, never touches Log/ or _attachments/: it
  * rewrites Tree.md (keeping its Keeper notes and Recent changes verbatim), the
@@ -581,6 +582,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   const pinned = new Set<number>();
   const lockedName = new Map<number, string>();
   const ownRoots = new Set<number>();
+  const closed = new Set<number>();
   const aliasesOf = new Map<number, string[]>();
   const labels = new Map<number, Array<[string, string]>>();
   const label = (i: number, labelKey: string, value: string) => labels.set(i, [...(labels.get(i) ?? []), [labelKey, value]]);
@@ -597,7 +599,9 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     for (const miss of hits.filter(h => h.i === undefined)) steering.unresolved.push(`${note.id}: ${miss.target.name || miss.target.id}`);
     if (!found.length) continue;
     switch (rule.kind) {
-      case "pinned": for (const { i } of found) pinned.add(i); break;
+      // Pin and close are opposites: the later note on a root wins (a pin reopens a closed root).
+      case "pinned": for (const { i } of found) { pinned.add(i); closed.delete(i); } break;
+      case "closed": for (const { i } of found) { closed.add(i); pinned.delete(i); } break;
       case "name": lockedName.set(found[0]!.i, rule.name); break;
       case "own-root": for (const { i } of found) ownRoots.add(i); break;
       case "aliases": for (const { i } of found) aliasesOf.set(i, [...new Set([...(aliasesOf.get(i) ?? []), ...rule.aliases])]); break;
@@ -610,13 +614,13 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   }
   // Flags the person set on a page by hand count as theirs too.
   docs.forEach((d, i) => {
-    if (d.steering.pinned) pinned.add(i);
+    if (d.steering.pinned && !closed.has(i)) pinned.add(i);
     if (d.steering.nameLocked && !lockedName.has(i) && previousRootAt(i)) lockedName.set(i, previousRootAt(i)!.name);
   });
   // A pin keeps the root's name as it is.
   for (const i of pinned) if (!lockedName.has(i)) lockedName.set(i, previousRootAt(i)?.name ?? cleanTopicName(docs[i]!.title));
   /** Steered root pages: each stays the root of its own group; two never share one. */
-  const steered = new Set<number>([...pinned, ...lockedName.keys(), ...ownRoots]);
+  const steered = new Set<number>([...pinned, ...lockedName.keys(), ...ownRoots, ...closed]);
   for (const i of steered) label(i, "steer", String(i));
   // An own root is a subject of its own (like a page made for a name the person keeps saying).
   for (const i of ownRoots) if (!docs[i]!.seededRoot) docs[i]!.subject = true;
@@ -992,6 +996,8 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   // A pinned working root is never demoted, whatever its heat (E9-5b).
   const pinnedWorking = (topic: Cluster) => topic.members.some(i => pinned.has(i) && groupOf(i) === "working");
   const eligible = ranked.filter((topic) => {
+    // A root the person closed stays long-term, however hot (E9-5e).
+    if (topic.members.some(i => closed.has(i))) return false;
     if (pinnedWorking(topic)) return true;
     const wasWorking = previousIn(topic.members).some(p => previous.get(p)!.kind === "working");
     // Working memory is what the person has been capturing about lately: at least one own capture in the window.
@@ -1001,8 +1007,10 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   const working = [...forcedWorking, ...eligible.filter(t => !forcedWorking.includes(t)).slice(0, Math.max(0, maxWorking - forcedWorking.length))];
   const cold = topics.filter(t => !working.includes(t));
   // A cold subject of its own is a long-term area of its own, however small; the other topics merge into areas.
-  const coldSubjects = cold.filter(t => subjects.has(t)).map(t => t.members);
-  const mergeable = cold.filter(t => !subjects.has(t));
+  // A closed root (E9-5e) is one too: it moves to long-term with its story intact, never folded into another area.
+  const ownArea = (t: Cluster) => subjects.has(t) || t.members.some(i => closed.has(i));
+  const coldSubjects = cold.filter(ownArea).map(t => t.members);
+  const mergeable = cold.filter(t => !ownArea(t));
   let areaGroups = mergeable.length ? agglomerate(mergeable.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas, labels) : [];
   // An area of one or two pages is a stray, not an area: it joins the area it reads most like (one it may join).
   const strays = new Set<number[]>();

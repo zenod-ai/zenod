@@ -329,3 +329,53 @@ describe("E9-5b engine: pin and rename go through the vault write lock as one co
     expect(parseNote(await readFile(join(check, "Projects/Hair transplant.md"), "utf8")).frontmatter).toMatchObject({ pinned: true });
   });
 });
+
+describe("E9-5e close by message: a closed root goes long-term and stays there until a pin reopens it", { timeout: 60_000 }, () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "zenod-e95e-close-")); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it("close moves the hot garden to long-term on the next run, keeps its id and pages, lint 0; a later pin reopens it", async () => {
+    await writeFixture(dir);
+    const first = (await rediscoverTree(dir, "2026-11-02", new TrackedWrites(dir)))!;
+    const garden = first.roots.find(r => r.kind === "working")!;
+    // A pin first: closing a pinned root still closes it (the later word wins).
+    await steerTreeRoot(dir, { action: "pin", root: garden.id, today: "2026-11-02" }, new TrackedWrites(dir));
+    const close = await steerTreeRoot(dir, { action: "close", root: garden.id, today: "2026-11-03", source: "by message on whatsapp" }, new TrackedWrites(dir));
+    expect(close).toMatchObject({ changed: true, note: "K-2", paths: [TREE_PATH] });
+    expect((await steerTreeRoot(dir, { action: "close", root: garden.id, today: "2026-11-03" }, new TrackedWrites(dir))).changed).toBe(false);
+
+    const closed = (await rediscoverTree(dir, "2026-11-08", new TrackedWrites(dir)))!;
+    const after = closed.roots.find(r => r.id === garden.id)!;
+    expect(after).toMatchObject({ kind: "long-term", name: garden.name, path: garden.path });
+    expect(after.members).toEqual(expect.arrayContaining(garden.members));
+    expect((await lintTree(dir)).issues.filter(i => i.severity === "error")).toEqual([]);
+
+    // A new capture on the garden does not reopen it.
+    await writeFixture(dir, [
+      { path: "Log/2026-11-09.md", content: `# 2026-11-09\n\n${entry("09:00", "e-c00001", "whatsapp", "Garden tomato beds need compost again")}` },
+      { path: "Notes/Garden shed.md", content: page("Garden shed", "Notes/Compost", "Garden shed near the raised beds and the compost ([[2026-11-09#^e-c00001]]).") },
+    ]);
+    expect((await rediscoverTree(dir, "2026-11-10", new TrackedWrites(dir)))!.roots.find(r => r.id === garden.id)!.kind).toBe("long-term");
+
+    // Pin it again: the latest word wins, and it is working memory once more.
+    const reopen = await steerTreeRoot(dir, { action: "pin", root: garden.id, today: "2026-11-10" }, new TrackedWrites(dir));
+    expect(reopen).toMatchObject({ changed: true, note: "K-3" });
+    expect((await rediscoverTree(dir, "2026-11-11", new TrackedWrites(dir)))!.roots.find(r => r.id === garden.id)!.kind).toBe("working");
+  });
+
+  it("alias and keep-apart by steer write one note each and are no-ops when repeated", async () => {
+    await writeFixture(dir);
+    const first = (await rediscoverTree(dir, "2026-11-02", new TrackedWrites(dir)))!;
+    const [a, b] = first.roots;
+    const alias = await steerTreeRoot(dir, { action: "alias", root: a!.id, aliases: ["veggie patch"], today: "2026-11-02" }, new TrackedWrites(dir));
+    expect(alias).toMatchObject({ changed: true, note: "K-1" });
+    expect(parseNote(await readFile(join(dir, a!.path), "utf8")).frontmatter).toMatchObject({ aliases: ["veggie patch"] });
+    expect((await steerTreeRoot(dir, { action: "alias", root: a!.id, aliases: ["Veggie Patch"], today: "2026-11-02" }, new TrackedWrites(dir))).changed).toBe(false);
+    const apart = await steerTreeRoot(dir, { action: "keep-apart", root: a!.id, others: [b!.path], today: "2026-11-02" }, new TrackedWrites(dir));
+    expect(apart).toMatchObject({ changed: true, note: "K-2", others: [b!.name] });
+    expect((await steerTreeRoot(dir, { action: "keep-apart", root: b!.id, others: [a!.id], today: "2026-11-02" }, new TrackedWrites(dir))).changed).toBe(false);
+    await expect(steerTreeRoot(dir, { action: "keep-apart", root: a!.id, others: [a!.id], today: "2026-11-02" }, new TrackedWrites(dir))).rejects.toMatchObject({ code: "unknown_root" });
+    expect(parseKeeperNotes(await readFile(join(dir, TREE_PATH), "utf8")).notes.map(n => n.rule.kind)).toEqual(["aliases", "keep-apart"]);
+  });
+});
