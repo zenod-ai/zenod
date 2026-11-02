@@ -207,7 +207,7 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
     expect(stats!.rows).toBeGreaterThan(0);
   });
 
-  it("ask_brain's search goes through the index: Log entry hits name the page they were filed on", async () => {
+  it("ask_brain's search goes through the index", async () => {
     let searchText = "";
     const llm = { answer: async (_input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult> => {
       searchText = await tools.searchVault!("Barcelona quote");
@@ -218,7 +218,7 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
     await engine.ask("What were the Barcelona quotes?");
     expect(searchText.split("\n")[0]).toMatch(new RegExp(`^${QUOTES.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(score `));
     expect(searchText).toContain("Log/2026-10-31.md#^e-c64e3b (score");
-    expect(searchText).toMatch(/^Log\/2026-10-31\.md#\^e-c64e3b .*· tree: Working memory › Hair transplant › 2023 Barcelona quotes$/m);
+    expect(searchText).not.toContain("· tree:"); // E9-5j: lineage is structured output only
   });
 
   it("refuses to serve another tenant's index file", async () => {

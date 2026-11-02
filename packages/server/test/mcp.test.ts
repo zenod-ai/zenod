@@ -571,7 +571,10 @@ describe("MCP endpoint", () => {
       expect(hits.find((hit) => hit.path === "Notes/Legacy.md")).toMatchObject({ placement: "unplaced", lineage: [] });
       expect(hits.find((hit) => hit.path === "Notes/Barcelona quotes.md")?.evidenceRefs).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
       const text = search.content.map((item) => (item as { text: string }).text).join("\n");
-      expect(text).toContain("path: Working memory › Hair transplant › Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b");
+      // E9-5j (root L-6): the text is as before EPIC-9; lineage lives in structured output only.
+      expect(text).not.toContain("path: ");
+      expect(text).not.toContain("Working memory ›");
+      expect(text).not.toContain("Search: ");
       expect(validateToolResponse("zenod.search_memory", search.structuredContent)).toBeTruthy();
 
       const node = await client.callTool({ name: "get_memory", arguments: { path: "Projects/Hair transplant.md" } });
@@ -583,6 +586,8 @@ describe("MCP endpoint", () => {
           { path: "Notes/Turkey clinics.md", title: "Turkey clinics" },
         ],
       });
+      const nodeText = node.content.map((item) => (item as { text: string }).text).join("\n");
+      expect(nodeText).not.toMatch(/^(path|children): /m);
       const legacy = await client.callTool({ name: "get_memory", arguments: { path: "Notes/Legacy.md" } });
       expect(legacy.isError).toBeFalsy();
       expect(legacy.structuredContent).toMatchObject({ placement: "unplaced", lineage: [], parent: null, children: [] });
@@ -916,7 +921,7 @@ describe("MCP endpoint", () => {
     const original = fakeEngine.ask;
     const path = "Working memory › Hair transplant › Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b";
     fakeEngine.ask = async () => ({
-      text: `About 4,000 euros.\n\nWhere this sits in your memory:\n- ${path}`,
+      text: "About 4,000 euros.",
       sources: [{ path: "Notes/Barcelona quotes.md", url: "", provider: "github" }],
       lineage: [{
         source: "Notes/Barcelona quotes.md",
@@ -935,7 +940,7 @@ describe("MCP endpoint", () => {
       const result = await client.callTool({ name: "ask_brain", arguments: { question: "where did the quote come from?" } });
       const answer = result.structuredContent as { lineage: Array<{ text: string }> };
       expect(answer.lineage.map((item) => item.text)).toEqual([path]);
-      expect(result.content.map((item) => (item as { text: string }).text).join("\n")).toContain(`- ${path}`);
+      expect(result.content.map((item) => (item as { text: string }).text).join("\n")).not.toContain(path);
       expect(validateToolResponse("zenod.ask_brain", result.structuredContent)).toBeTruthy();
       fakeEngine.ask = original;
       const plain = await client.callTool({ name: "ask_brain", arguments: { question: "what insurance do I have?" } });
