@@ -251,6 +251,9 @@ for (let i = 0; i < sundays.length; i++) {
     first: k.first,
     budget: k.budget,
     changes: k.applied.length,
+    /** Of those, the person's own word (Keeper notes: close, pin, name, own root), outside the budget. */
+    steered: k.steered,
+    keeperChosen: k.applied.length - k.steered,
     applied: k.applied,
     unconfirmed: k.unconfirmed.length,
     overBudget: k.overBudget.length,
@@ -291,6 +294,8 @@ const summary = {
   weeksKeeperAtOrAbove80: measured.filter((w) => (w.keeperStableShare ?? 1) >= 0.8).length,
   rootPagesRemovedByHistory: measured.reduce((s, w) => s + w.lostToHistory, 0),
   maxChanges: Math.max(...measured.map((w) => w.changes)),
+  maxKeeperChosenChanges: Math.max(...measured.map((w) => w.keeperChosen)),
+  steeredChanges: measured.reduce((s, w) => s + w.steered, 0),
   totalChanges: measured.reduce((s, w) => s + w.changes, 0),
   commits: weeks.filter((w) => w.commit).length,
   revertsIdentical: weeks.filter((w) => w.revertIdentical).length,
