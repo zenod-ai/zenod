@@ -27,9 +27,9 @@ An AI agent running in a visitor's Chrome can ask zenod.dev what Zenod is, compa
 ## Current State
 
 Owner: Delivery manager
-Status: ready
-Last attempted: scaffolded with spine_new.py on 2026-11-02
-Result: created, not started
+Status: active
+Last attempted: 2026-11-02 E11-S1 dispatched to a Sonnet worker (WebMCP tools in apps/site on wt/e11-s1-webmcp, PR)
+Result: worker running
 Evidence: zenod-in-every-mcp-directory-listing-spr.md
 Waiting on: Jordi: E11-A1 (S1 does not wait on it)
 Approved work: readied by Jordi 2026-11-02 ("do epicspine and zenod dev")
@@ -52,7 +52,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | E11-S1 | Ticket worker | worker | Register WebMCP tools in apps/site, feature-detected, with a vitest | ready | none | wt/e11-s1-webmcp | main | none | 2026-11-02 | build on branch, open PR (apps/** is under the Deploy gate), report |
-| E11-S2 | Ticket worker | Delivery manager | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, E11-A1 | none | main | none | 2026-11-02 | add the token once Jordi provides it |
+| E11-S2 | Ticket worker | Delivery manager | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, E11-A1 | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | add the token once Jordi provides it |
 
 ## Decisions
 
