@@ -16,7 +16,7 @@ import { openZenodSqlite } from "./sqlite.js";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory";
+export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory" | "tree_sweep";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -128,7 +128,21 @@ export interface MediaIngestReceipt {
   nextAdapterIssues?: string[];
 }
 
-export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt;
+export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt | TreeSweepJobResult;
+
+/**
+ * Weekly tree sweep receipt (EPIC-9 E9-2d). Counts and the vault revision only:
+ * stale-root names and duplicate titles live in the user's vault proposals page.
+ */
+export interface TreeSweepJobResult {
+  kind: "tree_sweep";
+  status: "swept" | "skipped";
+  reason?: string;
+  counts?: import("zenod").TreeSweepCounts;
+  committed: boolean;
+  revision: string | null;
+  proposalsPage?: string;
+}
 
 export interface TaskJob {
   id: string;
@@ -291,8 +305,8 @@ export class TaskJobStore {
     if (normalizedKey && normalizedKey.length > 512) {
       throw new Error("idempotencyKey must be at most 512 characters");
     }
-    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest" && kind !== "enrich_memory") {
-      throw new Error("idempotencyKey is only supported for durable channel/capture jobs");
+    if (normalizedKey && kind !== "chat" && kind !== "store" && kind !== "media_ingest" && kind !== "enrich_memory" && kind !== "tree_sweep") {
+      throw new Error("idempotencyKey is only supported for durable channel/capture jobs and the weekly tree sweep");
     }
 
     const id = randomUUID();
@@ -413,6 +427,34 @@ export class TaskJobStore {
       .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND id=?`)
       .get(this.tenantId, id) as Row | undefined;
     return row ? rowToJob(row) : null;
+  }
+
+  getByIdempotencyKey(key: string): TaskJob | null {
+    const row = this.db
+      .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND idempotency_key=?`)
+      .get(this.tenantId, key) as Row | undefined;
+    return row ? rowToJob(row) : null;
+  }
+
+  /** This tenant's newest job of one kind (the tree sweep's last run), or null. */
+  latestOfKind(kind: TaskJobKind): TaskJob | null {
+    const row = this.db
+      .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND kind=? ORDER BY created_at DESC LIMIT 1`)
+      .get(this.tenantId, kind) as Row | undefined;
+    return row ? rowToJob(row) : null;
+  }
+
+  /** Evidence refs of capture filings still queued or running (the sweep leaves their receipts alone). */
+  activeFilingEvidenceRefs(): string[] {
+    const rows = this.db
+      .prepare(`SELECT input_json FROM task_jobs WHERE tenant_id=? AND status IN ('queued', 'running') AND kind='enrich_memory'`)
+      .all(this.tenantId) as Array<{ input_json: string }>;
+    return rows.flatMap((row) => {
+      try {
+        const ref = (JSON.parse(row.input_json) as TaskJobInput).evidenceRef;
+        return typeof ref === "string" ? [ref] : [];
+      } catch { return []; }
+    });
   }
 
   recent(limit = 25): TaskJob[] {

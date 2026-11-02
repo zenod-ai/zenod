@@ -51,6 +51,7 @@ import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
+import { treeSweepSuggestion } from "./treeSweepSchedule.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1300,6 +1301,19 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       vault,
       usage,
     });
+  });
+
+  // EPIC-9 E9-2d: the signed-in customer's weekly memory sweep: next run, last
+  // run's counts, and a one-line suggestion when it left proposals for them.
+  app.get("/api/console/memory-sweep", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const status = runtime.treeSweepStatus();
+    return c.json({ ...status, suggestion: treeSweepSuggestion(status.last?.result) });
   });
 
   // EPIC-7 T2.5: the signed-in customer's own recent captures and their

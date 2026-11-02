@@ -37,6 +37,8 @@ import type {
   TaskingReply,
   TokenCostMeasurement,
   TokenCostOperation,
+  TreeSweepInput,
+  TreeSweepResult,
   WorkInput,
   WorkResult,
 } from "../types.js";
@@ -58,6 +60,7 @@ import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type 
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
+import { assertSweepChangesSafe, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
@@ -1944,6 +1947,48 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
   }
 
+  /**
+   * EPIC-9 E9-2d weekly sweep (see treeSweep.ts). Background lane of the write
+   * queue: it waits behind any interactive or filing turn and holds the vault
+   * write lock. Starts from a clean, published tree, commits everything as one
+   * revision, and reverts the working tree on any failure.
+   */
+  async function sweepTree(input: TreeSweepInput = {}): Promise<TreeSweepResult> {
+    assertVault(repo);
+    return queue.run(async (): Promise<TreeSweepResult> => {
+      input.assertActive?.();
+      await assertNoInterruptedFiling();
+      if ((await repo.pendingChanges()).length > 0) throw new Error("tree_sweep_dirty_worktree");
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      const writes = new TrackedWrites(vaultPath);
+      try {
+        const report = await runTreeSweep(vaultPath, {
+          today: todayString(now()),
+          ...(input.staleDays !== undefined ? { staleDays: input.staleDays } : {}),
+          ...(input.receiptMinAgeDays !== undefined ? { receiptMinAgeDays: input.receiptMinAgeDays } : {}),
+          skipEvidenceRefs: new Set(input.skipEvidenceRefs ?? []),
+        }, writes);
+        const changes = await repo.pendingChanges();
+        if (changes.length === 0) return { report, committed: false, revision: null };
+        assertSweepChangesSafe(changes);
+        const written = changes.filter(change => change.after !== null && change.path.endsWith(".md")).map(change => change.path);
+        const errors = [...(await lintVault(vaultPath, written)).errors, ...checkEvidenceImmutability(changes)];
+        if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
+        input.assertActive?.();
+        const c = report.counts;
+        const revision = await repo.commitAndPublish(
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
+        );
+        return { report, committed: true, revision };
+      } catch (error) {
+        await writes.revert();
+        await repo.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+  }
+
   async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
     const result = await enrichEvidenceFiling(input);
     return queue.run(() => recordPlacement(result, input.content, input.assertActive), "background");
@@ -3193,6 +3238,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       await syncForRead();
       return getNote(vaultPath, path, sourceResolver);
     },
+    sweepTree,
     memoryTree: async () => {
       assertVault(repo);
       await syncForRead();

@@ -514,6 +514,13 @@ export interface BrainEngine {
    * Optional: engines without it report every memory as unplaced.
    */
   memoryTree?(): Promise<MemoryTreeIndex>;
+  /**
+   * EPIC-9 E9-2d weekly tree sweep: stale working roots and duplicate titles become
+   * proposal lines, pending receipts are re-filed and archived (never deleted), Log/
+   * and _attachments/ stay untouched; all changes land as ONE revision. Runs on the
+   * background write lane, so never concurrently with a live filing. No LLM.
+   */
+  sweepTree?(input?: TreeSweepInput): Promise<TreeSweepResult>;
   /** Deterministic vault validation. No LLM. */
   lint(): Promise<LintReport>;
 }
@@ -627,4 +634,19 @@ export interface ConversationSearchHit {
   lastAt: Date;
   /** The matching messages, oldest first, capped per conversation. */
   messages: ConversationMessage[];
+}
+
+export interface TreeSweepInput {
+  staleDays?: number;
+  receiptMinAgeDays?: number;
+  /** Evidence refs whose filing job is still queued or running; their receipts are left alone. */
+  skipEvidenceRefs?: string[];
+  assertActive?: () => void;
+}
+
+export interface TreeSweepResult {
+  report: import("./engine/treeSweep.js").TreeSweepReport;
+  /** True when the sweep published one revision; false when there was nothing to change. */
+  committed: boolean;
+  revision: VaultRevision | null;
 }

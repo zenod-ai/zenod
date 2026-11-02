@@ -164,6 +164,8 @@ export class ZenodRuntimePool {
       runtime.settings.set("artifact_archive_local_dir", tenantStorage.dir("media"));
     }
     this.runtimes.set(tenantId, runtime);
+    // EPIC-9 E9-2d: the weekly memory tree sweep runs for every active tenant.
+    runtime.startTreeSweepSchedule();
     return runtime;
   }
 

@@ -1,5 +1,6 @@
 import {
   LlmAllowanceExceededError,
+  TREE_SWEEP_REPORT_PATH,
   VaultPublicationError,
   isLlmAllowanceExceededError,
   type BrainEngine,
@@ -19,6 +20,7 @@ import {
   type TaskJobInput,
   type TaskJobKind,
   type TaskJobStore,
+  type TreeSweepJobResult,
 } from "./taskJobStore.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 
@@ -111,7 +113,8 @@ export class TaskJobQueue {
 
   private requestDurableDrain(): void {
     if (this.activeDurableDrain) return;
-    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory"]);
+    // The weekly tree sweep shares this serial lane, so it never runs alongside a live filing.
+    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory", "tree_sweep"]);
     this.activeDurableDrain = active;
     void active
       .catch((error) => console.error("[task-job] durable lane failed:", error))
@@ -144,8 +147,11 @@ export class TaskJobQueue {
     leaseHeartbeat.unref?.();
     try {
       let completed = false;
-      const allowanceBlock = this.aiAllowanceBlock?.() ?? null;
-      if (allowanceBlock) {
+      // The tree sweep calls no model, so the AI allowance does not stop it.
+      const allowanceBlock = job.kind === "tree_sweep" ? null : this.aiAllowanceBlock?.() ?? null;
+      if (job.kind === "tree_sweep") {
+        completed = this.store.updateClaimed(job, { status: "done", result: await this.runTreeSweep(job) });
+      } else if (allowanceBlock) {
         completed = await this.completeOverAllowance(job, allowanceBlock);
       } else if (job.kind === "chat") {
         const engine = await this.getEngine();
@@ -248,6 +254,31 @@ export class TaskJobQueue {
     } finally {
       clearInterval(leaseHeartbeat);
     }
+  }
+
+  private async runTreeSweep(job: TaskJob): Promise<TreeSweepJobResult> {
+    let engine: BrainEngine;
+    try {
+      engine = await this.getEngine();
+    } catch (error) {
+      return { kind: "tree_sweep", status: "skipped", reason: `no vault: ${(error as Error).message}`, committed: false, revision: null };
+    }
+    if (!engine.sweepTree) return { kind: "tree_sweep", status: "skipped", reason: "engine has no tree sweep", committed: false, revision: null };
+    const result = await engine.sweepTree({
+      skipEvidenceRefs: this.store.activeFilingEvidenceRefs(),
+      assertActive: () => this.store.assertClaim(job),
+    });
+    if (!result.report.hasTree) return { kind: "tree_sweep", status: "skipped", reason: "vault has no Tree.md", committed: false, revision: null };
+    const c = result.report.counts;
+    console.log(`[tree-sweep] ${job.id} swept: receipts seen=${c.receiptsSeen} refiled=${c.receiptsRefiled} archived=${c.receiptsArchived} skipped=${c.receiptsSkipped}; stale roots=${c.staleRoots}/${c.workingRoots}; duplicate groups=${c.duplicateGroups}; tree lint errors ${c.treeLintErrorsBefore}→${c.treeLintErrorsAfter}; ${result.committed ? `one commit ${result.revision?.id.slice(0, 12) ?? "?"}` : "no changes"}`);
+    return {
+      kind: "tree_sweep",
+      status: "swept",
+      counts: result.report.counts,
+      committed: result.committed,
+      revision: result.revision?.id ?? null,
+      ...(result.report.counts.proposals > 0 ? { proposalsPage: TREE_SWEEP_REPORT_PATH } : {}),
+    };
   }
 
   private async completeOverAllowance(job: TaskJob, block: { message: string; resetsAt: string }): Promise<boolean> {
