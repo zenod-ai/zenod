@@ -48,6 +48,8 @@ import { parentRef, tokens, type TrackedWrites } from "./treePlacement.js";
  */
 
 export const DISCOVERY_GENERATOR = "zenod-discover";
+/** `generated:` of a page treeSubjects made for a name the person keeps saying. */
+export const SUBJECT_GENERATOR = "zenod-subject";
 export const DEFAULT_HALF_LIFE_DAYS = 14;
 export const DEFAULT_PROMOTE_HEAT = 0.9;
 export const DEFAULT_DEMOTE_HEAT = 0.3;
@@ -118,6 +120,8 @@ interface PageDoc {
   title: string;
   provisional: boolean;
   seededRoot: boolean;
+  /** A page Zenod made for a name the person keeps saying (treeSubjects): a subject of its own. */
+  subject: boolean;
   vector: Map<string, number>;
   /** Words of the title (names a cluster when the page is not a hand-seeded aggregator). */
   titleTerms: Set<string>;
@@ -175,6 +179,9 @@ const FILLER = new Set((
   "pues bueno entonces vale osea creo cosa cosas algo todo nada porque cuando también tambien muy bien hay ser hacer"
 ).split(" "));
 
+/** Spoken filler or ingest vocabulary: says how something was said, not what about. */
+export const isFillerTerm = (term: string) => FILLER.has(term);
+
 /** Token stream with repeats (tokens() is a set; tf needs counts). */
 function tokenList(text: string): string[] {
   const out: string[] = [];
@@ -227,7 +234,8 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex): P
   if (!seededRoot) collectSurfaces(surfaces, cleanTopicName(title), 3);
   collectSurfaces(surfaces, text, 1);
   const titleTerms = seededRoot ? new Set<string>() : new Set(tokenList(cleanTopicName(title)));
-  return { path, title, provisional: fields?.provisional === true, seededRoot, vector, titleTerms, surfaces, links, citations, parent };
+  const subject = frontmatter?.generated === SUBJECT_GENERATOR;
+  return { path, title, provisional: fields?.provisional === true, seededRoot, subject, vector, titleTerms, surfaces, links, citations, parent };
 }
 
 /** Ingest headers ("Voice note "x.ogg" ingested…", "Raw artifact: drive://…", "Transcribed by …") say how a capture arrived, not what it is about. */
@@ -360,6 +368,13 @@ interface Cluster {
   lastOwn: string | null;
 }
 
+/** A page splits off its topic as a subject of its own with at least this many of the person's own captures… */
+const SPLIT_MIN_OWN = 5;
+/** …nearly all of them (this share) held by no other page of the topic… */
+const SPLIT_EXCLUSIVE_SHARE = 0.85;
+/** …while the page is not what most of the topic hangs under. */
+const SPLIT_MAX_HUB_SHARE = 0.5;
+
 /** Below this word overlap, a capture held only by an aggregator stays with the aggregator. */
 const ATTRIBUTION_MIN_SIMILARITY = 0.12;
 /** Share of the topic bar a seeded aggregator must clear to join a topic. */
@@ -471,8 +486,50 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   };
 
   // Topics: real pages cluster by content; an aggregator then joins the topic it reads most like, or stands alone.
-  const realIdx = docs.map((d, i) => d.seededRoot ? -1 : i).filter(i => i >= 0);
+  // A subject page (a name the person keeps saying, E9-2i) is a topic of its own, with the pages filed under it.
+  const subjectIdx = docs.map((d, i) => d.subject && !d.seededRoot ? i : -1).filter(i => i >= 0);
+  const underSubject = (i: number) => subjectIdx.find(s => docs[i]!.parent === docs[s]!.path);
+  const realIdx = docs.map((d, i) => d.seededRoot || d.subject || underSubject(i) !== undefined ? -1 : i).filter(i => i >= 0);
   const groups = agglomerate(realIdx.map(i => [i]), sim, topicSimilarity);
+  const subjectGroups = new Set<number[]>();
+  for (const s of subjectIdx) {
+    const group = [s, ...docs.map((_, i) => i).filter(i => !docs[i]!.seededRoot && !docs[i]!.subject && underSubject(i) === s)];
+    groups.push(group);
+    subjectGroups.add(group);
+  }
+  // A page the person keeps capturing about on its own (most of its captures on no other page of its topic), whose
+  // title shares no word with the topic's other titles, is a subject of its own that word overlap and links merged
+  // into a neighbour (a family page inside another subject, E9-2i). It splits off with the pages that hang under it.
+  for (const group of [...groups]) {
+    if (subjectGroups.has(group) || group.length < 2) continue;
+    const inGroup = new Set(group);
+    const chainOf = (i: number) => {
+      const out: number[] = [];
+      const seen = new Set<number>([i]);
+      for (let p = docs[i]!.parent ? at.get(docs[i]!.parent!) : undefined; p !== undefined && inGroup.has(p) && !seen.has(p); p = docs[p]!.parent ? at.get(docs[p]!.parent!) : undefined) {
+        seen.add(p);
+        out.push(p);
+      }
+      return out;
+    };
+    for (const i of [...group]) {
+      if (!inGroup.has(i) || docs[i]!.provisional) continue;
+      const mine = heldBy.get(i) ?? [];
+      if (mine.length < SPLIT_MIN_OWN) continue;
+      const exclusive = mine.filter(key => !heatTargets.get(key)!.some(j => j !== i && inGroup.has(j))).length;
+      if (exclusive < mine.length * SPLIT_EXCLUSIVE_SHARE) continue;
+      const below = group.filter(j => inGroup.has(j) && chainOf(j).includes(i));
+      if (below.length >= (inGroup.size - 1) * SPLIT_MAX_HUB_SHARE) continue;
+      const own = new Set(tokenList(cleanTopicName(docs[i]!.title)));
+      const others = group.filter(j => inGroup.has(j) && j !== i && !below.includes(j));
+      if (!others.length || others.some(j => [...docs[j]!.titleTerms].some(t => own.has(t)))) continue;
+      const split = [i, ...below];
+      for (const j of split) inGroup.delete(j);
+      group.splice(0, group.length, ...group.filter(j => inGroup.has(j)));
+      groups.push(split);
+      subjectGroups.add(split);
+    }
+  }
   for (const [h, doc] of docs.entries()) {
     if (!doc.seededRoot) continue;
     const sims = groups.map(g => avgSim(h, g));
@@ -482,6 +539,8 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     else groups.push([h]);
   }
   const topics: Cluster[] = groups.map(g => heatOf(g.sort((a, b) => a - b)));
+  /** Subjects of their own (E9-2i): never merged into another topic or area. */
+  const subjects = new Set(topics.filter((_, k) => subjectGroups.has(groups[k]!)));
 
   // Current parent of a page, ignoring edges into a seeded aggregator on the first (fresh) run.
   const currentParent = (i: number): number | null => {
@@ -599,6 +658,11 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     const value = lift <= NAME_MIN_LIFT ? 0 : Math.round(reach * Math.min(1, lift / NAME_FULL_LIFT) * 1000) / 1000;
     return { value, cover: cov, reach, titled: titles };
   };
+  /** Share of the person's own captures on a group that carry all these words. */
+  const ownShare = (terms: string[], members: number[]) => {
+    const keys = ownKeys(members);
+    return keys.length ? keys.filter(key => terms.every(t => captureTerms(key).has(t))).length / keys.length : 0;
+  };
   /** Runs of one to three meaningful words from the group's own page titles (never a seeded one), as written. */
   const titlePhrases = (members: number[], contentWords = false) => {
     const phrases = new Map<string, { phrase: string; value: number; cover: number; reach: number; titled: number; terms: string[] }>();
@@ -652,7 +716,18 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       const title = cleanTopicName(docs[hub]!.title);
       const score = phraseScore(title, members);
       const best = chosen ? phraseScore(chosen.phrase, members).reach : 0;
-      if (title.split(/\s+/).length <= NAME_MAX_PHRASE_WORDS + 1 && !used.has(title.toLowerCase()) && score.cover >= NAME_PAIR_COVERAGE && score.reach >= best * NAME_HUB_SHARE) {
+      // A title whose head the person says in their own captures on the group, but whose tail they never do (the
+      // librarian's wording), names one page, not the subject: the group takes the head. "Family", not "Family
+      // Holidays & Logistics" (E9-2i). A title they say in full, or whose head they never say, stays whole.
+      const titleTerms = [...new Set(tokenList(title))];
+      const unsaid = titleTerms.filter(t => ownShare([t], members) === 0);
+      const head = (phrase: string) => title.toLowerCase().startsWith(phrase.toLowerCase()) && !/[\p{L}\p{N}]/u.test(title.charAt(phrase.length));
+      const said = unsaid.length > 0 && unsaid.length < titleTerms.length
+        ? phrases.filter(p => head(p.phrase) && p.terms.every(t => !unsaid.includes(t))).sort((a, b) => b.terms.length - a.terms.length || b.value - a.value)[0]
+        : undefined;
+      if (said) chosen = said;
+      const narrower = said !== undefined;
+      if (!narrower && title.split(/\s+/).length <= NAME_MAX_PHRASE_WORDS + 1 && !used.has(title.toLowerCase()) && score.cover >= NAME_PAIR_COVERAGE && score.reach >= best * NAME_HUB_SHARE) {
         chosen = { phrase: title, ...score, value: Math.max(score.value, chosen?.value ?? 0), terms: [...new Set(tokenList(title))] };
       }
     }
@@ -697,7 +772,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   for (;;) {
     let best: { a: number; b: number; s: number } | null = null;
     for (let a = 0; a < topics.length; a++) for (let b = a + 1; b < topics.length; b++) {
-      if (Math.min(topics[a]!.heat, topics[b]!.heat) < demote) continue;
+      if (Math.min(topics[a]!.heat, topics[b]!.heat) < demote || subjects.has(topics[a]!) || subjects.has(topics[b]!)) continue;
       const ta = nameTerms(topics[a]!.members);
       const tb = nameTerms(topics[b]!.members);
       // One is part of the other's subject: its name refines the other's, or most of its pages are titled with the other's name.
@@ -732,7 +807,10 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     return topic.ownCaptures > 0 && topic.heat >= (wasWorking ? demote : promote);
   }).slice(0, maxWorking);
   const cold = topics.filter(t => !working.includes(t));
-  let areaGroups = cold.length ? agglomerate(cold.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas) : [];
+  // A cold subject of its own is a long-term area of its own, however small; the other topics merge into areas.
+  const coldSubjects = cold.filter(t => subjects.has(t)).map(t => t.members);
+  const mergeable = cold.filter(t => !subjects.has(t));
+  let areaGroups = mergeable.length ? agglomerate(mergeable.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas) : [];
   // An area of one or two pages is a stray, not an area: it joins the area it reads most like.
   for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES)) {
     const others = areaGroups.filter(g => g !== small);
@@ -740,6 +818,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     others[sims.indexOf(Math.max(...sims))]!.push(...small);
     areaGroups = others;
   }
+  areaGroups.push(...coldSubjects);
   const areas: Cluster[] = areaGroups.map(g => heatOf(g.sort((a, b) => a - b)));
 
   const usedNames = new Set<string>();
