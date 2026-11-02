@@ -7,6 +7,7 @@ import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
+import { keeperAliasGroups, parseKeeperNotes } from "./treeSteering.js";
 
 /**
  * Tier-0 memory index (EPIC-9 E9-5a): one SQLite FTS5 file per tenant, derived from the
@@ -109,9 +110,12 @@ interface Row {
 const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
-/** Parse `## Keeper notes` alias lines in Tree.md: `- alias: A = B = C` (the E9-5b hook). */
+/**
+ * Alias groups from Tree.md `## Keeper notes`: E9-5b notes (`- K-1 | Agent Team | aliases: agentine, agent_team | …`,
+ * treeSteering.ts) plus the bare `- alias: A = B = C` form.
+ */
 export function keeperAliases(treeRaw: string): string[][] {
-  const groups: string[][] = [];
+  const groups: string[][] = keeperAliasGroups(parseKeeperNotes(treeRaw).notes);
   let inNotes = false;
   for (const line of treeRaw.split("\n")) {
     const heading = /^## (.+?)\s*$/.exec(line);
