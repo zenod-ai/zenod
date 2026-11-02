@@ -150,6 +150,35 @@ export function buildMatch(query: string, aliasGroups: readonly (readonly string
   return clauses.size ? [...clauses].join(" OR ") : null;
 }
 
+const SNIPPET_CHARS = 200;
+const fold = (value: string) => value.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+
+/** The quoted words of a MATCH expression, accent-folded: what a snippet should show. */
+function matchWords(match: string): string[] {
+  return [...match.matchAll(/"((?:[^"]|"")+)"/g)].map((m) => fold(m[1]!.replace(/""/g, '"'))).filter(Boolean);
+}
+
+/** ~200 characters around the first matched word in the body, else the summary, else the body's start. */
+function snippetOf(row: { summary: string; body: string } | undefined, words: readonly string[]): string {
+  if (!row) return "";
+  for (const text of [row.body, row.summary]) {
+    const flat = text.replace(/\s+/g, " ").trim();
+    // Folding can change length for some scripts; only trust positions when it does not.
+    const folded = fold(flat);
+    if (folded.length !== flat.length) continue;
+    let at = -1;
+    for (const word of words) {
+      const found = folded.indexOf(word);
+      if (found >= 0 && (at < 0 || found < at)) at = found;
+    }
+    if (at < 0) continue;
+    const start = Math.max(0, at - 60);
+    return `${start > 0 ? "…" : ""}${flat.slice(start, start + SNIPPET_CHARS).trim()}${start + SNIPPET_CHARS < flat.length ? "…" : ""}`;
+  }
+  const flat = (row.summary || row.body).replace(/\s+/g, " ").trim();
+  return flat.length > SNIPPET_CHARS ? `${flat.slice(0, SNIPPET_CHARS).trim()}…` : flat;
+}
+
 export class MemoryIndex {
   private readonly db: DatabaseSync;
   private dirty = true;
@@ -237,24 +266,29 @@ export class MemoryIndex {
     const match = buildMatch(query, this.aliasGroups);
     if (!match) return [];
     const rows = this.db.prepare(`
-      SELECT kind, path, title, filed, lineage, bm25(docs, ${BM25_WEIGHTS}) AS rank,
-             snippet(docs, -1, '', '', '…', 24) AS snippet
+      SELECT rowid, kind, path, title, filed, lineage, bm25(docs, ${BM25_WEIGHTS}) AS rank
       FROM docs WHERE docs MATCH ? ORDER BY rank LIMIT ?
-    `).all(match, limit * 3) as Array<{ kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; rank: number; snippet: string }>;
-    const out: MemoryIndexHit[] = [];
+    `).all(match, limit * 3) as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; rank: number }>;
+    const picked: typeof rows = [];
     const seen = new Set<string>();
     const scored = rows.map((row) => ({ ...row, rank: row.rank * KIND_FACTOR[row.kind] })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
     for (const row of scored) {
       if (seen.has(row.path)) continue; // a root row and its page share a path: keep the best
       seen.add(row.path);
-      out.push({
-        path: row.path, kind: row.kind, title: row.title, snippet: row.snippet.replace(/\s+/g, " ").trim(),
-        score: Math.round(-row.rank * 100) / 100, treePath: row.lineage,
-        ...(row.filed ? { filedOn: row.filed } : {}),
-      });
-      if (out.length >= limit) break;
+      picked.push(row);
+      if (picked.length >= limit) break;
     }
-    return out;
+    if (picked.length === 0) return [];
+    // FTS5 snippet() re-tokenizes whole bodies and was most of a query's time: a plain
+    // window around the first matched word does the same job for the returned rows only.
+    const texts = new Map((this.db.prepare(`SELECT rowid, summary, body FROM docs WHERE rowid IN (${picked.map(() => "?").join(", ")})`)
+      .all(...picked.map((row) => row.rowid)) as Array<{ rowid: number; summary: string; body: string }>).map((row) => [row.rowid, row]));
+    const words = matchWords(match);
+    return picked.map((row) => ({
+      path: row.path, kind: row.kind, title: row.title, snippet: snippetOf(texts.get(row.rowid), words),
+      score: Math.round(-row.rank * 100) / 100, treePath: row.lineage,
+      ...(row.filed ? { filedOn: row.filed } : {}),
+    }));
   }
 
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
@@ -269,12 +303,13 @@ export class MemoryIndex {
     const known = new Map((this.db.prepare("SELECT path, mtime_ms, size FROM files").all() as Array<{ path: string; mtime_ms: number; size: number }>)
       .map((row) => [row.path, row]));
     const changed: Array<{ path: string; mtimeMs: number; size: number }> = [];
-    for (const path of files) {
-      const info = await stat(join(vaultPath, path)).catch(() => null);
-      if (!info) continue;
+    const infos = await Promise.all(files.map((path) => stat(join(vaultPath, path)).catch(() => null)));
+    files.forEach((path, i) => {
+      const info = infos[i];
+      if (!info) return;
       const prior = known.get(path);
       if (full || !prior || prior.mtime_ms !== info.mtimeMs || prior.size !== info.size) changed.push({ path, mtimeMs: info.mtimeMs, size: info.size });
-    }
+    });
     const present = new Set(files);
     const removed = full ? [...known.keys()] : [...known.keys()].filter((path) => !present.has(path));
     this.lastCheck = this.now();
