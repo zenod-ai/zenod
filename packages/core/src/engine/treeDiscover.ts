@@ -51,7 +51,7 @@ export const DISCOVERY_GENERATOR = "zenod-discover";
 export const DEFAULT_HALF_LIFE_DAYS = 14;
 export const DEFAULT_PROMOTE_HEAT = 0.9;
 export const DEFAULT_DEMOTE_HEAT = 0.3;
-export const DEFAULT_MAX_WORKING = 7;
+export const DEFAULT_MAX_WORKING = 8;
 export const DEFAULT_MAX_AREAS = 6;
 export const DEFAULT_TOPIC_SIMILARITY = 0.13;
 export const DEFAULT_AREA_SIMILARITY = 0.04;
@@ -184,7 +184,9 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex): P
     // A hand-seeded root page: its summary paragraph and boilerplate are the seed, not content.
     const summary = typeof frontmatter?.summary === "string" ? frontmatter.summary : "";
     if (summary) text = text.replace(summary, " ");
-    text = text.split("\n").filter(line => !line.includes(SEEDED_ROOT_MARKER)).join("\n");
+    // Its headings, section intros and "In this branch" links were written by the seed and the clean-up, too.
+    text = text.split("\n").filter(line => !line.includes(SEEDED_ROOT_MARKER) && !/^#{1,6} /.test(line) && !/^(?:Each line is|- \[\[[^\]]+\]\]\s*$)/.test(line)).join("\n");
+    links.clear();
   }
   const vector = new Map<string, number>();
   weigh(vector, `${title}\n${title}\n${title}`, 1);
@@ -336,6 +338,8 @@ interface Cluster {
 
 /** Below this word overlap, a capture held only by an aggregator stays with the aggregator. */
 const ATTRIBUTION_MIN_SIMILARITY = 0.12;
+/** Share of the topic bar a seeded aggregator must clear to join a topic. */
+const HUB_JOIN_SHARE = 0.5;
 
 /** Plan the discovered tree; null when the vault has no Tree.md (tree-less vaults are never given one). */
 export async function discoverTree(vaultPath: string, options: TreeDiscoveryOptions): Promise<TreeDiscoveryPlan | null> {
@@ -416,7 +420,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     const sims = groups.map(g => avgSim(h, g));
     const best = sims.length ? Math.max(...sims) : 0;
     // Half the bar: an aggregator's mixed text reads less like any one topic than a real page would.
-    if (best >= topicSimilarity / 2) groups[sims.indexOf(best)]!.push(h);
+    if (best >= topicSimilarity * HUB_JOIN_SHARE) groups[sims.indexOf(best)]!.push(h);
     else groups.push([h]);
   }
   const topics: Cluster[] = groups.map(g => heatOf(g.sort((a, b) => a - b)));
