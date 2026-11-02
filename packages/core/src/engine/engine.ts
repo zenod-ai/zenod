@@ -62,8 +62,6 @@ import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEv
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
-import { steerTreeRoot, type TreeSteerInput, type TreeSteerResult } from "./treeSteer.js";
-import { lintTree } from "../vault/treeLint.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
@@ -2037,7 +2035,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
       try {
         const report = await runTreeSweep(vaultPath, {
           today: todayString(now()),
-          ...(input.staleDays !== undefined ? { staleDays: input.staleDays } : {}),
           ...(input.receiptMinAgeDays !== undefined ? { receiptMinAgeDays: input.receiptMinAgeDays } : {}),
           skipEvidenceRefs: new Set(input.skipEvidenceRefs ?? []),
         }, writes);
@@ -2056,7 +2053,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const agentLeaves = c.agentLeavesRefiled ? `, agent-report leaves to ops ${c.agentLeavesRefiled}` : "";
         const subjects = c.subjectPagesCreated ? `, subject pages ${c.subjectPagesCreated}` : "";
         const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${subjects}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${subjects}${roots})`,
         );
         return { report, committed: true, revision };
       } catch (error) {
@@ -2065,44 +2062,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
         throw error;
       }
     }, "background");
-  }
-
-  /**
-   * EPIC-9 E9-5b: pin or rename a root from the Memory tab. Interactive lane of the
-   * same write queue a filing takes (vault write lock): one Keeper note in Tree.md
-   * plus the root page's flag, linted and committed as one revision, reverted on
-   * any failure. No LLM.
-   */
-  async function steerTree(input: Omit<TreeSteerInput, "today">): Promise<TreeSteerResult> {
-    assertVault(repo);
-    return queue.run(async (): Promise<TreeSteerResult> => {
-      await assertNoInterruptedFiling();
-      if ((await repo.pendingChanges()).length > 0) throw new Error("tree_steer_dirty_worktree");
-      await repo.pull().catch(() => {});
-      lastSyncMs = now().getTime();
-      const writes = new TrackedWrites(vaultPath);
-      // Only Tree.md errors the steer introduced count (an older tree may carry lint debt).
-      const treeErrors = async () => (await lintTree(vaultPath)).issues.filter(issue => issue.severity === "error" && issue.path === "Tree.md").map(lintErrorKey);
-      const before = new Set(await treeErrors());
-      try {
-        const result = await steerTreeRoot(vaultPath, { ...input, today: todayString(now()) }, writes);
-        const changes = await repo.pendingChanges();
-        if (!result.changed || changes.length === 0) return result;
-        if (changes.some(change => change.path.startsWith("Log/") || change.path.startsWith("_attachments/") || !result.paths.includes(change.path))) {
-          throw new Error("tree_steer_unexpected_change");
-        }
-        const pages = result.paths.filter(path => path !== "Tree.md");
-        const errors = [...(await lintVault(vaultPath, pages)).errors.map(lintErrorKey), ...(await treeErrors()).filter(key => !before.has(key))];
-        if (errors.length > 0) throw new Error(`tree_steer_lint: ${errors.join("; ")}`);
-        const what = input.action === "pin" ? `pin ${result.root.name}` : `rename to ${result.root.name}`;
-        await repo.commitAndPublish(`memory: keeper note ${result.note} (${what})`);
-        return result;
-      } catch (error) {
-        await writes.revert();
-        await repo.discardChanges().catch(() => {});
-        throw error;
-      }
-    });
   }
 
   async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
@@ -3440,7 +3399,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
       return getNote(vaultPath, path, sourceResolver);
     },
     sweepTree,
-    steerTree,
     memoryTree: async () => {
       assertVault(repo);
       await syncForRead();

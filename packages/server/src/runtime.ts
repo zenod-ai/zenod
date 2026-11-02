@@ -31,8 +31,6 @@ import {
   type LintReport,
   type LlmUsageReport,
   type MemoryTreeOutline,
-  type TreeSteerAction,
-  type TreeSteerResult,
   type PeerTools,
   type TaskingInput,
   type TokenCostMeasurement,
@@ -2487,13 +2485,6 @@ export class Runtime {
         : result.message,
       snapshot: result.snapshot,
     };
-  }
-
-  /** Pin or rename a root of the vault's memory tree from the console Memory tab (EPIC-9 E9-5b). */
-  async steerMemoryTree(input: { action: TreeSteerAction; root: string; name?: string }): Promise<TreeSteerResult> {
-    const engine = await this.getEngine();
-    if (!engine.steerTree) throw new NotConfiguredError();
-    return engine.steerTree(input);
   }
 
   /** The vault's memory tree for the console Memory tab (EPIC-9 E9-2e); null without Tree.md. */

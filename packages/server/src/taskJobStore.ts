@@ -141,7 +141,6 @@ export interface TreeSweepJobResult {
   counts?: import("zenod").TreeSweepCounts;
   committed: boolean;
   revision: string | null;
-  proposalsPage?: string;
 }
 
 export interface TaskJob {

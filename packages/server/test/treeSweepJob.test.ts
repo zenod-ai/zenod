@@ -9,7 +9,6 @@ import { TaskJobStore, type TreeSweepJobResult } from "../src/taskJobStore.js";
 import {
   inTreeSweepWindow,
   nextTreeSweepAt,
-  treeSweepSuggestion,
   treeSweepWeekKey,
   treeSweepWeekStart,
 } from "../src/treeSweepSchedule.js";
@@ -39,17 +38,6 @@ describe("E9-2d tree sweep schedule", () => {
     expect(nextTreeSweepAt(at("2026-11-02T03:00:00Z"), false).toISOString()).toBe("2026-11-02T03:00:00.000Z");
     expect(nextTreeSweepAt(at("2026-11-02T14:00:00Z"), true).toISOString()).toBe("2026-11-08T02:00:00.000Z");
   });
-
-  it("suggests one console line only when the sweep left proposals", () => {
-    const base: TreeSweepJobResult = { kind: "tree_sweep", status: "swept", committed: true, revision: "abc", counts: {
-      workingRoots: 4, staleRoots: 0, receiptsSeen: 3, receiptsRefiled: 2, receiptsArchived: 1, receiptsSkipped: 0,
-      duplicateGroups: 0, proposals: 0, filesChanged: 5, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0 } };
-    expect(treeSweepSuggestion(base)).toBeNull();
-    expect(treeSweepSuggestion(undefined)).toBeNull();
-    const line = treeSweepSuggestion({ ...base, proposalsPage: "Inbox/Tree sweep.md", counts: { ...base.counts!, staleRoots: 1, duplicateGroups: 2, proposals: 3 } });
-    expect(line).toBe("Memory sweep: 1 ongoing topic has had no new capture in a month (keep, close or fold?); 2 sets of pages share a title (merge?). Details in Inbox/Tree sweep.md.");
-    expect(line!.split("\n")).toHaveLength(1);
-  });
 });
 
 describe("E9-2d tree sweep job", () => {
@@ -77,11 +65,11 @@ describe("E9-2d tree sweep job", () => {
         committed: true,
         revision: { provider: "github", id: "f00d", committedAt: "2026-11-08T03:00:00Z", urls: [] },
         report: {
-          hasTree: true, today: "2026-11-08", staleDays: 30,
-          counts: { workingRoots: 4, staleRoots: 1, receiptsSeen: 2, receiptsRefiled: 1, receiptsArchived: 1, receiptsSkipped: 0,
-            duplicateGroups: 0, proposals: 1, filesChanged: 4, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0 },
-          staleRoots: [{ name: "Private topic", path: "Projects/Private topic.md", lastCapture: "2026-09-01", days: 68 }],
-          duplicates: [], receipts: [], changedPaths: [],
+          hasTree: true, today: "2026-11-08",
+          counts: { workingRoots: 4, receiptsSeen: 2, receiptsRefiled: 1, receiptsArchived: 1, receiptsSkipped: 0,
+            rootOnlyCitations: 0, citationsDeepened: 0, filesChanged: 4, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0 },
+          receipts: [{ path: "Inbox/filing-private-topic.md", outcome: "refiled", reason: "Private topic", pages: ["Projects/Private topic.md"] }],
+          deepened: [], roots: [], changedPaths: [], lintErrorsBefore: [],
         },
       };
     });
@@ -101,8 +89,8 @@ describe("E9-2d tree sweep job", () => {
       release();
       const result = jobs.get(sweep.id)!.result as TreeSweepJobResult;
       expect(result).toEqual({
-        kind: "tree_sweep", status: "swept", committed: true, revision: "f00d", proposalsPage: "Inbox/Tree sweep.md",
-        counts: expect.objectContaining({ staleRoots: 1, receiptsRefiled: 1, proposals: 1 }),
+        kind: "tree_sweep", status: "swept", committed: true, revision: "f00d",
+        counts: expect.objectContaining({ receiptsRefiled: 1 }),
       });
       // Counts only: the stored receipt never carries a topic name.
       expect(JSON.stringify(result)).not.toContain("Private topic");

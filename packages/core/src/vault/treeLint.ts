@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { parseKeeperNotes } from "./treeSteering.js";
 import { basenameOf, isFilingReceiptPath, isIndexFile, tierOf } from "./files.js";
 import { scanVault, type VaultSnapshot } from "./pages.js";
 import {
@@ -60,12 +57,7 @@ export interface TreeLintReport {
 export async function lintTree(vaultPath: string, options: { snapshot?: VaultSnapshot; index?: TreeIndex } = {}): Promise<TreeLintReport> {
   const snapshot = options.snapshot ?? (await scanVault(vaultPath));
   const index = options.index ?? (await buildTreeIndex(vaultPath, snapshot));
-  const report = lintTreeIndex(index, snapshot.files);
-  // Keeper notes (E9-5b) are steering the keeper obeys: a malformed one would be silently ignored.
-  const raw = index.tree ? await readFile(join(vaultPath, TREE_PATH), "utf8").catch(() => "") : "";
-  for (const p of parseKeeperNotes(raw).problems) report.issues.push({ path: TREE_PATH, line: p.line, rule: p.rule, severity: "error", message: p.message });
-  report.ok = !report.issues.some(i => i.severity === "error");
-  return report;
+  return lintTreeIndex(index, snapshot.files);
 }
 
 /** Pure lint over an already-built index; `files` is every vault-relative markdown path. */

@@ -7,7 +7,6 @@ import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
-import { keeperAliasGroups, pageSteering, parseKeeperNotes } from "./treeSteering.js";
 
 /**
  * Tier-0 memory index (EPIC-9 E9-5a): one SQLite FTS5 file per tenant, derived from the
@@ -31,8 +30,8 @@ const STALE_AFTER_MS = 60_000;
 const KIND_FACTOR: Record<MemoryIndexHitKind, number> = { page: 1, root: 1, log: 0.5 };
 
 /**
- * Built-in alias groups: any member in a query also searches the others. Keeper notes in
- * Tree.md add tenant aliases (E9-5b); this list only seeds names that recur across vaults.
+ * Built-in alias groups: any member in a query also searches the others. Plain search help for
+ * names voice transcription spells several ways; nobody sets them (no steering, root L-7).
  */
 export const BUILT_IN_ALIASES: readonly (readonly string[])[] = [
   ["agentine", "agent team", "agent_team"],
@@ -60,7 +59,7 @@ export interface MemoryIndexOptions {
    * which then adopt the file's own stamp.
    */
   tenantId?: string;
-  /** Extra alias groups on top of the built-ins and Tree.md Keeper notes. */
+  /** Extra alias groups on top of the built-ins. */
   aliases?: readonly (readonly string[])[];
   now?: () => number;
 }
@@ -109,14 +108,6 @@ interface Row {
 
 const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
-/**
- * Alias groups from Tree.md `## Keeper notes`, read through E9-5b's parser (treeSteering.ts) so
- * there is one format: `- K-1 | Agent Team | aliases: agentine, agent_team | why | confirmed …`.
- */
-export function keeperAliases(treeRaw: string): string[][] {
-  return keeperAliasGroups(parseKeeperNotes(treeRaw).notes);
-}
 
 /** FTS5 MATCH expression: content words OR'd (prefix for longer words), plus alias phrases. */
 export function buildMatch(query: string, aliasGroups: readonly (readonly string[])[]): string | null {
@@ -174,8 +165,6 @@ export class MemoryIndex {
   private lastCheck = Number.NEGATIVE_INFINITY;
   private inflight: Promise<unknown> | null = null;
   private aliasGroups: readonly (readonly string[])[];
-  /** Keeper-note aliases are read from Tree.md on the first sync of a process, then whenever Tree.md changes. */
-  private keeperAliasesLoaded = false;
   readonly tenantId: string;
   private readonly now: () => number;
 
@@ -303,12 +292,6 @@ export class MemoryIndex {
     });
     const present = new Set(files);
     const removed = full ? [...known.keys()] : [...known.keys()].filter((path) => !present.has(path));
-    if (full || !this.keeperAliasesLoaded || changed.some((file) => file.path === TREE_PATH) || removed.includes(TREE_PATH)) {
-      // A restart with an up-to-date index file changes no rows, but its aliases live only in memory.
-      const treeRaw = await readFile(join(vaultPath, TREE_PATH), "utf8").catch(() => "");
-      this.aliasGroups = [...BUILT_IN_ALIASES, ...(this.options.aliases ?? []), ...keeperAliases(treeRaw)];
-      this.keeperAliasesLoaded = true;
-    }
     this.lastCheck = this.now();
     this.dirty = false;
     if (!full && changed.length === 0 && removed.length === 0) return { changed: 0, removed: 0 };
@@ -410,7 +393,8 @@ async function rowsOf(vaultPath: string, path: string): Promise<RowDraft[]> {
   const title = typeof meta.title === "string" && meta.title.trim() ? meta.title : body.match(/^# +([^\n]+)/m)?.[1]?.trim() || basenameOf(path);
   return [{
     title,
-    aliases: [...pageSteering(meta).aliases, ...strings(meta.tags)].join(" · "),
+    // Obsidian's own `aliases:` (a list or one string) and tags: the page's metadata, not steering.
+    aliases: [...(typeof meta.aliases === "string" ? [meta.aliases] : strings(meta.aliases)), ...strings(meta.tags)].join(" · "),
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
     body,
     kind: "page", path, file: path,

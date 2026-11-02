@@ -1,15 +1,8 @@
 import * as React from "react"
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ExternalLinkIcon,
-  PencilIcon,
-  PinIcon,
-} from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Card,
   CardContent,
@@ -28,10 +21,6 @@ export type MemoryTreeNode = {
   path: string | null
   summary?: string
   provisional?: boolean
-  /** Roots only (E9-5b): stable id, and the person's pin / name. */
-  rootId?: string
-  pinned?: boolean
-  nameLocked?: boolean
   pages: number
   latest: { date: string; title: string; path: string } | null
   url: string | null
@@ -44,14 +33,6 @@ export type MemoryTree = {
   placed: number
   unplaced: number
 }
-
-/** A pin or rename the person asks for on a root (POST /api/console/memory-tree/steer). */
-export type MemorySteerRequest =
-  | { action: "pin"; root: string }
-  | { action: "rename"; root: string; name: string }
-
-/** Resolves when the change is saved; rejects with a message to show. */
-export type MemorySteer = (request: MemorySteerRequest) => Promise<void>
 
 export type MemoryTreeState =
   | { status: "ready"; tree: MemoryTree }
@@ -113,104 +94,6 @@ function collectIds(nodes: MemoryTreeNode[], into: Set<string>): Set<string> {
   return into
 }
 
-/** Pin and rename on a selected root (E9-5b): each becomes a Keeper note Zenod never undoes. */
-function RootSteering({
-  node,
-  onSteer,
-}: {
-  node: MemoryTreeNode
-  onSteer: MemorySteer
-}) {
-  const [renaming, setRenaming] = React.useState(false)
-  const [name, setName] = React.useState(node.title)
-  const [busy, setBusy] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const root = node.rootId ?? node.path ?? node.id
-  const run = async (request: MemorySteerRequest) => {
-    setBusy(true)
-    setError(null)
-    try {
-      await onSteer(request)
-      setRenaming(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "That did not work")
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="flex flex-col gap-1" data-testid="memory-root-steering">
-      {renaming ? (
-        <form
-          className="flex flex-wrap items-center gap-1"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void run({ action: "rename", root, name: name.trim() })
-          }}
-        >
-          <Input
-            aria-label={`New name for ${node.title}`}
-            className="h-7 w-56 text-xs"
-            value={name}
-            maxLength={60}
-            onChange={(event) => setName(event.target.value)}
-            autoFocus
-          />
-          <Button
-            size="sm"
-            type="submit"
-            disabled={busy || !name.trim() || name.trim() === node.title}
-          >
-            Save name
-          </Button>
-          <Button
-            size="sm"
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setRenaming(false)
-              setName(node.title)
-              setError(null)
-            }}
-          >
-            Cancel
-          </Button>
-        </form>
-      ) : (
-        <div className="flex flex-wrap items-center gap-1">
-          {!node.pinned && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              title="Keep this branch where it is, with this name: Zenod never moves or renames it"
-              onClick={() => void run({ action: "pin", root })}
-            >
-              <PinIcon className="size-3" />
-              Pin
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            title="Give this branch your own name: Zenod keeps it"
-            onClick={() => setRenaming(true)}
-          >
-            <PencilIcon className="size-3" />
-            Rename
-          </Button>
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
 function TreeRow({
   node,
   depth,
@@ -219,7 +102,6 @@ function TreeRow({
   toggle,
   selected,
   select,
-  onSteer,
 }: {
   node: MemoryTreeNode
   depth: number
@@ -228,7 +110,6 @@ function TreeRow({
   toggle: (id: string) => void
   selected: string | null
   select: (id: string | null) => void
-  onSteer?: MemorySteer
 }) {
   const hasKids = node.children.length > 0
   const expanded = hasKids && open.has(node.id)
@@ -306,22 +187,6 @@ function TreeRow({
                   ` · ${shortTitle(node.latest.title)}`}
               </span>
             )}
-            {node.pinned && (
-              <Badge
-                variant="secondary"
-                title="You pinned this branch: Zenod never moves or renames it"
-              >
-                pinned
-              </Badge>
-            )}
-            {node.nameLocked && !node.pinned && (
-              <Badge
-                variant="secondary"
-                title="You named this branch: Zenod keeps your name"
-              >
-                your name
-              </Badge>
-            )}
             {node.provisional && (
               <Badge
                 variant="outline"
@@ -356,9 +221,6 @@ function TreeRow({
               ) : (
                 <p className="text-muted-foreground">{node.path}</p>
               )}
-              {node.kind === "root" && onSteer && (
-                <RootSteering key={node.title} node={node} onSteer={onSteer} />
-              )}
             </div>
           )}
         </div>
@@ -375,7 +237,6 @@ function TreeRow({
               toggle={toggle}
               selected={selected}
               select={select}
-              onSteer={onSteer}
             />
           ))}
         </ul>
@@ -384,13 +245,7 @@ function TreeRow({
   )
 }
 
-export function MemoryTreeCard({
-  state,
-  onSteer,
-}: {
-  state: MemoryTreeState
-  onSteer?: MemorySteer
-}) {
+export function MemoryTreeCard({ state }: { state: MemoryTreeState }) {
   const groups = state.status === "ready" ? state.tree.groups : []
   // Levels 0–1 open on load: each group shows its roots; deeper levels on demand.
   const [open, setOpen] = React.useState<Set<string>>(
@@ -467,7 +322,6 @@ export function MemoryTreeCard({
                   toggle={toggle}
                   selected={selected}
                   select={setSelected}
-                  onSteer={onSteer}
                 />
               ))}
             </ul>
