@@ -77,6 +77,14 @@ describe("production readiness gate", () => {
     vi.useRealTimers();
   });
 
+  it("accepts a live restricted Stripe key and refuses a test key (EPIC-7 T3.4)", () => {
+    const stripeKey = (key: string) => productionReadinessReport({ ...readyEnv, STRIPE_SECRET_KEY: key }).checks.find(c => c.id === "stripe_key")?.ok;
+    expect(stripeKey("rk_live_example")).toBe(true);
+    expect(stripeKey("sk_live_example")).toBe(true);
+    expect(stripeKey("rk_test_example")).toBe(false);
+    expect(stripeKey("sk_test_example")).toBe(false);
+  });
+
   it("pins the current one-plan Terms and legal version", async () => {
     const terms = await readFile(
       new URL("../../../apps/site/public/legal/terms.html", import.meta.url),
