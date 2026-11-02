@@ -46,7 +46,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P1 | Research worker | unassigned | Plan: survey every MCP directory worth being in (Anthropic, Google, and the rest), their listing requirements and SEO levers; fill Goal, Serves, Done means; propose one row or child epic per listing action | ready | none | - | main | none | 2026-11-02 | dispatch |
+| P1 | Research worker | worker run_a84842a7 | Plan: survey every MCP directory worth being in (Anthropic, Google, and the rest), their listing requirements and SEO levers; fill Goal, Serves, Done means; propose one row or child epic per listing action | active | none | - | main | none | 2026-11-02 | dispatch |
 
 ## Decisions
 
