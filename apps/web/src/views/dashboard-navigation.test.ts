@@ -15,6 +15,7 @@ describe("Zenod dashboard navigation", () => {
     expect(DASHBOARD_SECTIONS.map(({ id }) => id)).toEqual([
       "overview",
       "connect",
+      "subscribers",
       "channels",
       "vault",
       "usage",
@@ -27,6 +28,7 @@ describe("Zenod dashboard navigation", () => {
       "overview",
       "memory",
       "connect",
+      "subscribers",
       "channels",
       "vault",
       "usage",
@@ -34,7 +36,8 @@ describe("Zenod dashboard navigation", () => {
     ])
     expect(
       dashboardSectionsForEdition("self-hosted").map(({ id }) => id)
-    ).toEqual(["overview", "connect", "channels", "vault", "usage", "settings"])
+    ).toEqual(["overview", "connect", "subscribers", "channels", "vault", "usage", "settings"])
+    expect(dashboardSectionForTab("subscribers", "hosted")).toBe("subscribers")
   })
 
   it("does not expose product or transport internals as navigation", () => {
