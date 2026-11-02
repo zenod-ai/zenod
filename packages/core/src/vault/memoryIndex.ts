@@ -7,7 +7,7 @@ import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
-import { keeperAliasGroups, parseKeeperNotes } from "./treeSteering.js";
+import { keeperAliasGroups, pageSteering, parseKeeperNotes } from "./treeSteering.js";
 
 /**
  * Tier-0 memory index (EPIC-9 E9-5a): one SQLite FTS5 file per tenant, derived from the
@@ -111,22 +111,11 @@ const normalize = (value: string) => value.normalize("NFKC").toLowerCase().repla
 const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
 /**
- * Alias groups from Tree.md `## Keeper notes`: E9-5b notes (`- K-1 | Agent Team | aliases: agentine, agent_team | …`,
- * treeSteering.ts) plus the bare `- alias: A = B = C` form.
+ * Alias groups from Tree.md `## Keeper notes`, read through E9-5b's parser (treeSteering.ts) so
+ * there is one format: `- K-1 | Agent Team | aliases: agentine, agent_team | why | confirmed …`.
  */
 export function keeperAliases(treeRaw: string): string[][] {
-  const groups: string[][] = keeperAliasGroups(parseKeeperNotes(treeRaw).notes);
-  let inNotes = false;
-  for (const line of treeRaw.split("\n")) {
-    const heading = /^## (.+?)\s*$/.exec(line);
-    if (heading) { inNotes = heading[1]!.toLowerCase() === "keeper notes"; continue; }
-    if (!inNotes) continue;
-    const alias = /^\s*[-*]\s*alias(?:es)?:\s*(.+)$/i.exec(line);
-    if (!alias) continue;
-    const names = alias[1]!.split(/\s*(?:=|↔|,)\s*/).map((name) => name.trim()).filter(Boolean);
-    if (names.length >= 2) groups.push(names);
-  }
-  return groups;
+  return keeperAliasGroups(parseKeeperNotes(treeRaw).notes);
 }
 
 /** FTS5 MATCH expression: content words OR'd (prefix for longer words), plus alias phrases. */
@@ -185,6 +174,8 @@ export class MemoryIndex {
   private lastCheck = Number.NEGATIVE_INFINITY;
   private inflight: Promise<unknown> | null = null;
   private aliasGroups: readonly (readonly string[])[];
+  /** Keeper-note aliases are read from Tree.md on the first sync of a process, then whenever Tree.md changes. */
+  private keeperAliasesLoaded = false;
   readonly tenantId: string;
   private readonly now: () => number;
 
@@ -312,6 +303,12 @@ export class MemoryIndex {
     });
     const present = new Set(files);
     const removed = full ? [...known.keys()] : [...known.keys()].filter((path) => !present.has(path));
+    if (full || !this.keeperAliasesLoaded || changed.some((file) => file.path === TREE_PATH) || removed.includes(TREE_PATH)) {
+      // A restart with an up-to-date index file changes no rows, but its aliases live only in memory.
+      const treeRaw = await readFile(join(vaultPath, TREE_PATH), "utf8").catch(() => "");
+      this.aliasGroups = [...BUILT_IN_ALIASES, ...(this.options.aliases ?? []), ...keeperAliases(treeRaw)];
+      this.keeperAliasesLoaded = true;
+    }
     this.lastCheck = this.now();
     this.dirty = false;
     if (!full && changed.length === 0 && removed.length === 0) return { changed: 0, removed: 0 };
@@ -319,8 +316,6 @@ export class MemoryIndex {
     const parsed = await Promise.all(changed.map(async (file) => ({ ...file, rows: await rowsOf(vaultPath, file.path) })));
     // Lineage depends on other pages' parents, so any change re-derives it for every row.
     const lineage = await lineageResolver(vaultPath);
-    const treeRaw = await readFile(join(vaultPath, TREE_PATH), "utf8").catch(() => "");
-    this.aliasGroups = [...BUILT_IN_ALIASES, ...(this.options.aliases ?? []), ...keeperAliases(treeRaw)];
 
     const insert = this.db.prepare("INSERT INTO docs (title, aliases, lineage, summary, body, kind, path, file, filed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     const upsertFile = this.db.prepare("INSERT INTO files (path, mtime_ms, size) VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size");
@@ -415,7 +410,7 @@ async function rowsOf(vaultPath: string, path: string): Promise<RowDraft[]> {
   const title = typeof meta.title === "string" && meta.title.trim() ? meta.title : body.match(/^# +([^\n]+)/m)?.[1]?.trim() || basenameOf(path);
   return [{
     title,
-    aliases: [...strings(meta.aliases), ...strings(meta.tags)].join(" · "),
+    aliases: [...pageSteering(meta).aliases, ...strings(meta.tags)].join(" · "),
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
     body,
     kind: "page", path, file: path,
