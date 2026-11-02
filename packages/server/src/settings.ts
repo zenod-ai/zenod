@@ -242,6 +242,17 @@ const PLATFORM_LOCKED_KEYS: ReadonlySet<string> = new Set([
   "llm_base_url",
 ]);
 
+/**
+ * Ask models a hosted tenant may choose for itself on the platform key (E9-3c). Each is
+ * tool-capable and priced at or below the platform default (OpenRouter, 2026-11-02:
+ * deepseek-chat $0.26/$1.03 per M in/out; gpt-5.6-luna $0.20/$1.20, cached input $0.02).
+ * Anything else falls back to the host-configured model, so the allowlist still holds.
+ */
+export const PLATFORM_TENANT_ASK_MODELS: ReadonlySet<string> = new Set([
+  "deepseek/deepseek-chat",
+  "openai/gpt-5.6-luna",
+]);
+
 /** Build the platform LLM config from host env; null when ZENOD_PLATFORM_OPENROUTER_KEY is unset. */
 export function platformLlmFromEnv(env: NodeJS.ProcessEnv): PlatformLlm | null {
   const apiKey = env.ZENOD_PLATFORM_OPENROUTER_KEY?.trim();
@@ -403,9 +414,21 @@ export class Settings {
   get(key: SettingKey): string | null {
     if (this.platformLlm && PLATFORM_LOCKED_KEYS.has(key)) {
       if (key === "provider") return "openrouter";
+      // The tenant's own ask model (and its reasoning setting) applies when allowlisted.
+      if (key === "model_ask" && this.tenantAskModelAllowed()) return this.getStoredValue(key);
+      if (key === "model_ask_reasoning_effort" && this.tenantAskModelAllowed()) {
+        // Never read before E9-3c on the platform key: an invalid stored value must not break engine boot.
+        const effort = this.getStoredValue(key);
+        return effort === "none" || effort === "low" ? effort : null;
+      }
       return this.platformLlm.models?.[key] ?? null;
     }
     return this.getStoredValue(key);
+  }
+
+  private tenantAskModelAllowed(): boolean {
+    const stored = this.getStoredValue("model_ask");
+    return stored !== null && PLATFORM_TENANT_ASK_MODELS.has(stored);
   }
 
   set(key: SettingKey, value: string): void {

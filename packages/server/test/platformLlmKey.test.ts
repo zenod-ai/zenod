@@ -66,6 +66,40 @@ describe("platform OpenRouter key (D30)", () => {
     expect(s.llmBaseUrl()).toBeUndefined();
   });
 
+  it("E9-3c: the tenant's own allowlisted ask model applies on the platform key, with its reasoning setting", () => {
+    const s = hosted(new SqliteStateStore(":memory:"));
+    s.set("model_ask", "openai/gpt-5.6-luna");
+    s.set("model_ask_reasoning_effort", "low");
+    expect(s.get("model_ask")).toBe("openai/gpt-5.6-luna");
+    expect(s.askReasoningEffort()).toBe("low");
+    s.set("model_ask_reasoning_effort", "high");
+    expect(s.askReasoningEffort()).toBeUndefined();
+    // Unset, or a model off the allowlist: the host model and its (unset) reasoning apply.
+    s.set("model_ask", "");
+    expect(s.get("model_ask")).toBe("host/ask-model");
+    expect(s.askReasoningEffort()).toBeUndefined();
+    s.set("model_ask", "evil/expensive-model");
+    expect(s.get("model_ask")).toBe("host/ask-model");
+    expect(s.askReasoningEffort()).toBeUndefined();
+  });
+
+  it("E9-3c: a tenant on its own ask model is still metered against its allowance", () => {
+    const runtime = new Runtime(mkdtempSync(join(tmpdir(), "zenod-ask-model-")), undefined, {
+      seedFromEnv: false,
+      tenantId: "tenant-a",
+      platformLlm: { apiKey: PLATFORM_KEY, models: { model_ask: "host/ask-model" } },
+      tenantMonthlyAllowanceUsd: 3,
+    });
+    runtime.settings.set("model_ask", "openai/gpt-5.6-luna");
+    expect(runtime.settings.get("model_ask")).toBe("openai/gpt-5.6-luna");
+    const now = Date.now();
+    runtime.usageStore.record({
+      operation: "answer", provider: "openrouter", model: "openai/gpt-5.6-luna",
+      inputTokens: 12_000, outputTokens: 300, cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 0.0028,
+    }, now);
+    expect(runtime.aiAllowanceStatus(now)).toMatchObject({ allowanceUsd: 3, spendUsd: 0.0028, exhausted: false });
+  });
+
   it("host models come from the existing ZENOD_MODEL_* env vars", () => {
     const p = platformLlmFromEnv({
       ZENOD_PLATFORM_OPENROUTER_KEY: "k",
