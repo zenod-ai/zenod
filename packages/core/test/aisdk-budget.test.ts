@@ -267,6 +267,18 @@ describe("answer tool-step budget", () => {
     expect(captured.config.prepareStep({ stepNumber: 0 })).toEqual({});
   });
 
+  it("makes an ask_brain answer search or read in its first round (E9-3b)", async () => {
+    const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 5 });
+    await llm.answer({ question: "What size travel bag do I prefer?", vaultBriefing: "brief", conversation: [], answerSupportContract: "v1", answerSupportScope: "memory_only" }, readTools);
+    expect(captured.config.prepareStep({ stepNumber: 0 })).toEqual({ activeTools: ["search_vault", "read_note"], toolChoice: "required" });
+    // Pinned evidence is already a read: the first round is not forced.
+    await llm.answer({ question: "Summarize this", vaultBriefing: "brief", conversation: [], answerSupportContract: "v1", answerSupportScope: "memory_only", answerSupportRead: true }, readTools);
+    expect(captured.config.prepareStep({ stepNumber: 0 }).activeTools).toContain("submit_memory_answer");
+    // Chat (no memory_only scope) keeps its free first round.
+    await llm.answer({ question: "hi", vaultBriefing: "brief", conversation: [], answerSupportContract: "v1" }, readTools);
+    expect(captured.config.prepareStep({ stepNumber: 0 }).toolChoice).toBeUndefined();
+  });
+
   it("clamps an out-of-range configured budget", async () => {
     const llm = createBrainLlm({ provider: "anthropic", apiKey: "k", maxSteps: 999 });
     await llm.answer({ question: "hi", vaultBriefing: "brief", conversation: [] }, readTools);
