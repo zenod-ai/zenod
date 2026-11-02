@@ -777,7 +777,7 @@
           "type": "string"
         },
         "lineage": {
-          "$comment": "EPIC-9 E9-3b: where the answer's sources sit in the memory tree; absent when none is placed. text is the cited path, e.g. 'Working memory › House decision › Maresme ← Log/2026-10-14.md#^e-…'.",
+          "$comment": "EPIC-9 E9-3b: where the answer's sources sit in the memory tree; absent when none is placed. text is the cited path, e.g. 'Working memory › Cabin decision › Oakmere ← Log/2026-10-14.md#^e-…'.",
           "type": "array",
           "items": {
             "type": "object",

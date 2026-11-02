@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { lintVault } from "../src/vault/lint.js";
 import { buildTreeIndex, formatLineage, MAX_TREE_DEPTH, pagePathFromRef, pageTreeFields, parseTree } from "../src/vault/tree.js";
 import { lintTree } from "../src/vault/treeLint.js";
-import { AUDIT_TREE_PROPOSAL, seedTreeFiles } from "../src/vault/treeSeed.js";
+import { seedTreeFiles } from "../src/vault/treeSeed.js";
+import { NEUTRAL_TREE } from "./fixtures/neutralTree.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/tree-vault", import.meta.url));
 const dirs: string[] = [];
@@ -31,10 +32,10 @@ afterEach(async () => {
 
 describe("Tree.md parsing", () => {
   it("reads level-1 nodes with kind, page and summary", () => {
-    const parsed = parseTree(seedTreeFiles(AUDIT_TREE_PROPOSAL, "2026-11-01")[0]!.content);
+    const parsed = parseTree(seedTreeFiles(NEUTRAL_TREE, "2026-11-01")[0]!.content);
     expect(parsed.problems).toEqual([]);
-    expect(parsed.nodes.map(n => [n.name, n.kind])).toEqual(AUDIT_TREE_PROPOSAL.map(n => [n.name, n.kind]));
-    expect(parsed.nodes[2]).toMatchObject({ name: "Hair transplant", path: "Projects/Hair transplant.md" });
+    expect(parsed.nodes.map(n => [n.name, n.kind])).toEqual(NEUTRAL_TREE.map(n => [n.name, n.kind]));
+    expect(parsed.nodes[2]).toMatchObject({ name: "Boat repair", path: "Projects/Boat repair.md" });
     expect(parsed.nodes[2]!.line).toBe(15); // 1-based line in the file, frontmatter included
   });
 
@@ -54,7 +55,7 @@ describe("Tree.md parsing", () => {
     expect(pagePathFromRef("[[Projects/X|alias]]")).toBe("Projects/X.md");
     expect(pagePathFromRef("Notes/Y.md")).toBe("Notes/Y.md");
     // An unquoted [[X]] in YAML parses as a nested list; it still reads as the wikilink.
-    expect(pageTreeFields({ parent: [["Hair transplant"]], memory: "working" })).toEqual({ parent: "[[Hair transplant]]", memory: "working" });
+    expect(pageTreeFields({ parent: [["Boat repair"]], memory: "working" })).toEqual({ parent: "[[Boat repair]]", memory: "working" });
     expect(pageTreeFields({ parent: 3, memory: "someday" })).toMatchObject({ invalidParent: 3, invalidMemory: "someday" });
   });
 });
@@ -70,12 +71,12 @@ describe("tree lint on the fixture vault", () => {
 
   it("resolves lineage root → leaf and children", async () => {
     const index = await buildTreeIndex(FIXTURE);
-    const leaf = index.lineage("Projects/Hair transplant/2023 Barcelona quotes.md");
-    expect(leaf.ok && formatLineage(leaf)).toBe("Working › Hair transplant › 2023 Barcelona quotes");
+    const leaf = index.lineage("Projects/Boat repair/2023 Porto quotes.md");
+    expect(leaf.ok && formatLineage(leaf)).toBe("Working › Boat repair › 2023 Porto quotes");
     const note = index.lineage("Notes/Travel insurance.md");
     expect(note.ok && note.group).toBe("long-term");
     expect(note.ok && note.steps.map(s => s.path)).toEqual(["Areas/Life admin.md", "Notes/Travel insurance.md"]);
-    expect(index.children("Projects/Hair transplant.md")).toEqual(["Projects/Hair transplant/2023 Barcelona quotes.md"]);
+    expect(index.children("Projects/Boat repair.md")).toEqual(["Projects/Boat repair/2023 Porto quotes.md"]);
     expect(index.lineage("Log/2026-10-31.md")).toMatchObject({ ok: false, reason: "not-a-tree-page" });
   });
 });
@@ -87,7 +88,7 @@ describe("tree lint failures", () => {
     const report = await lintTree(dir);
     expect(report.hasTree).toBe(false);
     expect(rules(report)).toContain("tree/missing Tree.md");
-    expect(rules(report)).toContain("page/parent-not-in-tree Projects/Hair transplant.md");
+    expect(rules(report)).toContain("page/parent-not-in-tree Projects/Boat repair.md");
   });
 
   it("reports pages without parent, unresolved parents, and parents not in Tree.md", async () => {
@@ -128,16 +129,16 @@ describe("tree lint failures", () => {
 
   it("reports root pages that disagree with Tree.md, memory mismatches and missing node pages", async () => {
     const dir = await copyFixture();
-    const hair = join(dir, "Projects/Hair transplant.md");
-    await writeFile(hair, (await readFile(hair, "utf8")).replace("memory: working", "memory: long-term"));
-    const quotes = join(dir, "Projects/Hair transplant/2023 Barcelona quotes.md");
+    const boat = join(dir, "Projects/Boat repair.md");
+    await writeFile(boat, (await readFile(boat, "utf8")).replace("memory: working", "memory: long-term"));
+    const quotes = join(dir, "Projects/Boat repair/2023 Porto quotes.md");
     await writeFile(quotes, (await readFile(quotes, "utf8")).replace("memory: working", "memory: long-term"));
     await rm(join(dir, "Areas/People and family.md"));
     const report = await lintTree(dir);
     expect(rules(report)).toEqual([
-      "page/memory-mismatch Projects/Hair transplant/2023 Barcelona quotes.md",
+      "page/memory-mismatch Projects/Boat repair/2023 Porto quotes.md",
       "tree/node-page-missing Tree.md",
-      "tree/root-memory Projects/Hair transplant.md",
+      "tree/root-memory Projects/Boat repair.md",
     ]);
   });
 
@@ -156,9 +157,19 @@ describe("tree lint failures", () => {
 });
 
 describe("tree seed", () => {
-  it("emits Tree.md and one lint-clean root page per audit node", async () => {
-    const files = seedTreeFiles(AUDIT_TREE_PROPOSAL, "2026-11-01");
-    expect(files.map(f => f.path)).toEqual(["Tree.md", ...AUDIT_TREE_PROPOSAL.map(n => n.path)]);
+  it("with no nodes (what `zenod tree seed` writes) emits only an empty, lint-clean Tree.md (E9-5k)", async () => {
+    const files = seedTreeFiles([], "2026-11-01");
+    expect(files.map(f => f.path)).toEqual(["Tree.md"]);
+    expect(parseTree(files[0]!.content)).toMatchObject({ nodes: [], problems: [] });
+    const dir = await mkdtemp(join(tmpdir(), "zenod-tree-seed-"));
+    dirs.push(dir);
+    await writeFile(join(dir, "Tree.md"), files[0]!.content);
+    expect((await lintTree(dir)).issues).toEqual([]);
+  });
+
+  it("emits Tree.md and one lint-clean root page per given node", async () => {
+    const files = seedTreeFiles(NEUTRAL_TREE, "2026-11-01");
+    expect(files.map(f => f.path)).toEqual(["Tree.md", ...NEUTRAL_TREE.map(n => n.path)]);
     const dir = await mkdtemp(join(tmpdir(), "zenod-tree-seed-"));
     dirs.push(dir);
     for (const f of files) {

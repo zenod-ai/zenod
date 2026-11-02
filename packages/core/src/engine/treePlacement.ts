@@ -127,7 +127,7 @@ export async function chooseTreeNode(
   options: { exclude?: Set<string>; rootsOnly?: boolean; under?: string } = {},
 ): Promise<NodeChoice | null> {
   const words = tokens(text);
-  // Under a root, a word the root's own summary already names ("Agent Team" on a root) does not single out a page below it.
+  // Under a root, a word the root's own summary already names ("Moss Lantern" on a root) does not single out a page below it.
   const underRoot = options.under ? index.rootsByPath.get(options.under.toLowerCase()) : undefined;
   const rootWords = underRoot ? tokens(`${underRoot.name} ${underRoot.summary}`) : new Set<string>();
   let best: { path: string; score: number; depth: number; order: number } | null = null;
@@ -343,7 +343,7 @@ export function splitEvidenceRef(evidenceRef: string): { logPath: string; date: 
 
 export interface PlacedPage {
   path: string;
-  /** `Working › Hair transplant › 2023 Barcelona quotes`, when the vault has a tree. */
+  /** `Working › Boat repair › 2023 Porto quotes`, when the vault has a tree. */
   lineage?: string;
   provisional?: boolean;
   /** Set for rule-5 ops rollups. */

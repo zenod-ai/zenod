@@ -7,7 +7,7 @@ import { getNote, NoteNotFoundError } from "./ops/get.js";
 import { searchVault } from "./ops/search.js";
 import { lintVault } from "./vault/lint.js";
 import { lintTree } from "./vault/treeLint.js";
-import { AUDIT_TREE_PROPOSAL, seedTreeFiles } from "./vault/treeSeed.js";
+import { seedTreeFiles } from "./vault/treeSeed.js";
 import { buildTreeIndex, formatLineage } from "./vault/tree.js";
 import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
@@ -40,7 +40,7 @@ function usage(): string {
     "  lint [paths..]  validate the vault against the schema",
     "  tree lint [--json]        check the memory tree (parents, Tree.md roots, cycles, depth, duplicate titles)",
     "  tree lineage <path>       print a page's path root → leaf",
-    "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print the audit's proposed Tree.md, or write Tree.md + root pages into <dir>",
+    "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print an empty Tree.md (no roots), or write it into <dir>; `tree discover --apply` finds the roots",
     "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
     "  index rebuild             rebuild the tier-0 memory index (SQLite FTS5 beside the vault) from scratch; idempotent",
     "  index search <query>      query the tier-0 index (refreshes changed files first), with tree paths and timing",
@@ -276,7 +276,7 @@ async function main(): Promise<number> {
       }
       if (sub === "seed") {
         const flag = (name: string) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
-        const files = seedTreeFiles(AUDIT_TREE_PROPOSAL, flag("--date"));
+        const files = seedTreeFiles([], flag("--date"));
         const out = flag("--out");
         if (!out) {
           process.stdout.write(files[0]!.content);

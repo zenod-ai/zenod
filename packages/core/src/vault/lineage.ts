@@ -46,7 +46,7 @@ export interface AnswerLineage {
   lineage: LineageNode[];
   /** The Log evidence the path is anchored to, when known. */
   evidence?: string;
-  /** `Working memory › House decision › Maresme ← Log/2026-10-14.md#^e-…` */
+  /** `Working memory › Cabin decision › Oakmere ← Log/2026-10-14.md#^e-…` */
   text: string;
 }
 
@@ -176,7 +176,7 @@ export async function memoryTreeBriefing(vaultPath: string): Promise<string> {
   return formatTreeBriefing(await readTree(vaultPath).catch(() => null));
 }
 
-/** `Working memory › Hair transplant › 2023 Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b`; "" when unplaced. */
+/** `Working memory › Boat repair › 2023 Porto quotes ← Log/2026-10-31.md#^e-c64e3b`; "" when unplaced. */
 export function formatMemoryLineage(lineage: MemoryLineage): string {
   if (lineage.placement !== "placed") return "";
   const path = lineage.lineage.map((node) => node.title).join(" › ");

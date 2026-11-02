@@ -10,32 +10,6 @@ export interface SeedNode {
   summary: string;
 }
 
-/**
- * Level-1 tree proposed by the E9-1 audit (docs/epic9/E9-1-memory-structure-audit.md §5),
- * approved as default by Jordi in E9-A1 (2026-11-01). Working roots are the four
- * live topics he named; long-term are the five domains.
- */
-export const AUDIT_TREE_PROPOSAL: readonly SeedNode[] = [
-  { name: "Launching Epic Social", kind: "working", path: "Projects/Launching Epic Social.md",
-    summary: "Getting Epic Social out: the idea→draft→approved→posted pipeline, post topics, Agent Team, the EpicSpine/Epic Team/Epic Social brand, the Reddit and X launch and testers." },
-  { name: "Launching Zenod", kind: "working", path: "Projects/Launching Zenod.md",
-    summary: "Getting Zenod to paying users: the alpha launch, memory as a tree, production health and positioning." },
-  { name: "Hair transplant", kind: "working", path: "Projects/Hair transplant.md",
-    summary: "Deciding on a hair transplant: the options dossier and 2023 Barcelona quotes; open on budget, destination and timing." },
-  { name: "House decision", kind: "working", path: "Projects/House decision.md",
-    summary: "Choosing where to buy a house: Maresme vs Cerdanya vs Sardinia, legal exposure, yield and financing, and the Idealista/IdeaScraper data." },
-  { name: "Ventures and work", kind: "long-term", path: "Areas/Ventures and work.md",
-    summary: "The businesses and projects over time: Alpha9 (tax, gestorías), trading (Poly-Maker, Polymarket), Altamira2050/PatronBTC, RepoMiningFunding, OpenProp legal and Zenod's history." },
-  { name: "Ideas and knowledge", kind: "long-term", path: "Areas/Ideas and knowledge.md",
-    summary: "Reusable thinking: markets and finance research, AI and agents (EpicSpine doctrine), story and positioning." },
-  { name: "Infrastructure and runbooks", kind: "long-term", path: "Areas/Infrastructure and runbooks.md",
-    summary: "How the machines and accounts work: the VPS fleet and incident lessons, accounts and access (GitHub, Gmail, browser)." },
-  { name: "Life admin", kind: "long-term", path: "Areas/Life admin.md",
-    summary: "Running life: housing in general, insurance, hardware, health and travel." },
-  { name: "People and family", kind: "long-term", path: "Areas/People and family.md",
-    summary: "The people in Jordi's life; private, detail stays in the notes." },
-];
-
 /** Render a Tree.md from seed nodes (levels 0/1 only). */
 export function renderTreeFile(nodes: readonly SeedNode[], date: string): string {
   const lines = [
@@ -80,8 +54,12 @@ export interface SeedFile {
   content: string;
 }
 
-/** Tree.md plus one root page per node: what a fresh vault gets, or what a reviewed migration proposes. */
-export function seedTreeFiles(nodes: readonly SeedNode[] = AUDIT_TREE_PROPOSAL, date = new Date().toISOString().slice(0, 10)): SeedFile[] {
+/**
+ * Tree.md plus one root page per node. Zenod ships no topics of its own (EPIC-9 L-1: roots are
+ * discovered from content, never hand-picked): `zenod tree seed` passes no nodes and writes an
+ * empty Tree.md that `zenod tree discover --apply` then fills.
+ */
+export function seedTreeFiles(nodes: readonly SeedNode[], date = new Date().toISOString().slice(0, 10)): SeedFile[] {
   const names = new Set<string>();
   for (const node of nodes) {
     const key = basenameOf(node.path).toLowerCase();

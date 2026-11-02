@@ -308,7 +308,7 @@ export function createTreeIndex(
   };
 }
 
-/** `Working › Hair transplant › 2023 Barcelona quotes` — the display form retrieval returns. */
+/** `Working › Boat repair › 2023 Porto quotes` — the display form retrieval returns. */
 export function formatLineage(result: Extract<LineageResult, { ok: true }>): string {
   const group = result.group === "working" ? "Working" : "Long-term";
   return [group, ...result.steps.map(s => s.name)].join(" › ");

@@ -68,7 +68,7 @@ const HEAT_HORIZON_DAYS = 120;
 const OWN_CAPTURE_WINDOW_DAYS = 30;
 /** A long-term area smaller than this folds into the area it reads most like. */
 const MIN_AREA_PAGES = 3;
-/** Marker sentence of a root page written by `seedTreeFiles` (E9-2a/E9-2c): its summary was hand-written. */
+/** Marker sentence of a root page written by `seedTreeFiles` (E9-2a/E9-2c): its summary was written by hand, not discovered. */
 const SEEDED_ROOT_MARKER = "Pages about this subject name it as their";
 
 export interface TreeDiscoveryOptions {
@@ -146,7 +146,7 @@ interface PageDoc {
 const DAY_MS = 86_400_000;
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
 
-/** "Maresme vs Cerdanya House Decision 2026-07-24" → "Maresme vs Cerdanya House Decision"; "X — subtitle" → "X". */
+/** "Oakmere vs Fernhill Cabin Decision 2026-07-24" → "Oakmere vs Fernhill Cabin Decision"; "X — subtitle" → "X". */
 export function cleanTopicName(title: string): string {
   let name = title.replace(/\s+[—–]\s+.*$/, "").replace(/\s*\([^)]*\)\s*$/, "");
   name = name.replace(/[\s_-]+(?:(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+)?\d{4}(?:-\d{2}){0,2}$/i, "").replace(/^\d{4}(?:-\d{2}){0,2}[\s_-]+/, "");
@@ -587,7 +587,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   /**
    * The page a group is named after: the page most of the group already hangs under,
    * weighted by how many of the person's own captures count on it and by how general its
-   * title is (a root names a topic: "Housing" over "Jordi Property Decision 2026-08"); a
+   * title is (a root names a topic: "Housing" over "Cabin Purchase Decision 2026-08"); a
    * seeded aggregator counts half, a provisional page never. Ties: more central, path order.
    */
   const rankRoots = (members: number[]): number[] => {
@@ -707,7 +707,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
           const run = words.slice(start, start + len);
           if (run.some(word => !/\p{L}/u.test(word))) continue;
           const meaningful = run.map(word => [...tokens(word)].some(t => !FILLER.has(t)));
-          // A phrase starts and ends on a word that means something ("House Decision", not "vs Cerdanya").
+          // A phrase starts and ends on a word that means something ("Cabin Decision", not "vs Fernhill").
           if (!meaningful[0] || !meaningful[len - 1] || meaningful.filter(Boolean).length > NAME_MAX_PHRASE_WORDS) continue;
           const phrase = run.join(" ");
           if (phrases.has(phrase.toLowerCase())) continue;
@@ -729,7 +729,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
    * A short human title for a group (E9-2h): the title of the page the group hangs under when it
    * is short and says about as much as the best phrase (the person's own label), else the best
    * phrase from the group's titles; a `mixed` area (several topics) whose best phrase covers under
-   * three quarters of its pages gets two or three ("Idealista and Poly-Maker"). `used` holds the
+   * three quarters of its pages gets two or three ("Moss Lantern and Tide-Cart"). `used` holds the
    * names other roots took.
    */
   const nameGroup = (members: number[], used: Set<string>, hub?: number, mixed = false): { name: string; value: number; terms: string[] } => {
@@ -737,7 +737,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     const phrases = titlePhrases(members, !mixed).filter(p => !used.has(p.phrase.toLowerCase()));
     // A root's name describes most of its group: the best phrase on at least half its pages, if any is.
     let chosen = phrases.find(p => p.cover >= NAME_PAIR_COVERAGE) ?? phrases[0];
-    // A longer phrase that holds the best one and covers about as much says more ("Hair transplant", not "Hair").
+    // A longer phrase that holds the best one and covers about as much says more ("Boat repair", not "Boat").
     if (chosen) {
       const top = chosen;
       const refined = phrases.filter(p => p.terms.length > top.terms.length && top.terms.every(t => p.terms.includes(t)) && p.value >= top.value * NAME_REFINE_SHARE)
@@ -801,7 +801,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   /** Words of the name a topic would get on its own. */
   const nameTerms = (members: number[]) => nameGroup(members, new Set(), rankRoots(members)[0]).terms;
   // Near-duplicate subjects (E9-2h): two warm topics are one subject when one's name refines the
-  // other's ("Launching Zenod" or "Zenod deck" next to "Zenod") or their distinctive words overlap
+  // other's ("Launching Tide Cart" or "Tide Cart deck" next to "Tide Cart") or their distinctive words overlap
   // strongly. Cold topics meet in the long-term area merge instead.
   for (;;) {
     let best: { a: number; b: number; s: number } | null = null;
@@ -926,7 +926,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       if (display && !usedNames.has(`${display}${EARLIER_SUFFIX}`.toLowerCase())) derived = { ...derived, name: `${display}${EARLIER_SUFFIX}` };
     }
     // An "(earlier)" name is re-derived each run: it depends on the working roots of this run.
-    // The same parts in another order ("Poly-Maker and Idealista") are the same name: keep the one the person knows (E9-5b).
+    // The same parts in another order ("Tide-Cart and Moss Lantern") are the same name: keep the one the person knows (E9-5b).
     const parts = (name: string) => [...new Set(name.toLowerCase().split(/\s*,\s*|\s+and\s+/).filter(Boolean))].sort().join("|");
     const keep = prior !== undefined && !prior.name.endsWith(EARLIER_SUFFIX) && !usedNames.has(prior.name.toLowerCase())
       && (parts(prior.name) === parts(derived.name)

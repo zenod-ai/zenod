@@ -10,18 +10,18 @@ import { formatMemoryLineage, loadMemoryTree } from "../src/vault/lineage.js";
 // three levels deep, with a legacy page that has no parent and one whose parent does not resolve.
 const TREE_FIXTURE = fileURLToPath(new URL("./fixtures/tree-vault", import.meta.url));
 const FILES: Record<string, string> = {
-  "Tree.md": `---\ntitle: Tree\n---\n# Memory tree\n\n## Working memory\n\n- Hair transplant | working | [[Projects/Hair transplant]] | Deciding on a hair transplant.\n- House decision | working | [[Projects/House decision]] | Where to buy a house.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | The businesses over time.\n`,
-  "Projects/Hair transplant.md": `---\ntitle: Hair transplant\nparent: "[[Tree]]"\nmemory: working\n---\n# Hair transplant\n\nOptions dossier.\n`,
-  "Projects/House decision.md": `---\ntitle: House decision\nparent: "[[Tree]]"\nmemory: working\n---\nShortlist.\n`,
+  "Tree.md": `---\ntitle: Tree\n---\n# Memory tree\n\n## Working memory\n\n- Boat repair | working | [[Projects/Boat repair]] | Deciding on a boat repair.\n- Cabin decision | working | [[Projects/Cabin decision]] | Where to buy a house.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | The businesses over time.\n`,
+  "Projects/Boat repair.md": `---\ntitle: Boat repair\nparent: "[[Tree]]"\nmemory: working\n---\n# Boat repair\n\nOptions dossier.\n`,
+  "Projects/Cabin decision.md": `---\ntitle: Cabin decision\nparent: "[[Tree]]"\nmemory: working\n---\nShortlist.\n`,
   "Areas/Ventures and work.md": `---\ntitle: Ventures and work\nparent: "[[Tree]]"\nmemory: long-term\n---\nCompanies.\n`,
-  "Notes/Barcelona quotes 2023.md": `---\ntitle: Barcelona quotes 2023\nparent: "[[Hair transplant]]"\n---\n# Barcelona quotes\n\nZetaword quote of 4,000 EUR [[2026-10-31#^e-c64e3b]].\n`,
-  "Notes/Turkey clinics.md": `---\ntitle: Turkey clinics\nparent: "[[Hair transplant]]"\n---\nZetaword clinics in Istanbul [[2026-10-30#^e-aaaaaa]] [[2026-10-31#^e-c64e3b]].\n`,
-  "Notes/Maresme.md": `---\ntitle: Maresme\nparent: "[[Projects/House decision]]"\n---\nZetaword coastal option.\n`,
-  "Notes/Alpha9 tax.md": `---\ntitle: Alpha9 tax\nparent: "[[Ventures and work]]"\n---\nZetaword AEAT and gestorías.\n`,
-  "Notes/AEAT filing.md": `---\ntitle: AEAT filing\nparent: "[[Alpha9 tax]]"\n---\nZetaword 2026 Q3 filing.\n`,
+  "Notes/Porto quotes 2023.md": `---\ntitle: Porto quotes 2023\nparent: "[[Boat repair]]"\n---\n# Porto quotes\n\nZetaword quote of 4,000 EUR [[2026-10-31#^e-c64e3b]].\n`,
+  "Notes/Vigo yards.md": `---\ntitle: Vigo yards\nparent: "[[Boat repair]]"\n---\nZetaword yards in Vigo [[2026-10-30#^e-aaaaaa]] [[2026-10-31#^e-c64e3b]].\n`,
+  "Notes/Oakmere.md": `---\ntitle: Oakmere\nparent: "[[Projects/Cabin decision]]"\n---\nZetaword coastal option.\n`,
+  "Notes/Kestrel tax.md": `---\ntitle: Kestrel tax\nparent: "[[Ventures and work]]"\n---\nZetaword AEAT and gestorías.\n`,
+  "Notes/AEAT filing.md": `---\ntitle: AEAT filing\nparent: "[[Kestrel tax]]"\n---\nZetaword 2026 Q3 filing.\n`,
   "Notes/Legacy page.md": `---\ntitle: Legacy page\n---\nZetaword from before the tree.\n`,
   "Notes/Broken parent.md": `---\ntitle: Broken parent\nparent: "[[Nowhere]]"\n---\nOrphaned.\n`,
-  "Log/2026-10-31.md": `# 2026-10-31\n\n## 10:00 Barcelona quote ^e-c64e3b\n- source: whatsapp\n\n> Barcelona quote 4,000 EUR\n`,
+  "Log/2026-10-31.md": `# 2026-10-31\n\n## 10:00 Porto quote ^e-c64e3b\n- source: whatsapp\n\n> Porto quote 4,000 EUR\n`,
 };
 
 let vault: string;
@@ -44,37 +44,37 @@ describe("memory tree lineage (E9-3a)", () => {
     const byPath = new Map(await Promise.all(hits.map(async (hit) => [hit.path, await tree.lineageOf(hit.path)] as const)));
     expect(byPath.size).toBe(6);
 
-    const barcelona = byPath.get("Notes/Barcelona quotes 2023.md")!;
-    expect(barcelona.placement).toBe("placed");
-    expect(barcelona.lineage).toEqual([
+    const porto = byPath.get("Notes/Porto quotes 2023.md")!;
+    expect(porto.placement).toBe("placed");
+    expect(porto.lineage).toEqual([
       { path: null, title: "Working memory", memory: "working" },
-      { path: "Projects/Hair transplant.md", title: "Hair transplant", memory: "working" },
-      { path: "Notes/Barcelona quotes 2023.md", title: "Barcelona quotes 2023", memory: "working" },
+      { path: "Projects/Boat repair.md", title: "Boat repair", memory: "working" },
+      { path: "Notes/Porto quotes 2023.md", title: "Porto quotes 2023", memory: "working" },
     ]);
-    expect(barcelona.evidence).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
-    expect(formatMemoryLineage(barcelona)).toBe("Working memory › Hair transplant › Barcelona quotes 2023 ← Log/2026-10-31.md#^e-c64e3b");
+    expect(porto.evidence).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
+    expect(formatMemoryLineage(porto)).toBe("Working memory › Boat repair › Porto quotes 2023 ← Log/2026-10-31.md#^e-c64e3b");
 
-    expect(titles(byPath.get("Notes/Turkey clinics.md")!.lineage)).toEqual(["Working memory", "Hair transplant", "Turkey clinics"]);
-    expect(byPath.get("Notes/Turkey clinics.md")!.evidence).toEqual(["Log/2026-10-30.md#^e-aaaaaa", "Log/2026-10-31.md#^e-c64e3b"]);
-    expect(titles(byPath.get("Notes/Maresme.md")!.lineage)).toEqual(["Working memory", "House decision", "Maresme"]);
-    expect(byPath.get("Notes/Maresme.md")!.lineage[0]!.path).toBeNull();
-    expect(titles(byPath.get("Notes/Alpha9 tax.md")!.lineage)).toEqual(["Long-term memory", "Ventures and work", "Alpha9 tax"]);
+    expect(titles(byPath.get("Notes/Vigo yards.md")!.lineage)).toEqual(["Working memory", "Boat repair", "Vigo yards"]);
+    expect(byPath.get("Notes/Vigo yards.md")!.evidence).toEqual(["Log/2026-10-30.md#^e-aaaaaa", "Log/2026-10-31.md#^e-c64e3b"]);
+    expect(titles(byPath.get("Notes/Oakmere.md")!.lineage)).toEqual(["Working memory", "Cabin decision", "Oakmere"]);
+    expect(byPath.get("Notes/Oakmere.md")!.lineage[0]!.path).toBeNull();
+    expect(titles(byPath.get("Notes/Kestrel tax.md")!.lineage)).toEqual(["Long-term memory", "Ventures and work", "Kestrel tax"]);
     const aeat = byPath.get("Notes/AEAT filing.md")!;
-    expect(titles(aeat.lineage)).toEqual(["Long-term memory", "Ventures and work", "Alpha9 tax", "AEAT filing"]);
+    expect(titles(aeat.lineage)).toEqual(["Long-term memory", "Ventures and work", "Kestrel tax", "AEAT filing"]);
     expect(aeat.lineage.every((node) => node.memory === "long-term")).toBe(true);
   });
 
   it("returns parent and children for a tree node", async () => {
     const tree = await loadMemoryTree(vault);
-    const node = await tree.nodeView("Projects/Hair transplant.md");
+    const node = await tree.nodeView("Projects/Boat repair.md");
     expect(node.placement).toBe("placed");
-    expect(titles(node.lineage)).toEqual(["Working memory", "Hair transplant"]);
+    expect(titles(node.lineage)).toEqual(["Working memory", "Boat repair"]);
     expect(node.parent).toEqual({ path: null, title: "Working memory", memory: "working" });
     expect(node.children).toEqual([
-      { path: "Notes/Barcelona quotes 2023.md", title: "Barcelona quotes 2023", memory: "working" },
-      { path: "Notes/Turkey clinics.md", title: "Turkey clinics", memory: "working" },
+      { path: "Notes/Porto quotes 2023.md", title: "Porto quotes 2023", memory: "working" },
+      { path: "Notes/Vigo yards.md", title: "Vigo yards", memory: "working" },
     ]);
-    expect(titles((await tree.nodeView("Notes/Alpha9 tax.md")).children)).toEqual(["AEAT filing"]);
+    expect(titles((await tree.nodeView("Notes/Kestrel tax.md")).children)).toEqual(["AEAT filing"]);
     expect((await tree.nodeView("Notes/AEAT filing.md")).children).toEqual([]);
   });
 
@@ -111,11 +111,11 @@ describe("memory tree lineage (E9-3a)", () => {
 
   it("reads E9-2a's tree fixture vault", async () => {
     const tree = await loadMemoryTree(TREE_FIXTURE);
-    const barcelona = await tree.lineageOf("Projects/Hair transplant/2023 Barcelona quotes.md");
-    expect(formatMemoryLineage(barcelona)).toBe("Working memory › Hair transplant › 2023 Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b");
+    const porto = await tree.lineageOf("Projects/Boat repair/2023 Porto quotes.md");
+    expect(formatMemoryLineage(porto)).toBe("Working memory › Boat repair › 2023 Porto quotes ← Log/2026-10-31.md#^e-c64e3b");
     expect(formatMemoryLineage(await tree.lineageOf("Notes/Travel insurance.md"))).toBe("Long-term memory › Life admin › Travel insurance");
-    const root = await tree.nodeView("Projects/Hair transplant.md");
+    const root = await tree.nodeView("Projects/Boat repair.md");
     expect(root.parent).toEqual({ path: null, title: "Working memory", memory: "working" });
-    expect(root.children.map((child) => child.path)).toEqual(["Projects/Hair transplant/2023 Barcelona quotes.md"]);
+    expect(root.children.map((child) => child.path)).toEqual(["Projects/Boat repair/2023 Porto quotes.md"]);
   });
 });

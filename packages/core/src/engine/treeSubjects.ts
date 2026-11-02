@@ -15,11 +15,11 @@ export { SUBJECT_GENERATOR };
  *
  * Page clustering only finds subjects that already have pages. A product or project the
  * person keeps naming in their own captures, but that the librarian filed onto other
- * pages, never gets one: Jordi's agent_team (spoken "agent team") was spread over Zenod
- * and EpicSpine pages, and as two common words ("agent", "team") it could not set any
- * page apart either. So: the vault's coined names (written somewhere as one identifier,
- * `agent_team`, `EpicSpine`, `Poly-Maker`) are counted in the person's own recent
- * captures in any spelling ("agent team", "Agent-Team"); a name said often, on several
+ * pages, never gets one: a name like `blue_heron` (spoken "blue heron") spread over other
+ * pages, and as two common words ("blue", "heron") it could not set any page apart
+ * either. So: the vault's coined names (written somewhere as one identifier,
+ * `blue_heron`, `MossLantern`, `Tide-Cart`) are counted in the person's own recent
+ * captures in any spelling ("blue heron", "Blue-Heron"); a name said often, on several
  * days, with no page titled after it, gets a page that cites those captures. Discovery
  * then treats it as a subject of its own. Agent reports never count (captureOrigin).
  *
@@ -41,9 +41,9 @@ export const SUBJECT_MIN_DAYS = 2;
 const EXCERPT_CHARS = 160;
 
 export interface NamedSubject {
-  /** Letters and digits of the name, lowercase (`agentteam`). */
+  /** Letters and digits of the name, lowercase (`blueheron`). */
   key: string;
-  /** How the person writes it, for the page title (`Agent Team`). */
+  /** How the person writes it, for the page title (`Blue Heron`). */
   display: string;
   /** Own captures in the window that name it, oldest first. */
   captures: Array<{ capture: LogCapture; mentions: number }>;
@@ -58,8 +58,8 @@ const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T
 const keyOf = (text: string) => text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 /**
- * Coined names: one identifier made of two or three words (`agent_team`, `EpicSpine`,
- * `Poly-Maker`). Lowercase kebab words (`long-term`, `follow-up`) are ordinary English and
+ * Coined names: one identifier made of two or three words (`blue_heron`, `MossLantern`,
+ * `Tide-Cart`). Lowercase kebab words (`long-term`, `follow-up`) are ordinary English and
  * file names; words with digits are ids, not names.
  */
 const COINED_RES = [
@@ -68,7 +68,7 @@ const COINED_RES = [
   /(?<![\p{L}\p{N}_-])\p{Lu}\p{Ll}{1,}(?:-\p{Lu}\p{Ll}{1,}){1,2}(?![\p{L}\p{N}_-])/gu,
 ];
 
-/** The words of a coined name: `agent_team` → [agent, team], `EpicSpine` → [epic, spine]. */
+/** The words of a coined name: `blue_heron` → [blue, heron], `MossLantern` → [moss, lantern]. */
 export function nameParts(name: string): string[] {
   return name.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").split(/[\s_-]+/).filter(Boolean).map(p => p.toLowerCase());
 }

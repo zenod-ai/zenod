@@ -29,14 +29,6 @@ const STALE_AFTER_MS = 60_000;
  */
 const KIND_FACTOR: Record<MemoryIndexHitKind, number> = { page: 1, root: 1, log: 0.5 };
 
-/**
- * Built-in alias groups: any member in a query also searches the others. Plain search help for
- * names voice transcription spells several ways; nobody sets them (no steering, root L-7).
- */
-export const BUILT_IN_ALIASES: readonly (readonly string[])[] = [
-  ["agentine", "agent team", "agent_team"],
-];
-
 const STOP_WORDS = new Set([
   // English
   "a", "about", "after", "again", "all", "also", "am", "an", "and", "any", "are", "as", "at", "be", "been", "before", "but", "by",
@@ -59,7 +51,7 @@ export interface MemoryIndexOptions {
    * which then adopt the file's own stamp.
    */
   tenantId?: string;
-  /** Extra alias groups on top of the built-ins. */
+  /** Alias groups: any member in a query also searches the others. None built in (root L-7). */
   aliases?: readonly (readonly string[])[];
   now?: () => number;
 }
@@ -197,7 +189,7 @@ export class MemoryIndex {
     setMeta.run("tenant", this.tenantId);
     setMeta.run("schema", SCHEMA_VERSION);
     setMeta.run("vault", options.vaultPath);
-    this.aliasGroups = [...BUILT_IN_ALIASES, ...(options.aliases ?? [])];
+    this.aliasGroups = options.aliases ?? [];
   }
 
   /** Open (or create) a tenant's index. Throws MemoryIndexTenantError for another tenant's file. */

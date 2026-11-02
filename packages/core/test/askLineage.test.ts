@@ -13,8 +13,8 @@ import type { AnswerInput, AnswerResult, BrainLlm, VaultReadTools } from "../src
 // and cites the tree path of the sources the answer relies on. Unplaced vaults are unchanged.
 const TREE_FIXTURE = fileURLToPath(new URL("./fixtures/tree-vault", import.meta.url));
 const FLAT_FIXTURE = fileURLToPath(new URL("./fixtures/vault", import.meta.url));
-const QUOTES = "Projects/Hair transplant/2023 Barcelona quotes.md";
-const QUOTES_PATH = "Working memory › Hair transplant › 2023 Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b";
+const QUOTES = "Projects/Boat repair/2023 Porto quotes.md";
+const QUOTES_PATH = "Working memory › Boat repair › 2023 Porto quotes ← Log/2026-10-31.md#^e-c64e3b";
 
 let dir: string | undefined;
 let state: SqliteStateStore | undefined;
@@ -48,15 +48,15 @@ describe("ask_brain carries the memory tree in structured lineage (E9-3b, E9-5j)
   it("briefs levels 0–1 and returns the page's tree path as structured lineage only", async () => {
     let searchText = "";
     const { engine, inputs } = await engineFor(TREE_FIXTURE, async (_input, tools) => {
-      searchText = await tools.searchVault!("Barcelona quotes");
+      searchText = await tools.searchVault!("Porto quotes");
       await tools.readNote!(QUOTES);
-      return { text: "The 2023 Barcelona quotes were around 4,000 euros.", readPaths: [QUOTES] };
+      return { text: "The 2023 Porto quotes were around 4,000 euros.", readPaths: [QUOTES] };
     });
-    const answer = await engine.ask("Where did the hair transplant quotes come from?");
+    const answer = await engine.ask("Where did the boat repair quotes come from?");
 
     const briefing = inputs[0]!.vaultBriefing;
     expect(briefing).toContain("MAP — memory tree, levels 0–1");
-    expect(briefing).toContain("Working memory (ongoing now)\n- Launching Epic Social → Projects/Launching Epic Social.md:");
+    expect(briefing).toContain("Working memory (ongoing now)\n- Launching Moss Lantern → Projects/Launching Moss Lantern.md:");
     expect(briefing).toContain("Long-term memory (what lasts)");
     expect(briefing.indexOf("MAP — memory tree")).toBeLessThan(briefing.indexOf("MAP — meaning pages"));
 
@@ -73,15 +73,15 @@ describe("ask_brain carries the memory tree in structured lineage (E9-3b, E9-5j)
       evidence: "Log/2026-10-31.md#^e-c64e3b",
       text: QUOTES_PATH,
     })]);
-    expect(answer.lineage![0]!.lineage.map((node) => node.title)).toEqual(["Working memory", "Hair transplant", "2023 Barcelona quotes"]);
+    expect(answer.lineage![0]!.lineage.map((node) => node.title)).toEqual(["Working memory", "Boat repair", "2023 Porto quotes"]);
   });
 
   it("traces a Log entry source back to the deepest placed page that cites it", async () => {
     const { engine } = await engineFor(TREE_FIXTURE, async (_input, tools) => {
       await tools.readNote!("Log/2026-10-31.md#^e-c64e3b");
-      return { text: "You found the 2023 Barcelona quotes, around 4,000 euros.", readPaths: ["Log/2026-10-31.md#^e-c64e3b"] };
+      return { text: "You found the 2023 Porto quotes, around 4,000 euros.", readPaths: ["Log/2026-10-31.md#^e-c64e3b"] };
     });
-    const answer = await engine.ask("Where did the Barcelona quote come from?");
+    const answer = await engine.ask("Where did the Porto quote come from?");
     expect(answer.sources.map((source) => source.path)).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
     expect(answer.lineage?.map((item) => [item.page, item.text])).toEqual([[QUOTES, QUOTES_PATH]]);
     expect(answer.text).not.toContain(QUOTES_PATH);
@@ -92,9 +92,9 @@ describe("ask_brain carries the memory tree in structured lineage (E9-3b, E9-5j)
     const { engine, inputs } = await engineFor(TREE_FIXTURE, async (_input, tools) => {
       if (++calls === 1) return { text: "From the map: about 4,000 euros.", readPaths: [] };
       await tools.readNote!(QUOTES);
-      return { text: "The 2023 Barcelona quotes were around 4,000 euros.", readPaths: [QUOTES] };
+      return { text: "The 2023 Porto quotes were around 4,000 euros.", readPaths: [QUOTES] };
     });
-    const answer = await engine.ask("What were the Barcelona quotes?");
+    const answer = await engine.ask("What were the Porto quotes?");
     expect(inputs).toHaveLength(2);
     expect(inputs[0]!.hostInstruction).toBeUndefined();
     expect(inputs[1]!.hostInstruction).toContain("made no tool call");
@@ -116,11 +116,11 @@ describe("ask_brain carries the memory tree in structured lineage (E9-3b, E9-5j)
       if (input.hostInstruction?.includes("HOST-READ SOURCE")) {
         // Answer the typed way, selecting a support the host read registered.
         const id = /"id":"(as_[a-f0-9]{24})","kind":"passage"/.exec(input.vaultBriefing)![1]!;
-        return { text: "", readPaths: [], supportSelections: [{ id, mode: "raw_report" as const, summaryText: "The 2023 Barcelona quotes were around 4,000 euros." }] };
+        return { text: "", readPaths: [], supportSelections: [{ id, mode: "raw_report" as const, summaryText: "The 2023 Porto quotes were around 4,000 euros." }] };
       }
       return { text: "From the map: about 4,000 euros.", readPaths: [] };
     });
-    const answer = await engine.ask("Barcelona quotes hair transplant");
+    const answer = await engine.ask("Porto quotes boat repair");
     // Ask, the no-tool retry, then one answer from the host's own read.
     expect(inputs).toHaveLength(3);
     expect(inputs[2]!.answerSupportRead).toBe(true);
@@ -133,7 +133,7 @@ describe("ask_brain carries the memory tree in structured lineage (E9-3b, E9-5j)
 
   it("E9-3c: if the model still gives no usable answer, the host returns a verbatim excerpt of the page it read", async () => {
     const { engine, inputs } = await engineFor(TREE_FIXTURE, async () => ({ text: "", readPaths: [], supportProtocolError: "missing_submission" as const }));
-    const answer = await engine.ask("Barcelona quotes hair transplant");
+    const answer = await engine.ask("Porto quotes boat repair");
     expect(inputs).toHaveLength(3);
     expect(answer.text).toContain(`here is what the closest page in your memory says (${QUOTES}):`);
     expect(answer.text).toMatch(/^> /m);
@@ -144,15 +144,15 @@ describe("ask_brain carries the memory tree in structured lineage (E9-3b, E9-5j)
   it("E9-3c: no fallback when the model already read a source", async () => {
     const read = await engineFor(TREE_FIXTURE, async (_input, tools) => {
       await tools.readNote!(QUOTES);
-      return { text: "The 2023 Barcelona quotes were around 4,000 euros.", readPaths: [QUOTES] };
+      return { text: "The 2023 Porto quotes were around 4,000 euros.", readPaths: [QUOTES] };
     });
-    await read.engine.ask("Barcelona quotes hair transplant");
+    await read.engine.ask("Porto quotes boat repair");
     expect(read.inputs).toHaveLength(1);
   });
 
   it("E9-3c: no fallback read when the best hit carries under half the question's words", async () => {
     const { engine, inputs } = await engineFor(TREE_FIXTURE, async () => ({ text: "From the map.", readPaths: [] }));
-    const answer = await engine.ask("Barcelona zzqx yyvw wwpt");
+    const answer = await engine.ask("Porto zzqx yyvw wwpt");
     expect(inputs).toHaveLength(2);
     expect(answer.sources).toEqual([]);
     expect(answer.text).toContain("couldn't verify");
