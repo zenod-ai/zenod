@@ -1897,6 +1897,13 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
           }
           return { activeTools, toolChoice: "required" as const };
         }
+        // ask_brain (memory_only) must look before it answers. The briefing maps are a
+        // table of contents; prose written from them without a read is refused by the
+        // host ("couldn't verify"), so the first round has to call a search/read tool.
+        if (input.answerSupportContract && input.answerSupportScope === "memory_only" && stepNumber === 0 && !supportRead && !sourceDiscovered && !authoritativePeerResult && !finalAnswerStep) {
+          const first = [tools.searchVault && "search_vault", tools.searchEntries && "search_entries", tools.readNote && "read_note", tools.readFacts && "read_facts"].filter(Boolean) as string[];
+          if (first.length) return { activeTools: first, toolChoice: "required" as const };
+        }
         if (input.answerSupportContract && sourceDiscovered && !supportRead && !authoritativePeerResult && !finalAnswerStep) {
           const reads = [tools.readNote && "read_note", tools.readFacts && "read_facts", tools.searchEntries && "search_entries"].filter(Boolean) as string[];
           if (reads.length) return {activeTools:reads,toolChoice:"required" as const};
