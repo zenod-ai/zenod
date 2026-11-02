@@ -19,9 +19,10 @@ import { cleanSlateVault, type CleanSlateResult } from "./vault/cleanSlate.js";
 import { VaultRepo } from "./git/vaultRepo.js";
 import { createBrainLlm, type Provider } from "./llm/aisdk.js";
 import { SqliteStateStore } from "./state/sqlite.js";
+import { MemoryIndex } from "./vault/memoryIndex.js";
 import type { BrainEngine } from "./types.js";
 
-const COMMANDS = ["store", "ask", "chat", "search", "get", "lint", "tree", "clean-slate"] as const;
+const COMMANDS = ["store", "ask", "chat", "search", "get", "lint", "tree", "index", "clean-slate"] as const;
 type Command = (typeof COMMANDS)[number];
 
 function usage(): string {
@@ -41,11 +42,16 @@ function usage(): string {
     "  tree lineage <path>       print a page's path root → leaf",
     "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print the audit's proposed Tree.md, or write Tree.md + root pages into <dir>",
     "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
+    "  index rebuild             rebuild the tier-0 memory index (SQLite FTS5 beside the vault) from scratch; idempotent",
+    "  index search <query>      query the tier-0 index (refreshes changed files first), with tree paths and timing",
+    "  index stats               rows, files and size of the tier-0 index",
     "  clean-slate <path> [--push]  initialize an empty vault in two commits",
     "",
     "Environment:",
     "  ZENOD_VAULT_PATH  local vault directory (dev harness for search/get/lint)",
     "  VAULT_REPO        owner/name on GitHub, used for provenance URLs",
+    "  ZENOD_DATA_DIR    data dir; `index` defaults to <dir>/vault and <dir>/memory-index.sqlite",
+    "  ZENOD_MEMORY_INDEX  index file override for `index`",
   ].join("\n");
 }
 
@@ -106,7 +112,7 @@ async function buildEngine(): Promise<BrainEngine> {
     ...(process.env.ZENOD_MODEL_CLASSIFY ? { classifyModel: process.env.ZENOD_MODEL_CLASSIFY } : {}),
   });
   const state = new SqliteStateStore(join(dataDir, "state.sqlite"));
-  return createEngine({ repo, llm, state, location: location() });
+  return createEngine({ repo, llm, state, location: location(), memoryIndex: { path: join(dataDir, "memory-index.sqlite"), tenantId: "standalone" } });
 }
 
 async function main(): Promise<number> {
@@ -145,6 +151,41 @@ async function main(): Promise<number> {
       }
       console.log(`\n${hits.length} result(s) in ${elapsed}ms`);
       return 0;
+    }
+
+    case "index": {
+      // The index lives beside the vault in the data dir, never inside the vault (E9-A6).
+      const dataDir = process.env.ZENOD_DATA_DIR ?? join(process.env.HOME ?? ".", ".zenod");
+      const vault = process.env.ZENOD_VAULT_PATH ?? join(dataDir, "vault");
+      const index = MemoryIndex.open({ path: process.env.ZENOD_MEMORY_INDEX ?? join(dataDir, "memory-index.sqlite"), vaultPath: vault });
+      try {
+        const [sub, ...rest] = args;
+        if (sub === "rebuild") {
+          const stats = await index.rebuild();
+          console.log(`rebuilt tenant ${index.tenantId}: ${stats.rows} rows from ${stats.files} files, ${stats.bytes} bytes, ${stats.ms}ms`);
+          return 0;
+        }
+        if (sub === "stats") {
+          const stats = index.stats();
+          console.log(`tenant ${index.tenantId}: ${stats.rows} rows from ${stats.files} files, ${stats.bytes} bytes`);
+          return 0;
+        }
+        if (sub === "search" && rest.join(" ").trim()) {
+          await index.refresh();
+          const started = performance.now();
+          const hits = await index.search(rest.join(" ").trim());
+          const elapsed = (performance.now() - started).toFixed(1);
+          for (const hit of hits) {
+            console.log(`${hit.score.toFixed(2).padStart(7)}  ${hit.path}${hit.treePath ? `  [${hit.treePath}]` : ""}${hit.snippet ? `  — ${hit.snippet}` : ""}`);
+          }
+          console.log(`\n${hits.length} result(s) in ${elapsed}ms`);
+          return 0;
+        }
+        console.error("usage: zenod index rebuild | zenod index stats | zenod index search <query>");
+        return 1;
+      } finally {
+        index.close();
+      }
     }
 
     case "get": {

@@ -960,7 +960,8 @@ export function buildMcpServer(
     },
     async ({ query, source, sourceId, contentType, capturedAfter, capturedBefore, order, limit, cursor }) => {
       const engine = await getEngine();
-      const rankedHits = query ? await engine.search(query) : [];
+      const timed = query ? engine.searchTimed ? await engine.searchTimed(query) : { hits: await engine.search(query), tier: "scan" as const, ms: null } : null;
+      const rankedHits = timed?.hits ?? [];
       const tree = rankedHits.length ? await loadTree(engine) : null;
       const hits = await Promise.all(rankedHits.map(async (hit) => {
         const { placement, lineage, evidenceRefs } = await lineageFields(tree, hit.path);
@@ -984,7 +985,8 @@ export function buildMcpServer(
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
         : hits.map((hit) => {
-            const path = formatMemoryLineage({ placement: hit.placement, lineage: hit.lineage, evidence: hit.evidenceRefs });
+            // A Log entry hit from the tier-0 index (E9-5a) carries the path of the page it was filed on.
+            const path = formatMemoryLineage({ placement: hit.placement, lineage: hit.lineage, evidence: hit.evidenceRefs }) || hit.treePath || "";
             return `${hit.path} (score ${hit.score}) — ${hit.snippet}${path ? `\n  path: ${path}` : ""}${hit.url ? `\n  ${hit.url}` : ""}`;
           }).join("\n");
       const entryText = entries.length === 0
@@ -998,7 +1000,7 @@ export function buildMcpServer(
         content: [
           {
             type: "text",
-            text: [noteText, entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
+            text: [noteText + (timed?.ms != null && rankedHits.length ? `\nSearch: ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB)` : ""}` : ""), entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
           },
         ],
         structuredContent: output,

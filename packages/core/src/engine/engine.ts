@@ -55,6 +55,7 @@ import { getNote } from "../ops/get.js";
 import { formatMemoryLineage, loadMemoryTree, memoryTreeBriefing, type MemoryTreeIndex } from "../vault/lineage.js";
 import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
+import { MemoryIndex, MemoryIndexTenantError } from "../vault/memoryIndex.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
@@ -328,6 +329,11 @@ export interface EngineOptions {
   /** Shared server catalog for ask/chat; per-ask overrides still take precedence. */
   entrySearch?: AskOptions["entrySearch"];
   /**
+   * Tier-0 memory index (EPIC-9 E9-5a): a per-tenant SQLite FTS5 file beside the vault,
+   * never inside it. Omitted → search uses the two-pass scan only.
+   */
+  memoryIndex?: { path: string; tenantId: string };
+  /**
    * The vault repo. Optional: when omitted the engine runs "vaultless" — no
    * sync, no vault briefing, no vault read/write tools — for the Console shell
    * (the suite's base minus the vault capability). Vault-only methods (store,
@@ -481,7 +487,21 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
   const location = options.location ?? {};
   const now = options.now ?? (() => new Date());
-  const queue = new WriteQueue(repo ? vaultPath : undefined);
+  // Tier-0 index (E9-5a), opened on first search. Any write or pull through the queue
+  // marks it dirty; the next search re-reads only the files that changed.
+  let memoryIndex: MemoryIndex | null | undefined = repo && options.memoryIndex ? undefined : null;
+  const openMemoryIndex = (): MemoryIndex | null => {
+    if (memoryIndex !== undefined) return memoryIndex;
+    try {
+      memoryIndex = MemoryIndex.open({ path: options.memoryIndex!.path, tenantId: options.memoryIndex!.tenantId, vaultPath });
+    } catch (error) {
+      if (error instanceof MemoryIndexTenantError) throw error;
+      console.warn(`[memory-index] unavailable, using the scan search: ${error instanceof Error ? error.message : String(error)}`);
+      memoryIndex = null;
+    }
+    return memoryIndex;
+  };
+  const queue = new WriteQueue(repo ? vaultPath : undefined, () => memoryIndex?.markDirty());
   const readSyncTtl = options.readSyncTtlMs ?? DEFAULT_READ_SYNC_TTL_MS;
   let lastSyncMs = Number.NEGATIVE_INFINITY;
 
@@ -567,6 +587,44 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function safeReadRevision(): Promise<VaultRevision> {
     assertVault(repo);
     return withVaultWriteLock(vaultPath, async () => { await assertNoInterruptedFiling(); return repo.currentRevision(); }, 0);
+  }
+
+  /**
+   * Tier-0 BM25 index first (E9-5a: $0, milliseconds, lineage on every hit); the
+   * two-pass scan stays the fallback when the index is absent, fails or finds nothing.
+   */
+  async function rankedSearch(query: string): Promise<Hit[]> {
+    return (await timedSearch(query)).hits;
+  }
+
+  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number } }> {
+    const started = performance.now();
+    const ms = () => Math.round((performance.now() - started) * 10) / 10;
+    const index = openMemoryIndex();
+    if (index) {
+      try {
+        const hits = await index.search(query);
+        if (hits.length > 0) {
+          const elapsed = ms();
+          const { rows, bytes } = index.stats();
+          return { tier: "index", ms: elapsed, index: { rows, bytes }, hits: hits.map((hit) => {
+            const [base, anchor] = hit.path.split("#^");
+            return {
+              snippet: hit.snippet || hit.title,
+              score: hit.score,
+              ...sourceResolver(base!, anchor ? `^${anchor}` : undefined),
+              path: hit.path,
+              ...(hit.treePath ? { treePath: hit.treePath } : {}),
+              indexKind: hit.kind,
+            };
+          }) };
+        }
+      } catch (error) {
+        console.warn(`[memory-index] search failed, using the scan search: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const hits = await searchVault(vaultPath, query, sourceResolver);
+    return { hits, tier: "scan", ms: ms() };
   }
 
   async function syncForRead(): Promise<void> {
@@ -727,10 +785,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
         }));
       },
       searchVault: async (query: string) => {
-        const hits = await searchVault(vaultPath, query, sourceResolver);
+        const hits = await rankedSearch(query);
         if (hits.length === 0) return "no results";
         const context = onSearchHits ? await onSearchHits(hits) : "";
-        return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n"), context].filter(Boolean).join("\n\n");
+        return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}${h.treePath && h.path.includes("#^") ? ` · tree: ${h.treePath}` : ""}`).join("\n"), context].filter(Boolean).join("\n\n");
       },
       ...(typedEntries ? { searchEntries: async (input: EntrySearchInput) => {
         const search = entrySearch ?? options.entrySearch;
@@ -2562,9 +2620,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         .filter((term) => term.length >= 3 && !ASK_FALLBACK_STOP_WORDS.has(term)))];
       if (terms.length === 0) return null;
       // Plain ranked search, untracked: discovery alone never counts as a read here.
-      const hits = await Promise.all((await searchVault(vaultPath, terms.join(" "), sourceResolver)).slice(0, 5).map(async (hit) => ({
+      const hits = await Promise.all((await rankedSearch(terms.join(" "))).slice(0, 5).map(async (hit) => ({
         path: hit.path,
-        treePath: tree && !hit.path.startsWith("Log/") ? await tree.lineageOf(hit.path).then(formatMemoryLineage, () => null) || null : null,
+        treePath: hit.treePath || (tree && !hit.path.startsWith("Log/") ? await tree.lineageOf(hit.path).then(formatMemoryLineage, () => null) || null : null),
       })));
       // A hit on one common word is not an answer: the page itself must carry at least
       // half the question's content words. Checked untracked, before any read counts.
@@ -2599,7 +2657,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
   async function annotateHitLineage(text: string, tree: MemoryTreeIndex): Promise<string> {
     const lines = await Promise.all(text.split("\n").map(async (line) => {
       const hit = /^(.+?\.md) \(score [^)]*\) — /.exec(line);
-      if (!hit || hit[1]!.startsWith("Log/")) return line;
+      if (!hit || hit[1]!.startsWith("Log/") || line.includes(" · tree: ")) return line;
       const path = await tree.lineageOf(hit[1]!).then(formatMemoryLineage, () => "");
       return path ? `${line} · tree: ${path}` : line;
     }));
@@ -2637,13 +2695,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
     let readBusy = false;
     const tools = readTools(contextRefs, entrySearch, true, async hits => {
       if (contextRefs.length) return ""; // Pinned evidence already owns this scope.
-      const rawHits = hits.filter(hit => /^Log\/[^#]+\.md$/.test(hit.path));
+      // A Log file (scan search) or one exact Log entry (tier-0 index hit, E9-5a).
+      // Discovery hints (pending topics) are never raw hits, even though they carry a ref.
+      const rawHits = hits.filter(hit => /^Log\/[^#]+\.md$/.test(hit.path) || (hit.indexKind === "log" && /^Log\/[^#]+\.md#\^e-[0-9a-f]{6}$/.test(hit.path)));
       if (rawHits.length !== 1) return "";
       try {
         const hit = rawHits[0]!;
         if (!hit.snippet.trim()) return "";
-        const note = await getNote(vaultPath, hit.path, sourceResolver);
-        const ref = uniqueEvidenceRef(note.path, note.body, hit.snippet);
+        const [file, anchor] = hit.path.split("#^");
+        const note = await getNote(vaultPath, file!, sourceResolver);
+        const ref = anchor ? `${note.path}#^${anchor}` : uniqueEvidenceRef(note.path, note.body, hit.snippet);
         if (!ref) return "";
         // Search text only locates an entry; actual tracked reads establish support.
         const evidence = await groundedTools.readNote!(ref, { completeSource: true });
@@ -3310,7 +3371,17 @@ export function createEngine(options: EngineOptions): BrainEngine {
     search: async (query: string): Promise<Hit[]> => {
       assertVault(repo);
       await syncForRead();
-      return searchVault(vaultPath, query, sourceResolver);
+      return rankedSearch(query);
+    },
+    searchTimed: async (query: string) => {
+      assertVault(repo);
+      await syncForRead();
+      return timedSearch(query);
+    },
+    rebuildMemoryIndex: async () => {
+      assertVault(repo);
+      const index = openMemoryIndex();
+      return index ? index.rebuild() : null;
     },
     memoryScope: vaultPath,
     searchEntries: async (query: MemoryEntryQuery = {}): Promise<MemoryEntry[]> => {

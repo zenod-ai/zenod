@@ -1,5 +1,6 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
 import type { MemoryTreeOutline } from "./vault/treeOutline.js";
+import type { MemoryIndexStats } from "./vault/memoryIndex.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
  * (later) the WhatsApp gateway are all thin adapters over `BrainEngine`.
@@ -306,6 +307,10 @@ export interface Hit {
   revisionId?: string;
   /** GitHub compatibility field. Never populated for a non-GitHub vault. */
   githubUrl?: string;
+  /** Tier-0 index hits (E9-5a): the hit's tree path, `Working memory › House › Visits`; absent when unplaced. */
+  treePath?: string;
+  /** Tier-0 index hits only: which row kind matched (a Log hit's path is its exact evidence ref). */
+  indexKind?: "page" | "log" | "root";
 }
 
 export interface MemoryEntry {
@@ -500,8 +505,12 @@ export interface BrainEngine {
    * backlog candidates. Writing is opt-in and materializes proposed records.
    */
   digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult>;
-  /** Deterministic two-pass search. No LLM. */
+  /** Deterministic search, no LLM: the tier-0 BM25 index (E9-5a), else the two-pass scan. */
   search(query: string): Promise<Hit[]>;
+  /** search() plus which tier answered and its server-side time (index refresh included, vault pull excluded). */
+  searchTimed?(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number } }>;
+  /** Rebuild the tier-0 memory index from the vault (`zenod index rebuild`); null when this engine has none. */
+  rebuildMemoryIndex?(): Promise<MemoryIndexStats | null>;
   /** Deterministic retrieval of immutable memory entries by structural metadata. */
   searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
   /** Internal tenant/vault boundary for entry pagination; never a client parameter. */
