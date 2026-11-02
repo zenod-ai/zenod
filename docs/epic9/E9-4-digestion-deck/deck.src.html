@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EPIC-9 E9-4 · How your memory gets digested</title>
+<style>
+/*FONTS*/
+:root{
+  --ground:#f6f2ea; --paper:#fffdf8; --ink:#1d1d1b; --grey:#77736a; --line:#cfc8bb;
+  --accent:#1f5a3d; --accent-soft:#e3ece5; --warm:#f1e6d2; --muted:#ebe6dc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-snap-type:y mandatory;background:var(--ground)}
+body{font-family:Inter,system-ui,sans-serif;color:var(--ink);font-size:20px;line-height:1.4}
+.slide{scroll-snap-align:start;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:3vh 3vw;border-bottom:1px solid var(--line)}
+.frame{width:min(1500px,94vw);aspect-ratio:16/9;max-height:92vh;background:var(--ground);position:relative;padding:56px 72px 48px;display:flex;flex-direction:column}
+h1,h2{font-family:Fraunces,Georgia,serif;font-weight:600;letter-spacing:-.01em}
+h1{font-size:62px;line-height:1.05;max-width:20ch}
+h2{font-size:44px;line-height:1.1;max-width:30ch}
+.sub{color:var(--grey);font-size:22px;margin-top:10px;max-width:70ch}
+.body{flex:1;display:flex;gap:28px;margin-top:28px;min-height:0}
+.col{flex:1;display:flex;flex-direction:column;gap:14px;min-width:0}
+.box{background:var(--paper);border:1.5px solid var(--ink);padding:14px 18px;border-radius:2px}
+.box.accent{background:var(--accent);color:#fff;border-color:var(--accent)}
+.box.warm{background:var(--warm)}
+.box.muted{background:var(--muted);border-color:var(--line)}
+.box.ghost{background:transparent;border:1.5px dashed var(--grey);color:var(--grey)}
+.box h3{font-size:21px;font-weight:600;margin-bottom:4px}
+.box p,.box li{font-size:17px}
+.box.accent p,.box.accent li{color:#e9f1ec}
+ul{padding-left:20px} li{margin:3px 0}
+.small{font-size:15px;color:var(--grey)}
+.foot{position:absolute;left:72px;right:72px;bottom:18px;display:flex;justify-content:space-between;font-size:13px;color:var(--grey)}
+blockquote{font-family:Fraunces,Georgia,serif;font-size:25px;line-height:1.35;border-left:3px solid var(--accent);padding-left:20px;margin:6px 0}
+table{border-collapse:collapse;width:100%;font-size:16px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;border-bottom:1.5px solid var(--ink)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.hl td{background:var(--accent-soft)}
+td:first-child{white-space:nowrap}
+.arrow{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--grey)}
+.lane{display:flex;gap:12px;align-items:stretch}
+.lane .box{flex:1}
+.tag{display:inline-block;font-size:13px;padding:1px 7px;border:1px solid var(--line);border-radius:2px;color:var(--grey);margin-left:6px;vertical-align:middle}
+.tag.g{border-color:var(--accent);color:var(--accent)}
+/* tree mock-up */
+.tree{display:flex;gap:22px;flex:1;min-height:0}
+.group{flex:1;border:1.5px solid var(--ink);background:var(--paper);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.group.lt{border-color:var(--line);background:var(--muted)}
+.group.inbox{border-style:dashed;border-color:var(--grey);background:transparent}
+.group>.gname{font-family:Fraunces,Georgia,serif;font-size:20px;margin-bottom:2px}
+.node{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);background:#fff;padding:5px 10px;font-size:16px}
+.node.hot{border:1.5px solid var(--accent)}
+.node.new{background:var(--accent);color:#fff;border-color:var(--accent)}
+.node .n{color:var(--grey);font-size:13px;font-variant-numeric:tabular-nums}
+.node.new .n{color:#d7e6dc}
+.leaf{font-size:14px;color:var(--grey);padding-left:14px}
+.heat{display:inline-block;height:7px;background:var(--accent);margin-right:6px;vertical-align:middle;border-radius:1px}
+.events{width:360px;flex:none;display:flex;flex-direction:column;gap:8px}
+.ev{font-size:15px;border-left:3px solid var(--accent);padding:4px 0 4px 10px;background:transparent}
+.ev.steer{border-left-color:#b07a2a}
+.ev b{font-weight:600}
+.nav{position:fixed;right:14px;bottom:12px;font-size:12px;color:var(--grey);background:var(--paper);border:1px solid var(--line);padding:4px 8px}
+@media print{.slide{page-break-after:always;min-height:auto;border:0}.nav{display:none}}
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide"><div class="frame">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+    <h1>Your memory gets filed in seconds and digested over weeks</h1>
+    <p class="sub" style="font-size:26px;margin-top:22px">How the tree grows bottom-up from what you say, who keeps it tidy, how you find things cheaply, and what it costs.</p>
+    <p class="small" style="margin-top:40px">EPIC-9 · E9-4 digestion design · 2 November 2026 · for Jordi's review before we build</p>
+  </div>
+  <div class="foot"><span>Zenod · memory as a tree</span><span>1 / 18</span></div>
+</div></section>
+
+<!-- 2 -->
+<section class="slide"><div class="frame">
+  <h2>What you asked</h2>
+  <div class="body">
+    <div class="col" style="flex:1.3">
+      <blockquote>"It must be pretty expensive to refine the structure, or is it?"</blockquote>
+      <blockquote>"Do we need a persona that wakes up and works on your memory, and keeps it organized?"</blockquote>
+      <blockquote>"We need a strong story for retrieval… an index, so that we do inexpensive deterministic retrieval."</blockquote>
+      <blockquote>"Maybe the digestion is a slow process… how disciplined are we about keeping things tidy?"</blockquote>
+    </div>
+    <div class="col">
+      <div class="box warm"><h3>Where we stand</h3><p>Ingestion works: every capture lands in the Log and gets filed onto a page. The tree's roots are now found from your content (E9-2g, E9-2h). You said it is "much better", but Agentine and Family are still missing.</p></div>
+      <div class="box accent"><h3>What this deck answers</h3><p>How digestion works as its own slow loop. What the memory-keeper does on each wake. How retrieval gets a free index. What refining the tree really costs. What we take from EpicSpine and agent_team, and what EpicSpine gains back.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Source: your E9-A5 answer, 2026-11-02</span><span>2 / 18</span></div>
+</div></section>
+
+<!-- 3 -->
+<section class="slide"><div class="frame">
+  <h2>Two loops: file fast, digest slowly</h2>
+  <p class="sub">Ingestion never waits on tidying. Digestion re-reads what came in and reshapes the tree, at most once a day and properly once a week.</p>
+  <div class="body" style="flex-direction:column;gap:22px">
+    <div>
+      <p class="small" style="margin-bottom:6px">Fast loop: every message, seconds, built</p>
+      <div class="lane">
+        <div class="box warm"><h3>You speak</h3><p>WhatsApp, web, voice</p></div>
+        <div class="arrow">→</div>
+        <div class="box"><h3>Log</h3><p>append-only evidence, never edited</p></div>
+        <div class="arrow">→</div>
+        <div class="box"><h3>Librarian</h3><p>files onto a page, under a parent</p></div>
+        <div class="arrow">→</div>
+        <div class="box"><h3>Index row</h3><p>searchable at once <span class="tag g">new</span></p></div>
+      </div>
+    </div>
+    <div>
+      <p class="small" style="margin-bottom:6px">Slow loop: daily and weekly, the memory-keeper, mostly new</p>
+      <div class="lane">
+        <div class="box"><h3>Replay</h3><p>new captures read next to the older pages</p></div>
+        <div class="arrow">→</div>
+        <div class="box"><h3>Re-derive</h3><p>topics, heat, roots (no model call)</p></div>
+        <div class="arrow">→</div>
+        <div class="box accent"><h3>Few, named changes</h3><p>promote, close, merge, split, rename, at most 3 a week</p></div>
+        <div class="arrow">→</div>
+        <div class="box muted"><h3>One commit</h3><p>"what changed and why", one revert undoes it</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Like memory in the brain: fast episodic store, slow structured store, replay in between (McClelland et al. 1995)</span><span>3 / 18</span></div>
+</div></section>
+
+<!-- 4 -->
+<section class="slide"><div class="frame">
+  <h2>We have the parts for a keeper but no keeper yet</h2>
+  <div class="body">
+    <div class="col">
+      <p class="small">Built and live</p>
+      <div class="box"><h3>Filing into the tree</h3><p>Every capture gets a parent and a <code>filed:</code> line (E9-2b), and the lineage reaches the leaf (E9-2f).</p></div>
+      <div class="box"><h3>Bottom-up roots</h3><p>Topics come from TF-IDF clustering of your pages. Heat comes from your own captures with a 14-day half-life; agent reports never count (E9-2g, E9-2h).</p></div>
+      <div class="box"><h3>Weekly sweep</h3><p>Runs Sundays. It re-derives the roots, re-files receipts and proposes merges. No model call; nothing is deleted (E9-2d).</p></div>
+      <div class="box"><h3>Ask with lineage</h3><p>ask_brain cites the path and scores 9–10/10 (E9-3).</p></div>
+    </div>
+    <div class="col">
+      <p class="small">Missing, and why the tree still feels "not quite mine"</p>
+      <div class="box warm"><h3>Stable identity</h3><p>Each run re-derives the roots from scratch, so a name or grouping you liked can drift.</p></div>
+      <div class="box warm"><h3>Steering</h3><p>You can't pin, rename, alias ("Agentine = agent team") or say "that's wrong" and have it stick.</p></div>
+      <div class="box warm"><h3>Root summaries and closure</h3><p>A root has no "where this stands now" line, and a finished topic never gets an Outcome.</p></div>
+      <div class="box warm"><h3>An index</h3><p>Search re-scans the vault with ripgrep on every query, and there is no tier-0 path that costs nothing.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Evidence: docs/evidence/epic9-e9-2b…2h, 3a…3c</span><span>4 / 18</span></div>
+</div></section>
+
+<!-- 5 Day 1 -->
+<section class="slide"><div class="frame">
+  <h2>Day 1: everything is a loose leaf</h2>
+  <p class="sub">A new user, replayed with your real topics (names only). Seven captures arrive and get filed as pages. There are no roots yet: one day is too little evidence for a topic.</p>
+  <div class="body">
+    <div class="tree">
+      <div class="group inbox"><div class="gname">Not yet a topic</div>
+        <div class="node">Zenod launch plan <span class="n">1</span></div>
+        <div class="node">Agentine persona wake <span class="n">1</span></div>
+        <div class="node">EpicSpine skill note <span class="n">1</span></div>
+        <div class="node">House visit <span class="n">1</span></div>
+        <div class="node">Kids' school term <span class="n">1</span></div>
+        <div class="node">AEAT letter <span class="n">1</span></div>
+        <div class="node">Clinic quote <span class="n">1</span></div>
+      </div>
+      <div class="group"><div class="gname">Working memory</div><p class="small">empty until a topic has ≥ 3 pages or a week of your captures</p></div>
+      <div class="group lt"><div class="gname">Long-term memory</div><p class="small">empty</p></div>
+    </div>
+    <div class="events">
+      <div class="ev"><b>Ingestion</b>: 7 Log entries, 7 pages, each searchable at once</div>
+      <div class="ev"><b>Keeper, daily wake</b>: updates heat and the index. It makes no structural change, because it needs density before it names anything</div>
+      <div class="ev"><b>Cost today</b>: 7 filing calls. The keeper is $0</div>
+    </div>
+  </div>
+  <div class="foot"><span>Mock-up: names from your world, counts invented for illustration</span><span>5 / 18</span></div>
+</div></section>
+
+<!-- 6 Week 1 -->
+<section class="slide"><div class="frame">
+  <h2>Week 1: the first roots appear, named in your words</h2>
+  <p class="sub">The first weekly digestion clusters 28 pages. Four topics are dense and warm, so they become working roots. Small ones wait.</p>
+  <div class="body">
+    <div class="tree">
+      <div class="group"><div class="gname">Working memory</div>
+        <div class="node new">Zenod <span class="n">9</span></div>
+        <div class="node new">Agentine <span class="n">7</span></div><div class="leaf">incl. 2 EpicSpine pages</div>
+        <div class="node new">House <span class="n">5</span></div>
+        <div class="node new">Family <span class="n">4</span></div>
+      </div>
+      <div class="group inbox"><div class="gname">Not yet a topic</div>
+        <div class="node">AEAT letter, invoice <span class="n">2</span></div>
+        <div class="node">Clinic quote <span class="n">1</span></div>
+      </div>
+      <div class="group lt"><div class="gname">Long-term memory</div><p class="small">still empty: nothing has cooled yet</p></div>
+    </div>
+    <div class="events">
+      <div class="ev"><b>Promote ×4</b>: heat ≥ 0.9 and ≥ 3 pages</div>
+      <div class="ev"><b>Name ×4</b>: taken from your own titles and words, one cheap model call per new root to check the name</div>
+      <div class="ev"><b>Root page</b>: each gets a "Now" line: where it stands, latest capture, open question</div>
+      <div class="ev"><b>Change budget</b>: 4 of a first-week allowance of 6. Later weeks get 3</div>
+      <div class="ev"><b>You see</b>: "This week: 4 new topics" on the Memory tab</div>
+    </div>
+  </div>
+  <div class="foot"><span>Mock-up</span><span>6 / 18</span></div>
+</div></section>
+
+<!-- 7 Month 1 -->
+<section class="slide"><div class="frame">
+  <h2>Month 1: you steer once, and it sticks</h2>
+  <p class="sub">EpicSpine grows and you say it is its own thing. The keeper splits it out and keeps it there. Tax cools and moves to long-term.</p>
+  <div class="body">
+    <div class="tree">
+      <div class="group"><div class="gname">Working memory</div>
+        <div class="node hot">Agentine <span class="n">12 · pinned</span></div>
+        <div class="node new">EpicSpine <span class="n">8 · split</span></div>
+        <div class="node hot">Zenod <span class="n">21</span></div><div class="leaf">"Launching Zenod" merged in</div>
+        <div class="node">House <span class="n">11</span></div>
+        <div class="node">Family <span class="n">9</span></div>
+        <div class="node new">Hair transplant <span class="n">4</span></div>
+      </div>
+      <div class="group lt"><div class="gname">Long-term memory</div>
+        <div class="node">Admin and tax <span class="n">5</span></div>
+        <div class="node">Travel <span class="n">4</span></div>
+      </div>
+    </div>
+    <div class="events">
+      <div class="ev steer"><b>You</b>: "EpicSpine is not Agentine. Agentine is the agent team." The keeper stores two steering notes: split, and an alias</div>
+      <div class="ev"><b>Split</b>: EpicSpine leaves Agentine, which keeps its id, name and pin</div>
+      <div class="ev"><b>Merge</b>: "Launching Zenod" joins Zenod (names overlap)</div>
+      <div class="ev"><b>Promote</b>: Hair transplant, after a burst of quotes</div>
+      <div class="ev"><b>Cool</b>: Tax has had no capture in 30 days and moves to long-term, keeping its children</div>
+    </div>
+  </div>
+  <div class="foot"><span>Mock-up · amber = your steer</span><span>7 / 18</span></div>
+</div></section>
+
+<!-- 8 Month 3 -->
+<section class="slide"><div class="frame">
+  <h2>Month 3: finished things close with an Outcome</h2>
+  <p class="sub">A project that is done does not just fade. The keeper proposes one Outcome line, you say yes, and the topic moves to long-term with its story intact. Areas like Family never close, they only cool and warm.</p>
+  <div class="body">
+    <div class="tree">
+      <div class="group"><div class="gname">Working memory</div>
+        <div class="node hot">Agentine <span class="n">18 · pinned</span></div>
+        <div class="node hot">Zenod <span class="n">27</span></div>
+        <div class="node">EpicSpine <span class="n">11</span></div>
+        <div class="node">Family <span class="n">14</span></div>
+        <div class="node new">Altamira2050 <span class="n">4</span></div>
+      </div>
+      <div class="group lt"><div class="gname">Long-term memory</div>
+        <div class="node">House <span class="n">16 · Outcome</span></div>
+        <div class="node">Health <span class="n">6</span></div><div class="leaf">Hair transplant · Outcome</div>
+        <div class="node">Admin and tax <span class="n">8</span></div>
+        <div class="node">Zenod (earlier) <span class="n">14</span></div>
+        <div class="node">Travel <span class="n">5</span></div>
+      </div>
+    </div>
+    <div class="events">
+      <div class="ev"><b>Close</b>: "House: decided" becomes one Outcome line citing the capture where you said so</div>
+      <div class="ev"><b>Fold</b>: Hair transplant goes under a long-term Health area</div>
+      <div class="ev"><b>Stay stable</b>: 9 of 10 roots keep the id and name they had last month</div>
+      <div class="ev"><b>Never</b>: a page deleted, a Log line edited, a pinned root renamed</div>
+    </div>
+  </div>
+  <div class="foot"><span>Mock-up · project = closes with Outcome (like an epic) · area = never closes (like a standing spine)</span><span>8 / 18</span></div>
+</div></section>
+
+<!-- 9 recognisable -->
+<section class="slide"><div class="frame">
+  <h2>Five rules keep the tree recognisable week to week</h2>
+  <div class="body">
+    <div class="col">
+      <div class="box accent"><h3>Stable identity</h3><p>Each root has an id. Next week's cluster inherits the id and name when it shares at least half its pages with this week's root (Jaccard ≥ 0.5). The name only changes when the topic really changed.</p></div>
+      <div class="box"><h3>Change budget</h3><p>At most 3 structural changes a week (promote, close, merge, split, rename). Doing nothing is the default.</p></div>
+      <div class="box"><h3>Hysteresis</h3><p>A topic is promoted at heat 0.9 and demoted below 0.3. Merges and splits need two weeks in a row of the same signal. Built for roots in E9-2g; now applied to every change.</p></div>
+    </div>
+    <div class="col">
+      <div class="box"><h3>Your words win</h3><p>Names come from your page titles and your own captures, never from agent reports. A pin, a rename or an alias you give is never undone by the keeper.</p></div>
+      <div class="box"><h3>Evidence before structure</h3><p>A root needs at least 3 pages or a week of your captures. Below that, pages wait under "Not yet a topic", which is honest and costs nothing.</p></div>
+      <div class="box muted"><h3>The test</h3><p>We replay your last 8 weeks of captures on a copy of the vault. Week to week, at least 80% of roots keep their id and name, and you recognise the final tree.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Borrowed from incremental clustering practice (Jaccard / Hungarian matching of clusters across runs)</span><span>9 / 18</span></div>
+</div></section>
+
+<!-- 10 keeper -->
+<section class="slide"><div class="frame">
+  <h2>The memory-keeper: one persona, two wakes, a hard budget</h2>
+  <div class="body">
+    <div class="col">
+      <div class="box"><h3>Daily light wake: about 02:00, $0</h3>
+        <ul><li>Update heat from yesterday's own captures</li><li>Refresh the index for changed pages</li><li>Queue any provisional leaves for the weekly wake</li><li>No structural change, no model call</li></ul></div>
+      <div class="box accent"><h3>Weekly digestion: Sunday, ≤ $0.05</h3>
+        <ul><li>Re-derive topics and heat (no model call)</li><li>Match them to last week's roots (stable ids)</li><li>Apply your steering notes first</li><li>Pick at most 3 changes; doing nothing is the default</li><li>Model calls only for roots whose pages changed: check the name, rewrite the "Now" line</li><li>One commit, plus one line in "Recent changes" on Tree.md</li></ul></div>
+    </div>
+    <div class="col">
+      <div class="box warm"><h3>Also wakes early when…</h3><p>Ten or more of your own captures land on pages with no topic. That is the Generative Agents "reflect when enough has piled up" trigger, still capped at one digestion a day.</p></div>
+      <div class="box"><h3>Who it is in agent_team terms</h3><p>The Delivery Manager pattern, scoped to one vault. It reconciles (heat and evidence), advances (the few changes), raises one question when it is unsure, and reports (Recent changes). It is the single writer of Tree.md, like the steward of a spine.</p></div>
+      <div class="box muted"><h3>Runs where</h3><p>It runs on the existing durable task lane, beside the weekly sweep, under the vault write lock. It is metered against the tenant's $3 allowance like every other model call.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Pattern: Letta sleep-time agents; agent_team Delivery Manager remit (reconcile, advance, blockers, report)</span><span>10 / 18</span></div>
+</div></section>
+
+<!-- 11 steering -->
+<section class="slide"><div class="frame">
+  <h2>You steer in one sentence and the keeper keeps it as a rule</h2>
+  <div class="body">
+    <div class="col">
+      <table>
+        <tr><th>You say or tap</th><th>What it writes</th><th>Effect</th></tr>
+        <tr><td>Pin Agentine</td><td><code>pinned: true</code> on the root page</td><td>never demoted, never renamed</td></tr>
+        <tr><td>Rename "Housing" to "House"</td><td><code>name-locked</code></td><td>the keeper keeps your name</td></tr>
+        <tr><td>"Agentine is the agent team"</td><td><code>aliases: [agent team, agent_team]</code></td><td>search and clustering treat them as one word</td></tr>
+        <tr><td>"EpicSpine is not Agentine"</td><td>steering note: keep apart</td><td>never merged again</td></tr>
+        <tr><td>"That's wrong" on a change</td><td>revert that change + a note</td><td>not proposed again for 8 weeks</td></tr>
+        <tr><td>"Yes, close House"</td><td>Outcome line, citing your capture</td><td>moves to long-term</td></tr>
+      </table>
+      <p class="small" style="margin-top:10px">You can do these on WhatsApp or the Memory tab. Steering notes live in Tree.md under "Keeper notes", one line each, like EpicSpine's Operating Learnings.</p>
+    </div>
+    <div class="col" style="flex:.7">
+      <div class="box warm"><h3>What it never does</h3>
+        <ul><li>delete a page, or edit or reorder a Log line</li><li>rewrite your own words on a page</li><li>override a pin, a locked name or a steering note</li><li>count agent reports as your activity</li><li>make more than 3 structural changes a week</li><li>send your notes to a provider beyond the metered model calls for names and "Now" lines</li></ul></div>
+      <div class="box muted"><h3>What it asks</h3><p>One question a week at most, and only when two changes are near a tie. For example: "Is Altamira2050 part of Zenod or its own thing?"</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Same human-in-the-loop line as the Librarian Doctrine: autopilot for small changes, a proposal for anything a revert can't undo</span><span>11 / 18</span></div>
+</div></section>
+
+<!-- 12 index -->
+<section class="slide"><div class="frame">
+  <h2>Tier 0: a free keyword index that returns where things live</h2>
+  <p class="sub">One SQLite file per user, derived from the vault and rebuildable at any time. SQLite is already in Zenod (<code>node:sqlite</code>).</p>
+  <div class="body">
+    <div class="col">
+      <div class="box"><h3>What goes in</h3>
+        <ul><li>one row per page: title, aliases, lineage path, summary, "Now" line, body</li><li>one row per Log entry: date, source, first line, text, and the page it was <code>filed:</code> on</li><li>root rows too, so a question can land on a whole topic (RAPTOR's "collapsed tree")</li></ul></div>
+      <div class="box"><h3>How it ranks</h3>
+        <ul><li>FTS5 <code>bm25()</code> with weights: title and aliases 10, path 5, summary 3, body 1</li><li>tokenizer <code>unicode61 remove_diacritics 2</code>, for Spanish and English, no stemming</li><li>the lineage is put in front of every row's text ("Working › House › Visits"), a free version of Anthropic's contextual BM25</li></ul></div>
+    </div>
+    <div class="col">
+      <div class="box accent"><h3>What you get back</h3><p><code>search_memory "notario"</code> → 5 hits in milliseconds, each with its path and its Log anchor. No model call, $0, the same answer every time.</p></div>
+      <div class="box"><h3>How it stays fresh</h3><p>The librarian updates the index row for each page it writes. The daily wake checks it against the vault's git head, and a full rebuild is one command.</p></div>
+      <div class="box muted"><h3>Why not embeddings yet</h3><p>Under about 1,000 notes, keyword search with one author finds the right note most of the time (Librarian Doctrine). Embeddings come later as a reranker on top, never instead.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Sources: sqlite.org/fts5 · anthropic.com/news/contextual-retrieval · RAPTOR arXiv 2401.18059</span><span>12 / 18</span></div>
+</div></section>
+
+<!-- 13 retrieval tiers -->
+<section class="slide"><div class="frame">
+  <h2>Ask the cheapest tier first, and every tier cites the path</h2>
+  <div class="body" style="flex-direction:column">
+    <table>
+      <tr><th>Tier</th><th>What</th><th>When</th><th class="num">Cost per query</th><th>Status</th></tr>
+      <tr class="hl"><td>0 · index</td><td>FTS5 keyword search over pages, Log and roots, with lineage</td><td>names, words, "where did I say…"</td><td class="num">$0 · ms</td><td>proposed (E9-5a)</td></tr>
+      <tr><td>1 · tree walk</td><td>open the root's "Now" line and the leaf the index points to, no model</td><td>"what's the state of House?"</td><td class="num">$0</td><td>proposed (E9-5d)</td></tr>
+      <tr><td>2 · ask_brain</td><td>model reads the tree briefing and the tier-0 hits, then reads pages and answers with the path</td><td>questions that need reading and joining</td><td class="num">$0.0013 per call, ~$0.0016 per ask</td><td>live (E9-3c)</td></tr>
+      <tr><td>later · semantic</td><td>embeddings as a reranker over tier 0</td><td>past ~1,000 notes, or when words drift</td><td class="num">tbd</td><td>not planned now</td></tr>
+    </table>
+    <div class="lane" style="margin-top:22px">
+      <div class="box"><h3>What tier 0 changes for ask_brain</h3><p>Its first search tool becomes the index, not a vault scan. Fewer turns, fewer "nothing read" misses (the E9-3c failure), same cost cap.</p></div>
+      <div class="box"><h3>On $3 a month</h3><p>At ~$0.0016 per ask, the allowance covers about 1,900 asks. Tier-0 searches are free and unlimited.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Measured: E9-3c, Jordi's tenant usage ledger (metadata only), gpt-5.6-luna reasoning low, 48 calls, 73% cached input</span><span>13 / 18</span></div>
+</div></section>
+
+<!-- 14 cost -->
+<section class="slide"><div class="frame">
+  <h2>Refining the tree is cheap because most of it needs no model</h2>
+  <div class="body">
+    <div class="col" style="flex:1.4">
+      <table>
+        <tr><th>Step</th><th>Model?</th><th class="num">Per user per month</th><th>Basis</th></tr>
+        <tr><td>Topic discovery, heat, roots, sweep</td><td>no</td><td class="num">$0</td><td>measured: E9-2d/2g run with no provider call</td></tr>
+        <tr><td>Index upkeep (tier 0)</td><td>no</td><td class="num">$0</td><td>SQLite, seconds of CPU</td></tr>
+        <tr><td>Keeper names + "Now" lines</td><td>yes, only changed roots</td><td class="num">≈ $0.04–0.09</td><td>estimate: ≤ 10 calls/week at ≤ $0.002 each</td></tr>
+        <tr class="hl"><td>Keeper hard cap</td><td></td><td class="num">≤ $0.22</td><td>$0.05 per week, enforced</td></tr>
+        <tr><td>Onboarding backfill (≈ 100 pages, once)</td><td>yes</td><td class="num">≈ $0.20 once</td><td>estimate: one summary call per page</td></tr>
+        <tr><td>Asks (for comparison)</td><td>yes</td><td class="num">$0.0016 each</td><td>measured E9-3c</td></tr>
+        <tr><td>Filing each capture (ingestion)</td><td>yes</td><td class="num">not split out yet</td><td>E9-5c measures it in the ledger</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div class="box accent"><h3>Answer to "is it expensive?"</h3><p>No. The structure work is deterministic and free. Only naming and summarising use a model, and only for what changed: under 10 cents per user per month, at most 7% of the $3 allowance.</p></div>
+      <div class="box"><h3>Your tenant today</h3><p>$0.97 of the $3 allowance spent in November as of 2 November, including the E9-3c eval's 48 ask calls ($0.064).</p></div>
+      <div class="box muted"><h3>The lesson from GraphRAG</h3><p>Summarising every cluster up front is what makes GraphRAG costly. LazyGraphRAG reports indexing at 0.1% of that cost by deferring summaries. We do the same: summarise only what changed.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>"≤ $0.002 per keeper call" is set above a full 47k-token ask call ($0.00133), so it is a ceiling, not a guess</span><span>14 / 18</span></div>
+</div></section>
+
+<!-- 15 epicspine -->
+<section class="slide"><div class="frame">
+  <h2>EpicSpine solved this for work; memory keeps the shape, not the tasks</h2>
+  <div class="body">
+    <div class="col">
+      <p class="small">What we borrow</p>
+      <table>
+        <tr><th>EpicSpine / agent_team</th><th>In your memory</th></tr>
+        <tr><td>Root → child spines, one line each</td><td>Tree.md levels 0–1, root pages</td></tr>
+        <tr><td>Current State</td><td>each root's "Now" line</td></tr>
+        <tr><td>Outcome on close</td><td>Outcome line, then long-term</td></tr>
+        <tr><td>Standing spine (never closes)</td><td>areas: Family, Health, Admin</td></tr>
+        <tr><td>Operating Learnings</td><td>Keeper notes (your steering)</td></tr>
+        <tr><td>Stale sweep (14 days) and tree_audit</td><td>heat, hysteresis, the weekly sweep</td></tr>
+        <tr><td>Steward = single writer</td><td>keeper = single writer of Tree.md</td></tr>
+        <tr><td>Persona waking on cadence, Unblocker answers what's settled</td><td>keeper wakes; asks only near-ties</td></tr>
+      </table>
+      <p class="small" style="margin-top:8px">What we leave behind: status-as-task, asks and gates, dispatch. Memory is for finding things, not running them (EPIC-9 Non-Goals).</p>
+    </div>
+    <div class="col" style="flex:.8">
+      <p class="small">What EpicSpine should gain</p>
+      <div class="box accent"><h3>Bottom-up is the difference</h3><p>agent_team's roots are picked by hand. Zenod finds them (EPIC-9 L-1). Both need the same tree tools underneath.</p></div>
+      <div class="box"><h3>A shared tree library</h3><p>Heat with a half-life instead of a 14-day stale flag, stable ids across reruns, and a "Recent changes" rollup. <code>spines.py --active</code> could rank by heat.</p></div>
+      <div class="box"><h3>The steward persona pattern, written down</h3><p>Reconcile, then a few budgeted changes, then report. One reference page in the skill, used by both the keeper and spine stewards.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>EpicSpine skill: spine-model, standing-spines, learnings, tree-cleanse · agent_team: delivery-manager, unblocker remits</span><span>15 / 18</span></div>
+</div></section>
+
+<!-- 16 research -->
+<section class="slide"><div class="frame">
+  <h2>Outside work points the same way: cheap and structural first, models only on change</h2>
+  <div class="body" style="flex-direction:column">
+    <table>
+      <tr><th>Work</th><th>What it does</th><th>What transfers to Zenod</th></tr>
+      <tr><td>Complementary learning systems (1995)</td><td>fast hippocampus, slow cortex, replay in sleep</td><td>Log = fast store, tree = slow store, the keeper = replay</td></tr>
+      <tr><td>Letta sleep-time agents / sleep-time compute (2025)</td><td>a background agent reorganises memory while idle; ~5× less test-time compute</td><td>digestion as its own scheduled persona</td></tr>
+      <tr><td>Zettelkasten · PARA</td><td>hub notes appear when a cluster is dense; items move by actionability; archive, never delete</td><td>roots on density; project vs area; Outcome then long-term</td></tr>
+      <tr><td>GraphRAG · LazyGraphRAG (2024)</td><td>community detection + summaries; lazy version indexes at 0.1% of the cost</td><td>cluster for free, summarise only what changed</td></tr>
+      <tr><td>RAPTOR (2024)</td><td>a recursive summary tree; the "collapsed tree" retrieves across levels</td><td>root rows and page rows in one index</td></tr>
+      <tr><td>mem0 (2025) · A-MEM (2025)</td><td>ADD/UPDATE/DELETE/NOOP; notes that link and evolve</td><td>a small op set with NOOP as the default; link proposals in digestion</td></tr>
+      <tr><td>Generative Agents (2023)</td><td>recency × importance × relevance; reflect when enough has piled up</td><td>half-life heat (built); wake early on a backlog</td></tr>
+      <tr><td>Contextual Retrieval (2024)</td><td>BM25 + context cut retrieval failures 5.7% → 2.9%</td><td>lineage in front of each indexed row</td></tr>
+    </table>
+  </div>
+  <div class="foot"><span>Full source list in docs/epic9/E9-4-digestion-design.md</span><span>16 / 18</span></div>
+</div></section>
+
+<!-- 17 build plan -->
+<section class="slide"><div class="frame">
+  <h2>Build plan: six rows, the index first</h2>
+  <div class="body" style="flex-direction:column">
+    <table>
+      <tr><th>Row</th><th>What</th><th>Done check</th></tr>
+      <tr class="hl"><td>E9-5a</td><td>Tier-0 index: per-user SQLite FTS5 over pages, Log and roots, with lineage; search_memory and ask_brain search it first</td><td>the 10 eval questions have the right page in the top 5 for ≥ 9; p95 &lt; 50 ms; rebuild is idempotent; $0 model</td></tr>
+      <tr><td>E9-5b</td><td>Stable identity + steering: root ids matched across runs; <code>pinned</code>, <code>name-locked</code>, <code>aliases</code>; Keeper notes; pin and rename in the Memory tab</td><td>on a fixture, a rename and a pin survive 3 re-derivations; a "keep apart" note blocks a merge</td></tr>
+      <tr><td>E9-5c</td><td>Memory-keeper persona: daily light wake + weekly digestion, change budget 3, NOOP default, "Recent changes", $0.05/week cap; filing cost split out in the ledger</td><td>replay of your last 8 weeks on a clone: ≥ 80% of roots stable week to week, ≤ 3 changes/week, cost in the ledger</td></tr>
+      <tr><td>E9-5d</td><td>Root "Now" lines and Outcome on close: model only for changed roots, citing Log anchors</td><td>every working root has a dated "Now" line with a citation; one closure goes end to end on a clone</td></tr>
+      <tr><td>E9-5e</td><td>Steering on WhatsApp: "pin X", "X is not Y", "that's wrong", "yes, close X" become Keeper notes</td><td>5 phrasings parsed in tests; one real steer from you sticks over two weekly runs</td></tr>
+      <tr><td>E9-5f</td><td>EpicSpine gains: tree library (heat, stable ids, recent changes) + the steward-persona reference, upstreamed to epicspine-skill</td><td>skill PR merged; <code>spines.py --active</code> ranks by heat; Zenod imports nothing from it at runtime</td></tr>
+    </table>
+    <p class="small" style="margin-top:12px">Order: 5a and 5b in parallel, then 5c, then 5d and 5e. 5f runs alongside in the skill repo. E9-2i (Agentine and Family) lands first and becomes the first test of the steering notes.</p>
+  </div>
+  <div class="foot"><span>Proposed rows; the delivery manager records them in the spine when you approve</span><span>17 / 18</span></div>
+</div></section>
+
+<!-- 18 decisions -->
+<section class="slide"><div class="frame">
+  <h2>One question for you: build it as proposed?</h2>
+  <p class="sub">A yes takes these three defaults. Change any of them in one word.</p>
+  <div class="body">
+    <div class="col">
+      <div class="box accent"><h3>1 · How free is the keeper? Default: acts within a budget</h3><p>It makes up to 3 revertable changes a week on its own and shows each one under "Recent changes". You undo any with "that's wrong". Other options: proposals only (you approve each change), or no budget at all.</p></div>
+      <div class="box"><h3>2 · Cadence and money? Default: daily $0, weekly ≤ $0.05</h3><p>A deterministic daily wake and an LLM-assisted weekly digestion, capped at about $0.22 per user per month (7% of the $3 allowance). Option: nightly digestion, at about 7× the model cost.</p></div>
+      <div class="box"><h3>3 · Where does the index live? Default: beside the vault</h3><p>A derived SQLite file in your tenant's data directory, not committed to the vault. It is rebuildable, so your vault holds only your notes. Option: commit it into the vault.</p></div>
+    </div>
+    <div class="col" style="flex:.6">
+      <div class="box warm"><h3>If yes</h3><p>We record rows E9-5a…5f as ready, start with the index and stable ids, and replay your last 8 weeks before anything touches your real vault.</p></div>
+      <div class="box muted"><h3>Risk and undo</h3><p>Every keeper change is one vault commit, and the backup and revert routine is the same as E9-2g and 2h. The index is derived and can be deleted at any time.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>EPIC-9 · E9-4 · run_f6565d0c</span><span>18 / 18</span></div>
+</div></section>
+
+<div class="nav">↑ ↓ or scroll · 18 slides</div>
+<script>
+document.addEventListener('keydown',e=>{
+  const s=[...document.querySelectorAll('.slide')];
+  const y=window.scrollY+5;let i=s.findIndex(x=>x.offsetTop+x.offsetHeight>y);
+  if(['ArrowDown','PageDown',' ','ArrowRight'].includes(e.key)){e.preventDefault();s[Math.min(i+1,s.length-1)].scrollIntoView({behavior:'smooth'});}
+  if(['ArrowUp','PageUp','ArrowLeft'].includes(e.key)){e.preventDefault();s[Math.max(i-1,0)].scrollIntoView({behavior:'smooth'});}
+});
+</script>
+</body>
+</html>
