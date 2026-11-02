@@ -393,6 +393,16 @@ const MAX_BRIEFING_ATTACHMENTS = 40;
 const MAX_BRIEFING_SUMMARY_CHARS = 240;
 const MAX_ASK_CONTEXT_REFS = 10;
 const ASK_NO_TOOL_RETRY_INSTRUCTION = "Your previous reply made no tool call, so it could not be verified and was discarded. Call search_vault now (or read_note on a page from the map), then answer only from what you read.";
+const ASK_HOST_READ_INSTRUCTION = "Your earlier reply read no source, so Zenod searched the question itself and read the page shown under HOST-READ SOURCE. Treat it as the read result: answer from it by submitting its answerSupports. Read other pages only if it leaves the question unresolved; if it does not answer the question, say so.";
+const ASK_HOST_EXCERPT_CHARS = 700;
+const ASK_FALLBACK_STOP_WORDS = new Set([
+  "about", "after", "again", "all", "also", "and", "any", "are", "before", "but", "can", "could", "did", "does", "for",
+  "from", "get", "got", "had", "has", "have", "how", "into", "its", "memory", "not", "our", "please", "should", "tell",
+  "that", "the", "their", "them", "there", "these", "this", "those", "vault", "was", "were", "what", "when", "where",
+  "which", "who", "why", "will", "with", "would", "you", "your", "only", "come", "came", "know", "said", "one",
+]);
+// Both the no-source refusal and the grounding filter's empty result start this way.
+const ASK_UNVERIFIED_PREFIX = "I couldn't verify";
 const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
 
 function verbatimEntityCandidates(content: string): string[] {
@@ -2510,8 +2520,73 @@ export function createEngine(options: EngineOptions): BrainEngine {
     if (!pinnedBriefing && !session.toolAttempted()) {
       result = await llm.answer({ ...answerInput, hostInstruction: ASK_NO_TOOL_RETRY_INSTRUCTION }, askTools);
     }
-    const answer = await session.finalize(result);
+    // E9-3c: still nothing read. Zenod searches the question itself, reads the top
+    // page and answers from that read, the way pinned evidence is answered.
+    const hostRead = !pinnedBriefing && !session.sourceRead() ? await hostFallbackRead(question, askTools, tree) : null;
+    if (hostRead) {
+      result = await llm.answer({
+        ...answerInput,
+        answerSupportRead: true,
+        vaultBriefing: `${answerInput.vaultBriefing}\n\nHOST-READ SOURCE — Zenod searched the question and read this page${hostRead.treePath ? ` (tree: ${hostRead.treePath})` : ""}:\n[${hostRead.path}]\n${hostRead.read}`,
+        hostInstruction: ASK_HOST_READ_INSTRUCTION,
+      }, askTools);
+      // A read is in hand, so only a typed support submission is an answer; bare prose is not.
+      if (result.supportSelections === undefined && !result.supportProtocolError) result = { ...result, supportProtocolError: "missing_submission" };
+    }
+    let answer = await session.finalize(result);
+    // The model still produced no usable answer: give the source itself, never prose
+    // without one. The excerpt is verbatim from the page the host just read.
+    if (hostRead && hostRead.excerpt && answer.sources.length > 0 && (answer.text === ANSWER_PROTOCOL_FAILURE_TEXT || answer.text.startsWith(ASK_UNVERIFIED_PREFIX))) {
+      answer = { ...answer, text: `I couldn't compose a verified summary, so here is what the closest page in your memory says (${hostRead.path}):\n\n${hostRead.excerpt.split("\n").map((line) => `> ${line}`).join("\n")}` };
+    }
     return tree ? withAnswerLineage(answer, tree) : answer;
+  }
+
+  /**
+   * E9-3c host fallback: search the question's content words, then read the best
+   * relevant hit (a page placed in the tree first) through the ask's own tracked
+   * read tool, so the read registers supports and sources exactly like a model read.
+   */
+  async function hostFallbackRead(question: string, tools: VaultReadTools, tree: MemoryTreeIndex | null): Promise<{ path: string; treePath: string | null; read: string; excerpt: string } | null> {
+    if (!tools.readNote) return null;
+    try {
+      // Search ORs its terms, so question words like "what" would match everything:
+      // search the content words only, and read nothing when none of them hit.
+      const terms = [...new Set((question.toLocaleLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu) ?? [])
+        .filter((term) => term.length >= 3 && !ASK_FALLBACK_STOP_WORDS.has(term)))];
+      if (terms.length === 0) return null;
+      // Plain ranked search, untracked: discovery alone never counts as a read here.
+      const hits = await Promise.all((await searchVault(vaultPath, terms.join(" "), sourceResolver)).slice(0, 5).map(async (hit) => ({
+        path: hit.path,
+        treePath: tree && !hit.path.startsWith("Log/") ? await tree.lineageOf(hit.path).then(formatMemoryLineage, () => null) || null : null,
+      })));
+      // A hit on one common word is not an answer: the page itself must carry at least
+      // half the question's content words. Checked untracked, before any read counts.
+      const flat = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+      const relevant = async (path: string): Promise<boolean> => {
+        try {
+          const note = await getNote(vaultPath, path, sourceResolver);
+          const text = ` ${flat(`${path} ${note.body}`)} `;
+          return terms.filter((term) => text.includes(` ${flat(term)}`)).length >= Math.ceil(terms.length / 2);
+        } catch { return false; }
+      };
+      // Best ranked relevant hit, preferring a page placed in the tree among the top few.
+      const ordered = [...hits.filter((hit) => hit.treePath), ...hits.filter((hit) => !hit.treePath)];
+      let top: (typeof hits)[number] | undefined;
+      for (const hit of ordered) if (await relevant(hit.path)) { top = hit; break; }
+      if (!top) return null;
+      const read = await tools.readNote(top.path);
+      let excerpt = "";
+      try {
+        const parsed = JSON.parse(read) as { body?: string; passages?: Array<{ body?: string }> };
+        const body = parsed.passages ? parsed.passages.map((passage) => passage.body ?? "").join("\n") : parsed.body ?? "";
+        excerpt = body.trim().slice(0, ASK_HOST_EXCERPT_CHARS).trim();
+      } catch { /* a plain-text pinned read: no structured excerpt */ }
+      return { ...top, read, excerpt };
+    } catch (error) {
+      console.warn(`[zenod] ask fallback read failed: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 
   /** Append `· tree: <path>` to each placed page hit of a search_vault result. */
@@ -2826,6 +2901,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         return { answerSupports, answerSupportPartial: supportRegistry.lastPassageSelectionPartial };
       },
       toolAttempted: () => attempted,
+      /** True once the ask read anything: a passage, a fact view, or an entry enumeration (even an empty one). */
+      sourceRead: () => passageSources.size > 0 || factSources.length > 0 || readSpans.size > 0 || automaticFacts.size > 0
+        || factViews.length > 0 || explicitFactReadAttempts > 0 || conversationReadSpans.length > 0 || coverageTracker.scopes().length > 0,
       required: (readPaths: string[]) => readBusy || attempted || readPaths.length > 0 || coverageTracker.exhaustive
         || (Boolean(repo) && explicitMemoryRequest(question)),
       finalize: async (result: import("../llm/types.js").AnswerResult): Promise<Answer> => {

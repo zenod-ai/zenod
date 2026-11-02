@@ -110,6 +110,53 @@ describe("ask_brain cites the memory tree (E9-3b)", { timeout: 20_000 }, () => {
     expect(inputs).toHaveLength(1);
   });
 
+  it("E9-3c: when the ask ends with nothing read, Zenod searches the question, reads the top page and answers from it", async () => {
+    const { engine, inputs } = await engineFor(TREE_FIXTURE, async (input) => {
+      if (input.hostInstruction?.includes("HOST-READ SOURCE")) {
+        // Answer the typed way, selecting a support the host read registered.
+        const id = /"id":"(as_[a-f0-9]{24})","kind":"passage"/.exec(input.vaultBriefing)![1]!;
+        return { text: "", readPaths: [], supportSelections: [{ id, mode: "raw_report" as const, summaryText: "The 2023 Barcelona quotes were around 4,000 euros." }] };
+      }
+      return { text: "From the map: about 4,000 euros.", readPaths: [] };
+    });
+    const answer = await engine.ask("Barcelona quotes hair transplant");
+    // Ask, the no-tool retry, then one answer from the host's own read.
+    expect(inputs).toHaveLength(3);
+    expect(inputs[2]!.answerSupportRead).toBe(true);
+    expect(inputs[2]!.vaultBriefing).toContain(`HOST-READ SOURCE — Zenod searched the question and read this page (tree: ${QUOTES_PATH}):\n[${QUOTES}]`);
+    expect(answer.sources.map((source) => source.path)).toContain(QUOTES);
+    expect(answer.text).toContain("4,000 euros");
+    expect(answer.text).toContain(`- ${QUOTES_PATH}`);
+    expect(answer.lineage?.map((item) => item.page)).toEqual([QUOTES]);
+  });
+
+  it("E9-3c: if the model still gives no usable answer, the host returns a verbatim excerpt of the page it read", async () => {
+    const { engine, inputs } = await engineFor(TREE_FIXTURE, async () => ({ text: "", readPaths: [], supportProtocolError: "missing_submission" as const }));
+    const answer = await engine.ask("Barcelona quotes hair transplant");
+    expect(inputs).toHaveLength(3);
+    expect(answer.text).toContain(`here is what the closest page in your memory says (${QUOTES}):`);
+    expect(answer.text).toMatch(/^> /m);
+    expect(answer.sources.map((source) => source.path)).toContain(QUOTES);
+    expect(answer.text).toContain(`- ${QUOTES_PATH}`);
+  });
+
+  it("E9-3c: no fallback when the model already read a source", async () => {
+    const read = await engineFor(TREE_FIXTURE, async (_input, tools) => {
+      await tools.readNote!(QUOTES);
+      return { text: "The 2023 Barcelona quotes were around 4,000 euros.", readPaths: [QUOTES] };
+    });
+    await read.engine.ask("Barcelona quotes hair transplant");
+    expect(read.inputs).toHaveLength(1);
+  });
+
+  it("E9-3c: no fallback read when the best hit carries under half the question's words", async () => {
+    const { engine, inputs } = await engineFor(TREE_FIXTURE, async () => ({ text: "From the map.", readPaths: [] }));
+    const answer = await engine.ask("Barcelona zzqx yyvw wwpt");
+    expect(inputs).toHaveLength(2);
+    expect(answer.sources).toEqual([]);
+    expect(answer.text).toContain("couldn't verify");
+  });
+
   it("leaves a vault without a tree exactly as before", async () => {
     let searchText = "";
     const { engine, inputs } = await engineFor(FLAT_FIXTURE, async (_input, tools) => {
