@@ -788,7 +788,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const hits = await rankedSearch(query);
         if (hits.length === 0) return "no results";
         const context = onSearchHits ? await onSearchHits(hits) : "";
-        return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}${h.treePath && h.path.includes("#^") ? ` · tree: ${h.treePath}` : ""}`).join("\n"), context].filter(Boolean).join("\n\n");
+        return [hits.map((h) => `${h.path} (score ${h.score}) — ${h.snippet}`).join("\n"), context].filter(Boolean).join("\n\n");
       },
       ...(typedEntries ? { searchEntries: async (input: EntrySearchInput) => {
         const search = entrySearch ?? options.entrySearch;
@@ -2555,14 +2555,13 @@ export function createEngine(options: EngineOptions): BrainEngine {
     reportTokenCost("ask", [scopedBriefing.text, question], scopedBriefing);
     const session = memoryAnswerSession(question, contextRefs, pinnedSpans, pinnedSources, askOptions.entrySearch);
     const pinnedSupports = pinnedPassages.map(passage => ({ ref: passage.identity, ...session.registerPinned(passage) }));
-    // EPIC-9 E9-3b: search hits carry their tree path and the answer cites the path of
-    // each source it relies on. Any tree error leaves the answer exactly as before.
+    // EPIC-9 E9-3b: the answer carries the tree path of each source it relies on, in the
+    // structured `lineage` field only (E9-5j: the text is as before). Any tree error leaves the answer as before.
     const tree = await loadMemoryTree(vaultPath).catch((error: unknown) => {
       console.warn(`[zenod] memory tree unavailable for ask: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     });
-    const search = session.tools.searchVault;
-    const askTools: VaultReadTools = tree && search ? { ...session.tools, searchVault: async (query: string) => annotateHitLineage(await search(query), tree) } : session.tools;
+    const askTools: VaultReadTools = session.tools;
     const answerInput: AnswerInput = {
         question,
         answerSupportContract: "v1",
@@ -2652,17 +2651,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }
   }
 
-  /** Append `· tree: <path>` to each placed page hit of a search_vault result. */
-  async function annotateHitLineage(text: string, tree: MemoryTreeIndex): Promise<string> {
-    const lines = await Promise.all(text.split("\n").map(async (line) => {
-      const hit = /^(.+?\.md) \(score [^)]*\) — /.exec(line);
-      if (!hit || hit[1]!.startsWith("Log/") || line.includes(" · tree: ")) return line;
-      const path = await tree.lineageOf(hit[1]!).then(formatMemoryLineage, () => "");
-      return path ? `${line} · tree: ${path}` : line;
-    }));
-    return lines.join("\n");
-  }
-
   async function withAnswerLineage(answer: Answer, tree: MemoryTreeIndex): Promise<Answer> {
     if (answer.sources.length === 0) return answer;
     try {
@@ -2670,7 +2658,6 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (lineage.length === 0) return answer;
       return {
         ...answer,
-        text: `${answer.text}\n\nWhere this sits in your memory:\n${lineage.map((item) => `- ${item.text}`).join("\n")}`,
         lineage,
       };
     } catch (error) {

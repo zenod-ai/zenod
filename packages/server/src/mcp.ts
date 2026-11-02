@@ -3,7 +3,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   ContextRefError,
-  formatMemoryLineage,
   memoryEntrySummaries,
   type MemoryTreeIndex,
   type EntrySearchInput,
@@ -984,11 +983,11 @@ export function buildMcpServer(
       const output = { hits, entries, pagination };
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
-        : hits.map((hit) => {
-            // A Log entry hit from the tier-0 index (E9-5a) carries the path of the page it was filed on.
-            const path = formatMemoryLineage({ placement: hit.placement, lineage: hit.lineage, evidence: hit.evidenceRefs }) || hit.treePath || "";
-            return `${hit.path} (score ${hit.score}) — ${hit.snippet}${path ? `\n  path: ${path}` : ""}${hit.url ? `\n  ${hit.url}` : ""}`;
-          }).join("\n");
+        // Tree lineage stays in structured output only (E9-5j, root L-6): the text is as before EPIC-9.
+        : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}`).join("\n");
+      if (timed?.ms != null && rankedHits.length) {
+        console.info(`[memory-search] ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB)` : ""}`);
+      }
       const entryText = entries.length === 0
         ? structuralQuery ? "No memory entries match the structural filters." : ""
         : entries.map((entry) => [
@@ -1000,7 +999,7 @@ export function buildMcpServer(
         content: [
           {
             type: "text",
-            text: [noteText + (timed?.ms != null && rankedHits.length ? `\nSearch: ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB)` : ""}` : ""), entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
+            text: [noteText, entryText, pagination ? `Entry coverage: ${pagination.matchedEntries} matches / ${pagination.scannedEntries} scanned; hasMore=${pagination.hasMore}. ${pagination.hasMore ? `Continue with nextCursor=${pagination.nextCursor} and the same query/filters/order.` : "End of matching entries in this local snapshot."} Note hits are independently ranked and do not obey entry filters.` : ""].filter(Boolean).join("\n\n"),
           },
         ],
         structuredContent: output,
@@ -1031,13 +1030,11 @@ export function buildMcpServer(
       const note = await engine.get(path);
       const tree = await loadTree(engine);
       const placement = await lineageFields(tree, note.path);
-      const lineageText = formatMemoryLineage({ placement: placement.placement, lineage: placement.lineage, evidence: placement.evidenceRefs });
-      const treeText = `${lineageText ? `path: ${lineageText}\n` : ""}${placement.children.length ? `children: ${placement.children.map((child) => child.path ?? child.title).join(", ")}\n` : ""}`;
       return {
         content: [
           {
             type: "text",
-            text: `# ${note.path}\nfrontmatter: ${JSON.stringify(note.frontmatter)}\n${note.url ? `source: ${note.url}\n` : ""}${treeText}\n${note.body}`,
+            text: `# ${note.path}\nfrontmatter: ${JSON.stringify(note.frontmatter)}\n${note.url ? `source: ${note.url}\n` : ""}\n${note.body}`,
           },
         ],
         structuredContent: { ...note, ...placement },
