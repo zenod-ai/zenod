@@ -42,18 +42,28 @@ The steps are [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) A0–A5; these ar
 ## Current State
 
 Status: active
-Phase: milestone A ([ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md)) revived 2026-10-24, steps A0–A5 defined, none started. Every other spine in this repo is closed ([TIDY-2026-10-24](TIDY-2026-10-24.md)).
-Last attempted: docs main-direct, 2026-10-25 (Jordi via agent_team thread): publish.yml skips docs-only pushes and needs `ci` before publish/deploy, AGENTS.md `Integration policy: main-direct` + `Deploy gate:`, required `ci` status check removed from `main` protection ([#1433](https://github.com/zenod-ai/zenod/pull/1433), D34). Before that: agent_team EPIC-16 tree cleanse, 2026-10-24 (#1428–#1430).
-Production: `https://cloud.zenod.dev/api/health` reported `687f259` (= `main` HEAD) on 2026-10-24; the Publish image `deploy` job fails on `main` since 2026-10-24 (Dokploy API 404), owned by ZAL A0. Signup and paid checkout opened 2026-09-16 on `83c2752`; live billing never performed.
-Waiting on: nobody at the root. Human gates live in ZAL: A1 voice test, A5 Stripe verification + live €9. The per-plan allowance figure and turning on blocking at the cap (D30) move with A2.
-Next action: ZAL A0, re-check prod end to end (signup → WhatsApp → console), read-only, and fix the push-to-main deploy.
-Verified at: 2026-10-25 (this commit pushed main-direct without bypass; Publish image did not run for it). Health endpoint last read 2026-10-24.
+Phase: Zenod is getting ready for its first five real testers; the agents have built everything they can, and the dress rehearsal now waits on one sign-in from Jordi. One line per child (detail stays in each child):
+- [ZAL](EPIC-ZENOD-ALPHA-LAUNCH.md) milestone A: production is up and push-to-main deploys again (A0, 2026-10-25); the launch work runs in its children EPIC-7 and EPIC-6.
+- [EPIC-7](EPIC-7-REAL-USER-TEST.md) real-user test: T0–T6 done (checkout, $3 AI caps, tester codes, wording, tester-watch live), vault key and internal tokens rotated (T3.1, T3.2); the T7 rehearsal is paused at Google's password for operations@alpha9.io.
+- [EPIC-6](EPIC-6-HEALTH-DASHBOARD.md) health page: S1 inventory in review since 2026-10-25; S2–S6 wait for Jordi to accept S1 and stamp S2/S3.
+- [EPIC-9](EPIC-9-MEMORY-AS-A-TREE.md) memory as a tree: Jordi's vault is now a tree, new captures file into it, the Memory tab is live and ask_brain cites the path (eval 9–10/10); E9-2f merged (#1467); waits on Jordi's look (E9-A4).
+- [EPIC-8](EPIC-8-WEB3-VENICE-RESEARCH.md) Web3/Venice: brainstorm only, draft until Jordi stamps it ready (E8-A3).
+Last attempted: 2026-11-02, rolled up this week's child work: EPIC-7 rotated the exposed tokens and readied the rehearsal browser; EPIC-9 shipped tree filing, the weekly sweep, the Memory tab and ask_brain lineage (E9-2b…E9-2f, E9-3a…E9-3c). Before that: docs main-direct at the root, 2026-10-25 ([#1433](https://github.com/zenod-ai/zenod/pull/1433), D34).
+Result: Zenod runs in production and a new tester could sign up, get a free pass and be capped, but nobody outside the team has used it yet. Live `cloud.zenod.dev/api/health` ok on `61f6f52` (2026-11-02); live billing never performed.
+Waiting on: Jordi, three asks, most urgent first:
+- E7-A10 roll the six third-party keys that leaked into an agent session on 2026-11-01 (Stripe first; ~10 min in their dashboards).
+- E7-A11 sign in operations@alpha9.io once in the agent's browser (~1 min) so the T7 rehearsal runs.
+- E9-A4 open the Memory tab and say whether you recognise your world (2 min).
+Next action: Once Jordi signs in (E7-A11), the agents run the T7 dress rehearsal, then the T8 go/no-go and the five tester invites; rolled keys are swapped in as Jordi provides them (E7-A10).
+Verified at: 2026-11-02 (child Current States read from `main` e4886b3; health endpoint read live: ok, sha 61f6f52).
 
 ## Spine Map
 
 | Spine ID | Relationship | Spine | Contributes | Status | Health / Blocker | Next Action |
 |---|---|---|---|---|---|---|
-| ZAL | child | [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) | Milestone A "Zenod is production-ready": a real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, metered and capped (serves agent_team EPIC-12). | active | Revived 2026-10-24 under agent_team EPIC-12; A0 next; EPIC-6 health page sits under it. | ZAL A0 |
+| ZAL | child | [Zenod Alpha Launch](EPIC-ZENOD-ALPHA-LAUNCH.md) | Milestone A "Zenod is production-ready": a real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, metered and capped (serves agent_team EPIC-12). | active | A0 done 2026-10-25; launch work runs in EPIC-7 (real-user test, T7 waits on E7-A11) and EPIC-6 (health page). | EPIC-7 T7 |
+| EPIC-9 | child | [Memory as a tree](EPIC-9-MEMORY-AS-A-TREE.md) | Zenod files memory as a tree and answers with lineage. | active | Built and live; waits on Jordi's look (E9-A4). | E9-A4, then close E9-2 |
+| EPIC-8 | child | [Web3 / Venice research](EPIC-8-WEB3-VENICE-RESEARCH.md) | Private-inference angle for Zenod (research line). | draft | Waits on Jordi to stamp ready (E8-A3). | on E8-A3: T1 + T2 |
 | ZMR | child | [Memory Reliability](EPIC-ZENOD-MEMORY-RELIABILITY.md) | Complete multi-idea filing and grounded recall using existing evidence pipeline. | superseded | Closed: partially accomplished; superseded by ZAL (E16-S2, 2026-10-24) | none; [Outcome](EPIC-ZENOD-MEMORY-RELIABILITY.md#outcome) |
 | ZDU | child | [Deployments and upgrades](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md) | Repeatable minimal-scope upgrades with verified running versions and explicit rollback. | done | Closed: done (E16-S2, 2026-10-24) | none; [Outcome](EPIC-ZENOD-DEPLOYMENTS-UPGRADES.md#outcome) |
 | ZLS | child | [Landing story](EPIC-ZENOD-LANDING-STORY.md) | Promote the approved Zenod story into a responsive landing-page journey, retouch slides 01–08, and add slides 09–10. | superseded | Closed: superseded by ZAL (E16-S2, 2026-10-24) | none; [Outcome](EPIC-ZENOD-LANDING-STORY.md#outcome) |
