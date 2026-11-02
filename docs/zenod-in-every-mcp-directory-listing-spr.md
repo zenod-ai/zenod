@@ -25,14 +25,14 @@ Zenod is listed in Anthropic's MCP directory, Google's, and every other MCP list
 
 ## Current State
 
-Owner: unassigned
-Status: ready
-Last attempted: scaffolded with spine_new.py on 2026-11-02
+Owner: Delivery manager
+Status: active
+Last attempted: 2026-11-02 Delivery Manager wake run_1ada2ae7: planning worker P1 dispatched (Jordi readied the epic, L-37)
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
 Approved work: none
-Next action: fill Goal, Serves and Done means
+Next action: P1 fills Goal/Serves/Done means and the per-directory plan; then one child epic or row per listing action (EPIC-11 WebMCP already exists as a child)
 Source revision: uncommitted scaffold
 Verified at: 2026-11-02
 
@@ -46,7 +46,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | first step | draft | none | none | none | none | 2026-11-02 | write the first step |
+| P1 | Research worker | unassigned | Plan: survey every MCP directory worth being in (Anthropic, Google, and the rest), their listing requirements and SEO levers; fill Goal, Serves, Done means; propose one row or child epic per listing action | ready | none | - | main | none | 2026-11-02 | dispatch |
 
 ## Decisions
 
