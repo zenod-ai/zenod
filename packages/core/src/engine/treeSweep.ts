@@ -9,6 +9,7 @@ import { lintTreeIndex } from "../vault/treeLint.js";
 import { lintVault } from "../vault/lint.js";
 import { getEvidenceEntry } from "./evidence.js";
 import { applyTreeDiscovery, discoverTree, type DiscoveredRoot } from "./treeDiscover.js";
+import { materializeNamedSubjects, type MaterializedSubject } from "./treeSubjects.js";
 import { readLogCaptures } from "../vault/captureOrigin.js";
 import {
   appendOpsRollup,
@@ -126,6 +127,9 @@ export interface TreeSweepCounts {
   pagesReparented?: number;
   /** Provisional leaves made only of agent reports, now ops-rollup lines (E9-2h). */
   agentLeavesRefiled?: number;
+  /** Pages made for names the person keeps saying (E9-2i), and pages of theirs given new captures. */
+  subjectPagesCreated?: number;
+  subjectPagesUpdated?: number;
 }
 
 export interface TreeSweepReport {
@@ -155,10 +159,15 @@ export const lintErrorKey = (error: { path: string; rule: string; message: strin
 /** Discovery runs to a fixed point (its parent edges feed the next pass); a pass that writes nothing ends it. */
 const MAX_DISCOVERY_PASSES = 3;
 
-export async function rediscoverTree(vaultPath: string, today: string, writes: TrackedWrites, fresh = false): Promise<{ roots: DiscoveredRoot[]; changed: string[]; rootsNew: number } | null> {
-  const before = new Set((await readTree(vaultPath))?.nodes.map(n => `${n.name}|${n.kind}`) ?? []);
+export async function rediscoverTree(vaultPath: string, today: string, writes: TrackedWrites, fresh = false): Promise<{ roots: DiscoveredRoot[]; changed: string[]; rootsNew: number; subjects: MaterializedSubject[] } | null> {
+  const tree = await readTree(vaultPath);
+  if (!tree) return null;
+  const before = new Set(tree.nodes.map(n => `${n.name}|${n.kind}`));
   let roots: DiscoveredRoot[] | null = null;
   const changed = new Set<string>();
+  // Names the person keeps saying with no page about them get one first (E9-2i), so discovery can find them.
+  const subjects = await materializeNamedSubjects(vaultPath, today, writes);
+  for (const subject of subjects) changed.add(subject.path);
   for (let pass = 0; pass < MAX_DISCOVERY_PASSES; pass++) {
     // `fresh` applies to the first pass only; later passes continue what it wrote.
     const plan = await discoverTree(vaultPath, { today, ...(fresh && pass === 0 ? { fresh: true } : {}) });
@@ -168,7 +177,7 @@ export async function rediscoverTree(vaultPath: string, today: string, writes: T
     for (const path of written) changed.add(path);
     if (!written.length) break;
   }
-  return roots ? { roots, changed: [...changed].sort(), rootsNew: roots.filter(r => !before.has(`${r.name}|${r.kind}`)).length } : null;
+  return roots ? { roots, changed: [...changed].sort(), rootsNew: roots.filter(r => !before.has(`${r.name}|${r.kind}`)).length, subjects } : null;
 }
 
 const DAY_MS = 86_400_000;
@@ -588,7 +597,9 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
         discoveredWorking: discovery.roots.filter(r => r.kind === "working").length,
         discoveredLongTerm: discovery.roots.filter(r => r.kind === "long-term").length,
         rootsNew: discovery.rootsNew,
-        pagesReparented: discovery.changed.filter(p => p !== "Tree.md").length,
+        pagesReparented: discovery.changed.filter(p => p !== "Tree.md" && !discovery.subjects.some(s => s.path === p && s.created)).length,
+        subjectPagesCreated: discovery.subjects.filter(s => s.created).length,
+        subjectPagesUpdated: discovery.subjects.filter(s => !s.created).length,
       } : {}),
       agentLeavesRefiled: agentLeaves.length,
     },

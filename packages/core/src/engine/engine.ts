@@ -1994,8 +1994,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
         const c = report.counts;
         const roots = c.discoveredWorking !== undefined ? `, roots ${c.discoveredWorking} working / ${c.discoveredLongTerm} long-term` : "";
         const agentLeaves = c.agentLeavesRefiled ? `, agent-report leaves to ops ${c.agentLeavesRefiled}` : "";
+        const subjects = c.subjectPagesCreated ? `, subject pages ${c.subjectPagesCreated}` : "";
         const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${agentLeaves}${subjects}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
         );
         return { report, committed: true, revision };
       } catch (error) {

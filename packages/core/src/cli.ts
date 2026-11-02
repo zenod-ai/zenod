@@ -223,12 +223,13 @@ async function main(): Promise<number> {
         const changed = writes ? writes.paths.sort() : null;
         const roots = applied?.roots ?? plan.roots;
         if (rest.includes("--json")) {
-          console.log(JSON.stringify({ fresh: plan.fresh, stats: plan.stats, roots, changed, agentLeavesRefiled: refiled.length }, null, 2));
+          console.log(JSON.stringify({ fresh: plan.fresh, stats: plan.stats, roots, changed, agentLeavesRefiled: refiled.length, subjects: applied?.subjects ?? [] }, null, 2));
           return 0;
         }
         for (const root of roots) {
           console.log(`${root.kind.padEnd(9)}  ${root.name}  ·  ${root.pages} page(s) · heat ${root.heat} · own captures 30d ${root.ownCaptures}${root.continues ? "" : " · new"}`);
         }
+        for (const subject of applied?.subjects ?? []) console.log(`subject    ${subject.display}  ·  ${subject.created ? "new page" : `${subject.added} new capture(s) on`} ${subject.path}`);
         console.log(`${plan.stats.pages} tree pages · ${plan.stats.topics} topics · ${plan.fresh ? "fresh (current roots ignored)" : "continuing"}${changed ? ` · ${changed.length} file(s) written · ${refiled.length} agent-report leaf(s) moved to the ops rollup` : " · dry run"}`);
         return 0;
       }
