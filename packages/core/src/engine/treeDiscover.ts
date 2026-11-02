@@ -1007,8 +1007,10 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   const working = [...forcedWorking, ...eligible.filter(t => !forcedWorking.includes(t)).slice(0, Math.max(0, maxWorking - forcedWorking.length))];
   const cold = topics.filter(t => !working.includes(t));
   // A cold subject of its own is a long-term area of its own, however small; the other topics merge into areas.
-  const coldSubjects = cold.filter(t => subjects.has(t)).map(t => t.members);
-  const mergeable = cold.filter(t => !subjects.has(t));
+  // A closed root (E9-5e) is one too: it moves to long-term with its story intact, never folded into another area.
+  const ownArea = (t: Cluster) => subjects.has(t) || t.members.some(i => closed.has(i));
+  const coldSubjects = cold.filter(ownArea).map(t => t.members);
+  const mergeable = cold.filter(t => !ownArea(t));
   let areaGroups = mergeable.length ? agglomerate(mergeable.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas, labels) : [];
   // An area of one or two pages is a stray, not an area: it joins the area it reads most like (one it may join).
   const strays = new Set<number[]>();

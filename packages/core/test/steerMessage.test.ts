@@ -7,9 +7,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
 import {
   isSteerReply,
+  isUndoableSteerReply,
   parseSteerMessage,
   planSteer,
   resolveRoot,
+  revertOf,
+  steerAppliedReply,
   type SteerIntent,
   type SteerRoot,
 } from "../src/engine/steerMessage.js";
@@ -150,10 +153,20 @@ describe("E9-5e plan: resolve roots, ask when unsure, let ordinary sentences thr
     }
   });
 
+  it("a pin on a long-term root says it keeps its name and stays long-term", () => {
+    const family = ROOTS.find(r => r.node.name === "Family")!;
+    expect(steerAppliedReply({ action: "pin", root: family }, "K-9", "en")).toMatch(/^Memory tree: pinned "Family"\. It keeps this name and stays a topic of its own; it is in long-term memory now/);
+  });
+
   it("marks every steer reply so a bare \"that's wrong\" right after one is an undo", () => {
     expect(isSteerReply("Memory tree: pinned \"Zenod\".")).toBe(true);
     expect(isSteerReply("Árbol de memoria: he fijado \"Zenod\".")).toBe(true);
     expect(isSteerReply("Your dentist is on Monday.")).toBe(false);
+    expect(isUndoableSteerReply('Memory tree: pinned "Zenod" (note K-4). To undo it, reply "that\'s wrong".')).toBe(true);
+    expect(isUndoableSteerReply('Memory tree: I don\'t have a topic called "fam". Which one did you mean?')).toBe(false);
+    expect(revertOf("memory: keeper note K-4 (pin X)", "aaaaaaa")).toEqual({ subject: "memory: undo aaaaaaa (keeper note K-4 (pin X))", redo: false, what: "pin X" });
+    expect(revertOf("memory: undo aaaaaaa (keeper note K-4 (pin X))", "bbbbbbb")).toEqual({ subject: "memory: redo bbbbbbb (keeper note K-4 (pin X))", redo: true, what: "pin X" });
+    expect(revertOf("memory: redo bbbbbbb (keeper note K-4 (pin X))", "ccccccc")).toMatchObject({ subject: "memory: undo ccccccc (keeper note K-4 (pin X))", redo: false });
   });
 });
 
@@ -254,22 +267,33 @@ describe("E9-5e engine: a steer by message is one commit before filing, and \"th
 
     // Spanish, explicit: the undo is itself undone (the rename is back), never a force-push.
     const redo = await engine.chat("deshaz el último cambio del árbol", "whatsapp", { conversationKey: "other" });
-    expect(redo.text).toMatch(/^Árbol de memoria: deshecho: /);
+    expect(redo.text).toMatch(/^Árbol de memoria: recuperado: rename to House\. He revertido el deshacer \([0-9a-f]{7}\)/);
     const second = await remote();
     expect(await readFile(join(second.dir, TREE_PATH), "utf8")).toBe(treeAfterRename);
     expect(second.log.length).toBe(first.log.length + 1);
+    // Undo and redo alternate on the same change; subjects never nest.
+    expect(second.log[0]).toMatch(/^memory: redo [0-9a-f]{7} \(keeper note K-1 \(rename to House\)\)$/);
+    const third = await engine.chat("that's wrong", "whatsapp", { conversationKey: "other" });
+    expect(third.text).toMatch(/^Memory tree: undone: rename to House\./);
+    expect((await remote()).log[0]).toMatch(/^memory: undo [0-9a-f]{7} \(keeper note K-1 \(rename to House\)\)$/);
   });
 
-  it("asks back on an unknown root, writes nothing; and there is nothing to undo on a fresh vault", async () => {
+  it("asks back on an unknown root and writes nothing; a bare \"that's wrong\" after a question is chat", async () => {
     const { engine, remote, modelCalls } = await setup();
+    await engine.chat("pin Hair transplant", "whatsapp");
     const unknown = await engine.chat("pin Garden", "whatsapp");
     expect(unknown.text).toMatch(/^Memory tree: I don't have a topic called "Garden"\. Which one did you mean\? Your working topics: Launching Epic Social, Launching Zenod, Hair transplant, House decision\.$/);
-    const nothing = await engine.chat("undo the last tree change", "whatsapp");
-    expect(nothing.text).toBe("Memory tree: there is no recent change to your memory tree to undo. Nothing changed.");
+    // After a question back, a bare "that's wrong" is about that answer, not an undo of the pin before it.
+    expect((await engine.chat("that's wrong", "whatsapp")).text).toBe("A normal answer.");
+    expect(modelCalls()).toBe(1);
+    expect((await engine.chat("undo the last tree change", "whatsapp")).text).toMatch(/^Memory tree: undone: pin Hair transplant\./);
+    const nothing = await engine.chat("undo the last tree change", "mcp");
+    expect(nothing.text).toMatch(/^Memory tree: put back: pin Hair transplant\./);
     const taken = await engine.chat("rename House decision to Hair transplant", "whatsapp");
     expect(taken.text).toBe('Memory tree: another topic is already called "Hair transplant". Nothing changed.');
-    expect(modelCalls()).toBe(0);
-    expect((await remote()).log).toEqual(["seed vault"]);
+    expect(modelCalls()).toBe(1);
+    expect((await remote()).log.at(-1)).toBe("seed vault");
+    expect((await remote()).log).toHaveLength(4);
   });
 
   it("can be switched off: the message goes to the model as before", async () => {

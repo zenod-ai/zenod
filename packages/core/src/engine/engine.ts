@@ -64,12 +64,12 @@ import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, file
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { loadSteerRoots, steerTreeRoot, TreeSteerError, type TreeSteerInput, type TreeSteerResult } from "./treeSteer.js";
 import {
-  changeInWords,
-  isSteerReply,
+  isUndoableSteerReply,
   KEEPER_COMMIT_RE,
   nothingToUndoReply,
   parseSteerMessage,
   planSteer,
+  revertOf,
   steerAppliedReply,
   steerFailedReply,
   steerUnchangedReply,
@@ -2149,7 +2149,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     if (parsed.intent.kind === "undo" && !parsed.intent.explicit) {
       // A bare "that's wrong" is about the tree only right after a steer reply; otherwise it is about the answer.
       const last = [...await state.recentWindow(cid)].reverse().find(m => m.role === "assistant");
-      if (!last || !isSteerReply(last.text)) return null;
+      if (!last || !isUndoableSteerReply(last.text)) return null;
     }
     const plan = planSteer(parsed, await loadSteerRoots(vaultPath));
     if (plan.type === "pass") return null;
@@ -2162,7 +2162,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       try {
         const undone = await undoKeeperChange();
         if (!undone) return record(nothingToUndoReply(parsed.lang), { status: "nothing_to_undo" });
-        return record(undoReply(changeInWords(undone.subject), undone.id.slice(0, 7), parsed.lang), { status: "undone", commit: undone.id, revision: undone.revision.id });
+        const { redo, what } = revertOf(undone.subject, undone.id.slice(0, 7));
+        return record(undoReply(what, undone.id.slice(0, 7), parsed.lang, redo), { status: redo ? "redone" : "undone", commit: undone.id, revision: undone.revision.id });
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
         const reason = code === "tree_undo_unsupported" ? "unsupported" : code === "tree_undo_conflict" ? "conflict" : "error";
@@ -2213,7 +2214,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (changes.some(change => !target.paths.includes(change.path))) throw new Error("tree_undo_unexpected_change");
         const errors = (await treeErrors()).filter(key => !before.has(key));
         if (errors.length > 0) throw new Error(`tree_undo_lint: ${errors.join("; ")}`);
-        const revision = await repo.commitAndPublish(`memory: undo ${target.id.slice(0, 7)} (${target.subject.replace(/^memory:\s*/, "")})`);
+        const revision = await repo.commitAndPublish(revertOf(target.subject, target.id.slice(0, 7)).subject);
         return { id: target.id, subject: target.subject, revision };
       } catch (error) {
         await repo.discardChanges().catch(() => {});

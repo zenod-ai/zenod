@@ -237,6 +237,11 @@ export function isSteerReply(text: string): boolean {
   return Object.values(STEER_REPLY_PREFIX).some(prefix => text.startsWith(prefix));
 }
 
+/** A steer reply that reported a change (so a bare "that's wrong" after it means: undo that), not a question. */
+export function isUndoableSteerReply(text: string): boolean {
+  return isSteerReply(text) && [UNDO_HINT.en, UNDO_HINT.es, ...Object.values(AGAIN_HINT)].some(hint => text.includes(hint.trim()));
+}
+
 const say = (lang: SteerLang, en: string, es: string) => `${STEER_REPLY_PREFIX[lang]}${lang === "es" ? es : en}`;
 const list = (roots: readonly SteerRoot[], lang: SteerLang) => {
   const names = roots.map(r => `"${r.node.name}"`);
@@ -327,6 +332,10 @@ export function steerAppliedReply(apply: SteerApply, note: string, lang: SteerLa
   const hint = UNDO_HINT[lang];
   switch (apply.action) {
     case "pin":
+      if (apply.root.node.kind === "long-term") {
+        return say(lang, `pinned "${name}". It keeps this name and stays a topic of its own; it is in long-term memory now and moves up when you capture about it again (note ${note}).${hint}`,
+          `he fijado "${name}". Mantiene este nombre y sigue siendo un tema propio; ahora está en la memoria a largo plazo y sube cuando vuelvas a hablar de ello (nota ${note}).${hint}`);
+      }
       return say(lang, `pinned "${name}". It stays in working memory with this name, even when you go quiet on it (note ${note}).${hint}`,
         `he fijado "${name}". Se queda en la memoria activa con este nombre aunque no hables de ello (nota ${note}).${hint}`);
     case "rename":
@@ -358,10 +367,19 @@ export function steerUnchangedReply(apply: SteerApply, lang: SteerLang): string 
   }
 }
 
-/** The reply after an undo. `what` is the change in words, from its commit ("pin Agent Team"). */
-export function undoReply(what: string, commit: string, lang: SteerLang): string {
-  return say(lang, `undone: ${what}. I reverted that one change (${commit}) with a new commit; nothing was deleted. Say "that's wrong" again to put it back.`,
-    `deshecho: ${what}. He revertido ese cambio (${commit}) con un commit nuevo; no se ha borrado nada. Di "eso está mal" otra vez para recuperarlo.`);
+const AGAIN_HINT: Record<SteerLang, string> = {
+  en: `Say "that's wrong" again`,
+  es: `Di "eso está mal" otra vez`,
+};
+
+/** The reply after an undo (or a redo, when the commit reverted was itself an undo). `what` is the change in words ("pin Agent Team"). */
+export function undoReply(what: string, commit: string, lang: SteerLang, redo = false): string {
+  if (redo) {
+    return say(lang, `put back: ${what}. I reverted the undo (${commit}) with a new commit; nothing was deleted. ${AGAIN_HINT.en} to undo it.`,
+      `recuperado: ${what}. He revertido el deshacer (${commit}) con un commit nuevo; no se ha borrado nada. ${AGAIN_HINT.es} para deshacerlo.`);
+  }
+  return say(lang, `undone: ${what}. I reverted that one change (${commit}) with a new commit; nothing was deleted. ${AGAIN_HINT.en} to put it back.`,
+    `deshecho: ${what}. He revertido ese cambio (${commit}) con un commit nuevo; no se ha borrado nada. ${AGAIN_HINT.es} para recuperarlo.`);
 }
 
 export function nothingToUndoReply(lang: SteerLang): string {
@@ -379,14 +397,23 @@ export function steerFailedReply(lang: SteerLang, reason: "busy" | "conflict" | 
   }
 }
 
-/** "memory: keeper note K-4 (pin Agent Team)" → "pin Agent Team"; other subjects lose their "memory: " prefix. */
-export function changeInWords(subject: string): string {
-  const inner = /^memory: keeper note K-\d+ \((.+)\)$/.exec(subject);
-  if (inner) return inner[1]!;
-  const undo = /^memory: undo \S+ \((.+)\)$/.exec(subject);
-  if (undo) return `the undo of "${changeInWords(undo[1]!)}"`;
-  return subject.replace(/^memory:\s*/, "");
+/**
+ * What reverting a keeper commit means. Undo and redo alternate on the same original change, so
+ * subjects never nest: reverting "memory: keeper note K-4 (pin X)" gives "memory: undo <sha> (keeper
+ * note K-4 (pin X))"; reverting that gives "memory: redo <sha> (keeper note K-4 (pin X))", and so on.
+ */
+export function revertOf(subject: string, sha7: string): { subject: string; redo: boolean; what: string } {
+  const toggle = /^memory: (undo|redo) [0-9a-f]+ \((.+)\)$/.exec(subject);
+  const original = toggle ? toggle[2]! : subject.replace(/^memory:\s*/, "");
+  const redo = toggle?.[1] === "undo";
+  return { subject: `memory: ${redo ? "redo" : "undo"} ${sha7} (${original})`, redo, what: changeInWords(original) };
+}
+
+/** "keeper note K-4 (pin Agent Team)" → "pin Agent Team"; anything else as it is. */
+export function changeInWords(original: string): string {
+  const inner = /^(?:memory: )?keeper note K-\d+ \((.+)\)$/.exec(original);
+  return inner ? inner[1]! : original.replace(/^memory:\s*/, "");
 }
 
 /** Vault commits "that's wrong" may undo: Keeper notes and steers, the weekly tidy, the keeper, and undos. */
-export const KEEPER_COMMIT_RE = /^memory: (?:keeper\b|weekly tree sweep\b|tree\b|undo\b)/;
+export const KEEPER_COMMIT_RE = /^memory: (?:keeper\b|weekly tree sweep\b|tree\b|undo\b|redo\b)/;
