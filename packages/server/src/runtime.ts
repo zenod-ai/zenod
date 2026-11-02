@@ -72,6 +72,7 @@ import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore, type TaskJob, type TreeSweepJobResult } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
+import { createEntryHook, entryHookConfigFromEnv } from "./entryHook.js";
 import { ExecutionStore } from "./executionStore.js";
 import { TranscriptStore } from "./transcriptStore.js";
 import { JourneyStore } from "./journeyStore.js";
@@ -425,7 +426,7 @@ export class Runtime {
       text: formatFilingReceipt(result),
       severity: "info",
       dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
-    }), () => this.aiAllowanceBlock());
+    }), () => this.aiAllowanceBlock(), createEntryHook(entryHookConfigFromEnv(), this.tenantId));
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
