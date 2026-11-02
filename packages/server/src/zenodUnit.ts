@@ -63,6 +63,9 @@ import {
 import { mountStaticSurfaces } from "./staticSurfaces.js";
 import { loadSharedGithubApp, sharedGithubSettingFallbacks, type SharedGithubApp } from "./sharedGithubApp.js";
 import { walletFleetAllowlist } from "./walletUrl.js";
+import { mountSubscriberApi } from "./subscriberApi.js";
+import { SUBSCRIBER_ACTOR_HEADER } from "./subscriberRoutes.js";
+import { subscribersEnabled } from "./subscribers.js";
 import {
   ZENOD_PUBLISHED_SKILL,
   ZENOD_SKILL_BUNDLE_PATH,
@@ -166,6 +169,7 @@ export class ZenodRuntimePool {
         ...jevSettingFallbacks(this.env),
       },
       platformLlm: platformLlmFromEnv(this.env),
+      subscriberEnv: this.env,
       tenantMonthlyAllowanceUsd: tenantMonthlyAllowanceFromEnv(this.env),
       tenantAllowanceEnforced: tenantAllowanceEnforcedFromEnv(this.env),
       ...(this.googleDriveOAuthAuthorityForTenant
@@ -417,6 +421,8 @@ const HOSTED_CUSTOMER_HTTP_OPERATIONS = new Set([
   "POST /api/token/regenerate",
   "GET /api/connections",
   "POST /api/connections/revoke",
+  "GET /api/subscribers",
+  "POST /api/subscribers",
   "GET /api/channels",
   "POST /api/channels/whatsapp/challenge",
   "POST /api/channels/whatsapp/test",
@@ -440,6 +446,9 @@ function hostedCustomerHttpAllowed(method: string, path: string): boolean {
   if (HOSTED_CUSTOMER_HTTP_OPERATIONS.has(operation)) return true;
   if ((normalizedMethod === "GET" || normalizedMethod === "POST" || normalizedMethod === "DELETE") &&
       (path === "/mcp" || path.startsWith("/mcp/"))) return true;
+  // agent_team E42-S22: the Subscribers tab (pause, test, remove one subscriber).
+  if ((normalizedMethod === "PATCH" || normalizedMethod === "DELETE") && /^\/api\/subscribers\/sub_[A-Za-z0-9_-]+$/.test(path)) return true;
+  if (normalizedMethod === "POST" && /^\/api\/subscribers\/sub_[A-Za-z0-9_-]+\/test$/.test(path)) return true;
   return normalizedMethod === "POST" && /^\/api\/ingest\/jobs\/[^/]+\/(retry|cancel)$/.test(path);
 }
 
@@ -477,6 +486,7 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
 const HOSTED_CUSTOMER_PANELS = Object.freeze([
   "overview",
   "connect",
+  "subscribers",
   "channels",
   "vault",
   "usage",
@@ -1024,7 +1034,8 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
     // form target while leaving these two routes OAuth-client compatible.
     const isMcpOAuthBrowserRoute =
       c.req.path === "/oauth/authorize" ||
-      c.req.path === "/oauth/authorize/decision";
+      c.req.path === "/oauth/authorize/decision" ||
+      c.req.path === "/oauth/subscribers/decision";
     const formActionPolicy = isMcpOAuthBrowserRoute
       ? "form-action 'self' https: http://127.0.0.1:* http://[::1]:* http://localhost:*"
       : "form-action 'self' https://checkout.stripe.com";
@@ -1172,6 +1183,38 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       }));
     }
   }
+  // agent_team E42-S22: Sign in with Zenod (voice-note grant) and /api/subscribers/v1. Mounted first: it claims only
+  // /oauth/authorize with a voice_notes.* scope, zvc_ codes, zvn_ tokens and its own paths; all else falls through.
+  const subscriberApi = mountSubscriberApi(app, {
+    enabled: () => subscribersEnabled(env),
+    dataDir: storage.dataDir,
+    env,
+    getClient: (clientId) => oauthStore.getClient(clientId),
+    signInUrl: (returnTo) => `/auth/mcp/signin?return_to=${encodeURIComponent(returnTo)}`,
+    identity(c) {
+      const session = readCustomerSession(c, env);
+      if (!session) return null;
+      const principal = customer.principalForSession(session);
+      const account = customer.accounts.resolveActiveTenantForUser(session.user_id);
+      if (!account?.tenant_id || !(isOperatorTenant(account.tenant_id) ||
+        account.subscription_status === "active" || account.subscription_status === "past_due")) {
+        return c.text("Your Zenod account does not have an active workspace. Open your Zenod account to check access, then connect again.", 403);
+      }
+      return {
+        userId: session.user_id,
+        name: principal.display_name || session.display_name || null,
+        email: principal.email,
+        provider: session.provider,
+        tenantId: account.tenant_id,
+      };
+    },
+    runtimeForTenant(tenantId) {
+      const account = customer.accounts.resolveForTenantId(tenantId);
+      if (!account || !(isOperatorTenant(tenantId) ||
+        account.subscription_status === "active" || account.subscription_status === "past_due")) return null;
+      return runtimes.get(tenantId) ?? runtimes.forTenantStorage(tenantId, storage.forTenant({ id: tenantId }));
+    },
+  });
   app.route("/", customer.app);
   // Consent needs the original browser session; the API bridge below deliberately
   // strips cookies. Mount discovery and OAuth before any SPA catch-all as well.
@@ -1263,6 +1306,11 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
       }, 403);
     }
     let downstreamRequest = c.req.raw;
+    if (!session && c.req.header(SUBSCRIBER_ACTOR_HEADER)) {
+      const stripped = new Headers(c.req.raw.headers);
+      stripped.delete(SUBSCRIBER_ACTOR_HEADER);
+      downstreamRequest = new Request(c.req.raw, { headers: stripped });
+    }
     let admissionAccount = directRecord && !credentialMismatch && (directRecord.status ?? "active") === "active"
       ? customer.accounts.resolveForTenantId(directRecord.tenant.id)
       : null;
@@ -1285,6 +1333,17 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
 
       const headers = new Headers(c.req.raw.headers);
       headers.delete("cookie");
+      // The signed-in person, for the Subscribers card ("added by …"); a label only, never an authority.
+      headers.delete(SUBSCRIBER_ACTOR_HEADER);
+      try {
+        const actorPrincipal = customer.principalForSession(session);
+        headers.set(SUBSCRIBER_ACTOR_HEADER, JSON.stringify({
+          name: actorPrincipal.display_name || session.display_name || null,
+          email: actorPrincipal.email,
+        }));
+      } catch {
+        // no label; the card then shows the date only
+      }
       if (c.req.path.startsWith("/api/")) {
         const account = customer.accounts.resolveActiveTenantForUser(session.user_id);
         const token = account ? customer.tokenVault.get(account.account_id) : null;
@@ -1345,6 +1404,7 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           Promise.resolve().then(() => {
           }),
           Promise.resolve().then(() => customer.close()),
+          Promise.resolve().then(() => subscriberApi.close()),
           Promise.resolve().then(() => zenodPhylax?.close()),
           runtimes.close(),
         ])

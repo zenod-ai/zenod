@@ -22,7 +22,7 @@ import {
   type TaskJobStore,
   type TreeSweepJobResult,
 } from "./taskJobStore.js";
-import type { EntryHook } from "./entryHook.js";
+import type { EntryStoredListener } from "./subscribers.js";
 import { isAudioMimeType, transcribeAudio } from "./transcribe.js";
 
 /**
@@ -54,8 +54,8 @@ export class TaskJobQueue {
      * filed, and other kinds fail with the message.
      */
     private readonly aiAllowanceBlock?: () => { message: string; resetsAt: string } | null,
-    /** agent_team E42-S20: told (best effort, never awaited) when a capture is durably stored; see entryHook.ts. */
-    private readonly onEntryStored?: EntryHook,
+    /** agent_team E42-S22: told (best effort, never awaited) when a capture is durably stored; see subscribers.ts. */
+    private readonly onEntryStored?: EntryStoredListener,
   ) {}
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
@@ -72,12 +72,12 @@ export class TaskJobQueue {
     return this.store.get(id);
   }
 
-  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined): void {
+  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string): void {
     if (!evidenceRef || !this.onEntryStored) return;
     try {
-      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}) });
+      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}) });
     } catch {
-      console.warn("[entry-hook] notification failed after durable capture");
+      console.warn("[subscribers] notification failed after durable capture");
     }
   }
 
@@ -194,7 +194,7 @@ export class TaskJobQueue {
         });
         assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job, { status: "done", result });
-        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source);
+        if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source, job.input.capturedAt);
       } else if (job.kind === "media_ingest") {
         const rejection = this.admit(job.kind, job.input);
         if (rejection) throw new Error(rejection.message);
@@ -215,7 +215,7 @@ export class TaskJobQueue {
           );
           completed = this.store.updateClaimed(job, { status: "done", result });
           if (completed && result.status === "done" && result.digest.evidenceRef) {
-            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint));
+            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint), job.input.capturedAt);
           }
         }
       } else if (job.kind === "enrich_memory") {

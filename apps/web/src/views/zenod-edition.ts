@@ -14,6 +14,7 @@ export type ZenodPortalSection =
   | "overview"
   | "memory"
   | "connect"
+  | "subscribers"
   | "channels"
   | "vault"
   | "usage"
@@ -31,6 +32,7 @@ const HOSTED_SECTIONS = Object.freeze([
   { id: "overview", label: "Overview" },
   { id: "memory", label: "Memory" },
   { id: "connect", label: "Connect / MCP" },
+  { id: "subscribers", label: "Subscribers" },
   { id: "channels", label: "Channels" },
   { id: "vault", label: "Vault & sources" },
   { id: "usage", label: "Usage" },
@@ -40,6 +42,7 @@ const HOSTED_SECTIONS = Object.freeze([
 const SELF_HOSTED_SECTIONS = Object.freeze([
   { id: "overview", label: "Overview" },
   { id: "connect", label: "Connect / MCP" },
+  { id: "subscribers", label: "Subscribers" },
   { id: "channels", label: "Channels" },
   { id: "vault", label: "Vault & sources" },
   { id: "usage", label: "Usage" },

@@ -32,6 +32,7 @@ import {
   protectedResourceMetadata,
   publicBaseUrl,
 } from "./oauth.js";
+import { mountSubscriberRoutes } from "./subscriberRoutes.js";
 import {
   appStatus,
   createGithubIssue,
@@ -2596,6 +2597,9 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     runtime.oauth.revokeClient(clientId);
     return c.json({ ok: true });
   });
+
+  // agent_team E42-S22: Subscribers (push). 503 subscribers_disabled unless the operator switched it on.
+  mountSubscriberRoutes(app, runtime);
 
   app.get("/api/vault", async (c) => {
     const vaultConfigured = settings.vaultConfigured();

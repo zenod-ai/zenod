@@ -24,6 +24,7 @@ export function dashboardSectionForTab(
   if (tab === "memory" && available.has("memory")) return "memory"
   if (tab === "connect" && available.has("connect")) return "connect"
   if (tab === "connections" && available.has("connect")) return "connect"
+  if (tab === "subscribers" && available.has("subscribers")) return "subscribers"
   if (tab === "channels" && available.has("channels")) return "channels"
   if (tab === "vault") return "vault"
   if (tab === "costs") return "usage"

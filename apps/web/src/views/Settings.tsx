@@ -2,6 +2,7 @@ import { ZenodLogo } from "@/components/zenod-logo"
 import * as React from "react"
 import {
   ArrowLeftIcon,
+  BellRingIcon,
   BrainIcon,
   NetworkIcon,
   FolderGit2Icon,
@@ -47,6 +48,8 @@ import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
 import { HeraldLoopPanels } from "@/components/herald-loop-panels"
 import { GoogleDriveConnect } from "@/components/google-drive-connect"
 import { TelegramConnect } from "@/components/telegram-connect"
+import { SubscribersPanel } from "@/components/subscribers-panel"
+import { useSubscribersAvailability } from "@/lib/subscribers"
 import {
   HostedChannelsPanel,
   HostedUsagePanel,
@@ -59,6 +62,7 @@ const SECTION_ICONS = {
   overview: GaugeIcon,
   memory: NetworkIcon,
   connect: PlugZapIcon,
+  subscribers: BellRingIcon,
   channels: MessageCircleIcon,
   vault: FolderGit2Icon,
   usage: WalletCardsIcon,
@@ -142,6 +146,7 @@ export function Settings({
   const [section, setSection] = React.useState<DashboardSection>(() =>
     dashboardSectionForTab(initialTab, edition)
   )
+  const subscribersAvailability = useSubscribersAvailability()
   const isRing = overview?.unit?.name === "ring"
   const isHerald = overview?.unit?.name === "herald"
   const isCouncilUnit = isRing || isHerald
@@ -313,15 +318,20 @@ export function Settings({
           onValueChange={(value) => setSection(value as DashboardSection)}
         >
           <TabsList className="max-w-full overflow-x-auto">
-            {dashboardSectionsForEdition(edition).map(({ id, label }) => {
-              const Icon = SECTION_ICONS[id]
-              return (
-                <TabsTrigger key={id} value={id}>
-                  <Icon />
-                  {label}
-                </TabsTrigger>
-              )
-            })}
+            {dashboardSectionsForEdition(edition)
+              .filter(({ id }) => id !== "subscribers" || subscribersAvailability === "on")
+              .map(({ id, label }) => {
+                const Icon = SECTION_ICONS[id]
+                return (
+                  <TabsTrigger key={id} value={id}>
+                    <Icon />
+                    {label}
+                    {id === "subscribers" ? (
+                      <span className="text-[10px] font-normal text-muted-foreground">new</span>
+                    ) : null}
+                  </TabsTrigger>
+                )
+              })}
           </TabsList>
           <TabsContent value="overview" className="mt-4">
             <ZenodOverview
@@ -335,6 +345,9 @@ export function Settings({
           </TabsContent>
           <TabsContent value="connect" className="mt-4">
             <DashboardOverview overview={overview} showSupportCards={false} hosted={edition === "hosted"} />
+          </TabsContent>
+          <TabsContent value="subscribers" className="mt-4">
+            {subscribersAvailability === "on" ? <SubscribersPanel /> : null}
           </TabsContent>
           <TabsContent value="channels" className="mt-4">
             {edition === "hosted" ? (

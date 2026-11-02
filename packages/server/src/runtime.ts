@@ -74,7 +74,7 @@ import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
 import { TaskJobStore, type TaskJob, type TreeSweepJobResult } from "./taskJobStore.js";
 import { TaskJobQueue } from "./taskJobQueue.js";
-import { createEntryHook, entryHookConfigFromEnv } from "./entryHook.js";
+import { SubscriberDispatcher, SubscriberStore, subscriberUrlPolicyFromEnv, subscribersEnabled } from "./subscribers.js";
 import { ExecutionStore } from "./executionStore.js";
 import { TranscriptStore } from "./transcriptStore.js";
 import { JourneyStore } from "./journeyStore.js";
@@ -279,11 +279,20 @@ function createRunStatusLabel(result: CreateIssueThenRunResult): string {
  * Owns the engine lifecycle: builds it lazily from runtime settings and
  * rebuilds after settings change. One instance per process.
  */
+/** Public origin used in a subscriber event's `note.url` (agent_team E42-S22). */
+function subscriberPublicBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = (env.CUSTOMER_APP_URL || env.DOMAIN || "https://cloud.zenod.dev").trim().replace(/\/$/, "");
+  return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
+}
+
 export class Runtime {
   readonly settings: Settings;
   readonly credentialVault: CredentialVault;
   readonly state: SqliteStateStore;
   readonly oauth: OAuthStore;
+  /** agent_team E42-S22: Subscribers (push), null unless the operator set ZENOD_SUBSCRIBERS=on. */
+  readonly subscribers: SubscriberStore | null;
+  readonly subscriberDispatcher: SubscriberDispatcher | null;
   readonly whatsappStore: WhatsAppStore;
   readonly whatsapp: WhatsAppGateway;
   readonly telegram: TelegramGateway;
@@ -308,7 +317,7 @@ export class Runtime {
   private engine: BrainEngine | null = null;
   private repo: VaultRepository | null = null;
   private repoAuthorityKey: string | null = null;
-  private readonly tenantId: string;
+  readonly tenantId: string;
   private readonly tenantMonthlyAllowanceUsd: number | null;
   private readonly tenantAllowanceEnforced: boolean;
   private allowanceCache: { at: number; spendUsd: number } | null = null;
@@ -365,6 +374,8 @@ export class Runtime {
       }) => void;
       managedTelegramInbound?: TelegramManagedInboundHandler;
       managedTelegramInboundEnabled?: () => boolean;
+      /** agent_team E42-S22: where the Subscribers switch, private-origin exception and public URL are read (default process.env). */
+      subscriberEnv?: NodeJS.ProcessEnv;
     } = {},
   ) {
     this.tenantId = options.tenantId ?? "standalone";
@@ -393,6 +404,19 @@ export class Runtime {
     this.tenantMonthlyAllowanceUsd = options.tenantMonthlyAllowanceUsd ?? null;
     this.tenantAllowanceEnforced = options.tenantAllowanceEnforced ?? true;
     if (options.seedFromEnv !== false) this.settings.seedFromEnv(options.seedFromEnv);
+    const subscriberEnv = options.subscriberEnv ?? process.env;
+    if (subscribersEnabled(subscriberEnv)) {
+      this.subscribers = new SubscriberStore(join(dataDir, "subscribers.sqlite"), this.credentialVault);
+      this.subscriberDispatcher = new SubscriberDispatcher({
+        tenantId: this.tenantId,
+        store: this.subscribers,
+        policy: subscriberUrlPolicyFromEnv(subscriberEnv),
+        publicBaseUrl: subscriberPublicBaseUrl(subscriberEnv),
+      });
+    } else {
+      this.subscribers = null;
+      this.subscriberDispatcher = null;
+    }
     this.whatsappStore = new WhatsAppStore(join(dataDir, "whatsapp", "whatsapp.sqlite"));
     this.whatsapp = new WhatsAppGateway({
       dataDir: join(dataDir, "whatsapp"),
@@ -428,7 +452,7 @@ export class Runtime {
       text: formatFilingReceipt(result),
       severity: "info",
       dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
-    }), () => this.aiAllowanceBlock(), createEntryHook(entryHookConfigFromEnv(), this.tenantId));
+    }), () => this.aiAllowanceBlock(), this.subscriberDispatcher?.onEntryStored);
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
@@ -2521,6 +2545,7 @@ export class Runtime {
     };
     close(() => this.state.close());
     close(() => this.oauth.close());
+    close(() => this.subscribers?.close());
     close(() => this.whatsappStore.close());
     close(() => this.ingestStore.close());
     close(() => this.taskJobStore.close());
