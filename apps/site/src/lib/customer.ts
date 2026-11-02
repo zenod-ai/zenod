@@ -1,6 +1,7 @@
 export const SIGN_IN_PATH = "/auth/signin"
 export const GOOGLE_SIGN_IN_PATH = "/auth/google/start"
 export const DASHBOARD_URL = "https://cloud.zenod.dev/app"
+export const DOCS_URL = "https://github.com/zenod-ai/zenod/tree/main/docs"
 export const CHECKOUT_PATH = "/create-checkout-session"
 
 export type PaidTier = "monthly"

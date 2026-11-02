@@ -16,6 +16,7 @@ import {
   consumePendingHostedTier,
   createHostedCheckout,
   DASHBOARD_URL,
+  DOCS_URL,
   GOOGLE_SIGN_IN_PATH,
   type CustomerSession,
   type PaidTier,
@@ -27,7 +28,6 @@ import {
 } from "@/lib/customer";
 
 const GITHUB_URL = "https://github.com/zenod-ai/zenod";
-const DOCS_URL = "https://github.com/zenod-ai/zenod/tree/main/docs";
 const TERMS_URL = "/legal/terms.html";
 const PRIVACY_URL = "/legal/privacy.html";
 const DATA_URL = "/legal/data-handling.html";
