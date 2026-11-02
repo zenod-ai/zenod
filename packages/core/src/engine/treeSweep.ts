@@ -9,7 +9,9 @@ import { lintTreeIndex } from "../vault/treeLint.js";
 import { lintVault } from "../vault/lint.js";
 import { getEvidenceEntry } from "./evidence.js";
 import { applyTreeDiscovery, discoverTree, type DiscoveredRoot } from "./treeDiscover.js";
+import { readLogCaptures } from "../vault/captureOrigin.js";
 import {
+  appendOpsRollup,
   chooseTreeNode,
   citeOnLeaf,
   FILED_PREFIX,
@@ -30,6 +32,9 @@ import {
  *   (keep, close, or fold); the sweep never moves a root;
  * - a pending filing receipt (`Inbox/filing-…`, `Inbox/needs-filing-…`) is re-filed
  *   under the right node with E9-2b's placement, then moved to `Archive/Inbox/`;
+ * - a provisional leaf made only of agent reports (a test-campaign or wake report the
+ *   librarian's filter missed before E9-2h) becomes ops-rollup lines on its root, and
+ *   the leaf itself moves to `Archive/Agent reports/` byte for byte;
  * - a Log entry cited only by a level-1 root (outside its ops rollup) is also cited
  *   on the deepest page under that root that matches it (E9-2f), so lineage reaches
  *   the leaf; the root keeps its citation;
@@ -47,6 +52,8 @@ import {
 
 export const TREE_SWEEP_REPORT_PATH = "Inbox/Tree sweep.md";
 export const ARCHIVE_INBOX_DIR = "Archive/Inbox";
+/** Where the sweep keeps a leaf that only ever held agent reports (E9-2h): out of the tree, never deleted. */
+export const ARCHIVE_AGENT_LEAVES_DIR = "Archive/Agent reports";
 export const DEFAULT_STALE_DAYS = 30;
 /** A receipt younger than this may still be settling through its own retry; leave it alone. */
 export const DEFAULT_RECEIPT_MIN_AGE_DAYS = 2;
@@ -117,6 +124,8 @@ export interface TreeSweepCounts {
   rootsNew?: number;
   /** Tree pages whose `parent:` or `memory:` changed. */
   pagesReparented?: number;
+  /** Provisional leaves made only of agent reports, now ops-rollup lines (E9-2h). */
+  agentLeavesRefiled?: number;
 }
 
 export interface TreeSweepReport {
@@ -321,18 +330,18 @@ function parseReceipt(path: string, raw: string): ParsedReceipt {
   return { evidenceRef, pages: [...pages], pending, prepared, reason };
 }
 
-/** Free Archive/Inbox path for a receipt: same name, or `-2`, `-3`… when another file already holds it. */
-async function archivePath(vaultPath: string, path: string): Promise<string> {
+/** Free Archive path for a file: same name, or `-2`, `-3`… when another file already holds it. */
+async function archivePath(vaultPath: string, path: string, dir = ARCHIVE_INBOX_DIR): Promise<string> {
   const base = basenameOf(path);
   for (let n = 1; ; n++) {
-    const candidate = `${ARCHIVE_INBOX_DIR}/${n === 1 ? base : `${base}-${n}`}.md`;
+    const candidate = `${dir}/${n === 1 ? base : `${base}-${n}`}.md`;
     if ((await readFile(join(vaultPath, candidate), "utf8").catch(() => null)) === null) return candidate;
   }
 }
 
-/** Move a receipt to Archive/Inbox: copy byte for byte first, then remove the Inbox copy. Never a bare delete. */
-async function archiveReceipt(vaultPath: string, path: string, raw: string, writes: TrackedWrites): Promise<string> {
-  const target = await archivePath(vaultPath, path);
+/** Move a file to Archive/: copy byte for byte first, then remove the original. Never a bare delete. */
+async function archiveReceipt(vaultPath: string, path: string, raw: string, writes: TrackedWrites, dir = ARCHIVE_INBOX_DIR): Promise<string> {
+  const target = await archivePath(vaultPath, path, dir);
   await writes.write(target, raw);
   if ((await readFile(join(vaultPath, target), "utf8")) !== raw) throw new Error(`tree_sweep_archive_mismatch: ${path}`);
   await writes.remove(path);
@@ -392,6 +401,45 @@ async function sweepReceipt(
   return { path, outcome: "refiled", reason: "provisional leaf under the closest node", pages: [leaf.path], archivedTo };
 }
 
+export interface RefiledAgentLeaf {
+  path: string;
+  archivedTo: string;
+  /** Pages that now carry the leaf's reports as ops-rollup lines. */
+  rollups: string[];
+}
+
+/**
+ * E9-2h: a provisional leaf whose every citation is an agent report (captureOrigin
+ * "agent") was a filing the librarian's ops filter missed. Each report becomes a dated
+ * ops-rollup line on the root it reads most like (rule 5), and the leaf moves to
+ * `Archive/Agent reports/` byte for byte. Leaves with children, roots and any page
+ * citing one of the person's own captures stay where they are. The Log is untouched.
+ */
+export async function refileAgentLeaves(vaultPath: string, writes: TrackedWrites): Promise<RefiledAgentLeaf[]> {
+  const snapshot = await scanVault(vaultPath);
+  let index = await buildTreeIndex(vaultPath, snapshot);
+  const captures = await readLogCaptures(vaultPath, snapshot.files);
+  const out: RefiledAgentLeaf[] = [];
+  for (const [path, fields] of [...index.fields].sort(([a], [b]) => a.localeCompare(b))) {
+    if (!fields.provisional || index.rootsByPath.has(path.toLowerCase()) || index.children(path).length) continue;
+    const raw = await readFile(join(vaultPath, path), "utf8").catch(() => null);
+    if (raw === null) continue;
+    const refs = [...new Set([...parseNote(raw).body.matchAll(LOG_CITATION_RE)].map(m => `${m[1]}#^${m[2]}`))];
+    if (!refs.length || !refs.every(ref => captures.get(ref)?.origin === "agent")) continue;
+    const rollups = new Set<string>();
+    for (const ref of refs) {
+      const capture = captures.get(ref)!;
+      const page = await appendOpsRollup(vaultPath, index, { content: capture.content, evidenceRef: `Log/${capture.date}.md#^${capture.anchor}` }, writes);
+      if (page) rollups.add(page);
+    }
+    if (!rollups.size) continue;
+    const archivedTo = await archiveReceipt(vaultPath, path, raw, writes, ARCHIVE_AGENT_LEAVES_DIR);
+    out.push({ path, archivedTo, rollups: [...rollups] });
+    index = await buildTreeIndex(vaultPath);
+  }
+  return out;
+}
+
 /**
  * E9-2f: Log entries that only level-1 roots cite (the E9-2c clean-up's re-filed
  * lines, or a filing that reached only a root) are also cited on the deepest page
@@ -423,7 +471,7 @@ export async function deepenRootCitations(vaultPath: string, writes: TrackedWrit
     rootOnly++;
     const entry = await getEvidenceEntry(vaultPath, ref).catch(() => null);
     // Agent ops reports belong on the root (rule 5), however they got there.
-    if (entry && isAgentOpsReport(entry.content)) continue;
+    if (entry && isAgentOpsReport(entry.content, entry.source)) continue;
     for (const site of sites) {
       // `- 2026-06-12 · Some capture… [[2026-06-12#^e-…]]` → `Some capture…`
       const summary = site.line.replace(LOG_CITATION_RE, "").replace(/\(\s*\)/g, "").replace(/^\s*[-*]\s*(?:\d{4}-\d{2}-\d{2}\s*·\s*)?/, "").trim()
@@ -491,6 +539,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
     receipts.push(await sweepReceipt(vaultPath, path, { today: options.today, receiptMinAgeDays, skip: options.skipEvidenceRefs ?? new Set() }, writes));
   }
 
+  const agentLeaves = await refileAgentLeaves(vaultPath, writes);
   const { rootOnly, deepened } = await deepenRootCitations(vaultPath, writes);
   const discovery = options.discover === false ? null : await rediscoverTree(vaultPath, options.today, writes);
 
@@ -541,6 +590,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
         rootsNew: discovery.rootsNew,
         pagesReparented: discovery.changed.filter(p => p !== "Tree.md").length,
       } : {}),
+      agentLeavesRefiled: agentLeaves.length,
     },
     staleRoots: stale,
     duplicates,
@@ -555,13 +605,16 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
 /**
  * The sweep's raw-data guard over the pending changes it is about to commit:
  * no write under Log/ or _attachments/, and every removed file is an Inbox
- * receipt whose exact bytes now sit under Archive/Inbox/.
+ * receipt whose exact bytes now sit under Archive/Inbox/, or an agent-report leaf
+ * (a meaning page) whose exact bytes now sit under Archive/Agent reports/.
  */
 export function assertSweepChangesSafe(changes: FileChange[]): void {
   for (const change of changes) {
     if (tierOf(change.path) === "evidence") throw new Error(`tree_sweep_touched_evidence: ${change.path}`);
     if (change.after !== null) continue;
-    const archivedCopy = changes.some(other => other.path.startsWith(`${ARCHIVE_INBOX_DIR}/`) && other.after === change.before);
-    if (!isPendingReceiptPath(change.path) || !archivedCopy) throw new Error(`tree_sweep_delete_refused: ${change.path}`);
+    const copiedTo = (dir: string) => changes.some(other => other.path.startsWith(`${dir}/`) && other.after === change.before);
+    const receipt = isPendingReceiptPath(change.path) && copiedTo(ARCHIVE_INBOX_DIR);
+    const agentLeaf = tierOf(change.path) === "meaning" && copiedTo(ARCHIVE_AGENT_LEAVES_DIR);
+    if (!receipt && !agentLeaf) throw new Error(`tree_sweep_delete_refused: ${change.path}`);
   }
 }

@@ -12,7 +12,7 @@ import { buildTreeIndex, formatLineage } from "./vault/tree.js";
 import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
 import { discoverTree } from "./engine/treeDiscover.js";
-import { rediscoverTree } from "./engine/treeSweep.js";
+import { rediscoverTree, refileAgentLeaves } from "./engine/treeSweep.js";
 import { TrackedWrites } from "./engine/treePlacement.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
 import { cleanSlateVault, type CleanSlateResult } from "./vault/cleanSlate.js";
@@ -216,18 +216,20 @@ async function main(): Promise<number> {
           console.error("vault has no Tree.md; discovery only re-roots an existing tree");
           return 1;
         }
-        // --apply runs to a fixed point, as the weekly sweep does.
-        const applied = rest.includes("--apply") ? await rediscoverTree(vaultPath(), today, new TrackedWrites(vaultPath()), rest.includes("--fresh")) : null;
-        const changed = applied?.changed ?? null;
+        // --apply first moves agent-report leaves to the ops rollup (E9-2h), then runs to a fixed point, as the weekly sweep does.
+        const writes = rest.includes("--apply") ? new TrackedWrites(vaultPath()) : null;
+        const refiled = writes ? await refileAgentLeaves(vaultPath(), writes) : [];
+        const applied = writes ? await rediscoverTree(vaultPath(), today, writes, rest.includes("--fresh")) : null;
+        const changed = writes ? writes.paths.sort() : null;
         const roots = applied?.roots ?? plan.roots;
         if (rest.includes("--json")) {
-          console.log(JSON.stringify({ fresh: plan.fresh, stats: plan.stats, roots, changed }, null, 2));
+          console.log(JSON.stringify({ fresh: plan.fresh, stats: plan.stats, roots, changed, agentLeavesRefiled: refiled.length }, null, 2));
           return 0;
         }
         for (const root of roots) {
           console.log(`${root.kind.padEnd(9)}  ${root.name}  ·  ${root.pages} page(s) · heat ${root.heat} · own captures 30d ${root.ownCaptures}${root.continues ? "" : " · new"}`);
         }
-        console.log(`${plan.stats.pages} tree pages · ${plan.stats.topics} topics · ${plan.fresh ? "fresh (current roots ignored)" : "continuing"}${changed ? ` · ${changed.length} file(s) written` : " · dry run"}`);
+        console.log(`${plan.stats.pages} tree pages · ${plan.stats.topics} topics · ${plan.fresh ? "fresh (current roots ignored)" : "continuing"}${changed ? ` · ${changed.length} file(s) written · ${refiled.length} agent-report leaf(s) moved to the ops rollup` : " · dry run"}`);
         return 0;
       }
       if (sub === "seed") {

@@ -95,6 +95,8 @@ export interface DiscoveredRoot {
   lastOwnCapture: string | null;
   /** Topic names merged into this root (one for a working root). */
   topics: string[];
+  /** The words that set this root apart from the rest of the vault, strongest first (how it was named). */
+  terms: string[];
   /** Name of the current root it continues, when it does. */
   continues: string | null;
 }
@@ -117,6 +119,10 @@ interface PageDoc {
   provisional: boolean;
   seededRoot: boolean;
   vector: Map<string, number>;
+  /** Words of the title (names a cluster when the page is not a hand-seeded aggregator). */
+  titleTerms: Set<string>;
+  /** term → how it is written in this page ("WhatsApp", "AEAT") and how often. */
+  surfaces: Map<string, Map<string, number>>;
   links: Set<string>;
   citations: Set<string>;
   /** Resolved `parent:` page, when there is one. */
@@ -133,6 +139,19 @@ export function cleanTopicName(title: string): string {
   name = name.replace(/[|[\]#^]+/g, " ").replace(/_/g, " ").replace(/\s+/g, " ").trim();
   if (name && name === name.toLowerCase()) name = name.charAt(0).toUpperCase() + name.slice(1);
   return name || title.trim();
+}
+
+/** Remember how each term is written, so a name built from terms reads as the person wrote them. */
+function collectSurfaces(into: Map<string, Map<string, number>>, text: string, weight: number): void {
+  for (const word of text.normalize("NFKC").split(/[^\p{L}\p{N}]+/u)) {
+    if (word.length < 3) continue;
+    const [term] = tokens(word);
+    if (!term || FILLER.has(term)) continue;
+    const forms = into.get(term) ?? new Map<string, number>();
+    const form = word.length > 4 && /s$/i.test(word) && !/ss$/i.test(word) ? word.slice(0, -1) : word;
+    forms.set(form, (forms.get(form) ?? 0) + weight);
+    into.set(term, forms);
+  }
 }
 
 function weigh(into: Map<string, number>, text: string, weight: number): void {
@@ -189,7 +208,8 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex): P
     links.clear();
   }
   const vector = new Map<string, number>();
-  weigh(vector, `${title}\n${title}\n${title}`, 1);
+  // A seeded aggregator's title was hand-picked (EPIC-9 L-1): it neither groups nor names anything.
+  if (!seededRoot) weigh(vector, `${title}\n${title}\n${title}`, 1);
   if (!seededRoot) {
     for (const key of ["summary", "description"]) {
       const value = frontmatter?.[key];
@@ -203,7 +223,11 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex): P
     else weigh(vector, line, 1);
   }
   const parent = fields?.parent && !isTreeParentRef(fields.parent) ? index.resolveRef(fields.parent) : null;
-  return { path, title, provisional: fields?.provisional === true, seededRoot, vector, links, citations, parent };
+  const surfaces = new Map<string, Map<string, number>>();
+  if (!seededRoot) collectSurfaces(surfaces, cleanTopicName(title), 3);
+  collectSurfaces(surfaces, text, 1);
+  const titleTerms = seededRoot ? new Set<string>() : new Set(tokenList(cleanTopicName(title)));
+  return { path, title, provisional: fields?.provisional === true, seededRoot, vector, titleTerms, surfaces, links, citations, parent };
 }
 
 /** Ingest headers ("Voice note "x.ogg" ingested…", "Raw artifact: drive://…", "Transcribed by …") say how a capture arrived, not what it is about. */
@@ -340,6 +364,40 @@ interface Cluster {
 const ATTRIBUTION_MIN_SIMILARITY = 0.12;
 /** Share of the topic bar a seeded aggregator must clear to join a topic. */
 const HUB_JOIN_SHARE = 0.5;
+/** A word names a cluster only when it is at least e^0.3 ≈ 1.35× as common inside it as outside. */
+const NAME_MIN_LIFT = 0.3;
+/** Lift counts up to e^1.8 ≈ 6× in a term's weight: rarer words are not more of a subject. */
+const NAME_LIFT_CAP = 1.8;
+/** Words that can name something: start with a letter (no ids, hashes, amounts). */
+const NAME_TERM_RE = /^\p{L}[\p{L}\p{N}]*$/u;
+/** Top distinctive words of a group's content offered as one-word names next to its title phrases. */
+const NAME_CONTENT_WORDS = 5;
+/** Longest title phrase a root name takes. */
+const NAME_MAX_PHRASE_WORDS = 3;
+/** Words under e ≈ 2.7× as common inside a group as outside name it less fully. */
+const NAME_FULL_LIFT = 1;
+/** A longer phrase holding the best one replaces it while it keeps this share of its value. */
+const NAME_REFINE_SHARE = 0.9;
+/** The hub page's own title names the group while it is worth at least this share of the best phrase. */
+const NAME_HUB_SHARE = 0.55;
+/** Groups with at least this many pages may get a two- or three-part name. */
+const NAME_PARTS_MIN_PAGES = 3;
+/** At most this many parts ("A, B and C"). */
+const NAME_MAX_PARTS = 3;
+/** Parts are added until together they cover this share of the pages. */
+const NAME_PARTS_COVERAGE = 0.75;
+/** A phrase "covers" its group when it is on at least this share of the pages. */
+const NAME_PAIR_COVERAGE = 0.5;
+/** A further part of a name must be worth at least this share of the first part. */
+const NAME_PART_MIN_VALUE = 0.5;
+/** A working root's name on at least this share of a long-term area's pages (and more than any other phrase) makes it that root's earlier work. */
+const NAME_EARLIER_COVER = 1 / 3;
+/** A long-term area about a working root's subject: "Zenod (earlier)". */
+const EARLIER_SUFFIX = " (earlier)";
+/** A continuing root keeps its name while the name is worth at least this share of the best one. */
+const NAME_KEEP_SHARE = 0.8;
+/** Two topics whose distinctive words overlap at least this much (cosine) are one subject. */
+const MERGE_OVERLAP = 0.5;
 
 /** Plan the discovered tree; null when the vault has no Tree.md (tree-less vaults are never given one). */
 export async function discoverTree(vaultPath: string, options: TreeDiscoveryOptions): Promise<TreeDiscoveryPlan | null> {
@@ -425,31 +483,6 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   }
   const topics: Cluster[] = groups.map(g => heatOf(g.sort((a, b) => a - b)));
 
-  // Continuity: the current roots, unless this is the first run over a hand-seeded tree.
-  const previous = new Map<string, { name: string; kind: MemoryKind }>();
-  if (!fresh) for (const node of index.tree?.nodes ?? []) {
-    const path = index.resolveRef(node.path) ?? node.path;
-    if (index.fields.has(path)) previous.set(path, { name: node.name, kind: node.kind });
-  }
-  const previousIn = (members: number[]) => members.map(i => docs[i]!.path).filter(p => previous.has(p)).sort();
-
-  // Working memory: hot topics, with hysteresis for the ones already working.
-  const ranked = [...topics].sort((a, b) => b.heat - a.heat || a.members[0]! - b.members[0]!);
-  const working = ranked.filter((topic) => {
-    const wasWorking = previousIn(topic.members).some(p => previous.get(p)!.kind === "working");
-    return topic.lastOwn !== null && topic.heat >= (wasWorking ? demote : promote);
-  }).slice(0, maxWorking);
-  const cold = topics.filter(t => !working.includes(t));
-  let areaGroups = cold.length ? agglomerate(cold.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas) : [];
-  // An area of one or two pages is a stray, not an area: it joins the area it reads most like.
-  for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES)) {
-    const others = areaGroups.filter(g => g !== small);
-    const sims = others.map(o => small!.reduce((sum, i) => sum + avgSim(i, o), 0) / small!.length);
-    others[sims.indexOf(Math.max(...sims))]!.push(...small);
-    areaGroups = others;
-  }
-  const areas: Cluster[] = areaGroups.map(g => heatOf(g.sort((a, b) => a - b)));
-
   // Current parent of a page, ignoring edges into a seeded aggregator on the first (fresh) run.
   const currentParent = (i: number): number | null => {
     const target = docs[i]!.parent;
@@ -464,7 +497,6 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
    * title is (a root names a topic: "Housing" over "Jordi Property Decision 2026-08"); a
    * seeded aggregator counts half, a provisional page never. Ties: more central, path order.
    */
-  const topicRoot = (members: number[]): number => rankRoots(members)[0]!;
   const rankRoots = (members: number[]): number[] => {
     const inSet = new Set(members);
     const descendants = new Map<number, number>();
@@ -481,7 +513,237 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     return [...members].sort((a, b) => score(b) - score(a) || avgSim(b, members) - avgSim(a, members) || words(a) - words(b) || a - b);
   };
 
+  // Naming vocabulary (E9-2h): a cluster is named for the words that set it apart from the rest of
+  // the vault (its pages' words, their titles, the person's own captures on it), not after one page.
+  const rawDf = new Map<string, number>();
+  for (const doc of docs) for (const term of doc.vector.keys()) rawDf.set(term, (rawDf.get(term) ?? 0) + 1);
+  const captureTermCache = new Map<string, Set<string>>();
+  const captureTerms = (key: string) => {
+    let terms = captureTermCache.get(key);
+    if (!terms) captureTermCache.set(key, terms = new Set(tokenList(captureWords(own.get(key)!))));
+    return terms;
+  };
+  /** Pages that speak for a group: not a seeded aggregator or a provisional leaf (unless that is all it has). */
+  const realOf = (members: number[]) => {
+    const real = members.filter(i => !docs[i]!.seededRoot && !docs[i]!.provisional);
+    return real.length ? real : members;
+  };
+  /** The person's own captures that count on a group. */
+  const ownKeys = (members: number[]) => [...new Set(members.flatMap(i => heldBy.get(i) ?? []))];
+  const termCache = new Map<string, Map<string, number>>();
+  /**
+   * Distinctive terms of a group of pages (shown with each root, and its overlap profile): how
+   * many of its page titles carry the word (twice), how many of the person's own captures on it,
+   * how many of its pages, each times the lift over the rest of the vault (capped).
+   */
+  const clusterTerms = (members: number[]): Map<string, number> => {
+    const cacheKey = members.join(",");
+    const cached = termCache.get(cacheKey);
+    if (cached) return cached;
+    const pool = realOf(members);
+    const n = pool.length;
+    const dfIn = new Map<string, number>();
+    const titleIn = new Map<string, number>();
+    for (const i of pool) {
+      for (const term of docs[i]!.vector.keys()) dfIn.set(term, (dfIn.get(term) ?? 0) + 1);
+      for (const term of docs[i]!.titleTerms) titleIn.set(term, (titleIn.get(term) ?? 0) + 1);
+    }
+    const keys = ownKeys(members);
+    const ownIn = new Map<string, number>();
+    for (const key of keys) for (const term of captureTerms(key)) ownIn.set(term, (ownIn.get(term) ?? 0) + 1);
+    const out = new Map<string, number>();
+    for (const [term, df] of dfIn) {
+      if (!NAME_TERM_RE.test(term)) continue;
+      const inTitles = titleIn.get(term) ?? 0;
+      const inOwn = ownIn.get(term) ?? 0;
+      if (!inTitles && inOwn < 2 && df < Math.max(2, Math.ceil(n / 3))) continue;
+      const lift = Math.min(NAME_LIFT_CAP, Math.log((df / n) / (((rawDf.get(term) ?? df) - df + 0.5) / (docs.length - n + 1))));
+      if (lift <= NAME_MIN_LIFT) continue;
+      out.set(term, Math.round((2 * inTitles / n + (keys.length ? inOwn / keys.length : 0) + df / n) * lift * 1000) / 1000);
+    }
+    termCache.set(cacheKey, out);
+    return out;
+  };
+  const rankedTerms = (members: number[]) => [...clusterTerms(members)].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  /** How the pages write a term: the most frequent form, a capitalised one on a tie. */
+  const surfaceOf = (term: string, members: number[]) => {
+    const forms = new Map<string, number>();
+    for (const i of members) for (const [form, n] of docs[i]!.surfaces.get(term) ?? []) forms.set(form, (forms.get(form) ?? 0) + n);
+    return [...forms].sort((a, b) => b[1] - a[1] || Number(/[A-Z]/.test(b[0])) - Number(/[A-Z]/.test(a[0])) || a[0].localeCompare(b[0]))[0]?.[0] ?? term;
+  };
+  const hasAll = (i: number, terms: string[]) => terms.every(t => docs[i]!.vector.has(t) || docs[i]!.titleTerms.has(t));
+  /**
+   * What a name is worth for a group: the share of its pages, of its page titles (twice) and of
+   * the person's own captures on it that carry all the name's words, softened when those words
+   * are nearly as common in the rest of the vault (under 2× as common inside the group).
+   */
+  const phraseValue = (phrase: string, members: number[]) => phraseScore(phrase, members).value;
+  /** Value of a phrase for a group, and the share of the group's pages it is on. */
+  const phraseScore = (phrase: string, members: number[]): { value: number; cover: number; reach: number; titled: number } => {
+    const none = { value: 0, cover: 0, reach: 0, titled: 0 };
+    const terms = [...new Set(tokenList(phrase))];
+    if (!terms.length || terms.some(t => !NAME_TERM_RE.test(t))) return none;
+    const pool = realOf(members);
+    const inside = new Set(members);
+    const pages = pool.filter(i => hasAll(i, terms)).length;
+    if (!pages) return none;
+    const titles = pool.filter(i => terms.every(t => docs[i]!.titleTerms.has(t))).length;
+    const keys = ownKeys(members);
+    const own = keys.filter(key => terms.every(t => captureTerms(key).has(t))).length;
+    let outside = 0;
+    for (let i = 0; i < docs.length; i++) if (!inside.has(i) && !docs[i]!.seededRoot && hasAll(i, terms)) outside++;
+    const cov = pages / pool.length;
+    // Reach: how much of the group the name is on, before asking whether it is also elsewhere.
+    const reach = cov + 2 * titles / pool.length + (keys.length ? own / keys.length : 0);
+    const lift = Math.log(cov / ((outside + 0.5) / (docs.length - members.length + 1)));
+    const value = lift <= NAME_MIN_LIFT ? 0 : Math.round(reach * Math.min(1, lift / NAME_FULL_LIFT) * 1000) / 1000;
+    return { value, cover: cov, reach, titled: titles };
+  };
+  /** Runs of one to three meaningful words from the group's own page titles (never a seeded one), as written. */
+  const titlePhrases = (members: number[], contentWords = false) => {
+    const phrases = new Map<string, { phrase: string; value: number; cover: number; reach: number; titled: number; terms: string[] }>();
+    for (const i of realOf(members)) {
+      const words = cleanTopicName(docs[i]!.title).replace(/[()[\]{}:;,.!?"“”·|/]+/g, " ").split(/\s+/).filter(Boolean);
+      for (let start = 0; start < words.length; start++) {
+        for (let len = 1; len <= NAME_MAX_PHRASE_WORDS + 1 && start + len <= words.length; len++) {
+          const run = words.slice(start, start + len);
+          if (run.some(word => !/\p{L}/u.test(word))) continue;
+          const meaningful = run.map(word => [...tokens(word)].some(t => !FILLER.has(t)));
+          // A phrase starts and ends on a word that means something ("House Decision", not "vs Cerdanya").
+          if (!meaningful[0] || !meaningful[len - 1] || meaningful.filter(Boolean).length > NAME_MAX_PHRASE_WORDS) continue;
+          const phrase = run.join(" ");
+          if (phrases.has(phrase.toLowerCase())) continue;
+          phrases.set(phrase.toLowerCase(), { phrase, ...phraseScore(phrase, members), terms: [...new Set(tokenList(phrase))] });
+        }
+      }
+    }
+    // The words a single topic's pages and the person's own captures share most can name it too ("Garden"
+    // for pages titled "Raised beds", "Watering timer", "Compost"), written as the pages write them.
+    if (contentWords) for (const [term] of rankedTerms(members).slice(0, NAME_CONTENT_WORDS)) {
+      const word = surfaceOf(term, members);
+      const phrase = word.charAt(0).toUpperCase() + word.slice(1);
+      if (!phrases.has(phrase.toLowerCase())) phrases.set(phrase.toLowerCase(), { phrase, ...phraseScore(phrase, members), terms: [term] });
+    }
+    return [...phrases.values()].filter(p => p.value > 0)
+      .sort((a, b) => b.value - a.value || a.terms.length - b.terms.length || a.phrase.localeCompare(b.phrase));
+  };
+  /**
+   * A short human title for a group (E9-2h): the title of the page the group hangs under when it
+   * is short and says about as much as the best phrase (the person's own label), else the best
+   * phrase from the group's titles; a `mixed` area (several topics) whose best phrase covers under
+   * three quarters of its pages gets two or three ("Idealista and Poly-Maker"). `used` holds the
+   * names other roots took.
+   */
+  const nameGroup = (members: number[], used: Set<string>, hub?: number, mixed = false): { name: string; value: number; terms: string[] } => {
+    // A mixed area is named from its titles only (a shared content word there is usually generic).
+    const phrases = titlePhrases(members, !mixed).filter(p => !used.has(p.phrase.toLowerCase()));
+    // A root's name describes most of its group: the best phrase on at least half its pages, if any is.
+    let chosen = phrases.find(p => p.cover >= NAME_PAIR_COVERAGE) ?? phrases[0];
+    // A longer phrase that holds the best one and covers about as much says more ("Hair transplant", not "Hair").
+    if (chosen) {
+      const top = chosen;
+      const refined = phrases.filter(p => p.terms.length > top.terms.length && top.terms.every(t => p.terms.includes(t)) && p.value >= top.value * NAME_REFINE_SHARE)
+        .sort((x, y) => y.terms.length - x.terms.length || y.value - x.value)[0];
+      if (refined) chosen = refined;
+    }
+    if (hub !== undefined && !docs[hub]!.seededRoot && !docs[hub]!.provisional) {
+      // The person's own label for the page the group hangs under names it when it is on at least half
+      // the group and reaches about as far as the best phrase, even if the whole vault is about it ("Zenod").
+      const title = cleanTopicName(docs[hub]!.title);
+      const score = phraseScore(title, members);
+      const best = chosen ? phraseScore(chosen.phrase, members).reach : 0;
+      if (title.split(/\s+/).length <= NAME_MAX_PHRASE_WORDS + 1 && !used.has(title.toLowerCase()) && score.cover >= NAME_PAIR_COVERAGE && score.reach >= best * NAME_HUB_SHARE) {
+        chosen = { phrase: title, ...score, value: Math.max(score.value, chosen?.value ?? 0), terms: [...new Set(tokenList(title))] };
+      }
+    }
+    if (!chosen) {
+      const lead = rankedTerms(members)[0];
+      const word = lead ? surfaceOf(lead[0], members) : cleanTopicName(docs[members[0]!]!.title);
+      return { name: word.charAt(0).toUpperCase() + word.slice(1), value: lead?.[1] ?? 0, terms: lead ? [lead[0]] : [] };
+    }
+    // A mixed area no phrase covers: its two or three biggest subjects, each covering pages the others do not.
+    const real = realOf(members);
+    const covered = new Set(real.filter(i => hasAll(i, chosen!.terms)));
+    if (mixed && real.length >= NAME_PARTS_MIN_PAGES && covered.size < real.length * NAME_PARTS_COVERAGE) {
+      const parts = [chosen];
+      const minNew = real.length >= 2 * NAME_PARTS_MIN_PAGES ? 2 : 1;
+      for (const p of phrases) {
+        if (parts.length >= NAME_MAX_PARTS || covered.size >= real.length * NAME_PARTS_COVERAGE) break;
+        if (p.terms.some(t => parts.some(part => part.terms.includes(t)))) continue;
+        const adds = real.filter(i => !covered.has(i) && hasAll(i, p.terms));
+        if (adds.length < minNew || p.value < chosen.value * NAME_PART_MIN_VALUE) continue;
+        parts.push(p);
+        for (const i of adds) covered.add(i);
+      }
+      const name = parts.length === 1 ? chosen.phrase : `${parts.slice(0, -1).map(p => p.phrase).join(", ")} and ${parts.at(-1)!.phrase}`;
+      if (parts.length > 1 && !used.has(name.toLowerCase())) return { name, value: chosen.value, terms: parts.flatMap(p => p.terms) };
+    }
+    return { name: chosen.phrase, value: chosen.value, terms: chosen.terms };
+  };
+
+  /** Cosine of two groups' distinctive-word profiles. */
+  const termOverlap = (a: number[], b: number[]) => {
+    const unit = (m: Map<string, number>) => {
+      const norm = Math.sqrt([...m.values()].reduce((sum, v) => sum + v * v, 0)) || 1;
+      return new Map([...m].map(([t, v]) => [t, v / norm]));
+    };
+    return cosine(unit(clusterTerms(a)), unit(clusterTerms(b)));
+  };
+  /** Words of the name a topic would get on its own. */
+  const nameTerms = (members: number[]) => nameGroup(members, new Set(), rankRoots(members)[0]).terms;
+  // Near-duplicate subjects (E9-2h): two warm topics are one subject when one's name refines the
+  // other's ("Launching Zenod" or "Zenod deck" next to "Zenod") or their distinctive words overlap
+  // strongly. Cold topics meet in the long-term area merge instead.
+  for (;;) {
+    let best: { a: number; b: number; s: number } | null = null;
+    for (let a = 0; a < topics.length; a++) for (let b = a + 1; b < topics.length; b++) {
+      if (Math.min(topics[a]!.heat, topics[b]!.heat) < demote) continue;
+      const ta = nameTerms(topics[a]!.members);
+      const tb = nameTerms(topics[b]!.members);
+      // One is part of the other's subject: its name refines the other's, or most of its pages are titled with the other's name.
+      const titledAs = (members: number[], terms: string[]) => {
+        const real = realOf(members);
+        return terms.length > 0 && real.filter(i => terms.every(t => docs[i]!.titleTerms.has(t))).length >= real.length * NAME_PAIR_COVERAGE;
+      };
+      const refines = ta.length > 0 && tb.length > 0 && (ta.every(t => tb.includes(t)) || tb.every(t => ta.includes(t))
+        || titledAs(topics[a]!.members, tb) || titledAs(topics[b]!.members, ta));
+      const s = refines ? 1 : termOverlap(topics[a]!.members, topics[b]!.members);
+      if (s >= MERGE_OVERLAP && (!best || s > best.s)) best = { a, b, s };
+    }
+    if (!best) break;
+    const merged = heatOf([...topics[best.a]!.members, ...topics[best.b]!.members].sort((x, y) => x - y));
+    topics.splice(best.b, 1);
+    topics.splice(best.a, 1, merged);
+  }
+
+  // Continuity: the current roots, unless this is the first run over a hand-seeded tree.
+  const previous = new Map<string, { name: string; kind: MemoryKind }>();
+  if (!fresh) for (const node of index.tree?.nodes ?? []) {
+    const path = index.resolveRef(node.path) ?? node.path;
+    if (index.fields.has(path)) previous.set(path, { name: node.name, kind: node.kind });
+  }
+  const previousIn = (members: number[]) => members.map(i => docs[i]!.path).filter(p => previous.has(p)).sort();
+
+  // Working memory: hot topics, with hysteresis for the ones already working.
+  const ranked = [...topics].sort((a, b) => b.heat - a.heat || a.members[0]! - b.members[0]!);
+  const working = ranked.filter((topic) => {
+    const wasWorking = previousIn(topic.members).some(p => previous.get(p)!.kind === "working");
+    // Working memory is what the person has been capturing about lately: at least one own capture in the window.
+    return topic.ownCaptures > 0 && topic.heat >= (wasWorking ? demote : promote);
+  }).slice(0, maxWorking);
+  const cold = topics.filter(t => !working.includes(t));
+  let areaGroups = cold.length ? agglomerate(cold.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas) : [];
+  // An area of one or two pages is a stray, not an area: it joins the area it reads most like.
+  for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES)) {
+    const others = areaGroups.filter(g => g !== small);
+    const sims = others.map(o => small!.reduce((sum, i) => sum + avgSim(i, o), 0) / small!.length);
+    others[sims.indexOf(Math.max(...sims))]!.push(...small);
+    areaGroups = others;
+  }
+  const areas: Cluster[] = areaGroups.map(g => heatOf(g.sort((a, b) => a - b)));
+
   const usedNames = new Set<string>();
+  const workingNames = new Set<string>();
   const uniqueName = (name: string) => {
     let candidate = name;
     for (let n = 2; usedNames.has(candidate.toLowerCase()); n++) candidate = `${name} (${n})`;
@@ -502,7 +764,8 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     };
     // A root that continues keeps its page and name. Otherwise working: the topic's own root;
     // long-term: the root of the area's largest topic names the area.
-    const continued = previousIn(pages).find(p => !docs[at.get(p)!]!.provisional);
+    const continuing = new Set(previousIn(pages).map(p => at.get(p)!).filter(i => !docs[i]!.provisional));
+    const continued = continuing.size ? docs[rankRoots(pages).find(i => continuing.has(i))!]!.path : undefined;
     const largest = [...subTopics].sort((a, b) => b.members.length - a.members.length || b.heat - a.heat)[0];
     // A new root whose name another root already has gives way to the next candidate of its group.
     const ranked = rankRoots(largest?.members ?? pages).filter(i => !docs[i]!.provisional);
@@ -532,10 +795,32 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       if (path !== rootPath || depth > MAX_TREE_DEPTH) parents.set(docs[i]!.path, rootPath);
     }
 
-    const rootName = cleanTopicName(docs[rootIndex]!.title);
-    const name = uniqueName(prior?.name ?? rootName);
+    const mixed = kind === "long-term" && subTopics.length > 1;
+    let derived = nameGroup(pages, usedNames, rootIndex, mixed);
+    // A long-term area about the subject a working root carries is that subject's earlier work: its own best
+    // name is that root's, or that root's name is on more of its pages than any other phrase (and on a third at least).
+    if (kind === "long-term") {
+      const alone = nameGroup(pages, new Set(), rootIndex, mixed);
+      const phrases = titlePhrases(pages);
+      const subject = workingNames.has(alone.name.toLowerCase()) ? alone.name
+        : [...workingNames].map(name => {
+          const terms = [...new Set(tokenList(name))];
+          // As wide as every phrase that is not part of the root's own name, and in at least one of the area's titles.
+          const rival = Math.max(0, ...phrases.filter(p => !p.terms.every(t => terms.includes(t))).map(p => p.cover));
+          return { name, rival, ...phraseScore(name, pages) };
+        }).filter(w => w.titled > 0 && w.cover >= NAME_EARLIER_COVER && w.cover >= w.rival).sort((a, b) => b.cover - a.cover)[0]?.name;
+      const display = subject ? roots.find(r => r.kind === "working" && r.name.toLowerCase() === subject.toLowerCase())?.name ?? subject : null;
+      if (display && !usedNames.has(`${display}${EARLIER_SUFFIX}`.toLowerCase())) derived = { ...derived, name: `${display}${EARLIER_SUFFIX}` };
+    }
+    // An "(earlier)" name is re-derived each run: it depends on the working roots of this run.
+    const keep = prior !== undefined && !prior.name.endsWith(EARLIER_SUFFIX) && !usedNames.has(prior.name.toLowerCase())
+      && phraseScore(prior.name, pages).reach >= phraseScore(derived.name, pages).reach * NAME_KEEP_SHARE && phraseValue(prior.name, pages) >= derived.value * NAME_KEEP_SHARE;
+    const name = uniqueName(keep ? prior!.name : derived.name);
+    if (kind === "working") workingNames.add(name.toLowerCase());
     const topicNames = subTopics
-      .map(topic => ({ name: cleanTopicName(docs[topicRoot(topic.members)]!.title), size: topic.members.length, heat: topic.heat }))
+      // A topic that is only a seeded aggregator is not a subject of its own (EPIC-9 L-1).
+      .filter(topic => topic.members.some(i => !docs[i]!.seededRoot))
+      .map(topic => ({ name: cleanTopicName(docs[rankRoots(topic.members)[0]!]!.title), size: topic.members.length, heat: topic.heat }))
       .sort((a, b) => b.heat - a.heat || b.size - a.size || a.name.localeCompare(b.name));
     const pageWord = (n: number) => `${n} page${n === 1 ? "" : "s"}`;
     const ownText = cluster.lastOwn
@@ -543,7 +828,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       : "no recent capture of yours";
     const topicList = topicNames.map(t => t.name).filter(t => t.toLowerCase() !== name.toLowerCase()).slice(0, 4);
     // Working: the pages the person's captures land on most; long-term: the other topics in the area.
-    const busiest = pages.filter(i => i !== rootIndex && !docs[i]!.provisional)
+    const busiest = pages.filter(i => i !== rootIndex && !docs[i]!.provisional && !docs[i]!.seededRoot)
       .sort((a, b) => (heldBy.get(b)?.length ?? 0) - (heldBy.get(a)?.length ?? 0) || avgSim(b, pages) - avgSim(a, pages) || a - b)
       .map(i => cleanTopicName(docs[i]!.title)).filter(t => t.toLowerCase() !== name.toLowerCase()).slice(0, 3);
     const also = kind === "working" ? busiest : topicList.length ? topicList : busiest;
@@ -552,6 +837,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       name, kind, path: rootPath, summary: summary.replace(/\s*\|\s*/g, " / "), pages: pages.length,
       heat: cluster.heat, ownCaptures: cluster.ownCaptures, lastOwnCapture: cluster.lastOwn,
       topics: topicNames.map(t => t.name), continues: prior?.name ?? null,
+      terms: titlePhrases(pages).filter(p => p.terms.length === 1).slice(0, 5).map(p => p.phrase),
     });
   };
 
@@ -560,8 +846,11 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     ...working.map((topic): [Cluster, MemoryKind, Cluster[]] => [topic, "working", [topic]]),
     ...areas.map((area): [Cluster, MemoryKind, Cluster[]] => [area, "long-term", cold.filter(t => t.members.every(i => area.members.includes(i)))]),
   ];
+  // Working roots name themselves first (an area about the same subject is its earlier work); within a group,
+  // continuing roots first, then the larger.
   const continues = (cluster: Cluster) => previousIn(cluster.members).length > 0 ? 0 : 1;
-  for (const [cluster, kind, subTopics] of [...jobs].sort((a, b) => continues(a[0]) - continues(b[0]))) placeCluster(cluster, kind, subTopics);
+  for (const [cluster, kind, subTopics] of [...jobs].sort((a, b) => MEMORY_KINDS.indexOf(a[1]) - MEMORY_KINDS.indexOf(b[1])
+    || continues(a[0]) - continues(b[0]) || b[0].members.length - a[0].members.length)) placeCluster(cluster, kind, subTopics);
 
   roots.sort((a, b) => MEMORY_KINDS.indexOf(a.kind) - MEMORY_KINDS.indexOf(b.kind)
     || (a.kind === "working" ? b.heat - a.heat : b.pages - a.pages) || a.name.localeCompare(b.name));
