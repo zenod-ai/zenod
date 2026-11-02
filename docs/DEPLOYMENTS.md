@@ -61,7 +61,7 @@ Rollback changes code, not data. It retains captures written after deployment. R
 
 ## Dokploy credentials — where they live
 
-On VPS1 the Dokploy API key is in `~t3agent/.config/alpha9/` (see the [secrets catalog](https://github.com/AlfaBlok/infra-vps/blob/main/docs/secrets-catalog.md)); on the owner's Mac:
+On VPS1 the Dokploy API key is only in the root-only secret store (`/etc/alpha9-secrets/alpha9-config/DOKPLOY_API_KEY`, since 2026-11-02, EPIC-7 T3.3). Agents never read it: they use the `dokploy` wrapper (`dokploy apps`, `dokploy show zenod-mt`, `dokploy env-names zenod-mt`, `... | dokploy env-set zenod-mt NAME --stdin`, `dokploy deploy zenod-mt`), which returns only non-secret fields; secrets go in with `secret put zenod-mt NAME --ref ... --dokploy --approved <code>` (see the [secrets catalog](https://github.com/AlfaBlok/infra-vps/blob/main/docs/secrets-catalog.md)). On the owner's Mac:
 
 The Dokploy API credentials already exist on the owner's Mac. Agents must load them and must never ask the owner for them.
 
