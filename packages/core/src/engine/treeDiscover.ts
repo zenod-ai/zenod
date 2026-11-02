@@ -20,15 +20,6 @@ import {
 } from "../vault/tree.js";
 import { parentRef, tokens, type TrackedWrites } from "./treePlacement.js";
 import { heat as decayedHeat, matchRootIds, newRootId, MATCH_THRESHOLD, type HeatEvent } from "./treeIdentity.js";
-import {
-  keeperAliasGroups,
-  pageSteering,
-  parseKeeperNotes,
-  treeNoteSections,
-  withSteeringFields,
-  type KeeperNote,
-  type PageSteering,
-} from "../vault/treeSteering.js";
 
 /**
  * Self-organising roots (EPIC-9 E9-2g; EPIC-9 L-1: roots are discovered from the
@@ -56,14 +47,10 @@ import {
  * 6. Stable identity (E9-5b): each root carries an id (`^n-…` on its Tree.md line). A root
  *    inherits the old id it shares at least half its pages with (Jaccard ≥ 0.5, one-to-one,
  *    largest overlap first; treeIdentity.ts, the shared tree library).
- * 7. Steering (E9-5b, treeSteering.ts): the person's Keeper notes and root-page flags win over
- *    everything above. A pinned root is never demoted and keeps its name and page; a renamed
- *    (name-locked) root keeps the person's name; `keep apart` roots are never merged; an `own root`
- *    is a topic of its own; aliases are read as the name they stand for.
  *
  * Never deletes, never moves a file, never touches Log/ or _attachments/: it
- * rewrites Tree.md (keeping its Keeper notes and Recent changes verbatim), the
- * `parent:`/`memory:` lines of tree pages, and adds steering flags to root pages.
+ * rewrites Tree.md and the `parent:`/`memory:` lines of tree pages only. It reads no
+ * steering (no pins, names, aliases or notes; E9-5i, root L-7).
  */
 
 export const DISCOVERY_GENERATOR = "zenod-discover";
@@ -124,20 +111,6 @@ export interface DiscoveredRoot {
   id: string;
   /** Tree pages in this root's subtree, sorted (what the id is matched on). */
   members: string[];
-  /** Steering in force on this root (Keeper notes and its page's flags). */
-  pinned: boolean;
-  nameLocked: boolean;
-  /** Keeper-note aliases of this root (mirrored into its page's `aliases:`). */
-  aliases: string[];
-}
-
-export interface TreeSteeringReport {
-  /** Keeper notes read from Tree.md. */
-  notes: number;
-  /** `K-n: <what it did>` for each note that found its roots. */
-  applied: string[];
-  /** Notes (or targets) that name nothing in the vault: kept, not acted on. */
-  unresolved: string[];
 }
 
 export interface TreeDiscoveryPlan {
@@ -148,7 +121,6 @@ export interface TreeDiscoveryPlan {
   /** Every tree page → its group. */
   memory: Map<string, MemoryKind>;
   treeFile: string;
-  steering: TreeSteeringReport;
   /** Tree pages, clusters before the area merge, and own captures that heated something. */
   stats: { pages: number; topics: number; ownCaptures: number; agentCaptures: number };
 }
@@ -169,8 +141,6 @@ interface PageDoc {
   citations: Set<string>;
   /** Resolved `parent:` page, when there is one. */
   parent: string | null;
-  /** Steering flags in the page's own frontmatter. */
-  steering: PageSteering;
 }
 
 const DAY_MS = 86_400_000;
@@ -229,7 +199,7 @@ function tokenList(text: string): string[] {
   return out;
 }
 
-async function readPageDoc(vaultPath: string, path: string, index: TreeIndex, canon: (text: string) => string = t => t): Promise<PageDoc> {
+async function readPageDoc(vaultPath: string, path: string, index: TreeIndex): Promise<PageDoc> {
   const raw = await readFile(join(vaultPath, path), "utf8").catch(() => "");
   const { frontmatter, body: fullBody } = parseNote(raw);
   const fields = index.fields.get(path);
@@ -245,7 +215,7 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex, ca
     if (target && target !== path && index.fields.has(target)) links.add(target);
   }
   // Words only: citations out, wikilinks reduced to their visible text.
-  let text = canon(content.replace(CITATION_RE, " ").replace(WIKILINK_RE, (_all, target: string, _anchor, alias?: string) => alias ? alias.slice(1) : basenameOf(target)));
+  let text = content.replace(CITATION_RE, " ").replace(WIKILINK_RE, (_all, target: string, _anchor, alias?: string) => alias ? alias.slice(1) : basenameOf(target));
   if (seededRoot) {
     // A hand-seeded root page: its summary paragraph and boilerplate are the seed, not content.
     const summary = typeof frontmatter?.summary === "string" ? frontmatter.summary : "";
@@ -256,7 +226,7 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex, ca
   }
   const vector = new Map<string, number>();
   // A seeded aggregator's title was hand-picked (EPIC-9 L-1): it neither groups nor names anything.
-  if (!seededRoot) weigh(vector, canon(`${title}\n${title}\n${title}`), 1);
+  if (!seededRoot) weigh(vector, `${title}\n${title}\n${title}`, 1);
   if (!seededRoot) {
     for (const key of ["summary", "description"]) {
       const value = frontmatter?.[key];
@@ -275,7 +245,7 @@ async function readPageDoc(vaultPath: string, path: string, index: TreeIndex, ca
   collectSurfaces(surfaces, text, 1);
   const titleTerms = seededRoot ? new Set<string>() : new Set(tokenList(cleanTopicName(title)));
   const subject = frontmatter?.generated === SUBJECT_GENERATOR;
-  return { path, title, provisional: fields?.provisional === true, seededRoot, subject, vector, titleTerms, surfaces, links, citations, parent, steering: pageSteering(frontmatter) };
+  return { path, title, provisional: fields?.provisional === true, seededRoot, subject, vector, titleTerms, surfaces, links, citations, parent };
 }
 
 /** Ingest headers ("Voice note "x.ogg" ingested…", "Raw artifact: drive://…", "Transcribed by …") say how a capture arrived, not what it is about. */
@@ -289,28 +259,10 @@ export function captureWords(capture: Pick<LogCapture, "title" | "content">): st
   return [INGEST_TITLE_RE.test(capture.title) ? "" : capture.title, ...kept].join("\n");
 }
 
-function captureVector(capture: LogCapture, canon: (text: string) => string = t => t): Map<string, number> {
+function captureVector(capture: LogCapture): Map<string, number> {
   const vector = new Map<string, number>();
-  weigh(vector, canon(captureWords(capture)), 1);
+  weigh(vector, captureWords(capture), 1);
   return vector;
-}
-
-/**
- * Text rewriter that reads every alias of a Keeper-note alias group as the group's name (its first
- * member): "agentine" and "agent_team" count as "Agent Team" for topics and names (E9-5b).
- */
-export function aliasCanonicalizer(groups: readonly (readonly string[])[]): (text: string) => string {
-  const rules: Array<{ re: RegExp; to: string }> = [];
-  for (const group of groups) {
-    const [name, ...aliases] = group;
-    if (!name) continue;
-    for (const alias of aliases) {
-      const parts = alias.trim().split(/[\s_-]+/).filter(Boolean).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      if (!parts.length || alias.trim().toLowerCase() === name.trim().toLowerCase()) continue;
-      rules.push({ re: new RegExp(`(?<![\\p{L}\\p{N}_])${parts.join("[\\s_-]+")}(?![\\p{L}\\p{N}_])`, "giu"), to: name });
-    }
-  }
-  return rules.length ? (text: string) => rules.reduce((out, rule) => out.replace(rule.re, rule.to), text) : (text: string) => text;
 }
 
 /** A term in more than this share of pages says nothing about which topic a page is in. */
@@ -381,42 +333,13 @@ function similarityMatrix(docs: PageDoc[], vectors: Array<Map<string, number>>):
 }
 
 /**
- * Cannot-link labels (E9-5b): page index → `[key, value]` pairs. Two groups holding the same key
- * with different values are never merged (a `keep apart` note: key = note id, value = its target;
- * steered roots: key "steer", value = the root page).
- */
-export type ApartLabels = ReadonlyMap<number, ReadonlyArray<readonly [string, string]>>;
-
-function labelsOf(members: readonly number[], labels: ApartLabels): Map<string, Set<string>> {
-  const out = new Map<string, Set<string>>();
-  for (const i of members) for (const [key, value] of labels.get(i) ?? []) out.set(key, new Set([...(out.get(key) ?? []), value]));
-  return out;
-}
-
-function labelsConflict(a: Map<string, Set<string>>, b: Map<string, Set<string>>): boolean {
-  for (const [key, values] of a) {
-    const other = b.get(key);
-    if (other && [...other].some(v => !values.has(v))) return true;
-    if (other && [...values].some(v => !other.has(v))) return true;
-  }
-  return false;
-}
-
-/** True when two page groups may not be merged under the cannot-link labels. */
-export function keptApart(a: readonly number[], b: readonly number[], labels: ApartLabels): boolean {
-  return labels.size > 0 && labelsConflict(labelsOf(a, labels), labelsOf(b, labels));
-}
-
-/**
  * Average-linkage agglomeration over `groups` (each a list of page indexes):
  * merge the most similar pair while it is at least `threshold`, and further,
  * regardless of threshold, while there are more than `maxGroups`. Ties break
- * on the lower index, so the result is deterministic. Pairs `labels` keep
- * apart are never merged, even past `maxGroups`.
+ * on the lower index, so the result is deterministic.
  */
-function agglomerate(groups: number[][], sim: number[][], threshold: number, maxGroups = Infinity, labels: ApartLabels = new Map()): number[][] {
+function agglomerate(groups: number[][], sim: number[][], threshold: number, maxGroups = Infinity): number[][] {
   const live = groups.map(g => [...g]);
-  const tags = live.map(g => labelsOf(g, labels));
   const k = live.length;
   const between = Array.from({ length: k }, () => new Array<number>(k).fill(0));
   for (let a = 0; a < k; a++) {
@@ -431,7 +354,6 @@ function agglomerate(groups: number[][], sim: number[][], threshold: number, max
     let best: { a: number; b: number; s: number } | null = null;
     for (const a of alive) for (const b of alive) {
       if (b <= a) continue;
-      if (labels.size && labelsConflict(tags[a]!, tags[b]!)) continue;
       const s = between[a]![b]!;
       if (!best || s > best.s) best = { a, b, s };
     }
@@ -444,7 +366,6 @@ function agglomerate(groups: number[][], sim: number[][], threshold: number, max
       between[a]![c] = between[c]![a] = (na * between[a]![c]! + nb * between[b]![c]!) / (na + nb);
     }
     live[a] = [...live[a]!, ...live[b]!].sort((x, y) => x - y);
-    if (labels.size) tags[a] = labelsOf(live[a]!, labels);
     alive.delete(b);
   }
   return [...alive].map(i => live[i]!);
@@ -515,20 +436,16 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   const maxWorking = options.maxWorking ?? DEFAULT_MAX_WORKING;
   const maxAreas = options.maxAreas ?? DEFAULT_MAX_AREAS;
   const topicSimilarity = options.topicSimilarity ?? DEFAULT_TOPIC_SIMILARITY;
-  const { notes } = parseKeeperNotes(treeRaw);
-  const aliasGroups = keeperAliasGroups(notes);
-  const canon = aliasCanonicalizer(aliasGroups);
-  const noteSections = treeNoteSections(treeRaw);
 
   const snapshot = await scanVault(vaultPath);
   const index = await buildTreeIndex(vaultPath, snapshot);
   const docs: PageDoc[] = [];
-  for (const path of [...index.fields.keys()].sort()) docs.push(await readPageDoc(vaultPath, path, index, canon));
+  for (const path of [...index.fields.keys()].sort()) docs.push(await readPageDoc(vaultPath, path, index));
   const at = new Map(docs.map((d, i) => [d.path, i]));
   const captures = await readLogCaptures(vaultPath, snapshot.files);
   const own = new Map([...captures].filter(([, c]) => c.origin === "user"));
   if (docs.length === 0) {
-    return { fresh, roots: [], parents: new Map(), memory: new Map(), treeFile: treeRaw, steering: { notes: notes.length, applied: [], unresolved: [] }, stats: { pages: 0, topics: 0, ownCaptures: own.size, agentCaptures: captures.size - own.size } };
+    return { fresh, roots: [], parents: new Map(), memory: new Map(), treeFile: treeRaw, stats: { pages: 0, topics: 0, ownCaptures: own.size, agentCaptures: captures.size - own.size } };
   }
 
   // The roots as they stand (E9-5b): page, name, group, id and the pages under each. A root written
@@ -554,76 +471,6 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       previousRoots.push({ id, name: node.name, kind: node.kind, path, members });
     }
   }
-  const previousRootAt = (i: number) => previousRoots.find(r => r.path === docs[i]!.path);
-
-  // Steering (E9-5b): resolve each Keeper note to the pages it is about. A target names a root by id,
-  // by its current name or one of its aliases, or else names a page by its title.
-  const steering: TreeSteeringReport = { notes: notes.length, applied: [], unresolved: [] };
-  const key = (text: string) => text.trim().toLowerCase();
-  const byTitle = new Map<string, number>();
-  docs.forEach((d, i) => {
-    for (const title of [d.title, cleanTopicName(d.title)]) if (!byTitle.has(key(title))) byTitle.set(key(title), i);
-  });
-  const resolveName = (name: string): number | undefined => {
-    const names = [name, ...(aliasGroups.find(g => g.some(a => key(a) === key(name))) ?? [])];
-    for (const n of names) {
-      const root = previousRoots.find(r => key(r.name) === key(n));
-      if (root && at.has(root.path)) return at.get(root.path);
-    }
-    for (const n of names) if (byTitle.has(key(n))) return byTitle.get(key(n));
-    return undefined;
-  };
-  const resolveTarget = (target: KeeperNote["targets"][number]): number | undefined => {
-    const byId = target.id ? previousRoots.find(r => r.id === target.id) : undefined;
-    if (byId && at.has(byId.path)) return at.get(byId.path);
-    return target.name ? resolveName(target.name) : undefined;
-  };
-  const pinned = new Set<number>();
-  const lockedName = new Map<number, string>();
-  const ownRoots = new Set<number>();
-  const aliasesOf = new Map<number, string[]>();
-  const labels = new Map<number, Array<[string, string]>>();
-  const label = (i: number, labelKey: string, value: string) => labels.set(i, [...(labels.get(i) ?? []), [labelKey, value]]);
-  for (const note of notes) {
-    const rule = note.rule;
-    if (rule.kind === "other") continue;
-    const hits = note.targets.map(target => ({ target, i: resolveTarget(target) }));
-    // A rename note still finds its root by the new name once Tree.md carries it.
-    if (rule.kind === "name" && !hits.some(h => h.i !== undefined)) {
-      const i = resolveName(rule.name);
-      if (i !== undefined) hits.splice(0, hits.length, { target: { name: rule.name }, i });
-    }
-    const found = hits.filter((h): h is { target: typeof h.target; i: number } => h.i !== undefined);
-    for (const miss of hits.filter(h => h.i === undefined)) steering.unresolved.push(`${note.id}: ${miss.target.name || miss.target.id}`);
-    if (!found.length) continue;
-    switch (rule.kind) {
-      case "pinned": for (const { i } of found) pinned.add(i); break;
-      case "name": lockedName.set(found[0]!.i, rule.name); break;
-      case "own-root": for (const { i } of found) ownRoots.add(i); break;
-      case "aliases": for (const { i } of found) aliasesOf.set(i, [...new Set([...(aliasesOf.get(i) ?? []), ...rule.aliases])]); break;
-      case "keep-apart":
-        if (new Set(found.map(f => f.i)).size < 2) continue;
-        for (const { i } of found) label(i, note.id, String(i));
-        break;
-    }
-    steering.applied.push(`${note.id}: ${rule.kind} → ${[...new Set(found.map(f => docs[f.i]!.path))].join(", ")}`);
-  }
-  // Flags the person set on a page by hand count as theirs too.
-  docs.forEach((d, i) => {
-    if (d.steering.pinned) pinned.add(i);
-    if (d.steering.nameLocked && !lockedName.has(i) && previousRootAt(i)) lockedName.set(i, previousRootAt(i)!.name);
-  });
-  // A pin keeps the root's name as it is.
-  for (const i of pinned) if (!lockedName.has(i)) lockedName.set(i, previousRootAt(i)?.name ?? cleanTopicName(docs[i]!.title));
-  /** Steered root pages: each stays the root of its own group; two never share one. */
-  const steered = new Set<number>([...pinned, ...lockedName.keys(), ...ownRoots]);
-  for (const i of steered) label(i, "steer", String(i));
-  // An own root is a subject of its own (like a page made for a name the person keeps saying).
-  for (const i of ownRoots) if (!docs[i]!.seededRoot) docs[i]!.subject = true;
-  const groupOf = (i: number): MemoryKind | undefined => {
-    const lineage = index.lineage(docs[i]!.path);
-    return previousRootAt(i)?.kind ?? (lineage.ok ? lineage.group : undefined);
-  };
 
   const idf = idfOf(docs);
   const vectors = docs.map(d => tfidf(d.vector, idf));
@@ -643,7 +490,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     if (!holders.length) continue;
     const real = holders.filter(i => !docs[i]!.seededRoot);
     if (real.length) { heatTargets.set(key, real); continue; }
-    const vector = tfidf(captureVector(capture, canon), idf);
+    const vector = tfidf(captureVector(capture), idf);
     let best = -1;
     let bestSim = ATTRIBUTION_MIN_SIMILARITY;
     docs.forEach((d, i) => {
@@ -677,7 +524,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   const subjectIdx = docs.map((d, i) => d.subject && !d.seededRoot ? i : -1).filter(i => i >= 0);
   const underSubject = (i: number) => subjectIdx.find(s => docs[i]!.parent === docs[s]!.path);
   const realIdx = docs.map((d, i) => d.seededRoot || d.subject || underSubject(i) !== undefined ? -1 : i).filter(i => i >= 0);
-  const groups = agglomerate(realIdx.map(i => [i]), sim, topicSimilarity, Infinity, labels);
+  const groups = agglomerate(realIdx.map(i => [i]), sim, topicSimilarity);
   const subjectGroups = new Set<number[]>();
   for (const s of subjectIdx) {
     const group = [s, ...docs.map((_, i) => i).filter(i => !docs[i]!.seededRoot && !docs[i]!.subject && underSubject(i) === s)];
@@ -719,7 +566,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   }
   for (const [h, doc] of docs.entries()) {
     if (!doc.seededRoot) continue;
-    const sims = groups.map(g => keptApart([h], g, labels) ? -Infinity : avgSim(h, g));
+    const sims = groups.map(g => avgSim(h, g));
     const best = sims.length ? Math.max(...sims) : 0;
     // Half the bar: an aggregator's mixed text reads less like any one topic than a real page would.
     if (best >= topicSimilarity * HUB_JOIN_SHARE) groups[sims.indexOf(best)]!.push(h);
@@ -960,7 +807,6 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     let best: { a: number; b: number; s: number } | null = null;
     for (let a = 0; a < topics.length; a++) for (let b = a + 1; b < topics.length; b++) {
       if (Math.min(topics[a]!.heat, topics[b]!.heat) < demote || subjects.has(topics[a]!) || subjects.has(topics[b]!)) continue;
-      if (keptApart(topics[a]!.members, topics[b]!.members, labels)) continue;
       const ta = nameTerms(topics[a]!.members);
       const tb = nameTerms(topics[b]!.members);
       // One is part of the other's subject: its name refines the other's, or most of its pages are titled with the other's name.
@@ -989,36 +835,27 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
 
   // Working memory: hot topics, with hysteresis for the ones already working.
   const ranked = [...topics].sort((a, b) => b.heat - a.heat || a.members[0]! - b.members[0]!);
-  // A pinned working root is never demoted, whatever its heat (E9-5b).
-  const pinnedWorking = (topic: Cluster) => topic.members.some(i => pinned.has(i) && groupOf(i) === "working");
-  const eligible = ranked.filter((topic) => {
-    if (pinnedWorking(topic)) return true;
+  const working = ranked.filter((topic) => {
     const wasWorking = previousIn(topic.members).some(p => previous.get(p)!.kind === "working");
     // Working memory is what the person has been capturing about lately: at least one own capture in the window.
     return topic.ownCaptures > 0 && topic.heat >= (wasWorking ? demote : promote);
-  });
-  const forcedWorking = eligible.filter(pinnedWorking);
-  const working = [...forcedWorking, ...eligible.filter(t => !forcedWorking.includes(t)).slice(0, Math.max(0, maxWorking - forcedWorking.length))];
+  }).slice(0, maxWorking);
   const cold = topics.filter(t => !working.includes(t));
   // A cold subject of its own is a long-term area of its own, however small; the other topics merge into areas.
   const coldSubjects = cold.filter(t => subjects.has(t)).map(t => t.members);
   const mergeable = cold.filter(t => !subjects.has(t));
-  let areaGroups = mergeable.length ? agglomerate(mergeable.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas, labels) : [];
-  // An area of one or two pages is a stray, not an area: it joins the area it reads most like (one it may join).
-  const strays = new Set<number[]>();
-  for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES && !strays.has(g)); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES && !strays.has(g))) {
+  let areaGroups = mergeable.length ? agglomerate(mergeable.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas) : [];
+  // An area of one or two pages is a stray, not an area: it joins the area it reads most like.
+  for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES)) {
     const others = areaGroups.filter(g => g !== small);
-    const sims = others.map(o => keptApart(small!, o, labels) ? -Infinity : small!.reduce((sum, i) => sum + avgSim(i, o), 0) / small!.length);
-    const best = Math.max(...sims);
-    if (best === -Infinity) { strays.add(small); continue; }
-    others[sims.indexOf(best)]!.push(...small);
+    const sims = others.map(o => small!.reduce((sum, i) => sum + avgSim(i, o), 0) / small!.length);
+    others[sims.indexOf(Math.max(...sims))]!.push(...small);
     areaGroups = others;
   }
   areaGroups.push(...coldSubjects);
   const areas: Cluster[] = areaGroups.map(g => heatOf(g.sort((a, b) => a - b)));
 
-  // Names the person locked are theirs: no other root may take them.
-  const usedNames = new Set<string>([...lockedName.values()].map(name => name.toLowerCase()));
+  const usedNames = new Set<string>();
   const workingNames = new Set<string>();
   const uniqueName = (name: string) => {
     let candidate = name;
@@ -1045,9 +882,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     const largest = [...subTopics].sort((a, b) => b.members.length - a.members.length || b.heat - a.heat)[0];
     // A new root whose name another root already has gives way to the next candidate of its group.
     const ranked = rankRoots(largest?.members ?? pages).filter(i => !docs[i]!.provisional);
-    // A steered page (pinned, renamed, own root) is the root of its group, whatever else ranks higher.
-    const anchor = pages.find(i => steered.has(i));
-    const rootIndex = anchor !== undefined ? anchor : continued !== undefined ? at.get(continued)!
+    const rootIndex = continued !== undefined ? at.get(continued)!
       : ranked.find(i => !usedNames.has(cleanTopicName(docs[i]!.title).toLowerCase())) ?? ranked[0] ?? pages[0]!;
     const rootPath = docs[rootIndex]!.path;
     const prior = previous.get(rootPath);
@@ -1096,8 +931,7 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     const keep = prior !== undefined && !prior.name.endsWith(EARLIER_SUFFIX) && !usedNames.has(prior.name.toLowerCase())
       && (parts(prior.name) === parts(derived.name)
         || (phraseScore(prior.name, pages).reach >= phraseScore(derived.name, pages).reach * NAME_KEEP_SHARE && phraseValue(prior.name, pages) >= derived.value * NAME_KEEP_SHARE));
-    const locked = lockedName.get(rootIndex);
-    const name = locked ?? uniqueName(keep ? prior!.name : derived.name);
+    const name = uniqueName(keep ? prior!.name : derived.name);
     if (kind === "working") workingNames.add(name.toLowerCase());
     const topicNames = subTopics
       // A topic that is only a seeded aggregator is not a subject of its own (EPIC-9 L-1).
@@ -1121,8 +955,6 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
       topics: topicNames.map(t => t.name), continues: prior?.name ?? null,
       terms: titlePhrases(pages).filter(p => p.terms.length === 1).slice(0, 5).map(p => p.phrase),
       id: "", members: pages.map(i => docs[i]!.path).sort(),
-      pinned: pinned.has(rootIndex), nameLocked: locked !== undefined,
-      aliases: (aliasesOf.get(rootIndex) ?? []).filter(alias => alias.toLowerCase() !== name.toLowerCase()),
     });
   };
 
@@ -1140,14 +972,9 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   roots.sort((a, b) => MEMORY_KINDS.indexOf(a.kind) - MEMORY_KINDS.indexOf(b.kind)
     || (a.kind === "working" ? b.heat - a.heat : b.pages - a.pages) || a.name.localeCompare(b.name));
 
-  // Stable ids: a steered root keeps its page and so its id; the rest inherit the old id they share
-  // at least half their pages with (Jaccard ≥ 0.5, one-to-one), else get a new one.
-  const claimed = new Map<number, string>();
-  roots.forEach((root, k) => {
-    const prev = previousRoots.find(r => r.path === root.path);
-    if (prev && steered.has(at.get(root.path)!)) claimed.set(k, prev.id);
-  });
-  const ids = matchRootIds(new Map(previousRoots.map(r => [r.id, r.members])), roots.map(r => r.members), MATCH_THRESHOLD, claimed);
+  // Stable ids: a root inherits the old id it shares at least half its pages with (Jaccard ≥ 0.5,
+  // one-to-one), else gets a new one.
+  const ids = matchRootIds(new Map(previousRoots.map(r => [r.id, r.members])), roots.map(r => r.members), MATCH_THRESHOLD);
   roots.forEach((root, k) => { root.id = ids[k]!; });
 
   return {
@@ -1155,14 +982,12 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
     roots,
     parents,
     memory,
-    steering,
-    treeFile: renderDiscoveredTree(roots, options.today, noteSections),
+    treeFile: renderDiscoveredTree(roots, options.today),
     stats: { pages: docs.length, topics: topics.length, ownCaptures: own.size, agentCaptures: captures.size - own.size },
   };
 }
 
-/** Tree.md for a plan; `noteSections` (Keeper notes, Recent changes) are carried over verbatim at the end. */
-export function renderDiscoveredTree(roots: Array<Pick<DiscoveredRoot, "name" | "kind" | "path" | "summary"> & { id?: string }>, date: string, noteSections = ""): string {
+export function renderDiscoveredTree(roots: Array<Pick<DiscoveredRoot, "name" | "kind" | "path" | "summary"> & { id?: string }>, date: string): string {
   const lines = [
     "---",
     "title: Tree",
@@ -1181,7 +1006,6 @@ export function renderDiscoveredTree(roots: Array<Pick<DiscoveredRoot, "name" | 
     lines.push("", `## ${GROUP_HEADINGS[kind]}`, "");
     for (const root of roots.filter(r => r.kind === kind)) lines.push(formatTreeNode(root));
   }
-  if (noteSections.trim()) lines.push("", noteSections.trim());
   return `${lines.join("\n")}\n`;
 }
 
@@ -1211,17 +1035,11 @@ export async function applyTreeDiscovery(vaultPath: string, plan: TreeDiscoveryP
     await writes.write(TREE_PATH, plan.treeFile);
     changed.push(TREE_PATH);
   }
-  const roots = new Map(plan.roots.map(r => [r.path, r]));
+  const roots = new Set(plan.roots.map(r => r.path));
   for (const [path, parent] of [...plan.parents].sort(([a], [b]) => a.localeCompare(b))) {
     const kind = plan.memory.get(path)!;
     const raw = await readFile(join(vaultPath, path), "utf8");
-    const placed = withTreeFields(raw, parent === null ? TREE_PARENT : parentRef(parent), kind, roots.has(path)) ?? raw;
-    // A steered root's page mirrors its Keeper notes (E9-5b): flags and aliases are only ever added.
-    const root = roots.get(path);
-    const steered = root && (root.pinned || root.nameLocked || root.aliases.length)
-      ? withSteeringFields(placed, { pinned: root.pinned, nameLocked: root.nameLocked, aliases: root.aliases }) ?? placed
-      : placed;
-    const next = steered === raw ? null : steered;
+    const next = withTreeFields(raw, parent === null ? TREE_PARENT : parentRef(parent), kind, roots.has(path));
     if (next === null) continue;
     await writes.write(path, next);
     changed.push(path);

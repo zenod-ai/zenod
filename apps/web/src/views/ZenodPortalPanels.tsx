@@ -36,7 +36,6 @@ import {
 } from "@/components/recent-saves-card"
 import {
   MemoryTreeCard,
-  type MemorySteerRequest,
   type MemoryTree,
   type MemoryTreeState,
 } from "@/components/memory-tree-card"
@@ -104,7 +103,6 @@ export function RecentSavesPanel() {
 
 export function MemoryTreePanel() {
   const [state, setState] = React.useState<MemoryTreeState | null>(null)
-  const [version, setVersion] = React.useState(0)
 
   React.useEffect(() => {
     let cancelled = false
@@ -120,23 +118,10 @@ export function MemoryTreePanel() {
     return () => {
       cancelled = true
     }
-  }, [version])
-
-  // EPIC-9 E9-5b: a pin or rename is a Keeper note in the vault; reload the tree after it.
-  const steer = React.useCallback(async (request: MemorySteerRequest) => {
-    try {
-      await api("/api/console/memory-tree/steer", {
-        method: "POST",
-        body: request,
-      })
-    } catch (error) {
-      throw new Error(errorMessage(error), { cause: error })
-    }
-    setVersion((v) => v + 1)
   }, [])
 
   if (!state) return <Skeleton className="h-64 w-full" />
-  return <MemoryTreeCard state={state} onSteer={steer} />
+  return <MemoryTreeCard state={state} />
 }
 
 export function HostedChannelsPanel() {

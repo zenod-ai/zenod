@@ -8,7 +8,7 @@ import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import type { AnswerInput, AnswerResult, BrainLlm, VaultReadTools } from "../src/llm/types.js";
-import { buildMatch, keeperAliases, MemoryIndex, MemoryIndexTenantError } from "../src/vault/memoryIndex.js";
+import { buildMatch, MemoryIndex, MemoryIndexTenantError } from "../src/vault/memoryIndex.js";
 
 // EPIC-9 E9-5a: the tier-0 index — per-tenant SQLite FTS5 beside the vault, BM25 over pages,
 // Log entries and Tree.md roots, every hit carrying its tree path.
@@ -73,7 +73,7 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     expect(new Set(hits.map((hit) => hit.path)).size).toBe(hits.length);
   });
 
-  it("expands aliases: built-in (agentine ↔ agent team) and Tree.md Keeper notes", async () => {
+  it("expands built-in aliases (agentine ↔ agent team) and reads no Keeper notes (E9-5i)", async () => {
     const vault = await vaultFrom({
       "Projects/Crew.md": "---\ntitle: Crew\n---\nThe agent team ships the weekly digest.\n",
       "Projects/Casa.md": "---\ntitle: Casa\n---\nNotes about the flat in Gràcia.\n",
@@ -81,22 +81,11 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     });
     const index = indexFor(vault, join(dirname(vault), "idx.sqlite"));
     expect((await index.search("agentine"))[0]?.path).toBe("Projects/Crew.md");
-    expect((await index.search("home"))[0]?.path).toBe("Projects/Casa.md");
-    expect((await index.search("mi piso"))[0]?.path).toBe("Projects/Casa.md");
+    // A leftover Keeper-notes alias is not search help: nobody steers the index.
+    expect((await index.search("mi piso"))[0]?.path).not.toBe("Projects/Casa.md");
     // Accent-insensitive (remove_diacritics 2): "gracia" finds "Gràcia".
     expect((await index.search("gracia"))[0]).toMatchObject({ path: "Projects/Casa.md", snippet: expect.stringContaining("Gràcia") });
     expect(buildMatch("what about the agentine?", [["agentine", "agent team"]])).toBe('"agentine"* OR "agent team"');
-  });
-
-  // E9-5g: the index reads aliases in the formats E9-5b writes, never a second format.
-  it("reads Keeper-note aliases as E9-5b writes them (treeSteering.ts), and only that form", () => {
-    const tree = [
-      "## Keeper notes", "",
-      "- K-1 | Agent Team ^n-0f1e2d3c | aliases: agentine, agent team, agent_team | Jordi's words | confirmed 2026-11-02",
-      "- K-2 | Agent Team, EpicSpine | keep apart | different things | confirmed 2026-11-02",
-      "- alias: A = B",
-    ].join("\n");
-    expect(keeperAliases(tree)).toEqual([["Agent Team", "agentine", "agent team", "agent_team"]]);
   });
 
   it("finds a page by its aliases: frontmatter, as a list or a single string", async () => {
@@ -107,29 +96,6 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     const index = indexFor(vault, join(dirname(vault), "idx.sqlite"));
     expect((await index.search("vento"))[0]?.path).toBe("Projects/Northwind.md");
     expect((await index.search("sunny side"))[0]?.path).toBe("Projects/Solano.md");
-  });
-
-  it("loads Keeper-note aliases after a restart with an up-to-date index, and re-reads them when Tree.md changes", async () => {
-    const tree = (notes: string) => `---\ntitle: Tree\n---\n## Working memory\n\n## Keeper notes\n\n${notes}`;
-    const vault = await vaultFrom({
-      "Projects/Casa.md": "---\ntitle: Casa\n---\nNotes about the flat.\n",
-      "Projects/Huerto.md": "---\ntitle: Huerto\n---\nTomatoes and basil.\n",
-      "Tree.md": tree("- K-1 | Casa | aliases: home | words | confirmed 2026-11-02\n"),
-    });
-    const path = join(dirname(vault), "idx.sqlite");
-    const first = indexFor(vault, path);
-    expect((await first.search("home"))[0]?.path).toBe("Projects/Casa.md");
-    first.close();
-    open.splice(open.indexOf(first), 1);
-
-    // A new process: the file is current, so no row changes, but the aliases must still load.
-    const second = indexFor(vault, path);
-    expect((await second.search("home"))[0]?.path).toBe("Projects/Casa.md");
-
-    // A steer appends a note (through the write queue, which marks the index dirty).
-    await writeFile(join(vault, "Tree.md"), tree("- K-1 | Casa | aliases: home | words | confirmed 2026-11-02\n- K-2 | Huerto | aliases: allotment | words | confirmed 2026-11-02\n"));
-    second.markDirty();
-    expect((await second.search("allotment"))[0]?.path).toBe("Projects/Huerto.md");
   });
 
   it("updates incrementally: only changed files are re-read; edits, additions and deletions show up", async () => {

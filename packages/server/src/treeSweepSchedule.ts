@@ -1,4 +1,3 @@
-import type { TreeSweepJobResult } from "./taskJobStore.js";
 
 /**
  * When the weekly tree sweep runs (EPIC-9 E9-2d). Each tenant gets one sweep per
@@ -52,16 +51,3 @@ export function nextTreeSweepAt(now: number, ranThisWeek: boolean): Date {
 }
 
 export const TREE_SWEEP_SCHEDULE_TEXT = "weekly, from Sunday 02:00 UTC, in the first 02:00–06:00 UTC off-peak window the tenant is awake";
-
-/**
- * The one line the console shows after a sweep that left proposals: counts only,
- * pointing at the vault page that holds them. Null when there is nothing to decide.
- */
-export function treeSweepSuggestion(result: TreeSweepJobResult | undefined): string | null {
-  const counts = result?.status === "swept" ? result.counts : undefined;
-  if (!counts || counts.proposals === 0) return null;
-  const parts: string[] = [];
-  if (counts.staleRoots) parts.push(`${counts.staleRoots} ongoing topic${counts.staleRoots === 1 ? " has" : "s have"} had no new capture in a month (keep, close or fold?)`);
-  if (counts.duplicateGroups) parts.push(`${counts.duplicateGroups} set${counts.duplicateGroups === 1 ? "" : "s"} of pages share a title (merge?)`);
-  return `Memory sweep: ${parts.join("; ")}. Details in ${result!.proposalsPage ?? "Inbox/Tree sweep.md"}.`;
-}

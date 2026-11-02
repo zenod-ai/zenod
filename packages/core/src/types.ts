@@ -1,6 +1,5 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
 import type { MemoryTreeOutline } from "./vault/treeOutline.js";
-import type { TreeSteerInput, TreeSteerResult } from "./engine/treeSteer.js";
 import type { MemoryIndexStats } from "./vault/memoryIndex.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
@@ -526,20 +525,14 @@ export interface BrainEngine {
    */
   memoryTree?(): Promise<MemoryTreeIndex>;
   /**
-   * EPIC-9 E9-2d weekly tree sweep: stale working roots and duplicate titles become
-   * proposal lines, pending receipts are re-filed and archived (never deleted), Log/
+   * EPIC-9 E9-2d weekly tree sweep: re-files only (no proposals, E9-5i). Pending
+   * receipts are re-filed and archived (never deleted), Log/
    * and _attachments/ stay untouched; all changes land as ONE revision. Runs on the
    * background write lane, so never concurrently with a live filing. No LLM.
    */
   sweepTree?(input?: TreeSweepInput): Promise<TreeSweepResult>;
   /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
   memoryTreeOutline?(): Promise<MemoryTreeOutline | null>;
-  /**
-   * EPIC-9 E9-5b: pin or rename a root (Memory tab). One Keeper note in Tree.md plus the
-   * root page's flag, one revision under the vault write lock. Throws TreeSteerError on a
-   * bad root or name. No LLM.
-   */
-  steerTree?(input: Omit<TreeSteerInput, "today">): Promise<TreeSteerResult>;
   /** Deterministic vault validation. No LLM. */
   lint(): Promise<LintReport>;
 }
@@ -656,7 +649,6 @@ export interface ConversationSearchHit {
 }
 
 export interface TreeSweepInput {
-  staleDays?: number;
   receiptMinAgeDays?: number;
   /** Evidence refs whose filing job is still queued or running; their receipts are left alone. */
   skipEvidenceRefs?: string[];
