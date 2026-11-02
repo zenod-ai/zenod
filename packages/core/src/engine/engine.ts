@@ -1990,7 +1990,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         input.assertActive?.();
         const c = report.counts;
         const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
         );
         return { report, committed: true, revision };
       } catch (error) {

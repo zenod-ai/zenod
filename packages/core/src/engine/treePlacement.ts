@@ -21,7 +21,8 @@ import { entryHeading } from "./evidence.js";
  * - rule 2/4: every meaning page the capture touched hangs under a parent; a page
  *   without a resolvable lineage gets the best-matching node as `parent:`, marked
  *   `provisional: true` when the match is weak; a capture that reached no page
- *   becomes a provisional leaf under the closest node;
+ *   becomes a provisional leaf under the closest node; a capture that reached only
+ *   level-1 roots is also cited on the deepest matching page below them (E9-2f);
  * - rule 5: agent ops reports become one dated rollup line on their project node;
  * - rule 6: the Log entry gets `- filed: [[page]] (Working › Node › Page)` (or
  *   `- filed: log only (reason)`), appended so the Log stays append-only.
@@ -107,16 +108,20 @@ export interface NodeChoice {
  * Walk down from the roots (rule 2): score every rooted page by token overlap with
  * its name/title (weight 2) and its node/page summary or a name stem (weight 1). A
  * deeper page wins only by scoring higher than the node above it, so leaves do not
- * chain under siblings on a tie; provisional pages are never chosen. `rootsOnly` restricts the walk to level 1 (ops rollups, rule 5).
- * With no signal at all, falls back to the first long-term root.
+ * chain under siblings on a tie; provisional pages are never chosen. `rootsOnly` restricts the walk to level 1 (ops rollups, rule 5);
+ * `under` restricts it to the pages below one node (E9-2f: the leaf a root-level capture belongs on).
+ * With no signal at all, falls back to the first long-term root (never with `under`: no match there means none).
  */
 export async function chooseTreeNode(
   vaultPath: string,
   index: TreeIndex,
   text: string,
-  options: { exclude?: Set<string>; rootsOnly?: boolean } = {},
+  options: { exclude?: Set<string>; rootsOnly?: boolean; under?: string } = {},
 ): Promise<NodeChoice | null> {
   const words = tokens(text);
+  // Under a root, a word the root's own summary already names ("Agent Team" on a root) does not single out a page below it.
+  const underRoot = options.under ? index.rootsByPath.get(options.under.toLowerCase()) : undefined;
+  const rootWords = underRoot ? tokens(`${underRoot.name} ${underRoot.summary}`) : new Set<string>();
   let best: { path: string; score: number; depth: number; order: number } | null = null;
   let order = 0;
   for (const [path, fields] of index.fields) {
@@ -128,12 +133,14 @@ export async function chooseTreeNode(
     const lineage = index.lineage(path);
     if (!lineage.ok) continue;
     if (options.exclude && lineage.steps.some(step => options.exclude!.has(step.path))) continue;
+    if (options.under && (path === options.under || !lineage.steps.some(step => step.path === options.under))) continue;
     const summary = await pageSummary(vaultPath, path);
     const name = tokens(`${root?.name ?? fields.title} ${basenameOf(path)}`);
     const rest = tokens(`${root?.summary ?? ""} ${summary}`);
     if (!root) {
       // Below level 1 a page is only the right node when its own name (not one it shares with an ancestor) matches.
       const inherited = tokens(lineage.steps.slice(0, -1).map(step => `${step.name} ${basenameOf(step.path)}`).join(" "));
+      for (const word of rootWords) inherited.add(word);
       if (![...name].some(word => !inherited.has(word) && words.has(word))) continue;
     }
     let score = 0;
@@ -146,6 +153,7 @@ export async function chooseTreeNode(
     }
   }
   if (best && best.score > 0) return { path: best.path, score: best.score, weak: best.score < CONFIDENT_SCORE };
+  if (options.under) return null;
   const fallback = index.tree?.nodes.find(node => node.kind === "long-term") ?? index.tree?.nodes[0];
   const resolved = fallback ? index.resolveRef(fallback.path) : null;
   return resolved && index.fields.has(resolved) ? { path: resolved, score: 0, weak: true } : null;
@@ -266,21 +274,56 @@ export async function appendOpsRollup(
   if (existing) {
     next = raw.replace(lineRe, `- ${date} ops (${Number(existing[1]) + 1}): ${existing[2]}, ${citation}`);
   } else {
-    const line = `- ${date} ops (1): ${citation}`;
-    const heading = raw.indexOf(`\n${OPS_ROLLUP_HEADING}\n`);
-    if (heading >= 0) {
-      // Append at the end of the section: newest dates last, section stays contiguous.
-      const start = heading + OPS_ROLLUP_HEADING.length + 2;
-      const nextHeading = raw.slice(start).search(/^## /m);
-      const end = nextHeading < 0 ? raw.length : start + nextHeading;
-      const section = raw.slice(start, end).replace(/\s+$/, "");
-      const after = raw.slice(end);
-      next = `${raw.slice(0, start)}${section}${section ? "\n" : ""}${line}\n${after ? `\n${after}` : ""}`;
-    } else {
-      next = `${raw}${raw.endsWith("\n") ? "\n" : "\n\n"}${OPS_ROLLUP_HEADING}\n\nAgent ops reports (Watcher reads, console decisions), one line per day; the evidence stays in the Log.\n\n${line}\n`;
-    }
+    next = appendToSection(raw, OPS_ROLLUP_HEADING, "Agent ops reports (Watcher reads, console decisions), one line per day; the evidence stays in the Log.", `- ${date} ops (1): ${citation}`);
   }
   await writes.write(choice.path, next);
+  return choice.path;
+}
+
+/**
+ * Append a line at the end of a `## ` section (newest last, section stays
+ * contiguous), creating the section with its intro at the end of the page when absent.
+ */
+function appendToSection(raw: string, heading: string, intro: string, line: string): string {
+  const at = raw.indexOf(`\n${heading}\n`);
+  if (at < 0) return `${raw}${raw.endsWith("\n") ? "\n" : "\n\n"}${heading}\n\n${intro}\n\n${line}\n`;
+  const start = at + heading.length + 2;
+  const nextHeading = raw.slice(start).search(/^## /m);
+  const end = nextHeading < 0 ? raw.length : start + nextHeading;
+  const section = raw.slice(start, end).replace(/\s+$/, "");
+  const after = raw.slice(end);
+  return `${raw.slice(0, start)}${section}${section ? "\n" : ""}${line}\n${after ? `\n${after}` : ""}`;
+}
+
+/** E9-2f: a single shared name word (score 2) is not enough to cite a capture on a deeper page. */
+const LEAF_CITATION_SCORE = CONFIDENT_SCORE + 1;
+
+/** Section on a deeper page holding captures that first landed on its level-1 root (E9-2f). */
+export const LEAF_CAPTURES_HEADING = "## Captures";
+
+/**
+ * E9-2f: a capture cited only by a level-1 root also belongs on the deepest page
+ * under that root that matches it (E9-2b's walk, restricted to the root's
+ * subtree; a name word the root's summary does not already carry, plus one more
+ * matching word). Appends `- <date> · <summary> [[date#^e-…]]`
+ * to that page's `## Captures` section; the root keeps its citation, nothing is
+ * removed. Returns the page now citing the capture, or null when no page below
+ * the root fits.
+ */
+export async function citeOnLeaf(
+  vaultPath: string,
+  index: TreeIndex,
+  input: { rootPath: string; evidenceRef: string; text: string; summary: string },
+  writes: TrackedWrites = new TrackedWrites(vaultPath),
+): Promise<string | null> {
+  const choice = await chooseTreeNode(vaultPath, index, input.text, { under: input.rootPath });
+  // Stricter than placing a new page: a name word plus at least one more matching word.
+  if (!choice || choice.score < LEAF_CITATION_SCORE) return null;
+  const { date, anchor } = splitEvidenceRef(input.evidenceRef);
+  const raw = await readFile(join(vaultPath, choice.path), "utf8");
+  if (raw.includes(`${date}#^${anchor}`)) return choice.path;
+  const line = `- ${date} · ${oneLine(input.summary, 140) || "capture"} [[${date}#^${anchor}]]`;
+  await writes.write(choice.path, appendToSection(raw, LEAF_CAPTURES_HEADING, "Captures that first landed on the parent page; the Log entry is the evidence.", line));
   return choice.path;
 }
 
@@ -417,6 +460,16 @@ export async function placeCapture(
     if (leaf) { finalPages = [leaf.path]; touched.add(leaf.path); provisional.add(leaf.path); }
   }
   if (touched.size) index = await buildTreeIndex(vaultPath);
+  // E9-2f: a capture that reached only level-1 roots is also cited on the deepest page below them that fits (rule 2), so lineage reaches the leaf.
+  if (!plan.rollup && finalPages.length && finalPages.every(path => index.rootsByPath.has(path.toLowerCase()))) {
+    const leaves: string[] = [];
+    for (const rootPath of finalPages) {
+      const leaf = await citeOnLeaf(vaultPath, index, { rootPath, evidenceRef: input.evidenceRef, text: oneLine(input.content, 200), summary: input.content }, writes);
+      if (leaf && !leaves.includes(leaf)) leaves.push(leaf);
+    }
+    for (const leaf of leaves) touched.add(leaf);
+    finalPages = [...finalPages, ...leaves];
+  }
 
   const snapshot = await scanVault(vaultPath);
   const report = lintTreeIndex(index, snapshot.files);

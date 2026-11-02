@@ -270,7 +270,7 @@ export class TaskJobQueue {
     });
     if (!result.report.hasTree) return { kind: "tree_sweep", status: "skipped", reason: "vault has no Tree.md", committed: false, revision: null };
     const c = result.report.counts;
-    console.log(`[tree-sweep] ${job.id} swept: receipts seen=${c.receiptsSeen} refiled=${c.receiptsRefiled} archived=${c.receiptsArchived} skipped=${c.receiptsSkipped}; stale roots=${c.staleRoots}/${c.workingRoots}; duplicate groups=${c.duplicateGroups}; tree lint errors ${c.treeLintErrorsBefore}→${c.treeLintErrorsAfter}; ${result.committed ? `one commit ${result.revision?.id.slice(0, 12) ?? "?"}` : "no changes"}`);
+    console.log(`[tree-sweep] ${job.id} swept: receipts seen=${c.receiptsSeen} refiled=${c.receiptsRefiled} archived=${c.receiptsArchived} skipped=${c.receiptsSkipped}; root-only citations=${c.rootOnlyCitations} deepened=${c.citationsDeepened}; stale roots=${c.staleRoots}/${c.workingRoots}; duplicate groups=${c.duplicateGroups}; tree lint errors ${c.treeLintErrorsBefore}→${c.treeLintErrorsAfter}; ${result.committed ? `one commit ${result.revision?.id.slice(0, 12) ?? "?"}` : "no changes"}`);
     return {
       kind: "tree_sweep",
       status: "swept",
