@@ -538,13 +538,13 @@ describe("MCP endpoint", () => {
   it("search_memory and get_memory return tree lineage with evidence anchors (E9-3a)", async () => {
     const vault = await mkdtemp(join(tmpdir(), "zenod-mcp-lineage-"));
     const files: Record<string, string> = {
-      "Tree.md": "# Memory tree\n\n## Working memory\n\n- Hair transplant | working | [[Projects/Hair transplant]] | Options.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | Businesses.\n",
-      "Projects/Hair transplant.md": "---\ntitle: Hair transplant\nparent: \"[[Tree]]\"\nmemory: working\n---\nOptions.\n",
-      "Notes/Barcelona quotes.md": "---\ntitle: Barcelona quotes\nparent: \"[[Hair transplant]]\"\n---\nLineageword quote [[2026-10-31#^e-c64e3b]].\n",
-      "Notes/Turkey clinics.md": "---\ntitle: Turkey clinics\nparent: \"[[Hair transplant]]\"\n---\nLineageword clinics.\n",
+      "Tree.md": "# Memory tree\n\n## Working memory\n\n- Boat repair | working | [[Projects/Boat repair]] | Options.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | Businesses.\n",
+      "Projects/Boat repair.md": "---\ntitle: Boat repair\nparent: \"[[Tree]]\"\nmemory: working\n---\nOptions.\n",
+      "Notes/Porto quotes.md": "---\ntitle: Porto quotes\nparent: \"[[Boat repair]]\"\n---\nLineageword quote [[2026-10-31#^e-c64e3b]].\n",
+      "Notes/Vigo yards.md": "---\ntitle: Vigo yards\nparent: \"[[Boat repair]]\"\n---\nLineageword yards.\n",
       "Areas/Ventures and work.md": "---\ntitle: Ventures and work\nparent: \"[[Tree]]\"\nmemory: long-term\n---\nLineageword companies.\n",
-      "Notes/Alpha9 tax.md": "---\ntitle: Alpha9 tax\nparent: \"[[Ventures and work]]\"\n---\nLineageword AEAT.\n",
-      "Notes/AEAT filing.md": "---\ntitle: AEAT filing\nparent: \"[[Alpha9 tax]]\"\n---\nLineageword Q3.\n",
+      "Notes/Kestrel tax.md": "---\ntitle: Kestrel tax\nparent: \"[[Ventures and work]]\"\n---\nLineageword AEAT.\n",
+      "Notes/AEAT filing.md": "---\ntitle: AEAT filing\nparent: \"[[Kestrel tax]]\"\n---\nLineageword Q3.\n",
       "Notes/Legacy.md": "---\ntitle: Legacy\n---\nLineageword old.\n",
     };
     for (const [path, content] of Object.entries(files)) {
@@ -561,15 +561,15 @@ describe("MCP endpoint", () => {
       const hits = (search.structuredContent as { hits: Array<{ path: string; placement: string; lineage: Array<{ title: string }>; evidenceRefs: string[] }> }).hits;
       const paths = Object.fromEntries(hits.map((hit) => [hit.path, hit.lineage.map((node) => node.title).join(" › ")]));
       expect(paths).toEqual({
-        "Notes/Barcelona quotes.md": "Working memory › Hair transplant › Barcelona quotes",
-        "Notes/Turkey clinics.md": "Working memory › Hair transplant › Turkey clinics",
+        "Notes/Porto quotes.md": "Working memory › Boat repair › Porto quotes",
+        "Notes/Vigo yards.md": "Working memory › Boat repair › Vigo yards",
         "Areas/Ventures and work.md": "Long-term memory › Ventures and work",
-        "Notes/Alpha9 tax.md": "Long-term memory › Ventures and work › Alpha9 tax",
-        "Notes/AEAT filing.md": "Long-term memory › Ventures and work › Alpha9 tax › AEAT filing",
+        "Notes/Kestrel tax.md": "Long-term memory › Ventures and work › Kestrel tax",
+        "Notes/AEAT filing.md": "Long-term memory › Ventures and work › Kestrel tax › AEAT filing",
         "Notes/Legacy.md": "",
       });
       expect(hits.find((hit) => hit.path === "Notes/Legacy.md")).toMatchObject({ placement: "unplaced", lineage: [] });
-      expect(hits.find((hit) => hit.path === "Notes/Barcelona quotes.md")?.evidenceRefs).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
+      expect(hits.find((hit) => hit.path === "Notes/Porto quotes.md")?.evidenceRefs).toEqual(["Log/2026-10-31.md#^e-c64e3b"]);
       const text = search.content.map((item) => (item as { text: string }).text).join("\n");
       // E9-5j (root L-6): the text is as before EPIC-9; lineage lives in structured output only.
       expect(text).not.toContain("path: ");
@@ -577,13 +577,13 @@ describe("MCP endpoint", () => {
       expect(text).not.toContain("Search: ");
       expect(validateToolResponse("zenod.search_memory", search.structuredContent)).toBeTruthy();
 
-      const node = await client.callTool({ name: "get_memory", arguments: { path: "Projects/Hair transplant.md" } });
+      const node = await client.callTool({ name: "get_memory", arguments: { path: "Projects/Boat repair.md" } });
       expect(node.structuredContent).toMatchObject({
         placement: "placed",
         parent: { path: null, title: "Working memory", memory: "working" },
         children: [
-          { path: "Notes/Barcelona quotes.md", title: "Barcelona quotes" },
-          { path: "Notes/Turkey clinics.md", title: "Turkey clinics" },
+          { path: "Notes/Porto quotes.md", title: "Porto quotes" },
+          { path: "Notes/Vigo yards.md", title: "Vigo yards" },
         ],
       });
       const nodeText = node.content.map((item) => (item as { text: string }).text).join("\n");
@@ -919,17 +919,17 @@ describe("MCP endpoint", () => {
 
   it("ask_brain carries the tree lineage of its sources (E9-3b)", async () => {
     const original = fakeEngine.ask;
-    const path = "Working memory › Hair transplant › Barcelona quotes ← Log/2026-10-31.md#^e-c64e3b";
+    const path = "Working memory › Boat repair › Porto quotes ← Log/2026-10-31.md#^e-c64e3b";
     fakeEngine.ask = async () => ({
       text: "About 4,000 euros.",
-      sources: [{ path: "Notes/Barcelona quotes.md", url: "", provider: "github" }],
+      sources: [{ path: "Notes/Porto quotes.md", url: "", provider: "github" }],
       lineage: [{
-        source: "Notes/Barcelona quotes.md",
-        page: "Notes/Barcelona quotes.md",
+        source: "Notes/Porto quotes.md",
+        page: "Notes/Porto quotes.md",
         lineage: [
           { path: null, title: "Working memory", memory: "working" },
-          { path: "Projects/Hair transplant.md", title: "Hair transplant", memory: "working" },
-          { path: "Notes/Barcelona quotes.md", title: "Barcelona quotes", memory: "working" },
+          { path: "Projects/Boat repair.md", title: "Boat repair", memory: "working" },
+          { path: "Notes/Porto quotes.md", title: "Porto quotes", memory: "working" },
         ],
         evidence: "Log/2026-10-31.md#^e-c64e3b",
         text: path,

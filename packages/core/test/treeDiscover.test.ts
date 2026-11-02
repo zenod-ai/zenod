@@ -83,7 +83,7 @@ describe("E9-2g capture origin", () => {
   it("counts the person's own channels and plain MCP notes as theirs, agent reports as agents'", () => {
     expect(captureOrigin("whatsapp", "agent_team E46-S9 wake")).toBe("user");
     expect(captureOrigin("mcp", "Remember that I take my coffee as a flat white")).toBe("user");
-    expect(captureOrigin("mcp", "agent_team EPIC-46 (Epic Social), 2026-11-02 DM wake: all live")).toBe("agent");
+    expect(captureOrigin("mcp", "agent_team EPIC-46 (Moss Lantern), 2026-11-02 DM wake: all live")).toBe("agent");
     expect(captureOrigin("mcp", "Decision (E51-A1): the paper style")).toBe("agent");
     expect(captureOrigin("mcp", "fixed in PR #1467, live 61f6f52")).toBe("agent");
     expect(captureOrigin("selftest", "hello")).toBe("agent");
@@ -203,9 +203,9 @@ describe("E9-2g root discovery", { timeout: 60_000 }, () => {
 
 describe("E9-2g helpers", () => {
   it("names a topic after its page title without dates or subtitles", () => {
-    expect(cleanTopicName("Maresme vs Cerdanya House Decision 2026-07-24")).toBe("Maresme vs Cerdanya House Decision");
+    expect(cleanTopicName("Oakmere vs Fernhill Cabin Decision 2026-07-24")).toBe("Oakmere vs Fernhill Cabin Decision");
     expect(cleanTopicName("Council — Two Sub-Agents for Daily Posts")).toBe("Council");
-    expect(cleanTopicName("Poly-Maker Campaign July 2026")).toBe("Poly-Maker Campaign");
+    expect(cleanTopicName("Reef-Bot Campaign July 2026")).toBe("Reef-Bot Campaign");
     expect(cleanTopicName("notas_estrategia")).toBe("Notas estrategia");
   });
 

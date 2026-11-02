@@ -12,7 +12,7 @@ import { readTree } from "../src/vault/tree.js";
 import { lintTree } from "../src/vault/treeLint.js";
 
 /**
- * EPIC-9 E9-2i: two subjects Jordi talks about that his tree did not show, in a
+ * EPIC-9 E9-2i: two subjects a person talks about that their tree did not show, in a
  * made-up vault.
  *
  * - A product the person keeps naming in voice notes ("the lumen desk"; the fleet's
@@ -114,8 +114,8 @@ describe("named subjects and subjects of their own (E9-2i)", () => {
   });
 
   it("knows coined names and every spelling of them, never ordinary words", () => {
-    const names = coinedNames(["the lumen_desk console", "EpicSpine and Poly-Maker", "a voice_note with_the long-term follow-up", "e46-s9 x"]);
-    expect([...names.keys()].sort()).toEqual(["epicspine", "lumendesk", "polymaker"]);
+    const names = coinedNames(["the lumen_desk console", "MossLantern and Tide-Cart", "a voice_note with_the long-term follow-up", "e46-s9 x"]);
+    expect([...names.keys()].sort()).toEqual(["lumendesk", "mosslantern", "tidecart"]);
     const re = mentionRe(["lumen", "desk"]);
     expect("Lumen Desk, lumen desk, lumen-desk, lumen_desk, LumenDesk; illumen desks".match(re)).toHaveLength(5);
   });

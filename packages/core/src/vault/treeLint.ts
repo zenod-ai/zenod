@@ -78,7 +78,7 @@ export function lintTreeIndex(index: TreeIndex, files: string[]): TreeLintReport
 
   const tree = index.tree;
   if (!tree) {
-    error(TREE_PATH, "tree/missing", `vault has no ${TREE_PATH}; seed one with \`zenod tree seed\``);
+    error(TREE_PATH, "tree/missing", `vault has no ${TREE_PATH}; seed an empty one with \`zenod tree seed\`, then \`zenod tree discover --apply\``);
   } else {
     for (const p of tree.problems) error(TREE_PATH, p.rule, p.message, p.line);
     const names = new Map<string, number>();

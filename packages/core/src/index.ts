@@ -63,10 +63,10 @@ export {
   type LineageStep, type LineageResult, type TreeIndex,
 } from "./vault/tree.js";
 export { lintTree, lintTreeIndex, type TreeLintIssue, type TreeLintReport, type TreeLintStats } from "./vault/treeLint.js";
-export { AUDIT_TREE_PROPOSAL, seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
+export { seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
 export { heat as treeHeat, jaccard, matchRootIds, newRootId } from "./engine/treeIdentity.js";
 export { memoryTreeOutline, pageCaptureDate, type MemoryTreeOutline, type MemoryTreeOutlineNode, type MemoryTreeCapture } from "./vault/treeOutline.js";
-export { MemoryIndex, MemoryIndexTenantError, BUILT_IN_ALIASES, type MemoryIndexHit, type MemoryIndexOptions, type MemoryIndexStats } from "./vault/memoryIndex.js";
+export { MemoryIndex, MemoryIndexTenantError, type MemoryIndexHit, type MemoryIndexOptions, type MemoryIndexStats } from "./vault/memoryIndex.js";
 export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryLineage, type MemoryTreeNodeView, type LineageNode } from "./vault/lineage.js";
 export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } from "./engine/treePlacement.js";
 export {

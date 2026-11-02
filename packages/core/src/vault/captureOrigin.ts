@@ -8,7 +8,7 @@ import { listMarkdownFiles } from "./files.js";
  * or asked an assistant to remember. Agent reports written over MCP (wake and
  * Watcher reads, ticket closures, deploy notes) are content, never freshness:
  * otherwise a busy agent fleet makes its own topics look like what the person is
- * working on (Jordi's "Zenod council" in E9-A4).
+ * working on (seen in E9-A4).
  */
 export type CaptureOrigin = "user" | "agent";
 

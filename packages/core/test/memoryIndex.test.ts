@@ -13,7 +13,7 @@ import { buildMatch, MemoryIndex, MemoryIndexTenantError } from "../src/vault/me
 // EPIC-9 E9-5a: the tier-0 index — per-tenant SQLite FTS5 beside the vault, BM25 over pages,
 // Log entries and Tree.md roots, every hit carrying its tree path.
 const TREE_FIXTURE = fileURLToPath(new URL("./fixtures/tree-vault", import.meta.url));
-const QUOTES = "Projects/Hair transplant/2023 Barcelona quotes.md";
+const QUOTES = "Projects/Boat repair/2023 Porto quotes.md";
 
 let dirs: string[] = [];
 const open: Array<{ close(): void }> = [];
@@ -49,13 +49,13 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     const vault = await vaultFrom({}, TREE_FIXTURE);
     const path = join(dirname(vault), "memory-index.sqlite");
     const index = indexFor(vault, path);
-    const hits = await index.search("Barcelona quotes");
-    expect(hits[0]).toMatchObject({ path: QUOTES, kind: "page", treePath: "Working memory › Hair transplant › 2023 Barcelona quotes" });
+    const hits = await index.search("Porto quotes");
+    expect(hits[0]).toMatchObject({ path: QUOTES, kind: "page", treePath: "Working memory › Boat repair › 2023 Porto quotes" });
     // The snippet is a window around a matched word, accent-insensitive.
-    expect(hits[0]!.snippet.toLowerCase()).toMatch(/barcelona|quote/);
+    expect(hits[0]!.snippet.toLowerCase()).toMatch(/porto|quote/);
     // A Log entry hit is its exact evidence ref and carries the path of the page it was filed on.
     const log = hits.find((hit) => hit.kind === "log");
-    expect(log).toMatchObject({ path: "Log/2026-10-31.md#^e-c64e3b", filedOn: QUOTES, treePath: "Working memory › Hair transplant › 2023 Barcelona quotes" });
+    expect(log).toMatchObject({ path: "Log/2026-10-31.md#^e-c64e3b", filedOn: QUOTES, treePath: "Working memory › Boat repair › 2023 Porto quotes" });
     // Nothing was written into the vault.
     expect((await simpleGit(vault).raw(["ls-files", "--others", "--exclude-standard"]).catch(() => ""))).not.toContain("sqlite");
     const { readdir } = await import("node:fs/promises");
@@ -67,25 +67,28 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     const index = indexFor(vault, join(dirname(vault), "idx.sqlite"));
     const stats = await index.rebuild();
     expect(stats.rows).toBeGreaterThan(0);
-    const hits = await index.search("hair transplant");
-    expect(hits.map((hit) => hit.path)).toContain("Projects/Hair transplant.md");
+    const hits = await index.search("boat repair");
+    expect(hits.map((hit) => hit.path)).toContain("Projects/Boat repair.md");
     // A root row and its page share a path: one hit per path.
     expect(new Set(hits.map((hit) => hit.path)).size).toBe(hits.length);
   });
 
-  it("expands built-in aliases (agentine ↔ agent team) and reads no Keeper notes (E9-5i)", async () => {
+  it("has no built-in aliases and reads no Keeper notes (E9-5i, E9-5k)", async () => {
     const vault = await vaultFrom({
-      "Projects/Crew.md": "---\ntitle: Crew\n---\nThe agent team ships the weekly digest.\n",
+      "Projects/Crew.md": "---\ntitle: Crew\n---\nThe blue heron ships the weekly digest.\n",
       "Projects/Casa.md": "---\ntitle: Casa\n---\nNotes about the flat in Gràcia.\n",
-      "Tree.md": "---\ntitle: Tree\n---\n## Working memory\n\n## Keeper notes\n\n- K-1 | Casa ^n-1a2b3c4d | aliases: home, mi piso | Jordi's words | confirmed 2026-11-02\n",
+      "Tree.md": "---\ntitle: Tree\n---\n## Working memory\n\n## Keeper notes\n\n- K-1 | Casa ^n-1a2b3c4d | aliases: home, mi piso | the person's words | confirmed 2026-11-02\n",
     });
     const index = indexFor(vault, join(dirname(vault), "idx.sqlite"));
-    expect((await index.search("agentine"))[0]?.path).toBe("Projects/Crew.md");
+    // No hand-made spelling list in product code (root L-7): a variant the vault never writes finds nothing.
+    expect(await index.search("blueheronry")).toEqual([]);
+    expect((await index.search("blue heron"))[0]?.path).toBe("Projects/Crew.md");
     // A leftover Keeper-notes alias is not search help: nobody steers the index.
     expect((await index.search("mi piso"))[0]?.path).not.toBe("Projects/Casa.md");
     // Accent-insensitive (remove_diacritics 2): "gracia" finds "Gràcia".
     expect((await index.search("gracia"))[0]).toMatchObject({ path: "Projects/Casa.md", snippet: expect.stringContaining("Gràcia") });
-    expect(buildMatch("what about the agentine?", [["agentine", "agent team"]])).toBe('"agentine"* OR "agent team"');
+    // Alias groups a caller passes still expand.
+    expect(buildMatch("what about the heronry?", [["heronry", "blue heron"]])).toBe('"heronry"* OR "blue heron"');
   });
 
   it("finds a page by its aliases: frontmatter, as a list or a single string", async () => {
@@ -105,12 +108,12 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     expect(await index.refresh()).toEqual({ changed: 0, removed: 0 });
     expect(await index.search("quokkaword")).toEqual([]);
 
-    await writeFile(join(vault, "Notes/Quokka.md"), "---\ntitle: Quokka\nparent: \"[[Hair transplant]]\"\n---\nThe quokkaword note.\n");
+    await writeFile(join(vault, "Notes/Quokka.md"), "---\ntitle: Quokka\nparent: \"[[Boat repair]]\"\n---\nThe quokkaword note.\n");
     index.markDirty();
     expect(await index.refresh()).toEqual({ changed: 1, removed: 0 });
     // Not marked dirty: search still answers from the index without re-reading anything.
     const added = await index.search("quokkaword");
-    expect(added[0]).toMatchObject({ path: "Notes/Quokka.md", treePath: "Working memory › Hair transplant › Quokka" });
+    expect(added[0]).toMatchObject({ path: "Notes/Quokka.md", treePath: "Working memory › Boat repair › Quokka" });
 
     await unlink(join(vault, "Notes/Quokka.md"));
     index.markDirty();
@@ -197,10 +200,10 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
 
   it("serves hits with tree paths from the index and falls back to the scan when the index finds nothing", async () => {
     const { engine } = await engineWithIndex("t1", {});
-    const hits = await engine.search("Barcelona quotes");
-    expect(hits[0]).toMatchObject({ path: QUOTES, treePath: "Working memory › Hair transplant › 2023 Barcelona quotes" });
+    const hits = await engine.search("Porto quotes");
+    expect(hits[0]).toMatchObject({ path: QUOTES, treePath: "Working memory › Boat repair › 2023 Porto quotes" });
     // Substring match inside a word: FTS5 has no such token, the scan search still finds it.
-    const fallback = await engine.search("arcelon");
+    const fallback = await engine.search("orto");
     expect(fallback.length).toBeGreaterThan(0);
     expect(fallback[0]!.treePath).toBeUndefined();
     const stats = await engine.rebuildMemoryIndex!();
@@ -210,12 +213,12 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
   it("ask_brain's search goes through the index", async () => {
     let searchText = "";
     const llm = { answer: async (_input: AnswerInput, tools: VaultReadTools): Promise<AnswerResult> => {
-      searchText = await tools.searchVault!("Barcelona quote");
+      searchText = await tools.searchVault!("Porto quote");
       await tools.readNote!(QUOTES);
       return { text: "About 4,000 euros.", readPaths: [QUOTES] };
     } } as unknown as BrainLlm;
     const { engine } = await engineWithIndex("t1", {}, llm);
-    await engine.ask("What were the Barcelona quotes?");
+    await engine.ask("What were the Porto quotes?");
     expect(searchText.split("\n")[0]).toMatch(new RegExp(`^${QUOTES.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(score `));
     expect(searchText).toContain("Log/2026-10-31.md#^e-c64e3b (score");
     expect(searchText).not.toContain("· tree:"); // E9-5j: lineage is structured output only
@@ -223,8 +226,8 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
 
   it("refuses to serve another tenant's index file", async () => {
     const { engine, indexPath, vault } = await engineWithIndex("t1", {});
-    await engine.search("Barcelona");
+    await engine.search("Porto");
     const intruder = createEngine({ repo: await VaultRepo.open({ workdir: vault }), llm: {} as BrainLlm, state: new SqliteStateStore(":memory:"), memoryIndex: { path: indexPath, tenantId: "t2" } });
-    await expect(intruder.search("Barcelona")).rejects.toThrow(MemoryIndexTenantError);
+    await expect(intruder.search("Porto")).rejects.toThrow(MemoryIndexTenantError);
   });
 });

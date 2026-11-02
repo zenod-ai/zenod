@@ -6,17 +6,17 @@ import { memoryTreeOutline, pageCaptureDate } from "../src/vault/treeOutline.js"
 
 // EPIC-9 E9-2e: the console Memory tab outline, built live from Tree.md + page `parent:`.
 const FILES: Record<string, string> = {
-  "Tree.md": `---\ntitle: Tree\n---\n# Memory tree\n\n## Working memory\n\n- Hair transplant | working | [[Projects/Hair transplant]] | Deciding on a hair transplant.\n- House decision | working | [[Projects/House decision]] | Where to buy a house.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | The businesses over time.\n`,
-  "Projects/Hair transplant.md": `---\ntitle: Hair transplant\nparent: "[[Tree]]"\nmemory: working\nupdated: 2026-10-01\n---\nOptions dossier with a private body line.\n`,
-  "Projects/House decision.md": `---\ntitle: House decision\nparent: "[[Tree]]"\nmemory: working\n---\nShortlist.\n`,
+  "Tree.md": `---\ntitle: Tree\n---\n# Memory tree\n\n## Working memory\n\n- Boat repair | working | [[Projects/Boat repair]] | Deciding on a boat repair.\n- Cabin decision | working | [[Projects/Cabin decision]] | Where to buy a house.\n\n## Long-term memory\n\n- Ventures and work | long-term | [[Areas/Ventures and work]] | The businesses over time.\n`,
+  "Projects/Boat repair.md": `---\ntitle: Boat repair\nparent: "[[Tree]]"\nmemory: working\nupdated: 2026-10-01\n---\nOptions dossier with a private body line.\n`,
+  "Projects/Cabin decision.md": `---\ntitle: Cabin decision\nparent: "[[Tree]]"\nmemory: working\n---\nShortlist.\n`,
   "Areas/Ventures and work.md": `---\ntitle: Ventures and work\nparent: "[[Tree]]"\nmemory: long-term\n---\nCompanies.\n`,
-  "Notes/Barcelona quotes 2023.md": `---\ntitle: Barcelona quotes 2023\nparent: "[[Hair transplant]]"\n---\nQuote [[2026-10-31#^e-c64e3b]].\n`,
-  "Notes/Turkey clinics.md": `---\ntitle: Turkey clinics\nparent: "[[Hair transplant]]"\nprovisional: true\n---\nClinics [[2026-10-30#^e-aaaaaa]] [[2026-11-01#^e-bbbbbb]].\n`,
-  "Notes/Maresme.md": `---\ntitle: Maresme\nparent: "[[Projects/House decision]]"\ncreated: 2026-09-15\n---\nCoastal option.\n`,
-  "Notes/Alpha9 tax.md": `---\ntitle: Alpha9 tax\nparent: "[[Ventures and work]]"\n---\nAEAT.\n`,
-  "Notes/AEAT filing.md": `---\ntitle: AEAT filing\nparent: "[[Alpha9 tax]]"\n---\nQ3 filing [[2026-10-20#^e-cccccc]].\n`,
+  "Notes/Porto quotes 2023.md": `---\ntitle: Porto quotes 2023\nparent: "[[Boat repair]]"\n---\nQuote [[2026-10-31#^e-c64e3b]].\n`,
+  "Notes/Vigo yards.md": `---\ntitle: Vigo yards\nparent: "[[Boat repair]]"\nprovisional: true\n---\nClinics [[2026-10-30#^e-aaaaaa]] [[2026-11-01#^e-bbbbbb]].\n`,
+  "Notes/Oakmere.md": `---\ntitle: Oakmere\nparent: "[[Projects/Cabin decision]]"\ncreated: 2026-09-15\n---\nCoastal option.\n`,
+  "Notes/Kestrel tax.md": `---\ntitle: Kestrel tax\nparent: "[[Ventures and work]]"\n---\nAEAT.\n`,
+  "Notes/AEAT filing.md": `---\ntitle: AEAT filing\nparent: "[[Kestrel tax]]"\n---\nQ3 filing [[2026-10-20#^e-cccccc]].\n`,
   "Notes/Legacy page.md": `---\ntitle: Legacy page\n---\nFrom before the tree [[2026-11-02#^e-dddddd]].\n`,
-  "Log/2026-10-31.md": `# 2026-10-31\n\n## 10:00 Barcelona quote ^e-c64e3b\n`,
+  "Log/2026-10-31.md": `# 2026-10-31\n\n## 10:00 Porto quote ^e-c64e3b\n`,
 };
 
 const dirs: string[] = [];
@@ -39,26 +39,26 @@ describe("memory tree outline (E9-2e)", () => {
     expect(outline).toMatchObject({ roots: 3, placed: 8, unplaced: 1 });
     const [working, longTerm] = outline.groups;
     expect(working).toMatchObject({ id: "working", kind: "group", title: "Working memory", pages: 5, path: null, url: null });
-    expect(working!.latest).toEqual({ date: "2026-11-01", title: "Turkey clinics", path: "Notes/Turkey clinics.md" });
+    expect(working!.latest).toEqual({ date: "2026-11-01", title: "Vigo yards", path: "Notes/Vigo yards.md" });
     expect(longTerm).toMatchObject({ title: "Long-term memory", pages: 3, latest: { date: "2026-10-20", title: "AEAT filing" } });
 
-    const [hair, house] = working!.children;
-    expect(hair).toMatchObject({
+    const [boat, cabin] = working!.children;
+    expect(boat).toMatchObject({
       kind: "root",
-      title: "Hair transplant",
-      summary: "Deciding on a hair transplant.",
-      path: "Projects/Hair transplant.md",
+      title: "Boat repair",
+      summary: "Deciding on a boat repair.",
+      path: "Projects/Boat repair.md",
       pages: 3,
-      url: "https://github.com/acme/vault/blob/main/Projects/Hair transplant.md",
+      url: "https://github.com/acme/vault/blob/main/Projects/Boat repair.md",
     });
     // Newest capture first inside a node.
-    expect(hair!.children.map((child) => [child.title, child.latest?.date, child.provisional ?? false])).toEqual([
-      ["Turkey clinics", "2026-11-01", true],
-      ["Barcelona quotes 2023", "2026-10-31", false],
+    expect(boat!.children.map((child) => [child.title, child.latest?.date, child.provisional ?? false])).toEqual([
+      ["Vigo yards", "2026-11-01", true],
+      ["Porto quotes 2023", "2026-10-31", false],
     ]);
-    expect(house).toMatchObject({ pages: 2, latest: { date: "2026-09-15", title: "Maresme" } });
+    expect(cabin).toMatchObject({ pages: 2, latest: { date: "2026-09-15", title: "Oakmere" } });
     const tax = longTerm!.children[0]!.children[0]!;
-    expect(tax).toMatchObject({ title: "Alpha9 tax", pages: 2, children: [{ title: "AEAT filing", pages: 1, children: [] }] });
+    expect(tax).toMatchObject({ title: "Kestrel tax", pages: 2, children: [{ title: "AEAT filing", pages: 1, children: [] }] });
   });
 
   it("never carries a page body", async () => {

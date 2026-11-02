@@ -13,14 +13,15 @@ import { lintVault } from "../src/vault/lint.js";
 import { fileURLToPath } from "node:url";
 import { buildTreeIndex } from "../src/vault/tree.js";
 import { lintTree } from "../src/vault/treeLint.js";
-import { AUDIT_TREE_PROPOSAL, seedTreeFiles } from "../src/vault/treeSeed.js";
+import { seedTreeFiles } from "../src/vault/treeSeed.js";
+import { NEUTRAL_TREE } from "./fixtures/neutralTree.js";
 import type { StoreResult } from "../src/types.js";
 import type { BrainLlm, Classification, ClassifyInput, ComposePageInput } from "../src/llm/types.js";
 
 /**
- * EPIC-9 E9-2b: synthetic replay of 20 capture shapes taken from Jordi's Log
- * (anonymised): voice notes, text, links and agent ops reports across the hair,
- * house, Zenod and Epic Social topics plus long-term domains.
+ * EPIC-9 E9-2b: synthetic replay of 20 capture shapes in the shapes of a real Log
+ * (made-up topics): voice notes, text, links and agent ops reports across four
+ * working topics plus long-term domains.
  */
 interface Capture {
   key: string;
@@ -35,48 +36,48 @@ interface Capture {
 }
 
 const CAPTURES: Capture[] = [
-  { key: "hair-voice", contentType: "voice_note", root: "Hair transplant",
-    content: "Voice note: called the clinic in Istanbul, FUE quote 2,800 euros all-in for 3,000 grafts; compare with the Barcelona quotes before deciding on the hair transplant.",
-    pages: [{ path: "Notes/Hair transplant Istanbul quote.md", action: "create", title: "Hair transplant Istanbul quote" }] },
-  { key: "hair-text", root: "Hair transplant",
-    content: "Hair transplant: budget ceiling 4k, prefer spring timing so recovery fits before summer.",
-    pages: [{ path: "Projects/Hair transplant.md", action: "update", title: "Hair transplant" }] },
-  { key: "hair-link", contentType: "link", root: "Hair transplant",
-    content: "https://example.com/fue-vs-dhi-guide FUE vs DHI comparison for the hair transplant decision",
-    pages: [{ path: "Notes/FUE vs DHI guide.md", action: "create", title: "FUE vs DHI guide" }] },
-  { key: "house-voice", contentType: "voice_note", root: "House decision",
-    content: "Voice note: Cerdanya house visit, 1,100 m altitude, too cold in winter; Maresme stays first on the shortlist.",
-    pages: [{ path: "Notes/Cerdanya house visit.md", action: "create", title: "Cerdanya house visit" }] },
-  { key: "house-text", root: "House decision",
-    content: "House decision: ask the lawyer about legal exposure on rural plots before any offer.",
-    pages: [{ path: "Projects/House decision.md", action: "update", title: "House decision" }] },
-  { key: "house-link", contentType: "link", root: "House decision",
-    content: "https://www.idealista.com/inmueble/000000/ Maresme listing with sea view for the house shortlist",
-    pages: [{ path: "Notes/Maresme listing.md", action: "create", title: "Maresme listing" }] },
-  { key: "zenod-text", root: "Launching Zenod",
-    content: "Zenod positioning: memory that files itself; lead the launch page with WhatsApp voice notes.",
-    pages: [{ path: "Notes/Zenod positioning line.md", action: "create", title: "Zenod positioning line" }] },
-  { key: "zenod-voice", contentType: "voice_note", root: "Launching Zenod",
-    content: "Voice note: Zenod alpha launch needs three paying users before opening signup wider.",
-    pages: [{ path: "Projects/Launching Zenod.md", action: "update", title: "Launching Zenod" }] },
-  { key: "social-text", root: "Launching Epic Social",
-    content: "Epic Social post idea: why every agent team needs a spine; draft it for Reddit and X.",
-    pages: [{ path: "Notes/Post idea agent spine.md", action: "create", title: "Post idea agent spine" }] },
-  { key: "social-voice", contentType: "voice_note", root: "Launching Epic Social",
-    content: "Voice note: Epic Social testers, invite five builders from the Agent Team beta this week.",
-    pages: [{ path: "Notes/Epic Social testers.md", action: "create", title: "Epic Social testers" }] },
+  { key: "boat-voice", contentType: "voice_note", root: "Boat repair",
+    content: "Voice note: called the yard in Vigo, hull quote 2,800 euros all-in for 30 planks; compare with the Porto quotes before deciding on the boat repair.",
+    pages: [{ path: "Notes/Boat repair Vigo quote.md", action: "create", title: "Boat repair Vigo quote" }] },
+  { key: "boat-text", root: "Boat repair",
+    content: "Boat repair: budget ceiling 4k, prefer spring timing so relaunch fits before summer.",
+    pages: [{ path: "Projects/Boat repair.md", action: "update", title: "Boat repair" }] },
+  { key: "boat-link", contentType: "link", root: "Boat repair",
+    content: "https://example.com/epoxy-vs-varnish-guide Epoxy vs varnish comparison for the boat repair decision",
+    pages: [{ path: "Notes/Epoxy vs varnish guide.md", action: "create", title: "Epoxy vs varnish guide" }] },
+  { key: "cabin-voice", contentType: "voice_note", root: "Cabin decision",
+    content: "Voice note: Fernhill cabin visit, 1,100 m altitude, too cold in winter; Oakmere stays first on the shortlist.",
+    pages: [{ path: "Notes/Fernhill cabin visit.md", action: "create", title: "Fernhill cabin visit" }] },
+  { key: "cabin-text", root: "Cabin decision",
+    content: "Cabin decision: ask the lawyer about legal exposure on rural plots before any offer.",
+    pages: [{ path: "Projects/Cabin decision.md", action: "update", title: "Cabin decision" }] },
+  { key: "cabin-link", contentType: "link", root: "Cabin decision",
+    content: "https://listings.example.com/000000/ Oakmere listing with sea view for the cabin shortlist",
+    pages: [{ path: "Notes/Oakmere listing.md", action: "create", title: "Oakmere listing" }] },
+  { key: "cart-text", root: "Launching Tide Cart",
+    content: "Tide Cart positioning: a cart that tracks itself; lead the launch page with WhatsApp voice notes.",
+    pages: [{ path: "Notes/Tide Cart positioning line.md", action: "create", title: "Tide Cart positioning line" }] },
+  { key: "cart-voice", contentType: "voice_note", root: "Launching Tide Cart",
+    content: "Voice note: Tide Cart alpha launch needs three paying users before opening signup wider.",
+    pages: [{ path: "Projects/Launching Tide Cart.md", action: "update", title: "Launching Tide Cart" }] },
+  { key: "social-text", root: "Launching Moss Lantern",
+    content: "Moss Lantern post idea: why every crew needs a spine; draft it for Reddit and X.",
+    pages: [{ path: "Notes/Post idea crew spine.md", action: "create", title: "Post idea crew spine" }] },
+  { key: "social-voice", contentType: "voice_note", root: "Launching Moss Lantern",
+    content: "Voice note: Moss Lantern testers, invite five builders from the Heron Desk beta this week.",
+    pages: [{ path: "Notes/Moss Lantern testers.md", action: "create", title: "Moss Lantern testers" }] },
   { key: "ops-watcher-1", ops: true, root: "Infrastructure and runbooks",
     content: "infra-vps EPIC-15 Watcher read: 3 hosts healthy, disk 71% on vps1, no action needed.",
-    pages: [{ path: "Notes/Alpha9 VPS status.md", action: "create", title: "Alpha9 VPS status" }] },
-  { key: "ops-console", ops: true, root: "Launching Epic Social",
-    content: "agent_team console E6-S36 decision: merged #812 and deployed, health sha 1a2b3c4.",
-    pages: [{ path: "Notes/Agent Team console log.md", action: "create", title: "Agent Team console log" }] },
-  { key: "ops-wake", ops: true, root: "Launching Zenod",
-    content: "zenod EPIC-9 wake run_85ebce2b: dispatched E9-2a and E9-3a, report written to the spine.",
-    pages: [{ path: "Notes/Zenod wake log.md", action: "create", title: "Zenod wake log" }] },
+    pages: [{ path: "Notes/Kestrel VPS status.md", action: "create", title: "Kestrel VPS status" }] },
+  { key: "ops-console", ops: true, root: "Launching Moss Lantern",
+    content: "agent_team console E6-S36 decision: Heron Desk merged #812 and deployed, health sha 1a2b3c4.",
+    pages: [{ path: "Notes/Heron Desk console log.md", action: "create", title: "Heron Desk console log" }] },
+  { key: "ops-wake", ops: true, root: "Launching Tide Cart",
+    content: "Tide Cart EPIC-9 wake run_85ebce2b: dispatched E9-2a and E9-3a, report written to the spine.",
+    pages: [{ path: "Notes/Tide Cart wake log.md", action: "create", title: "Tide Cart wake log" }] },
   { key: "ops-watcher-2", ops: true, root: "Infrastructure and runbooks",
     content: "infra-vps EPIC-15 Watcher read: backup job green, 2 alerts cleared.",
-    pages: [{ path: "Notes/Alpha9 VPS status.md", action: "update", title: "Alpha9 VPS status" }] },
+    pages: [{ path: "Notes/Kestrel VPS status.md", action: "update", title: "Kestrel VPS status" }] },
   { key: "unsure", confidence: 0.3, root: "",
     content: "Remember the thing about the passport renewal.",
     pages: [] },
@@ -84,8 +85,8 @@ const CAPTURES: Capture[] = [
     content: "Travel insurance renews in March; check health cover abroad.",
     pages: [{ path: "Notes/Travel insurance.md", action: "update", title: "Travel insurance" }] },
   { key: "ventures", root: "Ventures and work",
-    content: "Alpha9 tax: quarterly VAT filed with the gestoría, next one due in January.",
-    pages: [{ path: "Notes/Alpha9 quarterly VAT.md", action: "create", title: "Alpha9 quarterly VAT" }] },
+    content: "Kestrel tax: quarterly VAT filed with the gestoría, next one due in January.",
+    pages: [{ path: "Notes/Kestrel quarterly VAT.md", action: "create", title: "Kestrel quarterly VAT" }] },
   { key: "runbook", root: "Infrastructure and runbooks",
     content: "Runbook: when the VPS fleet disk fills, prune docker images first, then old logs.",
     pages: [{ path: "Notes/VPS disk runbook.md", action: "create", title: "VPS disk runbook" }] },
@@ -146,7 +147,7 @@ async function vaultRepo(dir: string, withTree: boolean): Promise<VaultRepo> {
     { path: "Log/.gitkeep", content: "" },
     { path: "Inbox/.gitkeep", content: "" },
     // What `zenod tree seed --out` writes: Tree.md plus one lint-clean root page per node.
-    ...(withTree ? seedTreeFiles(AUDIT_TREE_PROPOSAL, "2026-11-01") : []),
+    ...(withTree ? seedTreeFiles(NEUTRAL_TREE, "2026-11-01") : []),
   ];
   for (const file of files) {
     await mkdir(dirname(join(seed, file.path)), { recursive: true });
@@ -207,8 +208,8 @@ describe("E9-2b tree placement replay", { timeout: 120_000 }, () => {
       expect(filed[0], capture.key).toMatch(/· ops rollup$/);
     }
     const files = await listMarkdownFiles(repo.path);
-    expect(files).not.toContain("Notes/Alpha9 VPS status.md");
-    expect(files).not.toContain("Notes/Agent Team console log.md");
+    expect(files).not.toContain("Notes/Kestrel VPS status.md");
+    expect(files).not.toContain("Notes/Heron Desk console log.md");
     const infra = await readFile(join(repo.path, "Areas/Infrastructure and runbooks.md"), "utf8");
     expect(infra).toMatch(/## Ops rollup\n[\s\S]*\n- \d{4}-\d{2}-\d{2} ops \(2\): \[\[[^\]]+\]\], \[\[[^\]]+\]\]\n/);
     // Ops traffic never refreshes `updated:`, so it cannot make a node look ongoing.
@@ -254,7 +255,7 @@ describe("E9-2b tree placement replay", { timeout: 120_000 }, () => {
     }
     expect(files.filter(path => path.startsWith("Inbox/needs-filing-"))).toHaveLength(1);
     // Ops reports still file through the classifier, as before.
-    expect(files).toContain("Notes/Alpha9 VPS status.md");
+    expect(files).toContain("Notes/Kestrel VPS status.md");
     expect((await lintVault(repo.path)).errors).toEqual([]);
     const log = await simpleGit(repo.path).log();
     expect(log.all.filter(commit => commit.message.startsWith("memory")).length).toBe(CAPTURES.length);
@@ -269,7 +270,7 @@ describe("E9-2b capture-first enrichment (WhatsApp path)", { timeout: 120_000 },
   it("places enriched captures, rolls up ops reports and gives a no-page capture a provisional leaf", async () => {
     const repo = await vaultRepo(dir, true);
     const engine = createEngine({ repo, llm: new ReplayLlm(), state: new SqliteStateStore(":memory:") });
-    for (const key of ["hair-voice", "ops-watcher-1", "unsure"]) {
+    for (const key of ["boat-voice", "ops-watcher-1", "unsure"]) {
       const capture = CAPTURES.find(c => c.key === key)!;
       const input = { content: capture.content, source: "whatsapp" as const, ...(capture.contentType ? { contentType: capture.contentType } : {}) };
       const captured = await engine.captureEvidence!(input);
@@ -296,8 +297,8 @@ describe("E9-2b helpers", () => {
   it("walks down to a deeper node only when its own name matches", async () => {
     const vault = fileURLToPath(new URL("./fixtures/tree-vault", import.meta.url));
     const index = await buildTreeIndex(vault);
-    expect((await chooseTreeNode(vault, index, "Two more Barcelona quotes from another clinic"))?.path).toBe("Projects/Hair transplant/2023 Barcelona quotes.md");
-    expect((await chooseTreeNode(vault, index, "Hair transplant: spring timing is better"))?.path).toBe("Projects/Hair transplant.md");
+    expect((await chooseTreeNode(vault, index, "Two more Porto quotes from another yard"))?.path).toBe("Projects/Boat repair/2023 Porto quotes.md");
+    expect((await chooseTreeNode(vault, index, "Boat repair: spring timing is better"))?.path).toBe("Projects/Boat repair.md");
     expect(await chooseTreeNode(vault, index, "zzz qqq")).toMatchObject({ weak: true, score: 0 });
   });
 
