@@ -2702,3 +2702,39 @@ describe("createUnit", () => {
     await expect(cancel.text()).resolves.toContain("demo checkout canceled");
   });
 });
+
+describe("tenantToolAllowlist", () => {
+  it("narrows an unprofiled credential per tenant and leaves other tenants on the full surface", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "mcp-chassis-tenant-allowlist-"));
+    tempDirs.push(dataDir);
+    const tenants = createMemoryTenantStore([
+      { token: "narrow-tenant-secret-token", tenant: { id: "narrow", name: "Narrow" } },
+      { token: "wide-tenant-secret-token", tenant: { id: "wide", name: "Wide" } },
+    ]);
+    const seen: string[] = [];
+    const unit = createUnit({
+      name: "demo",
+      tenantAuth: { store: tenants },
+      storage: { dataDir, vaultEncryptionKey: TEST_VAULT_KEY },
+      tenantToolAllowlist({ tenant, request }) {
+        seen.push(request.headers.get("authorization") ?? "");
+        return tenant.id === "narrow" ? ["read_memory"] : null;
+      },
+      tools(server) {
+        server.registerTool("read_memory", {}, async () => ({ content: [{ type: "text", text: "memory read" }] }));
+        server.registerTool("full_surface", {}, async () => ({ content: [{ type: "text", text: "full surface" }] }));
+      },
+    });
+    const base = await listen(unit.app);
+    const names = async (token: string) => {
+      const body = await listTools(base, { headers: { authorization: `Bearer ${token}` } }).then((r) => r.json());
+      return body.result.tools.map((tool: { name: string }) => tool.name);
+    };
+
+    expect(await names("narrow-tenant-secret-token")).toEqual(["read_memory"]);
+    expect(await names("wide-tenant-secret-token")).toEqual(
+      expect.arrayContaining(["install_operating_directive", "read_memory", "full_surface"]),
+    );
+    expect(seen).toEqual(["Bearer narrow-tenant-secret-token", "Bearer wide-tenant-secret-token"]);
+  });
+});

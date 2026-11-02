@@ -352,6 +352,14 @@ export interface CreateUnitOptions {
   tools?: UnitToolRegistrar;
   /** Exact MCP tool names exposed by each credential profile. Unknown profiles expose no tools. */
   toolProfiles?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Exact MCP tool names exposed to an ordinary (unprofiled) tenant credential, decided
+   * per request. Null keeps the full surface. A credential profile takes precedence.
+   */
+  tenantToolAllowlist?: (input: {
+    tenant: TenantContext;
+    request: Request;
+  }) => readonly string[] | null | Promise<readonly string[] | null>;
   /** Register unit product APIs on an automatically tenant-authenticated sub-router. */
   routes?: UnitRouteRegistrar;
   /** Optional tenant auth. When set, every MCP request resolves a tenant first. */
@@ -1868,9 +1876,14 @@ export function createUnit(options: CreateUnitOptions): UnitApp {
     );
     const tenant = c.get("tenant") ?? null;
     const credentialProfile = c.get("credentialProfile") ?? null;
+    const tenantAllowlist = credentialProfile === null && tenant && options.tenantToolAllowlist
+      ? await options.tenantToolAllowlist({ tenant, request: c.req.raw })
+      : null;
     const toolServer = restrictMcpTools(
       server,
-      profileToolAllowlist(credentialProfile, options.toolProfiles),
+      credentialProfile !== null
+        ? profileToolAllowlist(credentialProfile, options.toolProfiles)
+        : tenantAllowlist && new Set(tenantAllowlist),
     );
     const usage = tenant ? (getUsageStore()?.forTenant(tenant) ?? null) : null;
     // Only billable work (tool calls) is metered. initialize, notifications, ping and

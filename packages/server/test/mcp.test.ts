@@ -217,9 +217,9 @@ describe("MCP endpoint", () => {
       "task_brain",
     ]);
     const ingestMemory = tools.find((tool) => tool.name === "ingest_memory")!;
-    expect(ingestMemory.description).toContain("Drive file refs");
+    expect(ingestMemory.description).toContain("a Google Drive file ID");
     expect((ingestMemory.inputSchema.properties?.bytesRef as { description?: string }).description)
-      .toContain("Drive id");
+      .toContain("Drive file ID");
     await client.close();
   });
 
@@ -1168,8 +1168,8 @@ describe("Hosted archive-only MCP media admission", () => {
       ));
       const { tools } = await client.listTools();
       const ingestMemory = tools.find((tool) => tool.name === "ingest_memory")!;
-      expect(ingestMemory.description).toContain("Hosted Google Drive is archive/export-only");
-      expect(ingestMemory.description).not.toMatch(/Use this .*Drive file refs/i);
+      expect(ingestMemory.description).toContain("Google Drive file references are not accepted on Zenod Hosted");
+      expect(ingestMemory.description).not.toMatch(/Google Drive file ID/i);
       expect((ingestMemory.inputSchema.properties?.bytesRef as { description?: string }).description)
         .toContain("Hosted Drive file references are rejected");
 

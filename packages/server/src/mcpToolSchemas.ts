@@ -10,9 +10,9 @@ import { EVIDENCE_CONTEXT_REF_PATTERN } from "zenod/evidence-context";
  */
 
 export const SEARCH_MEMORY_SHAPE = {
-  query: z.string().min(1).optional().describe("Optional literal subject/transcript terms, e.g. 'travel insurance'. Omit for category-only lists; use contentType and order instead."),
+  query: z.string().min(1).optional().describe("Optional literal words to match in titles and text, e.g. 'travel insurance'. Without a query, entries are listed by filters and order alone."),
   sourceId: z.string().min(1).optional().describe("Exact stable source/provider identifier for entries."),
-  cursor: z.string().min(1).max(2048).optional().describe("Entry nextCursor; repeat the same query/filters/order. Snapshot change or server restart requires restarting and discarding prior pages."),
+  cursor: z.string().min(1).max(2048).optional().describe("nextCursor from the previous page. Valid with the same query, filters and order, until the vault changes or the server restarts."),
   source: z
     .enum(["cli", "mcp", "whatsapp", "telegram", "web", "drive", "selftest"])
     .optional()
@@ -28,7 +28,7 @@ export const SEARCH_MEMORY_SHAPE = {
 };
 
 export const GET_MEMORY_SHAPE = {
-  path: z.string().min(1).describe("Vault-relative path, e.g. Areas/Insurance.md"),
+  path: z.string().min(1).describe("Vault-relative path, e.g. Areas/Insurance.md, or an exact evidence reference, e.g. Log/2026-08-01.md#^e-123abc"),
 };
 
 export const ASK_BRAIN_SHAPE = {
@@ -66,18 +66,18 @@ export const STORE_MEMORY_SHAPE = {
 
 export const INGEST_MEMORY_SHAPE = {
   contentType: z.enum(["voice_note", "audio"]).optional()
-    .describe("For audio only: voice_note when the source identifies a recorded voice message; audio for ordinary audio attachments. Omit when unknown."),
+    .describe("Audio only: voice_note for a recorded voice message, audio for any other audio attachment; unset when unknown."),
   mediaType: z
     .enum(["audio", "screenshot", "image", "pdf", "document", "link"])
-    .describe("Artifact class. Z-10 v0 requires audio and screenshot/image; pdf/document/link are reserved by the same contract."),
+    .describe("Artifact class: audio, screenshot, image, pdf, document or link."),
   artifactUrl: z.string().url().optional().describe("Fetchable URL for the raw artifact. The URL is treated as evidence, not as memory text."),
   bytesRef: z
     .string()
     .min(1)
     .optional()
-    .describe("Opaque reference to bytes already staged by the caller/transport, e.g. a Drive id, object-store key, or Ring media handle."),
+    .describe("Opaque reference to bytes already staged by the caller/transport, e.g. a Drive file ID, an object-store key or a channel media handle."),
   filename: z.string().min(1).optional().describe("Original filename, if known."),
-  sourceHint: z.string().min(1).optional().describe("Where this came from, e.g. 'Claude upload', 'WhatsApp', 'Ring', or 'Drive'."),
+  sourceHint: z.string().min(1).optional().describe("Where this came from, e.g. 'Claude upload', 'WhatsApp' or 'Drive'."),
   contentHint: z.string().min(1).optional().describe("User-provided context for filing/digesting, e.g. 'remember the renewal date shown here'."),
   providedTranscript: z
     .string()
