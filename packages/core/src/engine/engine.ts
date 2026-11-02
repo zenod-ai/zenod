@@ -594,12 +594,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * two-pass scan stays the fallback when the index is absent, fails or finds nothing.
    */
   async function rankedSearch(query: string): Promise<Hit[]> {
+    return (await timedSearch(query)).hits;
+  }
+
+  async function timedSearch(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number }> {
+    const started = performance.now();
+    const ms = () => Math.round((performance.now() - started) * 10) / 10;
     const index = openMemoryIndex();
     if (index) {
       try {
         const hits = await index.search(query);
         if (hits.length > 0) {
-          return hits.map((hit) => {
+          return { tier: "index", ms: ms(), hits: hits.map((hit) => {
             const [base, anchor] = hit.path.split("#^");
             return {
               snippet: hit.snippet || hit.title,
@@ -609,13 +615,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
               ...(hit.treePath ? { treePath: hit.treePath } : {}),
               indexKind: hit.kind,
             };
-          });
+          }) };
         }
       } catch (error) {
         console.warn(`[memory-index] search failed, using the scan search: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    return searchVault(vaultPath, query, sourceResolver);
+    const hits = await searchVault(vaultPath, query, sourceResolver);
+    return { hits, tier: "scan", ms: ms() };
   }
 
   async function syncForRead(): Promise<void> {
@@ -3363,6 +3370,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       assertVault(repo);
       await syncForRead();
       return rankedSearch(query);
+    },
+    searchTimed: async (query: string) => {
+      assertVault(repo);
+      await syncForRead();
+      return timedSearch(query);
     },
     rebuildMemoryIndex: async () => {
       assertVault(repo);

@@ -507,6 +507,8 @@ export interface BrainEngine {
   digestBacklog(input: BacklogDigestInput): Promise<BacklogDigestResult>;
   /** Deterministic search, no LLM: the tier-0 BM25 index (E9-5a), else the two-pass scan. */
   search(query: string): Promise<Hit[]>;
+  /** search() plus which tier answered and its server-side time (index refresh included, vault pull excluded). */
+  searchTimed?(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number }>;
   /** Rebuild the tier-0 memory index from the vault (`zenod index rebuild`); null when this engine has none. */
   rebuildMemoryIndex?(): Promise<MemoryIndexStats | null>;
   /** Deterministic retrieval of immutable memory entries by structural metadata. */
