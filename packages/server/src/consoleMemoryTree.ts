@@ -1,5 +1,6 @@
 import type { MemoryTreeOutline } from "zenod";
-import { NotConfiguredError, type Runtime } from "./runtime.js";
+// Type-only: the Phylax bundle must not reach runtime.ts (scripts/assert-phylax-bundle.mjs).
+import type { NotConfiguredError, Runtime } from "./runtime.js";
 
 /**
  * Console "Memory" tab (EPIC-9 E9-2e): the signed-in customer's memory tree,
@@ -41,7 +42,7 @@ export async function loadConsoleMemoryTree(runtime: Pick<Runtime, "memoryTreeOu
     const tree = await runtime.memoryTreeOutline();
     return tree ? { status: "ready", tree } : { status: "empty", tree: null };
   } catch (error) {
-    if (error instanceof NotConfiguredError) return { status: "empty", tree: null };
+    if ((error as NotConfiguredError | null)?.name === "NotConfiguredError") return { status: "empty", tree: null };
     throw error;
   }
 }
