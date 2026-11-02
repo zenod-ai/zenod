@@ -51,6 +51,7 @@ Phase: Zenod is getting ready for its first five real testers; the agents have b
 Last attempted: 2026-11-02, rolled up this week's child work: EPIC-7 rotated the exposed tokens and readied the rehearsal browser; EPIC-9 shipped tree filing, the weekly sweep, the Memory tab and ask_brain lineage (E9-2b…E9-2f, E9-3a…E9-3c). Before that: docs main-direct at the root, 2026-10-25 ([#1433](https://github.com/zenod-ai/zenod/pull/1433), D34).
 Result: Zenod runs in production and a new tester could sign up, get a free pass and be capped, but nobody outside the team has used it yet. Live `cloud.zenod.dev/api/health` ok on `61f6f52` (2026-11-02); live billing never performed.
 Waiting on: Jordi, three asks, most urgent first: E7-A10 roll the six third-party keys that leaked into an agent session on 2026-11-01 (Stripe first, ~10 min in their dashboards); E7-A11 sign in operations@alpha9.io once in the agent's browser (~1 min) so the T7 rehearsal runs; E9-A4 open the Memory tab and say whether you recognise your world (2 min).
+Monitoring: E9-5j (reply cleanup, merged #1487, verifying live) and E9-5k (remove Jordi/agent_team-specific bits) in flight; waiting on Jordi: E7-A11, E7-A14, E10-A1 (snoo… · next check 2026-11-02T22:24:55.000Z
 Next action: Once Jordi signs in (E7-A11), the agents run the T7 dress rehearsal, then the T8 go/no-go and the five tester invites; rolled keys are swapped in as Jordi provides them (E7-A10).
 Verified at: 2026-11-02 (child Current States read from `main` e4886b3; health endpoint read live: ok, sha 61f6f52).
 
