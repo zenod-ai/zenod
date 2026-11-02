@@ -3,13 +3,15 @@ import { join } from "node:path";
 import { parseNote } from "../vault/frontmatter.js";
 import { basenameOf, isFilingReceiptPath, tierOf } from "../vault/files.js";
 import type { FileChange } from "../vault/immutability.js";
-import { scanVault } from "../vault/pages.js";
+import { CITATION_RE as LOG_CITATION_RE, scanVault } from "../vault/pages.js";
 import { buildTreeIndex, readTree, type TreeIndex } from "../vault/tree.js";
 import { lintTreeIndex } from "../vault/treeLint.js";
 import { getEvidenceEntry } from "./evidence.js";
 import {
   chooseTreeNode,
+  citeOnLeaf,
   FILED_PREFIX,
+  isAgentOpsReport,
   OPS_ROLLUP_HEADING,
   parseFiledLines,
   TrackedWrites,
@@ -26,6 +28,9 @@ import {
  *   (keep, close, or fold); the sweep never moves a root;
  * - a pending filing receipt (`Inbox/filing-…`, `Inbox/needs-filing-…`) is re-filed
  *   under the right node with E9-2b's placement, then moved to `Archive/Inbox/`;
+ * - a Log entry cited only by a level-1 root (outside its ops rollup) is also cited
+ *   on the deepest page under that root that matches it (E9-2f), so lineage reaches
+ *   the leaf; the root keeps its citation;
  * - pages sharing a title get a merge proposal line; nothing is merged;
  * - tree lint must not get worse.
  *
@@ -64,6 +69,13 @@ export interface DuplicateProposal {
   fold: string[];
 }
 
+/** A Log entry only a root cited, now also cited on a deeper page (E9-2f). */
+export interface DeepenedCitation {
+  evidenceRef: string;
+  root: string;
+  leaf: string;
+}
+
 export type ReceiptOutcome = "refiled" | "archived" | "skipped";
 
 export interface ReceiptResult {
@@ -82,6 +94,10 @@ export interface TreeSweepCounts {
   receiptsRefiled: number;
   receiptsArchived: number;
   receiptsSkipped: number;
+  /** Log entries cited only by level-1 roots before this sweep (ops rollups excluded). */
+  rootOnlyCitations: number;
+  /** Of those, how many are now also cited on a deeper page. */
+  citationsDeepened: number;
   duplicateGroups: number;
   proposals: number;
   filesChanged: number;
@@ -98,6 +114,7 @@ export interface TreeSweepReport {
   staleRoots: StaleRoot[];
   duplicates: DuplicateProposal[];
   receipts: ReceiptResult[];
+  deepened: DeepenedCitation[];
   /** Vault paths written or removed by this sweep (uncommitted). */
   changedPaths: string[];
 }
@@ -332,6 +349,49 @@ async function sweepReceipt(
   return { path, outcome: "refiled", reason: "provisional leaf under the closest node", pages: [leaf.path], archivedTo };
 }
 
+/**
+ * E9-2f: Log entries that only level-1 roots cite (the E9-2c clean-up's re-filed
+ * lines, or a filing that reached only a root) are also cited on the deepest page
+ * under that root that matches them, with E9-2b's placement walk. Ops rollups stay
+ * on the root (rule 5); no citation is removed; entries no deeper page fits stay as they are.
+ */
+export async function deepenRootCitations(vaultPath: string, writes: TrackedWrites): Promise<{ rootOnly: number; deepened: DeepenedCitation[] }> {
+  const index = await buildTreeIndex(vaultPath);
+  const belowRoot = new Set<string>();
+  const atRoot = new Map<string, Array<{ root: string; line: string }>>();
+  for (const path of index.fields.keys()) {
+    if (!index.lineage(path).ok) continue;
+    const isRoot = index.rootsByPath.has(path.toLowerCase());
+    const { body } = parseNote(await readFile(join(vaultPath, path), "utf8").catch(() => ""));
+    for (const line of (isRoot ? withoutOpsRollup(body) : body).split("\n")) {
+      for (const match of line.matchAll(LOG_CITATION_RE)) {
+        const ref = `Log/${match[1]}.md#^${match[2]}`;
+        if (!isRoot) { belowRoot.add(ref); continue; }
+        const sites = atRoot.get(ref) ?? [];
+        if (!sites.some(site => site.root === path)) sites.push({ root: path, line });
+        atRoot.set(ref, sites);
+      }
+    }
+  }
+  let rootOnly = 0;
+  const deepened: DeepenedCitation[] = [];
+  for (const [ref, sites] of atRoot) {
+    if (belowRoot.has(ref)) continue;
+    rootOnly++;
+    const entry = await getEvidenceEntry(vaultPath, ref).catch(() => null);
+    // Agent ops reports belong on the root (rule 5), however they got there.
+    if (entry && isAgentOpsReport(entry.content)) continue;
+    for (const site of sites) {
+      // `- 2026-06-12 · Some capture… [[2026-06-12#^e-…]]` → `Some capture…`
+      const summary = site.line.replace(LOG_CITATION_RE, "").replace(/\(\s*\)/g, "").replace(/^\s*[-*]\s*(?:\d{4}-\d{2}-\d{2}\s*·\s*)?/, "").trim()
+        || (entry?.content ?? "");
+      const leaf = await citeOnLeaf(vaultPath, index, { rootPath: site.root, evidenceRef: ref, text: summary, summary }, writes);
+      if (leaf) { deepened.push({ evidenceRef: ref, root: site.root, leaf }); break; }
+    }
+  }
+  return { rootOnly, deepened };
+}
+
 /** The vault page that carries the sweep's proposals; null when there is nothing to propose and no page yet. */
 export function renderSweepReport(report: Pick<TreeSweepReport, "staleRoots" | "duplicates" | "staleDays">): string {
   const lines = [
@@ -372,10 +432,10 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
   const receiptMinAgeDays = options.receiptMinAgeDays ?? DEFAULT_RECEIPT_MIN_AGE_DAYS;
   const empty: TreeSweepCounts = {
     workingRoots: 0, staleRoots: 0, receiptsSeen: 0, receiptsRefiled: 0, receiptsArchived: 0, receiptsSkipped: 0,
-    duplicateGroups: 0, proposals: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0,
+    rootOnlyCitations: 0, citationsDeepened: 0, duplicateGroups: 0, proposals: 0, filesChanged: 0, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0,
   };
   if (!(await readTree(vaultPath))) {
-    return { hasTree: false, today: options.today, staleDays, counts: empty, staleRoots: [], duplicates: [], receipts: [], changedPaths: [] };
+    return { hasTree: false, today: options.today, staleDays, counts: empty, staleRoots: [], duplicates: [], receipts: [], deepened: [], changedPaths: [] };
   }
 
   const before = await scanVault(vaultPath);
@@ -386,6 +446,8 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
   for (const path of before.files.filter(isPendingReceiptPath)) {
     receipts.push(await sweepReceipt(vaultPath, path, { today: options.today, receiptMinAgeDays, skip: options.skipEvidenceRefs ?? new Set() }, writes));
   }
+
+  const { rootOnly, deepened } = await deepenRootCitations(vaultPath, writes);
 
   const snapshot = await scanVault(vaultPath);
   const index = await buildTreeIndex(vaultPath, snapshot);
@@ -421,6 +483,8 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
       receiptsRefiled: refiled,
       receiptsArchived: archived,
       receiptsSkipped: receipts.filter(r => r.outcome === "skipped").length,
+      rootOnlyCitations: rootOnly,
+      citationsDeepened: deepened.length,
       duplicateGroups: duplicates.length,
       proposals: stale.length + duplicates.length,
       filesChanged: changedPaths.length,
@@ -430,6 +494,7 @@ export async function runTreeSweep(vaultPath: string, options: TreeSweepOptions,
     staleRoots: stale,
     duplicates,
     receipts,
+    deepened,
     changedPaths,
   };
 }
