@@ -51,6 +51,8 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     const index = indexFor(vault, path);
     const hits = await index.search("Barcelona quotes");
     expect(hits[0]).toMatchObject({ path: QUOTES, kind: "page", treePath: "Working memory › Hair transplant › 2023 Barcelona quotes" });
+    // The snippet is a window around a matched word, accent-insensitive.
+    expect(hits[0]!.snippet.toLowerCase()).toMatch(/barcelona|quote/);
     // A Log entry hit is its exact evidence ref and carries the path of the page it was filed on.
     const log = hits.find((hit) => hit.kind === "log");
     expect(log).toMatchObject({ path: "Log/2026-10-31.md#^e-c64e3b", filedOn: QUOTES, treePath: "Working memory › Hair transplant › 2023 Barcelona quotes" });
@@ -81,7 +83,7 @@ describe("tier-0 memory index (E9-5a)", { timeout: 20_000 }, () => {
     expect((await index.search("agentine"))[0]?.path).toBe("Projects/Crew.md");
     expect((await index.search("home"))[0]?.path).toBe("Projects/Casa.md");
     // Accent-insensitive (remove_diacritics 2): "gracia" finds "Gràcia".
-    expect((await index.search("gracia"))[0]?.path).toBe("Projects/Casa.md");
+    expect((await index.search("gracia"))[0]).toMatchObject({ path: "Projects/Casa.md", snippet: expect.stringContaining("Gràcia") });
     expect(keeperAliases("## Keeper notes\n- alias: A = B = C\n- keep apart: X, Y\n")).toEqual([["A", "B", "C"]]);
     expect(buildMatch("what about the agentine?", [["agentine", "agent team"]])).toBe('"agentine"* OR "agent team"');
   });
