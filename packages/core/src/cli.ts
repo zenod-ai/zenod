@@ -11,6 +11,9 @@ import { AUDIT_TREE_PROPOSAL, seedTreeFiles } from "./vault/treeSeed.js";
 import { buildTreeIndex, formatLineage } from "./vault/tree.js";
 import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
+import { discoverTree } from "./engine/treeDiscover.js";
+import { rediscoverTree } from "./engine/treeSweep.js";
+import { TrackedWrites } from "./engine/treePlacement.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
 import { cleanSlateVault, type CleanSlateResult } from "./vault/cleanSlate.js";
 import { VaultRepo } from "./git/vaultRepo.js";
@@ -37,6 +40,7 @@ function usage(): string {
     "  tree lint [--json]        check the memory tree (parents, Tree.md roots, cycles, depth, duplicate titles)",
     "  tree lineage <path>       print a page's path root → leaf",
     "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print the audit's proposed Tree.md, or write Tree.md + root pages into <dir>",
+    "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
     "  clean-slate <path> [--push]  initialize an empty vault in two commits",
     "",
     "Environment:",
@@ -202,6 +206,28 @@ async function main(): Promise<number> {
           return 1;
         }
         console.log(formatLineage(result));
+        return 0;
+      }
+      if (sub === "discover") {
+        const flag = (name: string) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
+        const today = flag("--today") ?? new Date().toISOString().slice(0, 10);
+        const plan = await discoverTree(vaultPath(), { today, ...(rest.includes("--fresh") ? { fresh: true } : {}) });
+        if (!plan) {
+          console.error("vault has no Tree.md; discovery only re-roots an existing tree");
+          return 1;
+        }
+        // --apply runs to a fixed point, as the weekly sweep does.
+        const applied = rest.includes("--apply") ? await rediscoverTree(vaultPath(), today, new TrackedWrites(vaultPath()), rest.includes("--fresh")) : null;
+        const changed = applied?.changed ?? null;
+        const roots = applied?.roots ?? plan.roots;
+        if (rest.includes("--json")) {
+          console.log(JSON.stringify({ fresh: plan.fresh, stats: plan.stats, roots, changed }, null, 2));
+          return 0;
+        }
+        for (const root of roots) {
+          console.log(`${root.kind.padEnd(9)}  ${root.name}  ·  ${root.pages} page(s) · heat ${root.heat} · own captures 30d ${root.ownCaptures}${root.continues ? "" : " · new"}`);
+        }
+        console.log(`${plan.stats.pages} tree pages · ${plan.stats.topics} topics · ${plan.fresh ? "fresh (current roots ignored)" : "continuing"}${changed ? ` · ${changed.length} file(s) written` : " · dry run"}`);
         return 0;
       }
       if (sub === "seed") {

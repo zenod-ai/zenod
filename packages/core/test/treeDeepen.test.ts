@@ -83,7 +83,7 @@ describe("E9-2f deepen root-only citations", { timeout: 60_000 }, () => {
     const treeBefore = await loadMemoryTree(dir);
     expect(await treeBefore.placedCitersOf("Log/2026-10-23.md#^e-666666")).toEqual(["Projects/Garden.md"]);
 
-    const report = await runTreeSweep(dir, { today: "2026-11-02" });
+    const report = await runTreeSweep(dir, { today: "2026-11-02", discover: false });
 
     // Root-only: e-666666, e-777777 and e-999999 (e-555555 is already on a leaf; the ops rollup is not counted).
     expect(report.counts).toMatchObject({ rootOnlyCitations: 3, citationsDeepened: 1, treeLintErrorsBefore: 0, treeLintErrorsAfter: 0 });
@@ -112,7 +112,7 @@ describe("E9-2f deepen root-only citations", { timeout: 60_000 }, () => {
     expect((await lintTree(dir)).issues.filter(i => i.severity === "error")).toEqual([]);
 
     // Idempotent: a second sweep has nothing more to deepen.
-    const again = await runTreeSweep(dir, { today: "2026-11-02" });
+    const again = await runTreeSweep(dir, { today: "2026-11-02", discover: false });
     expect(again.counts).toMatchObject({ rootOnlyCitations: 2, citationsDeepened: 0 });
     expect(again.changedPaths).toEqual([]);
   });

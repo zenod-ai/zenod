@@ -60,7 +60,7 @@ import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type 
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
-import { assertSweepChangesSafe, runTreeSweep } from "./treeSweep.js";
+import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
@@ -1985,12 +1985,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
         if (changes.length === 0) return { report, committed: false, revision: null };
         assertSweepChangesSafe(changes);
         const written = changes.filter(change => change.after !== null && change.path.endsWith(".md")).map(change => change.path);
-        const errors = [...(await lintVault(vaultPath, written)).errors, ...checkEvidenceImmutability(changes)];
+        // Only errors the sweep introduced count: re-rooting touches old pages that may carry lint debt (E9-2g).
+        const before = new Set(report.lintErrorsBefore);
+        const introduced = (await lintVault(vaultPath, written)).errors.filter((entry) => !before.has(lintErrorKey(entry)));
+        const errors = [...introduced, ...checkEvidenceImmutability(changes)];
         if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
         input.assertActive?.();
         const c = report.counts;
+        const roots = c.discoveredWorking !== undefined ? `, roots ${c.discoveredWorking} working / ${c.discoveredLongTerm} long-term` : "";
         const revision = await repo.commitAndPublish(
-          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
+          `memory: weekly tree sweep (re-filed ${c.receiptsRefiled}, archived ${c.receiptsArchived}, deepened ${c.citationsDeepened}${roots}, ${c.proposals} proposal${c.proposals === 1 ? "" : "s"})`,
         );
         return { report, committed: true, revision };
       } catch (error) {

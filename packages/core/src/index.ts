@@ -69,6 +69,7 @@ export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryL
 export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } from "./engine/treePlacement.js";
 export {
   runTreeSweep,
+  rediscoverTree,
   renderSweepReport,
   findStaleRoots,
   findDuplicateTitles,
@@ -80,6 +81,8 @@ export {
   type TreeSweepCounts,
   type TreeSweepOptions,
 } from "./engine/treeSweep.js";
+export { discoverTree, applyTreeDiscovery, type DiscoveredRoot, type TreeDiscoveryPlan, type TreeDiscoveryOptions } from "./engine/treeDiscover.js";
+export { captureOrigin, readLogCaptures, type CaptureOrigin, type LogCapture } from "./vault/captureOrigin.js";
 export { ensureSchemaV1 } from "./vault/migrate.js";
 export { cleanSlateVault, type CleanSlateOptions, type CleanSlateResult } from "./vault/cleanSlate.js";
 export { githubSourceRef, githubUrl, type VaultLocation } from "./vault/github.js";
