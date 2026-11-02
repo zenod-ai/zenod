@@ -120,7 +120,7 @@ Tell the agent "starting the later keys". It opens three cards:
 ### 2a. OpenRouter (about 3 minutes)
 
 Why later: the key has its own spending limit of $26 a month, so the worst case is $26. We cannot make a new one
-for you, because the only key that can create OpenRouter keys is in your Mac Keychain, not on our servers.
+for you, because the only key that can create OpenRouter keys is in your Bitwarden vault (item `alpha9-openrouter-provisioning-key`, copied there from the legacy Mac Keychain by infra-vps EPIC-17), not on our servers.
 
 1. Open <https://openrouter.ai/settings/keys>.
 2. Click **Create Key**. Name it `zenod-platform 2026-11` and set **Credit limit** to `26` with a **monthly**
@@ -196,7 +196,7 @@ enforced by the machines (EPIC-7 T3.3, built and proven 2026-11-02):
 
 What it does **not** cover, so nothing is oversold:
 
-- A key that is not in our secret store (for example one that lives only in your Mac Keychain) has no fingerprint
+- A key that is not in our secret store (for example one that lives only in your Bitwarden vault) has no fingerprint
   until it is stored. Every key agents use is in the store.
 - Codex is installed on VPS1 but not logged in, and no Codex sessions run, so Codex has no guard hooks. If Codex is
   ever used there, add them first. Only Claude Code sessions run on our servers today.

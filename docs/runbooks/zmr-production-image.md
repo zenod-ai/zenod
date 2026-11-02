@@ -64,7 +64,7 @@ python3 scripts/zmr-production-image.py deploy \
 
 Immediately before deployment, inspect the existing Dokploy deployment queue and confirm no pending/running deployment can supersede this operation. Save private `queue-clear.json` with actual inspection time, `manifestHash` (SHA256 of `recovery.json`), `mode: "deploy"`, `pendingDeployments: 0`. This is an explicit operator attestation, not an automatic queue inspection; the helper requires it to be at most 15 minutes old. One operator owns the window. Do not generate this file without inspecting the queue.
 
-Load the existing Dokploy credential through the established keychain helper, then invoke the same command without `--check-only`:
+Load the existing Dokploy credential through the established Bitwarden-backed helper (`dokploy-env`, infra-vps `scripts/mac/`), then invoke the same command without `--check-only`:
 
 ```sh
 eval "$(dokploy-env)"

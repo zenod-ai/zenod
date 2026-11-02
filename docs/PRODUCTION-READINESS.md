@@ -54,7 +54,7 @@ Approval of one gate never authorizes the next.
 - Stripe product: `prod_UpYtFTErYgQal7` (`Zenod Hosted`).
 - Legacy live prices, not approved for the €9 beta: monthly `price_1Tptlw80yG7aohEWL9X4zqMI`; yearly `price_1U46kg80yG7aohEWqPt2WbZu`.
 - Portal configuration: `bpc_1U46kh80yG7aohEWoLG51m8k`.
-- Live webhook endpoint: `we_1U46n480yG7aohEWgjxZLZT2`; its signing secret is held in macOS Keychain as service `zenod-stripe-live-webhook-secret`, account `jordi`.
+- Live webhook endpoint: `we_1U46n480yG7aohEWgjxZLZT2`; its signing secret belongs in Bitwarden as item `zenod-stripe-live-webhook-secret` (proposed name; infra-vps EPIC-17 S2 confirms the item exists); the Mac Keychain item of the same name (account `jordi`) is legacy.
 
 The webhook must subscribe to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, and `invoice.payment_failed`.
 
