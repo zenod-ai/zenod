@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| E11-S1 | Ticket worker | worker | Register WebMCP tools in apps/site, feature-detected, with a vitest | ready | none | wt/e11-s1-webmcp | main | none | 2026-11-02 | build on branch, open PR (apps/** is under the Deploy gate), report |
+| E11-S1 | Ticket worker | Sonnet subagent | Register WebMCP tools in apps/site, feature-detected, with a vitest | active | none | wt/e11-s1-webmcp | main | none | 2026-11-02 | build on branch, open PR (apps/** is under the Deploy gate), report |
 | E11-S2 | Ticket worker | Delivery manager | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, E11-A1 | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | add the token once Jordi provides it |
 
 ## Decisions
