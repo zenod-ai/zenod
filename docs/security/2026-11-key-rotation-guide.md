@@ -2,6 +2,14 @@
 
 Written 2026-11-02 for EPIC-7 ask E7-A10 (ticket T3.3). Short version first, details after.
 
+> **Superseded for doing it: use the one page.** Open <http://100.104.206.10:8783/> (tailnet only; EPIC-7 T3.4).
+> It has all five keys in one sitting, a link and a paste box per step, and live status. The agent checks each key,
+> swaps it in, verifies it, and then tells you which old key to revoke. TypeSafe (Jev) is already off. Two changes from
+> this guide: the Stripe restricted key also needs **Write** on Subscriptions, Coupons, Promotion Codes and Invoices,
+> and **Read** on Payment Methods (the tester codes, the monthly extensions and the daily tester check use them). The
+> webhook's old secret should expire in **24 hours**, not 1. This guide stays as the background and the "why".
+> Receipts: [T3.4 evidence](../evidence/epic7-t3-4-2026-11-02.md).
+
 ## The short version
 
 **Do now: Stripe, about 10 minutes.** Make one restricted key and roll one webhook secret, then paste each into
