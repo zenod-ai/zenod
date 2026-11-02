@@ -17,10 +17,13 @@ describe("site and dashboard routing", () => {
     await Promise.all([
       mkdir(join(siteDist, "assets"), { recursive: true }),
       mkdir(join(webDist, "assets"), { recursive: true }),
+      mkdir(join(siteDist, "brand"), { recursive: true }),
     ]);
     await Promise.all([
       writeFile(join(siteDist, "index.html"), "<html>Zenod public landing</html>"),
       writeFile(join(siteDist, "assets", "site.js"), "site asset"),
+      writeFile(join(siteDist, "connect.html"), "<html>Connect Zenod</html>"),
+      writeFile(join(siteDist, "brand", "zenod-icon.svg"), "<svg>Z</svg>"),
       writeFile(join(webDist, "index.html"), "<html>Zenod dashboard</html>"),
       writeFile(join(webDist, "assets", "dashboard.js"), "dashboard asset"),
     ]);
@@ -37,6 +40,12 @@ describe("site and dashboard routing", () => {
     await expect((await app.request("https://zenod.dev/")).text()).resolves.toContain("public landing");
     await expect((await app.request("https://zenod.dev/pricing")).text()).resolves.toContain("public landing");
     await expect((await app.request("/site/assets/site.js")).text()).resolves.toBe("site asset");
+  });
+
+  it("serves the connect guide and brand icons on the public host only", async () => {
+    await expect((await app.request("https://zenod.dev/connect")).text()).resolves.toContain("Connect Zenod");
+    await expect((await app.request("https://zenod.dev/brand/zenod-icon.svg")).text()).resolves.toBe("<svg>Z</svg>");
+    expect((await app.request("https://cloud.zenod.dev/connect")).status).toBe(404);
   });
 
   it("serves the dashboard SPA at cloud root and account for the transplanted customer layer", async () => {

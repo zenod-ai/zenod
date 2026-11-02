@@ -81,6 +81,10 @@ export function mountStaticSurfaces(app: Hono<ServerEnv>, options: StaticSurface
   app.get("/favicon.svg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/og.jpg", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
   app.get("/legal/*", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
+  // Directory listing kit (EPIC-10 R2): the connect guide and the brand icons
+  // that MCP directories link to.
+  app.get("/brand/*", publicHostOnly(staticFile({ root: siteRoot, ...noCache })));
+  app.get("/connect", publicHostOnly(staticFile({ root: siteRoot, path: "connect.html", ...noCache })));
   if (options.webDist) {
     app.get("/", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
     app.get("/account", nonPublicHostOnly(staticFile({ root: options.webDist, path: "index.html", ...noCache })));
