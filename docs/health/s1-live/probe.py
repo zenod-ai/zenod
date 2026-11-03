@@ -608,7 +608,9 @@ def page(d: dict, link: dict | None = None) -> str:
         until = dt.datetime.fromtimestamp(link["exp"], UTC).strftime("%d %b")
         u = html.escape(link["url"])
         signin = (f'<div id="signin">Open this page on any device: <a href="{u}">sign in to health.zenod.dev</a>. '
-                  f'The link works once, until {until}, and your browser then stays signed in for 30 days.</div>')
+                  f'The link works once, until {until}, and your browser then stays signed in while you use it. '
+                  f'If you have no password yet, it asks you to set one first. Lost your password? Use this link, '
+                  f'then set a new one.</div>')
     counts = {c: sum(1 for r in R if r["colour"] == c) for c in ("green", "amber", "red", "grey")}
     tr = []
     for r in R:
@@ -628,7 +630,8 @@ def page(d: dict, link: dict | None = None) -> str:
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>
 <h1>Zenod health inventory, live</h1>
 <p class="sub">Every part of Zenod, where it runs, and what it says right now. Probed <b>{probed.replace('T', ' ').replace('Z', ' UTC')}</b>
-<span id="age"></span>, every 5 minutes, read-only. Behind a password at health.zenod.dev; also on the tailnet.</p>
+<span id="age"></span>, every 5 minutes, read-only. Behind a password at health.zenod.dev; also on the tailnet.
+<a href="https://health.zenod.dev/password">Set or change your password</a>.</p>
 <div class="sum"><span class="pill">🟢 {counts['green']} green</span><span class="pill">🟠 {counts['amber']} amber</span>
 <span class="pill">🔴 {counts['red']} red</span><span class="pill">⚪ {counts['grey']} not deployed</span></div>
 <table><thead><tr><th></th><th>Component</th><th>Where it runs</th><th>Health signal, live</th><th>Last real activity</th>
