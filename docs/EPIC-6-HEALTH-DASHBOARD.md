@@ -22,23 +22,23 @@ Before testers arrive, anyone can see in one page whether the site, the database
 
 ## Done means
 
-- [ ] E6-1 `health.zenod.dev` serves, on the Tailscale network only (EPIC-6-A1 answered 2026-10-25), one page with a row per component: marketing site (`zenod.dev`), cloud app (`cloud.zenod.dev/api/health`, deployed SHA vs `main`), database (incl. the credits/usage ledger), WhatsApp relay, agent runner + Phylax. Each row shows green/amber/red, when it was checked, when it last did real work (last WhatsApp message in/out, last DB write, last agent run) and the last error from its logs with a timestamp. No secrets or user data on the page.
-- [ ] E6-2 A read-only prod smoke battery (one `npm run` command) checks the same components, runs every 15 min, and the page shows its last result and time; it exits non-zero on any red.
-- [ ] E6-3 Proven red: one component deliberately broken (or simulated) turns its row red within 15 min and an alert reaches Jordi; back to green once fixed.
+- [x] E6-1 `health.zenod.dev` serves, on the Tailscale network only (EPIC-6-A1 answered 2026-10-25), one page with a row per component: marketing site (`zenod.dev`), cloud app (`cloud.zenod.dev/api/health`, deployed SHA vs `main`), database (incl. the credits/usage ledger), WhatsApp relay, agent runner + Phylax. Each row shows green/amber/red, when it was checked, when it last did real work (last WhatsApp message in/out, last DB write, last agent run) and the last error from its logs with a timestamp. No secrets or user data on the page. Evidence: live at https://health.zenod.dev behind Jordi's own sign-in (Jordi 2026-11-03 chose public with a password over tailnet-only), tailnet copy http://vps3.taild81fbb.ts.net:8742/; [S1](evidence/epic6-s1-it5-2026-11-03.md), [S2](evidence/epic6-s2-2026-11-03.md).
+- [x] E6-2 A read-only prod smoke battery (one `npm run` command) checks the same components, runs every 15 min, and the page shows its last result and time; it exits non-zero on any red. Evidence: `npm run smoke:prod`, 17 checks every 15 min, results on the page ([S3](evidence/epic6-s3-2026-11-03.md), [S4](evidence/epic6-s4-2026-11-03.md)).
+- [x] E6-3 Proven red: one component deliberately broken (or simulated) turns its row red within 15 min and an alert reaches Jordi; back to green once fixed. Evidence: [S6](evidence/epic6-s6-2026-11-03.md) — red in 7 min 45 s, alert to the HQ thread, green and one recovery message; alerts [S5](evidence/epic6-s5-2026-11-03.md).
 - [ ] E6-4 Jordi opens the page and accepts it.
 
 ## Current State
 
 Owner: Delivery manager
-Status: active
-Last attempted: 2026-11-03 wake run_91a8edfe: E6-A2 approved; dispatched S5 (run_e48fbc21), S2 (run_e1f220d2), S3 (run_53e90946); before: 2026-11-03 roll-up from the ledger — S1 (review): the inventory of Zenod's 12 parts is a live page at https://health.zenod.dev behind a sign-in (tailnet copy http://vps3.taild81fbb.ts.net:8742/), refr
-Result: Jordi can already see whether Zenod is up at health.zenod.dev: 10 parts green, the agent runner grey (not deployed), and the host watchdog red because its alerts still go to retired servers (S5 fixes that)
+Status: review
+Last attempted: 2026-11-03 S4 and S6 integrated (run_4d8c2774); S1 it.1–5, S2, S3, S5 before that
+Result: health.zenod.dev shows 12 parts with live status, 7-day timelines, smoke results every 15 min, last errors kept across redeploys, and red reaches Jordi's HQ thread; proven red then green 2026-11-03
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
-Waiting on: nobody (E6-A3 approved); S1, S3, S5 cards in Jordi's review list
+Waiting on: Jordi accepts the page (E6-4) via the S6 card; S1, S3, S4, S5 cards in his review list
 Approved work: none
-Next action: on E6-A3, S4 makes a failed smoke check turn its row red and alert; then S6 proves red then green with Jordi
+Next action: Jordi's verdict; S2 joins review after its redeploy-survival check
 Source revision: uncommitted scaffold
-Verified at: 2026-11-03 (health.zenod.dev answers 401 without sign-in; tailnet page 200 with fresh probes; ledger read)
+Verified at: 2026-11-03 (S6 proof page 200, probe.json read; memory-index row grey only because no index load has been logged since the last redeploy)
 
 ## Non-Goals
 
@@ -56,9 +56,21 @@ Steps: each is independently testable and closes only with evidence.
 | S1 | Ticket worker | run_7ff4f183 | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | done (approved by Jordi 2026-11-03) | none | `wt/e6-s1-inventory` | `main` | [https://health.zenod.dev](https://health.zenod.dev) (7-day strip per service: hourly worst status plus the key number, backfilled read-only from logs, gaps hatched), [card](cards/S1.md), [evidence](evidence/epic6-s1-it5-2026-11-03.md); tailnet page http://vps3.taild81fbb.ts.net:8742/; fe8b32a | 2026-11-03 | Jordi reviews whether the 7-day strips read at a glance |
 | S2 | Ticket worker | run_e1f220d2 | Health aggregator: one read-only JSON endpoint/service returning per-component status, last activity, last error (no secrets) | active | S1 | none | `main` | [S2 evidence](evidence/epic6-s2-2026-11-03.md), [card](cards/S2.md), [interface](health/AGGREGATOR.md): one zenod-health document per 5-min probe (status, since, signal, last activity, last error kept across redeploys, recent changes, alert transitions for S5); live on health.zenod.dev; 21 tests; c359aeb, 34f5607 | 2026-11-03 | confirm a last error survives the next real redeploy on the live page, then review |
 | S3 | Ticket worker | run_53e90946 | Prod smoke battery: one `npm run` command, read-only, scheduled every 15 min, result stored for the page (E6-2) | done (approved by Jordi 2026-11-03) | S1 | [#1490](https://github.com/zenod-ai/zenod/pull/1490), [#1492](https://github.com/zenod-ai/zenod/pull/1492) | `main` | [S3 evidence](evidence/epic6-s3-2026-11-03.md), [card](cards/S3.md): `npm run smoke:prod`, 17 read-only checks every 15 min on VPS3, 17/17 pass on prod, simulated failure shown red with a reason; result per part on the page; installed copies match main | 2026-11-03 | Jordi reviews; a failed smoke check turning its row red is S4 |
-| S4 | Ticket worker | run_4d8c2774 | health.zenod.dev: already live behind Jordi's own password since S1 (Jordi 2026-11-03 superseded tailnet-only EPIC-6-A1); what remains is to feed it from the S2 aggregator and S3 smoke results (E6-1) | active | S2, S3 (both live) | none | `main` | none | 2026-10-24 | after S2/S3 |
+| S4 | Ticket worker | run_4d8c2774 | health.zenod.dev: already live behind Jordi's own password since S1 (Jordi 2026-11-03 superseded tailnet-only EPIC-6-A1); what remains is to feed it from the S2 aggregator and S3 smoke results (E6-1) | review | S2, S3 (both live) | [#1493](https://github.com/zenod-ai/zenod/pull/1493) | `main` | [S4 evidence](evidence/epic6-s4-2026-11-03.md), [card](cards/S4.md): a failed smoke check turns its row red with the reason, records it on the 7-day strip and alerts once through the S5 sender (recovery only when no caller still sees red); d57c250, live 58563d9 | 2026-11-03 | Jordi reviews whether a red row with its reason reads clearly |
 | S5 | Ticket worker | run_e48fbc21 | Alert on red to Jordi (channel picked in S1, e.g. WhatsApp via Phylax or email) | done (approved by Jordi 2026-11-03) | none (repoints the existing watchdog; later also reads S2) | [#1491](https://github.com/zenod-ai/zenod/pull/1491) | `main` | [S5 evidence](evidence/epic6-s5-2026-11-03.md), [card](cards/S5.md), proof page http://vps3.taild81fbb.ts.net:8742/s5/: watchdog repointed at today's parts (user timer on VPS1, every 2 min); red and back-to-green delivered to the HQ alerts thread in under a minute, deduped; page red rows use the same sender; watchdog row green | 2026-11-03 | Jordi reviews; leftover: the old root watchdog unit still logs undelivered alerts (needs root to switch off; harmless, noted for infra-vps) |
-| S6 | Tester | run_4d8c2774 | Prove red then green on one component (E6-3); Jordi acceptance (E6-4) | active | S4, S5 | none | prod | none | 2026-10-24 | last |
+| S6 | Tester | run_4d8c2774 | Prove red then green on one component (E6-3); Jordi acceptance (E6-4) | review | S4, S5 | none | prod | [S6 evidence](evidence/epic6-s6-2026-11-03.md), [card](cards/S6.md), proof page http://vps3.taild81fbb.ts.net:8742/s6/: test break 18:22:30, row red 18:30:15, alert 18:31:30, fixed 18:33:46, green 18:45:12, one recovery 18:46:15 UTC; no false recovery; prod untouched | 2026-11-03 | Jordi opens the page and accepts it (E6-4) |
+
+## Outcome
+
+Outcome: one page at health.zenod.dev, behind Jordi's own password, shows whether each of Zenod's 12 parts is up, with a 7-day timeline, last activity and last error, read-only smoke checks every 15 minutes, and any red reaches Jordi in his HQ alerts thread — proven red then green on 2026-11-03.
+Risk: if VPS1 itself is down there is no second alert channel (the page shows a stale banner after 15 min); the old root watchdog unit on VPS1 still logs undelivered alerts until someone with root switches it off; the health test suites are not in CI; history for some rows only starts 2026-11-03 (full 7 days by 2026-11-10).
+
+| Done means | Evidence |
+|---|---|
+| E6-1 page with a row per component | https://health.zenod.dev; [S1 it.5](evidence/epic6-s1-it5-2026-11-03.md), [S2](evidence/epic6-s2-2026-11-03.md) |
+| E6-2 smoke battery every 15 min on the page | [S3](evidence/epic6-s3-2026-11-03.md), [S4](evidence/epic6-s4-2026-11-03.md), PRs #1490, #1492, #1493 |
+| E6-3 proven red then green with an alert | [S6](evidence/epic6-s6-2026-11-03.md), [S5](evidence/epic6-s5-2026-11-03.md), PR #1491 |
+| E6-4 Jordi accepts | Jordi's review of the S6 card |
 
 ## Waiting on
 
