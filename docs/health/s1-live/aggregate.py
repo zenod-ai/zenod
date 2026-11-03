@@ -285,21 +285,29 @@ def components(d: dict) -> list[dict]:
         source="infra-vps-deploy-poller journal on VPS1",
         tests="infra-vps tests/test_deploy_poller.py; scripts/deploy-fleet.test.mjs for the manual script")
 
-    # 8 alerts: watchdog
+    # 8 alerts: watchdog (S5: user timer on VPS1; every queued alert id must show up as sent by the HQ relay)
     w = v.get("watchdog") or {}
-    col = "red" if (w.get("deliveredNo24h") and not w.get("deliveredYes24h")) or (w and w.get("timer") != "active") else "green"
-    dead = ", ".join(u.replace("https://", "").split("/")[0] for u in w.get("deadTargets") or [])
-    row(id="watchdog", n="8", name="Alerts: host watchdog", where="VPS1 · system timer zenod-watchdog, every 2 min",
+    lra = (ref - parse_ts(w["lastRun"])).total_seconds() if w.get("lastRun") else None
+    col = "red" if w.get("timer") != "active" or w.get("deliveredNo24h") or lra is None or lra > 600 else "green"
+    row(id="watchdog", n="8", name="Alerts: host watchdog", where="VPS1 · user timer zenod-health-watchdog, every "
+        "2 min; red rows here and its own checks go to Jordi's HQ alert thread",
         status=col,
-        problem=None if col == "green" else (f"alerts not delivered: it checks retired hosts {dead}" if dead
-                                             else f"alerts not delivered (timer {w.get('timer')})"),
-        signal=f"timer {w.get('timer')}; {w.get('alerts24h')} alerts in 24 h, {w.get('deliveredYes24h')} delivered, "
-               f"{w.get('deliveredNo24h')} not delivered",
+        problem=None if col == "green" else (
+            f"watchdog timer {w.get('timer')}" if w.get("timer") != "active" else
+            f"{w.get('deliveredNo24h')} alerts not delivered after 10 min" if w.get("deliveredNo24h") else
+            "watchdog has not run in 10 min"),
+        signal=f"timer {w.get('timer')}, last run {ago(w.get('lastRun'), ref)}; {w.get('alerts24h')} alerts and "
+               f"recoveries in 24 h, {w.get('deliveredYes24h')} delivered to the HQ thread, "
+               f"{w.get('deliveredNo24h')} not delivered after 10 min",
         signal_value={"alerts24h": w.get("alerts24h"), "delivered24h": w.get("deliveredYes24h"),
                       "undelivered24h": w.get("deliveredNo24h")},
-        activity=f"last alert {ago(w.get('lastAlert'), ref)}", activity_at=w.get("lastAlert"),
-        error=("it checks retired hosts: " + dead + "; nobody receives it. Fixing it is S5") if dead else "none",
-        source="zenod-watchdog journal on VPS1", tests="scripts/watchdog/watchdog-logic.test.sh")
+        activity=f"last alert {ago(w.get('lastAlert'), ref)}; last delivered {ago(w.get('lastDelivered'), ref)}",
+        activity_at=w.get("lastAlert"),
+        error="; ".join(filter(None, [
+            "none" if col == "green" else "alerts are not reaching Jordi",
+            "the retired root timer zenod-watchdog is still on and sends nowhere (root step to switch it off)"
+            if w.get("retiredRootTimer") == "active" else None])),
+        source="zenod-alert log and the HQ relay log on VPS1", tests="scripts/watchdog/watchdog-logic.test.sh")
 
     # 9 readiness keeper / watch
     col, prob = "green", None
