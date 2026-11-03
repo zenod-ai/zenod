@@ -50,7 +50,8 @@ def raw(at=T0):
                               "msg": "deploy-poller zenod-mt: noop"},
             "deploy_last_roll": {"at": "2026-11-02T21:22:00Z", "msg": "deploy-poller zenod-mt: rolled"},
             "watchdog": {"alerts24h": 1, "deliveredNo24h": 0, "deliveredYes24h": 1, "lastAlert": "2026-11-03T09:00:00Z",
-                         "deadTargets": [], "timer": "active"},
+                         "lastDelivered": "2026-11-03T09:00:00Z", "lastRun": at,
+                         "timer": "active", "retiredRootTimer": "inactive"},
             "readiness": {"at": "2026-11-03T11:30:00Z", "ready": True, "issues": "[]",
                           "proofs": [{"id": "backup_restore", "daysLeft": 20, "expiresAt": "2026-11-23T00:00:00Z"}]},
             "keeper_last": {"at": "2026-11-03T03:00:00Z", "msg": "plan ok"},
@@ -109,10 +110,19 @@ class StatusRules(unittest.TestCase):
 
     def test_watchdog_undelivered_is_red(self):
         d = raw(); w = d["vps1"]["watchdog"]
-        w.update(deliveredNo24h=144, deliveredYes24h=0, deadTargets=["https://c1.zenod.dev/api/health"])
+        w.update(deliveredNo24h=2, deliveredYes24h=5)       # S5: any alert not sent by the HQ relay in 10 min
         c = next(x for x in A.components(d) if x["id"] == "watchdog")
         self.assertEqual(c["status"], "red")
-        self.assertIn("c1.zenod.dev", c["problem"])
+        self.assertIn("2 alerts not delivered", c["problem"])
+
+    def test_watchdog_not_run_in_10_min_is_red_retired_root_timer_noted(self):
+        d = raw(); w = d["vps1"]["watchdog"]
+        w["retiredRootTimer"] = "active"
+        c = next(x for x in A.components(d) if x["id"] == "watchdog")
+        self.assertEqual(c["status"], "green")
+        self.assertIn("retired root timer", c["error"])
+        w["lastRun"] = "2026-11-03T11:40:00Z"
+        self.assertEqual(status(d)["watchdog"], "red")
 
     def test_watchdog_timer_stopped_is_red(self):
         d = raw(); d["vps1"]["watchdog"]["timer"] = "inactive"

@@ -1,46 +1,49 @@
 #!/usr/bin/env bash
-# zenod-watchdog — Epic-1 closure gate C-24/C-25 (#570 / W2-1 / W2-3).
+# zenod-watchdog — Zenod's host-level self-outage reporter (Epic-1 C-24/C-25, repointed in EPIC-6 S5).
 #
-# The system must report its OWN outages. This watchdog lives OUTSIDE the stack it
-# watches — it is a host systemd timer, NOT a container — so it survives the exact failure
-# that took the box dark on 2026-07-04 (disk full → dockerd down → every container,
-# including Phylax, unreachable). It checks the host + stack every run and, on a real
-# problem, pages Jordi WITHIN MINUTES, unprompted:
+# The system must report its OWN outages. This watchdog lives OUTSIDE the stack it watches — a systemd timer on
+# VPS1, NOT a container — so it survives the exact failure that took the box dark on 2026-07-04 (disk full →
+# dockerd down → every container unreachable). Since S5 it runs as a user timer of the account that owns the HQ
+# alert queue (zenod-health-watchdog.timer), so it needs no root: only the narrow read-only sudo rules for swarm tasks.
 #
-#   • dead docker daemon / dead stack   → CRITICAL
-#   • container crash-loop (>N restarts in the window) → CRITICAL
-#   • disk headroom (warn ≥80%, page ≥90%)            → WARN / CRITICAL
-#   • dead public endpoint (c1/z2 health != 200)      → CRITICAL
+# Every 2 minutes it checks today's components, under the same keys as the live page's rows (health.zenod.dev):
+#   • row-1   zenod.dev answers 200 with a Zenod title                               → page
+#   • row-2   cloud.zenod.dev/api/health answers 200 "ok"                             → page
+#   • row-4   phylax.zenod.dev/api/health answers 200 "ok", WhatsApp connected        → page
+#   • row-11  cloudflared-vps1-sites.service is active (the ingress tunnel)           → page
+#   • row-12  root disk below 90% (warn from 80% under disk-warn-root)                → page / warn
+#   • docker-dead  the Docker daemon is down: the whole stack is dark                 → page
+#   • crashloop-<svc>  ≥ RESTART_MAX failed tasks of the zenod-mt or phylax service in RESTART_WINDOW → page
+#   • extra URLs (ZENOD_WATCHDOG_EXTRA_URLS="key=url ...") answer 200 (used for the S5 proof)  → page
 #
-# Alert routing is two-tier so a down stack can still page:
-#   primary  = Phylax /api/notify  (→ WhatsApp; works while the Console is up)
-#   fallback = an out-of-band webhook (ntfy/Telegram/…) that needs only host network,
-#              used when the Console is unreachable (the "dead stack" case).
+# Alerts go through scripts/watchdog/zenod-alert.sh (the HQ queue, dedupe, 30-min re-alert, one RECOVERED message).
+# A row key is shared with the live page, so one outage seen by both alerts once.
 #
-# Pure evaluation logic (thresholds, crash-loop delta, dedup) is exercised by
+# Pure evaluation logic (thresholds, crash-loop rule, dedupe) is exercised by
 # scripts/watchdog/watchdog-logic.test.sh so the decision rules are tested, not just live.
 set -uo pipefail
 
-CONFIG="${ZENOD_WATCHDOG_ENV:-/etc/zenod-watchdog.env}"
+CONFIG="${ZENOD_WATCHDOG_ENV:-$HOME/.config/zenod-watchdog.env}"
 # shellcheck disable=SC1090
 [ -f "$CONFIG" ] && . "$CONFIG"
 
 # --- config (env-overridable; safe defaults) -------------------------------------------
-NOTIFY_URL="${ZENOD_NOTIFY_URL:-https://c1.zenod.dev}"
-NOTIFY_TOKEN="${ZENOD_NOTIFY_TOKEN:-}"
-FALLBACK_URL="${ZENOD_WATCHDOG_FALLBACK_URL:-}"       # out-of-band POST target (ntfy topic / Telegram sendMessage / …)
-HEALTH_URLS="${ZENOD_WATCHDOG_HEALTH_URLS:-https://c1.zenod.dev/api/health https://z2.zenod.dev/api/health}"
-WATCH_CONTAINERS="${ZENOD_WATCHDOG_CONTAINERS:-zenod-console zenod-z2 zenod-phylax zenod-epaminon zenod-archus2 zenod-outbound zenod-agent-runner}"
-DISK_PATHS="${ZENOD_WATCHDOG_DISK_PATHS:-/ /var/lib/docker}"
+SITE_URL="${ZENOD_WATCHDOG_SITE_URL:-https://zenod.dev/}"
+CLOUD_URL="${ZENOD_WATCHDOG_CLOUD_URL:-https://cloud.zenod.dev/api/health}"
+PHYLAX_URL="${ZENOD_WATCHDOG_PHYLAX_URL:-https://phylax.zenod.dev/api/health}"
+EXTRA_URLS="${ZENOD_WATCHDOG_EXTRA_URLS:-}"
+INGRESS_UNIT="${ZENOD_WATCHDOG_INGRESS_UNIT:-cloudflared-vps1-sites.service}"
+WATCH_SERVICES="${ZENOD_WATCHDOG_SERVICES:-zenod-mt-fxpzoo=cloud app-index-back-end-panel-6zm3qg=phylax}"
+DISK_PATH="${ZENOD_WATCHDOG_DISK_PATH:-/}"
 DISK_WARN="${ZENOD_WATCHDOG_DISK_WARN:-80}"
 DISK_PAGE="${ZENOD_WATCHDOG_DISK_PAGE:-90}"
-RESTART_MAX="${ZENOD_WATCHDOG_RESTART_MAX:-5}"        # crash-loop: >this many restarts within the window
-STATE_DIR="${ZENOD_WATCHDOG_STATE_DIR:-/var/lib/zenod-watchdog}"
-REALERT_SECS="${ZENOD_WATCHDOG_REALERT_SECS:-1800}"  # re-page an ongoing problem every 30 min
+RESTART_MAX="${ZENOD_WATCHDOG_RESTART_MAX:-3}"         # crash-loop: at least this many failed tasks ...
+RESTART_WINDOW="${ZENOD_WATCHDOG_RESTART_WINDOW:-900}" # ... within this many seconds
+export ZENOD_ALERT_SOURCE="${ZENOD_ALERT_SOURCE:-zenod watchdog}"
 
-mkdir -p "$STATE_DIR" 2>/dev/null || STATE_DIR="$(mktemp -d)"
-NOW="$(date +%s)"
-DOCKER="docker"; command -v docker >/dev/null 2>&1 || DOCKER="sudo docker"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+ZENOD_ALERT_LIB_ONLY=1 . "$HERE/zenod-alert.sh"
 
 log() { echo "[watchdog $(date -u +%FT%TZ)] $*"; }
 
@@ -52,114 +55,132 @@ disk_level() {
   elif [ "$pct" -ge "$warn" ]; then echo warn
   else echo ok; fi
 }
-# crashloop RESTARTS_NOW RESTARTS_PREV MAX -> "yes" | "no"  (delta over the window)
+# crashloop FAILED_TASKS_IN_WINDOW MAX -> "yes" | "no"
 crashloop() {
-  local now="$1" prev="$2" max="$3"
-  [ "$((now - prev))" -gt "$max" ] && echo yes || echo no
+  [ "$1" -ge "$2" ] && echo yes || echo no
 }
-
-# --- alert (dedup + re-alert + two-tier routing) ---------------------------------------
-# alert KEY SEVERITY TEXT  — SEVERITY is "warn" (info) | "page" (action)
-alert() {
-  local key="$1" severity="$2" text="$3"
-  local statef="$STATE_DIR/alert.$key"
-  local last=0; [ -f "$statef" ] && last="$(cat "$statef" 2>/dev/null || echo 0)"
-  # Suppress repeats unless the problem has persisted past the re-alert interval.
-  if [ "$((NOW - last))" -lt "$REALERT_SECS" ]; then return 0; fi
-  echo "$NOW" > "$statef"
-  local body="🚨 zenod-watchdog: $text"
-  [ "$severity" = "warn" ] && body="⚠️ zenod-watchdog: $text"
-  local sev="action"; [ "$severity" = "warn" ] && sev="info"
-  log "ALERT[$severity/$key] $text"
-  local delivered="no"
-  # Primary: Phylax /api/notify (only worth trying if the Console is reachable).
-  if [ -n "$NOTIFY_TOKEN" ] && curl -fsS -m 8 -o /dev/null "$NOTIFY_URL/api/health" 2>/dev/null; then
-    if curl -fsS -m 12 -X POST "$NOTIFY_URL/api/notify" \
-        -H "Authorization: Bearer $NOTIFY_TOKEN" -H "Content-Type: application/json" \
-        -d "$(printf '{"text":%s,"severity":"%s","eventType":"watchdog","dedupeKey":"watchdog:%s"}' "$(json_str "$body")" "$sev" "$key")" \
-        >/dev/null 2>&1; then delivered="phylax"; fi
-  fi
-  # Fallback: out-of-band webhook (the "dead stack" path). Plain text body — works for
-  # ntfy.sh topics and most simple webhooks; Telegram uses ?text= so keep it in the URL.
-  if [ "$delivered" = "no" ] && [ -n "$FALLBACK_URL" ]; then
-    if curl -fsS -m 12 -X POST "$FALLBACK_URL" -H "Content-Type: text/plain" --data "$body" >/dev/null 2>&1; then
-      delivered="fallback"; fi
-  fi
-  log "  delivery=$delivered"
-  [ "$delivered" != "no" ]
+# failed_tasks NOW WINDOW < "exit|state|timestamp" lines -> count of failed tasks that ended inside the window
+# (a swarm task that crashed: state failed/rejected or a non-zero exit; a normal roll is "shutdown" with exit 0)
+failed_tasks() {
+  python3 -c '
+import datetime as dt, re, sys
+now, win = int(sys.argv[1]), int(sys.argv[2]); n = 0
+for line in sys.stdin:
+    p = line.strip().split("|")
+    if len(p) < 3:
+        continue
+    code, state, ts = p[0], p[1], p[2]
+    m = re.match(r"(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)", ts)
+    if not m:
+        continue
+    t = dt.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=dt.timezone.utc).timestamp()
+    if now - t <= win and (state in ("failed", "rejected") or code not in ("", "0")):
+        n += 1
+print(n)' "$1" "$2"
 }
-# minimal JSON string escaper (quotes + backslashes + newlines)
-json_str() { printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '"%s"' "$1"; }
-
-clear_alert() { rm -f "$STATE_DIR/alert.$1" 2>/dev/null; }
+# health_verdict KIND HTTP_CODE BODY -> "ok" | reason   (KIND: site | health | phylax | plain)
+health_verdict() {
+  python3 -c '
+import json, re, sys
+kind, code, body = sys.argv[1], sys.argv[2], sys.stdin.read()
+if code != "200":
+    print("answered " + code + " (expected 200)"); sys.exit()
+if kind == "site":
+    m = re.search(r"<title>(.*?)</title>", body, re.S)
+    print("ok" if m and "Zenod" in m.group(1) else "answered 200 without a Zenod title"); sys.exit()
+if kind == "plain":
+    print("ok"); sys.exit()
+try:
+    j = json.loads(body)
+except ValueError:
+    print("answered 200 but not health JSON"); sys.exit()
+if j.get("status") != "ok":
+    print("reports status " + str(j.get("status"))[:20]); sys.exit()
+if kind == "phylax":
+    wa = ((j.get("channels") or {}).get("whatsapp") or {}).get("state")
+    if wa != "connected":
+        print("WhatsApp " + str(wa)[:20] + ", not connected"); sys.exit()
+print("ok")' "$1" "$2"
+}
 
 # --- checks -----------------------------------------------------------------------------
 # Sourced with ZENOD_WATCHDOG_LIB_ONLY=1 (the unit test) → expose the pure helpers above
 # without running any live check.
 if [ "${ZENOD_WATCHDOG_LIB_ONLY:-}" = "1" ]; then return 0 2>/dev/null || exit 0; fi
 
+NOW="$(date +%s)"
 problems=0
+page() { problems=$((problems+1)); za_alert "$1" page "$2"; }
+
+# fetch URL -> sets CODE and BODY (one retry after 5 s, so a single dropped request does not page)
+fetch() {
+  local tmp; tmp="$(mktemp)"
+  for _ in 1 2; do
+    CODE="$(curl -sS -m 10 -A zenod-watchdog -o "$tmp" -w '%{http_code}' "$1" 2>/dev/null || true)"
+    [ "${CODE:-000}" = 200 ] && break
+    sleep "${ZENOD_WATCHDOG_RETRY_SECS:-5}"
+  done
+  CODE="${CODE:-000}"; BODY="$(head -c 400000 "$tmp")"; rm -f "$tmp"
+}
+url_check() { # url_check KEY KIND URL NAME
+  fetch "$3"
+  local v; v="$(printf '%s' "$BODY" | health_verdict "$2" "$CODE")"
+  if [ "$v" = ok ]; then za_clear "$1" "$4 is green again: $3 answers 200"
+  else page "$1" "$4 is red: $3 $v"; fi
+}
 
 # 1) docker daemon / dead stack
-if ! systemctl is-active --quiet docker 2>/dev/null; then
-  problems=$((problems+1))
-  alert docker-dead page "Docker daemon is DOWN on the host — the whole stack is dark. (systemctl is-active docker != active)"
-  # Nothing container-level to check if docker is down; endpoints will also fail below.
+docker_up=no
+if systemctl is-active --quiet docker 2>/dev/null; then
+  docker_up=yes
+  za_clear docker-dead "Docker daemon on VPS1 is running again"
 else
-  clear_alert docker-dead
+  page docker-dead "Docker daemon on VPS1 is DOWN: the whole Zenod stack is dark"
 fi
 
-# 2) disk headroom (+ prevents the #570 disk-full recurrence being silent)
-for p in $DISK_PATHS; do
-  pct="$(df --output=pcent "$p" 2>/dev/null | tail -1 | tr -dc '0-9')"
-  [ -z "$pct" ] && continue
-  lvl="$(disk_level "$pct" "$DISK_WARN" "$DISK_PAGE")"
-  key="disk$(echo "$p" | tr -c 'a-zA-Z0-9' '-')"
-  case "$lvl" in
-    page) problems=$((problems+1)); alert "$key" page "Disk ${p} at ${pct}% (≥${DISK_PAGE}%). Runaway logs/data will take the box down — free space now (#570).";;
-    warn) alert "$key" warn "Disk ${p} at ${pct}% (≥${DISK_WARN}%). Headroom low; check log growth.";;
-    ok)   clear_alert "$key";;
-  esac
-done
+# 2) public endpoints, as the live page's rows 1, 2 and 4
+url_check row-1 site "$SITE_URL" "Marketing site zenod.dev"
+url_check row-2 health "$CLOUD_URL" "Cloud app cloud.zenod.dev"
+url_check row-4 phylax "$PHYLAX_URL" "WhatsApp relay Phylax"
+for kv in $EXTRA_URLS; do url_check "${kv%%=*}" plain "${kv#*=}" "Test target ${kv%%=*}"; done
 
-# 3) container crash-loops (restart delta over the timer window)
-if systemctl is-active --quiet docker 2>/dev/null; then
-  for c in $WATCH_CONTAINERS; do
-    rc="$($DOCKER inspect -f '{{.RestartCount}}' "$c" 2>/dev/null)"
-    [ -z "$rc" ] && continue   # not present on this host — skip, don't false-page
-    prevf="$STATE_DIR/restarts.$c"; prev=0; [ -f "$prevf" ] && prev="$(cat "$prevf" 2>/dev/null || echo 0)"
-    echo "$rc" > "$prevf"
-    if [ "$(crashloop "$rc" "$prev" "$RESTART_MAX")" = "yes" ]; then
-      problems=$((problems+1))
-      alert "crashloop-$c" page "Container ${c} is CRASH-LOOPING ($((rc - prev)) restarts since last check, RestartCount=$rc)."
+# 3) ingress tunnel (row 11)
+if systemctl is-active --quiet "$INGRESS_UNIT" 2>/dev/null; then
+  za_clear row-11 "Ingress tunnel is green again: $INGRESS_UNIT active"
+else
+  page row-11 "Ingress tunnel is red: $INGRESS_UNIT is $(systemctl is-active "$INGRESS_UNIT" 2>/dev/null)"
+fi
+
+# 4) disk headroom (row 12; the #570 disk-full recurrence must not be silent)
+pct="$(df -P "$DISK_PATH" 2>/dev/null | awk 'NR==2{print $5}' | tr -dc '0-9')"
+if [ -n "$pct" ]; then
+  case "$(disk_level "$pct" "$DISK_WARN" "$DISK_PAGE")" in
+    page) page row-12 "Host VPS1 is red: disk $DISK_PATH at ${pct}% (from ${DISK_PAGE}%). Free space now (#570)";;
+    warn) za_clear row-12 "Host VPS1 disk below ${DISK_PAGE}% again (${pct}%)"
+          za_alert disk-warn-root warn "Host VPS1 disk $DISK_PATH at ${pct}% (from ${DISK_WARN}%). Check log growth";;
+    ok)   za_clear row-12 "Host VPS1 disk is green again (${pct}%)"
+          za_clear disk-warn-root "Host VPS1 disk is green again (${pct}%)";;
+  esac
+fi
+
+# 5) crash-loops of the swarm services (read-only sudo rules: service ls / service ps / inspect --type task)
+if [ "$docker_up" = yes ]; then
+  svcs="$(sudo -n docker service ls --format '{{.ID}} {{.Name}}' 2>/dev/null | awk '{print $2}')"
+  for sv in $WATCH_SERVICES; do
+    svc="${sv%%=*}"; label="${sv#*=}"
+    printf '%s\n' "$svcs" | grep -qx "$svc" || continue   # not on this host: skip, don't false-page
+    # shellcheck disable=SC2046
+    tasks="$(sudo -n docker service ps -q --no-trunc "$svc" 2>/dev/null)"
+    [ -n "$tasks" ] || continue
+    # shellcheck disable=SC2086
+    n="$(sudo -n docker inspect --type task --format '{{.ServiceID}}|{{.Status.ContainerStatus.ContainerID}}|{{.Status.ContainerStatus.ExitCode}}|{{.Status.State}}|{{.DesiredState}}|{{.Status.Timestamp}}' $tasks 2>/dev/null \
+         | awk -F'|' '{print $3"|"$4"|"$6}' | failed_tasks "$NOW" "$RESTART_WINDOW")"
+    if [ "$(crashloop "${n:-0}" "$RESTART_MAX")" = yes ]; then
+      page "crashloop-$label" "The $label service is CRASH-LOOPING: $n failed tasks in the last $((RESTART_WINDOW / 60)) min"
     else
-      clear_alert "crashloop-$c"
+      za_clear "crashloop-$label" "The $label service is stable again"
     fi
   done
-fi
-
-# 4) public endpoint health (dead channel / dead stack even if docker looks up)
-for u in $HEALTH_URLS; do
-  code="$(curl -fsS -m 8 -o /dev/null -w '%{http_code}' "$u" 2>/dev/null || echo 000)"
-  key="health$(echo "$u" | tr -c 'a-zA-Z0-9' '-')"
-  if [ "$code" != "200" ]; then
-    problems=$((problems+1))
-    alert "$key" page "Endpoint ${u} returned ${code} (expected 200) — a channel/agent is dark."
-  else
-    clear_alert "$key"
-  fi
-done
-
-# 5) C-25 credit headroom (ledger-driven, warn-level; skipped unless a budget is configured
-#    server-side). The Console does the projection; the watchdog just relays the warning.
-if [ -n "$NOTIFY_TOKEN" ]; then
-  hr="$(curl -fsS -m 8 -H "Authorization: Bearer $NOTIFY_TOKEN" "$NOTIFY_URL/api/usage/headroom" 2>/dev/null || echo '')"
-  if printf '%s' "$hr" | grep -q '"level":"warn"'; then
-    msg="$(printf '%s' "$hr" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("message",""))' 2>/dev/null)"
-    alert credit-headroom warn "${msg:-Credit burn is high (C-25).}"
-  else
-    clear_alert credit-headroom
-  fi
 fi
 
 if [ "$problems" -eq 0 ]; then log "all healthy"; fi

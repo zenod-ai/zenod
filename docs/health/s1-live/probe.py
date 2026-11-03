@@ -272,17 +272,45 @@ def remote() -> dict:
              if "deploy-poller zenod-mt" in x[1] and "noop" not in x[1]]
     out["deploy_last_roll"] = {"at": iso(rolls[-1][0]), "msg": rolls[-1][1][:120]} if rolls else None
 
-    wd = journal("zenod-watchdog", "-24h")
+    # S5 watchdog (user timer) and its sender: every queued alert id (watchdog and this page) must show up as
+    # `alert=sent id=<id>` in the relay watchdog's log, which delivers the HQ queue to Jordi's "HQ — vps1 alerts" thread.
+    runs = journal("zenod-health-watchdog", "-24h", user=True)
+    sent_log = os.path.expanduser("~/agent_team_m0/relay-watchdog.log")
+    sent = set()
+    try:
+        with open(sent_log, "rb") as f:
+            f.seek(max(0, os.path.getsize(sent_log) - 3_000_000))
+            sent = set(re.findall(r"alert=sent id=(\S+)", f.read().decode("utf-8", "replace")))
+    except OSError:
+        pass
+    queued, undelivered, last_alert, last_sent = [], 0, None, None
+    try:
+        for line in open(os.path.expanduser("~/.local/state/zenod-alert/alert.log"), errors="replace"):
+            m = re.match(r"\[zenod-alert (\S+)\] (.*)", line)
+            t = parse_ts(m.group(1)) if m else None
+            if not t or t < day:
+                continue
+            if re.match(r"(ALERT|RECOVERED)\[", m.group(2)):
+                last_alert = t
+            q = re.search(r"delivery=hq-queue id=(\S+)", m.group(2))
+            if q:
+                queued.append(q.group(1))
+                if q.group(1) in sent:
+                    last_sent = t
+                elif (t_now - t).total_seconds() > 600:
+                    undelivered += 1
+            elif "delivery=no" in m.group(2):
+                undelivered += 1
+    except OSError:
+        pass
     out["watchdog"] = {
-        "runs24h": sum(1 for _, m in wd if m.startswith("[watchdog") and "ALERT" not in m and "delivery" not in m) or None,
-        "alerts24h": sum(1 for _, m in wd if "ALERT[" in m),
-        "deliveredNo24h": sum(1 for _, m in wd if "delivery=no" in m),
-        "deliveredYes24h": sum(1 for _, m in wd if re.search(r"delivery=(yes|ok|primary|fallback)", m)),
-        "lastAlert": iso(max((t for t, m in wd if "ALERT[" in m), default=None)),
-        "deadTargets": sorted({u for _, m in wd for u in re.findall(r"Endpoint (https://[^ ]+) returned 404", m)}),
+        "alerts24h": len(queued), "deliveredYes24h": sum(1 for i in queued if i in sent),
+        "deliveredNo24h": undelivered, "lastAlert": iso(last_alert), "lastDelivered": iso(last_sent),
+        "timer": sh(["systemctl", "--user", "show", "zenod-health-watchdog.timer", "-p", "ActiveState",
+                     "--value"]).strip(),
+        "lastRun": iso(runs[-1][0]) if runs else None,
+        "retiredRootTimer": sh(["systemctl", "show", "zenod-watchdog.timer", "-p", "ActiveState", "--value"]).strip(),
     }
-    st = sh(["systemctl", "show", "zenod-watchdog.timer", "-p", "ActiveState", "--value"]).strip()
-    out["watchdog"]["timer"] = st
 
     rw = [x for x in journal("zenod-readiness-watch", "-3h") if "watch ready=" in x[1]]
     if rw:
@@ -469,7 +497,8 @@ Behind a password at health.zenod.dev; also on the tailnet.
 <footer>Sources: public <code>/api/health</code> endpoints from VPS3; on VPS1 the Traefik access log, container logs
 (since each container started), systemd journals, <code>tester-watch --redact</code> and the Dokploy wrapper's app list.
 Counts and timestamps only: no message text, ids or keys. Colours: red = down or nobody is told; amber = up but
-something needs a look; grey = not deployed. Write-up: docs/health/INVENTORY.md (EPIC-6 S1), aggregator EPIC-6 S2.
+something needs a look; grey = not deployed. A red row (and the host watchdog's own checks) goes to Jordi's
+"HQ — vps1 alerts" thread once, again every 30 min while red, and once when it recovers (S5). Write-up: docs/health/INVENTORY.md (EPIC-6 S1), aggregator EPIC-6 S2.
 The same values as one JSON document: <a href="probe.json">probe.json</a>.</footer></main>
 <script>const t=Date.parse("{probed}");function u(){{const m=Math.round((Date.now()-t)/60000);
 if(location.hostname==="health.zenod.dev"){{const s=document.getElementById("signin");if(s)s.remove()}}
@@ -483,6 +512,7 @@ def main() -> None:
     ap.add_argument("--out")
     ap.add_argument("--from-json", help="a saved raw probe (or a v1 document's raw); no state unless --state")
     ap.add_argument("--state", help="history file (default ~/.local/state/zenod-health/history.json)")
+    ap.add_argument("--no-alert", action="store_true", help="do not send red components to the HQ alert queue (S5)")
     a = ap.parse_args()
     if a.remote:
         print(json.dumps(remote()))
@@ -512,7 +542,24 @@ def main() -> None:
         with open(tmp, "w") as f:
             f.write(body)
         os.replace(tmp, os.path.join(out, name))
+    if not a.from_json and not a.no_alert:
+        alert_red(doc)
     print(json.dumps({c["id"]: c["status"] for c in doc["components"]}))
+
+
+def alert_red(doc: dict) -> None:
+    """EPIC-6 S5: send red components to Jordi through the watchdog's sender on VPS1 (HQ alert queue, same dedupe
+    and row keys as the watchdog, one RECOVERED when a component is no longer red). The watchdog row is the sender
+    itself, so it is left out; a failed VPS1 read is not turned into alerts (the watchdog on VPS1 runs on its own)."""
+    if (doc.get("raw", {}).get("vps1") or {}).get("error"):
+        return
+    payload = [{"key": f"row-{c['n']}", "name": c["name"], "colour": c["status"], "signal": c["problem"] or c["signal"]}
+               for c in doc["components"] if c["id"] != "watchdog"]
+    out = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "hetzner_vps_1",
+              "ZENOD_ALERT_SOURCE='zenod health page' ~/.local/share/zenod-watchdog/zenod-alert.sh rows"],
+             timeout=60, stdin=json.dumps(payload))
+    for line in out.splitlines():
+        print(line, file=sys.stderr)
 
 
 if __name__ == "__main__":

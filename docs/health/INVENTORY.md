@@ -119,6 +119,12 @@ The GitHub `deploy` job of *Publish image* fails (Dokploy API 404, e.g. run 4013
 
 ### 4.2 Existing watchdog — pages into the void
 
+*2026-11-03, S5: fixed.* The watchdog now runs as the user timer `zenod-health-watchdog` (t3agent on VPS1, no root). It checks
+today's components under the live page's row keys (site, cloud, Phylax with WhatsApp, ingress, disk) plus Docker and swarm
+crash-loops. It sends through `scripts/watchdog/zenod-alert.sh` to the HQ alert queue, and the live page's red rows use
+the same sender, with shared dedupe, a 30-min re-alert and one RECOVERED message. Proof: [S5 evidence](../evidence/epic6-s5-2026-11-03.md).
+The retired root unit `zenod-watchdog.timer` still runs and sends nowhere; switching it off is a root step. The text below is the S1 finding.
+
 `zenod-watchdog.timer` (host systemd, every 2 min, outside the stack; source `scripts/watchdog/zenod-watchdog.sh`) is still running on VPS1 but is configured for hosts that no longer exist: health URLs `c1.zenod.dev`, `z2.zenod.dev`, a `z-jordi-…` tenant host (all 404 now), notify target `https://c1.zenod.dev` (dead), `ZENOD_WATCHDOG_FALLBACK_URL` empty. In the last 24 h the journal shows **141 `delivery=no` and 0 delivered** (*2026-11-03*: 144 and 0, unchanged): it "alerts" every 30 min and nobody hears it. Its docker/disk/crash-loop checks are sound and worth keeping. Fixing or replacing it is S5's job (§5); it also means any current "no alert" silence is not evidence of health.
 
 ### 4.3 Observatory
@@ -126,6 +132,12 @@ The GitHub `deploy` job of *Publish image* fails (Dokploy API 404, e.g. run 4013
 infra-vps already serves a host-level page (disk, containers, cgroup CPU) on tailnet `:8090` (and `health.alpha9.io` behind a login). It covers VPS1 as a host, not Zenod's product signals. S4 should link to it rather than copy it.
 
 ## 5. Alert channel for S5 — recommendation
+
+*2026-11-03, S5 outcome: superseded by root L-6.* Alerts must not use Zenod's own WhatsApp (Phylax `notify`), so S5 sends
+through the agent team's HQ alert queue (`~/agent_team_m0/alerts.pending` on VPS1), which the relay watchdog delivers to
+Jordi's T3 thread "HQ — vps1 alerts". Telegram tier 2 is not added: the only bot is Phylax's (Zenod's) and no chat is
+bound for Jordi, so one tier remains. If VPS1 itself is down, nothing alerts. The page then goes stale (red banner)
+until a host outside VPS1 sends. The text below is the S1 recommendation.
 
 Facts: Jordi's Phylax tenant has WhatsApp notifications **on, verified, phone set**; Telegram is enabled in Phylax but **no tenant has a Telegram binding** and `telegram/` data was last touched 2026-07-12; no email sender exists (`secret find email|smtp|resend|sendgrid|mailgun|postmark|ntfy` all empty); the old watchdog fallback is unset. Phylax exposes an MCP `notify` tool (`phylaxChannels.ts:2297`) that delivers to the tenant's configured channels; the Console-era `POST /api/notify` (`app.ts:2729`) only exists in the retired standalone app.
 
