@@ -25,18 +25,18 @@ Before testers arrive, anyone can see in one page whether the site, the database
 - [x] E6-1 `health.zenod.dev` serves, on the Tailscale network only (EPIC-6-A1 answered 2026-10-25), one page with a row per component: marketing site (`zenod.dev`), cloud app (`cloud.zenod.dev/api/health`, deployed SHA vs `main`), database (incl. the credits/usage ledger), WhatsApp relay, agent runner + Phylax. Each row shows green/amber/red, when it was checked, when it last did real work (last WhatsApp message in/out, last DB write, last agent run) and the last error from its logs with a timestamp. No secrets or user data on the page. Evidence: live at https://health.zenod.dev behind Jordi's own sign-in (Jordi 2026-11-03 chose public with a password over tailnet-only), tailnet copy http://vps3.taild81fbb.ts.net:8742/; [S1](evidence/epic6-s1-it5-2026-11-03.md), [S2](evidence/epic6-s2-2026-11-03.md).
 - [x] E6-2 A read-only prod smoke battery (one `npm run` command) checks the same components, runs every 15 min, and the page shows its last result and time; it exits non-zero on any red. Evidence: `npm run smoke:prod`, 17 checks every 15 min, results on the page ([S3](evidence/epic6-s3-2026-11-03.md), [S4](evidence/epic6-s4-2026-11-03.md)).
 - [x] E6-3 Proven red: one component deliberately broken (or simulated) turns its row red within 15 min and an alert reaches Jordi; back to green once fixed. Evidence: [S6](evidence/epic6-s6-2026-11-03.md) — red in 7 min 45 s, alert to the HQ thread, green and one recovery message; alerts [S5](evidence/epic6-s5-2026-11-03.md).
-- [ ] E6-4 Jordi opens the page and accepts it.
+- [x] E6-4 Jordi opens the page and accepts it. (Jordi approved the S6 acceptance card 2026-11-03, af4a490)
 
 ## Current State
 
 Owner: Delivery manager
 Status: review
-Last attempted: 2026-11-03 20:45Z S2 worker run_8f6d7ad7 finished (93742e4): cloud row false amber fixed by picking the newest publish by time, redeploy survival recorded, S2 in review ; Jordi closed S1, S3, S5 done
+Last attempted: 2026-11-03 reconcile (run_b7cebdcb): Jordi approved S2, S4, S6 cards ; all six rows done ; E6-4 ticked ; S2 worker run_8f6d7ad7 finished before that (93742e4)
 Result: health.zenod.dev shows 12 parts with live status, 7-day timelines, smoke results every 15 min, last errors kept across redeploys, and red reaches Jordi's HQ thread; proven red then green 2026-11-03
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
-Waiting on: Jordi reviews the S2, S4 and S6 cards and accepts the page (E6-4)
+Waiting on: Jordi's verdict on the epic (all Done means met, Outcome written)
 Approved work: none
-Next action: Jordi's verdict on S2, S4, S6 and E6-4 ; nothing for agents until then
+Next action: Jordi closes EPIC-6 ; nothing for agents
 Source revision: uncommitted scaffold
 Verified at: 2026-11-03 20:45Z tailnet page 200 ; probe 10 green, 0 amber, 0 red at 20:38Z ; S2 card fields re-checked against the gate
 
@@ -70,7 +70,7 @@ Risk: if VPS1 itself is down there is no second alert channel (the page shows a 
 | E6-1 page with a row per component | https://health.zenod.dev; [S1 it.5](evidence/epic6-s1-it5-2026-11-03.md), [S2](evidence/epic6-s2-2026-11-03.md) |
 | E6-2 smoke battery every 15 min on the page | [S3](evidence/epic6-s3-2026-11-03.md), [S4](evidence/epic6-s4-2026-11-03.md), PRs #1490, #1492, #1493 |
 | E6-3 proven red then green with an alert | [S6](evidence/epic6-s6-2026-11-03.md), [S5](evidence/epic6-s5-2026-11-03.md), PR #1491 |
-| E6-4 Jordi accepts | Jordi's review of the S6 card |
+| E6-4 Jordi accepts | Jordi approved the S6 acceptance card on the console 2026-11-03 (af4a490); S1–S5 cards approved the same day (3abf712, 823660e, 19691b2, 544818f, 6098de3) |
 
 ## Waiting on
 
