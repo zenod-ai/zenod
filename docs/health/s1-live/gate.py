@@ -11,12 +11,19 @@ Runs in the Dokploy app `zenod-health` (image python:3.12-alpine) on VPS1, servi
 that VPS3's probe timer rsyncs in every 5 min. Credentials: user HEALTH_USER (default jordi),
 password env HEALTH_PAGE_PASSWORD (store: zenod-health/HEALTH_PAGE_PASSWORD). The cookie key is
 derived from the password, so rotating it (env-set + redeploy) signs everybody out. Stdlib only.
+
+S1 it.3: one-time sign-in links. GET /login/<64 hex> signs the browser in (same 30-day cookie) if
+MAGIC_DIR/<sha256 of the token> exists and its content (a Unix expiry) is in the future. The file is
+renamed to .used before it is checked, an atomic step, so a link works once even under concurrent
+clicks and across restarts. Only hashes live on disk; the token is only in the link. Minted on VPS3 by
+probe.py (signin_link), which shows the link on the tailnet copy of the page, the review card's evidence link.
 """
 import base64
 import hashlib
 import hmac
 import html
 import os
+import re
 import sys
 import time
 from functools import partial
@@ -28,6 +35,8 @@ COOKIE = "zenod_health_session"
 SESSION_SECONDS = 30 * 24 * 3600
 MAX_FAILS = 10          # failed sign-ins allowed per window (all clients together)
 FAIL_WINDOW = 300
+MAGIC_DIR = os.environ.get("HEALTH_MAGIC_DIR", "/srv/magic")
+MAGIC_RE = re.compile(r"/login/([0-9a-f]{64})")
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -73,6 +82,19 @@ def valid_token(password, token, now=None):
         return False
 
 
+def redeem_magic(token, magic_dir=MAGIC_DIR, now=None):
+    """True once per minted token: rename-then-check makes it single-use."""
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    path = os.path.join(magic_dir, digest)
+    try:
+        os.rename(path, path + ".used")
+        with open(path + ".used") as f:
+            exp = int(f.read().strip())
+    except (OSError, ValueError):
+        return False
+    return exp > (now if now is not None else time.time())
+
+
 def safe_next(value):
     """Only same-site absolute paths; anything else goes to /."""
     if value.startswith("/") and not value.startswith("//") and "\\" not in value:
@@ -86,7 +108,8 @@ class Handler(SimpleHTTPRequestHandler):
     fails = []  # monotonic timestamps of recent failed sign-ins
 
     def log_message(self, fmt, *args):  # no query strings / cookies in logs
-        sys.stderr.write("%s %s\n" % (self.headers.get("X-Forwarded-For", self.address_string()) if self.headers else "-", fmt % args))
+        line = re.sub(r"/login/[0-9a-f]{8,}", "/login/<link>", fmt % args)
+        sys.stderr.write("%s %s\n" % (self.headers.get("X-Forwarded-For", self.address_string()) if self.headers else "-", line))
 
     def _check(self, user, pw):
         ok_user = hmac.compare_digest(user.encode(), self.user.encode())
@@ -160,6 +183,13 @@ class Handler(SimpleHTTPRequestHandler):
             if self._authed():
                 return self._redirect(nxt)
             return self._login_page(HTTPStatus.OK, nxt=nxt)
+        magic = MAGIC_RE.fullmatch(parts.path)
+        if magic:
+            if self._authed():
+                return self._redirect("/")
+            if self.password and redeem_magic(magic.group(1)):
+                return self._redirect("/", [self._cookie_header(make_token(self.password), SESSION_SECONDS)])
+            return self._login_page(HTTPStatus.UNAUTHORIZED, "This sign-in link was already used or has expired.")
         if not self._authed():
             target = parts.path + (("?" + parts.query) if parts.query else "")
             return self._login_page(HTTPStatus.UNAUTHORIZED, nxt=safe_next(target))

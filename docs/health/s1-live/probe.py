@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import html
 import json
+import secrets
+import time
 import os
 import re
 import subprocess
@@ -54,6 +57,45 @@ def sh(cmd: list[str], timeout: int = 60, stdin: str | None = None) -> str:
         return r.stdout
     except Exception:
         return ""
+
+
+# --------------------------------------------------------------------------------------------- sign-in link (S1 it.3)
+
+LINK_STATE = os.path.expanduser("~/.config/zenod-health/signin.json")   # VPS3, 0600, never in the repo
+MAGIC_DIR = ".local/share/zenod-health/magic"                           # VPS1, mounted at /srv/magic in the gate
+LINK_DAYS, REMINT_BEFORE = 7, 24 * 3600
+
+
+def signin_link() -> dict | None:
+    """Keep one unused one-time sign-in link for health.zenod.dev (gate.py redeems it once).
+
+    It is shown only on the tailnet copy of the page, which is already readable without a password,
+    so it opens nothing new to anyone. Re-minted when used or less than a day from expiry."""
+    try:
+        st = json.load(open(LINK_STATE))
+    except (OSError, ValueError):
+        st = None
+    now_s = int(time.time())
+    if st and st["exp"] - now_s > REMINT_BEFORE:
+        alive = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "hetzner_vps_1",
+                    f"test -e {MAGIC_DIR}/{st['hash']} && echo yes"], timeout=30).strip()
+        if alive == "yes":
+            return st
+    token = secrets.token_hex(32)
+    new = {"hash": hashlib.sha256(token.encode()).hexdigest(), "exp": now_s + LINK_DAYS * 86400,
+           "url": f"https://health.zenod.dev/login/{token}"}
+    old = f"rm -f {MAGIC_DIR}/{st['hash']}; " if st and re.fullmatch(r"[0-9a-f]{64}", st.get("hash", "")) else ""
+    ok = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "hetzner_vps_1",
+             f"umask 077 && mkdir -p {MAGIC_DIR} && {old}find {MAGIC_DIR} -name '*.used' -mtime +30 -delete; "
+             f"printf %s {new['exp']} > {MAGIC_DIR}/{new['hash']} && echo ok"], timeout=30).strip()
+    if ok != "ok":
+        return None
+    os.makedirs(os.path.dirname(LINK_STATE), mode=0o700, exist_ok=True)
+    tmp = LINK_STATE + ".tmp"
+    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+        json.dump(new, f)
+    os.replace(tmp, LINK_STATE)
+    return new
 
 
 # --------------------------------------------------------------------------------------------- remote (VPS1)
@@ -546,6 +588,7 @@ CSS = """
 color:var(--ink);background:var(--paper)}main{max-width:1400px;margin:0 auto;padding:28px 24px 48px}
 h1{font:600 26px/1.2 Georgia,serif;margin:0 0 6px}p.sub{margin:0 0 18px;color:#555}
 .sum{display:flex;gap:10px;margin:0 0 18px;flex-wrap:wrap}.pill{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:#fff}
+#signin{background:#e7f1ea;border:1px solid var(--g);padding:10px 14px;border-radius:6px;margin-bottom:14px}
 #stale{display:none;background:var(--r);color:#fff;padding:10px 14px;border-radius:6px;margin-bottom:14px}
 table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line)}
 th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
@@ -558,8 +601,14 @@ footer{margin-top:16px;color:#666;font-size:12.5px}code{font-size:12.5px}
 """
 
 
-def page(d: dict) -> str:
+def page(d: dict, link: dict | None = None) -> str:
     R = rows(d)
+    signin = ""
+    if link:
+        until = dt.datetime.fromtimestamp(link["exp"], UTC).strftime("%d %b")
+        u = html.escape(link["url"])
+        signin = (f'<div id="signin">Open this page on any device: <a href="{u}">sign in to health.zenod.dev</a>. '
+                  f'The link works once, until {until}, and your browser then stays signed in for 30 days.</div>')
     counts = {c: sum(1 for r in R if r["colour"] == c) for c in ("green", "amber", "red", "grey")}
     tr = []
     for r in R:
@@ -575,6 +624,7 @@ def page(d: dict) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod health inventory · live</title>
 <style>{CSS}</style></head><body><main>
+{signin}
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>
 <h1>Zenod health inventory, live</h1>
 <p class="sub">Every part of Zenod, where it runs, and what it says right now. Probed <b>{probed.replace('T', ' ').replace('Z', ' UTC')}</b>
@@ -591,6 +641,7 @@ Counts and timestamps only: no message text, ids or keys. Colours: red = down or
 something needs a look; grey = not deployed. Full write-up: docs/health/INVENTORY.md (EPIC-6 S1).
 Raw values: <a href="probe.json">probe.json</a>.</footer></main>
 <script>const t=Date.parse("{probed}");function u(){{const m=Math.round((Date.now()-t)/60000);
+if(location.hostname==="health.zenod.dev"){{const s=document.getElementById("signin");if(s)s.remove()}}
 document.getElementById("age").textContent=" ("+m+" min ago)";if(m>15)document.getElementById("stale").style.display="block"}}u();setInterval(u,30000)</script>
 </body></html>"""
 
@@ -607,7 +658,8 @@ def main() -> None:
     d = json.load(open(a.from_json)) if a.from_json else collect()
     out = os.path.expanduser(a.out or ".")
     os.makedirs(out, exist_ok=True)
-    for name, body in (("probe.json", json.dumps(d, indent=1)), ("index.html", page(d))):
+    link = None if a.from_json else signin_link()
+    for name, body in (("probe.json", json.dumps(d, indent=1)), ("index.html", page(d, link))):
         tmp = os.path.join(out, name + ".tmp")
         with open(tmp, "w") as f:
             f.write(body)
