@@ -6,7 +6,7 @@ Runs on VPS3 (systemd --user timer, every 5 min). Read-only: public health endpo
 ps/inspect/logs --timestamps, journalctl, tester-watch --redact, the dokploy wrapper's `apps` listing,
 the Traefik access log). Output is counts, states and timestamps only: no env, no ids, no message text.
 
-    python3 probe.py --out ~/artifacts/epic6-s1-health      # writes index.html + probe.json
+    python3 probe.py --out ~/artifacts/epic6-s1-health      # writes index.html + probe.json (S2: aggregate.py document)
 """
 
 from __future__ import annotations
@@ -370,217 +370,7 @@ def collect() -> dict:
     return d
 
 
-# --------------------------------------------------------------------------------------------- page
-
-def ago(s: str | None, ref: dt.datetime) -> str:
-    t = parse_ts(s) if isinstance(s, str) else s
-    if not t:
-        return "none seen"
-    sec = (ref - t).total_seconds()
-    if sec < 0:
-        sec = 0
-    if sec < 120:
-        a = f"{int(sec)} s ago"
-    elif sec < 7200:
-        a = f"{int(sec // 60)} min ago"
-    elif sec < 172800:
-        a = f"{sec / 3600:.1f} h ago"
-    else:
-        a = f"{sec / 86400:.1f} days ago"
-    return f"{iso(t).replace('T', ' ').replace('Z', ' UTC')} ({a})"
-
-
-def rows(d: dict) -> list[dict]:
-    ref = parse_ts(d["probedAt"])
-    v = d.get("vps1") or {}
-    acc = v.get("access") or {}
-    R = []
-
-    def row(**k):
-        R.append(k)
-
-    # 1 site
-    site = d["site"]
-    ok = site["status"] == 200 and site["title"] and "Zenod" in site["title"]
-    a = acc.get("zenod.dev", {})
-    row(n="1", name="Marketing site zenod.dev", where="VPS1 · Dokploy app zenod-mt, same container as the cloud app",
-        colour="green" if ok else "red",
-        signal=f"GET https://zenod.dev/ → {site['status']} in {site['secs']} s, title “{site['title']}”",
-        activity=f"last page request {ago(a.get('lastReal'), ref)}; {a.get('real24h', '?')} requests in 24 h (bots included)",
-        error=(f"last 5xx {ago(a.get('last5xx'), ref)} ({a.get('status5xx')}); {a.get('n5xx24h')} in 24 h"
-               if a.get("last5xx") else "no 5xx in the retained access log"),
-        tests="npm test (server static-surface tests, CI). No prod smoke yet: S3 builds it.")
-
-    # 2 cloud
-    c = d["cloud"]; j = c["json"]; el = j.get("eventLoop") or {}
-    sha = (j.get("sha") or "")[:7]
-    pub = (d.get("publish") or {}).get("headSha", "")[:7]
-    col = "green"
-    notes = []
-    if c["status"] != 200 or j.get("status") != "ok":
-        col = "red"
-    elif (el.get("p99Ms") or 0) > 200 or (el.get("utilization") or 0) > 0.8:
-        col = "amber"; notes.append("event loop slow")
-    if pub and sha and pub != sha:
-        pt = parse_ts((d.get("publish") or {}).get("createdAt"))
-        if pt and (ref - pt).total_seconds() > 1800 and col == "green":
-            col = "amber"
-        notes.append(f"newest published image is {pub}")
-    zl = v.get("zenod_log") or {}
-    zc = (v.get("containers") or {}).get(ZENOD_SVC) or {}
-    row(n="2", name="Cloud app cloud.zenod.dev", where="VPS1 · zenod-mt, image "
-        + ", ".join(x["image"].split("/")[-1] for x in (v.get("dokploy") or {}).get("zenod-mt", [])),
-        colour=col,
-        signal=(f"/api/health → {c['status']} “{j.get('status')}”, sha {sha} "
-                f"({'matches' if sha == pub else 'vs'} last publish {pub or '?'}), p99 {el.get('p99Ms')} ms, "
-                f"load {el.get('utilization')}; container up since {ago(zc.get('startedAt'), ref)}, "
-                f"{zc.get('restarts', '?')} restarts" + ("; " + "; ".join(notes) if notes else "")),
-        activity=(f"last finished job {ago((zl.get('lastJob') or {}).get('at'), ref)} "
-                  f"({(zl.get('lastJob') or {}).get('kind', '-')}); {zl.get('jobs24h', 0)} jobs in 24 h"),
-        error="; ".join(filter(None, [
-            (f"last error log line {ago(zl['lastError']['at'], ref)} ({zl['lastError']['what']})"
-             if zl.get("lastError") else "no error log lines since the container started"),
-            (f"last 5xx {ago(acc['cloud.zenod.dev']['last5xx'], ref)}"
-             if (acc.get("cloud.zenod.dev") or {}).get("last5xx") else "no 5xx in access log")])),
-        tests="packages/server/test/health.test.ts, eventLoopHealth.test.ts, productionReadiness.test.ts (CI on every push)")
-
-    # 3 database / ledgers
-    ac = v.get("accounts") or {}
-    rd = v.get("readiness") or {}
-    proofs = rd.get("proofs") or []
-    bk = next((p for p in proofs if p["id"] == "backup_restore"), None)
-    b = ac.get("bindings") or {}
-    unavail = sum(n for k, n in b.items() if k not in ("active",))
-    col = "green"
-    if bk is None or bk["daysLeft"] <= 0:
-        col = "red"
-    elif bk["daysLeft"] <= 7 or ac.get("failedCaptures7d") or unavail:
-        col = "amber"
-    row(n="3", name="Database and credits ledger", where="VPS1 · SQLite files on volumes zenod-mt-data and phylax-data",
-        colour=col,
-        signal=(f"ledgers readable through tester-watch for {ac.get('count', '?')} accounts; "
-                f"backup restore drill valid {bk['daysLeft']:.0f} more days (to {bk['expiresAt'][:10]})" if bk else
-                "backup proof not found")
-               + "; WhatsApp bindings " + ", ".join(f"{k} {n}" for k, n in sorted(b.items())),
-        activity=f"last capture written {ago(ac.get('lastCapture'), ref)}; {ac.get('captures7d', '?')} captures in 7 days",
-        error=(f"{ac.get('failedCaptures7d', '?')} failed captures in 7 days, {ac.get('capHits24h', '?')} credit-cap hits "
-               f"and {ac.get('noticeFailures24h', '?')} failed billing notices in 24 h"),
-        tests="scripts/verify-zenod-data.mjs (on a copy); monthly restore drill by the readiness keeper; keeper.test.py")
-
-    # 4 phylax
-    p = d["phylax"]; pj = p["json"]
-    wa = ((pj.get("channels") or {}).get("whatsapp") or {})
-    hb = (pj.get("worker") or {}).get("lastHeartbeatAt")
-    hb_age = (ref.timestamp() * 1000 - hb) / 1000 if hb else None
-    pl = v.get("phylax_log") or {}
-    col = "green"
-    if p["status"] != 200 or pj.get("status") != "ok" or wa.get("state") != "connected":
-        col = "red"
-    elif (hb_age is not None and hb_age > 60) or (pj.get("restart") or {}).get("required"):
-        col = "amber"
-    lr = pl.get("lastReconnect") or {}
-    row(n="4", name="WhatsApp relay Phylax", where="VPS1 · Dokploy app phylax, image "
-        + ", ".join(x["image"].split("@")[-1][:19] for x in (v.get("dokploy") or {}).get("phylax", [])),
-        colour=col,
-        signal=(f"/api/health → {p['status']} “{pj.get('status')}”, sha {(pj.get('sha') or '')[:7]}, WhatsApp "
-                f"{wa.get('state')}, receive path {(wa.get('receivePath') or {}).get('status')}, worker heartbeat "
-                f"{hb_age:.0f} s old" if hb_age is not None else f"/api/health → {p['status']}"),
-        activity=(f"last inbound WhatsApp message {ago(pl.get('lastInbound'), ref)} ({pl.get('inbound24h', 0)} in 24 h); "
-                  f"last “Saved” reply sent {ago(ac.get('lastSavedReply'), ref)} ({ac.get('saves7d', '?')} in 7 days)"),
-        error="; ".join(filter(None, [
-            f"last WhatsApp drop {ago(lr.get('at'), ref)} ({lr.get('reason')}), reconnected; {pl.get('reconnects24h', 0)} drops in 24 h"
-            if lr else "no WhatsApp drop since the container started",
-            f"last error log line {ago(pl['lastError']['at'], ref)}" if pl.get("lastError") else "0 error log lines"])),
-        tests="phylaxUnit.test.ts (health and restart rules), npm run test:phylax-image-contract (CI)")
-
-    # 5 agent runner
-    dk = v.get("dokploy") or {}
-    sts = {n: dk[n][0]["status"] for n in RUNNER_APPS if dk.get(n)}
-    running = [n for n, s in sts.items() if s not in ("idle",)]
-    row(n="5", name="Agent runner", where="not deployed · Dokploy apps " + ", ".join(sts) + " are stopped",
-        colour="grey" if not running else "amber",
-        signal="all idle in Dokploy" if not running else "unexpected status: " + ", ".join(f"{n} {sts[n]}" for n in running),
-        activity="agents run inside the cloud app, see row 2", error="n/a",
-        tests="scripts/exec-smoke.mjs exists but writes to prod, so it is kept out of the read-only battery")
-
-    # 6 memory search index (EPIC-9)
-    ix = zl.get("lastIndex") or {}
-    row(n="6", name="Memory search index", where="VPS1 · inside zenod-mt, built on demand per search",
-        colour="green" if ix else "grey",
-        signal=(f"last index load {ix.get('ms')} ms for {ix.get('rows')} items" if ix else
-                "no index load logged since the container started"),
-        activity=f"last search index load {ago(ix.get('at'), ref)}" if ix else "none since restart",
-        error="see row 2", tests="packages/core/test/memoryIndex.test.ts (CI)")
-
-    # 7 deploy path
-    dp = v.get("deploy_poller") or {}
-    dr = v.get("deploy_last_roll") or {}
-    dpa = (ref - parse_ts(dp["at"])).total_seconds() if dp.get("at") else None
-    col = "red" if dpa is None else ("green" if dpa < 600 and ("noop" in dp["msg"] or "roll" in dp["msg"]) else "amber")
-    row(n="7", name="Deploy path", where="VPS1 · user timer infra-vps-deploy-poller, every 2 min",
-        colour=col, signal=f"last run {ago(dp.get('at'), ref)}: “{dp.get('msg')}”",
-        activity=f"last production roll {ago(dr.get('at'), ref)}" if dr else
-        f"no roll in the last 14 days of journal; container started {ago(zc.get('startedAt'), ref)}",
-        error="none in the last 30 min" if col == "green" else dp.get("msg", "no poller line in 30 min"),
-        tests="infra-vps tests/test_deploy_poller.py; scripts/deploy-fleet.test.mjs for the manual script")
-
-    # 8 alerts: watchdog
-    w = v.get("watchdog") or {}
-    col = "red" if w.get("deliveredNo24h") and not w.get("deliveredYes24h") else "green"
-    row(n="8", name="Alerts: host watchdog", where="VPS1 · system timer zenod-watchdog, every 2 min",
-        colour=col,
-        signal=f"timer {w.get('timer')}; {w.get('alerts24h')} alerts in 24 h, {w.get('deliveredYes24h')} delivered, "
-               f"{w.get('deliveredNo24h')} not delivered",
-        activity=f"last alert {ago(w.get('lastAlert'), ref)}",
-        error=("it checks retired hosts: " + ", ".join(u.replace("https://", "").split("/")[0] for u in w.get("deadTargets") or [])
-               + "; nobody receives it. Fixing it is S5") if w.get("deadTargets") else "none",
-        tests="scripts/watchdog/watchdog-logic.test.sh")
-
-    # 9 readiness keeper / watch
-    col = "green"
-    mind = min((p_["daysLeft"] for p_ in proofs), default=None)
-    if not rd or rd.get("ready") is not True:
-        col = "red"
-    elif mind is not None and mind <= 7:
-        col = "amber"
-    kl = v.get("keeper_last") or {}
-    row(n="9", name="Readiness keeper and watch", where="VPS1 · system timers zenod-readiness-watch hourly, keeper daily",
-        colour=col,
-        signal=(f"checkout ready={rd.get('ready')} at {ago(rd.get('at'), ref)}; proofs: "
-                + ", ".join(f"{p_['id']} {p_['daysLeft']:.0f} days left" for p_ in proofs)) if rd else "no watch line in 3 h",
-        activity=f"keeper last ran {ago(kl.get('at'), ref)}",
-        error=("no issues" if rd.get("issues") == "[]" else f"issues {rd.get('issues')}") if rd else "watch silent",
-        tests="scripts/readiness-keeper/keeper.test.py, productionReadiness.test.ts")
-
-    # 10 tester watch
-    tw = v.get("testers") or {}
-    col = "green" if tw and not tw.get("alerts") and not tw.get("problems") else ("amber" if tw else "red")
-    row(n="10", name="Tester watch", where="VPS1 · /usr/local/bin/tester-watch, read-only",
-        colour=col,
-        signal=(f"{tw.get('count')} tester codes issued, {tw.get('signedUp')} signed up; {tw.get('alerts')} alerts, "
-                f"{tw.get('problems')} read problems") if tw else "tester-watch did not answer",
-        activity=f"read at {ago(ac.get('generatedAt'), ref)}", error="none" if col == "green" else "see signal",
-        tests="scripts/tester-watch/tester_watch.test.py")
-
-    # 11 ingress
-    cf = v.get("cloudflared")
-    row(n="11", name="Ingress tunnel", where="VPS1 · cloudflared-vps1-sites.service",
-        colour="green" if cf == "active" else "red", signal=f"service {cf}",
-        activity="carries rows 1, 2 and 4", error="none" if cf == "active" else cf, tests="none: covered by rows 1, 2, 4 probes")
-
-    # 12 host disk and observatory
-    dpct = v.get("disk_root_pct")
-    ob = d.get("observatory") or {}
-    col = "green" if dpct is not None and dpct < 80 and ob.get("status") == 200 else (
-        "amber" if dpct is not None and dpct < 90 else "red")
-    dg = v.get("disk_guard") or {}
-    row(n="12", name="Host VPS1: disk and observatory", where="VPS1 · disk-guard timer, observatory on tailnet :8090",
-        colour=col, signal=f"root disk {dpct}% used; observatory → {ob.get('status')}",
-        activity=f"disk guard last ran {ago(dg.get('at'), ref)}" if dg else "disk guard silent in 30 min",
-        error="none" if col == "green" else "disk or observatory", tests="infra-vps tests/test_disk_guard.py",
-        link="https://health.alpha9.io/")
-    return R
-
+# --------------------------------------------------------------------------------------------- page (S2: rendered from the aggregate document)
 
 CSS = """
 :root{--g:#1f7a3f;--a:#b26b00;--r:#b3261e;--k:#6b6b6b;--ink:#1d1d1b;--paper:#fbfaf7;--line:#dedad2}
@@ -597,12 +387,14 @@ td.c{width:12px;padding:0}td.c span{display:block;width:12px;min-height:64px;hei
 .green span{background:var(--g)}.amber span{background:var(--a)}.red span{background:var(--r)}.grey span{background:#b9b6ae}
 .st{font-weight:600;text-transform:uppercase;font-size:12px}.st.green{color:var(--g)}.st.amber{color:var(--a)}.st.red{color:var(--r)}.st.grey{color:var(--k)}
 td.name{font-weight:600;width:15%}td.where{width:15%;color:#444}td.tests{width:14%;color:#555;font-size:13px}
-footer{margin-top:16px;color:#666;font-size:12.5px}code{font-size:12.5px}
+h2{font:600 18px Georgia,serif;margin:22px 0 6px}ul.tr{margin:0;padding-left:18px;color:#444}
+.hist{color:#777;font-size:12.5px}footer{margin-top:16px;color:#666;font-size:12.5px}code{font-size:12.5px}
 """
 
 
-def page(d: dict, link: dict | None = None) -> str:
-    R = rows(d)
+def page(doc: dict, link: dict | None = None) -> str:
+    from aggregate import ago, parse_ts
+    ref = parse_ts(doc["checked_at"])
     signin = ""
     if link:
         until = dt.datetime.fromtimestamp(link["exp"], UTC).strftime("%d %b")
@@ -611,26 +403,46 @@ def page(d: dict, link: dict | None = None) -> str:
                   f'The link works once, until {until}, and your browser then stays signed in while you use it. '
                   f'If you have no password yet, it asks you to set one first. Lost your password? Use this link, '
                   f'then set a new one.</div>')
-    counts = {c: sum(1 for r in R if r["colour"] == c) for c in ("green", "amber", "red", "grey")}
+    counts = doc["summary"]
     tr = []
-    for r in R:
-        nm = html.escape(r["name"])
-        if r.get("link"):
-            nm = f'<a href="{html.escape(r["link"])}">{nm}</a>'
+    for c in doc["components"]:
+        nm = html.escape(c["name"])
+        if c.get("link"):
+            nm = f'<a href="{html.escape(c["link"])}">{nm}</a>'
+        st = c["status"]
+        la = c.get("last_activity")
+        act = html.escape(c["activity"])
+        if la and la.get("from_history"):
+            act += f'<br><span class="hist">kept from before: last seen {html.escape(ago(la["at"], ref))}</span>'
+        le = c.get("last_error")
+        if le:
+            err = (f'<b>{html.escape(le["what"])}</b><br>{html.escape(ago(le["at"], ref))}'
+                   + (f', first seen {html.escape(ago(le["first_seen"], ref))}' if le["first_seen"] != le["at"] else "")
+                   + f'<br><span class="hist">from {html.escape(le["source"])}</span>')
+        else:
+            err = "none recorded"
+        err += f'<br><span class="hist">now: {html.escape(c["error_now"])}</span>'
         tr.append(
-            f'<tr><td class="c {r["colour"]}"><span></span></td><td class="name">{nm}<br>'
-            f'<span class="st {r["colour"]}">{r["colour"]}</span></td><td class="where">{html.escape(r["where"])}</td>'
-            f'<td>{html.escape(r["signal"])}</td><td>{html.escape(r["activity"])}</td><td>{html.escape(r["error"])}</td>'
-            f'<td class="tests">{html.escape(r["tests"])}</td></tr>')
-    probed = d["probedAt"]
+            f'<tr id="{c["id"]}"><td class="c {st}"><span></span></td><td class="name">{nm}<br>'
+            f'<span class="st {st}">{st}</span><br><span class="hist">since {html.escape(ago(c["status_since"], ref))}</span>'
+            f'</td><td class="where">{html.escape(c["where"])}</td>'
+            f'<td>{html.escape(c["signal"])}<br><span class="hist">checked {html.escape(ago(c["checked_at"], ref))}</span></td>'
+            f'<td>{act}</td><td>{err}</td><td class="tests">{html.escape(c["tests"])}</td></tr>')
+    probed = doc["checked_at"]
+    since = (doc.get("history_since") or probed).replace("T", " ").replace("Z", " UTC")
+    trs = "".join(
+        f'<li>{html.escape(ago(t["at"], ref))}: {html.escape(t["name"])} {t["from"]} → <b>{t["to"]}</b>'
+        f' ({html.escape(t["reason"] or "")})</li>' for t in (doc.get("transitions") or [])[::-1][:10])
+    trs = f"<h2>Recent changes</h2><ul class=\"tr\">{trs}</ul>" if trs else ""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod health inventory · live</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod health · live</title>
 <style>{CSS}</style></head><body><main>
 {signin}
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>
-<h1>Zenod health inventory, live</h1>
-<p class="sub">Every part of Zenod, where it runs, and what it says right now. Probed <b>{probed.replace('T', ' ').replace('Z', ' UTC')}</b>
-<span id="age"></span>, every 5 minutes, read-only. Behind a password at health.zenod.dev; also on the tailnet.
+<h1>Zenod health, live</h1>
+<p class="sub">Every part of Zenod, where it runs, and what it says right now. Checked <b>{probed.replace('T', ' ').replace('Z', ' UTC')}</b>
+<span id="age"></span>, every 5 minutes, read-only. Last errors are kept by this page since {since}, so they survive a redeploy.
+Behind a password at health.zenod.dev; also on the tailnet.
 <a href="https://health.zenod.dev/password">Set or change your password</a>.</p>
 <div class="sum"><span class="pill">🟢 {counts['green']} green</span><span class="pill">🟠 {counts['amber']} amber</span>
 <span class="pill">🔴 {counts['red']} red</span><span class="pill">⚪ {counts['grey']} not deployed</span></div>
@@ -638,11 +450,12 @@ def page(d: dict, link: dict | None = None) -> str:
 <th>Last error</th><th>Test battery</th></tr></thead><tbody>
 {''.join(tr)}
 </tbody></table>
+{trs}
 <footer>Sources: public <code>/api/health</code> endpoints from VPS3; on VPS1 the Traefik access log, container logs
 (since each container started), systemd journals, <code>tester-watch --redact</code> and the Dokploy wrapper's app list.
 Counts and timestamps only: no message text, ids or keys. Colours: red = down or nobody is told; amber = up but
-something needs a look; grey = not deployed. Full write-up: docs/health/INVENTORY.md (EPIC-6 S1).
-Raw values: <a href="probe.json">probe.json</a>.</footer></main>
+something needs a look; grey = not deployed. Write-up: docs/health/INVENTORY.md (EPIC-6 S1), aggregator EPIC-6 S2.
+The same values as one JSON document: <a href="probe.json">probe.json</a>.</footer></main>
 <script>const t=Date.parse("{probed}");function u(){{const m=Math.round((Date.now()-t)/60000);
 if(location.hostname==="health.zenod.dev"){{const s=document.getElementById("signin");if(s)s.remove()}}
 document.getElementById("age").textContent=" ("+m+" min ago)";if(m>15)document.getElementById("stale").style.display="block"}}u();setInterval(u,30000)</script>
@@ -653,21 +466,32 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--remote", action="store_true")
     ap.add_argument("--out")
-    ap.add_argument("--from-json")
+    ap.add_argument("--from-json", help="a saved raw probe (or a v1 document's raw); no state unless --state")
+    ap.add_argument("--state", help="history file (default ~/.local/state/zenod-health/history.json)")
     a = ap.parse_args()
     if a.remote:
         print(json.dumps(remote()))
         return
-    d = json.load(open(a.from_json)) if a.from_json else collect()
+    import aggregate
+    if a.from_json:
+        raw = json.load(open(a.from_json))
+        raw = raw.get("raw", raw)
+    else:
+        raw = collect()
+    state_path = a.state or (None if a.from_json else aggregate.STATE)
+    state = aggregate.load_state(state_path) if state_path else aggregate.load_state("/nonexistent")
+    doc, state = aggregate.aggregate(raw, state)
+    if state_path:
+        aggregate.save_state(state, state_path)
     out = os.path.expanduser(a.out or ".")
     os.makedirs(out, exist_ok=True)
     link = None if a.from_json else signin_link()
-    for name, body in (("probe.json", json.dumps(d, indent=1)), ("index.html", page(d, link))):
+    for name, body in (("probe.json", json.dumps(doc, indent=1)), ("index.html", page(doc, link))):
         tmp = os.path.join(out, name + ".tmp")
         with open(tmp, "w") as f:
             f.write(body)
         os.replace(tmp, os.path.join(out, name))
-    print(json.dumps({r["name"]: r["colour"] for r in rows(d)}))
+    print(json.dumps({c["id"]: c["status"] for c in doc["components"]}))
 
 
 if __name__ == "__main__":
