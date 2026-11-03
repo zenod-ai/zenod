@@ -1,0 +1,11 @@
+[Unit]
+Description=EPIC-6 S1 live health inventory page (tailnet, port 8742)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/t3agent/github/epicspine-skill/skill/epic-spine/scripts/artifact_host.py --serve /home/t3agent/artifacts/epic6-s1-health --port 8742
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -4,6 +4,34 @@ Parent: [EPIC-6 health dashboard](../EPIC-6-HEALTH-DASHBOARD.md) (ledger row S1)
 
 Recorded decision respected: [EPIC-6-A1](../EPIC-6-HEALTH-DASHBOARD.md) (Jordi, 2026-10-25) — the health page is internal-only via Tailscale. So this inventory lists what is reachable **from the tailnet**, which is a superset of what is reachable from the internet.
 
+## 0. Refresh 2026-11-03 (re-probe, read-only) and the live page
+
+**Live page (tailnet): http://vps3.taild81fbb.ts.net:8742/** — one row per component below, re-probed every 5 minutes by
+a VPS3 user timer (`epic6-s1-health-probe.timer`, served by `epic6-s1-health-serve.service` via the EpicSpine
+`artifact_host.py`, tailnet bind only). Source: [s1-live/probe.py](s1-live/probe.py), units in [s1-live/units/](s1-live/units/),
+screenshot [s1-live-2026-11-03.png](s1-live-2026-11-03.png). Re-probed 2026-11-03 04:40–04:50 UTC from VPS3 and VPS1.
+
+What changed since 2026-10-25 (the sections below are updated where marked *2026-11-03*):
+
+| Fact | 2026-10-25 | 2026-11-03 |
+|---|---|---|
+| Cloud app image / health sha | `sha-a544887` | `sha-5aa4fe4` (= newest successful *Publish image* run on `main`, #1488); container up since 2026-11-02 21:22 UTC, 0 restarts |
+| Phylax image / health sha | `@sha256:13c5710c…`, `dc24572` | `@sha256:c48fd494…`, `1707c9f`; up since 2026-11-02 02:25 UTC; WhatsApp `connected`, 2 short drops in 24 h (`428`, `503`), each reconnected in ~2 s |
+| How agents read prod | `docker exec` + `node:sqlite` readOnly | **no longer possible**: t3agent's sudo on VPS1 is narrowed (root-narrow, EPIC-7 T3.3) to `docker ps/inspect/logs --timestamps`, `journalctl`, `systemctl status/show`, the Traefik access log, `tester-watch --redact` and the `dokploy` wrapper. The live page uses only those. Direct SQLite reads are an S2 design input (§6) |
+| Ledger activity and errors | per-table queries | from `tester-watch --all --json --redact --no-stripe` (aggregated over 3 accounts): last capture 2026-11-03 04:45 UTC, 190 captures / 15 “Saved” replies in 7 days, 0 failed captures, 0 cap hits, 0 failed billing notices |
+| Zenod↔Phylax bindings | 3 `active`, 1 `unavailable` | 3 `active` (finding §9.3 resolved) |
+| Backups | restore proof 2026-08-30, no schedule | **`zenod-readiness-keeper`** (system timer, daily 04:30 CET; monthly restore drill + Stripe profile check) last drilled 2026-11-01 08:06 UTC; proof valid to 2026-12-02. **`zenod-readiness-watch`** (hourly) says `ready=True`, no issues; nearest expiry is the Drive OAuth proof, 2026-11-28 (renewed by Jordi in Google Cloud, not automatic) |
+| Deploy path | GitHub `deploy` job red (Dokploy 404) | `deploy` job is a health-sha check (#1435); VPS1 `infra-vps-deploy-poller` rolls prod (last roll 2026-11-02 21:22 UTC `bb9eaec → 5aa4fe4`, `live sha`), now `noop up to date` every 2 min |
+| Watchdog | 141 undelivered in 24 h | **unchanged: 144 alerts in 24 h, 0 delivered**, still probing `c1`, `z2` and `z-jordi-…` hosts (S5) |
+| Testers | — | `tester-watch` (EPIC-7 T6): 1 tester code issued, 0 signed up, 0 alerts |
+| Memory search index (EPIC-9) | — | built in-process on demand: last load 2026-11-03 03:23 UTC, 753 items in 52.6 ms |
+| Host | — | root disk 53 %, `infra-vps-disk-guard` OK every 5 min; observatory `:8090` 200; `cloudflared-vps1-sites` active |
+| Other agents on the host (not rows) | `zenod-outbound`, `x-mcp-*` running | same, unchanged since 2026-10-23/24; agent-runner apps still all `idle` |
+
+Live colours at the refresh: 10 green (site, cloud app, database/ledger, Phylax, memory index, deploy path, readiness,
+tester watch, ingress, host), 1 red (watchdog alerts reach nobody), 1 grey (agent runner not deployed). The §8 day-one
+picture is superseded by the live page.
+
 ## 1. What is reachable from the tailnet (the page's vantage point)
 
 | Reach | How | Notes |
@@ -22,10 +50,10 @@ Everything below runs on **one host, VPS1 (Hetzner)**, as Docker Swarm services 
 
 | # | Component (E6-1 row) | What runs it today | Image / pin | State 2026-10-25 |
 |---|---|---|---|---|
-| 1 | Marketing site `zenod.dev` | **Same container as the cloud app**: Dokploy app `zenod-mt` (`2dkayH_eAur427leH64MT`), service `zenod-mt-fxpzoo`, domains `zenod.dev`, `cloud.zenod.dev`, `mind.zenod.dev` → port 8080; the static site is chosen by Host header (`packages/server/src/staticSurfaces.ts`, `ZENOD_PUBLIC_SITE_HOST`) | `ghcr.io/zenod-ai/zenod:sha-a544887` | up; `GET /` 200 in 0.16 s |
-| 2 | Cloud app `cloud.zenod.dev` | same `zenod-mt` container (multi-tenant Zenod, Stripe live, public Google/GitHub signup and paid signup on) | same | `/api/health` ok, sha `a544887a6ca1…` |
+| 1 | Marketing site `zenod.dev` | **Same container as the cloud app**: Dokploy app `zenod-mt` (`2dkayH_eAur427leH64MT`), service `zenod-mt-fxpzoo`, domains `zenod.dev`, `cloud.zenod.dev`, `mind.zenod.dev` → port 8080; the static site is chosen by Host header (`packages/server/src/staticSurfaces.ts`, `ZENOD_PUBLIC_SITE_HOST`) | `ghcr.io/zenod-ai/zenod:sha-a544887` (*2026-11-03*: `sha-5aa4fe4`) | up; `GET /` 200 in 0.16 s |
+| 2 | Cloud app `cloud.zenod.dev` | same `zenod-mt` container (multi-tenant Zenod, Stripe live, public Google/GitHub signup and paid signup on) | same | `/api/health` ok, sha `a544887a6ca1…` (*2026-11-03*: `5aa4fe4`) |
 | 3 | Database incl. credits/usage ledger | SQLite on volumes `zenod-mt-data` (`/data` in `zenod-mt`, 61 tenant dirs, ~1.7 GB) and `phylax-data` (`/data` in `phylax`, ~2.9 GB). Ledgers listed in §3.3 | n/a | files present and written (see §3.3) |
-| 4 | WhatsApp relay | **Phylax** (Dokploy app `phylax`, `urbFsgl6eImbQ4MTIZl5N`, service `app-index-back-end-panel-6zm3qg`, domain `phylax.zenod.dev`; instance `phylax-for-zenod`, provider mode `self_host_dev` = a linked WhatsApp session stored in `/data/whatsapp/session`). Phylax also does the voice transcription and the allowance (credits) ledger for WhatsApp | `ghcr.io/zenod-ai/phylax@sha256:13c5710c…` (health sha `dc24572`, the 2026-10-22 Node 22.23.4 rebuild of `ec3968c`) | up since 2026-10-23 17:37; WhatsApp `connected`, reconnect generation 11, last connect 2026-10-24 05:05 |
+| 4 | WhatsApp relay | **Phylax** (Dokploy app `phylax`, `urbFsgl6eImbQ4MTIZl5N`, service `app-index-back-end-panel-6zm3qg`, domain `phylax.zenod.dev`; instance `phylax-for-zenod`, provider mode `self_host_dev` = a linked WhatsApp session stored in `/data/whatsapp/session`). Phylax also does the voice transcription and the allowance (credits) ledger for WhatsApp | `ghcr.io/zenod-ai/phylax@sha256:13c5710c…` (health sha `dc24572`, the 2026-10-22 Node 22.23.4 rebuild of `ec3968c`; *2026-11-03*: `@sha256:c48fd494…`, sha `1707c9f`) | up since 2026-10-23 17:37; WhatsApp `connected`, reconnect generation 11, last connect 2026-10-24 05:05 |
 | 5a | Agent runner | **Not deployed.** `zenod-agent-runner`, Epaminon, Archus compose apps are stopped/idle in Dokploy (`epaminon`, `callisthenes`, `ring`, `herald`, `zenod-cloud-test` all `idle`); volume `zenod-agent-work` (7.9 GB) is unattached. `execution_tickets`, `journeys`, `ingest_jobs` are empty in every tenant. | n/a | nothing to probe; row should be grey "not deployed", not red |
 | 5b | Agents inside the app | Zenod's in-process job queue + LLM calls (`tasks.sqlite` `task_jobs`, per-tenant `usage.sqlite` `llm_usage`) | part of `zenod-mt` | last job done 2026-10-24 06:57 UTC |
 | 5c | Phylax | see row 4 | | |
@@ -65,7 +93,7 @@ The "database" is a set of SQLite files; there is no server to ping. Signals are
 | Accounts | `/data/customer-accounts.json` (`zenod-mt-data`) | JSON | modified 2026-10-25 03:49 | file mtime only |
 
 - **Health signal (proposal):** all of the above open read-only and `PRAGMA quick_check`-style reads succeed; plus volume free space (host root and the volume's filesystem) and file growth for the 353 MB Phylax meter.
-- **Backups:** the recovery proof `ZENOD_BACKUP_RESTORE_VERIFIED_AT` in the app env is 2026-08-30; no timer or cron on VPS1 references `scripts/zenod-volume-backup.sh`; the newest archive under `/var/backups/zenod` (now a symlink to the HC volume) is 2026-09-16, plus a 2026-10-12 manifest. A "last verified backup age" row would be **red from day one**; that is a real finding for ZAL, not a dashboard bug.
+- **Backups:** the recovery proof `ZENOD_BACKUP_RESTORE_VERIFIED_AT` in the app env is 2026-08-30; no timer or cron on VPS1 references `scripts/zenod-volume-backup.sh`; the newest archive under `/var/backups/zenod` (now a symlink to the HC volume) is 2026-09-16, plus a 2026-10-12 manifest. A "last verified backup age" row would be **red from day one**; that is a real finding for ZAL, not a dashboard bug. *2026-11-03: resolved by `zenod-readiness-keeper` (monthly restore drill, last 2026-11-01, proof valid to 2026-12-02; §0).*
 - **Last error:** `llm_usage.error_code`, `task_jobs.error`, `zenod_phylax_bindings.last_error_code`, `phylax_paid_work.pause_reason`.
 
 ### 3.4 WhatsApp relay — Phylax (row 4)
@@ -87,11 +115,11 @@ The "database" is a set of SQLite files; there is no server to ping. Signals are
 
 ### 4.1 Deploy path (what actually rolls prod today)
 
-The GitHub `deploy` job of *Publish image* fails (Dokploy API 404, e.g. run 40139987176: `publish` success, `deploy` failure) and is owned by ZAL A0. Prod is in fact rolled by a **VPS1 user timer**: `infra-vps-deploy-poller.timer` every 2 min (`infra-vps` `hosts/vps1/deploy-poller.json`: target `zenod-mt`, workflow `publish.yml`, branch `main`, publish job `publish`, verify `https://cloud.zenod.dev/api/health`). Its last runs say `deploy-poller zenod-mt: noop up to date`. Signal: `journalctl --user -u infra-vps-deploy-poller` newest line + Dokploy `application.one` deployment `status`/`title` (`Zenod production roll -> …:sha-<short>`). Phylax is never auto-rolled (AGENTS.md boundary).
+The GitHub `deploy` job of *Publish image* fails (Dokploy API 404, e.g. run 40139987176: `publish` success, `deploy` failure) and is owned by ZAL A0. *2026-11-03: fixed: `deploy` is now a health-sha check (#1435); the poller is the only roller.* Prod is in fact rolled by a **VPS1 user timer**: `infra-vps-deploy-poller.timer` every 2 min (`infra-vps` `hosts/vps1/deploy-poller.json`: target `zenod-mt`, workflow `publish.yml`, branch `main`, publish job `publish`, verify `https://cloud.zenod.dev/api/health`). Its last runs say `deploy-poller zenod-mt: noop up to date`. Signal: `journalctl --user -u infra-vps-deploy-poller` newest line + Dokploy `application.one` deployment `status`/`title` (`Zenod production roll -> …:sha-<short>`). Phylax is never auto-rolled (AGENTS.md boundary).
 
 ### 4.2 Existing watchdog — pages into the void
 
-`zenod-watchdog.timer` (host systemd, every 2 min, outside the stack; source `scripts/watchdog/zenod-watchdog.sh`) is still running on VPS1 but is configured for hosts that no longer exist: health URLs `c1.zenod.dev`, `z2.zenod.dev`, a `z-jordi-…` tenant host (all 404 now), notify target `https://c1.zenod.dev` (dead), `ZENOD_WATCHDOG_FALLBACK_URL` empty. In the last 24 h the journal shows **141 `delivery=no` and 0 delivered**: it "alerts" every 30 min and nobody hears it. Its docker/disk/crash-loop checks are sound and worth keeping. Fixing or replacing it is S5's job (§5); it also means any current "no alert" silence is not evidence of health.
+`zenod-watchdog.timer` (host systemd, every 2 min, outside the stack; source `scripts/watchdog/zenod-watchdog.sh`) is still running on VPS1 but is configured for hosts that no longer exist: health URLs `c1.zenod.dev`, `z2.zenod.dev`, a `z-jordi-…` tenant host (all 404 now), notify target `https://c1.zenod.dev` (dead), `ZENOD_WATCHDOG_FALLBACK_URL` empty. In the last 24 h the journal shows **141 `delivery=no` and 0 delivered** (*2026-11-03*: 144 and 0, unchanged): it "alerts" every 30 min and nobody hears it. Its docker/disk/crash-loop checks are sound and worth keeping. Fixing or replacing it is S5's job (§5); it also means any current "no alert" silence is not evidence of health.
 
 ### 4.3 Observatory
 
@@ -111,6 +139,7 @@ Repoint rather than rebuild: S5 should repoint `zenod-watchdog.sh` (its two-tier
 ## 6. Constraints for S2/S3 (aggregator and smoke battery)
 
 - **Cheap, safe signals first:** three public endpoints (§3.1, 3.2, 3.4) need no credentials and cover process liveness, deployed sha, WhatsApp transport and worker heartbeat.
+- *2026-11-03:* agents can no longer `docker exec` into prod (narrowed sudo, §0). The read-only sources that still work and that the live page uses: `tester-watch --redact` (ledger aggregates), container logs with `--timestamps` (job, index, WhatsApp inbound/drop lines), the Traefik access log (last real request and last 5xx per host), journals of the timers. S2 can start from `s1-live/probe.py`.
 - **Activity and error signals live inside SQLite on the VPS1 volumes.** A Dokploy app on the same host can reach them only by mounting `zenod-mt-data`/`phylax-data`, and a read-only mount of a live **WAL** database may not open (SQLite needs a writable `-shm`; not tested here, S2 must test before relying on it). The alternatives are a small bearer-authed, tailnet-only status endpoint inside each app returning counts and timestamps only (no message text), or `docker exec` from a host timer that writes a JSON file the page reads. S2 chooses; this page's recommendation is the endpoint (no volume sharing, no docker socket), with the host timer as the fast fallback.
 - **No user data:** every query above needs only `max(ts)`, `count(*)` and status/error codes; never select `body_text`, `transcript_text`, `input_json` or `result_json`.
 - **Docker stdout is not a history** (reset on deploy); the page should persist its own last-error record per component.
@@ -146,7 +175,7 @@ CI (`.github/workflows/ci.yml`, Node 22): `npm ci`, `npm run build`, Docker buil
 ## 9. Findings to route (none changes EPIC-6's goal)
 
 1. Watchdog delivers nothing (§4.2) → S5 (fix first; also an immediate gap for ZAL, one-line note recorded in the EPIC-6 row).
-2. No scheduled Zenod volume backup; restore proof dated 2026-08-30 (§3.3) → ZAL/A0 or a backup ticket; the page will show it.
-3. One Zenod↔Phylax binding `unavailable` (§3.2) → ZAL A0 to confirm real vs dormant.
-4. Auto-deploy: GitHub `deploy` job red while the VPS1 poller rolls prod (§4.1) → ZAL A0 (already its scope).
+2. No scheduled Zenod volume backup; restore proof dated 2026-08-30 (§3.3) → ZAL/A0 or a backup ticket; the page will show it. *2026-11-03: resolved by the readiness keeper's monthly drill.*
+3. One Zenod↔Phylax binding `unavailable` (§3.2) → ZAL A0 to confirm real vs dormant. *2026-11-03: gone, 3 of 3 active.*
+4. Auto-deploy: GitHub `deploy` job red while the VPS1 poller rolls prod (§4.1) → ZAL A0 (already its scope). *2026-11-03: resolved (#1435).*
 5. Phylax meter DB 353 MB despite `USAGE_RETENTION_DAYS=7` and 204k rows written every minute (§3.3) → growth watch; candidate row "volume headroom".
