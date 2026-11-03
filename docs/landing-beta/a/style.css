@@ -55,3 +55,4 @@ h2{font:400 clamp(2rem,4.6vw,3rem)/1.1 var(--serif);letter-spacing:-.02em;margin
  .diagram{width:auto;left:0;transform:none}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.d-dash{stroke-dasharray:7 7}
