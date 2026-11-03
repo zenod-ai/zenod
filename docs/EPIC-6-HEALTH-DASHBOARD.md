@@ -10,6 +10,8 @@ Additional root rationale: n/a
 Integration branch: main
 Integration policy: main-direct (repo `AGENTS.md` Deploy gate applies: gated code paths go via a self-merged PR; this spine and other docs push straight to `main`; root spine D34).
 
+Goal sentence: One page that shows whether Zenod is up.
+
 ## Goal
 
 Before testers arrive, anyone can see in one page whether the site, the database, the WhatsApp relay and the agents are alive, and when each last did real work.
@@ -51,7 +53,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| S1 | Ticket worker | run_ecb4e1a0 | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | active (needs evidence: the list exists only as a file on GitHub; it needs a page Jordi can open, then it comes back with the next step, building the health page; E48-S26 sort 2026-11-03) | none | `wt/e6-s1-inventory` | `main` | [docs/health/INVENTORY.md](health/INVENTORY.md) (probe 2026-10-25; S5 channel and findings inside) | 2026-10-25 | worker run_ecb4e1a0 builds an openable live inventory page + review card (2026-11-03) |
+| S1 | Ticket worker | run_ecb4e1a0 | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | review | none | `wt/e6-s1-inventory` | `main` | [live inventory page](http://vps3.taild81fbb.ts.net:8742/) (tailnet, refreshed every 5 min; 12 components, 10 green, 1 grey, 1 red: host watchdog alerts go nowhere, S5), [card](cards/S1.md), [evidence](evidence/epic6-s1-2026-11-03.md), refreshed [INVENTORY](health/INVENTORY.md) 8d67cf3 | 2026-11-03 | Jordi accepts S1 on its card; then S2/S3 are stamped ready |
 | S2 | Ticket worker | unassigned | Health aggregator: one read-only JSON endpoint/service returning per-component status, last activity, last error (no secrets) | draft | S1 | none | `main` | none | 2026-10-24 | after S1 |
 | S3 | Ticket worker | unassigned | Prod smoke battery: one `npm run` command, read-only, scheduled every 15 min, result stored for the page (E6-2) | draft | S1 | none | `main` | none | 2026-10-24 | after S1 |
 | S4 | Ticket worker | unassigned | `health.zenod.dev` (internal, tailnet-only per EPIC-6-A1; no public DNS record, no public exposure): page + Dokploy deploy (E6-1) | draft | S2, S3 | none | `main` | none | 2026-10-24 | after S2/S3 |
