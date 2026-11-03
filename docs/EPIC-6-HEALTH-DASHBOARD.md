@@ -31,14 +31,14 @@ Before testers arrive, anyone can see in one page whether the site, the database
 
 Owner: Delivery manager
 Status: review
-Last attempted: 2026-11-03 S4 and S6 integrated (run_4d8c2774); S1 it.1–5, S2, S3, S5 before that
+Last attempted: 2026-11-03 S4 and S6 card evidence labels cut to 6 words for the review gate (run_84b3b676) ; S4 and S6 integrated (run_4d8c2774) ; S1 it.1–5, S2, S3, S5 before that
 Result: health.zenod.dev shows 12 parts with live status, 7-day timelines, smoke results every 15 min, last errors kept across redeploys, and red reaches Jordi's HQ thread; proven red then green 2026-11-03
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
 Waiting on: Jordi accepts the page (E6-4) via the S6 card; S1, S3, S4, S5 cards in his review list
 Approved work: none
 Next action: Jordi's verdict; S2 joins review after its redeploy-survival check
 Source revision: uncommitted scaffold
-Verified at: 2026-11-03 (S6 proof page 200, probe.json read; memory-index row grey only because no index load has been logged since the last redeploy)
+Verified at: 2026-11-03 (S4 and S6 evidence link 200 again; S6 proof page 200, probe.json read; memory-index row grey only because no index load has been logged since the last redeploy)
 
 ## Non-Goals
 
