@@ -39,13 +39,13 @@ A real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, and is
 Status: active
 Phase: A0 re-check done and proposed done 2026-10-25 (worker run_f010b4a9); A1–A5 not started
 Last verified: 2026-10-25
-Last attempted: 2026-10-25 A0 worker run_f010b4a9: re-checked prod, fixed the push-to-main deploy check ([#1435](https://github.com/zenod-ai/zenod/pull/1435)); before: 2026-10-25 Epic Spine health wake (run_bad0b5fb) dispatched A0 as worker run_f010b4a9; EPIC-6 answered internal-only (EPIC-6-A1); earlier: revived this spine (history moved, A0–A5 ledger, tidy of stale spines: [TIDY-2026-10-24](TIDY-2026-10-24.md))
-Result: prod up on today's infra (health sha `ae3e77a`, signup start, Phylax WhatsApp connected, console shell served); push-to-main rolls prod again (run 40160156776 green, live sha = pushed sha after 93 s). Not exercised: the authenticated console and a live WhatsApp round trip (no customer session without Jordi's Google login), which A1's voice test covers.
+Last attempted: 2026-11-03 roll-up from children — [EPIC-7](EPIC-7-REAL-USER-TEST.md) (active): everything agents can build for the 5-tester test is live (checkout, caps, tester codes, wording, tester-watch, rotated keys); the rehearsal waits on one Google sign-in (E7-A15) and the leaked-key rolls on one key page (E7-A14). [EPIC-6](EPIC-6-HEALTH-DASHBOARD.md) (active): S1 inventory in review since 2026-10-25; S2–S6 wait for Jordi to accept S1. A0 re-check proposed done 2026-10-25; A1 voice test and A5 live billing not started
+Result: production is up (health ok on 5aa4fe4, 2026-11-03) and ready for testers apart from the rehearsal; no tester invited yet; live billing never performed
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
-Waiting on: nobody. A1 (Jordi's voice test) is asked only when it is the next step.
-Next action: the real-user test path (checkout back on, caps, tester codes, rehearsal, 5 invites) lives in [EPIC-7](EPIC-7-REAL-USER-TEST.md), waiting for Jordi to stamp it ready; A0 accept and A1 voice test as before (EPIC-7 T7 covers A0's console check).
-Verified at: 2026-10-25 (health, Dokploy, Phylax health and workflow run read live)
+Waiting on: Jordi, through EPIC-7: E7-A15 (one sign-in) and E7-A14 (key page); EPIC-6 waits on his S1 review
+Next action: EPIC-7 T7 rehearsal once Jordi signs in, then T8 go/no-go and the five invites
+Verified at: 2026-11-03 (child Current States read; live health 5aa4fe4)
 
 ## Issue Ledger
 
