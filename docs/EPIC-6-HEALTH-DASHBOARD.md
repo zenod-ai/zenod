@@ -34,7 +34,7 @@ Status: active
 Last attempted: 2026-11-03 roll-up from the ledger — S1 (review): the inventory of Zenod's 12 parts is a live page at https://health.zenod.dev behind a sign-in (tailnet copy http://vps3.taild81fbb.ts.net:8742/), refreshed every 5 min, on Jordi's request; S2–S6 (draft): aggregator, smoke battery, page polish and deploy, alert to Jordi, red-then-green proof, all waiting for Jordi to accept S1 and stamp the next steps
 Result: Jordi can already see whether Zenod is up at health.zenod.dev: 10 parts green, the agent runner grey (not deployed), and the host watchdog red because its alerts still go to retired servers (S5 fixes that)
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
-Waiting on: Jordi, ask E6-A2 (stamp S2, S3, S5 ready)
+Waiting on: nobody
 Approved work: none
 Next action: on E6-A2, S5 first (the watchdog's alerts reach nobody), then S2 aggregator and S3 smoke battery, then S4 wiring and S6 red-then-green proof
 Source revision: uncommitted scaffold
@@ -62,7 +62,7 @@ Steps: each is independently testable and closes only with evidence.
 
 ## Waiting on
 
-- [ask E6-A2: approve @Jordi since 2026-11-03 row S5] Build the rest of the health page: fix the alarm first, then the aggregator and the smoke tests? — context: you accepted the live list at health.zenod.dev; the next steps are drafts and only you ready them — impact: S5 makes the red alarm reach you (today its warnings go to retired servers, so nobody hears them); S2 and S3 make each row a real check every 15 minutes; S4 and S6 then wire and prove it — risk: low, all read-only checks plus one alert channel; rollback: switch the alert off — recommend: yes, ready S5, S2 and S3 now, S5 first — why Jordi: only you ready rows — details: https://health.zenod.dev
+- [answered E6-A2 2026-11-03 @Jordi] Build the rest of the health page: fix the alarm first, then the aggregator and the smoke tests? — context: you accepted the live list at health.zenod.dev; the next steps are drafts and only you ready them — impact: S5 makes the red alarm reach you (today its warnings go to retired servers, so nobody hears them); S2 and S3 make each row a real check every 15 minutes; S4 and S6 then wire and prove it — risk: low, all read-only checks plus one alert channel; rollback: switch the alert off — recommend: yes, ready S5, S2 and S3 now, S5 first — why Jordi: only you ready rows — details: https://health.zenod.dev — answer: APPROVED
 - [answered EPIC-6-A1 2026-10-25 @Jordi · done 2026-10-25 f9e26a3] Should `health.zenod.dev` be public? — answer: no, this is only via tailscale for us, or if it's public like zenod.dev we should then password it separately, but goal now is internal only — acted on: S4 is tailnet-only (no public DNS/exposure); a public page would need its own password and its own ask — unblocks: S4
 
 ## Decisions
