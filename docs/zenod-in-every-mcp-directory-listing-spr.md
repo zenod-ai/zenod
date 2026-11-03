@@ -84,3 +84,17 @@ None yet: one line each, `L-<n> | applies when | rule | why | confirmed <date>` 
 | Spine ID | Relationship | Spine | Purpose | Status | Health / Blocker | Latest Evidence | Last Rolled Up | Next Action |
 |---|---|---|---|---|---|---|---|---|
 | webmcp-on-zenod-dev-agents-in-chrome-can-read-the-offer-and-start-sign-up | child | [EPIC-11: WebMCP on zenod.dev: agents in Chrome can read the offer and start sign-up](EPIC-11-WEBMCP-ON-ZENOD-DEV.md) | makes zenod.dev itself callable by browser agents, one more place agents find Zenod | draft | none | none | 2026-11-02 | fill Goal, Serves and Done means |
+
+## Plain names
+
+The card's tree names a task by these (E48-S26, agent_team docs/review-cards.md). Plain words only.
+
+- P1: The plan was made: 15 directories were checked.
+- E10-R1: Customers see only the memory tools
+- E10-R2: the logo and the connect page
+- E10-R3: the official MCP registry
+- E10-R4: Smithery, Glama and other lists you add yourself to
+- E10-R5: the Anthropic connectors directory
+- E10-R6: the ChatGPT directory
+- E10-R7: a monthly check that people find Zenod
+- E10-R8: more listings once the registry has us
