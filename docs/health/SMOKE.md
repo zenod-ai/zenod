@@ -1,6 +1,7 @@
 # EPIC-6 S3: prod smoke battery
 
 Parent: [EPIC-6 health dashboard](../EPIC-6-HEALTH-DASHBOARD.md) (ledger row S3, Done means E6-2). Inputs: [INVENTORY](INVENTORY.md) §6–§7.
+Evidence: [epic6-s3-2026-11-03](../evidence/epic6-s3-2026-11-03.md) · review card [S3](../cards/S3.md).
 
 ```
 npm run smoke:prod                                   # all checks, a table, exit 1 on any fail
@@ -36,7 +37,7 @@ Dokploy, no env (root L-5). `scripts/exec-smoke.mjs` writes to prod and stays ou
 | phylax.whatsapp | phylax | WhatsApp `connected`, receive path `ready` |
 | testers.check | tester_watch | `tester-watch --check` exit 0, `OK …` |
 | deploy.poller | deploy | `infra-vps-deploy-poller` logged a zenod-mt run in 10 min, no error |
-| watchdog.timer | watchdog | `zenod-watchdog.timer` active (delivery is S5's alert proof) |
+| watchdog.timer | watchdog | S5 user timer `zenod-health-watchdog` (or the old root `zenod-watchdog`) active; delivery is S5's proof |
 | ingress.tunnel | ingress | `cloudflared-vps1-sites.service` active |
 | host.disk | host | VPS1 root disk < 85 % |
 | host.observatory | host | tailnet `:8090` 200 |

@@ -198,8 +198,15 @@ export function checks() {
     },
     {
       id: "watchdog.timer", component: "watchdog", title: "Watchdog timer running", kind: "remote",
-      cmd: "systemctl is-active zenod-watchdog.timer",
-      judge: (r) => ((r.stdout || "").trim() === "active" ? pass("timer active") : fail(`timer ${(r.stdout || "").trim() || `ssh exit ${r.code}`}`)),
+      // S5 moved the watchdog to the user timer zenod-health-watchdog; the root zenod-watchdog is being retired.
+      cmd: "echo user=$(systemctl --user is-active zenod-health-watchdog.timer) root=$(systemctl is-active zenod-watchdog.timer)",
+      judge: (r) => {
+        const m = /user=(\S*) root=(\S*)/.exec(r.stdout || "");
+        if (!m) return fail(`unreadable${r.code ? `, ssh exit ${r.code}` : ""}`);
+        if (m[1] === "active") return pass("zenod-health-watchdog timer active");
+        if (m[2] === "active") return pass("old root zenod-watchdog timer active");
+        return fail(`no watchdog timer active (user ${m[1] || "?"}, root ${m[2] || "?"})`);
+      },
     },
     {
       id: "ingress.tunnel", component: "ingress", title: "Cloudflare tunnel service active", kind: "remote",
