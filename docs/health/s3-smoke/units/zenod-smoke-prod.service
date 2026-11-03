@@ -1,0 +1,12 @@
+[Unit]
+Description=EPIC-6 S3 read-only prod smoke battery (npm run smoke:prod), result for health.zenod.dev
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Same script as `npm run smoke:prod`, installed from main (scripts/smoke-prod.mjs); exits 1 when any check fails.
+ExecStart=/usr/bin/node %h/.local/lib/zenod-smoke/smoke-prod.mjs --out %h/.local/share/zenod-health/smoke --keep 96
+# A red run is a result, not a unit failure: still refresh the page so it shows the fail within a minute.
+SuccessExitStatus=1
+ExecStartPost=/usr/bin/systemctl --user start --no-block epic6-s1-health-probe.service
+TimeoutStartSec=300
