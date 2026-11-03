@@ -34,9 +34,9 @@ Status: active
 Last attempted: 2026-11-03 roll-up from the ledger — S1 (review): the inventory of Zenod's 12 parts is a live page at https://health.zenod.dev behind a sign-in (tailnet copy http://vps3.taild81fbb.ts.net:8742/), refreshed every 5 min, on Jordi's request; S2–S6 (draft): aggregator, smoke battery, page polish and deploy, alert to Jordi, red-then-green proof, all waiting for Jordi to accept S1 and stamp the next steps
 Result: Jordi can already see whether Zenod is up at health.zenod.dev: 10 parts green, the agent runner grey (not deployed), and the host watchdog red because its alerts still go to retired servers (S5 fixes that)
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
-Waiting on: Jordi reviews the S1 card (in his review list); no coded ask
+Waiting on: Jordi, ask E6-A2 (stamp S2, S3, S5 ready)
 Approved work: none
-Next action: on Jordi's accept of S1, he stamps S2 and S3 ready; S5 (repoint the watchdog alerts) is the most useful next fix
+Next action: on E6-A2, S5 first (the watchdog's alerts reach nobody), then S2 aggregator and S3 smoke battery, then S4 wiring and S6 red-then-green proof
 Source revision: uncommitted scaffold
 Verified at: 2026-11-03 (health.zenod.dev answers 401 without sign-in; tailnet page 200 with fresh probes; ledger read)
 
@@ -53,15 +53,16 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| S1 | Ticket worker | run_7205d65a | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | done (approved by Jordi 2026-11-03) | none | `wt/e6-s1-inventory` | `main` | [https://health.zenod.dev](https://health.zenod.dev) (Jordi sets his own password, saved by his Bitwarden, only a hash stored; session renews while used), [card](cards/S1.md), [evidence](evidence/epic6-s1-it4-2026-11-03.md); tailnet page http://vps3.taild81fbb.ts.net:8742/ | 2026-11-03 | Jordi accepts S1 on its card; then S2/S3 are stamped ready |
+| S1 | Ticket worker | run_7205d65a | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | done | none | `wt/e6-s1-inventory` | `main` | [https://health.zenod.dev](https://health.zenod.dev) (Jordi sets his own password, saved by his Bitwarden, only a hash stored; session renews while used), [card](cards/S1.md), [evidence](evidence/epic6-s1-it4-2026-11-03.md); tailnet page http://vps3.taild81fbb.ts.net:8742/ | 2026-11-03 | accepted by Jordi 2026-11-03 (review: step complete, cbd6a86) |
 | S2 | Ticket worker | unassigned | Health aggregator: one read-only JSON endpoint/service returning per-component status, last activity, last error (no secrets) | draft | S1 | none | `main` | none | 2026-10-24 | after S1 |
 | S3 | Ticket worker | unassigned | Prod smoke battery: one `npm run` command, read-only, scheduled every 15 min, result stored for the page (E6-2) | draft | S1 | none | `main` | none | 2026-10-24 | after S1 |
-| S4 | Ticket worker | unassigned | `health.zenod.dev` (internal, tailnet-only per EPIC-6-A1; no public DNS record, no public exposure): page + Dokploy deploy (E6-1) | draft | S2, S3 | none | `main` | none | 2026-10-24 | after S2/S3 |
+| S4 | Ticket worker | unassigned | health.zenod.dev: already live behind Jordi's own password since S1 (Jordi 2026-11-03 superseded tailnet-only EPIC-6-A1); what remains is to feed it from the S2 aggregator and S3 smoke results (E6-1) | draft | S2, S3 | none | `main` | none | 2026-10-24 | after S2/S3 |
 | S5 | Ticket worker | unassigned | Alert on red to Jordi (channel picked in S1, e.g. WhatsApp via Phylax or email) | draft | S2 | none | `main` | none | 2026-10-24 | after S2 |
 | S6 | Tester | unassigned + Jordi | Prove red then green on one component (E6-3); Jordi acceptance (E6-4) | draft | S4, S5 | none | prod | none | 2026-10-24 | last |
 
 ## Waiting on
 
+- [ask E6-A2: approve @Jordi since 2026-11-03 row S5] Build the rest of the health page: fix the alarm first, then the aggregator and the smoke tests? — context: you accepted the live list at health.zenod.dev; the next steps are drafts and only you ready them — impact: S5 makes the red alarm reach you (today its warnings go to retired servers, so nobody hears them); S2 and S3 make each row a real check every 15 minutes; S4 and S6 then wire and prove it — risk: low, all read-only checks plus one alert channel; rollback: switch the alert off — recommend: yes, ready S5, S2 and S3 now, S5 first — why Jordi: only you ready rows — details: https://health.zenod.dev
 - [answered EPIC-6-A1 2026-10-25 @Jordi · done 2026-10-25 f9e26a3] Should `health.zenod.dev` be public? — answer: no, this is only via tailscale for us, or if it's public like zenod.dev we should then password it separately, but goal now is internal only — acted on: S4 is tailnet-only (no public DNS/exposure); a public page would need its own password and its own ask — unblocks: S4
 
 ## Decisions
@@ -70,6 +71,7 @@ One line per decision; detail goes to a linked page.
 
 | Date | Outcome | Decision / Attempt | Durable Summary | Evidence | Revisit When |
 |---|---|---|---|---|---|
+| 2026-11-03 | accepted | Jordi accepted S1 (review: step complete) — the live list at health.zenod.dev behind his own password | S1 done; ask E6-A2 for S2/S3/S5 | cbd6a86 | — |
 | 2026-11-03 | accepted | Jordi on the S1 review: "that's awesome, can it be on health.zenod.dev? and be pwd protected, yeah?" — supersedes EPIC-6-A1 (tailnet-only): the page goes on health.zenod.dev behind a password | S1 iteration 2 | ac5c8ee | — |
 | 2026-10-24 | accepted | Created as a goal under ZAL | one node in the epic log | EPIC-ZENOD-ALPHA-LAUNCH.md | never |
 | 2026-10-25 | accepted | EPIC-6-A1 answered by Jordi: health page is internal-only via Tailscale; if it is ever made public (like zenod.dev) it gets its own password first | exposure of prod state stays inside the tailnet; S4 builds tailnet-only | this row, EPIC-6-A1 | a public page is wanted |
