@@ -536,7 +536,7 @@ def rows(d: dict) -> list[dict]:
         colour=col, signal=f"root disk {dpct}% used; observatory → {ob.get('status')}",
         activity=f"disk guard last ran {ago(dg.get('at'), ref)}" if dg else "disk guard silent in 30 min",
         error="none" if col == "green" else "disk or observatory", tests="infra-vps tests/test_disk_guard.py",
-        link="http://100.104.206.10:8090/")
+        link="https://health.alpha9.io/")
     return R
 
 
@@ -578,7 +578,7 @@ def page(d: dict) -> str:
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>
 <h1>Zenod health inventory, live</h1>
 <p class="sub">Every part of Zenod, where it runs, and what it says right now. Probed <b>{probed.replace('T', ' ').replace('Z', ' UTC')}</b>
-<span id="age"></span>, every 5 minutes, read-only. Tailnet only.</p>
+<span id="age"></span>, every 5 minutes, read-only. Behind a password at health.zenod.dev; also on the tailnet.</p>
 <div class="sum"><span class="pill">🟢 {counts['green']} green</span><span class="pill">🟠 {counts['amber']} amber</span>
 <span class="pill">🔴 {counts['red']} red</span><span class="pill">⚪ {counts['grey']} not deployed</span></div>
 <table><thead><tr><th></th><th>Component</th><th>Where it runs</th><th>Health signal, live</th><th>Last real activity</th>

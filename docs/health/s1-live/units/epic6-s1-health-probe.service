@@ -1,7 +1,9 @@
 [Unit]
-Description=EPIC-6 S1 live health inventory: read-only probe, rewrites the page
+Description=EPIC-6 S1 live health inventory: read-only probe, rewrites the page, publishes it to health.zenod.dev
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 /home/t3agent/.local/lib/epic6-s1-health/probe.py --out /home/t3agent/artifacts/epic6-s1-health
+# S1 it.2: copy the page to VPS1, where the Dokploy app zenod-health (gate.py) serves it behind a password
+ExecStartPost=/usr/bin/rsync -a --delay-updates --timeout=60 /home/t3agent/artifacts/epic6-s1-health/ hetzner_vps_1:.local/share/zenod-health/www/
 TimeoutStartSec=300
