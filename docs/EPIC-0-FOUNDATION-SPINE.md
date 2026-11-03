@@ -54,7 +54,7 @@ Phase: Zenod is ready for its first five real testers apart from a dress rehears
 Last attempted: 2026-11-03 roll-up from children (above). Before: 2026-11-02 roll-up of EPIC-7 and EPIC-9 work
 Result: Zenod runs in production and a new tester could sign up, get a free pass and be capped, but nobody outside the team has used it yet. Live `cloud.zenod.dev/api/health` ok on `5aa4fe4` (2026-11-03); live billing never performed.
 Waiting on: Jordi, most urgent first: E7-A15 sign in operations@alpha9.io once in the agents' browser (~1 min; unblocks T7, EPIC-11 and EPIC-10 R1); E7-A14 follow the one key page (~15–20 min); EPIC-9 verdict on its Outcome
-Monitoring: Rolled up EPIC-6 Current State (S1 live at health.zenod.dev, in review). Nothing ready: S2-S6 draft pending Jordi's S1 accept; EPIC-7 T7 waits on the sign-in l… · next check 2026-11-03T10:07:55.000Z
+Monitoring: Nothing changed: no worker running, no ready row. Waiting on Jordi: S1 card review, the T7 sign-in link (not used yet), E7-A14 key page, EPIC-9 verdict; E10-A1… · next check 2026-11-03T14:08:24.000Z
 Next action: once Jordi signs in (E7-A15), the agents run the T7 dress rehearsal, then T8 go/no-go and the five tester invites
 Verified at: 2026-11-03 (child Current States read from main; live health ok, sha 5aa4fe4)
 
