@@ -31,7 +31,7 @@ Before testers arrive, anyone can see in one page whether the site, the database
 
 Owner: Delivery manager
 Status: active
-Last attempted: 2026-11-03 roll-up from the ledger — S1 (review): the inventory of Zenod's 12 parts is a live page at https://health.zenod.dev behind a sign-in (tailnet copy http://vps3.taild81fbb.ts.net:8742/), refreshed every 5 min, on Jordi's request; S2–S6 (draft): aggregator, smoke battery, page polish and deploy, alert to Jordi, red-then-green proof, all waiting for Jordi to accept S1 and stamp the next steps
+Last attempted: 2026-11-03 wake run_91a8edfe: E6-A2 approved; dispatched S5 (run_e48fbc21), S2 (run_e1f220d2), S3 (run_53e90946); before: 2026-11-03 roll-up from the ledger — S1 (review): the inventory of Zenod's 12 parts is a live page at https://health.zenod.dev behind a sign-in (tailnet copy http://vps3.taild81fbb.ts.net:8742/), refr
 Result: Jordi can already see whether Zenod is up at health.zenod.dev: 10 parts green, the agent runner grey (not deployed), and the host watchdog red because its alerts still go to retired servers (S5 fixes that)
 Evidence: [S1 iteration 2](evidence/epic6-s1-it2-2026-11-03.md), [S1 card](cards/S1.md), [INVENTORY](health/INVENTORY.md) 8d67cf3
 Waiting on: nobody (E6-A2 approved)
@@ -54,10 +54,10 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | S1 | Ticket worker | run_7205d65a | Inventory: each component, where it runs on today's infra (post infra-vps cleanup), its health signal, the log/table that shows last real activity and last error; what test batteries exist (`npm test`, `acceptance:*`, `packages/server/test/health.test.ts`) | done | none | `wt/e6-s1-inventory` | `main` | [https://health.zenod.dev](https://health.zenod.dev) (Jordi sets his own password, saved by his Bitwarden, only a hash stored; session renews while used), [card](cards/S1.md), [evidence](evidence/epic6-s1-it4-2026-11-03.md); tailnet page http://vps3.taild81fbb.ts.net:8742/ | 2026-11-03 | accepted by Jordi 2026-11-03 (review: step complete, cbd6a86) |
-| S2 | Ticket worker | unassigned | Health aggregator: one read-only JSON endpoint/service returning per-component status, last activity, last error (no secrets) | ready | S1 | none | `main` | none | 2026-10-24 | after S1 |
-| S3 | Ticket worker | unassigned | Prod smoke battery: one `npm run` command, read-only, scheduled every 15 min, result stored for the page (E6-2) | ready | S1 | none | `main` | none | 2026-10-24 | after S1 |
+| S2 | Ticket worker | run_e1f220d2 | Health aggregator: one read-only JSON endpoint/service returning per-component status, last activity, last error (no secrets) | active | S1 | none | `main` | none | 2026-10-24 | after S1 |
+| S3 | Ticket worker | run_53e90946 | Prod smoke battery: one `npm run` command, read-only, scheduled every 15 min, result stored for the page (E6-2) | active | S1 | none | `main` | none | 2026-10-24 | after S1 |
 | S4 | Ticket worker | unassigned | health.zenod.dev: already live behind Jordi's own password since S1 (Jordi 2026-11-03 superseded tailnet-only EPIC-6-A1); what remains is to feed it from the S2 aggregator and S3 smoke results (E6-1) | draft | S2, S3 | none | `main` | none | 2026-10-24 | after S2/S3 |
-| S5 | Ticket worker | unassigned | Alert on red to Jordi (channel picked in S1, e.g. WhatsApp via Phylax or email) | ready | none (repoints the existing watchdog; later also reads S2) | none | `main` | none | 2026-10-24 | first: make red reach Jordi |
+| S5 | Ticket worker | run_e48fbc21 | Alert on red to Jordi (channel picked in S1, e.g. WhatsApp via Phylax or email) | active | none (repoints the existing watchdog; later also reads S2) | none | `main` | none | 2026-10-24 | first: make red reach Jordi |
 | S6 | Tester | unassigned + Jordi | Prove red then green on one component (E6-3); Jordi acceptance (E6-4) | draft | S4, S5 | none | prod | none | 2026-10-24 | last |
 
 ## Waiting on
