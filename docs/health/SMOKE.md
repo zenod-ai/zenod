@@ -1,6 +1,7 @@
 # EPIC-6 S3: prod smoke battery
 
 Parent: [EPIC-6 health dashboard](../EPIC-6-HEALTH-DASHBOARD.md) (ledger row S3, Done means E6-2). Inputs: [INVENTORY](INVENTORY.md) §6–§7.
+Evidence: [epic6-s3-2026-11-03](../evidence/epic6-s3-2026-11-03.md) · review card [S3](../cards/S3.md).
 
 ```
 npm run smoke:prod                                   # all checks, a table, exit 1 on any fail
