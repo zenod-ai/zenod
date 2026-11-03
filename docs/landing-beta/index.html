@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod landing, three directions</title><meta name="robots" content="noindex">
+<style>
+:root{--bg:#f5f4ef;--ink:#151815;--muted:#555b56;--accent:#1f4d3a;--sans:system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html,body{overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.0625rem/1.6 var(--sans)}
+a{color:inherit}img{display:block;max-width:100%;height:auto}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:64rem;margin:0 auto;padding:0 1.5rem}
+h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.05;letter-spacing:-.03em;margin:4rem 0 1rem}
+.intro{max-width:40rem;color:var(--muted);margin:0 0 4rem}
+.dir{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:clamp(1.5rem,4vw,3rem);align-items:start;margin-bottom:5rem}
+.dir img{width:100%;border-radius:4px;border:1px solid #d8d6cc}
+.dir h2{font-size:1.75rem;letter-spacing:-.02em;margin:0 0 .5rem}
+.dir p{margin:0 0 .9rem}.dir .tag{color:var(--muted)}
+.btn{display:inline-block;padding:.7rem 1.2rem;border-radius:999px;background:var(--accent);color:#fff;text-decoration:none;font-weight:500;margin-top:.5rem}
+.btn:hover{background:var(--ink)}
+.mob{display:flex;gap:.75rem;margin-top:1rem}.mob img{width:5.5rem;border-radius:6px}
+@media(max-width:760px){.dir{grid-template-columns:minmax(0,1fr)}}
+footer{padding:0 0 4rem;color:var(--muted);font-size:.95rem}
+</style></head><body><main class="wrap">
+<h1>Three ways the Zenod landing could look.</h1>
+<p class="intro">Same facts as zenod.dev (hosted at €9/month + VAT, free self-hosting, WhatsApp, GitHub or Google Drive vault, MCP). Each page is one reading column, two columns at most, and two diagrams at most. The live site is untouched. Open each one on your phone as well.</p>
+
+<section class="dir"><a href="a/"><img src="shots/a-desktop-fold.png" alt="Direction A, desktop first screen" width="1440" height="900"></a><div>
+<h2>A. Paper</h2>
+<p>A calm essay in a serif on warm paper. Photographs carry the mood, and one thin diagram shows the voice-note path.</p>
+<p class="tag">Good: most distinct from AI-tool sites, easy to read, quiet. Trade-off: least tech-product energy, and long photo bands make the page tall.</p>
+<div class="mob"><a href="a/"><img src="shots/a-mobile-fold.png" alt="Direction A on a phone" width="780" height="1688"></a></div>
+<a class="btn" href="a/">Open A</a></div></section>
+
+<section class="dir"><a href="b/"><img src="shots/b-desktop-fold.png" alt="Direction B, desktop first screen" width="1440" height="900"></a><div>
+<h2>B. Night library</h2>
+<p>A dark, full-bleed photo hero, short sections and two light-line diagrams (voice note, agents) on deep green.</p>
+<p class="tag">Good: closest to the current dark look, cinematic, two clear diagrams. Trade-off: most likely to still feel like a dark developer site, and dark is harder to keep light on the eyes.</p>
+<div class="mob"><a href="b/"><img src="shots/b-mobile-fold.png" alt="Direction B on a phone" width="780" height="1688"></a></div>
+<a class="btn" href="b/">Open B</a></div></section>
+
+<section class="dir"><a href="c/"><img src="shots/c-desktop-fold.png" alt="Direction C, desktop first screen" width="1440" height="900"></a><div>
+<h2>C. Plain statements</h2>
+<p>Text first. Big plain sentences, one per screen, one photograph, one diagram and a price table.</p>
+<p class="tag">Good: shortest and clearest, fastest to load, least decoration. Trade-off: leans on copy, so it has the least visual identity and no librarian imagery.</p>
+<div class="mob"><a href="c/"><img src="shots/c-mobile-fold.png" alt="Direction C on a phone" width="780" height="1688"></a></div>
+<a class="btn" href="c/">Open C</a></div></section>
+</main>
+<footer><div class="wrap">Images generated with OpenAI gpt-image-2 for this preview. Nothing here is deployed.</div></footer>
+</body></html>

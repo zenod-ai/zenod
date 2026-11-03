@@ -1,0 +1,57 @@
+/* hallmark v2 | custom: paper editorial | single column, 1 diagram, photographs | gate-critique: no eyebrows, no mono, no tracked caps, no cards */
+:root{--bg:#f6f2e9;--ink:#18211c;--muted:#4f5a53;--accent:#1f4d3a;--accent-ink:#f6f2e9;--line:#c9c1ad;--tint:#e9efe6;
+--serif:"Newsreader",Georgia,"Times New Roman",serif;--sans:"Instrument Sans",system-ui,sans-serif;--measure:40rem;--wide:68rem;--gap:clamp(5rem,12vw,9rem)}
+*{box-sizing:border-box}html,body{overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.1875rem/1.65 var(--serif);-webkit-font-smoothing:antialiased}
+a{color:inherit}img{display:block;max-width:100%;height:auto}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:var(--measure);margin:0 auto;padding:0 1.5rem}
+.wrap-wide{max-width:var(--wide);margin:0 auto;padding:0 1.5rem}
+.nav{position:sticky;top:0;z-index:5;background:var(--bg)}
+.nav-in{display:flex;align-items:center;gap:2rem;max-width:var(--wide);margin:0 auto;padding:1rem 1.5rem}
+.nav-in nav{display:flex;gap:1.75rem;margin-left:auto;font:400 .95rem var(--sans)}
+.nav-in nav a{text-decoration:none;color:var(--muted)}.nav-in nav a:hover{color:var(--ink)}
+.brand{font:500 1.35rem var(--serif);text-decoration:none;letter-spacing:.01em}
+.btn{display:inline-block;font:500 .95rem var(--sans);padding:.8rem 1.4rem;border-radius:999px;border:1px solid var(--ink);text-decoration:none;transition:background-color .15s,color .15s}
+.btn:hover{background:var(--ink);color:var(--bg)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}.btn-primary:hover{background:var(--ink);border-color:var(--ink)}
+.btn-small{padding:.55rem 1.05rem;font-size:.9rem}
+.nav .btn-small{margin-left:0}
+.hero{padding-top:clamp(3.5rem,9vw,7rem);padding-bottom:clamp(3rem,6vw,4.5rem);max-width:52rem}
+h1{font:400 clamp(2.75rem,7.2vw,5.25rem)/1.02 var(--serif);letter-spacing:-.025em;margin:0 0 1.5rem;overflow-wrap:break-word;min-width:0}
+.lead{font-size:clamp(1.25rem,2.4vw,1.5rem);line-height:1.5;color:var(--muted);margin:0 0 2rem;max-width:36rem}
+.actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:0}
+.band{margin:0 auto}.band img{width:100%;aspect-ratio:2.2/1;object-fit:cover;border-radius:4px}
+.sec{padding-top:var(--gap)}
+h2{font:400 clamp(2rem,4.6vw,3rem)/1.1 var(--serif);letter-spacing:-.02em;margin:0 0 1.25rem}
+.sec p{margin:0 0 1.25rem}
+.fine{font:400 .95rem/1.5 var(--sans);color:var(--muted)}
+.band+.sec,.sec+.band{margin-top:var(--gap)}
+.band{margin-top:var(--gap)}.hero+.band{margin-top:0}
+.wrap-two{max-width:var(--wide);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(2rem,6vw,5rem);align-items:center}
+.pic img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px}
+.diagram{margin:2.5rem 0 1rem;width:min(62rem,calc(100vw - 3rem));position:relative;left:50%;transform:translateX(-50%)}
+.diagram svg{width:100%;height:auto;overflow:visible}
+.d-tall{display:none}
+.d-box{fill:none;stroke:var(--ink);stroke-width:1.25}.d-focus{stroke:var(--accent);fill:var(--tint);stroke-width:1.75}
+.d-line{fill:none;stroke:var(--ink);stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
+.d-t{fill:var(--ink);font-family:var(--serif)}.d-s{fill:var(--muted);font-family:var(--sans)}
+.plans{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(2rem,5vw,4rem);margin-top:2.5rem}
+.plan h3{font:500 1.15rem var(--sans);margin:0 0 .25rem}
+.price{font:400 clamp(2.6rem,5vw,3.5rem)/1 var(--serif);margin:0 0 1rem!important;letter-spacing:-.02em}
+.price small{font:400 1rem var(--sans);color:var(--muted);letter-spacing:0}
+.plan .btn{margin-top:.5rem}
+.foot{padding:var(--gap) 0 3rem}
+.foot .wrap{max-width:var(--wide)}
+.foot-name{font:400 1.5rem var(--serif);margin:0 0 1rem}
+.foot-links{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;font:400 .95rem var(--sans);color:var(--muted)}
+.foot-note{font:400 .85rem var(--sans);color:var(--muted);margin-top:2rem}
+@media(max-width:760px){
+ .nav-in nav{display:none}.nav-in .btn{margin-left:auto}
+ .wrap-two,.plans{grid-template-columns:minmax(0,1fr)}
+ .band img{aspect-ratio:4/3}
+ body{font-size:1.125rem}
+ .d-wide{display:none}.d-tall{display:block;max-width:22rem;margin:0 auto}
+ .diagram{width:auto;left:0;transform:none}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}

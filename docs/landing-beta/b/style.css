@@ -1,0 +1,53 @@
+/* hallmark v2 | custom: night library | full-bleed photographs between short sections, 2 diagrams | gate-critique: no eyebrows, no mono, no cards, scrim only under hero text */
+:root{--bg:#0d1511;--ink:#efeadc;--muted:#a6b1a7;--accent:#9bd8ae;--accent-ink:#0d1511;--line:#2b3a31;--tint:#16241c;
+--sans:"Instrument Sans",system-ui,sans-serif;--measure:44rem;--wide:72rem;--gap:clamp(5rem,12vw,9rem);--scrim:rgba(8,13,10,.55)}
+*{box-sizing:border-box}html,body{overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.125rem/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit}img{display:block;max-width:100%;height:auto}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.wrap{max-width:var(--measure);margin:0 auto;padding:0 1.5rem}
+.nav{position:absolute;top:0;left:0;right:0;z-index:5}
+.nav-in{display:flex;align-items:center;gap:2rem;max-width:60rem;margin:0 auto;padding:1.25rem 1.5rem}
+.nav-in nav{display:flex;gap:1.75rem;margin-left:auto;font-size:.95rem}
+.nav-in nav a{text-decoration:none;color:var(--ink);opacity:.8}.nav-in nav a:hover{opacity:1}
+.brand{font-weight:600;font-size:1.2rem;text-decoration:none}
+.btn{display:inline-block;font-weight:500;font-size:.95rem;padding:.8rem 1.4rem;border-radius:4px;border:1px solid var(--ink);text-decoration:none;transition:background-color .15s,color .15s}
+.btn:hover{background:var(--ink);color:var(--bg)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}.btn-primary:hover{background:var(--ink);border-color:var(--ink)}
+.btn-small{padding:.55rem 1rem;font-size:.9rem}
+.hero{position:relative;min-height:min(92vh,60rem);display:flex;align-items:flex-end;overflow:hidden}
+.hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,var(--scrim),transparent 70%)}
+.hero-in{position:relative;z-index:2;max-width:60rem;width:100%;padding-bottom:clamp(3rem,8vw,6rem)}
+.hero-in>*{max-width:44rem}
+h1{font:600 clamp(2.8rem,7.5vw,5.75rem)/1 var(--sans);letter-spacing:-.04em;margin:0 0 1.25rem;overflow-wrap:break-word;min-width:0}
+.lead{font-size:clamp(1.15rem,2.2vw,1.35rem);line-height:1.5;margin:0 0 2rem}
+.actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:0}
+.sec{padding-top:var(--gap)}
+h2{font:600 clamp(2rem,5vw,3.25rem)/1.05 var(--sans);letter-spacing:-.035em;margin:0 0 1.25rem}
+.sec.wrap{max-width:60rem}
+.sec p{margin:0 0 1.25rem;color:var(--ink);max-width:40rem}
+.sec p.fine,.fine{font-size:.95rem;line-height:1.5;color:var(--muted)}
+.full{margin:var(--gap) 0 0}.full img{width:100%;height:clamp(20rem,52vw,40rem);object-fit:cover}
+.diagram{margin:2.5rem 0 1rem}
+.diagram svg{width:100%;height:auto;overflow:visible}
+.d-tall{display:none}
+.d-box{fill:none;stroke:var(--muted);stroke-width:1.25}.d-focus{stroke:var(--accent);fill:var(--tint);stroke-width:1.75}
+.d-line{fill:none;stroke:var(--muted);stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
+.d-t{fill:var(--ink);font-family:var(--sans);font-weight:500}.d-s{fill:var(--muted);font-family:var(--sans)}
+.plans{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(2rem,5vw,4rem);margin-top:2.5rem}
+.plan h3{font:500 1.1rem var(--sans);margin:0 0 .25rem;color:var(--muted)}
+.price{font:600 clamp(2.6rem,5vw,3.75rem)/1 var(--sans);margin:0 0 1rem!important;letter-spacing:-.04em}
+.price small{font:400 1rem var(--sans);color:var(--muted);letter-spacing:0}
+.plan-main .price{color:var(--accent)}
+.foot{padding:var(--gap) 0 3rem}.foot .wrap{max-width:var(--wide)}
+.foot-name{font-size:1.4rem;font-weight:500;margin:0 0 1rem}
+.foot-links{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;font-size:.95rem;color:var(--muted)}
+.foot-note{font-size:.85rem;color:var(--muted);margin-top:2rem}
+@media(max-width:760px){
+ .nav-in nav{display:none}.nav-in .btn{margin-left:auto}
+ .plans{grid-template-columns:minmax(0,1fr)}
+ .hero{min-height:88vh}
+ .d-wide{display:none}.d-tall{display:block;max-width:22rem;margin:0 auto}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
