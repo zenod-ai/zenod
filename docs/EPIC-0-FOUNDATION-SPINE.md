@@ -13,6 +13,7 @@ Serves (cross-repo): [agent_team EPIC-12 · Zenod live, heard, sold](https://git
 Integration branch: `main`
 Active spine steward: Zenod delivery manager (Jordi + current bound agent task)
 History: [Foundation history to 2026-10-24, verbatim](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md) (July EpicSpine-adoption goal and DoD, role bindings, authority, bootstrap map, architecture, D1–D21, human gates, queues, validation evidence, handoff journal)
+Project name: [Zenod, the memory app](https://zenod.dev/)
 
 ## Goal
 
