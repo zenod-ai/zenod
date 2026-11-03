@@ -132,7 +132,7 @@ def components(d: dict) -> list[dict]:
                if a.get("last5xx") else "no 5xx in the retained access log"),
         events=[ev(a.get("last5xx"), f"HTTP {a.get('status5xx')} on zenod.dev", "traefik access log")],
         source="GET https://zenod.dev/ from VPS3; Traefik access log on VPS1",
-        tests="npm test (server static-surface tests, CI). No prod smoke yet: S3 builds it.")
+        tests="npm test (server static-surface tests, CI)")
 
     # 2 cloud
     c = d.get("cloud") or {}

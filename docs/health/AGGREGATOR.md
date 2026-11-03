@@ -9,6 +9,10 @@ One JSON document per probe run, written every 5 min by `s1-live/probe.py` on VP
 
 Code: `s1-live/aggregate.py` (stdlib only, pure); status rules tested in `s1-live/test_aggregate.py`
 (`python3 docs/health/s1-live/test_aggregate.py`). The page (`index.html`) is rendered from the document.
+Evidence: [epic6-s2-2026-11-03.md](../evidence/epic6-s2-2026-11-03.md); review card: [S2](../cards/S2.md).
+
+S3 seam: the smoke battery writes `~/.local/share/zenod-health/smoke/latest.json` (`zenod-smoke/v1`, keyed by
+the component ids below) and S3 adds its cells to `page()` through `s1-live/smoke_view.py`.
 
 ## Document (`schema: zenod-health/v1`)
 
