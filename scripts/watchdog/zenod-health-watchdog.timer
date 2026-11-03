@@ -1,5 +1,5 @@
 [Unit]
-Description=Run zenod-watchdog every 2 minutes (Epic-1 C-24)
+Description=Run zenod-watchdog every 2 minutes (Epic-1 C-24, EPIC-6 S5)
 
 [Timer]
 OnBootSec=2min
