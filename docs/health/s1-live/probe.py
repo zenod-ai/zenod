@@ -25,7 +25,10 @@ import sys
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import smoke_view  # noqa: E402  (S3 smoke battery result)
+try:
+    import smoke_view  # noqa: E402  (S3 smoke battery result; absent in --remote mode on VPS1)
+except ImportError:
+    smoke_view = None
 
 UTC = dt.timezone.utc
 
