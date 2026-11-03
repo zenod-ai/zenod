@@ -88,6 +88,33 @@ echo "${rows/\"red\"/\"green\"}" | ZENOD_ALERT_NOW=6200 bash "$A" rows >/dev/nul
 check "page: row green again, one RECOVERED" 1 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
 check "the RECOVERED names the row" 1 "$(grep -c '^\[RECOVERED\] zenod test: WhatsApp relay Phylax is green again' "$ZENOD_ALERT_QUEUE"/*RECOVERED.msg)"
 
+# S4: a key stays red while any caller sees it red (page smoke red vs watchdog green on the same row)
+check "sources: add"            "a,b" "$(za_srcs_add a b)"
+check "sources: add is a set"   "a,b" "$(za_srcs_add a,b b)"
+check "sources: del"            "b"   "$(za_srcs_del a,b a)"
+check "sources: del last"       ""    "$(za_srcs_del a a)"
+rm -f "$ZENOD_ALERT_QUEUE"/*
+echo '[{"key":"row-1","name":"Marketing site zenod.dev","colour":"red","signal":"smoke check failed"}]' \
+  | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=8000 bash "$A" rows >/dev/null
+check "page smoke red: one alert" 1 "$(q)"
+ZENOD_ALERT_SOURCE="zenod watchdog" ZENOD_ALERT_NOW=8120 bash "$A" clear row-1 "Marketing site is green again" >/dev/null
+check "watchdog green does not recover a row the page still has red" 0 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+ZENOD_ALERT_SOURCE="zenod watchdog" ZENOD_ALERT_NOW=8240 bash "$A" alert row-1 page "Marketing site is red: 502" >/dev/null
+ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=8300 bash "$A" alert row-1 page "Marketing site is red: 502" >/dev/null
+check "both see the outage: still one alert" 1 "$(q)"
+echo '[{"key":"row-1","name":"Marketing site zenod.dev","colour":"green","signal":""}]' \
+  | ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=8400 bash "$A" rows >/dev/null
+check "page green while the watchdog still sees red: no RECOVERED" 0 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+ZENOD_ALERT_SOURCE="zenod watchdog" ZENOD_ALERT_NOW=8420 bash "$A" clear row-1 "Marketing site is green again" >/dev/null
+check "both green: one RECOVERED" 1 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+ZENOD_ALERT_SOURCE="zenod health page" ZENOD_ALERT_NOW=9000 bash "$A" alert row-3 page "Database is red" >/dev/null
+ZENOD_ALERT_SOURCE="zenod watchdog" ZENOD_ALERT_NOW=10900 bash "$A" clear row-3 "Database is green again" >/dev/null
+check "a caller silent for 30 min no longer holds the key" 2 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+printf '7000 7000\n' > "$ZENOD_ALERT_STATE_DIR/alert.row-7"
+ZENOD_ALERT_NOW=9100 bash "$A" clear row-7 "Deploy path is green again" >/dev/null
+check "a state file from before S4 recovers on the first clear" 3 "$(ls "$ZENOD_ALERT_QUEUE" | grep -c RECOVERED)"
+rm -f "$ZENOD_ALERT_QUEUE"/*
+
 # an unwritable queue reports delivery=no and keeps nothing as sent
 chmod 500 "$T/base"; rm -rf "$ZENOD_ALERT_QUEUE" 2>/dev/null
 out="$(ZENOD_ALERT_QUEUE="$T/base/missing/q" ZENOD_ALERT_NOW=7000 bash "$A" alert row-9 page "x" 2>&1)"; rc=$?
