@@ -32,6 +32,7 @@ function healthySsh(cmd) {
   }
   if (cmd.includes("tester-watch")) return { code: 0, stdout: "OK 1 tester(s), no alerts\n" };
   if (cmd.includes("deploy-poller")) return { code: 0, stdout: "2026-11-03T16:58:00+00:00 h python3[1]: deploy-poller zenod-mt: noop up to date\n" };
+  if (cmd.includes("zenod-health-watchdog")) return { code: 0, stdout: "user=inactive root=active\n" };
   if (cmd.includes("is-active")) return { code: 0, stdout: "active\n" };
   if (cmd.startsWith("df")) return { code: 0, stdout: "/dev/sda1 78425224 39839000 35341484 53% /\n" };
   return { code: 1, stdout: "" };
@@ -84,6 +85,7 @@ test("judges catch stale deploys, a disconnected WhatsApp and an expired proof",
   assert.match(by["phylax.whatsapp"].reason, /state disconnected, receive path reconnecting \(428\)/);
   assert.match(by["readiness.proofs"].reason, /expired proof: backup_restore/);
   assert.equal(by["phylax.health"].ok, true);
+  assert.match(by["watchdog.timer"].reason, /old root zenod-watchdog/);
 });
 
 test("store keeps latest.json and only the newest N runs", async () => {
