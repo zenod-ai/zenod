@@ -1,0 +1,7 @@
+[Unit]
+Description=EPIC-6 S1 it.5: hourly 7-day timeline numbers per component from VPS1 logs (read-only, counts and durations only)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/t3agent/.local/lib/epic6-s1-health/timeline.py collect
+TimeoutStartSec=600

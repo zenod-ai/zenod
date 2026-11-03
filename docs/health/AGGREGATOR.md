@@ -54,3 +54,11 @@ for t in aggregate.transitions_after(doc, cursor, alert_only=True): send(t)
 The document keeps 50 transitions and is rewritten every 5 min, so a sender checking every 2 to 30 min
 misses nothing. `--doc` also takes a URL (tailnet URL needs no password). Everything is read-only against
 production: the aggregator adds no new access, it reuses the S1 probe's sources (INVENTORY.md §6).
+
+## 7-day timeline (EPIC-6 S1 iteration 5)
+
+`s1-live/timeline.py` keeps two compact stores next to the history file: `samples.json` (status per probe run, 5-min
+for 24 h, worst-per-hour for 8 days, written by `probe.py` through `timeline.record(doc)`) and `hours.json` (one key
+number and, where a log states it, a rebuilt status per component and UTC hour, written by `timeline.py collect`,
+user timer `epic6-s1-timeline.timer` every 15 min). `page()` renders one strip per row with `timeline.cell()`; keep
+that call when restructuring the page. Sources and backfill: [epic6-s1-it5-2026-11-03.md](../evidence/epic6-s1-it5-2026-11-03.md).

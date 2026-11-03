@@ -26,6 +26,12 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
+    import timeline  # noqa: E402  (S1 it.5: 7-day strip per row; keep when restructuring the page)
+except ImportError:
+    timeline = None
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
     import smoke_view  # noqa: E402  (S3 smoke battery result; absent in --remote mode on VPS1)
 except ImportError:
     smoke_view = None
@@ -410,6 +416,7 @@ def page(doc: dict, link: dict | None = None) -> str:
                   f'If you have no password yet, it asks you to set one first. Lost your password? Use this link, '
                   f'then set a new one.</div>')
     counts = doc["summary"]
+    tlv = timeline.load_view() if timeline else None
     smoke, smoke_hist = smoke_view.load()  # S3 smoke column (keep when restructuring the page)
     tr = []
     for c in doc["components"]:
@@ -432,7 +439,7 @@ def page(doc: dict, link: dict | None = None) -> str:
         tr.append(
             f'<tr id="{c["id"]}"><td class="c {st}"><span></span></td><td class="name">{nm}<br>'
             f'<span class="st {st}">{st}</span><br><span class="hist">since {html.escape(ago(c["status_since"], ref))}</span>'
-            f'</td><td class="where">{html.escape(c["where"])}</td>'
+            f'</td>{timeline.cell(c["id"], tlv, ref) if timeline else ""}<td class="where">{html.escape(c["where"])}</td>'
             f'<td>{html.escape(c["signal"])}<br><span class="hist">checked {html.escape(ago(c["checked_at"], ref))}</span></td>'
             f'<td>{act}</td><td>{err}</td><td class="tests">{smoke_view.cell(smoke, c["id"])}{html.escape(c["tests"])}</td></tr>')
     probed = doc["checked_at"]
@@ -443,7 +450,7 @@ def page(doc: dict, link: dict | None = None) -> str:
     trs = f"<h2>Recent changes</h2><ul class=\"tr\">{trs}</ul>" if trs else ""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod health · live</title>
-<style>{CSS}{smoke_view.CSS}</style></head><body><main>
+<style>{CSS}{timeline.CSS if timeline else ''}{smoke_view.CSS}</style></head><body><main>
 {signin}
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>
 <h1>Zenod health, live</h1>
@@ -454,7 +461,7 @@ Behind a password at health.zenod.dev; also on the tailnet.
 {smoke_view.banner(smoke, smoke_hist)}
 <div class="sum"><span class="pill">🟢 {counts['green']} green</span><span class="pill">🟠 {counts['amber']} amber</span>
 <span class="pill">🔴 {counts['red']} red</span><span class="pill">⚪ {counts['grey']} not deployed</span></div>
-<table><thead><tr><th></th><th>Component</th><th>Where it runs</th><th>Health signal, live</th><th>Last real activity</th>
+<table><thead><tr><th></th><th>Component</th>{timeline.header(ref) if timeline else ''}<th>Where it runs</th><th>Health signal, live</th><th>Last real activity</th>
 <th>Last error</th><th>Smoke result and test battery</th></tr></thead><tbody>
 {''.join(tr)}
 </tbody></table>
@@ -491,6 +498,8 @@ def main() -> None:
     doc, state = aggregate.aggregate(raw, state)
     if state_path:
         aggregate.save_state(state, state_path)
+    if timeline and not a.from_json:
+        timeline.record(doc)
     out = os.path.expanduser(a.out or ".")
     os.makedirs(out, exist_ok=True)
     link = None if a.from_json else signin_link()
