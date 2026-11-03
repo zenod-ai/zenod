@@ -24,6 +24,9 @@ import subprocess
 import sys
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import smoke_view  # noqa: E402  (S3 smoke battery result)
+
 UTC = dt.timezone.utc
 
 
@@ -404,6 +407,7 @@ def page(doc: dict, link: dict | None = None) -> str:
                   f'If you have no password yet, it asks you to set one first. Lost your password? Use this link, '
                   f'then set a new one.</div>')
     counts = doc["summary"]
+    smoke, smoke_hist = smoke_view.load()  # S3 smoke column (keep when restructuring the page)
     tr = []
     for c in doc["components"]:
         nm = html.escape(c["name"])
@@ -427,7 +431,7 @@ def page(doc: dict, link: dict | None = None) -> str:
             f'<span class="st {st}">{st}</span><br><span class="hist">since {html.escape(ago(c["status_since"], ref))}</span>'
             f'</td><td class="where">{html.escape(c["where"])}</td>'
             f'<td>{html.escape(c["signal"])}<br><span class="hist">checked {html.escape(ago(c["checked_at"], ref))}</span></td>'
-            f'<td>{act}</td><td>{err}</td><td class="tests">{html.escape(c["tests"])}</td></tr>')
+            f'<td>{act}</td><td>{err}</td><td class="tests">{smoke_view.cell(smoke, c["id"])}{html.escape(c["tests"])}</td></tr>')
     probed = doc["checked_at"]
     since = (doc.get("history_since") or probed).replace("T", " ").replace("Z", " UTC")
     trs = "".join(
@@ -436,7 +440,7 @@ def page(doc: dict, link: dict | None = None) -> str:
     trs = f"<h2>Recent changes</h2><ul class=\"tr\">{trs}</ul>" if trs else ""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod health · live</title>
-<style>{CSS}</style></head><body><main>
+<style>{CSS}{smoke_view.CSS}</style></head><body><main>
 {signin}
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>
 <h1>Zenod health, live</h1>
@@ -444,10 +448,11 @@ def page(doc: dict, link: dict | None = None) -> str:
 <span id="age"></span>, every 5 minutes, read-only. Last errors are kept by this page since {since}, so they survive a redeploy.
 Behind a password at health.zenod.dev; also on the tailnet.
 <a href="https://health.zenod.dev/password">Set or change your password</a>.</p>
+{smoke_view.banner(smoke, smoke_hist)}
 <div class="sum"><span class="pill">🟢 {counts['green']} green</span><span class="pill">🟠 {counts['amber']} amber</span>
 <span class="pill">🔴 {counts['red']} red</span><span class="pill">⚪ {counts['grey']} not deployed</span></div>
 <table><thead><tr><th></th><th>Component</th><th>Where it runs</th><th>Health signal, live</th><th>Last real activity</th>
-<th>Last error</th><th>Test battery</th></tr></thead><tbody>
+<th>Last error</th><th>Smoke result and test battery</th></tr></thead><tbody>
 {''.join(tr)}
 </tbody></table>
 {trs}
@@ -486,7 +491,11 @@ def main() -> None:
     out = os.path.expanduser(a.out or ".")
     os.makedirs(out, exist_ok=True)
     link = None if a.from_json else signin_link()
-    for name, body in (("probe.json", json.dumps(doc, indent=1)), ("index.html", page(doc, link))):
+    files = [("probe.json", json.dumps(doc, indent=1)), ("index.html", page(doc, link))]
+    smoke, _ = smoke_view.load()
+    if smoke:
+        files.append(("smoke.json", json.dumps(smoke, indent=1)))
+    for name, body in files:
         tmp = os.path.join(out, name + ".tmp")
         with open(tmp, "w") as f:
             f.write(body)

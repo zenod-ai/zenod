@@ -159,7 +159,7 @@ Repoint rather than rebuild: S5 should repoint `zenod-watchdog.sh` (its two-tier
 | Watchdog logic | `scripts/watchdog/watchdog-logic.test.sh` | disk levels, crash-loop delta, alert dedupe | No | Reuse for S5 |
 | Deploy script | `scripts/deploy-fleet.test.mjs` | fake-Dokploy test of the roll script | No | n/a |
 
-CI (`.github/workflows/ci.yml`, Node 22): `npm ci`, `npm run build`, Docker build check, `build:phylax`, `test:phylax-image-contract`, `npm test`. The host `vps-a9-1` has Node 18.19 only, so `npm ci`/`npm test` do not run on VPS1 itself (the repo requires Node ≥ 22 and `node:sqlite`; an `npm ci` attempt under 18 in this probe failed installing `@whiskeysockets/baileys`); prod containers run Node 22.23.4. A prod smoke battery (S3) therefore must be plain `curl`/Node-22-container based, not "run `npm test` on the host". There is **no existing read-only prod smoke**; S3 builds the first one.
+CI (`.github/workflows/ci.yml`, Node 22): `npm ci`, `npm run build`, Docker build check, `build:phylax`, `test:phylax-image-contract`, `npm test`. The host `vps-a9-1` has Node 18.19 only, so `npm ci`/`npm test` do not run on VPS1 itself (the repo requires Node ≥ 22 and `node:sqlite`; an `npm ci` attempt under 18 in this probe failed installing `@whiskeysockets/baileys`); prod containers run Node 22.23.4. A prod smoke battery (S3) therefore must be plain `curl`/Node-22-container based, not "run `npm test` on the host". There is **no existing read-only prod smoke**; S3 builds the first one. *2026-11-03: built: `npm run smoke:prod`, every 15 min, see [SMOKE.md](SMOKE.md).*
 
 ## 8. Day-one picture the page would show (so nobody is surprised)
 
