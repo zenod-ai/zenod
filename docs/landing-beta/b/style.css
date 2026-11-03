@@ -51,3 +51,4 @@ h2{font:600 clamp(2rem,5vw,3.25rem)/1.05 var(--sans);letter-spacing:-.035em;marg
  .d-wide{display:none}.d-tall{display:block;max-width:22rem;margin:0 auto}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.d-dash{stroke-dasharray:7 7}
