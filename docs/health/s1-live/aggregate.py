@@ -94,6 +94,14 @@ def ev(at: str | None, what: str, source: str) -> dict | None:
 
 # --------------------------------------------------------------------------------------------- status rules
 
+def newest_publish(runs: list[dict] | None) -> dict | None:
+    """The successful publish.yml run created last, from a list of runs. A 1-item `gh run list` page sometimes
+    comes back with an old run (2026-11-03: a September run, 779f74c, made the cloud row falsely amber), so the
+    probe reads a page of runs and picks the newest by createdAt instead of trusting the API's order."""
+    runs = [r for r in (runs or []) if r.get("headSha") and parse_ts(r.get("createdAt"))]
+    return max(runs, key=lambda r: parse_ts(r["createdAt"]), default=None)
+
+
 def components(d: dict) -> list[dict]:
     """The status rules: one dict per component from a raw probe. Pure: depends only on `d`.
 

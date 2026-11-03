@@ -353,5 +353,29 @@ class SmokeThroughAggregate(unittest.TestCase):
         self.assertEqual(d["summary"]["red"], 0)
 
 
+class NewestPublish(unittest.TestCase):
+    """2026-11-03: the API's 1-run page returned a September run, so the cloud row went falsely amber."""
+
+    RUNS = [{"headSha": "779f74c8210b", "createdAt": "2026-09-07T04:06:06Z"},
+            {"headSha": "58563d9aaaaa", "createdAt": "2026-11-03T18:22:22Z"},
+            {"headSha": "d3fa4b9aaaaa", "createdAt": "2026-11-03T17:04:00Z"}]
+
+    def test_picks_newest_by_created_at_not_api_order(self):
+        self.assertEqual(A.newest_publish(self.RUNS)["headSha"], "58563d9aaaaa")
+
+    def test_empty_or_broken_runs(self):
+        self.assertIsNone(A.newest_publish([]))
+        self.assertIsNone(A.newest_publish(None))
+        self.assertIsNone(A.newest_publish([{"headSha": "x"}]))
+
+    def test_cloud_green_when_live_sha_is_the_newest_publish(self):
+        r = raw("2026-11-03T20:30:20Z")
+        r["cloud"]["json"]["sha"] = "58563d9aaaaa"
+        r["publish"] = A.newest_publish(self.RUNS)
+        cloud = next(c for c in A.components(r) if c["id"] == "cloud")
+        self.assertEqual(cloud["status"], "green")
+        self.assertNotIn("behind", cloud["signal"])
+
+
 if __name__ == "__main__":
     unittest.main()

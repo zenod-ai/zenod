@@ -396,8 +396,9 @@ def collect() -> dict:
     d["observatory"] = {"status": s, "secs": round(secs, 3)}
     try:
         runs = json.loads(sh(["gh", "run", "list", "-R", "zenod-ai/zenod", "--workflow", "publish.yml", "--branch",
-                              "main", "--status", "success", "-L", "1", "--json", "headSha,createdAt"]))
-        d["publish"] = runs[0] if runs else None
+                              "main", "--status", "success", "-L", "20", "--json", "headSha,createdAt"]))
+        import aggregate
+        d["publish"] = aggregate.newest_publish(runs)
     except Exception:
         d["publish"] = None
     if smoke_view:  # S4: the latest smoke result, folded into each row's status by aggregate.merge_smoke()
