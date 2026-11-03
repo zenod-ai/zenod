@@ -400,6 +400,9 @@ def collect() -> dict:
         d["publish"] = runs[0] if runs else None
     except Exception:
         d["publish"] = None
+    if smoke_view:  # S4: the latest smoke result, folded into each row's status by aggregate.merge_smoke()
+        import aggregate
+        d["smoke"] = aggregate.smoke_summary(smoke_view.load(keep=1)[0])
     src = open(os.path.abspath(__file__)).read()
     r = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "hetzner_vps_1", "python3", "-", "--remote"],
            timeout=300, stdin=src)
@@ -428,7 +431,7 @@ td.c{width:12px;padding:0}td.c span{display:block;width:12px;min-height:64px;hei
 .st{font-weight:600;text-transform:uppercase;font-size:12px}.st.green{color:var(--g)}.st.amber{color:var(--a)}.st.red{color:var(--r)}.st.grey{color:var(--k)}
 td.name{font-weight:600;width:15%}td.where{width:15%;color:#444}td.tests{width:14%;color:#555;font-size:13px}
 h2{font:600 18px Georgia,serif;margin:22px 0 6px}ul.tr{margin:0;padding-left:18px;color:#444}
-.hist{color:#777;font-size:12.5px}footer{margin-top:16px;color:#666;font-size:12.5px}code{font-size:12.5px}
+.hist{color:#777;font-size:12.5px}.why{display:block;margin-top:4px;font-weight:400;font-size:12.5px;color:var(--r)}footer{margin-top:16px;color:#666;font-size:12.5px}code{font-size:12.5px}
 """
 
 
@@ -467,7 +470,8 @@ def page(doc: dict, link: dict | None = None) -> str:
         tr.append(
             f'<tr id="{c["id"]}"><td class="c {st}"><span></span></td><td class="name">{nm}<br>'
             f'<span class="st {st}">{st}</span><br><span class="hist">since {html.escape(ago(c["status_since"], ref))}</span>'
-            f'</td>{timeline.cell(c["id"], tlv, ref) if timeline else ""}<td class="where">{html.escape(c["where"])}</td>'
+            + (f'<br><span class="why">{html.escape(c["problem"])}</span>' if st in ("amber", "red") and c.get("problem") else "")
+            + f'</td>{timeline.cell(c["id"], tlv, ref) if timeline else ""}<td class="where">{html.escape(c["where"])}</td>'
             f'<td>{html.escape(c["signal"])}<br><span class="hist">checked {html.escape(ago(c["checked_at"], ref))}</span></td>'
             f'<td>{act}</td><td>{err}</td><td class="tests">{smoke_view.cell(smoke, c["id"])}{html.escape(c["tests"])}</td></tr>')
     probed = doc["checked_at"]
@@ -496,8 +500,8 @@ Behind a password at health.zenod.dev; also on the tailnet.
 {trs}
 <footer>Sources: public <code>/api/health</code> endpoints from VPS3; on VPS1 the Traefik access log, container logs
 (since each container started), systemd journals, <code>tester-watch --redact</code> and the Dokploy wrapper's app list.
-Counts and timestamps only: no message text, ids or keys. Colours: red = down or nobody is told; amber = up but
-something needs a look; grey = not deployed. A red row (and the host watchdog's own checks) goes to Jordi's
+Counts and timestamps only: no message text, ids or keys. Colours: red = down or nobody is told, or a smoke check
+for that part failed in the last 45 min (S4); amber = up but something needs a look; grey = not deployed. A red row (and the host watchdog's own checks) goes to Jordi's
 "HQ — vps1 alerts" thread once, again every 30 min while red, and once when it recovers (S5). Write-up: docs/health/INVENTORY.md (EPIC-6 S1), aggregator EPIC-6 S2.
 The same values as one JSON document: <a href="probe.json">probe.json</a>.</footer></main>
 <script>const t=Date.parse("{probed}");function u(){{const m=Math.round((Date.now()-t)/60000);

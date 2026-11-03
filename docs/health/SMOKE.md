@@ -70,6 +70,13 @@ The page code [s1-live/smoke_view.py](s1-live/smoke_view.py) renders a banner (l
 as dots, test runs ringed) and per-row pass/FAIL lines with reason and timing; the probe copies `latest.json` to the
 page as `smoke.json`.
 
+Since S4 a failed check also turns its row red and alerts through the S5 sender (rule table in
+[AGGREGATOR.md](AGGREGATOR.md#s4-a-failed-smoke-check-turns-its-row-red)).
+
+Drill (S6): `echo 'SMOKE_DRILL="--override site.home=https://drill.invalid/"' > ~/.config/zenod-health/smoke-drill.env`
+makes the next scheduled run a labelled test run with one failing check; `rm` the file and the run after that is the
+real battery again. Nothing in production changes.
+
 Install (VPS3, as t3agent):
 
 ```

@@ -14,6 +14,29 @@ Evidence: [epic6-s2-2026-11-03.md](../evidence/epic6-s2-2026-11-03.md); review c
 S3 seam: the smoke battery writes `~/.local/share/zenod-health/smoke/latest.json` (`zenod-smoke/v1`, keyed by
 the component ids below) and S3 adds its cells to `page()` through `s1-live/smoke_view.py`.
 
+## S4: a failed smoke check turns its row red
+
+`probe.py` puts the latest smoke result into the raw probe (`raw.smoke`, `aggregate.smoke_summary()`), and
+`aggregate.merge_smoke()` folds it into each row before transitions are computed. Probe status × smoke result:
+
+| Probe | Smoke for this row | Row |
+|---|---|---|
+| grey | anything | grey (not deployed, never alerted) |
+| any | no result, no check for this row, or result older than 45 min | probe status |
+| any | all checks pass | probe status |
+| green, amber or red | a check fails | **red**, `problem` = the probe's problem (if any) then `smoke check failed: <title>: <reason>`; a test run adds `[test run: check pointed at a test target]` |
+
+So the smoke reason shows under the row's status, in its last error (source `smoke: red`), in the transition and in
+the alert text; the 7-day strip records the red sample like any other. Each component also carries `probe_status`
+and `smoke` (`at`, `ok`, `pass`, `fail`, `stale`, `simulated`, `reason`). Tests: `SmokeMerge` and
+`SmokeThroughAggregate` in `test_aggregate.py`.
+
+Alerts: a smoke red uses the same S5 sender and row key (`row-<n>`) as a probe red, so one outage seen by the probe,
+the smoke battery and the VPS1 watchdog alerts once. The sender keeps which callers see a key red and sends the one
+RECOVERED only when none does (a caller silent for 30 min no longer counts), so the watchdog's own green check does
+not recover a row the page still has red from a smoke check (`scripts/watchdog/zenod-alert.sh`, tests in
+`watchdog-logic.test.sh`).
+
 ## Document (`schema: zenod-health/v1`)
 
 | Field | Meaning |

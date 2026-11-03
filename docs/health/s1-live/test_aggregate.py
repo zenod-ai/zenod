@@ -264,5 +264,94 @@ class Transitions(unittest.TestCase):
             self.assertIn("ingress       red", buf.getvalue())
 
 
+def smoke(at=T0, fail=None, simulated=False):
+    """A zenod-smoke/v1 latest.json: site and cloud checks, `fail` = {check id: reason} failing."""
+    fail = fail or {}
+    checks = [{"id": i, "component": comp, "title": t, "ok": i not in fail, "reason": fail.get(i, "200"),
+               **({"overridden": True} if simulated and i in fail else {})}
+              for i, comp, t in (("site.home", "site", "Home page answers"), ("site.connect", "site", "Connect page"),
+                                 ("cloud.health", "cloud", "Health answers ok"))]
+    return {"schema": "zenod-smoke/v1", "startedAt": at, "simulated": simulated, "checks": checks}
+
+
+class SmokeMerge(unittest.TestCase):
+    """S4: probe status × smoke result → row status (the merge rule)."""
+
+    REF = A.parse_ts(T0)
+
+    def m(self, status, problem=None, sm=None, cid="site"):
+        return A.merge_smoke(status, problem, A.smoke_summary(sm) if sm else None, cid, self.REF)
+
+    def test_rule_table(self):
+        bad = smoke(fail={"site.home": "timeout after 15 s"})
+        good = smoke()
+        old = smoke(at="2026-11-03T11:00:00Z", fail={"site.home": "timeout"})
+        cases = [  # (probe status, probe problem, smoke, expected row status)
+            ("green", None, None, "green"), ("amber", "slow", None, "amber"), ("red", "down", None, "red"),
+            ("green", None, good, "green"), ("amber", "slow", good, "amber"), ("red", "down", good, "red"),
+            ("green", None, bad, "red"), ("amber", "slow", bad, "red"), ("red", "down", bad, "red"),
+            ("grey", None, bad, "grey"), ("green", None, old, "green"), ("amber", "slow", old, "amber")]
+        for st, pr, sm, want in cases:
+            with self.subTest(probe=st, smoke=sm and A.smoke_summary(sm)["components"]["site"]["ok"]):
+                self.assertEqual(self.m(st, pr, sm)[0], want)
+
+    def test_reason_shown(self):
+        st, pr, cell = self.m("green", None, smoke(fail={"site.home": "HTTP 503"}))
+        self.assertEqual(pr, "smoke check failed: Home page answers: HTTP 503")
+        self.assertEqual(cell["reason"], pr)
+        self.assertFalse(cell["ok"])
+        st, pr, _ = self.m("amber", "event loop slow", smoke(fail={"site.home": "HTTP 503"}))
+        self.assertEqual(pr, "event loop slow; smoke check failed: Home page answers: HTTP 503")
+
+    def test_test_run_labelled(self):
+        _, pr, cell = self.m("green", None, smoke(fail={"site.home": "ENOTFOUND"}, simulated=True))
+        self.assertIn("[test run: check pointed at a test target]", pr)
+        self.assertTrue(cell["simulated"])
+
+    def test_component_without_checks_untouched(self):
+        self.assertEqual(self.m("green", None, smoke(fail={"site.home": "x"}), cid="database"), ("green", None, None))
+
+    def test_stale_marked(self):
+        _, _, cell = self.m("green", None, smoke(at="2026-11-03T11:00:00Z", fail={"site.home": "x"}))
+        self.assertTrue(cell["stale"])
+
+
+class SmokeThroughAggregate(unittest.TestCase):
+    """S4 end to end in the aggregator: transitions (what S5 sends), last error and the recorded status."""
+
+    def run_(self, st, at, sm, mut=None):
+        r = raw(at)
+        if mut:
+            mut(r)
+        r["smoke"] = A.smoke_summary(sm)
+        return A.aggregate(r, st)
+
+    def row(self, doc, cid):
+        return next(c for c in doc["components"] if c["id"] == cid)
+
+    def test_red_then_green_one_alert_each(self):
+        st = A.load_state("/nonexistent")
+        d, st = self.run_(st, "2026-11-03T12:00:00Z", smoke("2026-11-03T12:00:00Z"))
+        self.assertEqual(self.row(d, "site")["status"], "green")
+        d, st = self.run_(st, "2026-11-03T12:15:00Z", smoke("2026-11-03T12:15:00Z", fail={"site.home": "HTTP 503"}))
+        site = self.row(d, "site")
+        self.assertEqual((site["status"], site["probe_status"]), ("red", "green"))
+        self.assertEqual(site["last_error"]["source"], "smoke: red")
+        self.assertIn("HTTP 503", site["last_error"]["what"])
+        # probe sees the same outage 5 min later: still one red transition, one alert
+        def down(r):
+            r["site"]["status"] = 503
+        d, st = self.run_(st, "2026-11-03T12:20:00Z", smoke("2026-11-03T12:15:00Z", fail={"site.home": "HTTP 503"}), down)
+        d, st = self.run_(st, "2026-11-03T12:30:00Z", smoke("2026-11-03T12:30:00Z"))
+        ts = [(t["component"], t["from"], t["to"], t["alert"]) for t in A.transitions_after(d, alert_only=True)]
+        self.assertEqual(ts, [("site", "green", "red", True), ("site", "red", "green", True)])
+        self.assertEqual(self.row(d, "site")["status"], "green")
+
+    def test_no_smoke_in_raw_is_s2_behaviour(self):
+        d, _ = A.aggregate(raw(), A.load_state("/nonexistent"))
+        self.assertTrue(all(c["smoke"] is None for c in d["components"]))
+        self.assertEqual(d["summary"]["red"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,7 +5,10 @@ After=network-online.target
 [Service]
 Type=oneshot
 # Same script as `npm run smoke:prod`, installed from main (scripts/smoke-prod.mjs); exits 1 when any check fails.
-ExecStart=/usr/bin/node %h/.local/lib/zenod-smoke/smoke-prod.mjs --out %h/.local/share/zenod-health/smoke --keep 96
+# EPIC-6 S6 drill: SMOKE_DRILL="--override site.home=https://drill.invalid/" in the optional file below points one
+# check at a test target that fails (a labelled test run); delete the file and the next run is the real battery again.
+EnvironmentFile=-%h/.config/zenod-health/smoke-drill.env
+ExecStart=/usr/bin/node %h/.local/lib/zenod-smoke/smoke-prod.mjs --out %h/.local/share/zenod-health/smoke --keep 96 $SMOKE_DRILL
 # A red run is a result, not a unit failure: still refresh the page so it shows the fail within a minute.
 SuccessExitStatus=1
 ExecStartPost=/usr/bin/systemctl --user start --no-block epic6-s1-health-probe.service

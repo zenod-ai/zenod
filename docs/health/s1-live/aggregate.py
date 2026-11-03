@@ -23,6 +23,10 @@ Interface for S5 (the sender), on any host that has the published document:
 
 A transition has alert=true when it goes to red or comes back from red (red then green is E6-3). S5 keeps its own
 cursor (the `at` of the last transition it sent); the document is rewritten every 5 min and keeps 50 transitions.
+
+S4: the S3 smoke battery's latest result rides in raw["smoke"] (smoke_summary()) and merge_smoke() folds it into each
+row's status before transitions are computed, so a failed smoke check turns its row red, shows its reason, lands in
+the 7-day strip and goes through the same S5 sender and row key as a probe red: one outage seen by both alerts once.
 """
 
 from __future__ import annotations
@@ -42,6 +46,7 @@ KEEP_ERRORS, KEEP_TRANSITIONS, DOC_TRANSITIONS = 10, 200, 50
 ZENOD_SVC = "zenod-mt-fxpzoo"
 RUNNER_APPS = ("epaminon", "callisthenes", "ring", "herald", "zenod-cloud-test")
 STATUSES = ("green", "amber", "red", "grey")
+SMOKE_STALE_SECS = 45 * 60   # three missed 15-min runs: an old smoke result no longer colours a row
 
 
 def iso(t: dt.datetime | None) -> str | None:
@@ -369,6 +374,52 @@ def components(d: dict) -> list[dict]:
     return R
 
 
+# --------------------------------------------------------------------------------------------- S4: smoke × probe
+
+def smoke_summary(latest: dict | None) -> dict | None:
+    """The S3 latest.json (zenod-smoke/v1) cut down for raw["smoke"]: run time, test-run flag, failing checks."""
+    if not latest or not latest.get("startedAt"):
+        return None
+    comps: dict = {}
+    for c in latest.get("checks") or []:
+        x = comps.setdefault(c.get("component"), {"ok": True, "pass": 0, "fail": 0, "failing": []})
+        if c.get("ok"):
+            x["pass"] += 1
+        else:
+            x["ok"] = False
+            x["fail"] += 1
+            x["failing"].append({"id": c.get("id"), "title": c.get("title"), "reason": c.get("reason"),
+                                 "overridden": bool(c.get("overridden"))})
+    return {"at": iso(parse_ts(latest["startedAt"])), "simulated": bool(latest.get("simulated")), "components": comps}
+
+
+def merge_smoke(status: str, problem: str | None, smoke: dict | None, cid: str, ref: dt.datetime) -> tuple:
+    """Probe status × smoke result → (row status, problem, smoke cell for the document). Pure.
+
+    grey stays grey (not deployed, never alerted); no smoke result, no check for this row, or a result older than
+    SMOKE_STALE_SECS leaves the probe status as it is; all checks pass leaves it as it is; any failing check makes
+    the row red with the smoke reason (after the probe's own problem when the probe also saw one)."""
+    if not smoke:
+        return status, problem, None
+    sc = (smoke.get("components") or {}).get(cid)
+    at = parse_ts(smoke.get("at"))
+    if not sc or not at:
+        return status, problem, None
+    stale = (ref - at).total_seconds() > SMOKE_STALE_SECS
+    cell = {"at": smoke["at"], "ok": sc["ok"], "pass": sc["pass"], "fail": sc["fail"], "stale": stale,
+            "simulated": smoke.get("simulated", False), "reason": None}
+    if sc["ok"] or stale or status == "grey":
+        return status, problem, cell
+    f = sc["failing"]
+    why = "smoke check failed: " + "; ".join(f"{x['title']}: {x['reason']}" for x in f[:2])
+    if len(f) > 2:
+        why += f" (+{len(f) - 2} more)"
+    if any(x.get("overridden") for x in f):
+        why += " [test run: check pointed at a test target]"
+    cell["reason"] = why
+    return "red", f"{problem}; {why}" if status in ("amber", "red") and problem else why, cell
+
+
 # --------------------------------------------------------------------------------------------- history
 
 def load_state(path: str = STATE) -> dict:
@@ -418,13 +469,17 @@ def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
     st.setdefault("transitions", [])
     st["since"] = st.get("since") or raw["probedAt"]
     out, new_t = [], []
+    ref = parse_ts(raw["probedAt"])
     for c in components(raw):
+        probe_status = c["status"]
+        c["status"], c["problem"], smoke = merge_smoke(c["status"], c["problem"], raw.get("smoke"), c["id"], ref)
         h = st["components"].setdefault(c["id"], {"last_error": None, "errors": [], "last_activity": None,
                                                   "status": None, "status_since": None})
         h.setdefault("errors", [])
         events = sorted(c["events"], key=lambda e: e["at"])
         if c["status"] in ("amber", "red"):
-            events.append({"at": c["checked_at"], "what": c["problem"], "source": "probe: " + c["status"]})
+            by = "smoke" if smoke and smoke["reason"] and probe_status not in ("amber", "red") else "probe"
+            events.append({"at": c["checked_at"], "what": c["problem"], "source": f"{by}: {c['status']}"})
         for e in events:
             _record_error(h, e)
         la = h.get("last_activity")
@@ -444,7 +499,8 @@ def aggregate(raw: dict, state: dict) -> tuple[dict, dict]:
             "checked_at": c["checked_at"],
             "last_activity": dict(la, from_history=la["at"] != c["activity_at"]) if la else None,
             "activity": c["activity"], "last_error": h["last_error"], "errors": list(reversed(h["errors"])),
-            "error_now": c["error"], "problem": c["problem"], "source": c["source"], "tests": c["tests"],
+            "error_now": c["error"], "problem": c["problem"], "probe_status": probe_status, "smoke": smoke,
+            "source": c["source"], "tests": c["tests"],
             **({"link": c["link"]} if c.get("link") else {})})
     st["transitions"] = (st["transitions"] + new_t)[-KEEP_TRANSITIONS:]
     doc = {"schema": SCHEMA, "checked_at": raw["probedAt"], "history_since": st["since"],
