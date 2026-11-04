@@ -85,6 +85,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-10-27 | A2, A3, A4 moved to EPIC-7 (real-user production test, first 5 testers); Jordi: caps before testers, testers never charged, 1-month code extended monthly. | One epic for the whole path to testers. | [EPIC-7](EPIC-7-REAL-USER-TEST.md) |
 | 2026-10-24 | Old detail moved, not deleted, to the history page; stale sibling spines closed or superseded. | 707-line spine → under the 150-line budget; one active board. | [TIDY-2026-10-24](TIDY-2026-10-24.md) |
 | 2026-11-04 | ZAL-A6: landing direction A (Paper) chosen for zenod.dev; A6 stamped ready (root L-37). Decided by Jordi via Team desk chat, verbatim: "i choose A please". | His answer to ZAL-A6-A1 is the ready stamp; B and C stay beta-only. | [directions](http://vps3.taild81fbb.ts.net:8741/) |
+| 2026-11-04 | ZAL-A6 brief for direction A, by Jordi via Team desk chat, verbatim: "i want to lean on whatsapp as a way in, as are code agents, and go thgouth ingestion, digestion, retrieval and land the concept and land the value of having your memory store for mining and self custoydy, etc. first class voice treatment". Story: WhatsApp and code agents as the ways in → ingestion → digestion → retrieval → the value of owning your memory store (mining it, self-custody); voice first class. | His brief for the A6 build. | Team desk chat 2026-11-04 |
 
 
 ## Spine Map
