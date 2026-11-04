@@ -18,6 +18,8 @@ History: [2026-08-16 → 2026-09-16 spine, verbatim](archive/EPIC-ZENOD-ALPHA-LA
 
 A real user signs up, pays or gets a free pass, uses Zenod over WhatsApp, and is metered and capped.
 
+Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered and capped.
+
 ## Serves
 
 - Zenod root: [Foundation](EPIC-0-FOUNDATION-SPINE.md) — Zenod in real users' hands is the next milestone (root D14), now with the paid/free-pass path proved.
@@ -44,9 +46,13 @@ Result: production is up (health ok on 5aa4fe4, 2026-11-03) and ready for tester
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
 Waiting on: Jordi, through EPIC-7: E7-A15 (one sign-in) and E7-A14 (key page); EPIC-6 waits on his S1 review
-Waiting on (ZAL-A6-A1): Jordi picks a landing direction at http://vps3.taild81fbb.ts.net:8741/
+Waiting on (ZAL-A6-A1): answered 2026-11-04 — Jordi chose landing direction A (Paper); A6 ready, worker ports A to apps/site
 Next action: EPIC-7 T7 rehearsal once Jordi signs in, then T8 go/no-go and the five invites
 Verified at: 2026-11-03 (child Current States read; live health 5aa4fe4)
+
+## Waiting on
+
+- [answered ZAL-A6-A1 2026-11-04 @Jordi · done 2026-11-04] Pick a landing direction at http://vps3.taild81fbb.ts.net:8741/ — answer: "i choose A please" (Team desk chat) — A6 ready, worker dispatched
 
 ## Issue Ledger
 
@@ -58,7 +64,7 @@ Verified at: 2026-11-03 (child Current States read; live health 5aa4fe4)
 | A3 | Ticket worker | - | ZAL-A3 · Free-pass code with a capped allowance | moved | - | - | - | Moved to [EPIC-7](EPIC-7-REAL-USER-TEST.md) T4 on 2026-10-27. | - | 2026-10-27 | see EPIC-7 |
 | A4 | Recruiter (zenod-social) | - | ZAL-A4 · Recruit test users | moved | - | - | - | First wave of 5 moved to [EPIC-7](EPIC-7-REAL-USER-TEST.md) T9 on 2026-10-27; later waves toward DOD-1 come after it. | - | 2026-10-27 | see EPIC-7 |
 | A5 | Operator | Jordi + worker | ZAL-A5 · Stripe live: business verification + one live €9 payment | draft | A0 | - | - | Stripe business profile verified; one live €9 payment end to end (DOD-2) on price `price_1U8jip80yG7aohEW6tZnFgZq`. | Price approved 2026-08-26 (history) | 2026-10-24 | Ask Jordi for the business verification when next. |
-| A6 | Ticket worker | worker (Sonnet) | ZAL-A6 · Cleaner landing: parallel beta of zenod.dev | blocked | - | merged 74977f7 (docs only) | `main` | Beta landing on a temporary tailnet link beside the live `apps/site` (untouched): fewer columns, larger lighter diagrams, generated imagery, human copy; 3 directions + low-hanging-fruit list; Jordi picks before `apps/site` changes. | 2026-11-03: directions A Paper / B Night library / C Plain statements at http://vps3.taild81fbb.ts.net:8741/ ; v2 librarian framing + 5 diagrams ([diagrams](landing-beta/DIAGRAMS.md)); [list](landing-beta/LOW-HANGING-FRUIT.md) | 2026-11-03 | ZAL-A6-A1: Jordi picks A, B, C or a mix (manager recommends A + B's photo break); then a worker ports it to `apps/site` via PR. |
+| A6 | Ticket worker | worker (Sonnet) | ZAL-A6 · Cleaner landing: parallel beta of zenod.dev | ready | - | merged 74977f7 (docs only) | `main` | Beta landing on a temporary tailnet link beside the live `apps/site` (untouched): fewer columns, larger lighter diagrams, generated imagery, human copy; 3 directions + low-hanging-fruit list; Jordi picks before `apps/site` changes. | 2026-11-03: directions A Paper / B Night library / C Plain statements at http://vps3.taild81fbb.ts.net:8741/ ; v2 librarian framing + 5 diagrams ([diagrams](landing-beta/DIAGRAMS.md)); [list](landing-beta/LOW-HANGING-FRUIT.md) | 2026-11-03 | ZAL-A6-A1 answered 2026-11-04 (Jordi: "i choose A please"): worker ports direction A (Paper) into `apps/site` via a self-merged PR, live on zenod.dev, then review with its card. |
 
 Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-5 #1062 (stranger journey) → A0 + DOD-2; ZAL-6 #1063 (invitation draft) → A4 via zenod-social.
 
@@ -78,6 +84,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-10-24 | Revived as milestone A "Zenod is production-ready" under agent_team EPIC-12, steps A0–A5; plan approved by Jordi 2026-10-24. | One concrete finish line: 10 capped free-pass users and one live €9 payment; testers only after caps work. | agent_team deck slides 3–4; [EPIC-12](https://github.com/AlfaBlok/agent_team/blob/main/docs/spines/epic-12-zenod-live-heard-sold.md) |
 | 2026-10-27 | A2, A3, A4 moved to EPIC-7 (real-user production test, first 5 testers); Jordi: caps before testers, testers never charged, 1-month code extended monthly. | One epic for the whole path to testers. | [EPIC-7](EPIC-7-REAL-USER-TEST.md) |
 | 2026-10-24 | Old detail moved, not deleted, to the history page; stale sibling spines closed or superseded. | 707-line spine → under the 150-line budget; one active board. | [TIDY-2026-10-24](TIDY-2026-10-24.md) |
+| 2026-11-04 | ZAL-A6: landing direction A (Paper) chosen for zenod.dev; A6 stamped ready (root L-37). Decided by Jordi via Team desk chat, verbatim: "i choose A please". | His answer to ZAL-A6-A1 is the ready stamp; B and C stay beta-only. | [directions](http://vps3.taild81fbb.ts.net:8741/) |
 
 
 ## Spine Map
