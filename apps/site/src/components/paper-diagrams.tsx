@@ -131,48 +131,6 @@ export function WaysInDiagram() {
   );
 }
 
-export function VoiceDiagram() {
-  return (
-    <Figure
-      label="A voice note sent on WhatsApp goes to Zenod. Zenod keeps the recording, writes the transcript and files what you said onto the right pages."
-      wide={{
-        w: 960,
-        h: 300,
-        body: (
-          <>
-            <Box x={10} y={100} w={230} h={100} title="Voice note" sub="sent on WhatsApp" ts={26} ss={19} />
-            <Arrow pts={[[244, 150], [326, 150]]} />
-            <Box x={330} y={100} w={220} h={100} title="Zenod" sub="listens and files" focus ts={26} ss={19} />
-            <Arrow pts={[[554, 150], [602, 150], [602, 55], [706, 55]]} />
-            <Arrow pts={[[602, 150], [706, 150]]} />
-            <Arrow pts={[[602, 150], [602, 245], [706, 245]]} />
-            <Box x={710} y={15} w={240} h={80} title="Recording" sub="kept as the original" />
-            <Box x={710} y={110} w={240} h={80} title="Transcript" sub="word for word" />
-            <Box x={710} y={205} w={240} h={80} title="Pages updated" sub="linked to the note" />
-          </>
-        ),
-      }}
-      tall={{
-        w: 360,
-        h: 380,
-        body: (
-          <>
-            <Box x={30} y={0} w={300} h={76} title="Voice note" sub="sent on WhatsApp" ts={22} ss={16} />
-            <Arrow pts={[[180, 80], [180, 124]]} />
-            <Box x={30} y={128} w={300} h={76} title="Zenod" sub="listens and files" focus ts={22} ss={16} />
-            <Arrow pts={[[180, 208], [180, 232], [60, 232], [60, 276]]} />
-            <Arrow pts={[[180, 232], [180, 276]]} />
-            <Arrow pts={[[180, 232], [300, 232], [300, 276]]} />
-            <Box x={0} y={280} w={112} h={96} title="Recording" sub="kept" ts={17} ss={14} />
-            <Box x={124} y={280} w={112} h={96} title="Transcript" sub="in full" ts={17} ss={14} />
-            <Box x={248} y={280} w={112} h={96} title="Pages" sub="updated" ts={17} ss={14} />
-          </>
-        ),
-      }}
-    />
-  );
-}
-
 export function LayersDiagram() {
   return (
     <Figure
@@ -208,40 +166,6 @@ export function LayersDiagram() {
             <Label x={62} y={106} size={16}>retrieval</Label>
             <Arrow pts={[[220, 204], [220, 244]]} dash />
             <Label x={234} y={230} size={16}>links back</Label>
-          </>
-        ),
-      }}
-    />
-  );
-}
-
-export function AskDiagram() {
-  return (
-    <Figure
-      label="You ask your agent what you said about the light in that flat. Zenod answers from your pages and points to the original voice note."
-      wide={{
-        w: 960,
-        h: 180,
-        body: (
-          <>
-            <Box x={0} y={40} w={290} h={100} title="You ask" sub="the light in that flat?" ts={26} ss={19} />
-            <Arrow pts={[[294, 90], [331, 90]]} />
-            <Box x={335} y={40} w={290} h={100} title="Zenod answers" sub="you loved the morning light" focus ts={26} ss={19} />
-            <Arrow pts={[[629, 90], [666, 90]]} />
-            <Box x={670} y={40} w={290} h={100} title="Your voice note" sub="the original, to play back" ts={26} ss={19} />
-          </>
-        ),
-      }}
-      tall={{
-        w: 360,
-        h: 340,
-        body: (
-          <>
-            <Box x={30} y={0} w={300} h={76} title="You ask" sub="the light in that flat?" ts={22} ss={16} />
-            <Arrow pts={[[180, 80], [180, 128]]} />
-            <Box x={30} y={132} w={300} h={76} title="Zenod answers" sub="you loved the morning light" focus ts={22} ss={16} />
-            <Arrow pts={[[180, 212], [180, 260]]} />
-            <Box x={30} y={264} w={300} h={76} title="Your voice note" sub="the original, to play back" ts={22} ss={16} />
           </>
         ),
       }}
