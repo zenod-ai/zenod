@@ -41,14 +41,14 @@ Goal sentence: A real user signs up, uses Zenod over WhatsApp, and is metered an
 Status: active
 Phase: A0 re-check done and proposed done 2026-10-25 (worker run_f010b4a9); A1–A5 not started
 Last verified: 2026-10-25
-Last attempted: 2026-11-03 roll-up from children — [EPIC-7](EPIC-7-REAL-USER-TEST.md) (active): everything agents can build for the 5-tester test is live (checkout, caps, tester codes, wording, tester-watch, rotated keys); the rehearsal waits on one Google sign-in (E7-A15) and the leaked-key rolls on one key page (E7-A14). [EPIC-6](EPIC-6-HEALTH-DASHBOARD.md) (active): S1 inventory in review since 2026-10-25; S2–S6 wait for Jordi to accept S1. A0 re-check proposed done 2026-10-25; A1 voice test and A5 live billing not started
+Last attempted: 2026-11-04 ZAL-A6 Paper landing shipped by worker run_c49da4e3 (#1494, a69a78d live 10:12Z) and in review ; 2026-11-03 roll-up from children — [EPIC-7](EPIC-7-REAL-USER-TEST.md) (active): everything agents can build for the 5-tester test is live (checkout, caps, tester codes, wording, tester-watch, rotated keys); the rehearsal waits on one Google sign-in (E7-A15) and the leaked-key rolls on one key page (E7-A14). [EPIC-6](EPIC-6-HEALTH-DASHBOARD.md) (active): S1 inventory in review since 2026-10-25; S2–S6 wait for Jordi to accept S1. A0 re-check proposed done 2026-10-25; A1 voice test and A5 live billing not started
 Result: production is up (health ok on 5aa4fe4, 2026-11-03) and ready for testers apart from the rehearsal; no tester invited yet; live billing never performed
 Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794a44f78b8f64323f67da28bd4d983`; Dokploy `zenod-mt` on `ghcr.io/zenod-ai/zenod:sha-ae3e77a`; production-readiness still lists 5 advisory failures (Stripe webhook/portal/live billing journey, backup restore, Drive acceptance), all A5 or later. Public Google registration and paid checkout opened 2026-09-16 on `83c2752` ([receipt](evidence/public-opening-2026-09-16/README.md)); live billing and Drive acceptance never performed.
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
 Waiting on: Jordi, through EPIC-7: E7-A15 (one sign-in) and E7-A14 (key page); EPIC-6 waits on his S1 review
 Waiting on (ZAL-A6-A1): answered 2026-11-04; A6 in review — Paper landing live on https://zenod.dev/ at a69a78d ([evidence](evidence/zal-a6-2026-11-04.md)), awaiting Jordi's verdict on its card
 Next action: EPIC-7 T7 rehearsal once Jordi signs in, then T8 go/no-go and the five invites
-Verified at: 2026-11-03 (child Current States read; live health 5aa4fe4)
+Verified at: 2026-11-04 zenod.dev 200 with the new Paper page, A6 card fields checked against the gate ; 2026-11-03 child Current States read; live health 5aa4fe4
 
 ## Waiting on
 
