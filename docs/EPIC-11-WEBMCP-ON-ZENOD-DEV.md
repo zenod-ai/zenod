@@ -52,7 +52,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | E11-S1 | Ticket worker | Sonnet subagent | Register WebMCP tools in apps/site, feature-detected, with a vitest | done | none | PR #1475 merged 9b5d18d | main | CI pass run 41477574557; site vitest 24/24, typecheck, build green; lint red only on pre-existing story-sections.tsx:39 | 2026-11-02 | publish + live check
-| E11-S2 | Ticket worker | Delivery manager (agent registers via T3 browser) | Add the origin-trial token meta tag for zenod.dev | blocked | E11-S1, waits on EPIC-7/E7-A11 (one Google sign-in) | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | after the sign-in: register the trial in the browser, add the token meta tag via PR |
+| E11-S2 | Ticket worker | Delivery manager (agent registers via T3 browser) | Add the origin-trial token meta tag for zenod.dev (E11-3) | blocked | E11-S1, waits on EPIC-7/E7-A11 (one Google sign-in) | main via PR (meta tag in apps/site/index.html) | main | none | 2026-11-02 | after the sign-in: register the trial in the browser, add the token meta tag via PR |
 
 ## Decisions
 
@@ -61,6 +61,7 @@ One line per decision; detail goes to a linked page.
 | Date | Outcome | Decision / Attempt | Durable Summary | Evidence | Revisit When |
 |---|---|---|---|---|---|
 | 2026-11-02 | accepted | Created as a goal under zenod-in-every-mcp-directory-listing-sprint-and-mcp-seo | one node in the epic log | zenod-in-every-mcp-directory-listing-spr.md | never |
+| 2026-11-04 | accepted | E48-S6 asked-no-row sweep (agent_team run_0de9943c): E11-3 is E11-S2 (origin-trial token); its title now cites E11-3, no new row, no status changed | the console no longer lists E11-3 as asked with no row | this commit | never |
 
 ## Operating Learnings
 
