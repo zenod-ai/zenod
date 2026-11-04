@@ -1,7 +1,4 @@
 import * as React from "react";
-import { SlotText } from "slot-text/react";
-import { chromatic } from "slot-text";
-import "slot-text/style.css";
 import {
   ArrowUpRightIcon,
   BookOpenIcon,
@@ -9,9 +6,8 @@ import {
   LayoutDashboardIcon,
 } from "lucide-react";
 
-import heroLibrarian from "@/assets/zenod-v5-hero-librarian.webp";
 import { cn } from "@/lib/utils";
-import { StorySections } from "@/components/story-sections";
+import { PaperLanding } from "@/components/paper-landing";
 import { ConnectPage } from "@/components/connect-page";
 import {
   consumePendingHostedTier,
@@ -141,9 +137,9 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
           <span aria-hidden="true" />
         </a>
         <nav className="v5-nav-links" aria-label="Primary">
-          <a href="/#context">Why memory</a>
-          <a href="/#journey">Examples</a>
-          <a href="/#alexandria">The librarian</a>
+          <a href="/#ways-in">How it works</a>
+          <a href="/#voice">Voice</a>
+          <a href="/#yours">Your library</a>
           <a href="/#start">Run it your way</a>
           <a href="/connect">Connect</a>
         </nav>
@@ -178,19 +174,6 @@ function SiteHeader({ customer }: { customer: CustomerJourney }) {
   );
 }
 
-function StarLink() {
-  const [active, setActive] = React.useState(false);
-  return (
-    <a className="v5-button v5-star-link" href={GITHUB_URL} target="_blank" rel="noreferrer"
-      aria-label="Star Zenod on GitHub"
-      onMouseEnter={() => setActive(true)} onMouseLeave={() => setActive(false)}
-      onFocus={() => setActive(true)} onBlur={() => setActive(false)}>
-      <GithubIcon />
-      <SlotText text={active ? "Give us a star" : "Star on GitHub"} options={{ rollBy: "word", color: chromatic(), direction: "up", duration: 320, stagger: 40, bounce: 0.08 }} />
-    </a>
-  );
-}
-
 function SectionTitle({
   no,
   kicker,
@@ -212,16 +195,15 @@ function SectionTitle({
   );
 }
 
-function PricingSection({ customer, embedded = false }: { customer: CustomerJourney; embedded?: boolean }) {
-  const Container = embedded ? "div" : "section";
+function PricingSection({ customer }: { customer: CustomerJourney }) {
   return (
-    <Container className={embedded ? "zls-offer" : "v5-section"} id={embedded ? undefined : "start"}>
-      {!embedded && <SectionTitle
+    <section className="v5-section" id="start">
+      <SectionTitle
         no="06 / START"
         kicker="Choose where it runs"
         title="Start free. Stay in control."
         lead="One library. Two ways to run it."
-      />}
+      />
       <div className="v5-plans">
         {PRICING_OPTIONS.map((plan) => (
           <article
@@ -271,39 +253,7 @@ function PricingSection({ customer, embedded = false }: { customer: CustomerJour
         €9/month + VAT with managed AI usage and WhatsApp included.
         Hosted: GitHub or Drive · self-hosted: GitHub.
       </p>
-    </Container>
-  );
-}
-
-const verbs = ["contribute to.", "enrich.", "access.", "cultivate."];
-
-function MemoryRoll() {
-  const [index, setIndex] = React.useState(0);
-  React.useEffect(() => {
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const sync = () => {
-      clearInterval(timer);
-      if (!motion.matches && !document.hidden) {
-        timer = setInterval(() => setIndex((value) => (value + 1) % verbs.length), 3200);
-      }
-    };
-    sync();
-    motion.addEventListener("change", sync);
-    document.addEventListener("visibilitychange", sync);
-    return () => {
-      clearInterval(timer);
-      motion.removeEventListener("change", sync);
-      document.removeEventListener("visibilitychange", sync);
-    };
-  }, []);
-  return (
-    <div className="v5-verb-line" aria-label="Your memory, yours to contribute to, enrich, access, and cultivate.">
-      <span aria-hidden="true">Your memory, yours to</span>
-      <span className="v5-memory-roll" aria-hidden="true">
-        <SlotText text={verbs[index]} options={{ rollBy: "word", color: chromatic(), colorFade: 650, direction: "up", duration: 500, stagger: 55, bounce: 0.12, exitOffset: 0 }} />
-      </span>
-    </div>
+    </section>
   );
 }
 
@@ -333,67 +283,15 @@ function SiteFooter() {
 
 function LandingPage({ customer }: { customer: CustomerJourney }) {
   return (
-    <div className="v5-site">
-      <SiteHeader customer={customer} />
-      <main>
-        <section className="v5-hero">
-          <img
-            className="v5-hero-art"
-            src={heroLibrarian}
-            alt="The Librarian of Alexandria emerging from a network of connected memories"
-          />
-          <div className="v5-hero-shade" />
-          <div className="v5-wrap v5-hero-inner">
-            <div className="v5-hero-copy">
-              <p className="v5-eyebrow">The memory layer you control</p>
-              <h1>
-                Your agents.
-                <span className="v5-cyan">One memory.</span>
-                <span className="v5-acid">Totally yours.</span>
-              </h1>
-              <p className="v5-lead">
-                Every agent works better with the right context. Zenod keeps it
-                organized, portable, and yours.
-              </p>
-              <div className="v5-actions">
-                <a className="v5-button v5-button-primary" href="#start">
-                  Try Zenod free
-                </a>
-                <StarLink />
-              </div>
-              <MemoryRoll />
-            </div>
-          </div>
-          <div className="v5-identity">
-            <b>ZENOD · THE LIBRARIAN</b>
-            <span>ALEXANDRIA / REBUILT FOR AGENTS</span>
-          </div>
-          <div className="v5-wrap v5-proof">
-            <div>
-              <b>Yours</b>
-              <span>MARKDOWN + GIT</span>
-            </div>
-            <div>
-              <b>Portable</b>
-              <span>MODEL INDEPENDENT</span>
-            </div>
-            <div>
-              <b>Connected</b>
-              <span>MCP NATIVE</span>
-            </div>
-            <div>
-              <b>Maintained</b>
-              <span>ONE GATEKEEPER</span>
-            </div>
-          </div>
-        </section>
-
-        <StorySections pricing={<PricingSection customer={customer} embedded />} />
-        <div className="v5-wrap">
-          <SiteFooter />
-        </div>
-      </main>
-    </div>
+    <PaperLanding
+      customer={{
+        signedIn: Boolean(customer.session),
+        busyTier: customer.busyTier,
+        error: customer.error,
+        paidSignupReady: customer.paidSignupReady,
+        subscribe: customer.subscribe,
+      }}
+    />
   );
 }
 
