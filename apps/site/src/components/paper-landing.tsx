@@ -11,12 +11,16 @@ import hero from "@/assets/paper/hero.webp";
 import voice from "@/assets/paper/voice.webp";
 import hall from "@/assets/paper/hall.webp";
 import {
-  AskDiagram,
   CustodyDiagram,
   LayersDiagram,
-  VoiceDiagram,
   WaysInDiagram,
 } from "@/components/paper-diagrams";
+import {
+  ConsoleShots,
+  LearningShot,
+  RecallShot,
+  WhatsAppVoiceShot,
+} from "@/components/product-shots";
 import {
   DASHBOARD_URL,
   GOOGLE_SIGN_IN_PATH,
@@ -176,7 +180,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             transcript and files what you said onto the pages it belongs to. It
             replies when the note arrives, and again once it has been filed.
           </p>
-          <VoiceDiagram />
+          <WhatsAppVoiceShot />
         </section>
         <figure className="pp-band">
           <img
@@ -187,6 +191,16 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             alt="A phone, a ceramic cup and a blank sheet of paper on an oak desk"
           />
         </figure>
+
+        <section className="pp-sec pp-wrap" id="desk" aria-labelledby="desk-title">
+          <h2 id="desk-title">And from your editor.</h2>
+          <p>
+            When you and your coding agent work something out, tell it to save
+            the lesson. It calls Zenod’s store_memory tool, and Zenod files the
+            learning in the same library as your voice notes.
+          </p>
+          <LearningShot />
+        </section>
 
         <section className="pp-sec pp-wrap" id="ingestion" aria-labelledby="ingestion-title">
           <h2 id="ingestion-title"><span className="pp-h-step">Ingestion.</span> Kept as it arrived.</h2>
@@ -217,7 +231,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             from your own pages and names the pages it used. Follow the link and
             you are back at the voice note.
           </p>
-          <AskDiagram />
+          <RecallShot />
           <p className="pp-fine">
             Questions go through a connected agent such as Claude, ChatGPT or
             Cursor. <a href="/connect">How to connect</a>
@@ -237,6 +251,15 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             up. If you stop using Zenod, the files stay where they are.
           </p>
           <CustodyDiagram />
+        </section>
+
+        <section className="pp-sec pp-wrap" id="console" aria-labelledby="console-title">
+          <h2 id="console-title">One page for your settings.</h2>
+          <p>
+            Connect your WhatsApp number, pick where your library lives and see
+            what you have used this month, all in the Zenod console.
+          </p>
+          <ConsoleShots />
         </section>
 
         <section className="pp-sec pp-wrap" id="mine" aria-labelledby="mine-title">

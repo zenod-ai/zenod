@@ -91,6 +91,41 @@ body:has(.pp) {
 .pp-foot-name { font: 400 1.5rem var(--pp-serif); margin: 0 0 1rem; }
 .pp-foot-links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font: 400 0.95rem var(--pp-sans); color: var(--pp-muted); }
 
+/* Product visuals (ZAL-A6 iteration 2): WhatsApp chat, Claude Code, console. */
+.pp-shot { margin: 2.5rem 0 1rem; }
+.pp-shot figcaption { font: 400 0.9rem/1.5 var(--pp-sans); color: var(--pp-muted); margin-top: 0.9rem; text-align: center; }
+.pp-shot p { margin: 0; }
+
+.pp-phone { max-width: 23rem; margin: 0 auto; padding: 0.55rem; border: 1px solid var(--pp-ink); border-radius: 2.2rem; background: #fffdf8; }
+.pp-phone-screen { border-radius: 1.75rem; overflow: hidden; background: #efeae2; }
+.pp-shot .pp-wa-head { display: flex; align-items: center; gap: 0.6rem; padding: 1rem 1.1rem 0.8rem; background: #fffdf8; border-bottom: 1px solid #e3ddd0; font: 500 1rem var(--pp-sans); }
+.pp-wa-avatar { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--pp-accent); color: var(--pp-accent-ink); font: 500 1rem var(--pp-serif); }
+.pp-wa { display: flex; flex-direction: column; gap: 0.55rem; padding: 1rem 0.8rem 1.4rem; font: 400 0.84rem/1.42 var(--pp-sans); color: #111b21; }
+.pp-wa-msg { align-self: flex-start; max-width: 88%; padding: 0.45rem 0.65rem 0.3rem; border-radius: 0.6rem; background: #fff; box-shadow: 0 1px 0 rgba(17, 27, 33, 0.08); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pp-wa-out { align-self: flex-end; background: #d9fdd3; }
+.pp-wa-time { display: block; text-align: right; font-size: 0.68rem; color: #667781; margin-top: 0.15rem; }
+.pp-wa-voice { display: flex; align-items: center; gap: 0.6rem; min-width: 12rem; padding-top: 0.2rem; }
+.pp-wa-play { width: 0; height: 0; border-style: solid; border-width: 0.45rem 0 0.45rem 0.75rem; border-color: transparent transparent transparent #54656f; }
+.pp-wa-wave { display: flex; align-items: center; gap: 2px; flex: 1; }
+.pp-wa-wave i { display: block; width: 3px; border-radius: 2px; background: #7d8f87; }
+.pp-wa-len { font-size: 0.72rem; color: #667781; }
+
+.pp-term-fig { width: min(52rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
+.pp-term { border: 1px solid var(--pp-ink); border-radius: 10px; background: #fffdf8; overflow: hidden; }
+.pp-shot .pp-term-bar { padding: 0.55rem 1rem; border-bottom: 1px solid #e3ddd0; font: 500 0.8rem var(--pp-sans); color: var(--pp-muted); }
+.pp-term-body { display: flex; flex-direction: column; gap: 0.7rem; padding: 1.1rem 1.2rem 1.3rem; font: 400 0.82rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--pp-ink); }
+.pp-term-body p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pp-shot .pp-term-ask { background: var(--pp-tint); padding: 0.45rem 0.7rem; border-radius: 6px; }
+.pp-term-tool b { font-weight: 600; }
+.pp-term-dot { color: var(--pp-accent); margin-right: 0.5rem; }
+.pp-term-dot-ink { color: var(--pp-ink); }
+.pp-shot .pp-term-out { color: var(--pp-muted); padding-left: 1.4rem; margin-top: -0.45rem; }
+
+.pp-console { width: min(62rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
+.pp-console img, .pp-console-pair img { width: 100%; border: 1px solid #d9d4c7; border-radius: 8px; background: #fff; }
+.pp-console-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; width: min(52rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
+.pp-console-pair .pp-shot { margin-top: 1.5rem; }
+
 @media (max-width: 760px) {
   .pp { font-size: 1.125rem; }
   .pp-nav nav { display: none; }
@@ -100,6 +135,9 @@ body:has(.pp) {
   .pp-d-wide { display: none; }
   .pp-d-tall { display: block; max-width: 22rem; margin: 0 auto; }
   .pp-diagram { width: auto; left: 0; transform: none; }
+  .pp-term-fig, .pp-console, .pp-console-pair { width: auto; left: 0; transform: none; }
+  .pp-console-pair { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .pp-term-body { font-size: 0.76rem; padding: 0.9rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pp * { transition: none !important; }
