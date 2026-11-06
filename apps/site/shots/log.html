@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- ZAL-A9 screenshot: the day's evidence log in the user's GitHub repository.
+     Entry format follows appendEvidence in packages/core/src/engine/evidence.ts
+     (heading "## HH:MM <first eight words>  ^e-<6 hex>", source, verbatim,
+     content-type, captured-at, then the words quoted). Commit author and message
+     follow packages/core/src/git/vaultRepo.ts ("zenod-bot") and engine.ts
+     ("memory: capture voice_note"). Demo content only. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="shots.css">
+<link rel="stylesheet" href="github.css">
+</head>
+<body>
+<div id="shot" class="gh" style="width: 920px">
+  <div class="gh-top">
+    <svg class="gh-mark" viewBox="0 0 16 16" width="28" height="28"><path fill="#1f2328" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+    <span class="gh-crumb">maya-demo <i>/</i> <b>memory</b></span>
+    <span class="gh-pill">Private</span>
+  </div>
+  <div class="gh-tabs"><span class="on">Code</span><span>Issues</span><span>Pull requests</span><span>Actions</span><span>Settings</span></div>
+  <div class="gh-body">
+    <p class="gh-path"><a>memory</a> / <a>Log</a> / <b>2026-11-04.md</b></p>
+    <div class="gh-commit">
+      <span class="gh-av">Z</span><b>zenod-bot</b><span class="gh-msg">memory: capture voice_note</span>
+      <span class="gh-sha">3f9c2a1 · 2 minutes ago</span>
+    </div>
+    <div class="gh-file">
+      <div class="gh-file-head"><span class="gh-seg"><span class="on">Code</span><span>Blame</span></span><span class="gh-size">23 lines (20 loc) · 742 Bytes</span></div>
+      <ol class="gh-code" id="code"></ol>
+    </div>
+  </div>
+</div>
+<script>
+  const lines = [
+    ["h", "# 2026-11-04"],
+    ["", ""],
+    ["h", "## 04:40 Boiler service sticker: next service due March 2027.  ^e-2b81c4"],
+    ["l", "- source: whatsapp"],
+    ["l", "- verbatim: yes"],
+    ["l", "- content-type: image"],
+    ["l", "- captured-at: 2026-11-04T04:40:00.000Z"],
+    ["", ""],
+    ["q", "> Boiler service sticker: next service due March 2027."],
+    ["", ""],
+    ["h", "## 08:05 When migrating the orders table, run it on a  ^e-91b07d"],
+    ["l", "- source: mcp"],
+    ["l", "- verbatim: yes"],
+    ["", ""],
+    ["q", "> When migrating the orders table, run it on a copy first: the live table locks for several minutes."],
+    ["", ""],
+    ["h", "## 09:28 Just talked to Leo about the shed. He can  ^e-4f2a9c", "hl"],
+    ["l", "- source: whatsapp", "hl"],
+    ["l", "- verbatim: yes", "hl"],
+    ["l", "- content-type: voice_note", "hl"],
+    ["l", "- captured-at: 2026-11-04T09:28:00.000Z", "hl"],
+    ["", "", "hl"],
+    ["q", "> Just talked to Leo about the shed. He can come Saturday morning to help put up the frame, so I need to order the cedar boards before Friday.", "hl"],
+  ];
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const fmt = ([k, t]) => {
+    if (k === "h") return `<span class="k-h">${esc(t).replace(/(\^e-[0-9a-f]{6})$/, '<span class="k-a">$1</span>')}</span>`;
+    if (k === "l") return `<span class="k-m">-</span>${esc(t.slice(1))}`;
+    if (k === "q") return `<span class="k-q">${esc(t)}</span>`;
+    return esc(t);
+  };
+  document.getElementById("code").innerHTML = lines.map((l) => `<li class="${l[2] || ""}"><span>${fmt(l) || "&nbsp;"}</span></li>`).join("");
+</script>
+</body>
+</html>

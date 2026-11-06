@@ -1,0 +1,15 @@
+/* Shared base for the landing screenshots (ZAL-A9). Rendered by capture.mjs, never shipped. */
+@font-face {
+  font-family: "Geist";
+  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font-family: "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+#shot { display: inline-block; vertical-align: top; }
