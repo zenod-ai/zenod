@@ -108,12 +108,11 @@ export class TaskJobQueue {
   resume(): void {
     if (this.closed) return;
     this.requestDrains();
-    this.requestVaultRecovery();
   }
 
   /**
-   * Single-flight, throttled self-heal of an interrupted filing (see vaultRecovery.ts). Runs at boot and whenever
-   * a write is refused with filing_recovery_pending; never awaited by the job that tripped it.
+   * Single-flight, throttled self-heal of an interrupted filing (see vaultRecovery.ts). Runs whenever a job is
+   * refused with filing_recovery_pending (not at boot: hosted tenant runtimes never call resume()); never awaited by the job that tripped it.
    */
   private requestVaultRecovery(): void {
     if (this.closed || this.recovery || Date.now() - this.lastRecoveryAt < VAULT_RECOVERY_COOLDOWN_MS) return;
