@@ -106,6 +106,26 @@ export class VaultRepo implements VaultRepository {
     return (await this.git.raw(["rev-list", "--max-count=1", await this.headSha(), "--not", published.id])).trim() === "";
   }
 
+  private async containedIn(commit: string, revisionId: string): Promise<boolean> {
+    return (await this.git.raw(["rev-list", "--max-count=1", commit, "--not", revisionId])).trim() === "";
+  }
+
+  async unpublishedPaths(): Promise<string[]> {
+    const published = await this.currentPublishedRevision();
+    const out = await this.git.raw(["log", "--name-only", "--format=", `${published.id}..HEAD`]);
+    return [...new Set(out.split("\n").map((line) => line.trim()).filter(Boolean))];
+  }
+
+  async publishLocalHead(): Promise<"clean" | "published" | "diverged"> {
+    const published = await this.currentPublishedRevision();
+    const head = await this.headSha();
+    if (await this.containedIn(head, published.id)) return "clean";
+    // No rebase, no force: only a pure fast-forward of the authority may be pushed.
+    if (!(await this.containedIn(published.id, head))) return "diverged";
+    try { await this.git.push("origin", this.branch); } catch { /* verify below */ }
+    return (await this.containedIn(head, (await this.currentPublishedRevision()).id)) ? "published" : "diverged";
+  }
+
   async pullForFiling(): Promise<void> {
     await this.currentPublishedRevision();
     await this.git.merge(["--ff-only", `refs/remotes/origin/${this.branch}`]);

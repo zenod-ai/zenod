@@ -1886,6 +1886,63 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect((await repo.currentPublishedRevision()).id).toBe(recovered.revision!.id);
   });
 
+  it.each(["before-page", "before-push"] as const)("names an interrupted filing in one content-free line and reports it for recovery (%s)", async (crash) => {
+    const content = "Insurance renewal is in October.";
+    const reconcile = vi.fn(async (request: import("../src/engine/reconciliation.js").ReconciliationInput) => request.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds,
+      sourceQuote: request.sources.find(source => source.id === idea.sourceIds[0])!.text, statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));
+    Object.assign(llm, { reconcile });
+    const e = engine(); const captured = await e.captureEvidence!({ content, source: "whatsapp" });
+    expect(await e.inspectInterruptedFiling!()).toMatchObject({ interrupted: false, conditions: [], receipts: [] });
+    const input = { content, source: "whatsapp" as const, evidenceRef: captured.evidenceRef };
+    let calls = 0;
+    if (crash === "before-push") vi.spyOn(repo, "commitAndPublish").mockImplementationOnce(async message => { await repo.commit(message); throw new Error("synthetic crash"); });
+    await expect(e.enrichEvidence!({ ...input, assertActive: () => { if (crash === "before-page" && ++calls >= 5) throw new Error("synthetic crash"); } })).rejects.toThrow("synthetic crash");
+
+    const state1 = await e.inspectInterruptedFiling!();
+    expect(state1.interrupted).toBe(true);
+    expect(state1.conditions).toEqual([crash === "before-page" ? "pending_receipt" : "unpublished_head"]);
+    expect(state1.receipts).toEqual([expect.objectContaining({ evidenceRef: captured.evidenceRef, where: crash === "before-page" ? "pending_change" : "unpublished_commit",
+      path: `Inbox/filing-${captured.evidenceRef.slice(4, 14)}-${captured.evidenceRef.split("#^")[1]}.md` })]);
+    expect(state1.localHead).toBe(await repo.headSha());
+    if (crash === "before-push") { expect(state1.headPublished).toBe(false); expect(state1.publishedRevision).not.toBe(state1.localHead); }
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(e.captureEvidence!({ content: "unrelated new capture", source: "selftest" })).rejects.toThrow("filing_recovery_pending");
+      await expect(e.captureEvidence!({ content: "unrelated new capture", source: "selftest" })).rejects.toThrow("filing_recovery_pending");
+      const lines = warn.mock.calls.map(call => String(call[0])).filter(line => line.startsWith("[vault-recovery] writes blocked by filing_recovery_pending: "));
+      expect(lines).toHaveLength(1); // throttled: one line per distinct state
+      expect(lines[0]).toContain(captured.evidenceRef);
+      expect(lines[0]).not.toContain("Insurance renewal"); expect(lines[0]).not.toContain("unrelated new capture");
+    } finally { warn.mockRestore(); }
+
+    // The exact recovery path an enrich_memory job takes clears the guard.
+    expect((await e.enrichEvidence!(input)).filing).toBe("filed");
+    expect(await e.inspectInterruptedFiling!()).toMatchObject({ interrupted: false });
+    expect((await e.evidenceEnrichInput!(captured.evidenceRef))).toMatchObject({ evidenceRef: captured.evidenceRef, content, source: "whatsapp" });
+  });
+
+  it("publishes a receipt-less unpublished local commit only when it fast-forwards the authority", async () => {
+    const e = engine(); await e.captureEvidence!({ content: "first", source: "whatsapp" });
+    expect(await e.recoverUnpublishedHead!()).toBe("clean");
+    await writeFile(join(repo.path, "Areas/Local.md"), "# Local\nunpublished\n"); await repo.commit("local only");
+    expect(await e.inspectInterruptedFiling!()).toMatchObject({ interrupted: true, conditions: ["unpublished_head"], receipts: [] });
+    await expect(e.captureEvidence!({ content: "blocked", source: "whatsapp" })).rejects.toThrow("filing_recovery_pending");
+    const head = await repo.headSha();
+    expect(await e.recoverUnpublishedHead!()).toBe("published");
+    expect((await repo.currentPublishedRevision()).id).toBe(head);
+    expect((await e.captureEvidence!({ content: "after recovery", source: "whatsapp" })).filing).toBe("pending");
+
+    // Diverged: someone else published meanwhile. Nothing is pushed, rebased or discarded.
+    await writeFile(join(repo.path, "Areas/Local2.md"), "# Local2\nunpublished\n"); await repo.commit("local only 2");
+    const other = await VaultRepo.open({ workdir: join(dir, "other"), remoteUrl: join(dir, "origin.git") });
+    await writeFile(join(other.path, "Areas/Remote.md"), "# Remote\n"); await other.commitAndPublish("remote change");
+    const local = await repo.headSha();
+    expect(await e.recoverUnpublishedHead!()).toBe("diverged");
+    expect(await repo.headSha()).toBe(local);
+    expect(await readFile(join(repo.path, "Areas/Local2.md"), "utf8")).toContain("unpublished");
+  });
+
   it("recovers a checkpointed no-op without inventing an unchanged file publication", async () => {
     const content = "Insurance renewal is in October.";
     const reconcile = vi.fn(async (request: import("../src/engine/reconciliation.js").ReconciliationInput) => request.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds,

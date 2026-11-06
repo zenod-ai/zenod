@@ -28,6 +28,7 @@ export type {
   LintError,
   LintReport,
   MemoryContentType,
+  InterruptedFilingState,
   MemoryEntry,
   MemoryEntryQuery,
   Note,
@@ -45,6 +46,7 @@ export type {
   TokenCostOperation,
   TreeSweepInput,
   TreeSweepResult,
+  UnpublishedHeadRecovery,
   WorkInput,
   WorkResult,
 } from "./types.js";
