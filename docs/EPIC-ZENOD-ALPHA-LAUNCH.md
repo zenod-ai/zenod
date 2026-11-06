@@ -47,11 +47,12 @@ Production 2026-10-25: `cloud.zenod.dev/api/health` status ok, sha `ae3e77a3b794
 Finding 2026-10-25 (resolved): the `deploy` job's Dokploy 404 was not a moved app id: `dokploy.polyqu.com` was closed on 2026-10-22 (Dokploy is Tailscale-only), so GitHub runners cannot reach it. The VPS1 deploy poller (infra-vps EPIC-10-A9) already rolls `zenod-mt` after `publish`; #1435 turns `deploy` into a health-sha check and the two `DOKPLOY_*` GitHub secrets were removed. `scripts/deploy-fleet.sh` is manual-only and refuses on Dokploy v0.30 (`project.all` no longer returns images); not needed for the push path.
 Waiting on: Jordi, through EPIC-7: E7-A15 (one sign-in) and E7-A14 (key page); EPIC-6 waits on his S1 review
 Waiting on (ZAL-A6-A1): answered 2026-11-04 ; A6 done (Jordi approved 2026-11-04, c00a3d3), Paper landing with product visuals live at 43d63a1 ; A7 (restyle pricing and connect) parked as draft by Jordi
-Next action: A8 proves a live WhatsApp reply ; A9 preview ready → raise ZAL-A9-A1 (approve) ; then EPIC-7 T7 once Jordi signs in
+Next action: Jordi answers ZAL-A9-A1 (landing preview http://vps3.taild81fbb.ts.net:8746/) ; A8 proves a live WhatsApp reply ; then EPIC-7 T7 once Jordi signs in
 Verified at: 2026-11-04T11:25Z health sha 43d63a1, zenod.dev serves the product visuals, A6 card fields checked against the gate ; 2026-11-03 child Current States read; live health 5aa4fe4
 
 ## Waiting on
 
+- [ask ZAL-A9-A1: approve @Jordi since 2026-11-06 row A9] Should the redone home page go live on zenod.dev? Open http://vps3.taild81fbb.ts.net:8746/ — each section now shows a real Zenod screen first (your WhatsApp voice note and its replies, the day log in GitHub, the filed page in Obsidian, Claude Code saving and finding a memory, the history of your library, the console), then names the benefit — context: you found the first landing raw and half baked and asked for a polished redo, each benefit shown with a real screenshot — impact: yes ships it to zenod.dev in one merge; until then zenod.dev keeps the current page — risk: small, it is only the public page; rollback is one revert and a redeploy — recommend: approve, or say what to change and we iterate on the same link — why Jordi: the page is the public face and the look is your call — unblocks: A9 — details: [evidence](evidence/zal-a9-2026-11-06.md)
 - [answered ZAL-A6-A1 2026-11-04 @Jordi · done 2026-11-04] Pick a landing direction at http://vps3.taild81fbb.ts.net:8741/ — answer: "i choose A please" (Team desk chat) — A6 ready, worker dispatched
 
 ## Issue Ledger
