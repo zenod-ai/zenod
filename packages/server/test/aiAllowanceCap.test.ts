@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,8 +42,16 @@ function spend(runtime: Runtime, usd: number, at = NOW): void {
   );
 }
 
+// Runtime dirs created by hostedRuntime are removed after each test (no /tmp leak).
+const runtimeDirs: string[] = [];
+afterEach(() => {
+  for (const dir of runtimeDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
 function hostedRuntime(options: { allowance: number | null; enforced?: boolean; platform?: boolean }): Runtime {
-  return new Runtime(mkdtempSync(join(tmpdir(), "zenod-ai-cap-")), undefined, {
+  const dir = mkdtempSync(join(tmpdir(), "zenod-ai-cap-"));
+  runtimeDirs.push(dir);
+  return new Runtime(dir, undefined, {
     seedFromEnv: false,
     tenantId: "tenant-a",
     ...(options.platform === false ? {} : { platformLlm: { apiKey: PLATFORM_KEY } }),
