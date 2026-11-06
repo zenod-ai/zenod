@@ -61,6 +61,10 @@ export interface VaultRepository {
   currentPublishedRevision?(): Promise<VaultRevision>;
   /** Whether the local commit is contained in verified provider history. */
   isCurrentHeadPublished?(): Promise<boolean>;
+  /** Paths touched by local commits that are not yet in verified provider history (git vaults). */
+  unpublishedPaths?(): Promise<string[]>;
+  /** Push an unpublished local head when it fast-forwards provider history; never rebases or forces. */
+  publishLocalHead?(): Promise<"clean" | "published" | "diverged">;
   /** Return the durable revision currently materialized in the local workspace. */
   currentRevision(): Promise<VaultRevision>;
   trackedFiles(): Promise<string[]>;

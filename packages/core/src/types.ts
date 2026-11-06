@@ -112,6 +112,27 @@ export interface EnrichEvidenceInput extends StoreInput {
   evidenceRef: string;
 }
 
+/** Structured, content-free description of why writes are blocked by `filing_recovery_pending`. */
+export interface InterruptedFilingState {
+  interrupted: boolean;
+  conditions: Array<"pending_receipt" | "unpublished_head">;
+  receipts: Array<{
+    path: string;
+    evidenceRef: string;
+    phase: "prepared" | "ready" | "unreadable";
+    where: "pending_change" | "unpublished_commit";
+  }>;
+  /** Pending working-tree changes that are not filing receipts. */
+  otherPendingPaths: number;
+  localHead: string | null;
+  publishedRevision: string | null;
+  /** null when the provider could not be asked (see `error`). */
+  headPublished: boolean | null;
+  error?: string;
+}
+
+export type UnpublishedHeadRecovery = "clean" | "published" | "diverged" | "unsupported";
+
 export type TokenCostOperation = "classify" | "compose" | "ask" | "chat" | "tasking" | "work";
 
 export interface TokenCostMeasurement {
@@ -473,6 +494,12 @@ export interface BrainEngine {
   captureEvidence?(input: StoreInput): Promise<StoreResult>;
   /** Classify and optionally integrate an already-committed evidence entry. */
   enrichEvidence?(input: EnrichEvidenceInput): Promise<StoreResult>;
+  /** Read-only diagnosis of an interrupted filing (queued behind any live write). Never mutates the vault. */
+  inspectInterruptedFiling?(): Promise<InterruptedFilingState>;
+  /** Publish an unpublished local commit only when it fast-forwards the authority; never discards anything. */
+  recoverUnpublishedHead?(): Promise<UnpublishedHeadRecovery>;
+  /** Rebuild the enrichment input of an already-committed evidence entry (fallback when its job record is gone). */
+  evidenceEnrichInput?(evidenceRef: string): Promise<EnrichEvidenceInput | null>;
   /** Describe an image via the vision model and return a plain-text description. */
   describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
   /** Read-only agent loop: synthesized answer with citations. */

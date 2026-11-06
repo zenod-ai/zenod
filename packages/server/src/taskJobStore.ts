@@ -410,6 +410,35 @@ export class TaskJobStore {
       .run(resultJson, error, now, this.tenantId, claim.id, this.ownerId, claim.claimToken, now, MAX_FILING_RESUME_ATTEMPTS).changes === 1;
   }
 
+  /** Newest-first enrich_memory jobs for one evidence entry (any status), for interrupted-filing recovery. */
+  enrichmentJobsFor(evidenceRef: string): TaskJob[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM task_jobs WHERE tenant_id=? AND kind='enrich_memory' AND json_extract(input_json, '$.evidenceRef')=? ORDER BY created_at DESC`)
+      .all(this.tenantId, evidenceRef) as unknown as Row[];
+    return rows.map(rowToJob);
+  }
+
+  /**
+   * Put a finished-without-success enrichment (error/interrupted, or done with a filing still owed) back in the
+   * queue with a fresh retry budget. Never touches a job that is queued or running.
+   */
+  requeueForRecovery(id: string, now: number = Date.now()): boolean {
+    return this.db.prepare(`UPDATE task_jobs SET status='queued', attempts=0, error=NULL, owner_id=NULL, claim_token=NULL,
+      lease_expires_at=NULL, updated_at=? WHERE tenant_id=? AND id=? AND status NOT IN ('queued','running')`)
+      .run(now, this.tenantId, id).changes === 1;
+  }
+
+  /**
+   * Capture jobs that failed only because an interrupted filing blocked the vault. Nothing was written before the
+   * guard tripped, so re-running them is idempotent (same job id, same idempotency key, no duplicate evidence).
+   */
+  requeueFilingRecoveryBlocked(now: number = Date.now()): number {
+    return Number(this.db.prepare(`UPDATE task_jobs SET status='queued', attempts=0, error=NULL, owner_id=NULL, claim_token=NULL,
+      lease_expires_at=NULL, updated_at=? WHERE tenant_id=? AND status='error'
+      AND kind IN ('store','media_ingest','enrich_memory') AND error LIKE '%filing_recovery_pending%'`)
+      .run(now, this.tenantId).changes);
+  }
+
   nextRunningLeaseExpiry(): number | null {
     const row = this.db
       .prepare(

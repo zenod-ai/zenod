@@ -6,7 +6,7 @@ import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
-import { assertFilingTarget, filingInputFingerprint, filingReceiptPath, freezeFilingClassification, parseFilingReceipt, renderFilingReceipt, sealFilingReceipt, verifyPreparedFilingChanges, type FilingReceipt, type FrozenTopic } from "./filingReceipt.js";
+import { assertFilingTarget, filingInputFingerprint, filingReceiptPath, freezeFilingClassification, parseFilingReceipt, parseFilingReceiptEnvelope, renderFilingReceipt, sealFilingReceipt, verifyPreparedFilingChanges, type FilingReceipt, type FrozenTopic } from "./filingReceipt.js";
 import { publicationContentHash } from "../vault/publicationGuard.js";
 import { sourceWindows, semanticBounds, resolveTopicSpans, reviewedSourceSpans } from "./sourcePassages.js";
 import { AnswerSupportRegistry, ANSWER_SUPPORT_INSTRUCTION } from "./answerSupport.js";
@@ -37,8 +37,10 @@ import type {
   TaskingReply,
   TokenCostMeasurement,
   TokenCostOperation,
+  InterruptedFilingState,
   TreeSweepInput,
   TreeSweepResult,
+  UnpublishedHeadRecovery,
   WorkInput,
   WorkResult,
 } from "../types.js";
@@ -578,10 +580,92 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * rebases over a store's half-written working tree. Offline is fine —
    * reads then serve the local clone, same as store's pull fallback.
    */
+  const receiptEvidenceRef = (path: string): string => {
+    const match = /^Inbox\/filing-(\d{4}-\d{2}-\d{2})-(e-[a-zA-Z0-9-]+)\.md$/.exec(path)!;
+    return `Log/${match[1]}.md#^${match[2]}`;
+  };
+
+  /**
+   * Content-free description of an interrupted filing: which condition holds,
+   * which receipts and phases, and local HEAD vs the published revision.
+   * With `tolerant` a provider failure is reported instead of thrown.
+   */
+  async function describeInterruptedFiling(tolerant: boolean): Promise<InterruptedFilingState> {
+    assertVault(repo);
+    const pending = await repo.pendingChanges();
+    const receipts: InterruptedFilingState["receipts"] = [];
+    const phaseOf = async (path: string): Promise<"prepared" | "ready" | "unreadable"> =>
+      parseFilingReceiptEnvelope(await readFile(join(vaultPath, path), "utf8").catch(() => ""))?.phase ?? "unreadable";
+    for (const change of pending) {
+      if (isFilingReceiptPath(change.path)) receipts.push({ path: change.path, evidenceRef: receiptEvidenceRef(change.path), phase: await phaseOf(change.path), where: "pending_change" });
+    }
+    let headPublished: boolean | null = repo.isCurrentHeadPublished ? null : true;
+    let error: string | undefined;
+    let localHead: string | null = null;
+    let publishedRevision: string | null = null;
+    try {
+      if (repo.isCurrentHeadPublished) headPublished = await repo.isCurrentHeadPublished();
+      if (headPublished === false && repo.unpublishedPaths) {
+        for (const path of await repo.unpublishedPaths()) {
+          if (isFilingReceiptPath(path) && !receipts.some(receipt => receipt.path === path)) {
+            receipts.push({ path, evidenceRef: receiptEvidenceRef(path), phase: await phaseOf(path), where: "unpublished_commit" });
+          }
+        }
+      }
+    } catch (cause) {
+      if (!tolerant) throw cause;
+      error = cause instanceof Error ? cause.message : String(cause);
+    }
+    if (headPublished === false || receipts.length) {
+      localHead = await repo.currentRevision().then(revision => revision.commitSha ?? revision.id).catch(() => null);
+      publishedRevision = repo.currentPublishedRevision ? await repo.currentPublishedRevision().then(revision => revision.commitSha ?? revision.id).catch(() => null) : null;
+    }
+    const conditions: InterruptedFilingState["conditions"] = [];
+    if (pending.some(change => isFilingReceiptPath(change.path))) conditions.push("pending_receipt");
+    if (headPublished === false) conditions.push("unpublished_head");
+    return { interrupted: conditions.length > 0, conditions, receipts,
+      otherPendingPaths: pending.filter(change => !isFilingReceiptPath(change.path)).length,
+      localHead, publishedRevision, headPublished, ...(error ? { error } : {}) };
+  }
+
+  const guardLogged = new Map<string, number>();
   async function assertNoInterruptedFiling(): Promise<void> {
     if (!repo) return;
-    if ((await repo.pendingChanges()).some(change => isFilingReceiptPath(change.path))
-      || (repo.isCurrentHeadPublished && !(await repo.isCurrentHeadPublished()))) throw new Error("filing_recovery_pending");
+    const state = await describeInterruptedFiling(false);
+    if (!state.interrupted) return;
+    // One structured line per distinct state per minute: no vault content, no secrets.
+    const signature = JSON.stringify([state.conditions, state.receipts.map(receipt => [receipt.path, receipt.phase]), state.localHead, state.publishedRevision]);
+    const at = now().getTime();
+    if (at - (guardLogged.get(signature) ?? 0) >= 60_000) {
+      guardLogged.set(signature, at);
+      console.warn(`[vault-recovery] writes blocked by filing_recovery_pending: ${JSON.stringify(state)}`);
+    }
+    throw new Error("filing_recovery_pending");
+  }
+
+  async function inspectInterruptedFiling(): Promise<InterruptedFilingState> {
+    assertVault(repo);
+    // Serialized behind any live write so an in-flight filing is never mistaken for an interrupted one.
+    return queue.run(() => describeInterruptedFiling(true), "background");
+  }
+
+  async function recoverUnpublishedHead(): Promise<UnpublishedHeadRecovery> {
+    assertVault(repo);
+    const publish = repo.publishLocalHead;
+    if (!publish) return "unsupported";
+    return queue.run(async () => publish.call(repo), "background");
+  }
+
+  async function evidenceEnrichInput(evidenceRef: string): Promise<EnrichEvidenceInput | null> {
+    assertVault(repo);
+    try {
+      const entry = await getEvidenceEntry(vaultPath, evidenceRef, sourceResolver);
+      return { evidenceRef, content: entry.content, source: entry.source,
+        ...(entry.verbatim ? { verbatim: true } : {}),
+        ...(entry.contentType ? { contentType: entry.contentType } : {}),
+        ...(entry.capturedAt ? { capturedAt: entry.capturedAt } : {}),
+        ...(entry.sourceId ? { sourceId: entry.sourceId } : {}) };
+    } catch { return null; }
   }
 
   async function safeReadRevision(): Promise<VaultRevision> {
@@ -3347,6 +3431,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
     store,
     captureEvidence,
     enrichEvidence,
+    inspectInterruptedFiling,
+    recoverUnpublishedHead,
+    evidenceEnrichInput,
     ask,
     chat,
     handleTasking,
