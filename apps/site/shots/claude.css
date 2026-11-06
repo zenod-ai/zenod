@@ -1,0 +1,24 @@
+/* Claude Code in a dark terminal, closely enough for a cropped screenshot (ZAL-A9). */
+#shot { width: 940px; background: #191a17; color: #e8e6df; font: 400 14px/1.6 "Geist Mono", ui-monospace, monospace; border-radius: 0; }
+.cc-bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; background: #24251f; color: #9c9a90; font: 500 12.5px/1 "Geist"; }
+.cc-bar i { width: 12px; height: 12px; border-radius: 50%; background: #45463f; }
+.cc-bar span { margin-left: 10px; }
+.cc { padding: 20px 26px 22px; }
+.cc p { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc .ask { background: #2b2c26; color: #f2f0e8; padding: 6px 12px; margin-left: -12px; margin-right: -12px; }
+.cc .ask::before { content: "> "; color: #9c9a90; }
+.cc .tool, .cc .say { padding-left: 22px; position: relative; }
+.cc .tool::before { content: "●"; position: absolute; left: 0; color: #6cbf8a; }
+.cc .tool b { font-weight: 600; color: #f2f0e8; }
+.cc .tool em { font-style: normal; color: #9c9a90; }
+.cc .out { color: #a9a79d; margin-top: -12px; padding-left: 50px; position: relative; }
+.cc .out::before { content: ""; position: absolute; left: 22px; top: 2px; width: 12px; height: 9px; border-left: 1.5px solid #75736a; border-bottom: 1.5px solid #75736a; }
+.cc .more { color: #75736a; }
+.cc .say::before { content: "●"; position: absolute; left: 0; color: #f2f0e8; }
+.cc .box { border: 1px solid #4b4c44; border-radius: 6px; padding: 8px 12px; color: #75736a; margin: 20px 0 6px; }
+.cc .box::before { content: "> "; color: #9c9a90; }
+.cc .hint { color: #75736a; font-size: 12.5px; margin: 0; }
+.narrow .cc { padding: 16px 16px 18px; }
+.narrow .cc .ask { margin-left: -8px; margin-right: -8px; padding: 6px 8px; }
+.narrow .cc .out { padding-left: 34px; }
+.narrow .cc .out::before { left: 10px; }

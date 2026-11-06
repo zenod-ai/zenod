@@ -1,0 +1,62 @@
+/* GitHub's light theme, closely enough for a cropped screenshot (ZAL-A9). */
+.gh { background: #fff; color: #1f2328; font: 400 14px/1.5 "Geist", system-ui, sans-serif; }
+.gh-top { display: flex; align-items: center; gap: 14px; padding: 16px 24px 8px; background: #f6f8fa; }
+.gh-mark { display: block; }
+.gh-crumb { font-size: 15px; }
+.gh-crumb i { font-style: normal; color: #59636e; margin: 0 2px; }
+.gh-pill { font-size: 12px; font-weight: 500; color: #59636e; border: 1px solid #d1d9e0; border-radius: 999px; padding: 0 7px; line-height: 20px; }
+.gh-tabs { display: flex; gap: 6px; padding: 0 16px; background: #f6f8fa; border-bottom: 1px solid #d1d9e0; }
+.gh-tabs span { padding: 9px 10px 11px; color: #1f2328; position: relative; }
+.gh-tabs span.on { font-weight: 600; }
+.gh-tabs span.on::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: -1px; height: 2px; border-radius: 2px; background: #fd8c73; }
+.gh-body { padding: 18px 24px 24px; }
+.gh-path { margin: 0 0 14px; font-size: 16px; color: #0969da; }
+.gh-path a { color: #0969da; }
+.gh-path b { color: #1f2328; font-weight: 600; }
+.gh-commit { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #d1d9e0; border-radius: 6px 6px 0 0; background: #f6f8fa; font-size: 13.5px; }
+.gh-av { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #1f4d3a; color: #f6f2e9; font-size: 11px; font-weight: 600; }
+.gh-msg { color: #59636e; }
+.gh-sha { margin-left: auto; color: #59636e; font-size: 12.5px; }
+.gh-file { border: 1px solid #d1d9e0; border-top: 0; border-radius: 0 0 6px 6px; overflow: hidden; }
+.gh-file-head { display: flex; align-items: center; gap: 14px; padding: 8px 12px; background: #f6f8fa; border-bottom: 1px solid #d1d9e0; font-size: 12.5px; color: #59636e; }
+.gh-seg { display: inline-flex; border: 1px solid #d1d9e0; border-radius: 6px; overflow: hidden; }
+.gh-seg span { padding: 3px 12px; color: #1f2328; font-weight: 500; }
+.gh-seg span.on { background: #fff; box-shadow: inset 0 0 0 1px #d1d9e0; border-radius: 6px; }
+.gh-code { margin: 0; padding: 8px 0; list-style: none; counter-reset: ln; font: 400 12.5px/20px "Geist Mono", ui-monospace, monospace; }
+.gh-code li { counter-increment: ln; display: flex; white-space: pre-wrap; }
+.gh-code li::before { content: counter(ln); flex: none; width: 52px; padding-right: 16px; text-align: right; color: #59636e; }
+.gh-code li > span { flex: 1; padding-right: 20px; }
+.gh-code li.hl { background: #fff8c5; }
+.gh-code li.hl::before { color: #1f2328; }
+.k-h { color: #0550ae; font-weight: 600; }
+.k-a { color: #953800; font-weight: 400; }
+.k-m { color: #953800; }
+.k-q { color: #116329; }
+.gh-h { display: flex; align-items: center; justify-content: space-between; margin: 0 0 16px; }
+.gh-h b { font-size: 20px; font-weight: 600; }
+.gh-btn { font-size: 13px; font-weight: 500; border: 1px solid #d1d9e0; border-radius: 6px; padding: 4px 12px; background: #f6f8fa; }
+.gh-day { margin: 18px 0 8px; font-size: 13.5px; color: #59636e; display: flex; align-items: center; gap: 8px; }
+.gh-day::before { content: ""; width: 8px; height: 8px; border: 2px solid #59636e; border-radius: 50%; }
+.gh-list { border: 1px solid #d1d9e0; border-radius: 6px; }
+.gh-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid #d1d9e0; }
+.gh-row:first-child { border-top: 0; }
+.gh-row .t { flex: 1; min-width: 0; }
+.gh-row .t b { display: block; font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gh-row .t span { font-size: 12.5px; color: #59636e; display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.gh-row .t span .gh-av { width: 18px; height: 18px; font-size: 9.5px; }
+.gh-row .t span .gh-av.u { background: #c9b79c; color: #fff; }
+.gh-row code { font: 500 12px "Geist Mono", monospace; color: #59636e; border: 1px solid #d1d9e0; border-radius: 6px; padding: 3px 8px; }
+.gh-ok { color: #1a7f37; font-weight: 700; }
+/* Phone-width variant (capture.mjs adds .narrow): reflow, never shrink. */
+.narrow .gh-top { padding: 14px 16px 6px; }
+.narrow .gh-tabs span:nth-child(n+4) { display: none; }
+.narrow .gh-body { padding: 14px 14px 18px; }
+.narrow .gh-path { font-size: 15px; }
+.narrow .gh-commit { flex-wrap: wrap; row-gap: 2px; }
+.narrow .gh-sha { margin-left: 30px; width: 100%; }
+.narrow .gh-size { display: none; }
+.narrow .gh-code { font-size: 13px; line-height: 20px; }
+.narrow .gh-code li::before { width: 34px; padding-right: 10px; }
+.narrow .gh-row { padding: 10px 12px; }
+.narrow .gh-row .t b { white-space: normal; }
+.narrow .gh-row code { display: none; }

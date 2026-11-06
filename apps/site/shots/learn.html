@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- ZAL-A9 screenshot: Claude Code saves a learning to Zenod over MCP.
+     Tool names and outputs follow packages/server/src/mcp.ts: store_memory
+     returns enqueuedResponse ("Queued job … This runs in the background — poll
+     get_task_result with this ticket_id until state is 'done'."), and
+     get_task_result returns formatStoreResult ("Saved." / evidence: / pages:).
+     Demo content only. -->
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="shots.css"><link rel="stylesheet" href="claude.css"></head>
+<body>
+<div id="shot">
+  <div class="cc-bar"><i></i><i></i><i></i><span>orders-service — claude</span></div>
+  <div class="cc">
+    <p class="say">Found it. The migration rewrites the whole orders table, so Postgres holds a lock on it until the rewrite finishes. On the staging copy that took four minutes.</p>
+    <p class="ask">That was the cause. Save it to Zenod as a learning.</p>
+    <p class="tool"><b>zenod - store_memory</b> <em>(MCP)</em>(content: "When migrating the orders table, run it on a copy first: the live table locks for several minutes.")</p>
+    <p class="out">Queued job 7c1e0b52-4a9d-4f1e-9b3a-2d6c8e01f5a7 (status: queued). This runs in the background — poll get_task_result with this ticket_id until state is 'done'.</p>
+    <p class="tool"><b>zenod - get_task_result</b> <em>(MCP)</em>(ticket_id: "7c1e0b52-4a9d-4f1e-9b3a-2d6c8e01f5a7")</p>
+    <p class="out">Saved.
+evidence: Log/2026-11-04.md#^e-91b07d
+pages: Notes/Database migrations.md
+<span class="more">… +1 line (ctrl+o to expand)</span></p>
+    <p class="say">Saved. Zenod filed it on Notes/Database migrations.md.</p>
+    <p class="box">&nbsp;</p>
+    <p class="hint">  ? for shortcuts</p>
+  </div>
+</div>
+</body>
+</html>

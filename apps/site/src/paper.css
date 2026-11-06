@@ -1,21 +1,26 @@
-/* Paper landing (ZAL-A6, direction A). Scoped to .pp so /pricing and /connect keep their styles. */
+/* Paper landing (ZAL-A9 redo of ZAL-A6). Scoped to .pp so /pricing and /connect keep their styles.
+   Each section shows one product screen on a flat stage, then names the benefit beside it. */
 .pp {
   --pp-bg: #f6f2e9;
+  --pp-stage: #e9e3d5;
   --pp-ink: #18211c;
-  --pp-muted: #4f5a53;
+  --pp-muted: #4a554e;
   --pp-accent: #1f4d3a;
   --pp-accent-ink: #f6f2e9;
-  --pp-tint: #e9efe6;
+  --pp-field: #1f4d3a;
+  --pp-field-stage: #183d2e;
+  --pp-field-ink: #f3f1e8;
+  --pp-field-muted: #c3d0c6;
   --pp-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --pp-sans: "Instrument Sans", system-ui, sans-serif;
-  --pp-measure: 40rem;
-  --pp-wide: 68rem;
-  --pp-gap: clamp(5rem, 12vw, 9rem);
-  min-height: 100vh;
+  --pp-max: 82rem;
+  --pp-edge: clamp(1.25rem, 4vw, 3rem);
+  --pp-gap: clamp(6rem, 13vw, 11rem);
+  min-height: 100svh;
   overflow-x: clip;
   background: var(--pp-bg);
   color: var(--pp-ink);
-  font: 400 1.1875rem/1.65 var(--pp-serif);
+  font: 400 1.1875rem/1.6 var(--pp-serif);
   -webkit-font-smoothing: antialiased;
 }
 html:has(.pp),
@@ -23,122 +28,151 @@ body:has(.pp) {
   background: #f6f2e9;
 }
 .pp a { color: inherit; }
-.pp-sec p a, .pp-plans a:not(.pp-btn) { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .pp img { display: block; max-width: 100%; height: auto; }
 .pp :focus-visible { outline: 2px solid var(--pp-accent); outline-offset: 3px; }
-.pp-wrap { max-width: var(--pp-measure); margin: 0 auto; padding: 0 1.5rem; }
+.pp-say a, .pp-plans-sec a:not(.pp-btn) { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 
+/* Navigation: wordmark, four links, one action. */
 .pp-nav { position: sticky; top: 0; z-index: 5; background: var(--pp-bg); }
-.pp-nav-in { display: flex; align-items: center; gap: 1.5rem; max-width: var(--pp-wide); margin: 0 auto; padding: 1rem 1.5rem; }
-.pp-nav nav { display: flex; gap: 1.75rem; margin-left: auto; font: 400 0.95rem var(--pp-sans); }
-.pp-nav nav a, .pp-nav-link { text-decoration: none; color: var(--pp-muted); font: 400 0.95rem var(--pp-sans); }
-.pp-nav nav a:hover, .pp-nav-link:hover { color: var(--pp-ink); }
-.pp-brand { font: 500 1.35rem var(--pp-serif); text-decoration: none; letter-spacing: 0.01em; }
+.pp-nav-in { display: flex; align-items: center; gap: 1.75rem; max-width: var(--pp-max); margin: 0 auto; padding: 1rem var(--pp-edge); }
+.pp-nav nav { display: flex; gap: 1.75rem; margin-left: auto; }
+.pp-nav nav a, .pp-nav-link { text-decoration: none; color: var(--pp-ink); font: 400 1rem var(--pp-sans); transition: color 0.15s; }
+.pp-nav nav a:hover, .pp-nav-link:hover { color: var(--pp-accent); }
+.pp-brand { font: 500 1.5rem var(--pp-serif); text-decoration: none; letter-spacing: -0.01em; }
 
 .pp .pp-btn {
   display: inline-block;
-  font: 500 0.95rem var(--pp-sans);
-  padding: 0.8rem 1.4rem;
+  font: 500 1rem var(--pp-sans);
+  padding: 0.85rem 1.5rem;
   border-radius: 999px;
-  border: 1px solid var(--pp-ink);
+  border: 1.5px solid var(--pp-ink);
   background: transparent;
   color: var(--pp-ink);
   text-decoration: none;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
 }
 .pp .pp-btn:hover { background: var(--pp-ink); color: var(--pp-bg); }
+.pp .pp-btn:active { transform: translateY(1px); }
 .pp .pp-btn-primary { background: var(--pp-accent); border-color: var(--pp-accent); color: var(--pp-accent-ink); }
 .pp .pp-btn-primary:hover { background: var(--pp-ink); border-color: var(--pp-ink); }
-.pp .pp-btn:disabled { cursor: default; opacity: 0.55; }
-.pp .pp-btn:disabled:hover { background: var(--pp-accent); border-color: var(--pp-accent); }
-.pp .pp-btn-small { padding: 0.55rem 1.05rem; font-size: 0.9rem; }
+.pp .pp-btn:disabled { cursor: default; opacity: 0.6; transform: none; }
+.pp .pp-btn:disabled:hover { background: var(--pp-accent); border-color: var(--pp-accent); color: var(--pp-accent-ink); }
+.pp .pp-btn-small { padding: 0.6rem 1.15rem; font-size: 0.95rem; }
 
-.pp-hero { padding-top: clamp(3.5rem, 9vw, 7rem); padding-bottom: clamp(3rem, 6vw, 4.5rem); max-width: 52rem; }
-.pp h1 { font: 400 clamp(2.75rem, 7.2vw, 5.25rem)/1.02 var(--pp-serif); letter-spacing: -0.025em; margin: 0 0 1.5rem; overflow-wrap: break-word; }
-.pp-lead { font-size: clamp(1.25rem, 2.4vw, 1.5rem); line-height: 1.5; color: var(--pp-muted); margin: 0 0 2rem; max-width: 36rem; }
+/* Hero: the words on the left, the WhatsApp screen on its stage at the right. */
+.pp-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: end;
+  max-width: var(--pp-max);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3rem) var(--pp-edge) 0;
+}
+.pp-hero-text { padding-bottom: clamp(3rem, 7vw, 6rem); }
+.pp h1 { font: 400 clamp(2.9rem, 5.5vw, 5.5rem)/0.98 var(--pp-serif); letter-spacing: -0.035em; margin: 0 0 2rem; }
+.pp-line { display: block; overflow: hidden; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+.pp-line > span { display: block; }
+.pp-lead { font-size: clamp(1.2rem, 1.7vw, 1.45rem); line-height: 1.5; margin: 0 0 2.25rem; max-width: 34rem; }
 .pp-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 0; }
+.pp-hero-shot { margin: 0; }
+.pp-hero-stage { background: var(--pp-stage); height: min(46rem, calc(100svh - 6rem)); min-height: 34rem; overflow: hidden; display: flex; justify-content: center; padding-top: clamp(2rem, 4vw, 3.5rem); }
+.pp-hero-stage img { width: min(22rem, 78%); height: auto; align-self: flex-start; border-radius: 2rem; }
+.pp-hero-shot figcaption { font: 400 0.95rem/1.5 var(--pp-sans); color: var(--pp-muted); margin-top: 0.85rem; }
 
-.pp-band { max-width: var(--pp-wide); margin: var(--pp-gap) auto 0; padding: 0 1.5rem; }
-.pp-hero + .pp-band { margin-top: 0; }
-.pp-band img { width: 100%; aspect-ratio: 2.2 / 1; object-fit: cover; border-radius: 4px; }
-
-.pp-sec { padding-top: var(--pp-gap); }
-.pp h2 { font: 400 clamp(2rem, 4.6vw, 3rem)/1.1 var(--pp-serif); letter-spacing: -0.02em; margin: 0 0 1.25rem; }
-.pp-h-step { color: var(--pp-accent); }
-.pp-sec p { margin: 0 0 1.25rem; }
+/* Showcases: screen first on a flat stage, the benefit beside it. */
+.pp-show {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: end;
+  max-width: var(--pp-max);
+  margin: 0 auto;
+  padding: var(--pp-gap) var(--pp-edge) 0;
+}
+.pp-stage { background: var(--pp-stage); padding: clamp(1.25rem, 3.5vw, 3.25rem); }
+.pp-stage img { width: 100%; border-radius: 0.6rem; }
+.pp-show-left .pp-shot { grid-column: 1 / span 8; grid-row: 1; }
+.pp-show-left .pp-say { grid-column: 9 / span 4; grid-row: 1; }
+.pp-show-right .pp-shot { grid-column: 5 / span 8; grid-row: 1; }
+.pp-show-right .pp-say { grid-column: 1 / span 4; grid-row: 1; }
+.pp-say { padding-bottom: 0.25rem; }
+.pp h2 { font: 400 clamp(2.1rem, 3.4vw, 3.25rem)/1.04 var(--pp-serif); letter-spacing: -0.025em; margin: 0 0 1.25rem; }
+.pp-say p { margin: 0 0 1.1rem; }
+.pp-say .pp-cap { margin: 1.75rem 0 0; }
 .pp-fine { font: 400 0.95rem/1.5 var(--pp-sans) !important; color: var(--pp-muted); }
 .pp-error { color: #8a2c1d; }
 
-.pp-diagram { margin: 2.5rem 0 1rem; width: min(62rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
-.pp-diagram svg { width: 100%; height: auto; overflow: visible; }
-.pp-d-tall { display: none; }
-.pp-d-box { fill: none; stroke: var(--pp-ink); stroke-width: 1.25; }
-.pp-d-focus { stroke: var(--pp-accent); fill: var(--pp-tint); stroke-width: 1.75; }
-.pp-d-line { fill: none; stroke: var(--pp-ink); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
-.pp-d-dash { stroke-dasharray: 7 7; }
-.pp-d-t { fill: var(--pp-ink); font-family: var(--pp-serif); }
-.pp-d-s { fill: var(--pp-muted); font-family: var(--pp-sans); }
+/* The page that was filed is wide: give it ten columns. */
+#filed .pp-shot { grid-column: 4 / span 9; }
+#filed .pp-say { grid-column: 1 / span 3; }
+/* The console screen is tall: seven columns, words lower beside it. */
+#console .pp-shot { grid-column: 6 / span 7; }
+#console .pp-say { grid-column: 1 / span 4; }
 
-.pp-plans { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(2rem, 5vw, 4rem); margin: 2.5rem 0 2rem; }
-.pp-plan h3 { font: 500 1.15rem var(--pp-sans); margin: 0 0 0.25rem; }
-.pp-price { font: 400 clamp(2.6rem, 5vw, 3.5rem)/1 var(--pp-serif); margin: 0 0 1rem !important; letter-spacing: -0.02em; }
+/* Code agents: one field of deep green, terminals on a darker stage. */
+.pp-agents { background: var(--pp-field); color: var(--pp-field-ink); margin-top: var(--pp-gap); padding-bottom: var(--pp-gap); }
+.pp-agents .pp-stage { background: var(--pp-field-stage); }
+.pp-agents .pp-fine { color: var(--pp-field-muted); }
+.pp-agents :focus-visible { outline-color: var(--pp-field-ink); }
+
+/* Plans. */
+.pp-plans-sec { max-width: var(--pp-max); margin: 0 auto; padding: var(--pp-gap) var(--pp-edge) 0; }
+.pp-plans { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 3rem); margin: 2.5rem 0 2rem; }
+.pp-plan { background: var(--pp-stage); padding: clamp(1.75rem, 3.5vw, 3rem); display: flex; flex-direction: column; align-items: flex-start; }
+.pp-plan-hosted { background: var(--pp-field); color: var(--pp-field-ink); }
+.pp-plan-hosted .pp-price small { color: var(--pp-field-muted); }
+.pp-plan p { margin: 0 0 1.5rem; max-width: 30rem; }
+.pp-plan h3 { font: 500 1.1875rem var(--pp-sans); margin: 0 0 0.5rem; }
+.pp .pp-price { font: 400 clamp(2.9rem, 5.5vw, 5.5rem)/1 var(--pp-serif); margin: 0 0 1.25rem; letter-spacing: -0.03em; }
 .pp-price small { font: 400 1rem var(--pp-sans); color: var(--pp-muted); letter-spacing: 0; }
-.pp-plan .pp-btn { margin-top: 0.5rem; }
+.pp-plan .pp-btn { margin-top: auto; }
+.pp .pp-plan-hosted .pp-btn-primary { background: var(--pp-field-ink); border-color: var(--pp-field-ink); color: var(--pp-ink); }
+.pp .pp-plan-hosted .pp-btn-primary:hover { background: var(--pp-bg); }
+.pp .pp-plan-hosted .pp-btn-primary:disabled:hover { background: var(--pp-field-ink); border-color: var(--pp-field-ink); color: var(--pp-ink); }
+.pp-plans-sec > .pp-fine { max-width: 46rem; }
 
-.pp-foot { padding: var(--pp-gap) 0 3rem; }
-.pp-foot-in { max-width: var(--pp-wide); margin: 0 auto; padding: 0 1.5rem; }
-.pp-foot-name { font: 400 1.5rem var(--pp-serif); margin: 0 0 1rem; }
-.pp-foot-links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font: 400 0.95rem var(--pp-sans); color: var(--pp-muted); }
+/* Footer: the name, the links, one line on the screens. */
+.pp-foot { max-width: var(--pp-max); margin: 0 auto; padding: var(--pp-gap) var(--pp-edge) 3rem; }
+.pp-foot-name { font: 400 clamp(1.2rem, 1.7vw, 1.45rem)/1.4 var(--pp-serif); letter-spacing: -0.015em; margin: 0 0 1.5rem; max-width: 40rem; }
+.pp-foot-links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; font: 400 1rem var(--pp-sans); margin: 0 0 1rem; }
+.pp-foot-links a { text-decoration: none; }
+.pp-foot-links a:hover { color: var(--pp-accent); }
 
-/* Product visuals (ZAL-A6 iteration 2): WhatsApp chat, Claude Code, console. */
-.pp-shot { margin: 2.5rem 0 1rem; }
-.pp-shot figcaption { font: 400 0.9rem/1.5 var(--pp-sans); color: var(--pp-muted); margin-top: 0.9rem; text-align: center; }
-.pp-shot p { margin: 0; }
+/* Motion: the headline rises line by line; each part of a section rises in once. */
+@keyframes pp-rise { from { transform: translateY(105%); } to { transform: none; } }
+@keyframes pp-fade { from { opacity: 0; transform: translateY(1.25rem); } to { opacity: 1; transform: none; } }
+.pp-line > span { animation: pp-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pp-line + .pp-line > span { animation-delay: 0.11s; }
+.pp-lead, .pp-actions { animation: pp-fade 0.7s 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pp-hero-stage img { animation: pp-fade 1s 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pp-js .pp [data-reveal] { opacity: 0; transform: translateY(1.5rem); transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.pp-js .pp [data-reveal].pp-in { opacity: 1; transform: none; }
+.pp-js .pp .pp-show [data-reveal] + [data-reveal] { transition-delay: 0.09s; }
+.pp-js .pp .pp-plan + .pp-plan { transition-delay: 0.09s; }
+.pp-stage img { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.pp-stage:hover img { transform: scale(1.012); }
 
-.pp-phone { max-width: 23rem; margin: 0 auto; padding: 0.55rem; border: 1px solid var(--pp-ink); border-radius: 2.2rem; background: #fffdf8; }
-.pp-phone-screen { border-radius: 1.75rem; overflow: hidden; background: #efeae2; }
-.pp-shot .pp-wa-head { display: flex; align-items: center; gap: 0.6rem; padding: 1rem 1.1rem 0.8rem; background: #fffdf8; border-bottom: 1px solid #e3ddd0; font: 500 1rem var(--pp-sans); }
-.pp-wa-avatar { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--pp-accent); color: var(--pp-accent-ink); font: 500 1rem var(--pp-serif); }
-.pp-wa { display: flex; flex-direction: column; gap: 0.55rem; padding: 1rem 0.8rem 1.4rem; font: 400 0.84rem/1.42 var(--pp-sans); color: #111b21; }
-.pp-wa-msg { align-self: flex-start; max-width: 88%; padding: 0.45rem 0.65rem 0.3rem; border-radius: 0.6rem; background: #fff; box-shadow: 0 1px 0 rgba(17, 27, 33, 0.08); white-space: pre-wrap; overflow-wrap: anywhere; }
-.pp-wa-out { align-self: flex-end; background: #d9fdd3; }
-.pp-wa-time { display: block; text-align: right; font-size: 0.68rem; color: #667781; margin-top: 0.15rem; }
-.pp-wa-voice { display: flex; align-items: center; gap: 0.6rem; min-width: 12rem; padding-top: 0.2rem; }
-.pp-wa-play { width: 0; height: 0; border-style: solid; border-width: 0.45rem 0 0.45rem 0.75rem; border-color: transparent transparent transparent #54656f; }
-.pp-wa-wave { display: flex; align-items: center; gap: 2px; flex: 1; }
-.pp-wa-wave i { display: block; width: 3px; border-radius: 2px; background: #7d8f87; }
-.pp-wa-len { font-size: 0.72rem; color: #667781; }
-
-.pp-term-fig { width: min(52rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
-.pp-term { border: 1px solid var(--pp-ink); border-radius: 10px; background: #fffdf8; overflow: hidden; }
-.pp-shot .pp-term-bar { padding: 0.55rem 1rem; border-bottom: 1px solid #e3ddd0; font: 500 0.8rem var(--pp-sans); color: var(--pp-muted); }
-.pp-term-body { display: flex; flex-direction: column; gap: 0.7rem; padding: 1.1rem 1.2rem 1.3rem; font: 400 0.82rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--pp-ink); }
-.pp-term-body p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.pp-shot .pp-term-ask { background: var(--pp-tint); padding: 0.45rem 0.7rem; border-radius: 6px; }
-.pp-term-tool b { font-weight: 600; }
-.pp-term-dot { color: var(--pp-accent); margin-right: 0.5rem; }
-.pp-term-dot-ink { color: var(--pp-ink); }
-.pp-shot .pp-term-out { color: var(--pp-muted); padding-left: 1.4rem; margin-top: -0.45rem; }
-
-.pp-console { width: min(62rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
-.pp-console img, .pp-console-pair img { width: 100%; border: 1px solid #d9d4c7; border-radius: 8px; background: #fff; }
-.pp-console-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; width: min(52rem, calc(100vw - 3rem)); position: relative; left: 50%; transform: translateX(-50%); }
-.pp-console-pair .pp-shot { margin-top: 1.5rem; }
-
-@media (max-width: 760px) {
-  .pp { font-size: 1.125rem; }
+@media (max-width: 900px) {
   .pp-nav nav { display: none; }
   .pp-nav-link { margin-left: auto; }
+  .pp-hero { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 2rem; }
+  .pp-hero-text { padding-bottom: 2.5rem; }
+  .pp-hero-stage { height: min(40rem, 118vw); min-height: 0; }
+  .pp-hero-stage img { width: min(20rem, 80%); }
+  .pp-show { grid-template-columns: minmax(0, 1fr); }
+  .pp-show .pp-shot, .pp-show .pp-say, #filed .pp-shot, #filed .pp-say, #console .pp-shot, #console .pp-say { grid-column: 1; }
+  .pp-show .pp-shot { grid-row: 1; }
+  .pp-show .pp-say { grid-row: 2; padding: 2rem 0 0; }
   .pp-plans { grid-template-columns: minmax(0, 1fr); }
-  .pp-band img { aspect-ratio: 4 / 3; }
-  .pp-d-wide { display: none; }
-  .pp-d-tall { display: block; max-width: 22rem; margin: 0 auto; }
-  .pp-diagram { width: auto; left: 0; transform: none; }
-  .pp-term-fig, .pp-console, .pp-console-pair { width: auto; left: 0; transform: none; }
-  .pp-console-pair { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .pp-term-body { font-size: 0.76rem; padding: 0.9rem; }
+}
+@media (max-width: 560px) {
+  .pp { font-size: 1.125rem; }
+  .pp-nav-in { gap: 1rem; }
+  .pp-stage { padding: 1rem; }
+  .pp-stage img { border-radius: 0.4rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pp * { transition: none !important; }
+  .pp *, .pp *::before { animation: none !important; transition: none !important; }
 }

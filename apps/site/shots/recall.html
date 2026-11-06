@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- ZAL-A9 screenshot: Claude Code finds this morning's voice note in Zenod
+     and reads its transcript. Tool names and text shapes follow
+     packages/server/src/mcp.ts: search_memory entry lines
+     "<capturedAt> · <source>/<contentType> · <evidenceRef>" and get_memory
+     "<evidenceRef>\nsource: …\ncontentType: …\ncapturedAt: …\n<content>".
+     Demo content only. -->
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="shots.css"><link rel="stylesheet" href="claude.css"></head>
+<body>
+<div id="shot">
+  <div class="cc-bar"><i></i><i></i><i></i><span>~ — claude</span></div>
+  <div class="cc">
+    <p class="ask">What did I say in this morning’s voice note about the shed?</p>
+    <p class="tool"><b>zenod - search_memory</b> <em>(MCP)</em>(source: "whatsapp", contentType: "voice_note", order: "newest", limit: 1)</p>
+    <p class="out">2026-11-04T09:28:00.000Z · whatsapp/voice_note · Log/2026-11-04.md#^e-4f2a9c
+  Just talked to Leo about the shed. He can come Saturday morning…
+<span class="more">… +1 line (ctrl+o to expand)</span></p>
+    <p class="tool"><b>zenod - get_memory</b> <em>(MCP)</em>(path: "Log/2026-11-04.md#^e-4f2a9c")</p>
+    <p class="out">Log/2026-11-04.md#^e-4f2a9c
+source: whatsapp
+contentType: voice_note
+capturedAt: 2026-11-04T09:28:00.000Z
+Just talked to Leo about the shed. He can come Saturday morning to help put up the frame, so I need to order the cedar boards before Friday.</p>
+    <p class="say">In your 9:28 voice note you said Leo can come on Saturday morning to help put up the shed frame, and that you need to order the cedar boards before Friday.</p>
+    <p class="box">&nbsp;</p>
+    <p class="hint">  ? for shortcuts</p>
+  </div>
+</div>
+</body>
+</html>
