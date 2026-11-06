@@ -1,7 +1,7 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SqliteStateStore } from "zenod";
 
@@ -9,6 +9,17 @@ import { projectLedgerUsage } from "../src/customerMetering.js";
 import { Runtime } from "../src/runtime.js";
 import { Settings, platformLlmFromEnv, tenantMonthlyAllowanceFromEnv } from "../src/settings.js";
 import { UsageStore } from "../src/usageStore.js";
+
+// Every temp dir a test creates is removed afterwards (no /tmp leak).
+const tmpDirs: string[] = [];
+const makeTmpDir = (prefix: string): string => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tmpDirs.push(dir);
+  return dir;
+};
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 const PLATFORM_KEY = "sk-or-v1-platform-secret-value";
 const platform = { apiKey: PLATFORM_KEY, user: "tenant-a", models: { model_ask: "host/ask-model" } } as const;
@@ -84,7 +95,7 @@ describe("platform OpenRouter key (D30)", () => {
   });
 
   it("E9-3c: a tenant on its own ask model is still metered against its allowance", () => {
-    const runtime = new Runtime(mkdtempSync(join(tmpdir(), "zenod-ask-model-")), undefined, {
+    const runtime = new Runtime(makeTmpDir("zenod-ask-model-"), undefined, {
       seedFromEnv: false,
       tenantId: "tenant-a",
       platformLlm: { apiKey: PLATFORM_KEY, models: { model_ask: "host/ask-model" } },
@@ -155,7 +166,7 @@ describe("per-tenant metering and shadow allowance", () => {
 
 describe("Runtime.checkTenantAllowance", () => {
   it("shadow mode logs llm.allowance.exceeded at most once per hour and never throws", () => {
-    const dir = mkdtempSync(join(tmpdir(), "zenod-allowance-"));
+    const dir = makeTmpDir("zenod-allowance-");
     const runtime = new Runtime(dir, undefined, {
       seedFromEnv: false,
       tenantId: "tenant-a",

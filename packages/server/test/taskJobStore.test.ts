@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it, vi } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrainEngine } from "zenod";
@@ -12,7 +12,17 @@ import { TaskJobQueue } from "../src/taskJobQueue.js";
 // add_memory) that a restart interrupts mid-flight must be RESUMED on boot and completed
 // with its receipt — not dropped as failed. A fresh TaskJobStore on the same on-disk DB
 // simulates the process restart.
-const tmpDb = () => join(mkdtempSync(join(tmpdir(), "zenod-taskjob-")), "task.sqlite");
+// Every temp dir a test creates is removed afterwards (no /tmp leak).
+const tmpDirs: string[] = [];
+const makeTmpDir = (prefix: string): string => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tmpDirs.push(dir);
+  return dir;
+};
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+const tmpDb = () => join(makeTmpDir("zenod-taskjob-"), "task.sqlite");
 
 describe("TaskJobStore restart durability (C-27 / #580)", () => {
   it("upgrades an existing database additively and remains readable by the prior schema consumer", () => {

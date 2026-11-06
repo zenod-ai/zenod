@@ -39,9 +39,14 @@ describe("execution lane — Epaminon receivers", () => {
 
   it("the executor has an execution queue; other agents do not", async () => {
     expect(runtime.executionQueue).not.toBeNull();
-    const other = new Runtime(await mkdtemp(join(tmpdir(), "zenod-zenod-")), ZENOD_AGENT);
-    expect(other.executionQueue).toBeNull();
-    other.close();
+    const otherDir = await mkdtemp(join(tmpdir(), "zenod-zenod-"));
+    const other = new Runtime(otherDir, ZENOD_AGENT);
+    try {
+      expect(other.executionQueue).toBeNull();
+    } finally {
+      other.close();
+      await rm(otherDir, { recursive: true, force: true });
+    }
   });
 
   it("is inert until the lane is provisioned (503)", async () => {
