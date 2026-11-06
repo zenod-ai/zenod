@@ -223,6 +223,24 @@ describe("MCP endpoint", () => {
     await client.close();
   });
 
+  it("get_task_result reports a capture refused by the vault guard as still queued, so pollers wait for recovery (ZAL-A8)", async () => {
+    const client = await connect();
+    const blocked = runtime.taskJobStore.enqueue("media_ingest", { mediaType: "audio", bytesRef: "ring://media/blocked" });
+    runtime.taskJobStore.update(blocked.id, { status: "error", error: "Error: filing_recovery_pending" });
+    const failed = runtime.taskJobStore.enqueue("store", { content: "x", source: "whatsapp" });
+    runtime.taskJobStore.update(failed.id, { status: "error", error: "provider exploded" });
+
+    const waiting = await client.callTool({ name: "get_task_result", arguments: { ticket_id: blocked.id } });
+    expect(waiting.isError).toBeFalsy();
+    expect(waiting.structuredContent).toMatchObject({ ticket_id: blocked.id, status: "queued", state: "queued" });
+    expect((waiting.structuredContent as Record<string, unknown>).error).toBeUndefined();
+
+    const terminal = await client.callTool({ name: "get_task_result", arguments: { ticket_id: failed.id } });
+    expect(terminal.isError).toBe(true);
+    expect(terminal.structuredContent).toMatchObject({ status: "error", state: "error" });
+    await client.close();
+  });
+
   it("ingest_memory exposes the async media seam with loud input and processor errors", async () => {
     const client = await connect();
 

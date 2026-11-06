@@ -26,7 +26,7 @@ import {
   type ChatTestAuditRecord,
   type ChatTurnInterceptor,
 } from "./testHarness.js";
-import type { MediaIngestReceipt, TaskJob, TaskJobInput, TaskJobKind } from "./taskJobStore.js";
+import { awaitingVaultRecovery, type MediaIngestReceipt, type TaskJob, type TaskJobInput, type TaskJobKind } from "./taskJobStore.js";
 import type { ExecutionTicket } from "./executionQueue.js";
 import {
   formatConversationTranscript,
@@ -1343,7 +1343,11 @@ export function buildMcpServer(
             isError: true,
           };
         }
-        const job = taskJobs.get(requestedId);
+        const stored = taskJobs.get(requestedId);
+        // Refused by the vault guard: recovery replays it, so report it as still queued (ZAL-A8).
+        const job = stored && awaitingVaultRecovery(stored)
+          ? { ...stored, status: "queued" as const, error: null }
+          : stored;
         if (!job) {
           return {
             content: [{ type: "text", text: `No job found for id ${requestedId}.` }],

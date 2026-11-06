@@ -190,6 +190,16 @@ function rowToJob(row: Row): TaskJob {
   };
 }
 
+/**
+ * A capture job the vault guard refused with filing_recovery_pending. Vault recovery requeues exactly these
+ * (requeueFilingRecoveryBlocked), so a poller must see it as still pending, not failed (ZAL-A8: Phylax took the
+ * transient error as final and never sent the "Saved" receipt once the job was replayed).
+ */
+export function awaitingVaultRecovery(job: Pick<TaskJob, "status" | "kind" | "error">): boolean {
+  return job.status === "error" && (job.kind === "store" || job.kind === "media_ingest" || job.kind === "enrich_memory")
+    && Boolean(job.error?.includes("filing_recovery_pending"));
+}
+
 export interface TaskJobPatch {
   status?: TaskJobStatus;
   result?: TaskJobResult | null;

@@ -113,6 +113,7 @@ def signin_link() -> dict | None:
 # --------------------------------------------------------------------------------------------- remote (VPS1)
 
 ZENOD_SVC = "zenod-mt-fxpzoo"
+CAPTURE_KINDS = ("store", "media_ingest", "enrich_memory")
 PHYLAX_SVC = "app-index-back-end-panel-6zm3qg"
 RUNNER_APPS = ("epaminon", "callisthenes", "ring", "herald", "zenod-cloud-test")
 
@@ -169,7 +170,8 @@ def remote() -> dict:
     week = t_now - dt.timedelta(days=7)
 
     # zenod-mt
-    z = {"lastJob": None, "jobs24h": 0, "lastIndex": None, "lastError": None, "errors24h": 0, "lines": 0}
+    z = {"lastJob": None, "jobs24h": 0, "lastIndex": None, "lastError": None, "errors24h": 0, "lines": 0,
+         "capturesFailingSince": None}
     for t, rest in logs(ZENOD_SVC, week):
         z["lines"] += 1
         m = re.match(r"\[task-job\] \S+ done: (\w+)", rest)
@@ -177,6 +179,13 @@ def remote() -> dict:
             z["lastJob"] = {"at": iso(t), "kind": m.group(1)}
             if t >= day:
                 z["jobs24h"] += 1
+            if m.group(1) in CAPTURE_KINDS:
+                z["capturesFailingSince"] = None
+        # ZAL-A8: a save that failed with no save finished after it (kind logged since ZAL-A8; older lines count
+        # only when the vault guard refused them)
+        m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)
+        if m and (m.group(1) in CAPTURE_KINDS or (m.group(1) is None and "filing_recovery_pending" in rest)):
+            z["capturesFailingSince"] = z["capturesFailingSince"] or iso(t)
         m = re.match(r"\[memory-search\] tier-0 index, ([\d.]+) ms \((\d+) rows", rest)
         if m:
             z["lastIndex"] = {"at": iso(t), "ms": float(m.group(1)), "rows": int(m.group(2))}
@@ -198,10 +207,11 @@ def remote() -> dict:
 
     # phylax
     p = {"lastInbound": None, "inbound24h": 0, "lastReconnect": None, "reconnects24h": 0, "lastError": None,
-         "errors24h": 0}
+         "errors24h": 0, "inboundTimes": []}
     for t, rest in logs(PHYLAX_SVC, week):
         if rest.startswith("[whatsapp][diag] markRead"):
             p["lastInbound"] = iso(t)
+            p["inboundTimes"] = (p["inboundTimes"] + [iso(t)])[-200:]
             if t >= day:
                 p["inbound24h"] += 1
         elif rest.startswith("[whatsapp][health]"):

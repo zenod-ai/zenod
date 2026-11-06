@@ -155,6 +155,30 @@ class StatusRules(unittest.TestCase):
         self.assertEqual(s["cloud"], "green")           # its own health endpoint still answers
         self.assertEqual(s["site"], "green")
 
+    def test_reply_stall_turns_phylax_red_after_an_hour(self):
+        # ZAL-A8: 2026-11-04 to 11-06, messages came in and no "Saved" reply went out for 45 h, unalerted
+        d = raw()
+        d["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T09:00:00Z"
+        d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T08:59:00Z", "2026-11-03T10:30:00Z",
+                                                   "2026-11-03T11:55:00Z"]
+        c = next(x for x in A.components(d) if x["id"] == "phylax")
+        self.assertEqual(c["status"], "red")
+        self.assertIn("no “Saved” reply since a WhatsApp message at 2026-11-03 10:30:00 UTC", c["problem"])
+        d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T11:30:00Z"]  # under an hour: still green
+        self.assertEqual(status(d)["phylax"], "green")
+        d["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T11:31:00Z"
+        d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T10:30:00Z", "2026-11-03T11:30:00Z"]
+        self.assertEqual(status(d)["phylax"], "green")  # replied after every message
+
+    def test_saves_failing_for_an_hour_turn_database_red(self):
+        d = raw()
+        d["vps1"]["zenod_log"]["capturesFailingSince"] = "2026-11-03T11:20:00Z"
+        self.assertEqual(status(d)["database"], "green")
+        d["vps1"]["zenod_log"]["capturesFailingSince"] = "2026-11-03T10:50:00Z"
+        c = next(x for x in A.components(d) if x["id"] == "database")
+        self.assertEqual(c["status"], "red")
+        self.assertIn("saves failing since 2026-11-03 10:50:00 UTC", c["problem"])
+
     def test_no_message_text_or_secrets_fields(self):
         doc, _ = A.aggregate(raw(), A.load_state("/nonexistent"))
         blob = json.dumps(doc["components"])

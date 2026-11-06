@@ -59,6 +59,45 @@ it.each(["before-page", "before-push"] as const)("self-heals an interrupted fili
   } finally { await queue.close(); jobs.close(); state.close(); }
 }, 90_000);
 
+it("recovers an interrupted filing when the tenant runtime starts, before any save fails (ZAL-A8)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zenod-vault-recovery-start-")); roots.push(root);
+  const bare = join(root, "origin.git"); await mkdir(bare); await simpleGit(bare).init(true, { "--initial-branch": "main" });
+  const repo = await VaultRepo.open({ workdir: join(root, "vault"), remoteUrl: bare });
+  await cp(fileURLToPath(new URL("../../core/test/fixtures/vault", import.meta.url)), repo.path, { recursive: true });
+  await repo.commitAndPublish("fixture");
+  const content = "Insurance renewal is in October.";
+  const classify = vi.fn(async () => ({ confidence: 0.95, summary: "renewal", tags: [], pages: [], topics: [{
+    topic: "Renewal", summary: "Renewal", confidence: 0.95, disposition: "integrate_page" as const,
+    evidenceQuotes: [content], pages: [{ path: "Areas/Insurance.md", title: "Insurance", action: "update" as const }] }] }));
+  const reconcile = vi.fn(async (request: any) => request.ideas.map((idea: any) => ({ kind: "add", ideaIds: [idea.id],
+    sourceIds: request.addCandidates.filter((candidate: any) => candidate.ideaIds.includes(idea.id)).map((candidate: any) => candidate.id),
+    sourceQuote: request.sources.find((source: any) => source.id === idea.sourceIds[0]).text, statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));
+  const state = new SqliteStateStore(join(root, "state.sqlite"));
+  const engine = createEngine({ repo, state, llm: { classify, reconcile } as unknown as BrainLlm });
+  const captured = await engine.captureEvidence!({ content, source: "whatsapp", sourceId: "interrupted" });
+  vi.spyOn(repo, "commitAndPublish").mockImplementationOnce(async message => { await repo.commit(message); throw new Error("synthetic crash"); });
+  await expect(engine.enrichEvidence!({ content, source: "whatsapp", sourceId: "interrupted", evidenceRef: captured.evidenceRef,
+    assertActive: () => {} })).rejects.toThrow("synthetic crash");
+
+  const jobs = new TaskJobStore(join(root, "jobs.sqlite"), "tenant-a");
+  const owner = jobs.enqueue("enrich_memory", { content, source: "whatsapp", sourceId: "interrupted", evidenceRef: captured.evidenceRef }, "enrich:interrupted");
+  jobs.update(owner.id, { status: "error", error: "interrupted by a server restart (gave up after 1 retries)" });
+  // A save the guard refused before the restart: the start check retries it once the vault is clean.
+  const refused = jobs.enqueue("store", { content: "refused before the restart", source: "whatsapp", sourceId: "refused" });
+  jobs.update(refused.id, { status: "error", error: "Error: filing_recovery_pending" });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const queue = new TaskJobQueue(jobs, async () => engine);
+  try {
+    queue.resumeAtStart(0);
+    await until(() => jobs.get(owner.id)?.status === "done" && jobs.get(refused.id)?.status === "done");
+    expect(jobs.get(owner.id)?.status).toBe("done");
+    expect(jobs.get(refused.id)?.status).toBe("done");
+    expect(await engine.inspectInterruptedFiling!()).toMatchObject({ interrupted: false });
+    expect((await repo.currentPublishedRevision()).id).toBe(await repo.headSha());
+  } finally { await queue.close(); jobs.close(); state.close(); }
+}, 90_000);
+
 it("requeues only capture jobs that failed on the guard, and leaves a clean vault alone", () => {
   const jobs = new TaskJobStore(join(tmpdirSync(), "j.sqlite"), "tenant-a");
   const blocked = jobs.enqueue("store", { content: "x", source: "whatsapp" }); jobs.update(blocked.id, { status: "error", error: "filing_recovery_pending" });
