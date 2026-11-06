@@ -37,6 +37,21 @@ RECOVERED only when none does (a caller silent for 30 min no longer counts), so 
 not recover a row the page still has red from a smoke check (`scripts/watchdog/zenod-alert.sh`, tests in
 `watchdog-logic.test.sh`).
 
+## ZAL-A8: stalls turn a row red
+
+From 2026-11-04 09:46Z to 11-06 07:15Z no save finished and no WhatsApp message got its "Saved" reply, while the
+page showed only amber and nobody was alerted. Two rules (`STALL_MIN` = 60 min, tests in `test_aggregate.py`) now
+turn a row red, which goes to Jordi's HQ thread through the S5 sender like any red:
+
+- **row 4 Phylax:** a WhatsApp message (Phylax `markRead` log line) has had no "Saved" reply after it
+  (tester-watch `last_saved_reply`) for over an hour (`aggregate.reply_stall`). A message that legitimately gets
+  no "Saved" reply (an unbound sender, a cap notice) also counts until the next "Saved" reply.
+- **row 3 database:** a save failed (`[task-job] <id> failed (store|media_ingest|enrich_memory)`, or an older
+  line refused with `filing_recovery_pending`) and no save has finished since, for over an hour
+  (`probe.py` `capturesFailingSince`, `aggregate.saves_failing`).
+
+Both read the container logs since the container started, so a redeploy starts them fresh.
+
 ## Document (`schema: zenod-health/v1`)
 
 | Field | Meaning |

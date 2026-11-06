@@ -102,6 +102,25 @@ def newest_publish(runs: list[dict] | None) -> dict | None:
     return max(runs, key=lambda r: parse_ts(r["createdAt"]), default=None)
 
 
+STALL_MIN = 60  # ZAL-A8: saves failing or WhatsApp messages without a "Saved" reply for this long turn a row red
+
+
+def reply_stall(inbound_times: list[str] | None, last_saved_reply: str | None, ref: dt.datetime,
+                minutes: int = STALL_MIN) -> dt.datetime | None:
+    """The first WhatsApp message after the last "Saved" reply, when it is older than `minutes`: messages are
+    getting no reply (2026-11-04 to 11-06 went 45 h unnoticed). None while every older message had a reply after it."""
+    last = parse_ts(last_saved_reply)
+    waiting = [t for t in (parse_ts(x) for x in inbound_times or []) if t and (last is None or t > last)]
+    first = min(waiting, default=None)
+    return first if first and (ref - first).total_seconds() > minutes * 60 else None
+
+
+def saves_failing(since: str | None, ref: dt.datetime, minutes: int = STALL_MIN) -> dt.datetime | None:
+    """When saves started failing with none finished since, if that is longer ago than `minutes`."""
+    t = parse_ts(since)
+    return t if t and (ref - t).total_seconds() > minutes * 60 else None
+
+
 def components(d: dict) -> list[dict]:
     """The status rules: one dict per component from a raw probe. Pure: depends only on `d`.
 
@@ -197,8 +216,11 @@ def components(d: dict) -> list[dict]:
     b = ac.get("bindings") or {}
     unavail = sum(n for k, n in b.items() if k != "active")
     col, prob = "green", None
+    failing = saves_failing((v.get("zenod_log") or {}).get("capturesFailingSince"), ref)
     if ac.get("error"):
         col, prob = "red", "tester-watch could not read the ledgers"
+    elif failing:
+        col, prob = "red", f"saves failing since {ago(iso(failing), ref)}: no save has finished since"
     elif bk is None or bk["daysLeft"] <= 0:
         col, prob = "red", "backup restore drill missing or expired"
     elif bk["daysLeft"] <= 7:
@@ -231,8 +253,11 @@ def components(d: dict) -> list[dict]:
     hb_age = (ref.timestamp() * 1000 - hb) / 1000 if hb else None
     pl = v.get("phylax_log") or {}
     col, prob = "green", None
+    stall = reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref)
     if p.get("status") != 200 or pj.get("status") != "ok" or wa.get("state") != "connected":
         col, prob = "red", f"/api/health → {p.get('status')} “{pj.get('status')}”, WhatsApp {wa.get('state')}"
+    elif stall:
+        col, prob = "red", f"no “Saved” reply since a WhatsApp message at {ago(iso(stall), ref)}"
     elif hb_age is not None and hb_age > 60:
         col, prob = "amber", f"worker heartbeat {hb_age:.0f} s old"
     elif (pj.get("restart") or {}).get("required"):

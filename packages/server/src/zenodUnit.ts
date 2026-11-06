@@ -203,6 +203,8 @@ export class ZenodRuntimePool {
     this.runtimes.set(tenantId, runtime);
     // EPIC-9 E9-2d: the weekly memory tree sweep runs for every active tenant.
     runtime.startTreeSweepSchedule();
+    // ZAL-A8: drain jobs left queued by the last restart and check the vault for an interrupted filing.
+    runtime.taskJobQueue.resumeAtStart();
     return runtime;
   }
 

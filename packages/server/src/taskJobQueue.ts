@@ -45,6 +45,7 @@ export class TaskJobQueue {
   private closed = false;
   private recovery: Promise<void> | null = null;
   private lastRecoveryAt = 0;
+  private startCheck: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly store: TaskJobStore,
@@ -111,10 +112,26 @@ export class TaskJobQueue {
   }
 
   /**
-   * Single-flight, throttled self-heal of an interrupted filing (see vaultRecovery.ts). Runs whenever a job is
-   * refused with filing_recovery_pending (not at boot: hosted tenant runtimes never call resume()); never awaited by the job that tripped it.
+   * Hosted tenant runtimes start here (ZAL-A8, #1496 follow-up): drain anything left queued, then shortly after
+   * check the vault once, so an interrupted filing is recovered (and the writes it blocked retried) without
+   * waiting for a save to fail.
    */
-  private requestVaultRecovery(): void {
+  resumeAtStart(delayMs = 30_000): void {
+    this.resume();
+    if (this.closed || this.startCheck) return;
+    this.startCheck = setTimeout(() => {
+      this.startCheck = null;
+      this.requestVaultRecovery("start check skipped");
+    }, delayMs);
+    this.startCheck.unref?.();
+  }
+
+  /**
+   * Single-flight, throttled self-heal of an interrupted filing (see vaultRecovery.ts). Runs whenever a job is
+   * refused with filing_recovery_pending, and once shortly after a tenant runtime starts (resumeAtStart); never
+   * awaited by the job that tripped it.
+   */
+  private requestVaultRecovery(failureLabel = "failed"): void {
     if (this.closed || this.recovery || Date.now() - this.lastRecoveryAt < VAULT_RECOVERY_COOLDOWN_MS) return;
     this.lastRecoveryAt = Date.now();
     const active = recoverInterruptedFiling({
@@ -123,7 +140,7 @@ export class TaskJobQueue {
       enqueue: (kind, input, key) => this.enqueue(kind, input, key),
       kick: () => this.requestDrains(),
       isClosed: () => this.closed,
-    }).then(() => undefined, (error) => console.error("[vault-recovery] failed:", error instanceof Error ? error.message : error));
+    }).then(() => undefined, (error) => console.error(`[vault-recovery] ${failureLabel}:`, error instanceof Error ? error.message : error));
     this.recovery = active;
     void active.finally(() => { if (this.recovery === active) this.recovery = null; });
   }
@@ -283,7 +300,7 @@ export class TaskJobQueue {
           return;
         }
       }
-      console.error(`[task-job] ${job.id} failed:`, err);
+      console.error(`[task-job] ${job.id} failed (${job.kind}):`, err);
       if (err instanceof Error && err.message === "filing_recovery_pending") this.requestVaultRecovery();
       if (job.kind === "enrich_memory" && err instanceof VaultPublicationError && err.failure.retryable
         && this.store.resumePublicationFailure(job, err.message)) return;
@@ -355,6 +372,10 @@ export class TaskJobQueue {
 
   async close(): Promise<void> {
     this.closed = true;
+    if (this.startCheck) {
+      clearTimeout(this.startCheck);
+      this.startCheck = null;
+    }
     if (this.leaseTimer) {
       clearTimeout(this.leaseTimer);
       this.leaseTimer = null;
