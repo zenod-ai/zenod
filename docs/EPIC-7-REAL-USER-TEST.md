@@ -91,6 +91,7 @@ Steps: each is independently testable and closes only with evidence. T0–T6 mus
 | T8 | Operator | Jordi | Go / no-go for inviting | draft | T7 | - | - | none | 2026-10-27 | ask Jordi with T7's evidence |
 | T9 | Recruiter (zenod-social) | zenod-social Responder | Invite 5 by DM, each with their own code and the T5 text, from those who already answered on Reddit (Browerma, documentordie, WillowEmberly, UpSash, Relevant-Problem-794; FragrantBox4293, Ok-Car6047 unread) (E7-2) | draft | T8 | - | - | zenod-social data/posts-ledger.md rows 7–21 | 2026-10-27 | signal zenod-social after T8 |
 | T10 | Delivery manager | Delivery manager | Run the test: daily check per tester (T6), feedback logged, month-end extend/end decision per tester (E7-2..4) | draft | T9 | - | - | none | 2026-10-27 | starts with the first signup |
+| T11 | Delivery manager | Delivery manager | Answer Jordi definitively: why is Zenod not live, and why are we not getting testers now? (agent_team EPIC-73 / Jordi's 7 Nov note) | draft | none | - | - | [Jordi's 7 Nov note](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-07.md#%5Ee-5fc46c); [agent_team E73-S2 map](https://github.com/AlfaBlok/agent_team/blob/main/docs/status/e73-s2-tickets.md) item 33; facts read 2026-11-07: T0–T6 done (caps T3, codes T4 live), T7 blocked on one Google sign-in (E7-A15), T8 go/no-go not started; zenod-social E6-S4 (testers now) waits on this path | 2026-11-07 | Jordi readies it (or says not now) |
 
 ## Decisions
 
@@ -115,6 +116,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-01 | accepted | Jordi approved E7-A2 ($3 AI cap per tenant/month, Phylax 1,000,000, master 4,000,000) and E7-A6 (live tester coupons/codes, retire the free-forever code) | T3 live, T4 live, T2.2 ready | 3816c2c, aba539c | if a tester hits the cap in normal use |
 | 2026-11-01 | accepted | decided by Delivery Manager: tester feedback channel = reply to Jordi's invite DM (T5 and T6 both proposed it; the Zenod number saves into the tester's own vault, unreadable to us) | named in the invite (T5), tracked by T10 | this commit | rollback: name another channel in the invite before T9 |
 | 2026-11-04 | accepted | E48-S6 asked-no-row sweep (agent_team run_0de9943c): E7-2..E7-4 were already planned as T9 (invite 5, own codes) and T10 (run the test, feedback, month-end decision); their titles now cite the ids, no new row, no status changed | the console no longer lists E7-2..4 as asked with no row | this commit | if T9/T10 are split |
+| 2026-11-07 | accepted | Jordi, his 7 Nov voice note ([Jordi's 7 Nov note](https://github.com/AlfaBlok/obsidian-brain/blob/main/Log/2026-11-07.md#%5Ee-5fc46c)): "But why is Zenot not live?" and "for Zenith, why are we not getting testers like now? Why are we not getting testers?" Filed as T11 draft (a question); filed by agent_team under E73-A3 APPROVED 2026-11-07 | draft until he readies it | agent_team [agent_team E73-S2 map](https://github.com/AlfaBlok/agent_team/blob/main/docs/status/e73-s2-tickets.md) | when T8 is decided |
 
 ## Operating Learnings
 
