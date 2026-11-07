@@ -53,7 +53,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P1 | Ticket worker | unassigned | Plan + vision deck with mockups at one URL: chat-first landing, memory graph view, lit-up retrieval with scores, self-digestion, the vision and the proposed order of steps (E12-1..5) | ready | none | `wt/e12-p1` | main | none | 2026-11-07 | build the deck, then E12-A1 |
+| P1 | Ticket worker | run_1613c53f | Plan + vision deck with mockups at one URL: chat-first landing, memory graph view, lit-up retrieval with scores, self-digestion, the vision and the proposed order of steps (E12-1..5) | active | none | `wt/e12-p1` | main | none | 2026-11-07 | build the deck, then E12-A1 |
 | S1 | Ticket worker | unassigned | E12-1: chat-first cloud landing that answers from your memory with links | draft | P1; E12-A1 | - | main | - | 2026-11-07 | after E12-A1 |
 | S2 | Ticket worker | unassigned | E12-2: memory graph view, navigable; demo graph reused on zenod.dev | draft | P1; E12-A1 | - | main | - | 2026-11-07 | after E12-A1 |
 | S3 | Ticket worker | unassigned | E12-3: retrieval that lights up the top 5 with percentages and links, under 1 s, also over MCP | draft | P1; E12-A1 | - | main | - | 2026-11-07 | after E12-A1 |
