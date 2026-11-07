@@ -1,0 +1,73 @@
+name: MCP Registry
+
+# Publishes Zenod's listing (docs/epic10/server.json) to the official MCP
+# Registry as dev.zenod/memory whenever that file changes on main. The
+# namespace is proven by DNS: the zenod.dev TXT record `v=MCPv1; k=ed25519;
+# p=<public key>` matches the private key in the MCP_REGISTRY_PRIVATE_KEY
+# Actions secret (also in the VPS1 secret store as
+# zenod-mcp-registry/MCP_REGISTRY_PRIVATE_KEY). Bump "version" in server.json
+# to publish; an already-published version is skipped. See EPIC-10 row E10-R3
+# (docs/zenod-in-every-mcp-directory-listing-spr.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/epic10/server.json"
+      - ".github/workflows/mcp-registry.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: mcp-registry
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PUBLISHER_VERSION: v1.8.8
+  SERVER_JSON: docs/epic10/server.json
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --help >/dev/null
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate "$SERVER_JSON"
+
+      - name: Skip if this version is already published
+        id: check
+        run: |
+          name=$(jq -r .name "$SERVER_JSON")
+          version=$(jq -r .version "$SERVER_JSON")
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/$(jq -rn --arg n "$name" '$n|@uri')/versions/${version}")
+          echo "registry has ${name}@${version}: HTTP ${code}"
+          if [ "$code" = "200" ]; then echo "publish=false" >> "$GITHUB_OUTPUT"; else echo "publish=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Log in (DNS) and publish
+        if: steps.check.outputs.publish == 'true'
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: |
+          ./mcp-publisher login dns --domain zenod.dev --private-key "$MCP_REGISTRY_PRIVATE_KEY" >/dev/null
+          ./mcp-publisher publish "$SERVER_JSON"
+
+      - name: Confirm in registry search
+        run: |
+          version=$(jq -r .version "$SERVER_JSON")
+          for i in $(seq 1 12); do
+            if curl -fsS 'https://registry.modelcontextprotocol.io/v0.1/servers?search=dev.zenod' \
+              | jq -e --arg v "$version" '[.servers[].server | select(.name=="dev.zenod/memory" and .version==$v)] | length > 0' >/dev/null; then
+              echo "dev.zenod/memory@${version} is listed"; exit 0
+            fi
+            sleep 15
+          done
+          echo "dev.zenod/memory@${version} not in registry search after 3 minutes"; exit 1
