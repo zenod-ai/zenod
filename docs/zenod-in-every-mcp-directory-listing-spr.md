@@ -34,7 +34,7 @@ Status: active
 Last attempted: 2026-11-02 Delivery Manager wake run_1ada2ae7: planning worker P1 dispatched (Jordi readied the epic, L-37)
 Result: P1 plan done 2026-11-02 ([plan](epic10/P1-mcp-directory-plan.md)): Zenod technically ready; 5 review gaps; rows R1–R8 planned
 Evidence: [P1 plan](epic10/P1-mcp-directory-plan.md), [server.json](epic10/server.json)
-Waiting on: Jordi, ask E10-A1 (publish to the free self-serve directories)
+Waiting on: nobody
 Approved work: none
 Next action: E10-R1 (customer tool surface) and E10-R2 (listing kit) in parallel; R3/R4 publish on E10-A1; E10-A2 (Anthropic) and E10-A3 (OpenAI) are raised when R5/R6 are next
 Source revision: uncommitted scaffold
@@ -42,7 +42,7 @@ Verified at: 2026-11-02
 
 ## Waiting on
 
-- [ask E10-A1: approve @Jordi since 2026-11-02 row E10-R3] May agents publish Zenod to the free, self-serve MCP directories (the official MCP Registry, Smithery, Glama, mcp.so, MCP Market free queue, awesome-mcp-servers, the Gemini CLI gallery) using the drafted wording? — context: P1 surveyed 15 directories; these need no review and no money, but each is a public post in Zenod's name; the wording leads with what no other memory server says: memory over WhatsApp, filed into a vault you own, answers with sources — impact: Zenod becomes findable in every tool that reads the official registry (VS Code, PulseMCP and others) and in the main web catalogs — risk: a public listing whose wording you dislike; rollback: each can be edited or removed (registry versions can be deprecated) — recommend: yes, it is the cheapest reach available and only repeats claims zenod.dev already makes — why Jordi: publishing in the company's name is your call — details: [plan §3 wording](epic10/P1-mcp-directory-plan.md) — snoozed until: 2026-11-05
+- [answered E10-A1 2026-11-07 @Jordi] May agents publish Zenod to the free, self-serve MCP directories (the official MCP Registry, Smithery, Glama, mcp.so, MCP Market free queue, awesome-mcp-servers, the Gemini CLI gallery) using the drafted wording? — context: P1 surveyed 15 directories; these need no review and no money, but each is a public post in Zenod's name; the wording leads with what no other memory server says: memory over WhatsApp, filed into a vault you own, answers with sources — impact: Zenod becomes findable in every tool that reads the official registry (VS Code, PulseMCP and others) and in the main web catalogs — risk: a public listing whose wording you dislike; rollback: each can be edited or removed (registry versions can be deprecated) — recommend: yes, it is the cheapest reach available and only repeats claims zenod.dev already makes — why Jordi: publishing in the company's name is your call — details: [plan §3 wording](epic10/P1-mcp-directory-plan.md) — snoozed until: 2026-11-05 — answer: APPROVED
 
 ## Non-Goals
 
