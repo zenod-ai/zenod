@@ -1,26 +1,29 @@
-// zenod.dev landing, direction A "Paper" (ZAL-A6). Story, per Jordi's brief of
-// 2026-11-04: WhatsApp and code agents as the ways in, then ingestion,
-// digestion and retrieval, then owning the library (mining it, self-custody).
-// Voice notes get their own chapter. Every claim must hold for production today.
+// zenod.dev landing, Paper (ZAL-A9 redo of ZAL-A6). Every section shows one
+// real product screen first, then names the benefit in plain words. Story, per
+// Jordi's brief of 2026-11-04: WhatsApp and code agents as the ways in, then
+// ingestion, digestion and retrieval, then owning the library (mining it,
+// self-custody); voice first. Every claim must hold for production today, and
+// WhatsApp only captures and acknowledges (root L-6). The screenshots are
+// rendered by apps/site/shots/capture.mjs with demo content only.
+import * as React from "react";
 import "@fontsource-variable/newsreader";
 import "@fontsource/instrument-sans/400.css";
 import "@fontsource/instrument-sans/500.css";
 import "@/paper.css";
 
-import hero from "@/assets/paper/hero.webp";
-import voice from "@/assets/paper/voice.webp";
-import hall from "@/assets/paper/hall.webp";
-import {
-  CustodyDiagram,
-  LayersDiagram,
-  WaysInDiagram,
-} from "@/components/paper-diagrams";
-import {
-  ConsoleShots,
-  LearningShot,
-  RecallShot,
-  WhatsAppVoiceShot,
-} from "@/components/product-shots";
+import whatsapp from "@/assets/shots/whatsapp.webp";
+import log from "@/assets/shots/log.webp";
+import logPhone from "@/assets/shots/log-phone.webp";
+import page from "@/assets/shots/page.webp";
+import pagePhone from "@/assets/shots/page-phone.webp";
+import learn from "@/assets/shots/learn.webp";
+import learnPhone from "@/assets/shots/learn-phone.webp";
+import recall from "@/assets/shots/recall.webp";
+import recallPhone from "@/assets/shots/recall-phone.webp";
+import history from "@/assets/shots/history.webp";
+import historyPhone from "@/assets/shots/history-phone.webp";
+import consoleShot from "@/assets/shots/console.webp";
+import consolePhone from "@/assets/shots/console-phone.webp";
 import {
   DASHBOARD_URL,
   GOOGLE_SIGN_IN_PATH,
@@ -45,8 +48,7 @@ function Nav({ customer }: { customer: PaperCustomer }) {
           Zenod
         </a>
         <nav aria-label="Primary">
-          <a href="#ways-in">How it works</a>
-          <a href="#voice">Voice</a>
+          <a href="#how">How it works</a>
           <a href="#yours">Your library</a>
           <a href="#start">Pricing</a>
           <a href="/connect">Connect</a>
@@ -68,12 +70,55 @@ function Nav({ customer }: { customer: PaperCustomer }) {
   );
 }
 
+interface ShotProps {
+  src: string;
+  width: number;
+  height: number;
+  // The same screen reflowed at phone width, so its text stays readable.
+  phone: { src: string; width: number; height: number };
+  alt: string;
+  caption: string;
+}
+
+function Shot({ src, width, height, phone, alt }: ShotProps) {
+  return (
+    <div className="pp-shot pp-stage" data-reveal>
+      <picture>
+        <source media="(max-width: 560px)" srcSet={phone.src} width={phone.width} height={phone.height} />
+        <img src={src} width={width} height={height} loading="lazy" alt={alt} />
+      </picture>
+    </div>
+  );
+}
+
+interface ShowcaseProps {
+  id: string;
+  title: string;
+  shot: ShotProps;
+  layout: "left" | "right" | "wide";
+  children: React.ReactNode;
+}
+
+// Show it, then name it: the screenshot comes first, the benefit follows.
+function Showcase({ id, title, shot, layout, children }: ShowcaseProps) {
+  return (
+    <section className={`pp-show pp-show-${layout}`} id={id} aria-labelledby={`${id}-title`}>
+      <Shot {...shot} />
+      <div className="pp-say" data-reveal>
+        <h2 id={`${id}-title`}>{title}</h2>
+        {children}
+        <p className="pp-fine pp-cap">{shot.caption}</p>
+      </div>
+    </section>
+  );
+}
+
 function Plans({ customer }: { customer: PaperCustomer }) {
   return (
-    <section className="pp-sec pp-wrap" id="start" aria-labelledby="start-title">
-      <h2 id="start-title">Run it your way.</h2>
+    <section className="pp-plans-sec" id="start" aria-labelledby="start-title">
+      <h2 id="start-title" data-reveal>Run it your way.</h2>
       <div className="pp-plans">
-        <div className="pp-plan">
+        <div className="pp-plan" data-reveal>
           <h3>Self-hosted</h3>
           <p className="pp-price">Free</p>
           <p>
@@ -84,7 +129,7 @@ function Plans({ customer }: { customer: PaperCustomer }) {
             Read the install guide
           </a>
         </div>
-        <div className="pp-plan">
+        <div className="pp-plan pp-plan-hosted" data-reveal>
           <h3>Zenod Hosted</h3>
           <p className="pp-price">
             €9 <small>per month + VAT</small>
@@ -119,193 +164,219 @@ function Plans({ customer }: { customer: PaperCustomer }) {
   );
 }
 
+function useReveal() {
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const items = [...document.querySelectorAll<HTMLElement>(".pp [data-reveal]")];
+    if (!("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    root.classList.add("pp-js");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add("pp-in");
+          observer.unobserve(entry.target);
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px" },
+    );
+    for (const item of items) observer.observe(item);
+    return () => {
+      observer.disconnect();
+      root.classList.remove("pp-js");
+    };
+  }, []);
+}
+
 export function PaperLanding({ customer }: { customer: PaperCustomer }) {
+  useReveal();
   return (
     <div className="pp">
       <Nav customer={customer} />
       <main id="top">
-        <section className="pp-hero pp-wrap">
-          <h1>Hire a librarian for your memory.</h1>
-          <p className="pp-lead">
-            Talk to Zenod on WhatsApp, or plug it into Claude Code and Cursor.
-            It transcribes, files and keeps what you send in a library of plain
-            Markdown that lives in your own GitHub or Google Drive.
-          </p>
-          <p className="pp-actions">
-            <a className="pp-btn pp-btn-primary" href="#start">
-              Try Zenod free
-            </a>
-            <a className="pp-btn" href={GITHUB_URL}>
-              Star on GitHub
-            </a>
-          </p>
-        </section>
-        <figure className="pp-band">
-          <img
-            src={hero}
-            width={1536}
-            height={1024}
-            alt="Wooden library shelves holding paper scrolls and books in warm window light"
-          />
-        </figure>
-
-        <section className="pp-sec pp-wrap" id="ways-in" aria-labelledby="ways-in-title">
-          <h2 id="ways-in-title">Two ways in.</h2>
-          <p>
-            Most of what you want to remember starts in one of two places: your
-            phone, or the agent you are working with. Zenod sits behind both.
-          </p>
-          <p>
-            On your phone it is a WhatsApp contact. Send it a voice note, a
-            photo, a document or a quick line of text. At your desk it is an MCP
-            server, so Claude Code, Cursor, VS Code, ChatGPT and Gemini CLI can
-            save to your memory and look things up in it while you work.
-          </p>
-          <WaysInDiagram />
-          <p className="pp-fine">
-            WhatsApp comes with Hosted. Self-hosted uses Telegram.{" "}
-            <a href="/connect">How to connect an agent</a>
-          </p>
+        <section className="pp-hero" aria-labelledby="hero-title">
+          <div className="pp-hero-text">
+            <h1 id="hero-title">
+              <span className="pp-line"><span>Hire a librarian</span></span>{" "}
+              <span className="pp-line"><span>for your memory.</span></span>
+            </h1>
+            <p className="pp-lead">
+              Send Zenod a voice note on WhatsApp, or ask your coding agent to
+              save what you just worked out. Zenod transcribes it, files it and
+              keeps it as plain Markdown in your own GitHub or Google Drive.
+            </p>
+            <p className="pp-actions">
+              <a className="pp-btn pp-btn-primary" href="#start">
+                Get started
+              </a>
+              <a className="pp-btn" href="#how">
+                See how it works
+              </a>
+            </p>
+          </div>
+          <figure className="pp-hero-shot">
+            <div className="pp-hero-stage">
+              <img
+                src={whatsapp}
+                width={1170}
+                height={2532}
+                alt="WhatsApp chat with Zenod: a 14 second voice note, Zenod's reply that it was queued for transcription, then its receipt with a recap, the transcript and the two pages it was filed on"
+              />
+            </div>
+            <figcaption>
+              A voice note to Zenod on WhatsApp and its two replies, word for
+              word.
+            </figcaption>
+          </figure>
         </section>
 
-        <section className="pp-sec pp-wrap" id="voice" aria-labelledby="voice-title">
-          <h2 id="voice-title">Made for voice notes.</h2>
-          <p>
-            Most thoughts never get typed. They turn up while you walk, drive or
-            cook. Hold the mic in WhatsApp and say it the way you would to a
-            friend, in ten seconds or in a long ramble.
-          </p>
-          <p>
-            Zenod transcribes the note, keeps the recording next to the
-            transcript and files what you said onto the pages it belongs to. It
-            replies when the note arrives, and again once it has been filed.
-          </p>
-          <WhatsAppVoiceShot />
-        </section>
-        <figure className="pp-band">
-          <img
-            src={voice}
-            width={1536}
-            height={1024}
-            loading="lazy"
-            alt="A phone, a ceramic cup and a blank sheet of paper on an oak desk"
-          />
-        </figure>
+        <div id="how" className="pp-how">
+          <Showcase
+            id="kept"
+            layout="left"
+            title="Kept exactly as you said it."
+            shot={{
+              src: log,
+              phone: { src: logPhone, width: 760, height: 1968 },
+              width: 1840,
+              height: 1518,
+              alt: "A GitHub file view of Log/2026-11-04.md: three dated entries, a photo, a note from an AI assistant and the voice note, each with its source and the words quoted unchanged",
+              caption: "The day’s log in your GitHub repository, with the voice note at the bottom.",
+            }}
+          >
+            <p>
+              Every voice note, photo and message lands first in a dated log,
+              word for word, and WhatsApp recordings are archived to your Google
+              Drive. Zenod writes each entry once and never edits it, so the
+              original is always there to check.
+            </p>
+          </Showcase>
 
-        <section className="pp-sec pp-wrap" id="desk" aria-labelledby="desk-title">
-          <h2 id="desk-title">And from your editor.</h2>
-          <p>
-            When you and your coding agent work something out, tell it to save
-            the lesson. It calls Zenod’s store_memory tool, and Zenod files the
-            learning in the same library as your voice notes.
-          </p>
-          <LearningShot />
-        </section>
+          <Showcase
+            id="filed"
+            layout="right"
+            title="Filed on the right page."
+            shot={{
+              src: page,
+              phone: { src: pagePhone, width: 760, height: 1192 },
+              width: 2080,
+              height: 1000,
+              alt: "The Garden shed project page open in Obsidian, with its properties and four lines, each ending in a link to the log entry it came from",
+              caption: "The page the voice note was filed on, opened in Obsidian.",
+            }}
+          >
+            <p>
+              Zenod reads what came in and updates the projects and topics it
+              touches. Every line links back to the moment you said it, so you
+              can check any summary against your own words.
+            </p>
+          </Showcase>
+        </div>
 
-        <section className="pp-sec pp-wrap" id="ingestion" aria-labelledby="ingestion-title">
-          <h2 id="ingestion-title"><span className="pp-h-step">Ingestion.</span> Kept as it arrived.</h2>
-          <p>
-            Everything you send is saved first, exactly as it came in: the
-            recording, the photo, the PDF, your words. Zenod writes these
-            originals once and never edits them again. They are the evidence
-            that every later note points back to.
-          </p>
-        </section>
+        <div className="pp-agents">
+          <Showcase
+            id="save"
+            layout="left"
+            title="Save a lesson from your editor."
+            shot={{
+              src: learn,
+              phone: { src: learnPhone, width: 760, height: 1574 },
+              width: 1880,
+              height: 1052,
+              alt: "Claude Code in a terminal calling the Zenod store_memory tool with a database learning, then get_task_result, which answers Saved with the log entry and the page it was filed on",
+              caption: "Claude Code saving a learning through Zenod’s MCP tools.",
+            }}
+          >
+            <p>
+              When you and Claude Code, Cursor or VS Code work something out,
+              ask it to save the lesson. It goes into the same library as your
+              voice notes, filed the same way.
+            </p>
+          </Showcase>
 
-        <section className="pp-sec pp-wrap" id="digestion" aria-labelledby="digestion-title">
-          <h2 id="digestion-title"><span className="pp-h-step">Digestion.</span> Filed where it belongs.</h2>
-          <p>
-            Then Zenod reads what came in and updates the pages it touches: a
-            project, a person, a preference, a date to remember. Each line it
-            writes links to the original it came from, so you can check any
-            summary against what you actually said.
-          </p>
-          <LayersDiagram />
-        </section>
+          <Showcase
+            id="ask"
+            layout="right"
+            title="Ask, and see the source."
+            shot={{
+              src: recall,
+              phone: { src: recallPhone, width: 760, height: 1592 },
+              width: 1880,
+              height: 1070,
+              alt: "Claude Code calling the Zenod search_memory tool for the newest WhatsApp voice note, then get_memory, which returns the full transcript, then answering from it",
+              caption: "Claude Code finding this morning’s voice note and reading its transcript.",
+            }}
+          >
+            <p>
+              Any connected agent can search your library and read the exact
+              entry behind its answer, down to the transcript of this
+              morning’s voice note.
+            </p>
+            <p className="pp-fine">
+              Questions go through a connected agent such as Claude, ChatGPT or
+              Cursor. <a href="/connect">How to connect</a>
+            </p>
+          </Showcase>
+        </div>
 
-        <section className="pp-sec pp-wrap" id="retrieval" aria-labelledby="retrieval-title">
-          <h2 id="retrieval-title"><span className="pp-h-step">Retrieval.</span> Ask, and see the source.</h2>
+        <Showcase
+          id="yours"
+          layout="left"
+          title="The library is yours."
+          shot={{
+            src: history,
+            phone: { src: historyPhone, width: 760, height: 1358 },
+            width: 1840,
+            height: 1298,
+            alt: "The commit history of a private GitHub repository called memory: commits from zenod-bot for each capture and filing, and one from the owner made in Obsidian",
+            caption: "Every change Zenod makes is a commit in your repository.",
+          }}
+        >
           <p>
-            Ask your agent “When does my passport expire?” or “What did I say
-            about the light in that flat?” Zenod searches your library, answers
-            from your own pages and names the pages it used. Follow the link and
-            you are back at the voice note.
+            Your memory is plain Markdown in a GitHub repository or Google Drive
+            folder you own, with every change kept in its history. Open it in
+            Obsidian, dig through years of notes with any tool, or stop using
+            Zenod and keep every file.
           </p>
-          <RecallShot />
-          <p className="pp-fine">
-            Questions go through a connected agent such as Claude, ChatGPT or
-            Cursor. <a href="/connect">How to connect</a>
-          </p>
-        </section>
+        </Showcase>
 
-        <section className="pp-sec pp-wrap" id="yours" aria-labelledby="yours-title">
-          <h2 id="yours-title">The library stays in your hands.</h2>
+        <Showcase
+          id="console"
+          layout="right"
+          title="Everything on one page."
+          shot={{
+            src: consoleShot,
+            phone: { src: consolePhone, width: 780, height: 1604 },
+            width: 1560,
+            height: 2124,
+            alt: "The Zenod console overview: MCP, vault and channel cards, included usage at 18 percent, and recent saves from a WhatsApp voice note, an AI assistant and a WhatsApp photo",
+            caption: "The Zenod console overview.",
+          }}
+        >
           <p>
-            Your memory is plain Markdown in a GitHub repository you own or, on
-            Hosted, a Google Drive folder in your account. Zenod is the
-            librarian you hire to keep it in order. The shelves are yours.
+            Connect WhatsApp, choose where your library lives, and see what you
+            saved lately and how much of the month’s usage is left.
           </p>
-          <p>
-            Every change is a git commit, so you can see what was written and
-            when. Open the folder in Obsidian, copy it, back it
-            up. If you stop using Zenod, the files stay where they are.
-          </p>
-          <CustodyDiagram />
-        </section>
-
-        <section className="pp-sec pp-wrap" id="console" aria-labelledby="console-title">
-          <h2 id="console-title">One page for your settings.</h2>
-          <p>
-            Connect your WhatsApp number, pick where your library lives and see
-            what you have used this month, all in the Zenod console.
-          </p>
-          <ConsoleShots />
-        </section>
-
-        <section className="pp-sec pp-wrap" id="mine" aria-labelledby="mine-title">
-          <h2 id="mine-title">Years of notes you can dig into.</h2>
-          <p>
-            A year of voice notes is a record of how you think. Because it sits
-            in plain files you control, you can put it to work: ask an agent
-            what you kept putting off last spring, which names come up around a
-            project, or how your view of a house changed over six visits. Any
-            tool that reads text can read it, including ones nobody has built
-            yet.
-          </p>
-        </section>
-
-        <section className="pp-sec pp-wrap" id="name" aria-labelledby="name-title">
-          <h2 id="name-title">Why the name.</h2>
-          <p>
-            Zenodotus was the first librarian of the Library of Alexandria. The
-            library was the place. The librarian made it usable.
-          </p>
-        </section>
-        <figure className="pp-band">
-          <img
-            src={hall}
-            width={1536}
-            height={1024}
-            loading="lazy"
-            alt="A quiet library hall with tall arches and a reader at a long table"
-          />
-        </figure>
+        </Showcase>
 
         <Plans customer={customer} />
       </main>
       <footer className="pp-foot">
-        <div className="pp-foot-in">
-          <p className="pp-foot-name">Zenod, the librarian for your memory.</p>
-          <p className="pp-foot-links">
-            <a href="/connect">Docs</a>
-            <a href={GITHUB_URL}>GitHub</a>
-            <a href="/legal/privacy.html">Privacy</a>
-            <a href="/legal/terms.html">Terms</a>
-            <a href="/legal/legal-notice.html">Legal notice</a>
-            <a href="/legal/cookies.html">Cookies</a>
-            <a href="/legal/data-handling.html">Data</a>
-          </p>
-        </div>
+        <p className="pp-foot-name">
+          Zenod is named after Zenodotus, the first librarian of Alexandria.
+        </p>
+        <p className="pp-foot-links">
+          <a href="/connect">Docs</a>
+          <a href={GITHUB_URL}>GitHub</a>
+          <a href="/legal/privacy.html">Privacy</a>
+          <a href="/legal/terms.html">Terms</a>
+          <a href="/legal/legal-notice.html">Legal notice</a>
+          <a href="/legal/cookies.html">Cookies</a>
+          <a href="/legal/data-handling.html">Data</a>
+        </p>
+        <p className="pp-fine pp-foot-note">
+          Screens show the real product with demo people and notes.
+        </p>
       </footer>
     </div>
   );
