@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Zenod vision: a chat-first app, a memory graph you can walk and retrieval that lights up the memories it used. A plan with mockups.">
-<title>Zenod vision: chat first, a memory you can see</title>
+<meta name="description" content="Zenod is the AI librarian of your memory, live in production. The next chapter: a chat-first app, a memory graph you can walk and retrieval that lights up the memories it used.">
+<title>Zenod, the AI librarian of your memory: the next chapter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
 <style>
-/* Hallmark · deck · theme: zenod paper (project tokens, apps/site/src/paper.css) · signature: five memories lighting up in the graph · genre editorial */
+/* Hallmark · deck · theme: zenod paper (project tokens, apps/site/src/paper.css) · signature: five memories lighting up in the graph · round 2: live product first, ingest, digest, access, build · genre editorial */
 /* critique: one idea per slide; mockups are flat product screens on a stage, no fake browser chrome; demo data only */
-/* waive 58: a ten-slide plan deck, about 80 to 140 words per slide; the page total is the sum of slides */
+/* waive 58: a fourteen-slide plan deck, about 80 to 140 words per slide; the page total is the sum of slides */
 :root {
   --bg: #f6f2e9;
   --stage: #e9e3d5;
@@ -163,6 +163,41 @@ svg.flow .ahp { fill: var(--ink); }
 .next .box { border: 1px solid var(--accent-soft); border-radius: 6px; padding: 1.5rem 1.75rem; font: 400 1.05rem/1.55 var(--sans); max-width: 46rem; }
 .next .box b { font: 500 1.35rem var(--serif); display: block; margin-bottom: 0.4rem; }
 .foot { font: 400 0.9rem/1.6 var(--sans); color: var(--muted); padding: 2rem var(--edge); max-width: var(--max); margin: 0 auto; }
+
+/* round 2: the library spine, real product screens, alignment, landing proposal */
+.spine4 { list-style: none; padding: 0; margin: 2.25rem 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--ink); counter-reset: sp; }
+.spine4 li { padding: 1.25rem 1.5rem 0 0; position: relative; font: 400 0.98rem/1.5 var(--sans); color: var(--muted); }
+.spine4 li + li { padding-left: 1.5rem; border-left: 1px solid var(--line); }
+.spine4 b { display: block; font: 500 1.6rem/1.15 var(--serif); color: var(--ink); margin: 0.35rem 0 0.75rem; }
+.spine4 .k { font: 500 0.9rem var(--sans); color: var(--accent); }
+.spine4 p { margin: 0 0 0.9rem; }
+.spine4 .tag { margin-bottom: 0.35rem; }
+@media (max-width: 900px) { .spine4 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 1.5rem; } .spine4 li + li { border-left: 0; padding-left: 0; } }
+.shot { background: var(--stage); border-radius: 6px; padding: clamp(0.75rem, 2vw, 1.5rem); margin: 0; }
+.shot img { display: block; width: 100%; height: auto; border-radius: 3px; }
+.shot.tall img { max-height: 70svh; width: auto; margin: 0 auto; }
+.shot figcaption { font: 400 0.88rem/1.45 var(--sans); color: var(--muted); margin-top: 0.7rem; }
+.shots2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; margin-top: 1.75rem; }
+@media (max-width: 900px) { .shots2 { grid-template-columns: minmax(0, 1fr); } }
+.facts { list-style: none; padding: 0; margin: 1.5rem 0 0; font: 400 1rem/1.5 var(--sans); color: var(--muted); }
+.facts li { padding: 0.6rem 0; border-top: 1px solid var(--line); }
+.facts li b { color: var(--ink); font-weight: 500; }
+.inline .yes { font: 400 clamp(4rem, 9vw, 7.5rem)/0.95 var(--serif); color: var(--accent); margin: 0 0 1.5rem; letter-spacing: -0.02em; }
+.inline blockquote { margin: 0; padding: 0 0 0 1.5rem; border-left: 2px solid var(--accent); font: 400 clamp(1.15rem, 1.7vw, 1.4rem)/1.55 var(--serif); max-width: 46rem; }
+.inline blockquote p { margin: 0 0 0.9rem; }
+.compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; margin-top: 1.25rem; max-width: 62rem; }
+.compare .lab { font: 500 0.9rem var(--sans); color: var(--muted); margin: 0 0 0.5rem; }
+@media (max-width: 900px) { .compare { grid-template-columns: minmax(0, 1fr); } }
+.mini { background: var(--bg); border-radius: 3px; padding: 1.5rem 1.6rem; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: center; aspect-ratio: 16 / 10; box-sizing: border-box; }
+.mini .mh { font: 400 clamp(1.4rem, 2.4vw, 2.1rem)/1.05 var(--serif); margin: 0 0 0.6rem; letter-spacing: -0.015em; }
+.mini .ms { font: 400 0.82rem/1.45 var(--sans); color: var(--muted); margin: 0 0 0.8rem; }
+.mini .mb { display: inline-block; font: 500 0.78rem var(--sans); background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 0.35rem 0.8rem; }
+.mini .mrow { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ink); font: 500 0.8rem var(--sans); color: var(--ink); }
+.mini .mrow span { padding-top: 0.45rem; }
+.mini .mrow i { font-style: normal; color: var(--accent); margin-right: 0.3rem; }
+.adopt { list-style: none; padding: 0; margin: 1.25rem 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; font: 400 0.98rem/1.5 var(--sans); color: var(--muted); }
+.adopt b { display: block; font: 500 1.15rem var(--serif); color: var(--ink); margin-bottom: 0.3rem; }
+@media (max-width: 900px) { .adopt { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body>
@@ -170,51 +205,90 @@ svg.flow .ahp { fill: var(--ink); }
 <section class="slide cover" id="s1">
   <div class="in split">
     <div>
-      <p class="no">Zenod vision deck, 7 November 2026</p>
-      <h1>Your memory, open on a chat.</h1>
-      <p class="lede">Ask it like WhatsApp. Watch the memories it used light up.</p>
-      <p class="meta">A plan for Jordi to approve. Every screen here is a mockup with invented demo data. Nothing on it is built yet unless a slide says so.</p>
+      <p class="no">Zenod, the next chapter &nbsp;·&nbsp; 7 November 2026</p>
+      <h1>The AI librarian of your memory.</h1>
+      <p class="lede">It ingests and digests, so you can reach your memory from any agent and build on it.</p>
+      <p class="meta">Zenod is live in production today at zenod.dev. This deck shows what it already does, then what the next chapter adds on top: a way to see and talk to your library. Screens marked live are the real product with demo notes. Screens marked mockup are not built yet.</p>
     </div>
     <div class="cover-g">{{GRAPH}}</div>
   </div>
 </section>
 
-<section class="slide" id="s2">
+<section class="slide inline" id="s2">
   <div class="in">
-    <p class="no">1 &nbsp; The vision</p>
-    <h2>The best place to keep your memory is one you can see into.</h2>
-    <p class="lede">Today you send to Zenod and it files. Next, you open it and talk to what you kept.</p>
-    <ul class="four">
-      <li><b>Chat first</b><span>Sign in and the first thing is a chat box that answers from your memory, with links.</span></li>
-      <li><b>A graph you walk</b><span>Every memory is a node, every link an edge. Open one, follow its links.</span></li>
-      <li><b>Retrieval that lights up</b><span>Ask a question and five memories light up, each with a match score, in under a second. Same over MCP.</span></li>
-      <li><b>Digests itself</b><span>Each new memory is filed at once and the whole graph is tidied every night.</span></li>
-    </ul>
+    <p class="no">1 &nbsp; Are we in line?</p>
+    <p class="yes">Yes.</p>
+    <blockquote>
+      <p>Zenod is the AI librarian of your memory, and it is already working in production. It ingests what you send it: WhatsApp voice notes, photos and messages, and the lessons your coding agent saves. It digests them: transcribes, keeps the original word for word, files each one onto the right page and finds your topics by itself. It keeps the library as plain Markdown in your own GitHub or Google Drive, so any agent you use can reach your memory over MCP and build on it.</p>
+      <p>This chapter does not change what Zenod is. It gives the library a window: a chat to ask it, a graph to walk it, retrieval that shows which memories it used, and digestion that runs every night.</p>
+    </blockquote>
+    <p class="small" style="margin-top:1.5rem">Confirm or correct this paragraph. Every slide here, and the landing proposal on slide 12, follows it.</p>
   </div>
 </section>
 
 <section class="slide" id="s3">
   <div class="in">
-    <p class="no">2 &nbsp; Where we are today</p>
-    <h2>Most of the engine exists. The window onto it does not.</h2>
-    <table>
-      <thead><tr><th>Piece</th><th>Today, on cloud.zenod.dev</th><th>Proposed</th></tr></thead>
-      <tbody>
-        <tr><td>Chat</td><td>A signed-in user lands on an overview of cards. A chat screen exists in the code but only for internal agents.</td><td>Chat is the landing screen, answers cite memories.</td></tr>
-        <tr><td>Memory view</td><td>A two-level tree of topics. Links between notes are read for clustering but never stored or shown.</td><td>A navigable graph of every memory and link.</td></tr>
-        <tr><td>Retrieval</td><td>A keyword index. Right page in the top 5 for 10 of 10 test questions, 46 ms server time, about half a second over MCP. Scores are raw, no percentages, no vectors.</td><td>The same ranked top 5 with a match score and a link, lit up in the graph.</td></tr>
-        <tr><td>Digestion</td><td>Each capture is filed on arrival. Topics are re-found once a week, Sunday night. Nothing shows when it last ran.</td><td>Nightly sweep, last run shown in the app.</td></tr>
-      </tbody>
-    </table>
+    <p class="no">2 &nbsp; The library, in four verbs</p>
+    <h2>Ingest, digest, access from any agent, build on it.</h2>
+    <ol class="spine4">
+      <li><span class="k">1</span><b>Ingest</b><span class="tag today">Live</span><p>WhatsApp voice notes, photos and messages. Lessons saved from Claude Code, Cursor or VS Code. Telegram when you host it yourself.</p><span class="tag prop">Adds</span><p>Ask or keep from a chat in the app.</p></li>
+      <li><span class="k">2</span><b>Digest</b><span class="tag today">Live</span><p>Transcribed, logged word for word, filed onto the right pages, topics found by itself, re-sorted weekly.</p><span class="tag prop">Adds</span><p>A nightly sweep that also rebuilds the links, with its last run shown.</p></li>
+      <li><span class="k">3</span><b>Access from any agent</b><span class="tag today">Live</span><p>Seven MCP tools for Claude, ChatGPT, Cursor, VS Code and Gemini CLI. Listed in the official MCP Registry.</p><span class="tag prop">Adds</span><p>The top five memories with a match percentage and a link.</p></li>
+      <li><span class="k">4</span><b>Build on it</b><span class="tag today">Live</span><p>Agents read the exact entry and work from it. Plain Markdown you own, every change a commit.</p><span class="tag prop">Adds</span><p>A chat-first app and a graph you can walk.</p></li>
+    </ol>
   </div>
 </section>
 
 <section class="slide" id="s4">
   <div class="in split">
     <div>
-      <p class="no">3 &nbsp; Mockup: the landing screen</p>
-      <h2>Sign in, and you are in a conversation.</h2>
-      <p class="lede">Questions get answers from your memory, with the memories used as links. Settings move to the side.</p>
+      <p class="no">3 &nbsp; Live today: ingest</p>
+      <h2>Send a voice note. Zenod takes it from there.</h2>
+      <p class="lede">The real WhatsApp flow in production: a receipt at once, then the recap, the transcript and the pages it was filed on.</p>
+      <ul class="facts">
+        <li><b>Ways in:</b> WhatsApp on the hosted plan, Telegram when self-hosted, and any MCP agent.</li>
+        <li><b>Kept:</b> every capture lands first in a dated log, word for word, and recordings are archived to Google Drive.</li>
+        <li><b>Unchanged by this chapter:</b> WhatsApp only captures and acknowledges.</li>
+      </ul>
+    </div>
+    <figure class="shot tall"><img src="shots/whatsapp.webp" width="1170" height="2532" alt="WhatsApp chat with Zenod: a 14 second voice note, the queued receipt, then the recap, transcript and the two pages it was filed on" loading="lazy"><figcaption>Live. The production WhatsApp flow, with demo content.</figcaption></figure>
+  </div>
+</section>
+
+<section class="slide" id="s5">
+  <div class="in">
+    <p class="no">4 &nbsp; Live today: digest, then access from any agent</p>
+    <h2>Filed on the right page, and any agent can find it.</h2>
+    <div class="shots2">
+      <figure class="shot"><img src="shots/page.webp" width="2080" height="1000" alt="The Garden shed project page in Obsidian, each line linking back to the log entry it came from" loading="lazy"><figcaption>Live. The page the voice note was filed on, each line linked to the moment it was said.</figcaption></figure>
+      <figure class="shot"><img src="shots/recall.webp" width="1880" height="1070" alt="Claude Code calling search_memory and get_memory on Zenod, then answering from the voice note transcript" loading="lazy"><figcaption>Live. Claude Code finds this morning's voice note over MCP and works from its transcript.</figcaption></figure>
+    </div>
+    <p class="small" style="margin-top:1.25rem">Live on cloud.zenod.dev and listed in the official MCP Registry as dev.zenod/memory. zenod.dev/connect has steps for Claude, ChatGPT, Cursor, VS Code and Gemini CLI. Search finds the right page in the top five for 10 of 10 test questions, in 46 ms on the server.</p>
+  </div>
+</section>
+
+<section class="slide" id="s6">
+  <div class="in">
+    <p class="no">5 &nbsp; What this chapter adds on top</p>
+    <h2>The librarian works. Next, you can see into the library.</h2>
+    <table>
+      <thead><tr><th>Piece</th><th>Live today</th><th>This chapter adds</th></tr></thead>
+      <tbody>
+        <tr><td>Asking</td><td>You ask through a connected agent. The signed-in app opens on an overview of cards.</td><td>The app opens on a chat that answers from your memory, with links.</td></tr>
+        <tr><td>Seeing</td><td>A two-level tree of the topics Zenod found. Links between notes are read but not shown.</td><td>A graph of every memory and link you can walk.</td></tr>
+        <tr><td>Retrieval</td><td>A ranked top five over MCP, fast and accurate. Scores are raw numbers.</td><td>The same five with a match percentage and a link, lit up in the graph.</td></tr>
+        <tr><td>Digestion</td><td>Filed on arrival. Topics re-found once a week, Sunday night.</td><td>Every night, links rebuilt, last run shown in the app.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="slide" id="s7">
+  <div class="in split">
+    <div>
+      <p class="no">6 &nbsp; Mockup: the app opens on a chat</p>
+      <h2>Sign in, and you are talking to your library.</h2>
+      <p class="lede">The same answers your agents get over MCP today, now in the app, with the memories used as links. Settings move to the side.</p>
       <p class="small">Proposed default: a question is answered and nothing is saved. Tap keep to save a message, as WhatsApp does today. WhatsApp itself does not change.</p>
     </div>
     <div class="app" aria-label="Mockup of the chat-first landing screen">
@@ -228,8 +302,8 @@ svg.flow .ahp { fill: var(--ink); }
         </div>
         <div class="main">
           <div class="msg me">What did I agree with the landlord about the Lisbon flat?</div>
-          <div class="msg z">You agreed to sign for twelve months from January, with the boiler serviced before you move in<sup><a href="#s6" tabindex="-1">1</a></sup>. The landlord asked for a copy of your visa first<sup><a href="#s6" tabindex="-1">2</a></sup>.</div>
-          <div class="used">Used <a href="#s6" tabindex="-1">The Lisbon flat 92%</a><a href="#s6" tabindex="-1">Voice note, 3 Nov 81%</a><a href="#s6" tabindex="-1">Visa checklist 74%</a></div>
+          <div class="msg z">You agreed to sign for twelve months from January, with the boiler serviced before you move in<sup><a href="#s9" tabindex="-1">1</a></sup>. The landlord asked for a copy of your visa first<sup><a href="#s9" tabindex="-1">2</a></sup>.</div>
+          <div class="used">Used <a href="#s9" tabindex="-1">The Lisbon flat 92%</a><a href="#s9" tabindex="-1">Voice note, 3 Nov 81%</a><a href="#s9" tabindex="-1">Visa checklist 74%</a></div>
           <div class="compose">Ask your memory, or send something to keep<span class="send">Send</span></div>
           <div class="hint">Last digested today at 03:10</div>
         </div>
@@ -238,10 +312,10 @@ svg.flow .ahp { fill: var(--ink); }
   </div>
 </section>
 
-<section class="slide" id="s5">
+<section class="slide" id="s8">
   <div class="in">
-    <p class="no">4 &nbsp; Mockup: the memory view</p>
-    <h2>Your memory as a graph you can walk.</h2>
+    <p class="no">7 &nbsp; Mockup: walk the library</p>
+    <h2>The shelves, drawn as a graph.</h2>
     <div class="app">
       <div class="screen graph-ui" style="display:grid">
         <div>{{GRAPH}}</div>
@@ -249,19 +323,19 @@ svg.flow .ahp { fill: var(--ink); }
           <h3>The Lisbon flat</h3>
           <p>Home. Updated 3 Nov from a voice note.</p>
           <ul>
-            <li>Parent: <a href="#s5" tabindex="-1">Home</a></li>
-            <li>Links to: <a href="#s5" tabindex="-1">Lisbon trip ideas</a></li>
-            <li>Linked from: <a href="#s5" tabindex="-1">Visa checklist</a>, <a href="#s5" tabindex="-1">Photo of a receipt</a></li>
-            <li>From the log: <a href="#s5" tabindex="-1">Voice note, 3 Nov</a></li>
+            <li>Parent: <a href="#s8" tabindex="-1">Home</a></li>
+            <li>Links to: <a href="#s8" tabindex="-1">Lisbon trip ideas</a></li>
+            <li>Linked from: <a href="#s8" tabindex="-1">Visa checklist</a>, <a href="#s8" tabindex="-1">Photo of a receipt</a></li>
+            <li>From the log: <a href="#s8" tabindex="-1">Voice note, 3 Nov</a></li>
           </ul>
         </div>
       </div>
     </div>
-    <div class="legend"><span><i></i>belongs to a topic</span><span><i class="d"></i>a link one memory makes to another</span><span>Large dark nodes are topics Zenod found itself</span></div>
+    <div class="legend"><span><i></i>belongs to a topic</span><span><i class="d"></i>a link one memory makes to another</span><span>Large dark nodes are topics Zenod already finds by itself today</span></div>
   </div>
 </section>
 
-<section class="slide" id="s6">
+<section class="slide" id="s9">
   <div class="in split rev">
     <div class="app">
       <div class="screen" style="display:block;min-height:0">
@@ -270,31 +344,31 @@ svg.flow .ahp { fill: var(--ink); }
       </div>
     </div>
     <div>
-      <p class="no">5 &nbsp; Mockup: retrieval that lights up</p>
+      <p class="no">8 &nbsp; Mockup: retrieval that lights up</p>
       <h2>Ask, and five memories light up.</h2>
       {{RESULTS}}
-      <p class="small" style="margin-top:1rem">The same ranked five come back to Claude, ChatGPT or Cursor over MCP. The score is how well each memory matches against the best match, not a probability.</p>
+      <p class="small" style="margin-top:1rem">Search over MCP already returns a ranked five today. This adds the percentage and the link, in the app and for Claude, ChatGPT or Cursor alike. The score is how well each memory matches against the best match, not a probability.</p>
     </div>
   </div>
 </section>
 
-<section class="slide" id="s7">
+<section class="slide" id="s10">
   <div class="in">
-    <p class="no">6 &nbsp; How self-digestion runs</p>
-    <h2>Filed on arrival, tidied every night.</h2>
+    <p class="no">9 &nbsp; Digestion: live, and nightly next</p>
+    <h2>Already digests on arrival. Next, every night too.</h2>
     {{FLOW}}
     <div class="cols3">
-      <div><b>Already running</b>Filing on capture and the search index both work today. Topics are re-found once a week.</div>
+      <div><b>Live today</b>Filing on capture and the search index work in production. Topics are re-found once a week, Sunday night.</div>
       <div><b>What changes</b>The sweep moves from weekly to nightly and also rebuilds the link graph. Topics still come from your own notes, never from a seeded list.</div>
       <div><b>What it costs</b>The sweep calls no AI model, so nightly costs only server time. Filing cost is unchanged.</div>
     </div>
   </div>
 </section>
 
-<section class="slide" id="s8">
+<section class="slide" id="s11">
   <div class="in">
-    <p class="no">7 &nbsp; The build plan, in proposed order</p>
-    <h2>Six steps, each one you can open and judge.</h2>
+    <p class="no">10 &nbsp; The build plan, in proposed order</p>
+    <h2>Six steps on the live product, each one you can open and judge.</h2>
     <ol class="plan">
       <li class="head" aria-hidden="true"><span></span><span>What it delivers</span><span>How you check it</span><span class="eff">Effort</span></li>
       <li><span class="k">1</span><span><b>Ranked retrieval with a match score</b>Top 5 with a percentage and a link, as an MCP tool first. Needs no new screens.</span><span>You ask Zenod a question in Claude and see five memories with scores and links, in under a second.</span><span class="eff">about 1 day</span></li>
@@ -302,16 +376,16 @@ svg.flow .ahp { fill: var(--ink); }
       <li><span class="k">3</span><span><b>Memory graph view</b>A graph built from topics and links, opened node by node.</span><span>You open Memory, click a node, follow a link.</span><span class="eff">2 to 3 days</span></li>
       <li><span class="k">4</span><span><b>Lights up in the graph</b>Joins steps 1 and 3: a query lights up its five nodes.</span><span>You type a question in the memory view and watch five nodes light up.</span><span class="eff">about 1 day</span></li>
       <li><span class="k">5</span><span><b>Nightly digestion, last run shown</b>Weekly sweep becomes nightly and shows when it ran.</span><span>The app shows last digested today, and a new memory appears in the graph.</span><span class="eff">about 1 day</span></li>
-      <li><span class="k">6</span><span><b>Demo graph on zenod.dev, this deck kept current</b>The landing page explains Zenod with the demo graph. Each delivery updates this deck with a next step.</span><span>You open zenod.dev and this deck and both show the latest.</span><span class="eff">half a day, then ongoing</span></li>
+      <li><span class="k">6</span><span><b>zenod.dev in this look, this deck kept current</b>The landing takes on the deck’s shape with the demo graph (slide 12). Each delivery updates this deck with a next step.</span><span>You open zenod.dev and this deck and both show the latest.</span><span class="eff">half a day, then ongoing</span></li>
     </ol>
-    <p class="small" style="margin-top:1rem">Efforts are estimates. Each step ships on its own and stays live once it passes.</p>
+    <p class="small" style="margin-top:1rem">Efforts are estimates. Each step ships into production on its own, next to everything already live, and stays once it passes.</p>
   </div>
 </section>
 
-<section class="slide" id="s9">
+<section class="slide" id="s12">
   <div class="in">
-    <p class="no">8 &nbsp; What could go wrong</p>
-    <h2>Four risks we plan for from the start.</h2>
+    <p class="no">11 &nbsp; What could go wrong</p>
+    <h2>Four risks, planned for without touching what works.</h2>
     <div class="cols3" style="grid-template-columns:repeat(2,minmax(0,1fr))">
       <div><b>Privacy</b>The graph and chat show a whole vault to its owner only. The public page uses invented demo data, never a real vault.</div>
       <div><b>Big vaults</b>Jordi’s vault already indexes over 700 items. The graph opens on topics and expands on click so it stays readable at thousands.</div>
@@ -321,16 +395,37 @@ svg.flow .ahp { fill: var(--ink); }
   </div>
 </section>
 
-<section class="slide next" id="s10">
+<section class="slide" id="s13">
   <div class="in">
-    <p class="no">9 &nbsp; What we propose next</p>
-    <h2>Approve this plan, and step 1 starts.</h2>
-    <p class="lede">Ranked retrieval with a match score, on MCP first. It is the engine the chat and the lit-up graph both run on.</p>
-    <div class="box"><b>How you will check it</b>Ask Zenod a question from Claude. Five memories come back, each with a percentage and a link that opens it, in under a second. After that, the chat-first landing.</div>
+    <p class="no">12 &nbsp; Proposal: zenod.dev takes on this look</p>
+    <h2>Make the landing read like this deck.</h2>
+    <p class="lede">It already shares the paper, the green and the type. What it lacks is the deck's shape: the librarian line first, the four verbs as its spine, and one idea per screen.</p>
+    <div class="compare">
+      <div><p class="lab">Live today on zenod.dev</p><figure class="shot" style="padding:0.75rem"><img src="shots/landing-today.webp" width="1440" height="900" alt="The live zenod.dev hero: Hire a librarian for your memory, with a WhatsApp screenshot" loading="lazy"></figure></div>
+      <div><p class="lab">Proposed opening screen, mockup</p><div class="shot" style="padding:0.75rem"><div class="mini">
+        <div><p class="mh">The AI librarian of your memory.</p><p class="ms">It ingests and digests, so you can reach your memory from any agent and build on it.</p><span class="mb">Get started</span></div>
+        <div>{{GRAPH_MINI}}</div>
+        <div class="mrow"><span><i>1</i>Ingest</span><span><i>2</i>Digest</span><span><i>3</i>Access</span><span><i>4</i>Build on it</span></div>
+      </div></div></div>
+    </div>
+    <ul class="adopt">
+      <li><b>Keep</b>The real product screens, the plans, the connect page and the legal pages, word for word where still true.</li>
+      <li><b>Change</b>Open on the librarian line beside the demo graph, then one full screen per verb, each with its live screen, then a green closing band with one action.</li>
+      <li><b>How</b>A separate build step after you confirm, through the site's normal review and release. Nothing on zenod.dev changes from this deck.</li>
+    </ul>
   </div>
 </section>
 
-<p class="foot">Zenod vision deck, EPIC-12 plan step. Mockups use invented demo data. Today’s figures come from the memory-tree evidence of 2 November 2026: 10 of 10 test questions found in the top 5, 46 ms server time.</p>
+<section class="slide next" id="s14">
+  <div class="in">
+    <p class="no">13 &nbsp; What we propose next</p>
+    <h2>Confirm the positioning, and step 1 starts.</h2>
+    <p class="lede">Ranked retrieval with a match percentage, on MCP first. It is the engine the chat and the lit-up graph both run on, and every agent that already reaches Zenod gets it the same day.</p>
+    <div class="box"><b>How you will check it</b>Ask Zenod a question from Claude. Five memories come back, each with a percentage and a link that opens it, in under a second. Then the chat-first app, and the landing in this look as its own step.</div>
+  </div>
+</section>
+
+<p class="foot">Zenod, the next chapter: EPIC-12 plan, round 2. Live screens are the real product with demo people and notes, the same ones zenod.dev shows. Mockups use invented demo data. Today's figures: zenod.dev, cloud.zenod.dev health, the MCP Registry entry dev.zenod/memory, and the memory-tree evidence of 2 November 2026.</p>
 
 <script>
 document.addEventListener('keydown', function (e) {

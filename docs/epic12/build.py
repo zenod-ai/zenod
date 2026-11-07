@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Builds the EPIC-12 P1 vision deck (one static page). Demo data only."""
-import math, sys
+import math, os, shutil, sys
 
 OUT = sys.argv[1]
 
@@ -125,6 +125,12 @@ HTML = open(sys.argv[2]).read()
 HTML = (HTML.replace("{{GRAPH}}", graph_svg(focus="flat"))
         .replace("{{GRAPH_LIT}}", graph_svg(lit=LIT, cls="g lit-graph", vb="440 75 760 635"))
         .replace("{{RESULTS}}", results_list())
+        .replace("{{GRAPH_MINI}}", graph_svg(lit=LIT, cls="g lit-graph", vb="440 75 760 635"))
         .replace("{{FLOW}}", digestion_svg()))
 open(OUT, "w").write(HTML)
+# Real product screens (round 2): the same demo-content shots zenod.dev shows, plus the live landing hero.
+SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shots")
+DST = os.path.join(os.path.dirname(os.path.abspath(OUT)), "shots")
+if os.path.abspath(SRC) != os.path.abspath(DST):
+    shutil.copytree(SRC, DST, dirs_exist_ok=True)
 print("wrote", OUT, len(HTML))
