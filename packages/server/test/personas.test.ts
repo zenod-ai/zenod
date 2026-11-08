@@ -99,6 +99,28 @@ describe("persona runner (EPIC-14 S4)", () => {
     expect(store.runs("weekly-recap")).toHaveLength(1);
   });
 
+  it("reads the user's feedback on its cards in its next run, once, and new feedback is reason to wake (EPIC-14 S2 round 3)", async () => {
+    let clock = new Date("2026-11-08T03:00:00Z");
+    const stub = stubModel();
+    const { deps: d, inbox } = deps({ model: () => stub.model, now: () => clock });
+    const nightly: PersonaDefinition = { ...WEEKLY_RECAP, schedule: { every: "night" } };
+    await runPersona(nightly, d, "schedule");
+    expect(stub.calls[0]!.system).not.toContain("wrote back");
+    const finding = inbox.list().find((item) => item.kind === "finding")!;
+    inbox.addReply(finding.id, { kind: "feedback", text: "I booked it yesterday, stop flagging the dentist", readAt: null });
+    clock = new Date("2026-11-09T03:00:00Z");
+    const run = await runPersona(nightly, d, "schedule");
+    expect(run).toMatchObject({ status: "done", modelCalls: 1 });
+    expect(stub.calls[1]!.system).toContain("I booked it yesterday, stop flagging the dentist");
+    expect(stub.calls[1]!.system).toContain(finding.title);
+    expect(inbox.get(finding.id)!.replies[0]!.readAt).toBeTruthy();
+    // Read once: the next night, same memories and no new words, it sleeps.
+    clock = new Date("2026-11-10T03:00:00Z");
+    expect(await runPersona(nightly, d, "schedule")).toMatchObject({ status: "skipped" });
+    await runPersona(nightly, d, "manual");
+    expect(stub.calls.at(-1)!.system).not.toContain("wrote back");
+  });
+
   it("skips with no model call when there is nothing to read, or nothing new since the last real run", async () => {
     const empty = stubModel();
     const a = deps({ entries: [], model: () => empty.model });

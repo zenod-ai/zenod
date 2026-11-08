@@ -51,6 +51,23 @@ export interface InboxJobResult {
   answer?: boolean;
 }
 
+/**
+ * What the user wrote back on a card (EPIC-14 S2 round 3), like Epic Team's feedback box: an answer
+ * in their own words (a question), feedback to the persona (a finding; it reads it on its next run)
+ * or a follow-up for the desk (a job; it starts a new job linked to this one).
+ */
+export interface InboxReply {
+  kind: "answer" | "feedback" | "followup";
+  text: string;
+  at: string;
+  /** answer: the store job that filed it into the memory. */
+  savedJobId?: string | null;
+  /** followup: the new desk job's inbox item. */
+  followUpItemId?: string | null;
+  /** feedback: when the persona's run read it. */
+  readAt?: string | null;
+}
+
 export interface InboxItem {
   id: string;
   kind: InboxKind;
@@ -70,6 +87,10 @@ export interface InboxItem {
   /** job: the step it is on while working. */
   step: string | null;
   result: InboxJobResult | null;
+  /** What the user wrote back on this card, oldest first. */
+  replies: InboxReply[];
+  /** job: the earlier job this one follows up. */
+  followUpOf: { id: string; title: string } | null;
   /** True for the example items the empty inbox can show; they never write to the memory. */
   example: boolean;
   /** The poster's own key, so posting the same thing twice keeps one item. */
@@ -131,7 +152,11 @@ interface Row {
   seen_at: string | null;
 }
 
-type ItemData = Pick<InboxItem, "from" | "title" | "body" | "options" | "recommended" | "answer" | "links" | "step" | "result">;
+type ItemData = Pick<InboxItem, "from" | "title" | "body" | "options" | "recommended" | "answer" | "links" | "step" | "result"> &
+  Partial<Pick<InboxItem, "replies" | "followUpOf">>;
+
+export const INBOX_REPLY_MAX_CHARS = 1_000;
+const MAX_REPLIES = 20;
 
 const text = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
@@ -150,6 +175,8 @@ function rowToItem(row: Row): InboxItem {
     links: data.links ?? [],
     step: data.step ?? null,
     result: data.result ?? null,
+    replies: data.replies ?? [],
+    followUpOf: data.followUpOf ?? null,
     example: row.example === 1,
     sourceKey: row.source_key,
     createdAt: row.created_at,
@@ -288,6 +315,74 @@ export class InboxStore {
     return this.write(item, "answered", { answer: { optionId: option.id, label: option.label, at: this.now().toISOString(), savedJobId } }, true);
   }
 
+  /** A question answered in the user's own words instead of a button. */
+  answerInWords(id: string, words: string, savedJobId: string | null = null): InboxItem {
+    const item = this.require(id, "question");
+    if (item.status !== "open") throw new InboxError("conflict", "this question is already answered");
+    const label = text(words, INBOX_REPLY_MAX_CHARS);
+    if (!label) throw new InboxError("invalid", "write a few words first");
+    const at = this.now().toISOString();
+    return this.write(item, "answered", {
+      answer: { optionId: "words", label, at, savedJobId },
+      replies: [...item.replies, { kind: "answer" as const, text: label, at, savedJobId }].slice(-MAX_REPLIES),
+    }, true);
+  }
+
+  /** Keep what the user wrote back on a card (feedback to a persona, a follow-up for the desk). */
+  addReply(id: string, reply: Omit<InboxReply, "at">): InboxItem {
+    const item = this.get(id);
+    if (!item) throw new InboxError("not_found", "no such inbox item");
+    const words = text(reply.text, INBOX_REPLY_MAX_CHARS);
+    if (!words) throw new InboxError("invalid", "write a few words first");
+    const replies = [...item.replies, { ...reply, text: words, at: this.now().toISOString() }].slice(-MAX_REPLIES);
+    // Writing back is reading: the card is seen, and keeps its place.
+    return this.write(item, item.status, { replies }, true);
+  }
+
+  /** A follow-up job names the job it follows. */
+  linkFollowUp(id: string, original: InboxItem): InboxItem {
+    const item = this.require(id, "job");
+    return this.write(item, item.status, { followUpOf: { id: original.id, title: original.title } }, item.seenAt !== null);
+  }
+
+  /**
+   * The feedback a persona has not read yet, from the cards it posted, oldest first. Example cards
+   * never reach a persona.
+   */
+  unreadFeedback(from: string): Array<{ itemId: string; title: string; reply: InboxReply; index: number }> {
+    const out: Array<{ itemId: string; title: string; reply: InboxReply; index: number }> = [];
+    for (const item of this.list(500)) {
+      if (item.from !== from || item.example || item.kind === "job") continue;
+      item.replies.forEach((reply, index) => {
+        if (reply.kind === "feedback" && !reply.readAt) out.push({ itemId: item.id, title: item.title, reply, index });
+      });
+    }
+    return out.sort((a, b) => a.reply.at.localeCompare(b.reply.at));
+  }
+
+  /** When the user last wrote feedback to this persona, read or not (its wake check). */
+  lastFeedbackAt(from: string): string | null {
+    let last: string | null = null;
+    for (const item of this.list(500)) {
+      if (item.from !== from || item.example) continue;
+      for (const reply of item.replies) if (reply.kind === "feedback" && (!last || reply.at > last)) last = reply.at;
+    }
+    return last;
+  }
+
+  /** The persona's run read this feedback; the card says so. Does not move the card. */
+  markFeedbackRead(entries: Array<{ itemId: string; index: number }>): void {
+    const at = this.now().toISOString();
+    for (const { itemId, index } of entries) {
+      const item = this.get(itemId);
+      const reply = item?.replies[index];
+      if (!item || !reply || reply.readAt) continue;
+      const replies = item.replies.map((candidate, i) => (i === index ? { ...candidate, readAt: at } : candidate));
+      const data: ItemData = { ...this.dataOf(item), replies };
+      this.db.prepare(`UPDATE inbox_items SET data=? WHERE id=?`).run(JSON.stringify(data), item.id);
+    }
+  }
+
   /** "Got it" on a finding, or "Good" on a finished job. */
   dismiss(id: string): InboxItem {
     const item = this.get(id);
@@ -362,12 +457,18 @@ export class InboxStore {
     return item;
   }
 
+  private dataOf(item: InboxItem): ItemData {
+    return {
+      from: item.from, title: item.title, body: item.body, options: item.options, recommended: item.recommended,
+      answer: item.answer, links: item.links, step: item.step, result: item.result,
+      ...(item.replies.length ? { replies: item.replies } : {}),
+      ...(item.followUpOf ? { followUpOf: item.followUpOf } : {}),
+    };
+  }
+
   private write(item: InboxItem, status: InboxStatus, patch: Partial<ItemData>, seen: boolean): InboxItem {
     const at = this.now().toISOString();
-    const data: ItemData = {
-      from: item.from, title: item.title, body: item.body, options: item.options, recommended: item.recommended,
-      answer: item.answer, links: item.links, step: item.step, result: item.result, ...patch,
-    };
+    const data: ItemData = { ...this.dataOf(item), ...patch };
     this.db
       .prepare(`UPDATE inbox_items SET status=?, data=?, updated_at=?, seen_at=? WHERE id=?`)
       .run(status, JSON.stringify(data), at, seen ? item.seenAt ?? at : null, item.id);
