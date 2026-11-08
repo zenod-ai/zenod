@@ -44,6 +44,15 @@ export type Subscriber = {
   deliveries: SubscriberDelivery[]
 }
 
+// EPIC-21 V1: apps allowed to forward their own voice notes into Zenod.
+export type Forwarder = {
+  grant_id: string
+  name: string
+  scope: string
+  account: { name: string | null; email: string | null }
+  created_at: string
+}
+
 type CreatedWebhook = {
   subscription: Subscriber
   signing_secret: string
@@ -468,13 +477,74 @@ function AddWebhook({ onCreated }: { onCreated: (sub: Subscriber) => void }) {
   )
 }
 
+function Forwarders({ list, onRemoved }: { list: Forwarder[]; onRemoved: (id: string) => void }) {
+  const [busy, setBusy] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  async function remove(id: string) {
+    setBusy(id)
+    setError(null)
+    try {
+      await subscribersCall(`/api/subscribers/forwarders/${id}`, { method: "DELETE" })
+      onRemoved(id)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card className="rounded-lg">
+      <CardContent className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">Apps that forward voice notes</h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Voice notes you record in these apps land in your Zenod, tagged with
+            the app. They can add notes only; they cannot read or change your
+            memory. Remove one to cut it off.
+          </p>
+        </div>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <ul className="flex flex-col border-t pt-5">
+          {list.map((app) => (
+            <li
+              key={app.grant_id}
+              className="flex flex-wrap items-center justify-between gap-3 border-t py-4 first:border-t-0 first:pt-0"
+            >
+              <div className="min-w-0">
+                <h3 className="font-semibold">{app.name}</h3>
+                <p className="text-sm text-muted-foreground">
+                  connected by {app.account.name ?? app.account.email ?? "you"} with Sign in with Zenod, {day(app.created_at)}
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => remove(app.grant_id)}>
+                {busy === app.grant_id ? <Spinner /> : null}
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function SubscribersPanel() {
   const [subs, setSubs] = React.useState<Subscriber[] | null>(null)
+  const [forwarders, setForwarders] = React.useState<Forwarder[]>([])
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    subscribersCall<{ subscribers: Subscriber[] }>("/api/subscribers")
-      .then((body) => setSubs(body.subscribers))
+    subscribersCall<{ subscribers: Subscriber[]; forwarders?: Forwarder[] }>("/api/subscribers")
+      .then((body) => {
+        setSubs(body.subscribers)
+        setForwarders(body.forwarders ?? [])
+      })
       .catch((err: Error) => setError(err.message))
   }, [])
 
@@ -531,6 +601,12 @@ export function SubscribersPanel() {
           )}
         </CardContent>
       </Card>
+      {forwarders.length > 0 ? (
+        <Forwarders
+          list={forwarders}
+          onRemoved={(id) => setForwarders((list) => list.filter((f) => f.grant_id !== id))}
+        />
+      ) : null}
       <AddWebhook onCreated={add} />
     </div>
   )

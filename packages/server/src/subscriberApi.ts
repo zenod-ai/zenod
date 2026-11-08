@@ -1,4 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
+import { bodyLimit } from "hono/body-limit";
 import type { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import type { HttpBindings } from "@hono/node-server";
@@ -7,6 +10,7 @@ import type { Context, Hono } from "hono";
 import type { Runtime } from "./runtime.js";
 import { apiError, subscribersDisabled } from "./subscriberRoutes.js";
 import {
+  FORWARD_SCOPE,
   hashSubscriberToken,
   SUBSCRIBER_EVENT,
   SUBSCRIBER_SCOPES,
@@ -18,8 +22,10 @@ import {
   TEST_NOTE_ID,
   validateSubscriberUrl,
   type AddressLookup,
+  type GrantScope,
   type SubscriberGrant,
 } from "./subscribers.js";
+import { createVoiceNoteForwardServer, FORWARD_MAX_BODY_BYTES } from "./voiceNoteForward.js";
 import { openZenodSqlite } from "./sqlite.js";
 import { mergeMemoryEntries } from "./memoryEntryCatalog.js";
 import type { MemoryEntry } from "zenod";
@@ -32,6 +38,10 @@ import type { MemoryEntry } from "zenod";
  * (RFC 7591) and the hosted sign-in, but its codes (`zvc_`) and tokens never enter the MCP OAuth store, so a voice-note
  * grant can never call /mcp. Grants live per tenant (subscribers.sqlite); this module keeps only a host-level index
  * (token hash -> tenant) and the short-lived codes, in `subscriber-index.sqlite`.
+ *
+ * EPIC-21 V1 adds a second grant an app can ask for, `voice_notes.write`: forward its own voice notes into Zenod through
+ * one narrow MCP server at /api/subscribers/v1/mcp (ingest_voice_note), and nothing else (contract:
+ * docs/voice-note-forwarding.md). An app may ask for it alone or together with the subscriber scopes.
  */
 
 const CODE_TTL_MS = 10 * 60 * 1000;
@@ -68,6 +78,8 @@ export interface SubscriberApiHost {
   /** Where the private-origin exception is read (default process.env). */
   env?: NodeJS.ProcessEnv;
   lookup?: AddressLookup;
+  /** How the forwarding door fetches an audioUrl (tests). */
+  fetch?: typeof fetch;
   now?: () => number;
 }
 
@@ -185,9 +197,21 @@ export function isSubscriberAuthorize(scopeParam: string | null | undefined): bo
   return Boolean(scopeParam && scopeParam.split(/\s+/).some((scope) => scope.startsWith("voice_notes.")));
 }
 
-function scopeIsExact(scopeParam: string): boolean {
+/**
+ * The grant's scope when the request asks for one Zenod offers: the subscriber pair, `voice_notes.write` alone, or all
+ * three; null otherwise (unknown scopes, or only half of the subscriber pair).
+ */
+export function grantScope(scopeParam: string): string | null {
   const scopes = new Set(scopeParam.split(/\s+/).filter(Boolean));
-  return scopes.size === SUBSCRIBER_SCOPES.length && SUBSCRIBER_SCOPES.every((scope) => scopes.has(scope));
+  const subscribe = SUBSCRIBER_SCOPES.every((scope) => scopes.has(scope));
+  const write = scopes.has(FORWARD_SCOPE);
+  const known = (subscribe ? SUBSCRIBER_SCOPES.length : 0) + (write ? 1 : 0);
+  if (known === 0 || known !== scopes.size) return null;
+  return [...(subscribe ? SUBSCRIBER_SCOPES : []), ...(write ? [FORWARD_SCOPE] : [])].join(" ");
+}
+
+function scopeIsExact(scopeParam: string): boolean {
+  return grantScope(scopeParam) !== null;
 }
 
 function readParams(src: URLSearchParams): AuthorizeParams {
@@ -287,20 +311,34 @@ function consentPage(input: {
     consent: input.nonce,
   }) as Array<[string, string]>).map(([key, value]) => `<input type="hidden" name="${key}" value="${esc(value)}">`).join("");
   const provider = identity.provider === "google" ? "Google" : identity.provider === "github" ? "GitHub" : null;
-  return shell(`${client.clientName} wants to receive your voice notes`, `
+  const scope = grantScope(params.scope) ?? SUBSCRIBER_SCOPES.join(" ");
+  const subscribe = scope.includes("voice_notes.subscribe");
+  const write = scope.includes(FORWARD_SCOPE);
+  const headline = subscribe && write
+    ? `${client.clientName} wants to send you its voice notes and receive yours`
+    : write ? `${client.clientName} wants to send its voice notes to your Zenod` : `${client.clientName} wants to receive your voice notes`;
+  const gets = [
+    ...(write ? ["Adding voice notes you record in it to your Zenod, tagged with its name"] : []),
+    ...(subscribe ? ["A signal each time a new voice note lands in your Zenod", "Read access to those notes only: the words, the time, the length"] : []),
+  ];
+  const getsNot = [
+    write && !subscribe ? "Reading anything in your Zenod" : "Your other memories, files, or notes from before today",
+    write ? "Any right to change or delete in your Zenod" : "Any right to write, change or delete in your Zenod",
+  ];
+  return shell(headline, `
 <div class="marks" aria-hidden="true"><span class="z">Z</span><span class="dots">···</span><span class="app">${esc(initials(client.clientName))}</span></div>
-<h1>${esc(client.clientName)} wants to receive your voice notes</h1>
+<h1>${esc(headline)}</h1>
 <p class="sub">${esc(redirectHost)} · ${esc(kindLabel(params.kind, params.product))}</p>
 <div class="who"><div>${esc(identity.name ?? identity.email ?? "Your Zenod account")}<small>${esc([identity.email, provider ? `signed in with ${provider}` : null].filter(Boolean).join(" · "))}</small></div><a href="${esc(input.notYouHref)}">Not you?</a></div>
 <h2>It will get</h2>
-<ul><li>A signal each time a new voice note lands in your Zenod</li><li>Read access to those notes only: the words, the time, the length</li></ul>
+<ul>${gets.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
 <h2>It will not get</h2>
-<ul class="not"><li>Your other memories, files, or notes from before today</li><li>Any right to write, change or delete in your Zenod</li></ul>
-<p class="note">It shows up in Zenod under <strong>Subscribers</strong>, where you can pause or remove it any time.</p>
+<ul class="not">${getsNot.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
+<p class="note">It shows up in Zenod under <strong>Subscribers</strong>, where you can ${subscribe ? "pause or remove" : "remove"} it any time.</p>
 <form method="post" action="${DECISION_PATH}">${hidden}
 <div class="row"><button type="submit" name="decision" value="deny">Cancel</button><button class="allow" type="submit" name="decision" value="approve">Allow</button></div>
 </form>
-<p class="meta">${esc(new URL(input.baseUrl).host)}/oauth/authorize · scope: ${esc(SUBSCRIBER_SCOPES.join(" "))}</p>`);
+<p class="meta">${esc(new URL(input.baseUrl).host)}/oauth/authorize · scope: ${esc(scope)}</p>`);
 }
 
 class Limiter {
@@ -396,7 +434,7 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
       clientId: p.clientId,
       redirectUri: p.redirectUri,
       codeChallenge: p.codeChallenge,
-      scope: SUBSCRIBER_SCOPES.join(" "),
+      scope: grantScope(p.scope)!,
       tenantId: identity.tenantId,
       accountName: identity.name,
       accountEmail: identity.email,
@@ -458,7 +496,7 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
   // --- the subscriber API ---
 
   type Authed = { runtime: Runtime; grant: SubscriberGrant; tenantId: string };
-  const authenticate = (c: Context, scope: (typeof SUBSCRIBER_SCOPES)[number]): Authed | Response => {
+  const authenticate = (c: Context, scope: GrantScope | "any"): Authed | Response => {
     if (!host.enabled()) return subscribersDisabled(c);
     const header = c.req.header("authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -468,14 +506,14 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
     const runtime = entry ? host.runtimeForTenant(entry.tenantId) : null;
     const grant = runtime?.subscribers?.grantForTokenHash(hash) ?? null;
     if (!entry || !runtime || !grant || grant.id !== entry.grantId) return apiError(c, 401, "invalid_token", "This connection was removed or is not valid.");
-    if (!grant.scope.split(/\s+/).includes(scope)) return apiError(c, 403, "insufficient_scope", `This call needs ${scope}.`);
+    if (scope !== "any" && !grant.scope.split(/\s+/).includes(scope)) return apiError(c, 403, "insufficient_scope", `This call needs ${scope}.`);
     if (!calls.take(grant.id)) return apiError(c, 429, "rate_limited", "Too many calls; try again in a minute.");
     c.header("Cache-Control", "no-store");
     return { runtime, grant, tenantId: entry.tenantId };
   };
 
   app.get(`${API_PREFIX}/me`, (c) => {
-    const auth = authenticate(c, "voice_notes.subscribe");
+    const auth = authenticate(c, "any");
     return auth instanceof Response ? auth : c.json(grantJson(auth.grant));
   });
 
@@ -582,6 +620,36 @@ export function mountSubscriberApi(app: Hono<{ Bindings: HttpBindings }>, host: 
     if (!sinceGrant && !auth.runtime.subscribers!.announcedToGrant(auth.grant.id, id)) return notFound();
     return c.json({ note: { id, text: entry.content, captured_at: entry.capturedAt, source: entry.source ?? null, content_type: "voice_note" } });
   });
+
+  // EPIC-21 V1: the forwarding door, a stateless MCP server holding only ingest_voice_note and its receipt.
+  app.post(`${API_PREFIX}/mcp`, bodyLimit({
+    maxSize: FORWARD_MAX_BODY_BYTES,
+    onError: (c) => apiError(c, 413, "too_large", "The request is larger than the 16 MB audio limit allows."),
+  }), async (c) => {
+    const auth = authenticate(c, FORWARD_SCOPE);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json().catch(() => undefined);
+    if (body === undefined) return apiError(c, 400, "invalid_request", "Send a JSON-RPC body.");
+    const server = createVoiceNoteForwardServer({
+      runtime: auth.runtime,
+      grant: auth.grant,
+      tenantId: auth.tenantId,
+      policy: auth.runtime.subscriberDispatcher?.policy ?? subscriberUrlPolicyFromEnv(host.env),
+      lookup: host.lookup,
+      ...(host.fetch ? { fetch: host.fetch } : {}),
+      now,
+    });
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    const { incoming, outgoing } = c.env as HttpBindings;
+    outgoing.on("close", () => {
+      void transport.close();
+      void server.close();
+    });
+    await server.connect(transport);
+    await transport.handleRequest(incoming, outgoing, body);
+    return RESPONSE_ALREADY_SENT;
+  });
+  app.on(["GET", "DELETE"], `${API_PREFIX}/mcp`, (c) => c.json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed: POST JSON-RPC to this stateless endpoint." }, id: null }, 405));
 
   // The slow safety net (contract section 6): pointers to voice notes since a time, never before the grant.
   async function listNotes(c: Context, auth: Authed): Promise<Response> {

@@ -21,6 +21,9 @@ import { openZenodSqlite } from "./sqlite.js";
 
 export const SUBSCRIBER_EVENT = "voice_note.captured";
 export const SUBSCRIBER_SCOPES = ["voice_notes.read", "voice_notes.subscribe"] as const;
+/** EPIC-21 V1: an app that forwards its own voice notes into Zenod (the ingest door, nothing else). */
+export const FORWARD_SCOPE = "voice_notes.write";
+export type GrantScope = (typeof SUBSCRIBER_SCOPES)[number] | typeof FORWARD_SCOPE;
 export const SUBSCRIBER_TOKEN_PREFIX = "zvn_";
 export const DELIVERY_LOG_DAYS = 7;
 export const DELIVERY_TIMEOUT_MS = 5_000;
@@ -201,6 +204,11 @@ export class SubscriberStore {
   grantForTokenHash(tokenHash: string): SubscriberGrant | null {
     const row = this.db.prepare("SELECT * FROM subscriber_grants WHERE token_hash = ?").get(tokenHash) as Record<string, string | null> | undefined;
     return row ? toGrant(row) : null;
+  }
+
+  /** Every grant, newest first (EPIC-21 V1: forwarding apps have a grant and no subscription). */
+  grants(): SubscriberGrant[] {
+    return (this.db.prepare("SELECT * FROM subscriber_grants ORDER BY created_at DESC").all() as Array<Record<string, string | null>>).map(toGrant);
   }
 
   grant(id: string): SubscriberGrant | null {
@@ -528,6 +536,8 @@ export interface StoredEntry {
   contentType?: string;
   source?: string;
   capturedAt?: string;
+  /** EPIC-21 V1: the OAuth client that forwarded this note; its own subscriptions are not told about it. */
+  forwardedBy?: string;
 }
 
 export type EntryStoredListener = (entry: StoredEntry) => void;
@@ -564,7 +574,9 @@ export class SubscriberDispatcher {
     if (!entry.evidenceRef || entry.contentType !== "voice_note") return;
     let subs: Subscription[];
     try {
-      subs = this.options.store.list().filter((sub) => sub.enabled && sub.event === SUBSCRIBER_EVENT);
+      subs = this.options.store.list().filter((sub) => sub.enabled && sub.event === SUBSCRIBER_EVENT &&
+        // A note an app forwarded is not announced back to that same app (no echo loop).
+        !(entry.forwardedBy && sub.grantId && this.options.store.grant(sub.grantId)?.clientId === entry.forwardedBy));
     } catch {
       return;
     }

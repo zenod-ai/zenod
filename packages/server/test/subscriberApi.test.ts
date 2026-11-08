@@ -291,5 +291,8 @@ describe("hosted capability allowlist", () => {
     expect(hostedCapabilityViolation("POST", "/api/subscribers/sub_abc-1/test")).toBeNull();
     expect(hostedCapabilityViolation("PUT", "/api/subscribers/sub_abc-1")).not.toBeNull();
     expect(hostedCapabilityViolation("DELETE", "/api/subscribers/../tenants")).not.toBeNull();
+    // EPIC-21 V1: remove an app that forwards voice notes.
+    expect(hostedCapabilityViolation("DELETE", "/api/subscribers/forwarders/grt_abc-1")).toBeNull();
+    expect(hostedCapabilityViolation("DELETE", "/api/subscribers/forwarders/../x")).not.toBeNull();
   });
 });

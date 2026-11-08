@@ -104,10 +104,10 @@ export class TaskJobQueue {
     return this.store.get(id);
   }
 
-  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string): void {
+  private entryStored(evidenceRef: string | null | undefined, contentType: string | undefined, source: string | undefined, capturedAt?: string, forwardedBy?: string): void {
     if (!evidenceRef || !this.onEntryStored) return;
     try {
-      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}) });
+      this.onEntryStored({ evidenceRef, ...(contentType ? { contentType } : {}), ...(source ? { source } : {}), ...(capturedAt ? { capturedAt } : {}), ...(forwardedBy ? { forwardedBy } : {}) });
     } catch {
       console.warn("[subscribers] notification failed after durable capture");
     }
@@ -291,7 +291,7 @@ export class TaskJobQueue {
           );
           completed = this.store.updateClaimed(job, { status: "done", result });
           if (completed && result.status === "done" && result.digest.evidenceRef) {
-            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint), job.input.capturedAt);
+            this.entryStored(result.digest.evidenceRef, job.input.contentType ?? job.input.mediaType, sourceFromHint(job.input.sourceHint), job.input.capturedAt, job.input.forwardedBy);
           }
         }
       } else if (job.kind === "enrich_memory") {
@@ -617,6 +617,7 @@ async function processMediaIngest(
     `Raw artifact sha256: ${archived.handle.sha256}`,
     `Media type: ${archived.mediaType}`,
     `Source: ${input.sourceHint ?? archived.sourceKind}`,
+    ...(input.sourceApp ? [`Source app: ${input.sourceApp}`] : []),
     ...(input.senderTimestamp ? [`Source timestamp: ${input.senderTimestamp}`] : []),
     ...(extraction.transcriptionStatus === "skipped_duration_limit"
       ? ["Transcription: skipped because the audio exceeds Zenod's 2-hour transcription limit."]
@@ -816,6 +817,7 @@ function receiptSource(input: TaskJobInput): MediaIngestReceipt["source"] {
     ...(input.senderTimestamp ? { senderTimestamp: input.senderTimestamp } : {}),
     ...(input.contentHint ? { contentHint: input.contentHint } : {}),
     ...(input.mediaHints ? { hints: input.mediaHints } : {}),
+    ...(input.sourceApp ? { app: input.sourceApp } : {}),
   };
 }
 

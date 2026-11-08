@@ -146,3 +146,32 @@ describe("SubscribersPanel", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("URL must use HTTPS.")
   })
 })
+
+describe("Apps that forward voice notes (EPIC-21 V1)", () => {
+  it("lists a forwarding app apart from subscribers and removes it", async () => {
+    const fetch = mockFetch({
+      "GET /api/subscribers": () => ({
+        status: 200,
+        body: {
+          subscribers: [],
+          forwarders: [{ grant_id: "grt_team", name: "Epic Team", scope: "voice_notes.write", account: { name: "Jordi Montes", email: null }, created_at: "2026-11-08T19:00:00.000Z" }],
+        },
+      }),
+      "DELETE /api/subscribers/forwarders/grt_team": () => ({ status: 204 }),
+    })
+    render(<SubscribersPanel />)
+    const card = (await screen.findByRole("heading", { name: "Apps that forward voice notes" })).closest("div.flex-col") as HTMLElement
+    expect(within(card.parentElement!).getByText("Epic Team")).toBeTruthy()
+    expect(screen.getByText(/connected by Jordi Montes with Sign in with Zenod/)).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }))
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Apps that forward voice notes" })).toBeNull())
+    expect(fetch).toHaveBeenCalledWith("/api/subscribers/forwarders/grt_team", expect.objectContaining({ method: "DELETE" }))
+  })
+
+  it("shows no forwarding card when there is none", async () => {
+    mockFetch({ "GET /api/subscribers": () => ({ status: 200, body: { subscribers: [] } }) })
+    render(<SubscribersPanel />)
+    await screen.findByText(/Nothing is subscribed yet/)
+    expect(screen.queryByRole("heading", { name: "Apps that forward voice notes" })).toBeNull()
+  })
+})
