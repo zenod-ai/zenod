@@ -390,3 +390,28 @@ svg.zp-gcompact .zp-gcenter text { font-size: 25px; }
   .zp-glit .zp-gdot, .zp-glit .zp-ghalo, .zp-gpct { animation: none; }
   .zp-glitedge { animation: none; opacity: 1; }
 }
+
+/* EPIC-14 E14-S1: the chat's voice note button and the recording bar that replaces the compose
+   field while a note is recorded. */
+.zp-mic { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; padding: 0 !important; background: transparent; color: var(--zp-accent); border: 1px solid var(--zp-line); }
+.zp-mic:hover:not(:disabled) { border-color: var(--zp-accent); }
+.zp-compose:has(.zp-recording) > textarea, .zp-compose:has(.zp-recording) > button { display: none; }
+.zp-recording { flex: 1; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; min-height: 2.25rem; }
+.zp-recdot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--zp-accent); animation: zp-dot 1.2s ease infinite; }
+.zp-recdot-off { animation: none; background: var(--zp-faint); }
+.zp-reclen { font: 600 1rem var(--zp-sans); color: var(--zp-ink); font-variant-numeric: tabular-nums; min-width: 2.6rem; }
+.zp-reclevel { flex: 1; min-width: 3rem; height: 2px; background: var(--zp-line); overflow: hidden; }
+.zp-reclevel i { display: block; height: 100%; background: var(--zp-accent); transform-origin: left; transition: transform 120ms linear; }
+.zp-recstate { font-size: 0.85rem; color: var(--zp-muted); }
+.zp-voicemsg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--zp-muted); }
+.zp-voice { font-variant-numeric: tabular-nums; }
+.zp-voice + .zp-keepnote { align-self: flex-end; }
+@media (max-width: 640px) {
+  .zp-compose .zp-mic { margin-left: auto; }
+  .zp-recording { flex-wrap: nowrap; gap: 0.45rem; }
+  .zp-recstate { display: none; }
+  .zp-reclevel { min-width: 1.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zp-recdot, .zp-reclevel i { animation: none; transition: none; }
+}

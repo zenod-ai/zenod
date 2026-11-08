@@ -14,6 +14,8 @@ import {
   type MemorySendRoute,
 } from "@/lib/memory-chat"
 import { litHash } from "@/lib/memory-graph"
+import { formatLength, voiceNoteStatus } from "@/lib/voice-note"
+import { VoiceNoteButton } from "@/components/voice-note-button"
 
 // EPIC-12 E12-S1: the hosted app opens on this chat. It answers from your memory and shows
 // the memories it used with their match percentages and links. EPIC-16 E16-B1: one Send button;
@@ -46,6 +48,7 @@ type Turn =
       keep: KeepState | null
       result: MemoryChatAnswer | null
     }
+  | { id: number; kind: "voice-note"; seconds: number; keep: KeepState }
   | { id: number; kind: "error"; text: string }
 
 type NewTurn = Turn extends infer T
@@ -58,7 +61,8 @@ const KEEP_POLL_MS = 1500
 const KEEP_POLL_TRIES = 40
 
 function useKeepPolling(
-  update: (id: number, keep: KeepState) => void
+  update: (id: number, keep: KeepState) => void,
+  status: (id: string) => Promise<MemoryKeepReceipt> = keepStatus
 ): (turnId: number, receipt: MemoryKeepReceipt) => void {
   const alive = React.useRef(true)
   React.useEffect(() => {
@@ -74,7 +78,7 @@ function useKeepPolling(
       let tries = 0
       const tick = () => {
         if (!alive.current || tries++ >= KEEP_POLL_TRIES) return
-        keepStatus(first.id)
+        status(first.id)
           .then((receipt) => {
             if (!alive.current) return
             update(turnId, { state: "kept", receipt })
@@ -84,13 +88,21 @@ function useKeepPolling(
       }
       setTimeout(tick, KEEP_POLL_MS)
     },
-    [update]
+    [update, status]
   )
 }
 
 /** What Zenod did with the message (E16-B1): said plainly, with a link once it is saved. */
-function KeepLine({ keep, route }: { keep: KeepState; route: MemorySendRoute }) {
-  const part = route.action === "both" ? (
+function KeepLine({
+  keep,
+  route,
+  retry = "Send it again.",
+}: {
+  keep: KeepState
+  route?: MemorySendRoute
+  retry?: string
+}) {
+  const part = route?.action === "both" ? (
     <span className="zp-keptpart">“{route.keep}”</span>
   ) : null
   if (keep.state === "keeping" || keep.state === "idle")
@@ -101,7 +113,7 @@ function KeepLine({ keep, route }: { keep: KeepState; route: MemorySendRoute }) 
   if (receipt.status === "failed")
     return (
       <p className="zp-keepnote zp-warn" data-testid="memory-kept">
-        Not saved. Send it again.
+        Not saved. {retry}
       </p>
     )
   if (receipt.status === "saving")
@@ -353,13 +365,15 @@ export function MemoryChat() {
   const updateKeep = React.useCallback((id: number, keep: KeepState) => {
     setTurns((all) =>
       all.map((turn) =>
-        turn.id === id && (turn.kind === "reply" || turn.kind === "pending")
+        turn.id === id &&
+        (turn.kind === "reply" || turn.kind === "pending" || turn.kind === "voice-note")
           ? { ...turn, keep }
           : turn
       )
     )
   }, [])
   const pollKeep = useKeepPolling(updateKeep)
+  const pollVoice = useKeepPolling(updateKeep, voiceNoteStatus)
 
   React.useEffect(() => {
     if (turns.length > 0) endRef.current?.scrollIntoView?.({ block: "end" })
@@ -444,6 +458,13 @@ export function MemoryChat() {
                 <div key={turn.id} className="zp-msg zp-me">
                   {turn.text}
                 </div>
+              ) : turn.kind === "voice-note" ? (
+                <div key={turn.id} className="zp-turn">
+                  <div className="zp-msg zp-me zp-voice">
+                    Voice note · {formatLength(turn.seconds)}
+                  </div>
+                  <KeepLine keep={turn.keep} retry="Record it again." />
+                </div>
               ) : turn.kind === "pending" ? (
                 <PendingTurn
                   key={turn.id}
@@ -482,6 +503,12 @@ export function MemoryChat() {
                   void send()
                 }
               }}
+            />
+            <VoiceNoteButton
+              onSent={(receipt, seconds) =>
+                pollVoice(push({ kind: "voice-note", seconds, keep: { state: "keeping" } }), receipt)
+              }
+              onNotice={(text) => push({ kind: "error", text })}
             />
             <button
               type="submit"

@@ -657,8 +657,10 @@ async function processMediaIngest(
   };
 }
 
-function sourceFromHint(sourceHint: string | undefined): "mcp" | "whatsapp" | "telegram" | "drive" {
+function sourceFromHint(sourceHint: string | undefined): "mcp" | "whatsapp" | "telegram" | "drive" | "web" {
   const normalized = sourceHint?.trim().toLowerCase() ?? "";
+  // E14-S1: a voice note recorded in the web app's chat.
+  if (normalized.startsWith("zenod app")) return "web";
   if (normalized.startsWith("whatsapp")) return "whatsapp";
   if (normalized.startsWith("telegram")) return "telegram";
   if (normalized.startsWith("drive")) return "drive";
