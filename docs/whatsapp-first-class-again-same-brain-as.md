@@ -22,7 +22,7 @@ Goal sentence: WhatsApp answers with the same brain as the cloud chat: it saves,
 
 ## Done means
 
-- [ ] E20-1 The recent WhatsApp exchanges are reviewed message by message (what was sent, what Zenod did and replied, what it should have done), with the causes ranked.
+- [x] E20-1 The recent WhatsApp exchanges are reviewed message by message (what was sent, what Zenod did and replied, what it should have done), with the causes ranked.
 - [ ] E20-2 A WhatsApp message gets the same decision as the cloud chat (save a memory, answer from memory, or a job for the memory desk shown in the inbox as "run it?"), and answers use the same checked answer path, short enough for WhatsApp.
 - [ ] E20-3 Proven on real-style messages through the live WhatsApp path: the decision is right at least 9 times in 10, answers are correct on his real questions at least as often as the cloud chat, and replies arrive within a few seconds.
 
@@ -30,13 +30,13 @@ Goal sentence: WhatsApp answers with the same brain as the cloud chat: it saves,
 
 Owner: Delivery Manager (Zenod launch)
 Status: active
-Last attempted: scaffolded with spine_new.py on 2026-11-08
-Result: created, not started
-Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
-Approved work: none
-Next action: A1 dispatched (review, then build)
-Source revision: uncommitted scaffold
+Last attempted: 2026-11-08 A1 (run_b72ff779): review done, two fixes built
+Result: the review (E20-1, [private page](http://vps3.taild81fbb.ts.net:8921/e20-a1/)) found his 18:50Z WhatsApp question answered "Memory filing is in progress": since 16:14Z his memory refused every save, because agent jobs wrote straight into the vault while a voice note was mid-filing. Fix #1530 merged (05c9815). WhatsApp brain #1532 (decide, checked answer, desk jobs to the inbox) stacked on E14-S3, waits for S3 to merge
+Evidence: replay on a copy of his memory: decision 40/40 and 39/40 (blind), answers graded the same as the cloud chat on 10 real questions, reply p50 2.1 s
+Waiting on: E14-S3 merge (A1's PR is stacked on it)
+Approved work: L-6 mandate (vn_14cb0d46)
+Next action: A1 verifies #1530 live and his memory saving again; after S3 merges, merges #1532, verifies live, card to review
+Source revision: main 05c9815
 Verified at: 2026-11-08
 
 ## Non-Goals
@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| A1 | Ticket worker | run_b72ff779-04e1-4467-8292-655206a85cac — claimed 2026-11-08T18:55Z, lease until 2026-11-08T20:55Z | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | active | none | `wt/e20-a1` | main | none | 2026-11-08 | dispatch |
+| A1 | Ticket worker | run_b72ff779-04e1-4467-8292-655206a85cac — claimed 2026-11-08T18:55Z, lease until 2026-11-08T20:55Z | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | active | E14-S3 (for #1532) | [#1530](https://github.com/zenod-ai/zenod/pull/1530) merged 05c9815 · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `wt/e20-a1` | main | [review](http://vps3.taild81fbb.ts.net:8921/e20-a1/) | 2026-11-08 | verify #1530 live, merge #1532 after S3, prove live, card |
 
 ## Decisions
 
@@ -62,6 +62,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-08 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
 | 2026-11-08 | accepted | epic “WhatsApp first-class again: same brain as the chat” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (Chat), 2026-11-08 18:52Z · 1 min 00 s · $0.0026 (gpt-4o-mini-transcribe) · vn_14cb0d46 Audio: https://tea") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-08 | accepted | Planned by the Delivery Manager. Root L-6 (WhatsApp replies change only in Jordi's own words) is satisfied: his Team desk voice note vn_14cb0d46 (18:52Z) asks for exactly this — WhatsApp went unattended since the graph, chat and voice changes and should behave like the cloud chat. | L-6 mandate recorded | vn_14cb0d46 | if he narrows it |
+| 2026-11-08 | accepted | Review cause 1: agent jobs (E19-U1 16:23Z, E12-S14 16:58Z, E12-S15 17:37Z) pushed straight to his vault while voice note e-6d07aa was mid-filing; its plan's base was gone, recovery replayed a non-retryable conflict and every save failed from 16:14Z | Zenod now files such a note again on the current memory (#1530). Agent jobs that change the memory should go through Zenod (the memory desk), not push to the vault repo | [review](http://vps3.taild81fbb.ts.net:8921/e20-a1/) | if another direct push wedges filing |
 
 ## Operating Learnings
 
