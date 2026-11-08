@@ -10,12 +10,16 @@
  * - strength (0..1): the hit's BM25 score relative to the best hit for this question.
  *   1 = the best hit.
  *
- * matchPercent = round(100 × (coverage + strength) / 2), between 1 and 100.
+ * matchPercent = round(100 × coverage × (1 + strength) / 2), between 1 and 100.
  *
- * It is relative to this question and this vault, not a probability: the best hit that
- * contains every word reads 100 %, and a hit with half the words and half the strength
- * reads 50 %. Without a coverage figure (the scan fallback), strength alone is used.
- * Hits keep their BM25 order, and a hit never reads higher than the hit ranked above it
+ * Coverage leads (E12-S3c): strength is relative to the best hit, so on its own it makes the
+ * best hit of a weak question read high, and tied hits all read the same. Here a hit never
+ * reads higher than the share of the question it contains: a hit with a fifth of the
+ * question reads at most 20 %, the best hit that contains every word reads 100 %, and a hit
+ * with every word but half the best strength reads 75 %. It is relative to this question and
+ * this vault, not a probability. Without a coverage figure (the scan fallback), strength
+ * alone is used.
+  * Hits keep their BM25 order, and a hit never reads higher than the hit ranked above it
  * (monotonic), so the list reads top-down.
  */
 
@@ -32,7 +36,7 @@ const clamp01 = (value: number) => (Number.isFinite(value) ? Math.min(1, Math.ma
 
 export function matchPercent({ score, topScore, coverage }: MatchInput): number {
   const strength = topScore > 0 ? clamp01(score / topScore) : 0;
-  const blended = coverage === undefined ? strength : (clamp01(coverage) + strength) / 2;
+  const blended = coverage === undefined ? strength : (clamp01(coverage) * (1 + strength)) / 2;
   return Math.max(1, Math.min(100, Math.round(blended * 100)));
 }
 

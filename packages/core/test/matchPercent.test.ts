@@ -7,10 +7,13 @@ import { buildMatchTerms, MemoryIndex } from "../src/vault/memoryIndex.js";
 
 // EPIC-12 E12-S3a: ranked retrieval carries a match percentage people can read.
 describe("match percentage (E12-S3a)", () => {
-  it("blends rarity-weighted coverage and strength vs the best hit, 1..100", () => {
+  it("coverage leads: a hit never reads higher than the share of the question it holds, 1..100", () => {
     expect(matchPercent({ score: 10, topScore: 10, coverage: 1 })).toBe(100);
-    expect(matchPercent({ score: 5, topScore: 10, coverage: 0.5 })).toBe(50);
-    expect(matchPercent({ score: 10, topScore: 10, coverage: 0.5 })).toBe(75);
+    expect(matchPercent({ score: 10, topScore: 10, coverage: 1 })).toBe(100);
+    expect(matchPercent({ score: 5, topScore: 10, coverage: 1 })).toBe(75);
+    expect(matchPercent({ score: 5, topScore: 10, coverage: 0.5 })).toBe(38);
+    expect(matchPercent({ score: 10, topScore: 10, coverage: 0.5 })).toBe(50); // best hit holding half the question
+    expect(matchPercent({ score: 10, topScore: 10, coverage: 0.22 })).toBe(22); // tied junk hits are not 61 %
     expect(matchPercent({ score: 2, topScore: 8 })).toBe(25); // no coverage: strength alone
     expect(matchPercent({ score: 0, topScore: 10, coverage: 0 })).toBe(1); // never 0
     expect(matchPercent({ score: 20, topScore: 10, coverage: 3 })).toBe(100); // clamped
@@ -73,6 +76,25 @@ describe("index search percentages and latency (E12-S3a)", { timeout: 60_000 }, 
       expect(hit.matchPercent).toBeLessThan(hit === hits[0] ? 101 : 100);
     }
     expect(hits.map((hit) => hit.matchPercent)).toEqual([...hits.map((hit) => hit.matchPercent)].sort((a, b) => b - a));
+  });
+
+  it("pages that match only on the tree path or a generic word do not make the list (E12-S3c)", async () => {
+    const page = (title: string, summary: string, body: string) => `---\ntitle: ${title}\nsummary: "${summary}"\nparent: "[[Tree]]"\nmemory: long-term\n---\n${body}\n`;
+    const index = await vaultOf({
+      "Tree.md": "---\ntitle: Tree\n---\n# Memory tree\n\n## Long-term memory\n\n- Travel | long-term | [[Areas/Travel]] | Trips.\n- Hair transplant | long-term | [[Areas/Hair transplant]] | Clinic options.\n- EpicSpine | long-term | [[Areas/EpicSpine]] | The method.\n",
+      "Areas/Travel.md": page("Travel", "Trips and flights.", "Flights to Porto."),
+      "Areas/Hair transplant.md": page("Hair transplant", "Clinic options.", "Recovery notes."),
+      "Areas/EpicSpine.md": page("EpicSpine", "A document-centric method for AI-assisted work.", "Epic documents and tickets."),
+      "Log/2026-11-08.md": "# 2026-11-08\n\n## 09:12 Doctrine ^e-aa11bb\n- source: mcp\n\n> We are going to use EpicSpine as a doctrine\n",
+    });
+    const hits = await index.search("How does my memory work with EpicSpine as a doctrine?", 5);
+    const titles = hits.map((hit) => hit.title);
+    expect(titles).toContain("EpicSpine");
+    expect(titles).not.toContain("Travel");
+    expect(titles).not.toContain("Hair transplant");
+    expect(hits.some((hit) => hit.path.startsWith("Log/"))).toBe(true);
+    // Only generic words: nothing to find, and whatever turns up reads weak, never a tied 61 %.
+    for (const hit of await index.search("how does my memory work", 5)) expect(hit.matchPercent).toBeLessThanOrEqual(30);
   });
 
   it("answers the top 5 well under a second on a vault of about 1,500 rows", async () => {

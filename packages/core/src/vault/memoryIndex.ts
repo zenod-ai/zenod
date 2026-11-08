@@ -42,6 +42,18 @@ const STOP_WORDS = new Set([
   "se", "si", "sin", "sobre", "son", "su", "sus", "te", "tu", "un", "una", "uno", "unos", "y", "ya", "yo",
 ]);
 
+/**
+ * Words that name memory itself or a generic request, not what the question is about
+ * (E12-S3c). "how does my memory work" must not rank every page under "Long-term memory ›"
+ * (the tree path is indexed) at the same score. Dropped like stop words, unless the question
+ * has nothing else.
+ */
+const GENERIC_WORDS = new Set([
+  "memory", "memories", "memoria", "memorias", "remember", "remind", "recall", "note", "notes", "nota", "notas", "know", "knowledge",
+  "use", "using", "used", "usar", "want", "need", "think", "say", "said", "mean", "means", "work", "works", "going", "something",
+  "thing", "things", "everything", "anything", "much", "many", "let", "make", "give", "show", "find", "look",
+]);
+
 export interface MemoryIndexOptions {
   /** SQLite file in the tenant's data dir, e.g. `<dataDir>/memory-index.sqlite`. */
   path: string;
@@ -113,10 +125,13 @@ export function buildMatch(query: string, aliasGroups: readonly (readonly string
  * The MATCH expression and, separately, one clause per content word of the query (aliases
  * excluded): the words a hit's coverage is measured against.
  */
-export function buildMatchTerms(query: string, aliasGroups: readonly (readonly string[])[]): { match: string | null; terms: string[] } {
+export function buildMatchTerms(query: string, aliasGroups: readonly (readonly string[])[]): { match: string | null; terms: string[]; generic: boolean } {
   const normalized = normalize(query);
   const words = normalized.split(" ").filter(Boolean);
-  let terms = [...new Set(words.filter((word) => !STOP_WORDS.has(word) && word.length >= 2))];
+  const content = words.filter((word) => !STOP_WORDS.has(word) && word.length >= 2);
+  let terms = [...new Set(content.filter((word) => !GENERIC_WORDS.has(word)))];
+  const generic = terms.length === 0;
+  if (terms.length === 0) terms = [...new Set(content)];
   if (terms.length === 0) terms = [...new Set(words)];
   const clauses = new Set<string>();
   for (const term of terms) {
@@ -131,7 +146,7 @@ export function buildMatchTerms(query: string, aliasGroups: readonly (readonly s
     if (!members.some((member) => padded.includes(` ${member} `))) continue;
     for (const member of members) if (!terms.includes(member)) clauses.add(quote(member));
   }
-  return { match: clauses.size ? [...clauses].join(" OR ") : null, terms: termClauses };
+  return { match: clauses.size ? [...clauses].join(" OR ") : null, terms: termClauses, generic };
 }
 
 const SNIPPET_CHARS = 200;
@@ -247,12 +262,12 @@ export class MemoryIndex {
   /** BM25-ranked hits, one per path, freshest index first. Empty when nothing matches. */
   async search(query: string, limit = MAX_HITS): Promise<MemoryIndexHit[]> {
     if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
-    const { match, terms } = buildMatchTerms(query, this.aliasGroups);
+    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
     if (!match) return [];
     const rows = this.db.prepare(`
       SELECT rowid, kind, path, title, filed, lineage, bm25(docs, ${BM25_WEIGHTS}) AS rank
       FROM docs WHERE docs MATCH ? ORDER BY rank LIMIT ?
-    `).all(match, limit * 3) as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; rank: number }>;
+    `).all(match, Math.max(40, limit * 8)) as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; rank: number }>;
     const picked: typeof rows = [];
     const seen = new Set<string>();
     const scored = rows.map((row) => ({ ...row, rank: row.rank * KIND_FACTOR[row.kind] })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
@@ -260,18 +275,26 @@ export class MemoryIndex {
       if (seen.has(row.path)) continue; // a root row and its page share a path: keep the best
       seen.add(row.path);
       picked.push(row);
-      if (picked.length >= limit) break;
+      if (picked.length >= Math.max(40, limit * 8)) break;
     }
     if (picked.length === 0) return [];
-    // FTS5 snippet() re-tokenizes whole bodies and was most of a query's time: a plain
-    // window around the first matched word does the same job for the returned rows only.
-    const texts = new Map((this.db.prepare(`SELECT rowid, summary, body FROM docs WHERE rowid IN (${picked.map(() => "?").join(", ")})`)
-      .all(...picked.map((row) => row.rowid)) as Array<{ rowid: number; summary: string; body: string }>).map((row) => [row.rowid, row]));
     const words = matchWords(match);
     const coverage = this.coverageOf(terms, picked.map((row) => row.rowid));
-    const topScore = -picked[0]!.rank;
-    const percents = monotonic(picked.map((row) => matchPercent({ score: -row.rank, topScore, coverage: coverage.get(row.rowid) ?? 0 })));
-    return picked.map((row, i) => ({
+    // A page that only matches on its tree path (or on nothing a person wrote) is not an answer:
+    // drop it, and drop hits holding under a quarter of what the best one does. Never drop to empty.
+    const best = Math.max(0, ...picked.map((row) => coverage.get(row.rowid) ?? 0));
+    const kept = best > 0 ? picked.filter((row) => (coverage.get(row.rowid) ?? 0) >= best * 0.25) : picked;
+    kept.splice(limit);
+    const topScore = -kept[0]!.rank;
+
+    // FTS5 snippet() re-tokenizes whole bodies and was most of a query's time: a plain
+    // window around the first matched word does the same job for the returned rows only.
+    const texts = new Map((this.db.prepare(`SELECT rowid, summary, body FROM docs WHERE rowid IN (${kept.map(() => "?").join(", ")})`)
+      .all(...kept.map((row) => row.rowid)) as Array<{ rowid: number; summary: string; body: string }>).map((row) => [row.rowid, row]));
+    // A question made only of generic words ("how does my memory work") matches on nothing in
+    // particular: whatever it finds reads weak.
+    const percents = monotonic(kept.map((row) => matchPercent({ score: -row.rank, topScore, coverage: (coverage.get(row.rowid) ?? 0) * (generic ? 0.3 : 1) })));
+    return kept.map((row, i) => ({
       path: row.path, kind: row.kind, title: row.title, snippet: snippetOf(texts.get(row.rowid), words),
       score: Math.round(-row.rank * 100) / 100,
       matchPercent: percents[i]!,
@@ -286,13 +309,15 @@ export class MemoryIndex {
     if (terms.length === 0 || rowids.length === 0) return out;
     const total = (this.db.prepare("SELECT count(*) AS n FROM docs").get() as { n: number }).n;
     const countOf = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ?");
+    // Content columns only: the tree path (lineage) is for finding, not for what a memory says.
     const among = this.db.prepare(`SELECT rowid FROM docs WHERE docs MATCH ? AND rowid IN (${rowids.map(() => "?").join(", ")})`);
     let weightSum = 0;
     for (const term of terms) {
-      const df = (countOf.get(term) as { n: number }).n;
+      const scoped = `{title aliases summary body} : ${term}`;
+      const df = (countOf.get(scoped) as { n: number }).n;
       const weight = idfOf(total, df);
       weightSum += weight;
-      for (const row of among.all(term, ...rowids) as Array<{ rowid: number }>) out.set(row.rowid, out.get(row.rowid)! + weight);
+      for (const row of among.all(scoped, ...rowids) as Array<{ rowid: number }>) out.set(row.rowid, out.get(row.rowid)! + weight);
     }
     if (weightSum > 0) for (const [rowid, sum] of out) out.set(rowid, sum / weightSum);
     return out;

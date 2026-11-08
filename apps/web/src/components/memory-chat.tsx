@@ -135,7 +135,9 @@ function AnswerTurn({
         <div className="zp-used" aria-label="Memories used">
           <p className="zp-usedhead">
             {result.memories.length > 0
-              ? `Top ${result.memories.length} memories for this question`
+              ? result.memories.length > 5
+                ? "Memories for this question"
+                : `Top ${result.memories.length} memories for this question`
               : "Memories cited"}
           </p>
           <ol>

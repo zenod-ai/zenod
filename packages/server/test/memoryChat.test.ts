@@ -52,6 +52,21 @@ function fakeEngine(label: string, options: { ask?: (question: string) => Promis
   return engine as unknown as FakeEngine;
 }
 
+describe("answerFromMemory cited memories keep their percentage (E12-S3c)", () => {
+  it("shows a cited memory that ranked below the top 5 in the list with its own percentage", async () => {
+    const engine = fakeEngine("beta", {
+      ask: async () => ({ text: "From [[Notes/beta 8]].", sources: [{ path: "Notes/beta 8.md", title: "beta 8", url: "https://github.com/o/r/blob/main/Notes/beta%208.md", provider: "github" }] }) as unknown as Answer,
+    });
+    const more = [...(await engine.search("x"))];
+    for (const n of [7, 8, 9]) more.push(hit(`Notes/beta ${n}.md`, 3 - n / 10, { matchPercent: 60 - n }));
+    engine.searchTimed = async () => ({ hits: more, tier: "index" as const, ms: 2 });
+    const result = await answerFromMemory(engine, "beta plans");
+    expect(result.memories.map((memory) => memory.path)).toEqual([1, 2, 3, 4, 5, 8].map((n) => `Notes/beta ${n}.md`));
+    expect(result.memories[5]).toMatchObject({ cited: true, rank: 8, matchPercent: 44 }); // its own percentage, kept below the hit above
+    expect(result.alsoCited).toEqual([]);
+  });
+});
+
 describe("answerFromMemory (E12-S1)", () => {
   it("answers with the top 5 ranked memories, marks the cited ones and lists other citations once", async () => {
     const engine = fakeEngine("alpha");
