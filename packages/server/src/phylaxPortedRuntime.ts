@@ -5,7 +5,11 @@ import type { Env, Hono } from "hono";
 import { SqliteStateStore } from "zenod/state/sqlite";
 import { Settings } from "./settings.js";
 import { WhatsAppGateway, type SocketFactory } from "./whatsappGateway.js";
-import { WhatsAppStore } from "./whatsappStore.js";
+import {
+  CAPTURE_NOT_SAVED_REPLY,
+  CAPTURE_RETRY_NOTICE,
+  WhatsAppStore,
+} from "./whatsappStore.js";
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { TelegramGateway } from "./telegramGateway.js";
 import {
@@ -251,6 +255,8 @@ export class PhylaxPortedRuntime {
   private readonly eventLoopHeartbeatStaleMs: number;
   private eventLoopHeartbeatAt = Date.now();
   private eventLoopHeartbeatTimer: NodeJS.Timeout | null = null;
+  private readonly captureRetryTickMs: number;
+  private captureRetryTimer: NodeJS.Timeout | null = null;
   private readonly probeVoiceDuration: (bytes: Buffer, fileName: string) => Promise<number | null>;
   private readonly onCaptureJobObserved?: (input: {
     tenantId: string;
@@ -323,6 +329,10 @@ export class PhylaxPortedRuntime {
     this.eventLoopHeartbeatIntervalMs = Number.isFinite(configuredHeartbeatInterval)
       ? Math.max(100, Math.min(configuredHeartbeatInterval, 60_000))
       : 5_000;
+    const configuredCaptureRetryTick = Number(env.PHYLAX_CAPTURE_RETRY_TICK_MS ?? 30_000);
+    this.captureRetryTickMs = Number.isFinite(configuredCaptureRetryTick)
+      ? Math.max(1_000, Math.min(configuredCaptureRetryTick, 300_000))
+      : 30_000;
     const configuredHeartbeatStale = Number(env.PHYLAX_EVENT_LOOP_HEARTBEAT_STALE_MS ?? 20_000);
     this.eventLoopHeartbeatStaleMs = Number.isFinite(configuredHeartbeatStale)
       ? Math.max(this.eventLoopHeartbeatIntervalMs * 2, Math.min(configuredHeartbeatStale, 300_000))
@@ -920,9 +930,12 @@ export class PhylaxPortedRuntime {
             error instanceof PhylaxChannelError
             && error.retryDisposition === "idempotent_capture"
           ) {
+            // The transcript is kept and the save is keyed, so it is retried by
+            // itself (retryDueVoiceCaptures). A rejected credential keeps its own
+            // reconnect text; a reconnect from settings retries at once.
             this.whatsappStore.deferIdempotentVoiceCapture(
               job.providerMessageId,
-              "⚠️ Your voice note was transcribed, but Zenod has not returned a save receipt. The transcript is safely retained; retry after the connection is repaired cannot create a second memory.",
+              error.audit?.failureCode === "downstream_unauthorized" ? error.message : CAPTURE_RETRY_NOTICE,
             );
           } else {
             this.whatsappStore.markVoiceRingOutcomeUnknown(job.providerMessageId);
@@ -930,7 +943,7 @@ export class PhylaxPortedRuntime {
         } else {
           this.whatsappStore.queueVoiceFailureReply(
             job.providerMessageId,
-            "⚠️ Zenod could not process that voice note. Please try again.",
+            CAPTURE_NOT_SAVED_REPLY,
           );
         }
         await this.whatsapp.drainMediaRecovery();
@@ -944,6 +957,26 @@ export class PhylaxPortedRuntime {
     const resumed = this.whatsappStore.resumeIdempotentVoiceCaptures(tenantId);
     if (resumed > 0) this.kickVoiceWorker();
     return resumed;
+  }
+
+  /** Hand kept voice notes whose next retry is due back to the voice worker. */
+  retryDueVoiceCaptures(now = Date.now()): number {
+    if (this.voiceWorkerClosed) return 0;
+    const resumed = this.whatsappStore.resumeDueVoiceCaptureRetries(now);
+    if (resumed > 0) this.kickVoiceWorker();
+    return resumed;
+  }
+
+  private startCaptureRetryTimer(): void {
+    if (this.captureRetryTimer) return;
+    this.captureRetryTimer = setInterval(() => {
+      try {
+        this.retryDueVoiceCaptures();
+      } catch (error) {
+        console.error("[phylax] voice capture retry tick failed:", error);
+      }
+    }, this.captureRetryTickMs);
+    this.captureRetryTimer.unref();
   }
 
   wakeAllowanceWork(): void {
@@ -983,6 +1016,9 @@ export class PhylaxPortedRuntime {
     await this.whatsapp.startIfEnabled();
     await this.telegram.startIfEnabled();
     await this.organ.resumePendingCaptures();
+    const resumed = this.retryDueVoiceCaptures();
+    if (resumed > 0) console.log(`[phylax] resumed ${resumed} kept voice note(s) for a save retry`);
+    this.startCaptureRetryTimer();
   }
 
   workerHealth(now = Date.now()): {
@@ -1028,6 +1064,8 @@ export class PhylaxPortedRuntime {
     this.voiceWorkerClosed = true;
     if (this.eventLoopHeartbeatTimer) clearInterval(this.eventLoopHeartbeatTimer);
     this.eventLoopHeartbeatTimer = null;
+    if (this.captureRetryTimer) clearInterval(this.captureRetryTimer);
+    this.captureRetryTimer = null;
     for (const controller of this.voiceAbortControllers.values()) controller.abort();
     const failures: unknown[] = [];
     const voiceDrain = (async (): Promise<void> => {

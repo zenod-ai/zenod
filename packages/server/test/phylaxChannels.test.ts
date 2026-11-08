@@ -3999,7 +3999,7 @@ describe("ported gateway integration", () => {
         expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
       expect(sent).toEqual([
         'I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.',
-        "⚠️ Your voice note was transcribed, but Zenod could not confirm the final result. I will not retry it automatically because that could perform the request twice.",
+        "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.",
       ]);
       expect(sent.join("\n")).not.toMatch(/Ring|Phylax/i);
       expect(runtime.whatsappStore.channelAudit(event.messageId)).toBeNull();
@@ -4128,8 +4128,9 @@ describe("ported gateway integration", () => {
       await vi.waitFor(() =>
         expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("capture_retry_pending"));
       await vi.waitFor(() => expect(sent).toHaveLength(2));
-      expect(sent[1]).toContain("Zenod has not returned a save receipt");
-      expect(sent[1]).toContain("cannot create a second memory");
+      expect(sent[1]).toBe(
+        "⚠️ I couldn't save that voice note yet. It's kept safe, and I'll confirm here when it's saved.",
+      );
       expect(storeKeys).toEqual(["alpha:whatsapp:voice-capture-credential-repair"]);
 
       memoryAvailable = true;
@@ -4150,6 +4151,228 @@ describe("ported gateway integration", () => {
     } finally {
       await runtime.close();
     }
+  });
+
+  describe("ZAL-A10 kept voice notes retry by themselves", () => {
+    const KEPT = "⚠️ I couldn't save that voice note yet. It's kept safe, and I'll confirm here when it's saved.";
+    const NOT_SAVED = "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.";
+
+    async function keptVoiceHarness(name: string) {
+      const dataDir = await mkdtemp(join(tmpdir(), `phylax-zal-a10-${name}-`));
+      dirs.push(dataDir);
+      const sent: string[] = [];
+      const storeKeys: string[] = [];
+      // Zenod's server dedupes by idempotency key: one job per key, whatever the call count.
+      const jobsByKey = new Map<string, string>();
+      const control = { reachable: false, jobState: "done" as "done" | "error" };
+      const organ = new PhylaxChannelsOrgan({
+        dataDir,
+        routes: {
+          resolve: () => ({
+            tenantId: "alpha",
+            downstreamUrl: "https://zenod.test/mcp/memory",
+            downstreamToken: "memory-scope-only",
+            turnBindings: {
+              voice_note: { tool: "store_memory", argumentMappings: { content: { source: "transcript" } } },
+              text: defaultPhylaxTurnBindings().text,
+              media: defaultPhylaxTurnBindings().media,
+            },
+          }),
+        },
+        artifactUrl: (tenantId, artifactId) => `https://phylax.test/artifacts/${tenantId}/${artifactId}`,
+        transcriber: {
+          async transcribe() {
+            return { text_transcript: "a note worth keeping", transcription_source: "test-stt" };
+          },
+        },
+        discoverDownstream: async () => ({
+          transport: "connected",
+          tools: "ready",
+          specs: [{
+            as: "memory",
+            mcp: "store_memory",
+            arg: "input",
+            description: "Store memory",
+            inputSchema: {
+              type: "object",
+              additionalProperties: false,
+              required: ["content", "idempotencyKey"],
+              properties: { content: { type: "string" }, idempotencyKey: { type: "string" } },
+            },
+          }],
+        }),
+        async callDownstream(call) {
+          if (call.tool === "store_memory") {
+            const key = String(call.arguments.idempotencyKey);
+            storeKeys.push(key);
+            if (!control.reachable) {
+              return {
+                isError: true,
+                content: [{ type: "text", text: "Could not reach Zenod: MCP request did not return a canonical response" }],
+              };
+            }
+            if (!jobsByKey.has(key)) jobsByKey.set(key, `job-${jobsByKey.size + 1}`);
+            return {
+              content: [{ type: "text", text: "queued" }],
+              structuredContent: { ticket_id: jobsByKey.get(key), state: "accepted" },
+            };
+          }
+          expect(call.tool).toBe("get_task_result");
+          const jobId = String(call.arguments.ticket_id);
+          if (control.jobState === "error") {
+            return {
+              isError: true,
+              content: [{ type: "text", text: "job failed" }],
+              structuredContent: { ticket_id: jobId, state: "error", error: { code: "job_failed", message: "failed" } },
+            };
+          }
+          return {
+            content: [{ type: "text", text: "done" }],
+            structuredContent: {
+              ticket_id: jobId,
+              state: "done",
+              result: {
+                recap: "Kept note saved.",
+                evidenceRef: "Log/2026-11-08.md#^kept",
+                pagesTouched: ["Inbox/Kept.md"],
+                commitSha: "abc1234",
+                githubUrls: [],
+              },
+            },
+          };
+        },
+        capturePollIntervalMs: 1,
+        sleep: async () => {},
+      });
+      const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
+        probeVoiceDuration: async () => 60,
+        whatsappSocketFactory: async () => ({
+          ev: { on() {} },
+          async sendMessage(_jid, content) {
+            sent.push(content.text);
+            return { key: { id: `zal-a10-${name}-${sent.length}` } };
+          },
+        }),
+      });
+      runtime.settings.setWhatsAppSettings({ enabled: true, providerMode: "self_host_dev", acceptAll: true });
+      await runtime.whatsapp.start();
+      const event: WhatsAppInboundEvent = {
+        messageId: `voice-zal-a10-${name}`,
+        chatId: "34611111111@s.whatsapp.net",
+        senderId: "34611111111@s.whatsapp.net",
+        senderName: "Alpha",
+        chatName: "Alpha",
+        isGroup: false,
+        timestamp: 1,
+        body: "",
+        hasMedia: true,
+        mediaType: "ptt",
+        mimeType: "audio/ogg",
+        fileName: null,
+        mediaRaw: { testBytes: `zal-a10-${name}-audio` },
+      };
+      return { runtime, sent, storeKeys, jobsByKey, control, event };
+    }
+
+    it("retries a kept voice note on its own schedule, files it once and then sends Saved", async () => {
+      const { runtime, sent, storeKeys, jobsByKey, control, event } = await keptVoiceHarness("retry");
+      try {
+        await runtime.whatsapp.handleEvent(event);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("capture_retry_pending"));
+        await vi.waitFor(() => expect(sent).toHaveLength(2));
+        expect(sent[1]).toBe(KEPT);
+
+        // Not due yet: the first retry waits a minute.
+        expect(runtime.retryDueVoiceCaptures(Date.now())).toBe(0);
+
+        // Due, still unreachable: retried, parked again, and no second notice.
+        expect(runtime.retryDueVoiceCaptures(Date.now() + 61_000)).toBe(1);
+        await vi.waitFor(() => expect(storeKeys).toHaveLength(2));
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("capture_retry_pending"));
+        expect(runtime.retryDueVoiceCaptures(Date.now() + 61_000)).toBe(0);
+        expect(sent).toHaveLength(2);
+
+        control.reachable = true;
+        expect(runtime.retryDueVoiceCaptures(Date.now() + 10 * 60_000)).toBe(1);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
+        await vi.waitFor(() => expect(sent).toHaveLength(3));
+        expect(sent[2]).toContain("Saved ✓");
+        expect(new Set(storeKeys)).toEqual(new Set([`alpha:whatsapp:${event.messageId}`]));
+        expect(jobsByKey.size).toBe(1);
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, recovered: 1, gaveUp: 0 });
+      } finally {
+        await runtime.close();
+      }
+    });
+
+    it("gives up after the bounded schedule and tells the user to try again", async () => {
+      const { runtime, sent, storeKeys, event } = await keptVoiceHarness("give-up");
+      try {
+        await runtime.whatsapp.handleEvent(event);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("capture_retry_pending"));
+        for (let retry = 1; retry <= 10; retry += 1) {
+          expect(runtime.retryDueVoiceCaptures(Date.now() + 9 * 60 * 60_000)).toBe(1);
+          await vi.waitFor(() => expect(storeKeys).toHaveLength(retry + 1));
+          await vi.waitFor(() =>
+            expect(runtime.whatsappStore.voiceJob(event.messageId)?.state)
+              .toBe(retry === 10 ? "failed" : "capture_retry_pending"));
+        }
+        await vi.waitFor(() => expect(sent).toHaveLength(3));
+        expect(sent[1]).toBe(KEPT);
+        expect(sent[2]).toBe(NOT_SAVED);
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, recovered: 0, gaveUp: 1 });
+        expect(runtime.retryDueVoiceCaptures(Date.now() + 9 * 60 * 60_000)).toBe(0);
+      } finally {
+        await runtime.close();
+      }
+    });
+
+    it("does not retry a save that Zenod reports failed and says try again", async () => {
+      const { runtime, sent, storeKeys, control, event } = await keptVoiceHarness("job-error");
+      control.reachable = true;
+      control.jobState = "error";
+      try {
+        await runtime.whatsapp.handleEvent(event);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("ring_outcome_unknown"));
+        await vi.waitFor(() => expect(sent).toHaveLength(2));
+        expect(sent[1]).toBe(NOT_SAVED);
+        expect(runtime.retryDueVoiceCaptures(Date.now() + 24 * 60 * 60_000)).toBe(0);
+        expect(storeKeys).toHaveLength(1);
+      } finally {
+        await runtime.close();
+      }
+    });
+
+    it("recovers a note left waiting before this change without replaying its cached error", async () => {
+      const { runtime, sent, storeKeys, jobsByKey, control, event } = await keptVoiceHarness("legacy");
+      control.reachable = true;
+      control.jobState = "error";
+      try {
+        await runtime.whatsapp.handleEvent(event);
+        await vi.waitFor(() => expect(sent).toHaveLength(2));
+        // A row parked by the old code: no retry time, and Phylax's journal still holds the
+        // error Zenod returned then. Zenod has since finished the same job.
+        (runtime.whatsappStore as unknown as { db: DatabaseSync }).db.prepare(
+          `UPDATE whatsapp_voice_jobs SET job_state = 'capture_retry_pending', capture_retry_at = NULL
+           WHERE provider_message_id = ?`,
+        ).run(event.messageId);
+        control.jobState = "done";
+        expect(runtime.retryDueVoiceCaptures()).toBe(1);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
+        await vi.waitFor(() => expect(sent).toHaveLength(3));
+        expect(sent[2]).toContain("Saved ✓");
+        expect(storeKeys).toEqual([`alpha:whatsapp:${event.messageId}`, `alpha:whatsapp:${event.messageId}`]);
+        expect(jobsByKey.size).toBe(1);
+      } finally {
+        await runtime.close();
+      }
+    });
   });
 
   it("files three overlapping WhatsApp voice notes once each with distinct stable provider keys and one final receipt", async () => {
@@ -4337,7 +4560,7 @@ describe("ported gateway integration", () => {
       expect(sent.filter((text) => text.includes("Transcription: completed."))).toHaveLength(3);
       expect(sent.filter((text) => text.includes("Transcript: transcript for voice-overlap-")))
         .toHaveLength(3);
-      expect(sent.filter((text) => text.includes("could not confirm the final result"))).toHaveLength(0);
+      expect(sent.filter((text) => text.includes("couldn't save this"))).toHaveLength(0);
       for (const messageId of messageIds) {
         expect(runtime.whatsappStore.voiceJob(messageId)?.state).not.toBe("ring_outcome_unknown");
         expect(runtime.whatsappStore.mediaRecovery(messageId)).toMatchObject({

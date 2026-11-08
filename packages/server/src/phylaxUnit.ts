@@ -423,6 +423,8 @@ export function createPhylaxUnit(options: CreatePhylaxUnitOptions = {}) {
         runtime: "phylax",
       },
       worker,
+      // ZAL-A10: kept voice notes and their automatic save retries (counts only).
+      captureRetries: runtime.whatsappStore.voiceCaptureRetryCounts(),
       eventLoop: eventLoopHealth(),
       restart: {
         required: restartRequired,

@@ -733,8 +733,8 @@ describe("WhatsAppGateway", () => {
       await gateway.handleEvent(audioEvent({ messageId: "ported-download-hostile-1" }));
 
       expect(socket.sent.map((message) => message.text)).toEqual([
-        "⚠️ Zenod could not process that message. Please try again.",
-        "⚠️ Zenod could not process that message. Please try again.",
+        "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.",
+        "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.",
       ]);
       expect(socket.sent.map((message) => message.text).join("\n"))
         .not.toMatch(/internal\.example|bearer-123|Ring|Phylax|MCP|tool|stack/i);
