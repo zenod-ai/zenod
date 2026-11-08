@@ -49,7 +49,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| D1 | Ticket worker | unassigned | Harmonize the whole cloud app to the Zenod design language and put the Z favicon on every Zenod surface (E17-1..3) | ready | none | `wt/e17-d1` | main | none | 2026-11-08 | dispatch |
+| D1 | Ticket worker | run_09a7cd57 | Harmonize the whole cloud app to the Zenod design language and put the Z favicon on every Zenod surface (E17-1..3) | active | none | `wt/e17-d1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 
