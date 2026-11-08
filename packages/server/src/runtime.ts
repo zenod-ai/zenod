@@ -70,7 +70,6 @@ import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore, estimateCostUsd } from "./usageStore.js";
-import { inboxFor } from "./inboxStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
 import { duePersonas, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import type { PersonaRun } from "./personaStore.js";
