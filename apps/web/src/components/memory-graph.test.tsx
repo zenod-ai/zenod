@@ -8,7 +8,10 @@ import {
   graphHash,
   graphPathFromHash,
   layoutGraph,
+  layoutLit,
   lineageAbove,
+  litFromHash,
+  litHash,
   type MemoryGraphNode,
   type MemoryGraphView,
 } from "@/lib/memory-graph"
@@ -178,5 +181,93 @@ describe("memory graph layout (E12-S2)", () => {
     expect(graphPathFromHash("#graph")).toBeNull()
     expect(graphPathFromHash("#memory?path=x.md")).toBeNull()
     expect(lineageAbove("Working memory › Garden › Shed")).toEqual(["Working memory", "Garden"])
+  })
+})
+
+describe("an answer lit up in the graph (E12-S13)", () => {
+  const LIT: MemoryGraphView & { status: "ready" } = {
+    status: "ready",
+    center: "Home/Plumber.md",
+    nodes: [
+      node("Home/Plumber.md", "Plumber", "lit", { degree: 2 }),
+      node("Log/2026-11-03.md#^e-1", "Voice note", "lit", { kind: "note" }),
+      node("Home/Boiler.md", "Boiler", "lit"),
+      node("Areas/Home.md", "Home", "bridge", { kind: "root", degree: 9 }),
+    ],
+    edges: [
+      { from: "Areas/Home.md", to: "Home/Plumber.md", kind: "tree", lit: true },
+      { from: "Areas/Home.md", to: "Home/Boiler.md", kind: "tree", lit: true, strength: 0.9 },
+      { from: "Log/2026-11-03.md#^e-1", to: "Home/Plumber.md", kind: "filed", lit: true },
+    ],
+    more: { parent: 0, child: 0, link: 0, backlink: 0 },
+    total: { nodes: 2400, edges: 5100 },
+    lit: [
+      { ref: "Home/Plumber.md", path: "Home/Plumber.md" },
+      { ref: "Log/2026-11-03.md#^e-1", path: "Log/2026-11-03.md#^e-1" },
+      { ref: "Home/Boiler.md", path: "Home/Boiler.md" },
+      { ref: "Gone.md", path: null },
+    ],
+  }
+  const answer = {
+    question: "Who fixes the boiler?",
+    memories: [
+      { path: "Home/Plumber.md", title: "Plumber", matchPercent: 92 },
+      { path: "Log/2026-11-03.md#^e-1", title: "Voice note | 3 Nov", matchPercent: 61 },
+      { path: "Home/Boiler.md", title: "Boiler", matchPercent: 40 },
+      { path: "Gone.md", title: "Gone", matchPercent: null },
+    ],
+  }
+
+  it("carries the answer's memories and percentages in the link, best first", () => {
+    const hash = litHash(answer)
+    expect(hash.startsWith("#graph?")).toBe(true)
+    expect(graphPathFromHash(hash)).toBeNull()
+    expect(litFromHash(hash)).toEqual({
+      question: "Who fixes the boiler?",
+      memories: [
+        { path: "Home/Plumber.md", title: "Plumber", matchPercent: 92 },
+        { path: "Log/2026-11-03.md#^e-1", title: "Voice note   3 Nov", matchPercent: 61 },
+        { path: "Home/Boiler.md", title: "Boiler", matchPercent: 40 },
+        { path: "Gone.md", title: "Gone", matchPercent: null },
+      ],
+    })
+    expect(litFromHash("#graph?path=Notes%2FShed.md")).toBeNull()
+  })
+
+  it("puts the best memory in the middle and the pages between them outside the lit ring", () => {
+    const placed = layoutLit(LIT)
+    const at = new Map(placed.map((p) => [p.path, p]))
+    const distance = (path: string) => Math.hypot(at.get(path)!.x - 400, at.get(path)!.y - 280)
+    expect(distance("Home/Plumber.md")).toBe(0)
+    expect(distance("Areas/Home.md")).toBeGreaterThan(distance("Home/Boiler.md"))
+    expect(layoutLit(LIT)).toEqual(placed)
+  })
+
+  it("lights each used memory with its percentage, links between them in green, each one opens", async () => {
+    const calls = mockFetch((url) => (url.startsWith("/api/console/memory-graph?lit=") ? { body: LIT } : graphRoutes(url)))
+    window.history.replaceState(null, "", `/${litHash(answer)}`)
+    render(<MemoryGraph />)
+    const graph = await screen.findByRole("group", { name: /Memory graph/ })
+    expect(calls[0]).toBe(
+      `/api/console/memory-graph?lit=${encodeURIComponent("Home/Plumber.md")}&lit=${encodeURIComponent("Log/2026-11-03.md#^e-1")}&lit=${encodeURIComponent("Home/Boiler.md")}&lit=Gone.md`
+    )
+    expect(screen.getByTestId("lit-question").textContent).toBe("Who fixes the boiler?")
+    const plumber = within(graph).getByRole("button", { name: /Plumber, 92% match/ })
+    expect(plumber.getAttribute("class")).toBe("zp-gnode zp-glit zp-glittop")
+    expect(plumber.textContent).toContain("92%")
+    expect(within(graph).getByRole("button", { name: /Voice note, 61% match/ }).getAttribute("class")).toBe("zp-gnode zp-glog zp-glit")
+    expect(within(graph).getByRole("button", { name: /^Home: 9/ }).getAttribute("class")).toBe("zp-gnode zp-gtopic zp-gbridge")
+    expect(graph.querySelectorAll("line.zp-glitedge")).toHaveLength(3)
+    expect(graph.querySelector("line.zp-glitedge title")?.textContent).toBe("strength 90%")
+    expect(screen.getByText(/3 memories lit · 3 links between them/)).toBeTruthy()
+    const panel = screen.getByLabelText("Memories the answer used")
+    expect(panel.textContent).toContain("not in the graph yet")
+    // A Log entry opens in the Memory tab; a page opens in the graph with its neighbours.
+    fireEvent.click(within(graph).getByRole("button", { name: /Voice note/ }))
+    expect(window.location.hash).toBe(`#memory?path=${encodeURIComponent("Log/2026-11-03.md#^e-1")}`)
+    window.history.replaceState(null, "", `/${litHash(answer)}`)
+    fireEvent.click(within(panel).getByRole("button", { name: "Boiler" }))
+    expect(window.location.hash).toBe(graphHash("Home/Boiler.md"))
+    await waitFor(() => expect(screen.queryByTestId("lit-question")).toBeNull())
   })
 })

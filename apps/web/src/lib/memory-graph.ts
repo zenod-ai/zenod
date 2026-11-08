@@ -11,13 +11,17 @@ export type MemoryGraphRelation =
   | "link"
   | "backlink"
   | "hub"
+  /** E12-S13: a memory the answer used, and a page between two of them. */
+  | "lit"
+  | "bridge"
 
 export type MemoryGraphNode = {
   path: string
   title: string
   summary: string
   treePath: string
-  kind: "tree" | "root" | "page"
+  /** note: a Log entry the answer used (lit views only). */
+  kind: "tree" | "root" | "page" | "note"
   relation: MemoryGraphRelation
   links: number
   backlinks: number
@@ -29,7 +33,12 @@ export type MemoryGraphNode = {
 export type MemoryGraphEdge = {
   from: string
   to: string
-  kind: "link" | "tree"
+  /** filed: a lit Log entry to a page it was filed into. */
+  kind: "link" | "tree" | "filed"
+  /** On the way between memories the answer used (E12-S13). */
+  lit?: boolean
+  /** 0 to 1 once links carry a strength (EPIC-18). */
+  strength?: number
 }
 
 export type MemoryGraphView = {
@@ -38,6 +47,8 @@ export type MemoryGraphView = {
   edges: MemoryGraphEdge[]
   more: { parent: number; child: number; link: number; backlink: number }
   total: { nodes: number; edges: number }
+  /** Lit views: each asked memory and what it resolved to (null: not drawn). */
+  lit?: Array<{ ref: string; path: string | null }>
 }
 
 export type MemoryGraphResponse =
@@ -91,6 +102,12 @@ export function readMemoryGraph(
   )
 }
 
+/** The memories an answer used, lit up with the pages between them (E12-S13). */
+export function readLitGraph(paths: string[]): Promise<MemoryGraphResponse> {
+  const query = paths.map((path) => `lit=${encodeURIComponent(path)}`).join("&")
+  return request(`/api/console/memory-graph?${query}`)
+}
+
 export async function searchMemories(
   query: string
 ): Promise<MemorySearchResult[]> {
@@ -109,6 +126,50 @@ export function graphPathFromHash(hash: string): string | null {
 
 export function graphHash(path: string | null): string {
   return path ? `#graph?path=${encodeURIComponent(path)}` : "#graph"
+}
+
+/** Most memories one answer lights up (the server's cap). */
+export const LIT_MAX = 12
+
+/** One memory an answer used, as the chat handed it over. */
+export type LitMemory = { path: string; title: string; matchPercent: number | null }
+
+/** An answer's memories lit up in the graph (`#graph?q=…&m=…`): from the chat's "Show in graph". */
+export type LitAnswer = { question: string; memories: LitMemory[] }
+
+/** `#graph?q=<question>&m=<percent>:<path>|<title>…`, best first; a memory without a percent has `-`. */
+export function litHash(answer: LitAnswer): string {
+  const params = new URLSearchParams()
+  if (answer.question) params.set("q", answer.question.slice(0, 200))
+  for (const memory of answer.memories.slice(0, LIT_MAX)) {
+    const pct = memory.matchPercent == null ? "-" : String(Math.round(memory.matchPercent))
+    params.append("m", `${pct}:${memory.path}|${memory.title.replace(/\|/g, " ").slice(0, 80)}`)
+  }
+  return `#graph?${params.toString()}`
+}
+
+export function litFromHash(hash: string): LitAnswer | null {
+  if (!hash.startsWith("#graph?")) return null
+  const params = new URLSearchParams(hash.slice("#graph?".length))
+  const memories = params
+    .getAll("m")
+    .map((value): LitMemory | null => {
+      const colon = value.indexOf(":")
+      if (colon < 1) return null
+      const rest = value.slice(colon + 1)
+      const bar = rest.lastIndexOf("|")
+      const path = (bar >= 0 ? rest.slice(0, bar) : rest).trim()
+      if (!path) return null
+      const pct = Number(value.slice(0, colon))
+      return {
+        path,
+        title: (bar >= 0 ? rest.slice(bar + 1) : "").trim() || path,
+        matchPercent: Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : null,
+      }
+    })
+    .filter((memory): memory is LitMemory => memory !== null)
+    .slice(0, LIT_MAX)
+  return memories.length ? { question: params.get("q") ?? "", memories } : null
 }
 
 export type PlacedNode = MemoryGraphNode & {
@@ -133,6 +194,8 @@ const SECTOR_ORDER: Record<MemoryGraphRelation, number> = {
   child: 2,
   backlink: 3,
   hub: 4,
+  lit: 5,
+  bridge: 6,
 }
 
 /**
@@ -199,6 +262,69 @@ export function layoutGraph(
   }
   ring(near.length ? near : hubs, options.compact ? 135 : 290, 215, 0)
   return placed
+}
+
+/**
+ * A lit answer (E12-S13), like the deck's retrieval scene: the best memory in the middle, the
+ * other lit memories on an inner ring in rank order, and the pages between them on an outer
+ * ring, each turned towards the lit memories it connects. Deterministic.
+ */
+export function layoutLit(
+  view: MemoryGraphView,
+  options: { compact?: boolean } = {}
+): PlacedNode[] {
+  const CX = graphWidth(options.compact) / 2
+  const lit = view.nodes.filter((node) => node.relation === "lit")
+  const rest = view.nodes.filter((node) => node.relation !== "lit")
+  const placed = new Map<string, PlacedNode>()
+  const sideOf = (angle: number): PlacedNode["side"] => {
+    const cos = Math.cos(angle)
+    if (Math.abs(cos) >= 0.6) return cos > 0 ? "right" : "left"
+    return Math.sin(angle) < 0 ? "top" : "bottom"
+  }
+  const [first, ...others] = lit
+  if (first) placed.set(first.path, { ...first, x: CX, y: CY, side: "bottom" })
+  const inner = options.compact ? { rx: 120, ry: 140 } : { rx: 200, ry: 135 }
+  others.forEach((node, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * (i + 0.5)) / others.length
+    placed.set(node.path, {
+      ...node,
+      x: CX + Math.cos(angle) * inner.rx,
+      y: CY + Math.sin(angle) * inner.ry,
+      side: sideOf(angle),
+    })
+  })
+  // Each outer page sits towards the lit memories it touches, then they are spread evenly in that order.
+  const angleOf = (path: string) => {
+    const at = placed.get(path)
+    return at ? Math.atan2(at.y - CY, at.x - CX) : null
+  }
+  const wanted = rest.map((node, index) => {
+    const near = view.edges
+      .filter((edge) => edge.from === node.path || edge.to === node.path)
+      .map((edge) => angleOf(edge.from === node.path ? edge.to : edge.from))
+      .filter((angle): angle is number => angle !== null)
+    const x = near.reduce((sum, a) => sum + Math.cos(a), 0)
+    const y = near.reduce((sum, a) => sum + Math.sin(a), 0)
+    const angle = near.length && (x || y) ? Math.atan2(y, x) : -Math.PI / 2 + index
+    return { node, angle: (angle + 2.5 * Math.PI) % (2 * Math.PI) }
+  })
+  wanted.sort((a, b) => a.angle - b.angle || a.node.path.localeCompare(b.node.path))
+  const outer = options.compact ? { rx: 170, ry: 245 } : { rx: 340, ry: 235 }
+  const offset = wanted.length ? wanted[0]!.angle : 0
+  wanted.forEach(({ node, angle }, i) => {
+    // Evenly spaced, but no further than half a step from where it wants to be.
+    const even = offset + (2 * Math.PI * i) / wanted.length
+    const step = (2 * Math.PI) / Math.max(1, wanted.length)
+    const at = Math.max(even - step / 2, Math.min(even + step / 2, angle)) - Math.PI / 2
+    placed.set(node.path, {
+      ...node,
+      x: CX + Math.cos(at) * outer.rx,
+      y: CY + Math.sin(at) * outer.ry,
+      side: sideOf(at),
+    })
+  })
+  return view.nodes.map((node) => placed.get(node.path)!).filter(Boolean)
 }
 
 /** "Working memory › House › Visits" without the last step (the node itself). */

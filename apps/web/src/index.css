@@ -347,3 +347,36 @@ svg.zp-gcompact .zp-gcenter text { font-size: 25px; }
   .zp-gtree { stroke-dashoffset: 0; }
   .zp-glink { opacity: 0.6; }
 }
+
+/* E12-S13: an answer lit up in the graph, after the deck's retrieval scene. Each lit memory
+   turns green in rank order (--d), the links between them follow, the rest stays quiet. */
+.zp-glit .zp-gdot { fill: var(--zp-accent); stroke: var(--zp-accent); animation: zp-glightdot 500ms ease var(--d, 0ms) both; }
+.zp-glit .zp-ghalo { fill: var(--zp-accent-soft); stroke: none; transform-box: fill-box; transform-origin: center; animation: zp-ghalo 600ms ease-out var(--d, 0ms) both; }
+.zp-glit text { font-weight: 600; }
+.zp-glittop text { font: 500 22px var(--zp-serif); }
+.zp-gpct { font: 600 15px var(--zp-sans); fill: var(--zp-accent); animation: zp-gnodein 300ms ease var(--d, 0ms) both; }
+.zp-glit:hover .zp-gdot, .zp-glit:focus-visible .zp-gdot { stroke: var(--zp-ink); }
+.zp-gbridge { opacity: 0.62; }
+.zp-gbridge:hover, .zp-gbridge:focus-visible { opacity: 1; }
+.zp-glog .zp-gdot { fill: var(--zp-faint); stroke: var(--zp-faint); }
+.zp-glitedge { stroke: var(--zp-accent); stroke-width: 2.4; opacity: 0; animation: zp-glitline 500ms ease var(--d, 0ms) forwards; }
+.zp-gfiled { stroke: var(--zp-faint); stroke-dasharray: 2 4; opacity: 0.6; }
+.zp-litq { margin: 0.2rem 0 0; font: 400 1.05rem / 1.4 var(--zp-serif); border: 1.5px solid var(--zp-accent); border-radius: 999px; padding: 0.45rem 1rem; align-self: flex-start; max-width: 100%; }
+.zp-legend i.zp-llit { width: 0.7rem; height: 0.7rem; border: 0; border-radius: 50%; background: var(--zp-accent); }
+.zp-litlist { list-style: none; margin: 0; padding: 0; }
+.zp-litlist li { display: grid; grid-template-columns: 1.3rem minmax(0, 1fr) 3.5rem 2.6rem; grid-template-areas: "rank title bar pct" ". meta meta meta"; column-gap: 0.55rem; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid var(--zp-line); font-size: 0.92rem; }
+.zp-litrank { grid-area: rank; color: var(--zp-faint); font-variant-numeric: tabular-nums; }
+.zp .zp-litlist button.zp-title { all: unset; grid-area: title; cursor: pointer; color: var(--zp-accent); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zp .zp-litlist button.zp-title:hover, .zp .zp-litlist button.zp-title:focus-visible { text-decoration: underline; }
+.zp-litlist .zp-bar { grid-area: bar; }
+.zp-litlist .zp-bar i { background: var(--zp-accent); }
+.zp-litlist .zp-pct { grid-area: pct; text-align: right; font-weight: 600; }
+.zp-litlist .zp-meta { grid-area: meta; font-size: 0.8rem; color: var(--zp-muted); }
+.zp-showgraph { float: right; font: 500 0.88rem var(--zp-sans); color: var(--zp-accent); }
+.zp-showgraph::after { content: " \2192"; }
+@keyframes zp-glightdot { from { fill: var(--zp-bg); stroke: var(--zp-ink); } }
+@keyframes zp-glitline { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .zp-glit .zp-gdot, .zp-glit .zp-ghalo, .zp-gpct { animation: none; }
+  .zp-glitedge { animation: none; opacity: 1; }
+}

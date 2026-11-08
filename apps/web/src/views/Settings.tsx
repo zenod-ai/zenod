@@ -175,6 +175,8 @@ export function Settings({
         setSection("chat")
       } else if (window.location.hash.startsWith("#graph")) {
         setSection("graph")
+        // E12-S13: "Show in graph" from deep in the chat lands at the top of the graph.
+        if (window.location.hash.includes("m=")) window.scrollTo?.({ top: 0 })
       } else if (window.location.hash === "#inbox") {
         setSection("inbox")
       }

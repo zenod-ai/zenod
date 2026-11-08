@@ -45,7 +45,7 @@ describe("console memory graph route (E12-S2)", () => {
       const index = MemoryIndex.open({ path: join(dir, tenant, "memory-index.sqlite"), vaultPath: vault, tenantId: tenant });
       indexes.push(index);
       const engine = {
-        memoryGraph: vi.fn(async (request: { center?: string | null; limit?: number } = {}) => {
+        memoryGraph: vi.fn(async (request: { center?: string | null; limit?: number; lit?: string[] | null } = {}) => {
           const view = await index.graph(request);
           if (!view) throw Object.assign(new Error("note not found"), { name: "NoteNotFoundError" });
           return view;
@@ -110,6 +110,28 @@ describe("console memory graph route (E12-S2)", () => {
       // Another tenant's page is simply not in your graph.
       expect((await t.get("/api/console/memory-graph?path=Garden", t.bob)).status).toBe(404);
       expect((await t.get(`/api/console/memory-graph?path=${"x".repeat(600)}`, t.ada)).status).toBe(400);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("lights up the memories an answer used, from the asking tenant's graph only (E12-S13)", async () => {
+    const t = await setup();
+    try {
+      expect((await t.get("/api/console/memory-graph?lit=Shed")).status).toBe(401);
+      const lit = await (await t.get("/api/console/memory-graph?lit=Shed&lit=Garden&lit=Boat", t.ada)).json();
+      expect(lit).toMatchObject({ status: "ready", center: "Notes/Shed.md" });
+      expect(lit.lit).toEqual([
+        { ref: "Shed", path: "Notes/Shed.md" },
+        { ref: "Garden", path: "Areas/Garden.md" },
+        // Another tenant's memory is not in your graph: never resolved, never drawn.
+        { ref: "Boat", path: null },
+      ]);
+      expect(lit.nodes.filter((node: { relation: string }) => node.relation === "lit").map((node: { path: string }) => node.path)).toEqual(["Notes/Shed.md", "Areas/Garden.md"]);
+      expect(lit.edges).toContainEqual({ from: "Areas/Garden.md", to: "Notes/Shed.md", kind: "tree", lit: true });
+      expect(JSON.stringify(lit)).not.toMatch(/Engine|Notes\/Boat/);
+      const tooMany = Array.from({ length: 13 }, (_, i) => `lit=n${i}`).join("&");
+      expect((await t.get(`/api/console/memory-graph?${tooMany}`, t.ada)).status).toBe(400);
     } finally {
       await t.close();
     }

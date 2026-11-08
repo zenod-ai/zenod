@@ -70,8 +70,8 @@ export { heat as treeHeat, jaccard, matchRootIds, newRootId } from "./engine/tre
 export { memoryTreeOutline, pageCaptureDate, type MemoryTreeOutline, type MemoryTreeOutlineNode, type MemoryTreeCapture } from "./vault/treeOutline.js";
 export { idfOf, matchPercent, monotonic, withMatchPercent, type MatchInput } from "./vault/matchPercent.js";
 export {
-  MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, MEMORY_GRAPH_MAX_LIMIT, MEMORY_GRAPH_TREE_TITLE,
-  type MemoryGraphEdge, type MemoryGraphNode, type MemoryGraphPage, type MemoryGraphRawEdge, type MemoryGraphRelation, type MemoryGraphView,
+  MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, MEMORY_GRAPH_LIT_MAX, MEMORY_GRAPH_MAX_LIMIT, MEMORY_GRAPH_TREE_TITLE,
+  type MemoryGraphEdge, type MemoryGraphNode, type MemoryGraphNote, type MemoryGraphPage, type MemoryGraphRawEdge, type MemoryGraphRelation, type MemoryGraphView,
 } from "./vault/memoryGraph.js";
 export { MemoryIndex, MemoryIndexTenantError, type MemoryIndexHit, type MemoryIndexOptions, type MemoryIndexStats, type MemoryNoteLinks } from "./vault/memoryIndex.js";
 export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryLineage, type MemoryTreeNodeView, type LineageNode } from "./vault/lineage.js";

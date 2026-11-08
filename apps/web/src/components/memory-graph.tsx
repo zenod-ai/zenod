@@ -15,10 +15,14 @@ import {
   graphPathFromHash,
   graphWidth,
   layoutGraph,
+  layoutLit,
   lineageAbove,
+  litFromHash,
+  readLitGraph,
   readMemoryGraph,
   searchMemories,
   shortTitle,
+  type LitAnswer,
   type MemoryGraphNode,
   type MemoryGraphView,
   type MemorySearchResult,
@@ -30,6 +34,8 @@ import {
 // time, so a vault of thousands of notes stays quick; open a dot to read it and follow its
 // links, or jump with the search box (S3a ranked retrieval). Styled after the product deck's
 // graph (docs/epic12/DESIGN-LANGUAGE.md): ink tree lines, dashed links, one accent on the focus.
+// E12-S13: an answer's memories light up here too (`#graph?q=…&m=…`, the chat's "Show in graph"),
+// one after another with their match percentages, and the links between them in green.
 
 /** The last answer, for the center it was asked for: a newer center shows it dimmed until its own arrives. */
 type GraphState = { for: string | null | undefined } & (
@@ -58,14 +64,23 @@ function useCompact(ref: React.RefObject<HTMLElement | null>): boolean {
   return compact
 }
 
-function useGraphCenter(): [string | null, (path: string | null) => void] {
+function useGraphCenter(): [
+  string | null,
+  (path: string | null) => void,
+  LitAnswer | null,
+] {
   const [center, setCenter] = React.useState<string | null>(() =>
     graphPathFromHash(window.location.hash)
   )
+  const [lit, setLit] = React.useState<LitAnswer | null>(() =>
+    litFromHash(window.location.hash)
+  )
   React.useEffect(() => {
     const onHash = () => {
-      if (window.location.hash.startsWith("#graph"))
+      if (window.location.hash.startsWith("#graph")) {
         setCenter(graphPathFromHash(window.location.hash))
+        setLit(litFromHash(window.location.hash))
+      }
     }
     window.addEventListener("hashchange", onHash)
     return () => window.removeEventListener("hashchange", onHash)
@@ -76,12 +91,24 @@ function useGraphCenter(): [string | null, (path: string | null) => void] {
     if (window.location.hash === hash) return
     window.location.hash = hash
     setCenter(path)
+    setLit(null)
   }, [])
-  return [center, go]
+  return [center, go, lit]
 }
 
 export function MemoryGraph() {
-  const [center, go] = useGraphCenter()
+  const [center, go, lit] = useGraphCenter()
+  if (lit) return <LitGraph answer={lit} onOpen={go} />
+  return <WholeGraph center={center} go={go} />
+}
+
+function WholeGraph({
+  center,
+  go,
+}: {
+  center: string | null
+  go: (path: string | null) => void
+}) {
   const [state, setState] = React.useState<GraphState>({
     for: undefined, // nothing answered yet
     kind: "loading",
@@ -198,16 +225,23 @@ function GraphCanvas({
   view,
   onOpen,
   busy,
+  percents,
 }: {
   view: MemoryGraphView
   onOpen: (path: string) => void
   busy: boolean
+  /** A lit answer (E12-S13): each lit memory's match percentage, in rank order. */
+  percents?: Map<string, number | null>
 }) {
   const box = React.useRef<HTMLDivElement>(null)
   const compact = useCompact(box)
   const placed = React.useMemo(
-    () => layoutGraph(view, { compact }),
-    [view, compact]
+    () => (percents ? layoutLit : layoutGraph)(view, { compact }),
+    [view, compact, percents]
+  )
+  const order = React.useMemo(
+    () => new Map([...(percents?.keys() ?? [])].map((path, i) => [path, i])),
+    [percents]
   )
   const at = React.useMemo(
     () => new Map(placed.map((node) => [node.path, node])),
@@ -227,21 +261,42 @@ function GraphCanvas({
             const a = at.get(edge.from)
             const b = at.get(edge.to)
             if (!a || !b) return null
-            const focus = edge.from === view.center || edge.to === view.center
+            const focus =
+              !percents &&
+              (edge.from === view.center || edge.to === view.center)
+            // A lit link shows once both its ends are lit.
+            const step = Math.max(
+              order.get(edge.from) ?? 0,
+              order.get(edge.to) ?? 0
+            )
             return (
               <line
                 key={`${view.center}|${edge.from}|${edge.to}|${edge.kind}`}
                 className={cn(
                   "zp-gedge",
-                  `zp-g${edge.kind}`,
+                  edge.lit ? "zp-glitedge" : `zp-g${edge.kind}`,
                   focus && "zp-gfocus"
                 )}
+                style={
+                  edge.lit
+                    ? ({
+                        "--d": `${litDelay(step) + 250}ms`,
+                        ...(edge.strength !== undefined
+                          ? { strokeWidth: 1 + 3 * edge.strength }
+                          : {}),
+                      } as React.CSSProperties)
+                    : undefined
+                }
                 x1={a.x}
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
                 pathLength={edge.kind === "tree" ? 1 : undefined}
-              />
+              >
+                {edge.strength !== undefined ? (
+                  <title>{`strength ${Math.round(edge.strength * 100)}%`}</title>
+                ) : null}
+              </line>
             )
           })}
         </g>
@@ -250,7 +305,19 @@ function GraphCanvas({
             key={node.path}
             node={node}
             onOpen={onOpen}
-            maxTitle={node.relation === "center" ? 28 : compact ? 12 : 18}
+            maxTitle={
+              node.relation === "center"
+                ? 28
+                : percents && order.get(node.path) === 0
+                  ? compact
+                    ? 20
+                    : 28
+                  : compact
+                  ? 12
+                  : 18
+            }
+            percent={percents?.get(node.path)}
+            step={order.get(node.path)}
           />
         ))}
       </svg>
@@ -258,17 +325,35 @@ function GraphCanvas({
   )
 }
 
+/** When the n-th memory of a lit answer lights up, after the graph has drawn. */
+function litDelay(step: number): number {
+  return 450 + step * 260
+}
+
 function GraphNode({
   node,
   onOpen,
   maxTitle,
+  percent,
+  step,
 }: {
   node: PlacedNode
   onOpen: (path: string) => void
   maxTitle: number
+  percent?: number | null
+  step?: number
 }) {
   const isCenter = node.relation === "center"
-  const radius = isCenter ? 11 : node.kind === "page" ? 6.5 : 8.5
+  const isLit = node.relation === "lit"
+  const radius = isCenter
+    ? 11
+    : isLit
+      ? step === 0
+        ? 11
+        : 8.5
+      : node.kind === "page" || node.kind === "note"
+        ? 6.5
+        : 8.5
   const label = shortTitle(node.title, maxTitle)
   const dx =
     node.side === "right" ? radius + 8 : node.side === "left" ? -radius - 8 : 0
@@ -285,12 +370,21 @@ function GraphNode({
       className={cn(
         "zp-gnode",
         isCenter && "zp-gcenter",
-        node.kind !== "page" && "zp-gtopic"
+        (node.kind === "root" || node.kind === "tree") && "zp-gtopic",
+        node.kind === "note" && "zp-glog",
+        isLit && "zp-glit",
+        isLit && step === 0 && "zp-glittop",
+        node.relation === "bridge" && "zp-gbridge"
       )}
-      style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
+      style={
+        {
+          transform: `translate(${node.x}px, ${node.y}px)`,
+          ...(isLit ? { "--d": `${litDelay(step ?? 0)}ms` } : {}),
+        } as React.CSSProperties
+      }
       role="button"
       tabIndex={0}
-      aria-label={`${node.title}${isCenter ? ", open" : ""}: ${node.degree} connections`}
+      aria-label={`${node.title}${isCenter ? ", open" : ""}${isLit && percent != null ? `, ${percent}% match` : ""}: ${node.degree} connections`}
       onClick={() => onOpen(node.path)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -303,12 +397,18 @@ function GraphNode({
         {node.treePath || node.title}
         {node.summary ? ` — ${node.summary}` : ""}
       </title>
-      {isCenter ? <circle className="zp-ghalo" r={26} /> : null}
+      {isCenter || isLit ? (
+        <circle className="zp-ghalo" r={isLit && step !== 0 ? 19 : 26} />
+      ) : null}
       <circle className="zp-ghit" r={radius + 9} />
       <circle className="zp-gdot" r={radius} />
       <text x={dx} y={dy} textAnchor={anchor}>
         {label}
-        {node.hidden > 0 && !isCenter ? (
+        {isLit && percent != null ? (
+          <tspan className="zp-gpct" dx={6}>
+            {percent}%
+          </tspan>
+        ) : node.hidden > 0 && !isCenter && !isLit ? (
           <tspan className="zp-gmore" dx={5}>
             +{node.hidden}
           </tspan>
@@ -539,5 +639,188 @@ function GraphSearch({ onOpen }: { onOpen: (path: string) => void }) {
         </ol>
       ) : null}
     </div>
+  )
+}
+
+/** Open a memory from a lit answer: a page in the graph, a Log entry in the Memory tab. */
+function openMemory(path: string, kind: MemoryGraphNode["kind"] | "log", go: (path: string) => void) {
+  if (kind === "note" || kind === "log") {
+    window.location.hash = `#memory?path=${encodeURIComponent(path)}`
+    return
+  }
+  go(path)
+}
+
+/**
+ * E12-S13: the memories one answer used, lit up in the graph like the deck's retrieval scene:
+ * the best one in the middle, the rest around it lighting up in rank order with their match
+ * percentages, the pages between them, and the links on the way in green. Each opens.
+ */
+function LitGraph({
+  answer,
+  onOpen,
+}: {
+  answer: LitAnswer
+  onOpen: (path: string | null) => void
+}) {
+  const paths = answer.memories.map((memory) => memory.path)
+  const key = paths.join("\n")
+  const [state, setState] = React.useState<
+    | { for: string; kind: "ready"; view: MemoryGraphView }
+    | { for: string; kind: "empty" }
+    | { for: string; kind: "error"; message: string }
+    | null
+  >(null)
+
+  React.useEffect(() => {
+    let live = true
+    readLitGraph(key.split("\n"))
+      .then(
+        (result) =>
+          live &&
+          setState(
+            result.status === "ready"
+              ? { for: key, kind: "ready", view: result }
+              : { for: key, kind: "empty" }
+          )
+      )
+      .catch(
+        (error: unknown) =>
+          live &&
+          setState({
+            for: key,
+            kind: "error",
+            message:
+              error instanceof Error ? error.message : "Something went wrong.",
+          })
+      )
+    return () => {
+      live = false
+    }
+  }, [key])
+
+  const current = state?.for === key ? state : null
+  const view = current?.kind === "ready" ? current.view : null
+  // Each lit memory's percentage, in rank order, keyed by the path it resolved to.
+  const percents = React.useMemo(() => {
+    if (!view) return undefined
+    const map = new Map<string, number | null>()
+    view.lit?.forEach((item, i) => {
+      if (item.path && !map.has(item.path))
+        map.set(item.path, answer.memories[i]?.matchPercent ?? null)
+    })
+    return map
+  }, [view, answer])
+  const drawn = new Map(
+    (view?.lit ?? []).map((item) => [item.ref, item.path] as const)
+  )
+  const kindOf = (path: string | null) =>
+    view?.nodes.find((node) => node.path === path)?.kind
+  const litEdges = view?.edges.filter((edge) => edge.lit).length ?? 0
+
+  return (
+    <section className="zp zp-graph" aria-label="An answer lit up in your memory">
+      <div className="zp-head zp-graphhead">
+        <div>
+          <h2>Where the answer came from.</h2>
+          <p className="zp-lede">
+            The memories Zenod used light up with how well each matched, and the
+            links between them turn green. Open any of them.
+          </p>
+        </div>
+        <GraphSearch onOpen={onOpen} />
+      </div>
+      <div className="zp-graphgrid">
+        <div className="zp-stage">
+          <div className="zp-screen zp-graphscreen">
+            <nav className="zp-crumbs" aria-label="Where you are">
+              <button type="button" className="zp-crumb" onClick={() => onOpen(null)}>
+                Your memory
+              </button>
+              <span className="zp-crumbstep zp-crumbhere">This answer</span>
+            </nav>
+            {answer.question ? (
+              <p className="zp-litq" data-testid="lit-question">
+                {answer.question}
+              </p>
+            ) : null}
+            {view && percents ? (
+              <GraphCanvas
+                key={key}
+                view={view}
+                onOpen={(path) => openMemory(path, kindOf(path) ?? "page", onOpen)}
+                busy={false}
+                percents={percents}
+              />
+            ) : current?.kind === "empty" ? (
+              <p className="zp-empty">
+                Your graph appears once your vault has memories.
+              </p>
+            ) : current?.kind === "error" ? (
+              <p className="zp-hint zp-warn" role="alert">
+                {current.message}
+              </p>
+            ) : (
+              <p className="zp-empty">Lighting up the answer…</p>
+            )}
+            {view ? (
+              <div className="zp-legend">
+                <span>
+                  <i className="zp-llit" /> used by the answer
+                </span>
+                <span>
+                  <i className="zp-ltree" /> part of
+                </span>
+                <span>
+                  <i className="zp-llink" /> links to
+                </span>
+                <span className="zp-time">
+                  {percents?.size ?? 0} memories lit · {litEdges}{" "}
+                  {litEdges === 1 ? "link" : "links"} between them
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <aside className="zp-gpanel" aria-label="Memories the answer used">
+          <h3>Memories used</h3>
+          <ol className="zp-litlist">
+            {answer.memories.map((memory, i) => {
+              const path = view ? (drawn.get(memory.path) ?? null) : memory.path
+              const isLog = memory.path.includes("#^") || memory.path.startsWith("Log/")
+              return (
+                <li key={`${memory.path}-${i}`}>
+                  <span className="zp-litrank">{i + 1}</span>
+                  <button
+                    type="button"
+                    className="zp-title"
+                    onClick={() =>
+                      openMemory(path ?? memory.path, path ? (kindOf(path) ?? "page") : isLog ? "log" : "page", onOpen)
+                    }
+                  >
+                    {memory.title}
+                  </button>
+                  <span className="zp-bar" aria-hidden="true">
+                    <i style={{ width: `${memory.matchPercent ?? 0}%` }} />
+                  </span>
+                  <span className="zp-pct">
+                    {memory.matchPercent == null ? "·" : `${memory.matchPercent}%`}
+                  </span>
+                  {view && !path ? (
+                    <span className="zp-meta">not in the graph yet</span>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ol>
+          {view ? (
+            <p className="zp-hint">
+              Green dots are the memories used, the best one in the middle. The
+              grey ones connect them.
+            </p>
+          ) : null}
+        </aside>
+      </div>
+    </section>
   )
 }

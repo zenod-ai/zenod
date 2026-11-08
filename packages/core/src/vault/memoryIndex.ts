@@ -10,7 +10,7 @@ import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { pageTreeFields, parseTree, TREE_PATH } from "./tree.js";
 import { extractCitations, extractPageLinks } from "./pages.js";
 import { isVoiceCapture, recentIntent, type RecentIntent } from "./recentIntent.js";
-import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphRawEdge, type MemoryGraphView } from "./memoryGraph.js";
+import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphNote, type MemoryGraphRawEdge, type MemoryGraphView } from "./memoryGraph.js";
 
 /**
  * Tier-0 memory index (EPIC-9 E9-5a): one SQLite FTS5 file per tenant, derived from the
@@ -653,11 +653,21 @@ export class MemoryIndex {
    * overview when omitted; null when `center` is not a memory. Built from stored rows, cached
    * until the next sync changes something, so a view of a large vault costs milliseconds.
    */
-  async graph(options: { center?: string | null; limit?: number } = {}): Promise<MemoryGraphView | null> {
+  async graph(options: { center?: string | null; limit?: number; lit?: readonly string[] | null } = {}): Promise<MemoryGraphView | null> {
     await this.fresh();
     const graph = this.memoryGraph();
     const limit = options.limit ?? MEMORY_GRAPH_DEFAULT_LIMIT;
+    if (options.lit?.length) return graph.litView(options.lit, { limit, notes: this.litNotes(graph, options.lit) });
     return options.center ? graph.neighbourhood(options.center, limit) : graph.overview(limit);
+  }
+
+  /** Of an answer's memories (E12-S13), the Log entries: each with the pages it is tied to, so it can join the lit graph. */
+  private litNotes(graph: MemoryGraph, refs: readonly string[]): MemoryGraphNote[] {
+    const entries = refs.filter((ref) => ref.includes("#") && !graph.has(ref) && !graph.resolve(ref));
+    if (entries.length === 0) return [];
+    const rows = this.db.prepare(`SELECT path, title, summary FROM docs WHERE kind = 'log' AND path IN (${entries.map(() => "?").join(", ")})`)
+      .all(...entries) as Array<{ path: string; title: string; summary: string }>;
+    return rows.map((row) => ({ ...row, ties: this.connectionsOf(row.path).pages.slice(0, 4).map((page) => page.path) }));
   }
 
   private memoryGraph(): MemoryGraph {
