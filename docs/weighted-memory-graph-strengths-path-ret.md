@@ -24,7 +24,7 @@ Goal sentence: Each memory links to others with a strength, and retrieval follow
 
 - [x] E18-1 Each memory link has a strength (0 to 100%), stored in a fast database (SQLite or DuckDB) with node ids in the Markdown; built from what exists today (S2 graph, filing receipts, wikilinks) and kept up to date on every filing.
 - [ ] E18-2 Retrieval follows paths whose multiplied strength stays above a threshold (e.g. 0.9 × 0.95 = 0.855 > 0.8 is included), measured on his real questions (~/zenod-eval) against today's retrieval: better answers, fewer tokens.
-- [ ] E18-3 zenod.dev explains the idea conceptually: a librarian indexing your memory, one thought as a constellation of links of different weights.
+- [x] E18-3 zenod.dev explains the idea conceptually: a librarian indexing your memory, one thought as a constellation of links of different weights.
 
 ## Current State
 
@@ -51,8 +51,9 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | W1 | Ticket worker | run_2912c5d4 (round 2) | Audit what exists, then weighted edges in a fast DB with node ids, and path retrieval with a multiplied-strength threshold, measured on real questions (E18-1, E18-2) | done (approved by Jordi 2026-11-08) | none | [#1524](https://github.com/zenod-ai/zenod/pull/1524) merged e7840bf, [#1528](https://github.com/zenod-ai/zenod/pull/1528) merged d85488b | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e18-w1/) ([md](evidence/e18-w1-2026-11-08.md)), [card](cards/E18-W1.md): live sha d85488b since 2026-11-08 19:45Z (health; bundle has the strength key); bottom line Better: right note in top 5 18 to 21, top 8 23 to 26, S3c 95 of 110 unchanged, search 113 to 89 ms; graph lines by strength (width, faint to deep green, dashed under 20 %, percent on hover/tap, legend, panel percents), shown on the demo vault desktop and phone; not model-judged (E15-A1); signed-in waits on E7-A15 | 2026-11-08 | followups: started E18-3, W3 |
-| W2 | Ticket worker | run_8db27ba9 | The constellation idea on zenod.dev (E18-3) | review | W1 | [#1527](https://github.com/zenod-ai/zenod/pull/1527) merged d5ee98f | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e18-w2/) ([md](evidence/e18-w2-2026-11-08.md)), [card](cards/E18-W2.md): live d5ee98f on zenod.dev since 19:25Z | 2026-11-08 | followups: start Mark the strengths section live — it still says Coming; confirm: yes — only Jordi can judge if it explains his idea |
+| W2 | Ticket worker | run_8db27ba9 | The constellation idea on zenod.dev (E18-3) | done (approved by Jordi 2026-11-08) | W1 | [#1527](https://github.com/zenod-ai/zenod/pull/1527) merged d5ee98f | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e18-w2/) ([md](evidence/e18-w2-2026-11-08.md)), [card](cards/E18-W2.md): live d5ee98f on zenod.dev since 19:25Z | 2026-11-08 | followups: started W4 |
 | W3 | Ticket worker | run_8db27ba9 (as W2) | the constellation idea on zenod.dev: follow-up of W1 | done (no confirm: nothing for Jordi to open and judge) | W1 | none | main | Jordi started it when closing W1 2026-11-08 | 2026-11-08 | same work as W2, already built and live on zenod.dev (#constellation) and in review; closes with W2 |
+| W4 | Ticket worker | unassigned | mark the strengths section live on the landing: follow-up of W2 | ready | W2 | none | main | Jordi started it when closing W2 2026-11-08 | 2026-11-08 | worker |
 
 ## Decisions
 
