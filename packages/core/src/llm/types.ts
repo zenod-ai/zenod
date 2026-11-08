@@ -42,6 +42,12 @@ export interface BrainLlm {
   work(input: WorkLoopInput, tools: VaultReadTools, writeTools?: VaultWriteTools): Promise<WorkLoopResult>;
   /** Mine provided evidence/context for structured backlog candidates. */
   extractBacklog(input: BacklogExtractInput): Promise<BacklogExtractResult>;
+  /**
+   * The web app's fast chat answer (E12-S1b): one streamed call, no tools, on the chat model.
+   * Calls onText with each delta and resolves to the whole output. Optional: without it the
+   * engine falls back to the read-only ask loop.
+   */
+  streamMemoryChat?(input: { system: string; prompt: string }, onText: (delta: string) => void): Promise<string>;
 }
 
 /**

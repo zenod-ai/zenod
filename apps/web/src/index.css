@@ -265,3 +265,10 @@
 .zp-src { font-size: 0.86em; white-space: nowrap; }
 .zp-src::before { content: "↗ "; }
 .zp-none { background: transparent; border: 1px dashed var(--zp-line); color: var(--zp-muted); }
+/* E12-S1b: a streamed answer is a draft until each citation is checked against its memory. */
+.zp-draft { color: var(--zp-muted); }
+.zp-checking, .zp-checked { display: block; margin-top: 0.35rem; font-size: 0.8rem; color: var(--zp-faint); }
+.zp-checked { color: var(--zp-accent); }
+.zp-checked::before { content: "✓ "; }
+.zp-cite { font-size: 0.78em; font-variant-numeric: tabular-nums; text-decoration: none; color: var(--zp-accent); vertical-align: super; line-height: 0; }
+.zp-cite:hover { text-decoration: underline; }

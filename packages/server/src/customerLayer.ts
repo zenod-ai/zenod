@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { stream } from "hono/streaming";
 import { tenantAllowanceEnforcedFromEnv, tenantMonthlyAllowanceFromEnv } from "./settings.js";
 import type { Runtime } from "./runtime.js";
 import { McpTokenStore, type McpTokenRecord } from "./mcpTokens.js";
@@ -56,6 +57,7 @@ import { projectRecentSave } from "./recentSaves.js";
 import {
   answerFromMemory,
   isMemoryKeepJobKey,
+  streamAnswerFromMemory,
   MEMORY_CHAT_MAX_QUESTION_CHARS,
   memoryKeepContent,
   memoryKeepIdempotencyKey,
@@ -1385,38 +1387,87 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const MEMORY_CHATS_PER_TENANT = 2;
   const allowanceResponse = (c: Context, block: { message: string; resetsAt: string | null }) =>
     c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
-  app.post("/api/console/memory-chat", async (c) => {
+  // Everything a chat needs before any model call: the session's tenant, its engine runtime, the
+  // AI allowance and a free chat slot. Returns a Response to send instead when one is missing.
+  const memoryChatStart = async (c: Context) => {
     const session = readCustomerSession(c, env);
-    if (!session) return c.json({ error: "unauthorized" }, 401);
+    if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
     const body = await c.req.json<{ question?: unknown }>().catch(() => ({}) as { question?: unknown });
     const question = typeof body.question === "string" ? body.question.trim() : "";
-    if (!question) return c.json({ error: "question is required" }, 400);
-    if (question.length > MEMORY_CHAT_MAX_QUESTION_CHARS) return c.json({ error: "question is too long" }, 400);
+    if (!question) return { response: c.json({ error: "question is required" }, 400) };
+    if (question.length > MEMORY_CHAT_MAX_QUESTION_CHARS) return { response: c.json({ error: "question is too long" }, 400) };
     const account = accounts.resolveActiveTenantForUser(session.user_id);
-    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    if (!account?.tenant_id) return { response: c.json({ error: "no_account" }, 404) };
     const runtime = host.runtimeForAccount?.(account) ?? null;
-    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
     const block = runtime.aiAllowanceBlock();
-    if (block) return allowanceResponse(c, block);
+    if (block) return { response: allowanceResponse(c, block) };
     const tenantId = account.tenant_id;
     const inFlight = memoryChatsInFlight.get(tenantId) ?? 0;
-    if (inFlight >= MEMORY_CHATS_PER_TENANT) return c.json({ error: "busy", message: "Zenod is still answering your last question." }, 429);
+    if (inFlight >= MEMORY_CHATS_PER_TENANT) return { response: c.json({ error: "busy", message: "Zenod is still answering your last question." }, 429) };
     memoryChatsInFlight.set(tenantId, inFlight + 1);
-    try {
-      return c.json(await answerFromMemory(await runtime.getEngine(), question));
-    } catch (error) {
-      // By name: this module is bundled into Phylax, which must not import the "zenod" runtime.
-      if ((error as Error | null)?.name === "LlmAllowanceExceededError") {
-        const exceeded = error as Error & { resetsAt?: string | null };
-        return allowanceResponse(c, { message: exceeded.message, resetsAt: exceeded.resetsAt ?? null });
-      }
-      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);
-      console.warn(`[memory-chat] answer unavailable for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
-      return c.json({ error: "memory chat unavailable" }, 503);
-    } finally {
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
       const left = (memoryChatsInFlight.get(tenantId) ?? 1) - 1;
       if (left > 0) memoryChatsInFlight.set(tenantId, left);
       else memoryChatsInFlight.delete(tenantId);
+    };
+    return { question, runtime, tenantId, release };
+  };
+  // A chat failure as { status, body }: the allowance and vault states keep their own codes.
+  const memoryChatFailure = (tenantId: string, error: unknown) => {
+    // By name: this module is bundled into Phylax, which must not import the "zenod" runtime.
+    if ((error as Error | null)?.name === "LlmAllowanceExceededError") {
+      const exceeded = error as Error & { resetsAt?: string | null };
+      return { status: 429 as const, body: { error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: exceeded.message, resetsAt: exceeded.resetsAt ?? null } };
+    }
+    if ((error as Error | null)?.name === "NotConfiguredError") return { status: 409 as const, body: { error: "vault_not_ready" } };
+    console.warn(`[memory-chat] answer unavailable for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+    return { status: 503 as const, body: { error: "memory chat unavailable" } };
+  };
+
+  // E12-S1b: the same chat, streamed as NDJSON lines so the app shows the memories at once and the
+  // answer as it is written: {"type":"memories"}, then {"type":"text"} deltas, then {"type":"answer"}
+  // with the checked answer (which replaces the streamed text) or {"type":"error"}.
+  app.post("/api/console/memory-chat/stream", async (c) => {
+    const start = await memoryChatStart(c);
+    if ("response" in start) return start.response;
+    const { question, runtime, tenantId, release } = start;
+    c.header("content-type", "application/x-ndjson; charset=utf-8");
+    c.header("cache-control", "no-store");
+    c.header("x-accel-buffering", "no");
+    return stream(c, async (out) => {
+      // A closed tab frees the slot at once; the answer still finishes and is metered.
+      out.onAbort(release);
+      const send = (event: Record<string, unknown>) => out.aborted ? Promise.resolve(out) : out.write(`${JSON.stringify(event)}\n`);
+      try {
+        const answer = await streamAnswerFromMemory(await runtime.getEngine(), question, {
+          onMemories: (memories) => { void send({ type: "memories", memories }); },
+          onText: (text) => { void send({ type: "text", text }); },
+        });
+        await send({ type: "answer", answer });
+      } catch (error) {
+        const failure = memoryChatFailure(tenantId, error);
+        await send({ type: "error", status: failure.status, ...failure.body });
+      } finally {
+        release();
+      }
+    });
+  });
+
+  app.post("/api/console/memory-chat", async (c) => {
+    const start = await memoryChatStart(c);
+    if ("response" in start) return start.response;
+    const { question, runtime, tenantId, release } = start;
+    try {
+      return c.json(await answerFromMemory(await runtime.getEngine(), question));
+    } catch (error) {
+      const failure = memoryChatFailure(tenantId, error);
+      return c.json(failure.body, failure.status);
+    } finally {
+      release();
     }
   });
 

@@ -3,6 +3,7 @@ import {safeCandidateClassification} from "./meaningNotes.js";
 import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
+import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
@@ -2692,6 +2693,46 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   /**
+   * E12-S1b: the web app's fast chat answer. Reads each ranked memory (an exact Log entry by its
+   * anchor, otherwise the page), gives the model a bounded excerpt of each, streams the prose and
+   * checks every citation's quote against the memory it names. Read-only, no tools, one call.
+   */
+  async function answerFromMemories(
+    question: string,
+    memories: ReadonlyArray<{ n: number; path: string; title: string; snippet?: string }>,
+    onText?: (delta: string) => void,
+  ): Promise<MemoryChatCheck | null> {
+    if (!llm.streamMemoryChat) return null;
+    assertVault(repo);
+    await syncForRead();
+    const context: MemoryChatContext[] = [];
+    for (const memory of memories) {
+      const [file, anchor] = memory.path.split("#^") as [string, string | undefined];
+      try {
+        const note = await getNote(vaultPath, file, sourceResolver);
+        let body = note.body;
+        if (anchor) {
+          const start = body.search(new RegExp(`^## .*?\\s+\\^${anchor.replace(/[^\w-]/g, "")}\\s*$`, "m"));
+          if (start >= 0) {
+            const following = body.slice(start + 1).search(/^## /m);
+            body = body.slice(start, following < 0 ? body.length : start + 1 + following);
+          }
+        }
+        context.push({ n: memory.n, path: memory.path, title: memory.title, text: memoryChatExcerpt(body, memory.snippet ?? "") });
+      } catch {
+        // A memory that cannot be read now is left out; the rest still answer.
+      }
+    }
+    if (context.length === 0) return { checked: false, reason: "no_answer", text: "", cited: [] };
+    const { system, prompt } = memoryChatPrompt(question, context);
+    reportTokenCost("ask", [system, prompt]);
+    const filter = memoryChatStreamFilter((text) => onText?.(text));
+    const output = await llm.streamMemoryChat({ system, prompt }, (delta) => filter.push(delta));
+    filter.end();
+    return checkMemoryChatAnswer(output || "", context);
+  }
+
+  /**
    * E9-3c host fallback: search the question's content words, then read the best
    * relevant hit (a page placed in the tree first) through the ask's own tracked
    * read tool, so the read registers supports and sources exactly like a model read.
@@ -3438,6 +3479,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     recoverUnpublishedHead,
     evidenceEnrichInput,
     ask,
+    answerFromMemories,
     chat,
     handleTasking,
     work,

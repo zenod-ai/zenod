@@ -15,6 +15,8 @@ export type MemoryChatMemory = {
 }
 
 export type MemoryChatSource = {
+  /** The memory's number in the answer's citations, when it has one. */
+  rank?: number
   path: string
   title: string
   url: string
@@ -29,6 +31,15 @@ export type MemoryChatAnswer = {
   memories: MemoryChatMemory[]
   alsoCited: MemoryChatSource[]
   ms: number
+  /** "quoted": every citation's quote was found in its memory (E12-S1b); "ask": the ask loop's check. */
+  checkedBy?: "quoted" | "ask"
+}
+
+export type MemoryChatStreamHandlers = {
+  /** The top memories, before the answer is written. */
+  onMemories?: (memories: MemoryChatMemory[]) => void
+  /** The answer as it is written, before it is checked. */
+  onText?: (text: string) => void
 }
 
 export type MemoryKeepReceipt = {
@@ -93,6 +104,73 @@ export function askMemory(question: string): Promise<MemoryChatAnswer> {
   return request("/api/console/memory-chat", json({ question }))
 }
 
+type StreamEvent =
+  | { type: "memories"; memories: MemoryChatMemory[] }
+  | { type: "text"; text: string }
+  | { type: "answer"; answer: MemoryChatAnswer }
+  | { type: "error"; status: number; error?: string; code?: string; message?: string }
+
+/**
+ * Ask with the answer streamed (E12-S1b): the memories arrive at once, the answer as it is written,
+ * then the checked answer. Falls back to the one-shot request where the browser cannot stream.
+ */
+export async function askMemoryStream(
+  question: string,
+  handlers: MemoryChatStreamHandlers = {}
+): Promise<MemoryChatAnswer> {
+  if (typeof ReadableStream === "undefined" || typeof TextDecoder === "undefined")
+    return askMemory(question)
+  const response = await fetch("/api/console/memory-chat/stream", json({ question }))
+  if (response.status === 404 && !response.headers.get("content-type")?.includes("json"))
+    return askMemory(question)
+  if (!response.ok || !response.body) {
+    const data = (await response.json().catch(() => null)) as {
+      error?: string
+      code?: string
+      message?: string
+    } | null
+    const code = data?.code ?? data?.error
+    throw new MemoryChatError(
+      response.status,
+      data?.message ?? (code ? FRIENDLY[code] : undefined) ?? "Something went wrong. Try again.",
+      code
+    )
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let final: MemoryChatAnswer | null = null
+  const handle = (line: string) => {
+    if (!line.trim()) return
+    const event = JSON.parse(line) as StreamEvent
+    if (event.type === "memories") handlers.onMemories?.(event.memories)
+    else if (event.type === "text") handlers.onText?.(event.text)
+    else if (event.type === "answer") final = event.answer
+    else if (event.type === "error") {
+      const code = event.code ?? event.error
+      throw new MemoryChatError(
+        event.status,
+        event.message ?? (code ? FRIENDLY[code] : undefined) ?? "Something went wrong. Try again.",
+        code
+      )
+    }
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: !done })
+    let newline = buffer.indexOf("\n")
+    while (newline >= 0) {
+      handle(buffer.slice(0, newline))
+      buffer = buffer.slice(newline + 1)
+      newline = buffer.indexOf("\n")
+    }
+    if (done) break
+  }
+  handle(buffer)
+  if (!final) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
+  return final
+}
+
 export function keepNote(content: string): Promise<MemoryKeepReceipt> {
   return request("/api/console/memory-keep", json({ kind: "note", content }))
 }
@@ -142,8 +220,16 @@ export function memoryName(path: string): string {
  * wikilinks as words, a citation link named by its memory instead of its raw vault path, and no
  * bare "Source summary:" label (the summary is followed by the source it summarises).
  */
-export function presentAnswer(text: string): string {
+export function presentAnswer(
+  text: string,
+  cites: ReadonlyArray<{ rank?: number; appPath: string }> = []
+): string {
+  const byRank = new Map(cites.filter((c) => c.rank).map((c) => [c.rank!, c.appPath]))
   return plainWikilinks(text)
+    // E12-S1b: "[2]" cites memory 2 of the list; it links to that memory in the app.
+    .replace(/\[(\d{1,2})\](?!\()/g, (raw, n: string) =>
+      byRank.has(Number(n)) ? `[${n}](${byRank.get(Number(n))})` : raw
+    )
     .replace(/^Source summary:\s*\n/gm, "")
     .replace(
       /\[([^\]\n]+?\.md(?:#[^\]\n]*)?)\]\((https?:\/\/[^)\s]+)\)/g,

@@ -7,6 +7,7 @@ import type { MemoryIndexStats } from "./vault/memoryIndex.js";
  */
 
 import type { ChatToolEvent } from "./llm/types.js";
+import type { MemoryChatCheck } from "./llm/memoryChatAnswer.js";
 import type { VaultCitation, VaultRevision } from "./vault/repository.js";
 export { EVIDENCE_CONTEXT_REF_PATTERN } from "./evidenceContext.js";
 
@@ -508,6 +509,16 @@ export interface BrainEngine {
   describeImage(imageData: Uint8Array, mimeType: string, prompt?: string): Promise<string>;
   /** Read-only agent loop: synthesized answer with citations. */
   ask(question: string, options?: AskOptions): Promise<Answer>;
+  /**
+   * The web app's fast chat answer (E12-S1b): one streamed model call over memories ranked
+   * retrieval already found (numbered by rank), each citation checked against its memory's text.
+   * Read-only; null when the model has no streaming chat call (callers fall back to ask).
+   */
+  answerFromMemories?(
+    question: string,
+    memories: ReadonlyArray<{ n: number; path: string; title: string; snippet?: string }>,
+    onText?: (delta: string) => void,
+  ): Promise<MemoryChatCheck | null>;
   /**
    * Full conversational turn: ask + optional store, with conversation memory.
    * Pass onDelta to stream the answer text, onToolEvent to surface tool

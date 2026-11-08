@@ -117,6 +117,8 @@ export interface AiLlmOptions {
   apiKey: string;
   /** Ask/chat loop model. */
   askModel?: string;
+  /** The web app's fast chat answer (E12-S1b): one streamed call over retrieved memories. */
+  chatModel?: string;
   /** Classification pass model. */
   classifyModel?: string;
   /** Optional OpenAI/OpenRouter effort for classify, reconcile and backlog extraction only.
@@ -192,12 +194,17 @@ export function isLlmAllowanceExceededError(error: unknown): error is LlmAllowan
 }
 
 /** Per-provider default models. All are user-overridable in settings. */
-export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string; vision: string }> = {
-  anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5", vision: "claude-sonnet-4-6" },
-  openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini", vision: "gpt-4o-mini" },
-  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-3.1-flash-lite" },
-  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct" },
+export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string; vision: string; chat: string }> = {
+  anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5", vision: "claude-sonnet-4-6", chat: "claude-haiku-4-5" },
+  openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini", vision: "gpt-4o-mini", chat: "gpt-4o-mini" },
+  // chat (E12-S1b): on 60 demo answers 60 checked, first words p95 1.0 s, full answer p95 1.6 s, ~$0.0003 each
+  // (docs/evidence/e12-s1b-2026-11-08.md); Haiku 5.5 was 59 of 60, p95 2.0 s.
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-3.1-flash-lite", chat: "google/gemini-3.1-flash-lite" },
+  groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct", chat: "llama-3.3-70b-versatile" },
 };
+
+/** Output budget for the fast chat answer: a few sentences plus the quotes. */
+export const MAX_CHAT_OUTPUT_TOKENS = 700;
 
 /**
  * Default tool-step budget for an answer turn when none is configured. The
@@ -760,6 +767,7 @@ export { backlogCandidateSchema, backlogExtractSchema };
  */
 export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
   private readonly askModelId: string;
+  private readonly chatModelId: string;
   private readonly classifyModelId: string;
   private readonly organizerProviderOptions?: { openai: { reasoningEffort: "none" | "low" } };
   private readonly askProviderOptions?: { openai: { reasoningEffort: "none" | "low" } };
@@ -783,6 +791,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
   constructor(options: AiLlmOptions) {
     const defaults = PROVIDER_DEFAULTS[options.provider];
     this.askModelId = options.askModel || defaults.ask;
+    this.chatModelId = options.chatModel || defaults.chat;
     this.classifyModelId = options.classifyModel || defaults.classify;
     if (options.organizerReasoningEffort !== undefined) {
       if (!["openai", "openrouter"].includes(options.provider) || !["none", "low"].includes(options.organizerReasoningEffort)) {
@@ -860,6 +869,40 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
     } catch {
       // Metering must never break the call path.
     }
+  }
+
+  /**
+   * The web app's fast chat answer (E12-S1b): one streamed call on the chat model, no tools. Metered
+   * and allowance-checked like every call (the model factory runs onBeforeCall); usage is reported as
+   * an answer on the tenant's ledger.
+   */
+  async streamMemoryChat(input: { system: string; prompt: string }, onText: (delta: string) => void): Promise<string> {
+    const model = this.model(this.chatModelId);
+    const result = streamText({
+      model,
+      system: input.system,
+      prompt: input.prompt,
+      temperature: 0,
+      maxOutputTokens: MAX_CHAT_OUTPUT_TOKENS,
+      maxRetries: 1,
+    });
+    let text = "";
+    try {
+      for await (const part of result.fullStream) {
+        if (part.type === "text-delta") {
+          text += part.text;
+          onText(part.text);
+        } else if (part.type === "error") {
+          const err = (part as { error?: unknown }).error;
+          throw err instanceof Error ? err : new Error(extractErrorMessage(err));
+        }
+      }
+    } catch (error) {
+      this.reportUsage("answer", this.chatModelId, undefined, undefined, { status: "failed", errorCode: "chat_stream_failed" });
+      throw error;
+    }
+    this.reportUsage("answer", this.chatModelId, await result.totalUsage, await result.providerMetadata);
+    return text;
   }
 
   /**
