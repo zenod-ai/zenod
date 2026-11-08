@@ -37,8 +37,10 @@ import { heat as decayedHeat, matchRootIds, newRootId, MATCH_THRESHOLD, type Hea
  * 3. Working memory: topics at or above `promoteHeat`; a topic that is working
  *    already stays until it falls below `demoteHeat` (hysteresis, so the tree does
  *    not flap week to week); at most `maxWorking`, hottest first.
- * 4. Long-term memory: the remaining topics merged further by content into at
- *    most `maxAreas` areas.
+ * 4. Long-term memory: the remaining topics merged further by content, only where
+ *    they read alike (`areaSimilarity`); a topic that reads like no other stays an
+ *    area of its own (E12-S8: no forced merges, so unrelated pages are never
+ *    squeezed into one area named after two of them). `maxAreas` is an optional cap.
  * 5. Each root is a page of its own cluster: a page that already continues a root
  *    keeps it (stable name); otherwise the page most of the cluster hangs under,
  *    then the most central one. Pages keep a parent inside their cluster; the
@@ -60,9 +62,11 @@ export const DEFAULT_HALF_LIFE_DAYS = 14;
 export const DEFAULT_PROMOTE_HEAT = 0.9;
 export const DEFAULT_DEMOTE_HEAT = 0.3;
 export const DEFAULT_MAX_WORKING = 8;
-export const DEFAULT_MAX_AREAS = 6;
+/** No cap by default (E12-S8): a forced cap merged unrelated long-term pages into one area. */
+export const DEFAULT_MAX_AREAS = Number.POSITIVE_INFINITY;
 export const DEFAULT_TOPIC_SIMILARITY = 0.13;
-export const DEFAULT_AREA_SIMILARITY = 0.04;
+/** Raised from 0.04 (E12-S8): at 0.04 two unrelated projects of a real vault merged into one area; 0.06 keeps them apart. */
+export const DEFAULT_AREA_SIMILARITY = 0.06;
 /** Captures older than this add no heat (0.5^(120/14) ≈ 0.003 anyway). */
 const HEAT_HORIZON_DAYS = 120;
 const OWN_CAPTURE_WINDOW_DAYS = 30;
@@ -845,11 +849,16 @@ export async function discoverTree(vaultPath: string, options: TreeDiscoveryOpti
   const coldSubjects = cold.filter(t => subjects.has(t)).map(t => t.members);
   const mergeable = cold.filter(t => !subjects.has(t));
   let areaGroups = mergeable.length ? agglomerate(mergeable.map(t => t.members), sim, options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY, maxAreas) : [];
-  // An area of one or two pages is a stray, not an area: it joins the area it reads most like.
-  for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES)) {
+  // An area of one or two pages joins the area it reads most like, but only when it
+  // reads like it at all (the area similarity floor); otherwise it stays on its own.
+  const areaFloor = options.areaSimilarity ?? DEFAULT_AREA_SIMILARITY;
+  const settled = new Set<number[]>();
+  for (let small = areaGroups.find(g => g.length < MIN_AREA_PAGES && !settled.has(g)); small && areaGroups.length > 1; small = areaGroups.find(g => g.length < MIN_AREA_PAGES && !settled.has(g))) {
     const others = areaGroups.filter(g => g !== small);
     const sims = others.map(o => small!.reduce((sum, i) => sum + avgSim(i, o), 0) / small!.length);
-    others[sims.indexOf(Math.max(...sims))]!.push(...small);
+    const best = Math.max(...sims);
+    if (best < areaFloor) { settled.add(small); continue; }
+    others[sims.indexOf(best)]!.push(...small);
     areaGroups = others;
   }
   areaGroups.push(...coldSubjects);

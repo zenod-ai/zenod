@@ -182,11 +182,31 @@ describe("E9-2g root discovery", { timeout: 60_000 }, () => {
     expect(report.changedPaths).toEqual([]);
   });
 
+  it("never forces unrelated long-term pages into one area (E12-S8)", async () => {
+    const subjects = [["Sailing", "dinghy mainsail rigging regatta"], ["Violin", "bow rosin scales concerto"], ["Taxes", "invoice deduction quarterly filing"],
+      ["Chess", "opening gambit endgame rating"], ["Beekeeping", "hive queen honey swarm"], ["Pottery", "kiln glaze clay wheel"],
+      ["Astronomy", "telescope nebula eyepiece star"], ["Cycling", "derailleur cassette saddle climb"]];
+    const files = [...fixtureFiles(), ...subjects.flatMap(([name, words]) => [1, 2, 3].map(n => ({ path: `Notes/${name} ${n}.md`,
+      content: page(`${name} ${n}`, "Areas/Life admin", `${name} ${words} part ${n}. See [[${name} ${n === 1 ? 2 : 1}]].`) })))];
+    await writeFixture(dir, files);
+    const plan = (await discoverTree(dir, { today: "2026-11-02" }))!;
+    const areaOf = (path: string) => { let at: string | null | undefined = path; for (let i = 0; i < 12 && plan.parents.get(at!); i++) at = plan.parents.get(at!); return at; };
+    const areas = subjects.map(([name]) => areaOf(`Notes/${name} 1.md`));
+    // Each subject keeps its own area, and its three pages stay together.
+    expect(new Set(areas).size).toBe(subjects.length);
+    for (const [name] of subjects) expect(new Set([1, 2, 3].map(n => areaOf(`Notes/${name} ${n}.md`))).size).toBe(1);
+    // A caller can still ask for a cap.
+    const capped = (await discoverTree(dir, { today: "2026-11-02", maxAreas: 6 }))!;
+    expect(capped.roots.filter(root => root.kind === "long-term").length).toBeLessThanOrEqual(6);
+  });
+
   it("the weekly sweep re-roots and reports counts", async () => {
     await writeFixture(dir);
     const report = await runTreeSweep(dir, { today: "2026-11-02" });
     expect(report.counts).toMatchObject({ discoveredWorking: 1, treeLintErrorsAfter: 0 });
-    expect(report.counts.rootsNew).toBe(report.roots.length);
+    // E12-S8: no forced merges, so a seeded root that reads like nothing else stays on its own and is not new.
+    expect(report.roots.find(root => root.name === "Life admin")).toMatchObject({ kind: "long-term", pages: 1 });
+    expect(report.counts.rootsNew).toBe(report.roots.length - 1);
     expect(report.changedPaths).toContain("Tree.md");
   });
 
