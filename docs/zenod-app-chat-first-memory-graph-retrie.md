@@ -83,7 +83,7 @@ Steps: each is independently testable and closes only with evidence.
 | S11 | Ticket worker | Agent, sonnet, wt/e12-s11 (done, cleaned up) | Dark mode harmonised plus a light/dark/system toggle, system by default (Jordi 2026-11-08 on live chat) | done (approved by Jordi 2026-11-08) | S1 | [#1511](https://github.com/zenod-ai/zenod/pull/1511) merged 07238de | main | [evidence](evidence/e12-s11-2026-11-08.md), [card](cards/E12-S11.md): live health sha 07238de (2026-11-08); chat paper style has a dark variant, Light/Dark/System toggle in the hosted header (and account page), stored choice applied before first paint; light unchanged; web tests 146/146; live dark view not checked signed-in (no non-Jordi account) | 2026-11-08 | confirm: yes — Jordi opens https://cloud.zenod.dev, Chat tab, flips the toggle |
 | S12 | Ticket worker | unassigned | chat first landing: follow-up of S3a | draft | S3a | none | main | parked by Jordi when closing S3a 2026-11-08 | 2026-11-08 | Jordi starts it from the goal when wanted |
 | S13 | Ticket worker | run_7f60dca1-0e6f-4c70-bab2-110f89b760d7 — claimed 2026-11-08T16:47Z, lease until 2026-11-08T18:47Z | light up answers in the graph: follow-up of S2 | active | S2 | none | main | Jordi started it when closing S2 2026-11-08 | 2026-11-08 | worker |
-| S14 | Ticket worker | unassigned | move old team report lines off your pages: follow-up of S8 | ready | S8 | none | main | Jordi started it when closing S8 2026-11-08 | 2026-11-08 | worker |
+| S14 | Ticket worker | run_21f37c2d | move old team report lines off your pages: follow-up of S8 | active | S8 | none | main | Jordi started it when closing S8 2026-11-08 | 2026-11-08 | worker |
 
 ## Decisions
 
