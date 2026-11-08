@@ -62,7 +62,7 @@ import { getNote, NoteNotFoundError } from "../ops/get.js";
 import { formatMemoryLineage, loadMemoryTree, memoryTreeBriefing, type MemoryTreeIndex } from "../vault/lineage.js";
 import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
-import { MemoryIndex, MemoryIndexTenantError, type MemoryCloudRequest } from "../vault/memoryIndex.js";
+import { ASKED_NOTE_LIFT, MemoryIndex, MemoryIndexTenantError, type MemoryCloudRequest } from "../vault/memoryIndex.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
@@ -2888,12 +2888,15 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const today = now();
     const timed = recentIntent(question, today.getTime());
     const all: Array<{ n: number; path: string; title: string; snippet?: string }> = [...memories];
+    // E12-S19: the person's notes that hold the question in one passage are read whole, wherever they rank.
+    let asked: string[] = [];
     if (!timed) {
       // The person's own words first: a note they sent that holds the question, if ranking missed it.
       const index = openMemoryIndex();
+      asked = index ? (await index.askedNotes(question, 2).catch(() => [])).filter((note) => note.share >= ASKED_NOTE_LIFT).map((note) => note.path) : [];
       const own = index ? await index.ownNotes(question, ANSWER_OWN_NOTES).catch(() => [] as string[]) : [];
       let next = Math.max(0, ...memories.map((memory) => memory.n)) + 1;
-      for (const path of own) {
+      for (const path of [...asked, ...own]) {
         if (all.some((memory) => memory.path === path)) continue;
         all.push({ n: next++, path, title: "Your note" });
       }
@@ -2934,8 +2937,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
     }
     // E12-S16: the notes with a passage that holds the question are read whole, so a decision late in
-    // a long voice note is not cut. Not for time questions: those read every note captured then.
-    const whole = new Set(timed ? [] : memoryChatFocus(question, read.map(({ memory, body, kind }) => ({ n: memory.n, title: memory.title, text: memoryChatExcerpt(body, "", Number.MAX_SAFE_INTEGER), own: kind === "voice" || kind === "own" }))));
+    // a long voice note is not cut; E12-S19: so is the best asked note. Not for time questions: those
+    // read every note captured then.
+    const askedNumbers = all.filter((memory) => asked.includes(memory.path)).map((memory) => memory.n);
+    const whole = new Set(timed ? [] : [...askedNumbers.slice(0, 1), ...memoryChatFocus(question, read.map(({ memory, body, kind }) => ({ n: memory.n, title: memory.title, text: memoryChatExcerpt(body, "", Number.MAX_SAFE_INTEGER), own: kind === "voice" || kind === "own" })))]);
     const context: MemoryChatContext[] = read.map(({ memory, i, body, when, filed, kind }) => {
       const budget = whole.has(memory.n) ? MEMORY_CHAT_WHOLE_CONTEXT_CHARS : timed?.window.kind === "range" ? ANSWER_PERIOD_CHARS : i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : i < 10 ? MEMORY_CHAT_CONTEXT_CHARS : ANSWER_TAIL_CHARS;
       const title = memory.title === "Your note" && when ? `Your ${/voice/.test(when) ? "voice note" : "note"}` : memory.title;
