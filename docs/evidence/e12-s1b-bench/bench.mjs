@@ -83,6 +83,8 @@ for (let run = 0; run < runs; run++) {
       cited: result?.memories?.filter((m) => m.cited).length ?? 0,
       calls: calls.length,
       costUsd: calls.reduce((sum, c) => sum + (c.providerCostUsd ?? 0), 0),
+      inputTokens: calls.reduce((sum, c) => sum + c.inputTokens + c.cachedInputTokens, 0),
+      outputTokens: calls.reduce((sum, c) => sum + c.outputTokens, 0),
       model: calls[0]?.model ?? null,
       error,
       answer: text.slice(0, 400),
@@ -101,6 +103,8 @@ const summary = {
   correct: rows.filter((r) => r.correct).length / rows.length,
   callsPerAnswer: rows.reduce((s, r) => s + r.calls, 0) / rows.length,
   costPerAnswerUsd: rows.reduce((s, r) => s + r.costUsd, 0) / rows.length,
+  inputTokensPerAnswer: Math.round(rows.reduce((s, r) => s + r.inputTokens, 0) / rows.length),
+  outputTokensPerAnswer: Math.round(rows.reduce((s, r) => s + r.outputTokens, 0) / rows.length),
 };
 writeFileSync(outFile, JSON.stringify({ summary, rows }, null, 2));
 console.log(JSON.stringify(summary));

@@ -197,8 +197,9 @@ export function isLlmAllowanceExceededError(error: unknown): error is LlmAllowan
 export const PROVIDER_DEFAULTS: Record<Provider, { ask: string; classify: string; vision: string; chat: string }> = {
   anthropic: { ask: "claude-sonnet-4-6", classify: "claude-haiku-4-5", vision: "claude-sonnet-4-6", chat: "claude-haiku-4-5" },
   openai: { ask: "gpt-4o-mini", classify: "gpt-4o-mini", vision: "gpt-4o-mini", chat: "gpt-4o-mini" },
-  // chat (E12-S1b): measured fastest to first words with reliable quoted citations on the demo questions.
-  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-3.1-flash-lite", chat: "anthropic/claude-haiku-5.5" },
+  // chat (E12-S1b): on 60 demo answers 60 checked, first words p95 1.0 s, full answer p95 1.6 s, ~$0.0003 each
+  // (docs/evidence/e12-s1b-2026-11-08.md); Haiku 5.5 was 59 of 60, p95 2.0 s.
+  openrouter: { ask: "deepseek/deepseek-chat", classify: "deepseek/deepseek-chat", vision: "google/gemini-3.1-flash-lite", chat: "google/gemini-3.1-flash-lite" },
   groq: { ask: "llama-3.3-70b-versatile", classify: "llama-3.1-8b-instant", vision: "meta-llama/llama-4-scout-17b-16e-instruct", chat: "llama-3.3-70b-versatile" },
 };
 

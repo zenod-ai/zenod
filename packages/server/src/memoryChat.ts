@@ -65,7 +65,7 @@ const titleOf = (path: string) => basePath(path).split("/").pop()!.replace(/\.md
 
 const NON_ANSWER_TEXT = {
   retry: "Zenod could not put a checked answer together this time. The memories below match your question: open them, or ask again.",
-  unverified: "Zenod found no note that answers this directly. The closest memories are below.",
+  unverified: "No confident answer: Zenod found no note that answers this directly. The closest memories are below.",
   unchecked: "No confident answer: Zenod could not check its answer against your memories, so it is not shown. The closest memories are below.",
   none: "No memory matches this question yet.",
 } as const;
