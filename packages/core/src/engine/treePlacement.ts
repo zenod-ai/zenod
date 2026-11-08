@@ -221,8 +221,9 @@ export async function writeProvisionalLeaf(
   index: TreeIndex,
   input: { content: string; evidenceRef: string; reason: string; today: string },
   writes: TrackedWrites = new TrackedWrites(vaultPath),
+  options: { rootsOnly?: boolean } = {},
 ): Promise<{ path: string; parent: string } | null> {
-  const choice = await chooseTreeNode(vaultPath, index, input.content);
+  const choice = await chooseTreeNode(vaultPath, index, input.content, options.rootsOnly ? { rootsOnly: true } : {});
   if (!choice) return null;
   const { date, anchor } = splitEvidenceRef(input.evidenceRef);
   const citation = `[[${date}#^${anchor}]]`;

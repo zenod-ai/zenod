@@ -122,6 +122,8 @@ describe("E12-S8 a rejected memory is never dropped", { timeout: 120_000 }, () =
     const raw = await readFile(join(repo.path, leaf), "utf8");
     expect(raw).toContain(SENTENCE);
     expect(parseNote(raw).frontmatter).toMatchObject({ provisional: true });
+    // Under a top-level branch, not under the deeper naming page that shares the word "names".
+    expect(String(parseNote(raw).frontmatter!.parent)).toMatch(/^\[\[(?:Projects|Areas)\/[^/\]]+\]\]$/);
     expect(raw).toContain(`#^${captured.evidenceRef.split("#^")[1]}]]`);
     // The capture's Log entry records where it went, and the page and receipt are published together.
     const [logPath, anchor] = captured.evidenceRef.split("#^") as [string, string];

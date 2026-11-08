@@ -1967,7 +1967,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (!(await readTree(vaultPath))) continue;
       const writes = new TrackedWrites(vaultPath);
       const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath),
-        { content: `${outcome.topic}\n\n${text}`, evidenceRef, reason: why, today: todayString(now()) }, writes).catch(() => null);
+        // A rescued memory hangs under a top-level branch, never deep under a page that only shares a word with it.
+        { content: `${outcome.topic}\n\n${text}`, evidenceRef, reason: why, today: todayString(now()) }, writes, { rootsOnly: true }).catch(() => null);
       const after = leaf ? await readFile(join(vaultPath, leaf.path), "utf8").catch(() => null) : null;
       const before = leaf ? writes.original(leaf.path) ?? null : null;
       await writes.revert();
