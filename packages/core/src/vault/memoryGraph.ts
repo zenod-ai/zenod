@@ -34,15 +34,28 @@ export interface MemoryGraphRawEdge {
   kind: "link" | "tree";
 }
 
-export type MemoryGraphRelation = "center" | "parent" | "child" | "link" | "backlink" | "hub";
+/** lit / bridge (E12-S13): a memory an answer used, and a page that connects two of them. */
+export type MemoryGraphRelation = "center" | "parent" | "child" | "link" | "backlink" | "hub" | "lit" | "bridge";
+
+/** Most memories one answer lights up (E12-S13). */
+export const MEMORY_GRAPH_LIT_MAX = 12;
+
+/** A Log entry an answer used: not a page, so it joins the lit view tied to the pages it was filed into. */
+export interface MemoryGraphNote {
+  path: string;
+  title: string;
+  summary: string;
+  /** Pages the note is tied to (filed into, cited by, links to), strongest first. */
+  ties: string[];
+}
 
 export interface MemoryGraphNode {
   path: string;
   title: string;
   summary: string;
   treePath: string;
-  /** tree: Tree.md itself; root: a level-1 root of the tree; page: any other memory. */
-  kind: "tree" | "root" | "page";
+  /** tree: Tree.md itself; root: a level-1 root of the tree; page: any other memory; note: a Log entry (lit views only). */
+  kind: "tree" | "root" | "page" | "note";
   /** How the node relates to the view's center (overview: roots are children of the tree, the rest hubs). */
   relation: MemoryGraphRelation;
   links: number;
@@ -58,7 +71,12 @@ export interface MemoryGraphEdge {
   /** link: the page that links. tree: the parent. */
   from: string;
   to: string;
-  kind: "link" | "tree";
+  /** filed: a lit Log entry to a page it is tied to (lit views only). */
+  kind: "link" | "tree" | "filed";
+  /** Lit views: the edge is on the way between memories the answer used. */
+  lit?: boolean;
+  /** 0 to 1 when links carry a strength (EPIC-18); absent until then. */
+  strength?: number;
 }
 
 export interface MemoryGraphView {
@@ -69,6 +87,8 @@ export interface MemoryGraphView {
   /** Neighbours of the center left out by the limit, per relation. */
   more: { parent: number; child: number; link: number; backlink: number };
   total: { nodes: number; edges: number };
+  /** Lit views (E12-S13): the asked memories in the order given, with what each resolved to (null: not in the graph). */
+  lit?: Array<{ ref: string; path: string | null }>;
 }
 
 interface Adjacent {
@@ -199,7 +219,7 @@ export class MemoryGraph {
     if (!center) return null;
     const node = this.nodes.get(center)!;
     const sort = byWeight(this);
-    const groups: Array<{ relation: Exclude<MemoryGraphRelation, "center" | "hub">; paths: string[] }> = [
+    const groups: Array<{ relation: keyof MemoryGraphView["more"]; paths: string[] }> = [
       { relation: "parent", paths: node.parent ? [node.parent] : [] },
       // Disjoint groups: a neighbour is named by its closest relation (tree first, then links).
       { relation: "link", paths: [...node.out].filter((path) => path !== node.parent && !node.children.has(path)).sort(sort) },
@@ -254,6 +274,89 @@ export class MemoryGraph {
     return this.view(tree ? TREE_PATH : null, relation, { parent: 0, child: 0, link: 0, backlink: 0 });
   }
 
+  /**
+   * The memories one answer used, lit (E12-S13): each asked memory (best first), the pages that
+   * connect two or more of them (shared parent, a page both link to or from), then each one's
+   * tree parent so it shows where it sits. Edges between lit memories and through a bridge are
+   * marked `lit`. Neighbourhood only, so a large vault costs what one view costs.
+   *
+   * `paths` plugs in path retrieval (EPIC-18): each path is a walk of node refs from the
+   * question's seed to a memory; its nodes become bridges and its steps lit edges, with the
+   * step's strength when `strengths` (keyed `from\nto`, either order) has it.
+   */
+  litView(
+    refs: readonly string[],
+    options: { limit?: number; notes?: readonly MemoryGraphNote[]; paths?: readonly (readonly string[])[]; strengths?: ReadonlyMap<string, number> } = {},
+  ): MemoryGraphView {
+    const cap = capOf(options.limit ?? MEMORY_GRAPH_DEFAULT_LIMIT);
+    const notes = new Map((options.notes ?? []).map((note) => [note.path, note]));
+    const relation = new Map<string, MemoryGraphRelation>();
+    const asked: Array<{ ref: string; path: string | null }> = [];
+    for (const ref of refs.slice(0, MEMORY_GRAPH_LIT_MAX)) {
+      const path = notes.has(ref) ? ref : this.resolve(ref);
+      asked.push({ ref, path });
+      if (path && path !== TREE_PATH && relation.size < cap) relation.set(path, "lit");
+    }
+    const lit = [...relation.keys()];
+    const litSet = new Set(lit);
+    // Neighbours of each lit memory, and of a lit note its ties.
+    const around = (path: string): string[] => {
+      const note = notes.get(path);
+      if (note) return note.ties.map((tie) => this.resolve(tie)).filter((tie): tie is string => Boolean(tie) && tie !== TREE_PATH);
+      const node = this.nodes.get(path);
+      return node ? [...node.neighbours].filter((n) => n !== TREE_PATH) : [];
+    };
+    const touches = new Map<string, number>();
+    for (const path of lit) for (const n of new Set(around(path))) if (!litSet.has(n)) touches.set(n, (touches.get(n) ?? 0) + 1);
+    const pathNodes = new Set<string>();
+    for (const walk of options.paths ?? []) for (const ref of walk) {
+      const path = this.resolve(ref);
+      if (path && !litSet.has(path) && path !== TREE_PATH) pathNodes.add(path);
+    }
+    const sort = byWeight(this);
+    const bridges = [
+      ...[...pathNodes],
+      ...[...touches].filter(([path, count]) => count >= 2 && !pathNodes.has(path)).sort((a, b) => b[1] - a[1] || sort(a[0], b[0])).map(([path]) => path),
+    ];
+    for (const path of bridges) if (relation.size < cap && !relation.has(path)) relation.set(path, "bridge");
+    // A lit note with no bridge still shows the page it was filed into; a page its parent.
+    for (const path of lit) {
+      if (relation.size >= cap) break;
+      const note = notes.get(path);
+      const up = note ? around(path)[0] : this.nodes.get(path)?.parent;
+      if (up && up !== TREE_PATH && !relation.has(up)) relation.set(up, "parent");
+    }
+    const view = this.view(lit[0] ?? null, new Map([...relation].filter(([path]) => !notes.has(path))), { parent: 0, child: 0, link: 0, backlink: 0 });
+    // Notes are not pages: add them with their ties.
+    const order = [...relation.keys()];
+    for (const path of lit) {
+      const note = notes.get(path);
+      if (!note) continue;
+      const ties = [...new Set(around(path))];
+      const shown = ties.filter((tie) => relation.has(tie));
+      view.nodes.push({
+        path, title: note.title, summary: note.summary, treePath: "", kind: "note", relation: "lit",
+        links: ties.length, backlinks: 0, children: 0, degree: ties.length, hidden: ties.length - shown.length,
+      });
+      for (const tie of shown) view.edges.push({ from: path, to: tie, kind: "filed" });
+    }
+    view.nodes.sort((a, b) => order.indexOf(a.path) - order.indexOf(b.path));
+    const role = (path: string) => relation.get(path);
+    const steps = new Set<string>();
+    for (const walk of options.paths ?? []) {
+      const resolved = walk.map((ref) => (notes.has(ref) ? ref : this.resolve(ref)));
+      for (let i = 1; i < resolved.length; i++) if (resolved[i - 1] && resolved[i]) steps.add(pairKey(resolved[i - 1]!, resolved[i]!));
+    }
+    for (const edge of view.edges) {
+      const a = role(edge.from);
+      const b = role(edge.to);
+      const strength = options.strengths?.get(`${edge.from}\n${edge.to}`) ?? options.strengths?.get(`${edge.to}\n${edge.from}`);
+      if (strength !== undefined) edge.strength = strength;
+      if ((a === "lit" && b === "lit") || ((a === "lit" || b === "lit") && (a === "bridge" || b === "bridge")) || steps.has(pairKey(edge.from, edge.to))) edge.lit = true;
+    }
+    return { ...view, lit: asked };
+  }
+
   private view(center: string | null, relation: Map<string, MemoryGraphRelation>, more: MemoryGraphView["more"]): MemoryGraphView {
     const edges: MemoryGraphEdge[] = [];
     const visible = new Map<string, number>([...relation.keys()].map((path) => [path, 0]));
@@ -284,6 +387,10 @@ export class MemoryGraph {
     });
     return { center, nodes, edges, more, total: this.size };
   }
+}
+
+function pairKey(a: string, b: string): string {
+  return a < b ? `${a}\n${b}` : `${b}\n${a}`;
 }
 
 function capOf(limit: number): number {

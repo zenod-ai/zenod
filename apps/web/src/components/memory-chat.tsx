@@ -13,6 +13,7 @@ import {
   type MemoryKeepReceipt,
   type MemorySendRoute,
 } from "@/lib/memory-chat"
+import { litHash } from "@/lib/memory-graph"
 
 // EPIC-12 E12-S1: the hosted app opens on this chat. It answers from your memory and shows
 // the memories it used with their match percentages and links. EPIC-16 E16-B1: one Send button;
@@ -20,6 +21,7 @@ import {
 // (a question is never kept). Styled in the product deck's paper language (docs/epic12/DESIGN-LANGUAGE.md).
 // E12-S1b: the memories show as soon as they are found and the answer streams in, marked as a
 // draft until Zenod has checked each citation against the memory it names.
+// E12-S13: "Show in graph" opens the Graph tab with the answer's memories lit up.
 
 type KeepState =
   | { state: "idle" }
@@ -148,10 +150,13 @@ function MemoryList({
   memories,
   alsoCited = [],
   noteLinks,
+  question,
 }: {
   memories: MemoryChatMemory[]
   alsoCited?: MemoryChatAnswer["alsoCited"]
   noteLinks?: MemoryChatAnswer["noteLinks"]
+  /** Set once the answer is in: offers "Show in graph" with these memories lit. */
+  question?: string
 }) {
   return (
     <div className="zp-used" aria-label="Memories used">
@@ -161,6 +166,29 @@ function MemoryList({
             ? "Memories for this question"
             : `Top ${memories.length} memories for this question`
           : "Memories cited"}
+        {question !== undefined ? (
+          <a
+            className="zp-showgraph"
+            data-testid="show-in-graph"
+            href={`/${litHash({
+              question,
+              memories: [
+                ...memories.map((memory) => ({
+                  path: memory.path,
+                  title: memory.title,
+                  matchPercent: memory.matchPercent,
+                })),
+                ...alsoCited.map((source) => ({
+                  path: source.path,
+                  title: source.title,
+                  matchPercent: null,
+                })),
+              ],
+            })}`}
+          >
+            Show in graph
+          </a>
+        ) : null}
       </p>
       <ol>
         {memories.map((memory) => (
@@ -278,6 +306,7 @@ function AnswerTurn({ result }: { result: MemoryChatAnswer }) {
           memories={result.memories}
           alsoCited={result.alsoCited}
           noteLinks={result.noteLinks}
+          question={result.question}
         />
       ) : (
         <p className="zp-hint">No memory matched this question.</p>

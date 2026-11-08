@@ -170,3 +170,79 @@ describe("memory graph (E12-S2)", { timeout: 30_000 }, () => {
     expect(() => indexFor(vault, "tenant-b")).toThrow(/belongs to tenant tenant-a/);
   });
 });
+
+describe("lit answers in the graph (E12-S13)", { timeout: 30_000 }, () => {
+  const node = (path: string) => ({ path, title: path.replace(/^.*\//, "").replace(/\.md$/, ""), summary: "", treePath: "" });
+  const graph = () => MemoryGraph.build(
+    ["Areas/House.md", "Notes/Roof.md", "Notes/Gutter.md", "Notes/Plumber.md", "Notes/Far.md", "Notes/Shared.md"].map(node),
+    [
+      { from: "Notes/Roof.md", target: "House", kind: "tree" },
+      { from: "Notes/Gutter.md", target: "House", kind: "tree" },
+      { from: "Notes/Roof.md", target: "Shared", kind: "link" },
+      { from: "Notes/Plumber.md", target: "Shared", kind: "link" },
+      { from: "Notes/Far.md", target: "Plumber", kind: "link" },
+    ],
+  );
+
+  it("lights the asked memories best first, adds the pages between them and marks those links lit", () => {
+    const view = graph().litView(["Roof", "Gutter", "Plumber", "Nowhere"]);
+    expect(view.center).toBe("Notes/Roof.md");
+    expect(view.lit).toEqual([
+      { ref: "Roof", path: "Notes/Roof.md" },
+      { ref: "Gutter", path: "Notes/Gutter.md" },
+      { ref: "Plumber", path: "Notes/Plumber.md" },
+      { ref: "Nowhere", path: null },
+    ]);
+    expect(view.nodes.slice(0, 3).map((n) => [n.path, n.relation])).toEqual([
+      ["Notes/Roof.md", "lit"], ["Notes/Gutter.md", "lit"], ["Notes/Plumber.md", "lit"],
+    ]);
+    // House is the parent of two lit memories, Shared is linked from two: both bridge them.
+    expect(relationOf(view, "Areas/House.md")).toBe("bridge");
+    expect(relationOf(view, "Notes/Shared.md")).toBe("bridge");
+    // Far touches one lit memory only: not drawn.
+    expect(relationOf(view, "Notes/Far.md")).toBeUndefined();
+    expect(view.edges.filter((e) => e.lit).map((e) => `${e.from}>${e.to}`).sort()).toEqual([
+      "Areas/House.md>Notes/Gutter.md", "Areas/House.md>Notes/Roof.md", "Notes/Plumber.md>Notes/Shared.md", "Notes/Roof.md>Notes/Shared.md",
+    ]);
+  });
+
+  it("shows a lone memory's parent unlit, and takes path retrieval's walks and strengths when given (EPIC-18)", () => {
+    const lone = graph().litView(["Gutter"]);
+    expect(relationOf(lone, "Areas/House.md")).toBe("parent");
+    expect(lone.edges).toEqual([{ from: "Areas/House.md", to: "Notes/Gutter.md", kind: "tree" }]);
+    const walked = graph().litView(["Gutter", "Far"], {
+      paths: [["Gutter", "House", "Roof", "Shared", "Plumber", "Far"]],
+      strengths: new Map([["Notes/Roof.md\nNotes/Shared.md", 0.9]]),
+    });
+    for (const path of ["Areas/House.md", "Notes/Roof.md", "Notes/Shared.md", "Notes/Plumber.md"]) expect(relationOf(walked, path)).toBe("bridge");
+    expect(walked.edges.find((e) => e.from === "Notes/Roof.md" && e.to === "Notes/Shared.md")).toMatchObject({ lit: true, strength: 0.9 });
+    expect(walked.edges.every((e) => e.lit)).toBe(true);
+  });
+
+  it("lights a voice note from the vault with the page it was filed into", async () => {
+    const vault = await vaultFrom({}, TREE_FIXTURE);
+    const index = indexFor(vault);
+    const entry = "Log/2026-10-31.md#^e-c64e3b";
+    const view = await index.graph({ lit: [entry, "Projects/Boat repair.md"] });
+    const note = view!.nodes.find((n) => n.path === entry)!;
+    expect(note).toMatchObject({ kind: "note", relation: "lit" });
+    expect(relationOf(view, "Projects/Boat repair.md")).toBe("lit");
+    expect(relationOf(view, "Projects/Boat repair/2023 Porto quotes.md")).toBe("bridge");
+    expect(view!.edges).toContainEqual({ from: entry, to: "Projects/Boat repair/2023 Porto quotes.md", kind: "filed", lit: true });
+  });
+
+  it("stays a neighbourhood on a large vault", () => {
+    const pages = [node("Areas/Hub.md")];
+    const edges: Array<{ from: string; target: string; kind: "link" | "tree" }> = [];
+    for (let i = 0; i < 5000; i++) {
+      pages.push(node(`Notes/n${i}.md`));
+      edges.push({ from: `Notes/n${i}.md`, target: "Hub", kind: "tree" }, { from: `Notes/n${i}.md`, target: `n${(i + 1) % 5000}`, kind: "link" });
+    }
+    const big = MemoryGraph.build(pages, edges);
+    const started = performance.now();
+    const view = big.litView(["n1", "n2", "n3", "n4", "n5"], { limit: 24 });
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(view.nodes.length).toBeLessThanOrEqual(24);
+    expect(relationOf(view, "Areas/Hub.md")).toBe("bridge");
+  });
+});

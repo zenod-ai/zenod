@@ -587,7 +587,7 @@ export interface BrainEngine {
    * the overview without one. Null when this engine has no tier-0 index; a view with `center`
    * unresolved throws an error named NoteNotFoundError.
    */
-  memoryGraph?(request?: { center?: string | null; limit?: number }): Promise<MemoryGraphView | null>;
+  memoryGraph?(request?: { center?: string | null; limit?: number; lit?: readonly string[] | null }): Promise<MemoryGraphView | null>;
   /** Deterministic retrieval of immutable memory entries by structural metadata. */
   searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
   /** Internal tenant/vault boundary for entry pagination; never a client parameter. */

@@ -95,6 +95,10 @@ describe("MemoryChat one Send (E16-B1)", () => {
     expect(screen.queryByTestId("memory-kept")).toBeNull()
     expect(screen.queryByRole("button", { name: "Keep" })).toBeNull()
     expect(live.calls).toEqual([{ url: "/api/console/memory-send/stream", body: { message: "Who fixes the boiler?" } }])
+   // E12-S13: the answered memories open lit up in the graph, with their percentages.
+    const show = screen.getByTestId("show-in-graph").getAttribute("href")!
+    expect(show.startsWith("/#graph?")).toBe(true)
+    expect(decodeURIComponent(show)).toContain("m=92:Home/Plumber.md|")
   })
 
   it("keeps a statement and says so with a link to the saved memory", async () => {
