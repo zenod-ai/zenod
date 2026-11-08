@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { parseLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
+import { parseLogCaptures } from "./captureOrigin.js";
 import { basenameOf, isFilingReceiptPath, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
@@ -26,7 +26,7 @@ import { buildWeightedLinks, CLOUD_DEFAULT_THRESHOLD, expandCloud, isNote, nodeI
  * and filing receipts (E12-S3c). 4: weighted memory graph (E18-W1): a filing's confidence on its
  * `filed` edges, each page's `zid`, and the derived `nodes` and `links` (strength 0..1) tables.
  * 5: pages under `Archive/Agent reports/` are marked `agent` and page bodies leave out their
- * `## Ops rollup` section (E12-S15). An older file is rebuilt once on open.
+ * `## Ops rollup` lines (E12-S15). An older file is rebuilt once on open.
  */
 const SCHEMA_VERSION = "5";
 const MAX_HITS = 20;
@@ -50,6 +50,12 @@ const AGENT_LOG_FACTOR = 0.5;
 /** A hit holding under this share of the best hit's question words is not shown (E12-S3c). */
 const MIN_SHARE_OF_BEST = 0.25;
 const factorOf = (row: { kind: MemoryIndexHitKind; meta?: string }) => KIND_FACTOR[row.kind] * (row.meta?.startsWith("agent") ? AGENT_LOG_FACTOR : 1);
+/**
+ * The `## Ops rollup` section's own lines: its intro and the dated `- <date> ops (<n>): [[…]]`
+ * links to agent reports (E9-2b rule 5). Only these leave a page's indexed body: topic filing
+ * appended some of the person's own lines after that section, and those stay (E12-S15).
+ */
+const ROLLUP_LINE_RE = /^(?:- \d{4}-\d{2}-\d{2} ops \(\d+\): .*|Agent ops reports \(Watcher reads, console decisions\), one line per day; the evidence stays in the Log\.)$/gm;
 /** Where moved agent report lines are kept (E12-S14): content, not the person's memories. */
 const AGENT_REPORTS_DIR = "Archive/Agent reports/";
 /**
@@ -503,7 +509,7 @@ export class MemoryIndex {
       matchPercent: percents[i]!,
       treePath: row.lineage,
       ...(row.filed ? { filedOn: row.filed } : {}),
-    })), limit);
+    })), limit, aboutAgents);
   }
 
   /**
@@ -514,8 +520,9 @@ export class MemoryIndex {
    * (0.8). Its percent is the best match's percent times that product, so with a 90 % best match a
    * page its note was filed into with strength 0.95 reads 86 %. A word match also reached along
    * a path keeps the higher of the two. At most four memories join; nothing weaker ever does.
+   * An agent report joins only when the question is about the agents' work (E12-S15).
    */
-  private withGraphNeighbours(hits: MemoryIndexHit[], limit: number): MemoryIndexHit[] {
+  private withGraphNeighbours(hits: MemoryIndexHit[], limit: number, aboutAgents = false): MemoryIndexHit[] {
     const joins = Math.max(0, Math.trunc(this.options.cloud?.joins ?? CLOUD_DEFAULT_JOINS));
     const seeds = hits.slice(0, CLOUD_SEEDS).filter((hit) => hit.matchPercent >= CLOUD_SEED_FLOOR);
     if (joins === 0 || seeds.length === 0) return hits;
@@ -552,9 +559,9 @@ export class MemoryIndex {
     const candidates = [...reached].filter(([path]) => !shown.has(path)).sort((a, b) => b[1].percent - a[1].percent || a[0].localeCompare(b[0]));
     for (const [path, best] of candidates) {
       if (added.length >= joins) break;
-      const row = this.db.prepare("SELECT kind, title, summary, body, lineage, filed FROM docs WHERE path = ? AND kind IN ('page', 'root', 'log') ORDER BY kind = 'root' LIMIT 1")
-        .get(path) as { kind: MemoryIndexHitKind; title: string; summary: string; body: string; lineage: string; filed: string } | undefined;
-      if (!row) continue;
+      const row = this.db.prepare("SELECT kind, title, summary, body, lineage, filed, meta FROM docs WHERE path = ? AND kind IN ('page', 'root', 'log') ORDER BY kind = 'root' LIMIT 1")
+        .get(path) as { kind: MemoryIndexHitKind; title: string; summary: string; body: string; lineage: string; filed: string; meta: string } | undefined;
+      if (!row || (!aboutAgents && row.meta.startsWith("agent"))) continue;
       added.push({
         path, kind: row.kind === "log" ? "log" : "page", title: row.title,
         snippet: snippetOf(row.kind === "log" ? { summary: "", body: spokenWords(row.body) } : row, []), score: 0,
@@ -1202,8 +1209,8 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
     // Obsidian's own `aliases:` (a list or one string) and tags: the page's metadata, not steering.
     aliases: [...(typeof meta.aliases === "string" ? [meta.aliases] : strings(meta.aliases)), ...strings(meta.tags)].join(" · "),
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
-    // The rollup section is a list of agent report links, not what the page is about (E12-S15).
-    body: withoutOpsRollup(body),
+    // Rollup lines link agent reports: not what the page is about (E12-S15).
+    body: body.replace(ROLLUP_LINE_RE, ""),
     kind: "page", path, file: path, meta: path.startsWith(AGENT_REPORTS_DIR) ? "agent" : "",
   }] };
 }

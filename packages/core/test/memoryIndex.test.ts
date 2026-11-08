@@ -245,7 +245,7 @@ describe("agent reports are not the person's memories (E12-S15)", { timeout: 20_
   it("leaves agent reports and the moved-report archive out unless the question is about them", async () => {
     const vault = await vaultFrom({
       "Log/2026-11-08.md": LOG,
-      "Projects/Garden.md": PAGE("Garden", "Beds and compost. See [[Index]].\n\n## Ops rollup\n\nAgent ops reports.\n\n- 2026-11-08 ops (1): [[2026-11-08#^e-b10001]] greenhouse heater sensor"),
+      "Projects/Garden.md": PAGE("Garden", "Beds and compost. See [[Index]].\n\n## Ops rollup\n\nAgent ops reports.\n\n- 2026-11-08 ops (1): [[2026-11-08#^e-b10001]] greenhouse heater sensor\n- Tomato watering every two days [[2026-11-08#^e-a10001]]"),
       "Archive/Agent reports/Moved report lines.md": PAGE("Moved report lines", "## 2026-11-08 from [[Projects/Garden]] line 9\n\n- greenhouse heater sensor dashboard deployed [[2026-11-08#^e-b10001]]"),
       "Index.md": "---\ntitle: Index\n---\n# Index\n",
     });
@@ -254,8 +254,10 @@ describe("agent reports are not the person's memories (E12-S15)", { timeout: 20_
     expect(mine).toContain("Log/2026-11-08.md#^e-a10001");
     expect(mine).not.toContain("Log/2026-11-08.md#^e-b10001");
     expect(mine).not.toContain("Archive/Agent reports/Moved report lines.md");
-    // The rollup section is not what the Garden page is about.
-    expect(mine).not.toContain("Projects/Garden.md");
+    // The rollup lines are not what the Garden page is about: it shows only through the person's note it cites.
+    expect((await index.search("greenhouse heater")).find((hit) => hit.path === "Projects/Garden.md")?.via ?? "Log/2026-11-08.md#^e-a10001").toBe("Log/2026-11-08.md#^e-a10001");
+    expect((await index.search("greenhouse sensor dashboard")).map((hit) => hit.path)).not.toContain("Projects/Garden.md");
+    expect((await index.search("tomato watering")).map((hit) => hit.path)).toContain("Projects/Garden.md");
     const theirs = (await index.search("what did the agents report about the greenhouse heater")).map((hit) => hit.path);
     expect(theirs).toContain("Log/2026-11-08.md#^e-b10001");
     expect((await index.search("E41-S2 greenhouse")).map((hit) => hit.path)).toContain("Log/2026-11-08.md#^e-b10001");
