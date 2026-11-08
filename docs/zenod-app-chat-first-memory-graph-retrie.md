@@ -89,7 +89,7 @@ Steps: each is independently testable and closes only with evidence.
 | S17 | Ticket worker | unassigned | stronger chat model (OpenRouter credit, E15-A3): follow-up of S1b | blocked | E15-A3 (OpenRouter credit; production shares the near-empty account) | none | main | Jordi started it when closing S1b 2026-11-08 | 2026-11-08 | measure a stronger chat model on the 45 real questions once the account has credit; nothing to run before |
 | S18 | Ticket worker | run_7e4b0644-5f40-4d89-94d0-8b312c050bff — claimed 2026-11-08T20:41Z, lease until 2026-11-08T22:41Z | answers too thin (the largest cause left, 6 of 15 misses): follow-up of S16 | active | S16 | none | main | Jordi started it when closing S16 2026-11-08 | 2026-11-08 | worker |
 | S19 | Ticket worker | run_7e4b0644-5f40-4d89-94d0-8b312c050bff — claimed 2026-11-08T20:41Z, lease until 2026-11-08T22:41Z | the asked note is never read (hedging and first-screen questions miss their note in ranking): follow-up of S16 | active | S16 | none | main | Jordi started it when closing S16 2026-11-08 | 2026-11-08 | worker |
-| S20 | Ticket worker | run_3191b691 | landing fixes: follow-up of S3c | active | S3c | none | main | Jordi started it when closing S3c 2026-11-08 | 2026-11-08 | every voice note linked to its topics (21 of 72 none), backfill as one undoable commit, measured with the Q2 suite |
+| S20 | Ticket worker | run_3191b691-bb66-4af2-b514-a10abd79998d — claimed 2026-11-08T22:22Z, lease until 2026-11-09T00:22Z | landing fixes: follow-up of S3c | active | S3c | none | main | Jordi started it when closing S3c 2026-11-08 | 2026-11-08 | every voice note linked to its topics (21 of 72 none), backfill as one undoable commit, measured with the Q2 suite |
 
 ## Decisions
 
