@@ -45,6 +45,12 @@ export interface PersonaDefinition {
   defaultEnabled: boolean;
   limits: PersonaLimits;
   /**
+   * When the persona's behaviour last changed (ISO). A persona revised after its last run wakes once
+   * more at once, in its own period, and is not skipped as "nothing new", so a fix reaches users the
+   * same day instead of next week.
+   */
+  revisedAt?: string;
+  /**
    * The no-model wake check: what this wake would look at, as a short string. A scheduled wake whose
    * fingerprint equals the last real run's is skipped with no model call. Null: nothing to look at.
    */
@@ -131,9 +137,15 @@ const monthStart = (date: Date) => new Date(Date.UTC(date.getUTCFullYear(), date
  * period runs at most once (the run log's unique period key), in the first off-peak window the
  * tenant is awake, so a restart never runs a night twice and never runs at peak time.
  */
-export function personaPeriodKey(schedule: PersonaSchedule, now: Date): string {
-  if (schedule.every === "week") return `week:${isoDay(new Date(treeSweepWeekStart(now.getTime())))}`;
-  return `night:${isoDay(now)}`;
+export function personaPeriodKey(persona: Pick<PersonaDefinition, "schedule" | "revisedAt">, now: Date): string {
+  const base = persona.schedule.every === "week" ? `week:${isoDay(new Date(treeSweepWeekStart(now.getTime())))}` : `night:${isoDay(now)}`;
+  return persona.revisedAt ? `${base}@${persona.revisedAt}` : base;
+}
+
+/** Never ran, or last ran before its latest revision: wakes at once, at any hour. */
+function wantsFirstWake(store: PersonaStore, persona: PersonaDefinition): boolean {
+  const last = store.runs(persona.id, 1)[0];
+  return !last || (persona.revisedAt !== undefined && last.startedAt < persona.revisedAt);
 }
 
 /** When a scheduled persona next wakes: the next off-peak window whose period has not run. */
@@ -180,7 +192,7 @@ export async function runPersona(
 ): Promise<PersonaRun | null> {
   const now = deps.now ?? (() => new Date());
   const started = now();
-  const periodKey = trigger === "schedule" ? personaPeriodKey(persona.schedule, started) : null;
+  const periodKey = trigger === "schedule" ? personaPeriodKey(persona, started) : null;
   const run = deps.store.start(persona.id, trigger, periodKey);
   if (!run) return null;
 
@@ -202,10 +214,23 @@ export async function runPersona(
   };
   const read: PersonaReadContext = {
     today: isoDay(started),
+    // Spread over the days, newest first within each, so a busy day cannot crowd out the rest of the week.
     async recentMemories({ days, limit = 40 }) {
       step();
-      const after = new Date(started.getTime() - days * 24 * 3_600_000).toISOString();
-      return deps.memory.searchEntries({ capturedAfter: after, order: "newest", limit: Math.min(limit, 100) });
+      const span = Math.max(1, Math.min(days, 31));
+      const max = Math.min(limit, 100);
+      const after = new Date(started.getTime() - span * 24 * 3_600_000).toISOString();
+      // One scan of the window (no model), then an even share per day.
+      const all = await deps.memory.searchEntries({ capturedAfter: after, order: "newest", limit: null });
+      const byDay = new Map<string, MemoryEntry[]>();
+      for (const entry of all) {
+        const day = entry.capturedAt.slice(0, 10);
+        byDay.set(day, [...(byDay.get(day) ?? []), entry]);
+      }
+      const perDay = Math.max(1, Math.ceil(max / Math.max(1, byDay.size)));
+      return [...byDay.values()].flatMap((entries) => entries.slice(0, perDay))
+        .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
+        .slice(0, max);
     },
     async search(query) {
       step();
@@ -260,8 +285,9 @@ export async function runPersona(
   };
 
   try {
-    tally.fingerprint = await persona.fingerprint(read);
-    if (tally.fingerprint === null) return end("skipped", "Nothing to read yet");
+    const seen = await persona.fingerprint(read);
+    if (seen === null) return end("skipped", "Nothing to read yet");
+    tally.fingerprint = persona.revisedAt ? `${persona.revisedAt}|${seen}` : seen;
     if (trigger === "schedule" && deps.store.lastRealRun(persona.id)?.fingerprint === tally.fingerprint) {
       return end("skipped", "Nothing new since the last run");
     }
@@ -290,14 +316,14 @@ async function commitNotes(persona: PersonaDefinition, deps: PersonaRunnerDeps, 
 
 /**
  * The personas due now: switched on and their period has no run yet, in the off-peak window. A
- * persona that is on and has never run wakes at once, at any hour, so a new user (or one who just
- * switched it on) sees what it does the same day instead of after the first night.
+ * persona that is on and has never run (or was revised since its last run) wakes at once, at any
+ * hour, so a new user (or one who just switched it on) sees what it does the same day.
  */
 export function duePersonas(personas: readonly PersonaDefinition[], store: PersonaStore, now: Date): PersonaDefinition[] {
   const inWindow = inTreeSweepWindow(now.getTime());
   return personas.filter((persona) => {
-    if (!personaEnabled(store, persona) || store.hasRunForPeriod(persona.id, personaPeriodKey(persona.schedule, now))) return false;
-    return inWindow || store.runs(persona.id, 1).length === 0;
+    if (!personaEnabled(store, persona) || store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now))) return false;
+    return inWindow || wantsFirstWake(store, persona);
   });
 }
 
@@ -314,7 +340,7 @@ export function personaView(persona: PersonaDefinition, store: PersonaStore, now
     enabled,
     limits: persona.limits,
     budget: personaBudget(store, persona, now, totalMonthUsd),
-    nextWakeAt: enabled ? nextPersonaWakeAt(persona.schedule, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona.schedule, now))).toISOString() : null,
+    nextWakeAt: enabled ? nextPersonaWakeAt(persona.schedule, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now))).toISOString() : null,
     lastRun: runs[0] ?? null,
     runs,
   };

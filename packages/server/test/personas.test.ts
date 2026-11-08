@@ -6,7 +6,7 @@ import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine, SqliteStateStore, VaultRepo, type BrainEngine, type BrainLlm, type MemoryEntry } from "zenod";
 import { InboxStore } from "../src/inboxStore.js";
-import { BUILT_IN_PERSONAS, parseRecapReply, WEEKLY_RECAP } from "../src/personaCatalog.js";
+import { BUILT_IN_PERSONAS, memoryWords, parseRecapReply, WEEKLY_RECAP } from "../src/personaCatalog.js";
 import { registerPersonaRoutes } from "../src/personaRoutes.js";
 import {
   duePersonas,
@@ -54,7 +54,9 @@ const entry = (n: number, day: string, title: string): MemoryEntry => ({
 
 function fakeMemory(entries: MemoryEntry[]) {
   return {
-    async searchEntries() { return entries; },
+    async searchEntries(query: { capturedAfter?: string; limit?: number | null } = {}) {
+      return entries.filter((e) => !query.capturedAfter || e.capturedAt >= query.capturedAfter).slice(0, query.limit ?? undefined);
+    },
     async search() { return []; },
     async get(): Promise<never> { throw new Error("not in this test"); },
   };
@@ -107,12 +109,13 @@ describe("persona runner (EPIC-14 S4)", () => {
     const stub = stubModel();
     const b = deps({ model: () => stub.model, now: () => clock });
     b.deps.store = new PersonaStore(join(dir, "personas-b.sqlite"));
-    expect(await runPersona(WEEKLY_RECAP, b.deps, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08" });
+    expect(await runPersona(WEEKLY_RECAP, b.deps, "schedule")).toMatchObject({ status: "done", periodKey: `week:2026-11-08@${WEEKLY_RECAP.revisedAt}` });
     // The same period never runs twice.
     expect(await runPersona(WEEKLY_RECAP, b.deps, "schedule")).toBeNull();
-    // Next week, same memories: skipped, no call.
-    clock = new Date("2026-11-15T03:00:00Z");
-    expect(await runPersona(WEEKLY_RECAP, b.deps, "schedule")).toMatchObject({ status: "skipped", summary: "Nothing new since the last run" });
+    // A nightly persona the next night, same memories: skipped, no call.
+    const nightly: PersonaDefinition = { ...WEEKLY_RECAP, schedule: { every: "night" } };
+    clock = new Date("2026-11-09T03:00:00Z");
+    expect(await runPersona(nightly, b.deps, "schedule")).toMatchObject({ status: "skipped", summary: "Nothing new since the last run" });
     expect(stub.calls).toHaveLength(1);
   });
 
@@ -173,20 +176,55 @@ describe("persona runner (EPIC-14 S4)", () => {
   });
 
   it("wakes a persona that is on and never ran at once, then only in the off-peak window, once per period", () => {
-    const store = new PersonaStore(join(dir, "personas.sqlite"));
-    const noon = new Date("2026-11-08T12:00:00Z");
+    const store = new PersonaStore(join(dir, "personas.sqlite"), () => new Date("2026-11-08T20:00:00Z"));
+    const noon = new Date("2026-11-08T21:00:00Z");
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap"]);
     const run = store.start("weekly-recap", "manual")!;
     store.finish(run.id, { status: "done", steps: 1, modelCalls: 1, inputTokens: 1, outputTokens: 1, costUsd: 0, summary: "", inboxItemIds: [], revision: null, fingerprint: "x" });
     expect(duePersonas(BUILT_IN_PERSONAS, store, noon)).toEqual([]);
     const night = new Date("2026-11-09T03:00:00Z");
     expect(duePersonas(BUILT_IN_PERSONAS, store, night).map((p) => p.id)).toEqual(["weekly-recap"]);
-    store.start("weekly-recap", "schedule", personaPeriodKey(WEEKLY_RECAP.schedule, night));
+    store.start("weekly-recap", "schedule", personaPeriodKey(WEEKLY_RECAP, night));
     expect(duePersonas(BUILT_IN_PERSONAS, store, night)).toEqual([]);
     store.setEnabled("weekly-recap", false);
     expect(duePersonas(BUILT_IN_PERSONAS, store, new Date("2026-11-16T03:00:00Z"))).toEqual([]);
     expect(nextPersonaWakeAt({ every: "week" }, night, true).toISOString()).toBe("2026-11-15T02:00:00.000Z");
     expect(nextPersonaWakeAt({ every: "night" }, noon, false).toISOString()).toBe("2026-11-09T02:00:00.000Z");
+  });
+
+  it("wakes a revised persona once more at once, in its own period, even with nothing new", async () => {
+    let clock = new Date("2026-11-08T12:00:00Z");
+    const stub = stubModel();
+    const { deps: d, store } = deps({ model: () => stub.model, now: () => clock });
+    const v1: PersonaDefinition = { ...WEEKLY_RECAP, revisedAt: undefined };
+    expect(duePersonas([v1], store, clock).length).toBe(1);
+    expect(await runPersona(v1, d, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08" });
+    expect(duePersonas([v1], store, clock)).toEqual([]);
+    clock = new Date("2026-11-08T20:00:00Z");
+    const v2: PersonaDefinition = { ...WEEKLY_RECAP, revisedAt: "2026-11-08T19:30:00.000Z" };
+    expect(duePersonas([v2], store, clock).length).toBe(1);
+    expect(await runPersona(v2, d, "schedule")).toMatchObject({ status: "done", periodKey: "week:2026-11-08@2026-11-08T19:30:00.000Z" });
+    expect(duePersonas([v2], store, clock)).toEqual([]);
+    expect(stub.calls).toHaveLength(2);
+  });
+
+  it("reads memories spread over the 7 days, so a busy day does not crowd out the week", async () => {
+    const busy = Array.from({ length: 60 }, (_, i) => entry(i, "2026-11-08", `Busy day ${i}`)).map((e, i) => ({ ...e, capturedAt: `2026-11-08T0${Math.floor(i / 10)}:${String(i % 60).padStart(2, "0")}:00.000Z` }));
+    const older = [entry(91, "2026-11-04", "Mid-week memory"), entry(92, "2026-11-02", "Early-week memory")];
+    const stub = stubModel();
+    const { deps: d } = deps({ entries: [...busy, ...older], model: () => stub.model });
+    await runPersona(WEEKLY_RECAP, d, "manual");
+    const prompt = stub.calls[0]!.prompt;
+    expect(prompt).toContain("Mid-week memory");
+    expect(prompt).toContain("Early-week memory");
+    expect(prompt.split("\n").filter((line) => line.startsWith("[")).length).toBeLessThanOrEqual(40);
+  });
+
+  it("gives the model what was said, not a voice note's capture header", () => {
+    const voice = 'Voice note "AB12.ogg" ingested through Zenod media seam.\nRaw artifact: drive://file/x\nTranscribed by someone.\n\nI still have not booked the dentist.';
+    expect(memoryWords(voice)).toBe("I still have not booked the dentist.");
+    expect(memoryWords("Note: buy milk\n\nand eggs")).toBe("Note: buy milk and eggs");
+    expect(memoryWords("Plain words.")).toBe("Plain words.");
   });
 
   it("marks runs a restart interrupted as failed so their period can run again", () => {
