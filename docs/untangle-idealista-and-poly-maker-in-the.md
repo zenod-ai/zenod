@@ -25,10 +25,16 @@ Goal sentence: Idealista and Poly-Maker are two separate memories again, and que
 - [ ] E19-1 The tree no longer has one shared node for Idealista and Poly-Maker: each has its own place, and the links that belong to each point to the right one, done through a reversible, logged change to his vault.
 - [ ] E19-2 Before and after on Idealista and Poly-Maker questions: answers about one no longer return the other, and why they got knotted is explained with the fix that stops it recurring.
 
+## Outcome
+
+Verdict: accomplished
+Outcome: Idealista and Poly-Maker are two separate memories again, and questions about one find only it. (closed on the console's review list)
+Closed: 2026-11-08 by Jordi (closed on the console's review list)
+
 ## Current State
 
 Owner: Delivery Manager (Zenod launch)
-Status: active
+Status: done (closed by Jordi 2026-11-08)
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
@@ -49,7 +55,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| U1 | Ticket worker | run_383b13fc-f1bb-4852-a67f-8c7927016853 | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | review | none | vault `32bb6ae` (no code change) | vault `e1537ed` | [evidence](evidence/e19-u1-2026-11-08.md) · [card](cards/E19-U1.md) · live search clean 16:51Z | 2026-11-08 | Jordi judges the before and after; followups: none; confirm: yes — only Jordi can say whether his Idealista questions now come back clean |
+| U1 | Ticket worker | run_383b13fc-f1bb-4852-a67f-8c7927016853 | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | done (approved by Jordi 2026-11-08) | none | vault `32bb6ae` (no code change) | vault `e1537ed` | [evidence](evidence/e19-u1-2026-11-08.md) · [card](cards/E19-U1.md) · live search clean 16:51Z | 2026-11-08 | Jordi judges the before and after; followups: none; confirm: yes — only Jordi can say whether his Idealista questions now come back clean |
 
 ## Decisions
 
