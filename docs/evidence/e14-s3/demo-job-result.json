@@ -1,0 +1,109 @@
+{
+  "ms": 13101,
+  "steps": [
+    "Reading your topics",
+    "Looking under Boat repair",
+    "Looking under Cabin decision",
+    "Reading Boat repair",
+    "Reading Cabin decision",
+    "Checking the links of Cabin decision",
+    "Making 3 changes"
+  ],
+  "usage": {
+    "calls": 8,
+    "in": 6846,
+    "out": 261,
+    "cost": 0.0021030000000000003
+  },
+  "status": "done",
+  "plan": {
+    "title": "Split Boat and Cabin",
+    "summary": "Separated the boat repair and cabin decision into two distinct top-level topics and removed the incorrect link to the boat yard schedule from the cabin page.",
+    "search": "Boat repair",
+    "changes": [
+      {
+        "op": "rename",
+        "page": "Projects/Boat repair.md",
+        "name": "Boat repair",
+        "summary": "Boat hull repair notes."
+      },
+      {
+        "op": "root",
+        "page": "Projects/Cabin decision.md",
+        "name": "Cabin decision",
+        "kind": "long-term",
+        "summary": "Buying the cabin by the lake or not."
+      },
+      {
+        "op": "unlink",
+        "from": "Projects/Cabin decision.md",
+        "to": "2026-10-02#^e-222222"
+      }
+    ]
+  },
+  "touched": 6,
+  "changes": [
+    {
+      "what": "Topic renamed",
+      "before": "Boat and cabin",
+      "after": "Boat repair"
+    },
+    {
+      "what": "Cabin decision became its own topic",
+      "before": "Long-term › Boat repair › Cabin decision",
+      "after": "Long-term › Cabin decision"
+    },
+    {
+      "what": "A note line taken off Cabin decision, still filed elsewhere"
+    }
+  ],
+  "search": {
+    "query": "Boat repair",
+    "before": [
+      "Boat repair · Long-term memory › Boat and cabin",
+      "Cabin decision · Long-term memory › Boat and cabin › Cabin decision",
+      "Hull quotes · Long-term memory › Boat and cabin › Hull quotes",
+      "Yard schedule · Long-term memory › Boat and cabin › Yard schedule",
+      "The yard can start the boat in · Long-term memory › Boat and cabin › Cabin decision"
+    ],
+    "after": [
+      "Boat repair · Long-term memory › Boat repair",
+      "Hull quotes · Long-term memory › Boat repair › Hull quotes",
+      "Yard schedule · Long-term memory › Boat repair › Yard schedule",
+      "The yard can start the boat in · Long-term memory › Boat repair › Yard schedule"
+    ]
+  },
+  "revision": "443538b7fd9da714808045cc4129547a8c551a43",
+  "edits": [
+    {
+      "kind": "tree_replace",
+      "before": "- Boat and cabin | long-term | [[Projects/Boat repair]] | The boat hull repair and the cabin purchase decision.",
+      "after": "- Boat repair | long-term | [[Projects/Boat repair]] | Boat hull repair notes."
+    },
+    {
+      "kind": "tree_add",
+      "line": "- Cabin decision | long-term | [[Projects/Cabin decision]] | Buying the cabin by the lake or not. ^n-cfaf9750",
+      "group": "long-term"
+    },
+    {
+      "kind": "field",
+      "file": "Projects/Cabin decision.md",
+      "key": "parent",
+      "before": "\"[[Projects/Boat repair]]\"",
+      "after": "\"[[Tree]]\""
+    },
+    {
+      "kind": "field",
+      "file": "Projects/Cabin decision.md",
+      "key": "memory",
+      "before": null,
+      "after": "long-term"
+    },
+    {
+      "kind": "line_remove",
+      "file": "Projects/Cabin decision.md",
+      "line": "- 2026-10-02 · Yard can start in March [[2026-10-02#^e-222222]]",
+      "after": "- 2026-10-03 · Oakmere cabin survey booked [[2026-10-03#^e-333333]]"
+    }
+  ]
+}

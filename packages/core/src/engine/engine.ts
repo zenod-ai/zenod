@@ -69,6 +69,8 @@ import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } 
 import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
+import { lintTree } from "../vault/treeLint.js";
+import { applyDeskChanges, checkDeskChanges, checkDeskPlan, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
@@ -2951,6 +2953,115 @@ export function createEngine(options: EngineOptions): BrainEngine {
     return parseSendRoute(output, message) ?? ruleSendRoute(message);
   }
 
+  /** The desk's before and after search: the top five memories, each with its place in the tree. */
+  async function deskSearch(query: string): Promise<string[]> {
+    openMemoryIndex()?.markDirty();
+    const hits = await rankedSearch(query).catch(() => [] as Hit[]);
+    return hits.slice(0, 5).map((hit) => {
+      const title = hit.title || hit.path.split("/").pop()!.replace(/\.md(#.*)?$/, "");
+      return hit.treePath ? `${title} · ${hit.treePath}` : title;
+    });
+  }
+
+  /**
+   * EPIC-14 S3, the memory desk: a job on the memory. The agent reads first, outside the write
+   * lane (the chat model, step-capped, metered like every call); then, in the background lane like
+   * the weekly sweep, its plan is applied, checked (no words rewritten, nothing deleted, Log/
+   * untouched, tree lint no worse) and published as ONE commit. A plan touching more than
+   * maxTouched memories is put back and returned as needs_go for the person's yes.
+   */
+  async function deskJob(input: DeskJobInput): Promise<DeskJobResult> {
+    assertVault(repo);
+    const step = (text: string) => { try { input.onStep?.(text); } catch { /* progress is best effort */ } };
+    let plan = input.plan ?? null;
+    let agent = { steps: 0, inputChars: 0 };
+    if (!plan) {
+      if (!llm.streamMemoryChat) return { status: "refused", reason: "The memory desk needs Zenod's chat model, which is not set up here.", agent };
+      await syncForRead();
+      const outcome = await runDeskAgent({
+        request: input.request,
+        call: ({ system, prompt }) => {
+          reportTokenCost("ask", [system, prompt], undefined, "memory_desk");
+          return llm.streamMemoryChat!({ system, prompt }, () => {});
+        },
+        tools: deskReadTools(vaultPath, (query) => rankedSearch(query)),
+        check: (plan) => checkDeskPlan(vaultPath, plan),
+        ...(input.maxSteps ? { maxSteps: input.maxSteps } : {}),
+        onStep: step,
+        ...(input.assertActive ? { assertActive: input.assertActive } : {}),
+      });
+      agent = { steps: outcome.steps, inputChars: outcome.inputChars };
+      if (outcome.status === "refused") return { status: "refused", reason: outcome.reason, agent };
+      plan = outcome.plan;
+    }
+    const approved = plan;
+    const maxTouched = input.maxTouched ?? DESK_MAX_TOUCHED;
+    step(`Making ${approved.changes.length} change${approved.changes.length === 1 ? "" : "s"}`);
+    const result = await queue.run(async (): Promise<DeskJobResult> => {
+      input.assertActive?.();
+      await assertNoInterruptedFiling();
+      if ((await repo.pendingChanges()).length > 0) throw new Error("desk_dirty_worktree");
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      const query = approved.search || approved.title;
+      const before = await deskSearch(query);
+      const treeBefore = await buildTreeIndex(vaultPath);
+      const errorsOf = async () => (await lintTree(vaultPath)).issues.filter((issue) => issue.severity === "error").length;
+      const lintBefore = await errorsOf();
+      const writes = new TrackedWrites(vaultPath);
+      try {
+        const { edits, views } = await applyDeskChanges(vaultPath, approved.changes, writes);
+        const changes = await repo.pendingChanges();
+        if (changes.length === 0) return { status: "nothing", reason: "Your memory is already filed that way. Nothing changed.", plan: approved, agent };
+        const problems = [...checkDeskChanges(changes), ...checkEvidenceImmutability(changes).map((entry) => `${entry.path}: ${entry.message}`)];
+        const lintAfter = await errorsOf();
+        if (lintAfter > lintBefore) problems.push(`the tree would have ${lintAfter - lintBefore} more problem${lintAfter - lintBefore === 1 ? "" : "s"}`);
+        if (problems.length > 0) throw new DeskChangeError(`The desk stopped before changing anything: ${problems.slice(0, 3).join("; ")}`);
+        const touched = await deskTouched(treeBefore, vaultPath, writes.paths);
+        if (touched > maxTouched) {
+          await writes.revert();
+          await repo.discardChanges().catch(() => {});
+          return { status: "needs_go", plan: approved, changes: views, touched, agent };
+        }
+        input.assertActive?.();
+        const revision = await repo.commitAndPublish(`memory desk: ${approved.title}`);
+        return { status: "done", plan: approved, edits, changes: views, touched, search: { query, before, after: [] }, revision, agent };
+      } catch (error) {
+        await writes.revert();
+        await repo.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+    if (result.status === "done") result.search.after = await deskSearch(result.search.query);
+    return result;
+  }
+
+  /** Undo a desk job: each of its edits put back (a line changed since is left alone), as ONE commit. */
+  async function undoDeskJob(input: { title: string; edits: DeskEdit[] }): Promise<DeskUndoResult> {
+    assertVault(repo);
+    return queue.run(async (): Promise<DeskUndoResult> => {
+      await assertNoInterruptedFiling();
+      if ((await repo.pendingChanges()).length > 0) throw new Error("desk_dirty_worktree");
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      const writes = new TrackedWrites(vaultPath);
+      try {
+        const { undone, skipped } = await undoDeskEdits(vaultPath, input.edits, writes);
+        const changes = await repo.pendingChanges();
+        if (changes.length === 0) return { revision: null, undone, skipped };
+        const restoring = new Set(input.edits.flatMap((edit) => (edit.kind === "line_remove" ? [edit.line] : [])));
+        const problems = [...checkDeskChanges(changes, restoring), ...checkEvidenceImmutability(changes).map((entry) => `${entry.path}: ${entry.message}`)];
+        if (problems.length > 0) throw new DeskChangeError(`Undo stopped before changing anything: ${problems.slice(0, 3).join("; ")}`);
+        const revision = await repo.commitAndPublish(`memory desk: undo ${input.title}`);
+        return { revision, undone, skipped };
+      } catch (error) {
+        await writes.revert();
+        await repo.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+  }
+
   /**
    * E9-3c host fallback: search the question's content words, then read the best
    * relevant hit (a page placed in the tree first) through the ask's own tracked
@@ -3700,6 +3811,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
     ask,
     answerFromMemories,
     routeSend,
+    deskJob,
+    undoDeskJob,
     chat,
     handleTasking,
     work,

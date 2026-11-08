@@ -46,3 +46,8 @@
 @media (prefers-reduced-motion: reduce) {
   .zi-item, .zi-step i { animation: none; }
 }
+/* EPIC-14 S3: "Ask the desk", the way to start a job on the memory from the inbox. */
+.zi-ask { display: flex; flex-direction: column; gap: 0.45rem; padding-bottom: 0.9rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--zp-line); }
+.zi-askhead { font: 500 1.05rem var(--zp-serif); margin: 0; }
+.zi-ask input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: 400 1rem / 1.4 var(--zp-sans); color: var(--zp-ink); padding: 0.3rem 0; }
+.zi-ask input::placeholder { color: var(--zp-muted); }

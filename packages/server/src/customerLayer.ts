@@ -79,6 +79,8 @@ import {
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
 import { registerPersonaRoutes } from "./personaRoutes.js";
+import { inboxFor } from "./inboxStore.js";
+import { DeskLimitError, startDeskJob } from "./memoryDesk.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1523,6 +1525,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
         const engine = await runtime.getEngine();
         const route = await routeSendMessage(engine, message);
         await send({ type: "route", route });
+        // EPIC-14 S3: a job on the memory goes to the memory desk and shows in the inbox at once.
+        // "unsure" asks first in the app ("keep it, or do it as a job?"); nothing runs on a guess.
+        if (route.action === "job" && route.job) {
+          try {
+            const item = startDeskJob(inboxFor(runtime), runtime.taskJobQueue, route.job);
+            await send({ type: "desk", item: { id: item.id, title: item.title, status: item.status, step: item.step } });
+          } catch (error) {
+            const message = error instanceof DeskLimitError ? error.message : "The memory desk could not take that just now. Try again in a moment.";
+            if (!(error instanceof DeskLimitError)) console.warn(`[memory-desk] job not started for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+            await send({ type: "desk", error: "desk unavailable", message });
+          }
+        }
         if (route.keep) {
           try {
             const job = runtime.taskJobQueue.enqueue("store", { content: route.keep, source: "web" }, memoryKeepIdempotencyKey(tenantId, route.keep));

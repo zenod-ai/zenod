@@ -6,6 +6,7 @@ import {
   clearInboxExamples,
   dismissInbox,
   markInboxSeen,
+  askInboxDesk,
   readInbox,
   setInboxCount,
   showInboxExamples,
@@ -320,6 +321,63 @@ function InboxCard({
   )
 }
 
+/**
+ * "Ask the desk" (EPIC-14 S3): the way to start a worker on your memory from the inbox. The job
+ * shows below at once as Working, then Done with what changed and Undo.
+ */
+function AskDesk({ onStarted }: { onStarted: (change: InboxChange) => void }) {
+  const [text, setText] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  async function submit() {
+    const request = text.trim()
+    if (!request || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      onStarted(await askInboxDesk(request))
+      setText("")
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form
+      className="zi-ask"
+      aria-label="Ask the desk"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void submit()
+      }}
+    >
+      <p className="zi-askhead">Ask the desk</p>
+      <div className="zp-compose">
+        <input
+          aria-label="A job for the memory desk"
+          placeholder="A job on your memory, like “Untangle Idealista and Poly-Maker”"
+          value={text}
+          maxLength={600}
+          onChange={(event) => setText(event.target.value)}
+        />
+        <button type="submit" className="zp-send" disabled={!text.trim() || busy}>
+          Start the job
+        </button>
+      </div>
+      <p className="zp-hint">
+        The desk re-files, splits, joins, moves and relinks your topics. It
+        never rewrites your words or deletes, and every job can be undone.
+      </p>
+      {error ? (
+        <p className="zi-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 export function MemoryInbox({ active = true }: { active?: boolean }) {
   const [state, setState] = React.useState<State>({ kind: "loading" })
   const [busy, setBusy] = React.useState(false)
@@ -383,6 +441,14 @@ export function MemoryInbox({ active = true }: { active?: boolean }) {
     setInboxCount(change.needsYou)
   }, [])
 
+  const onStarted = React.useCallback((change: InboxChange) => {
+    setState((previous) => ({
+      kind: "ready",
+      items: [change.item, ...(previous.kind === "ready" ? previous.items.filter((item) => item.id !== change.item.id) : [])],
+    }))
+    setInboxCount(change.needsYou)
+  }, [])
+
   async function examples(show: boolean) {
     setBusy(true)
     try {
@@ -415,6 +481,7 @@ export function MemoryInbox({ active = true }: { active?: boolean }) {
       </div>
       <div className="zp-stage">
         <div className="zp-screen zi-screen">
+          {state.kind !== "error" ? <AskDesk onStarted={onStarted} /> : null}
           {state.kind === "loading" ? (
             <p className="zp-empty">Opening your inbox…</p>
           ) : state.kind === "error" ? (
@@ -425,8 +492,8 @@ export function MemoryInbox({ active = true }: { active?: boolean }) {
             <div className="zi-empty">
               <p className="zp-empty">Nothing needs you.</p>
               <p className="zp-hint">
-                When a helper asks something or finishes a job, it shows up
-                here. Want to see what that looks like?
+                When a helper asks something or the desk finishes a job, it
+                shows up here. Want to see what that looks like?
               </p>
               <button
                 type="button"

@@ -65,6 +65,9 @@ export const dismissInbox = (id: string) =>
   api<InboxChange>(itemPath(id, "dismiss"), { method: "POST" })
 export const undoInbox = (id: string) =>
   api<InboxChange>(itemPath(id, "undo"), { method: "POST" })
+/** "Ask the desk" (EPIC-14 S3): start a memory desk job; it is in the inbox at once as Working. */
+export const askInboxDesk = (request: string) =>
+  api<InboxChange>("/api/console/memory-desk/jobs", { method: "POST", body: { request } })
 export const showInboxExamples = () =>
   api<InboxList>(`${BASE}/examples`, { method: "POST" })
 export const clearInboxExamples = () =>

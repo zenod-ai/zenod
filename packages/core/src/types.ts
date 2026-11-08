@@ -542,6 +542,13 @@ export interface BrainEngine {
    */
   routeSend?(message: string): Promise<import("./llm/sendRoute.js").SendRoute>;
   /**
+   * The memory desk (EPIC-14 S3): a job on the memory, done by a step-capped agent on the chat model
+   * and published as ONE commit that never rewrites words or deletes. Big jobs return needs_go.
+   */
+  deskJob?(input: import("./engine/memoryDesk.js").DeskJobInput): Promise<import("./engine/memoryDesk.js").DeskJobResult>;
+  /** Undo a desk job: its edits put back, as ONE commit. */
+  undoDeskJob?(input: { title: string; edits: import("./engine/memoryDesk.js").DeskEdit[] }): Promise<import("./engine/memoryDesk.js").DeskUndoResult>;
+  /**
    * Full conversational turn: ask + optional store, with conversation memory.
    * Pass onDelta to stream the answer text, onToolEvent to surface tool
    * start/end activity (the chat "calling a tool…" indicator). `conversationKey`

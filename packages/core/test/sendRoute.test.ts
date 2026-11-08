@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { guardSendRoute, isQuestionClause, parseSendRoute, ruleSendRoute, sendRoutePrompt } from "../src/llm/sendRoute.js";
+import { guardSendRoute, isQuestionClause, parseSendRoute, ruleSendRoute, sendRoutePrompt, looksLikeDeskJob } from "../src/llm/sendRoute.js";
 
 // EPIC-16 E16-B1: one Send button. Zenod decides from the content whether to keep, answer, or both,
 // and a question is never kept.
@@ -63,5 +63,38 @@ describe("parseSendRoute guard (E16-B1)", () => {
   it("a route with nothing to do answers the message", () => {
     expect(guardSendRoute({ action: "keep", keep: null, question: null, by: "model" }, "hello")).toMatchObject({ action: "answer", question: "hello" });
     expect(sendRoutePrompt("x").prompt).toBe("MESSAGE\nx");
+  });
+});
+
+describe("the memory desk's job outcome (EPIC-14 S3)", () => {
+  const JOBS = [
+    "Idealista and Poly-Maker are tangled, they are two separate things, please split them",
+    "move the boiler notes under House",
+    "Can you merge the Flat and Apartment pages?",
+    "rename the Garden topic to Allotment",
+    "my cabin notes got mixed up with the boat",
+    "separa los temas de Idealista y Poly-Maker",
+  ];
+  const NOT_JOBS = [
+    "Can you move the couch on Saturday",
+    "We split the bill with Ana",
+    "Rename the company to Brightwater next year",
+    "what did I say about the boat?",
+    "remember to clean up the garage",
+  ];
+
+  it("the plain rules read a request to reorganise the memory, never a chore or a question", () => {
+    for (const message of JOBS) expect(looksLikeDeskJob(message), message).toBe(true);
+    for (const message of NOT_JOBS) expect(looksLikeDeskJob(message), message).toBe(false);
+  });
+
+  it("runs a job only when the model and the rules agree, asks when one of them is unsure", () => {
+    const message = JOBS[0]!;
+    expect(parseSendRoute(JSON.stringify({ keep: "", ask: "", job: message }), message)).toEqual({ action: "job", keep: null, question: null, job: message, by: "model" });
+    expect(parseSendRoute(JSON.stringify({ keep: message, ask: "" }), message)).toMatchObject({ action: "unsure", keep: null, job: message });
+    expect(parseSendRoute(JSON.stringify({ keep: "", ask: "", job: "tidy" }), "We split the bill with Ana")).toMatchObject({ action: "unsure", keep: null, question: null });
+    expect(ruleSendRoute(message)).toMatchObject({ action: "unsure", by: "rules" });
+    expect(ruleSendRoute("We split the bill with Ana")).toMatchObject({ action: "keep" });
+    expect(sendRoutePrompt(message).system).toContain("job:");
   });
 });

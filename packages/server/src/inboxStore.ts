@@ -93,6 +93,17 @@ export type InboxJobUpdate =
 /** Undo for a desk job (set by the memory desk, S3): puts the memory back, for example by reverting the job's commit. */
 export type InboxUndo = (item: InboxItem) => Promise<void>;
 
+/**
+ * What the memory desk (S3) plugs into a tenant's inbox: Undo for its jobs, the answers it owns
+ * (a plan card's yes, "run it?"; true when handled, so the answer is not filed as a note), and a
+ * look before listing (a job cut off by a restart is marked failed).
+ */
+export interface InboxDeskHooks {
+  undo: InboxUndo;
+  answer(item: InboxItem, optionId: string): boolean;
+  refresh?(store: InboxStore): void;
+}
+
 export class InboxError extends Error {
   constructor(readonly code: "not_found" | "invalid" | "conflict", message: string) {
     super(message);
@@ -178,6 +189,8 @@ export class InboxStore {
   private readonly db: DatabaseSync;
   private closed = false;
   private undo: InboxUndo | null = null;
+  private deskAnswer: InboxDeskHooks["answer"] | null = null;
+  private deskRefresh: InboxDeskHooks["refresh"] | null = null;
 
   constructor(path: string, private readonly now: () => Date = () => new Date()) {
     this.db = openZenodSqlite(path);
@@ -301,6 +314,23 @@ export class InboxStore {
     this.undo = undo;
   }
 
+  /** The memory desk's hooks (S3): Undo, the answers it owns, and a look before listing. */
+  setDeskHooks(hooks: InboxDeskHooks | null): void {
+    this.undo = hooks?.undo ?? null;
+    this.deskAnswer = hooks?.answer ?? null;
+    this.deskRefresh = hooks?.refresh ?? null;
+  }
+
+  /** True when the desk took this answer (it starts or cancels a job) instead of filing it. */
+  answerByDesk(item: InboxItem, optionId: string): boolean {
+    return this.deskAnswer ? this.deskAnswer(item, optionId) : false;
+  }
+
+  /** Let the desk settle its items before the inbox is shown. */
+  refresh(): void {
+    try { this.deskRefresh?.(this); } catch (error) { console.warn(`[inbox] desk refresh failed: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+
   /** Undo a finished job: puts the memory back, then marks the item undone. */
   async undoJob(id: string): Promise<InboxItem> {
     const item = this.require(id, "job");
@@ -348,10 +378,11 @@ const stores = new Map<string, InboxStore>();
  * The tenant's inbox, opened once per data directory. This is the internal API later steps call:
  * `inboxFor(runtime).post({ kind: "question", ... })`, `.updateJob(id, { status: "done", result })`.
  */
-export function inboxFor(runtime: { readonly dataDir: string }): InboxStore {
+export function inboxFor(runtime: { readonly dataDir: string; readonly inboxDeskHooks?: InboxDeskHooks }): InboxStore {
   let store = stores.get(runtime.dataDir);
   if (!store) {
     store = new InboxStore(join(runtime.dataDir, "inbox.sqlite"));
+    if (runtime.inboxDeskHooks) store.setDeskHooks(runtime.inboxDeskHooks);
     stores.set(runtime.dataDir, store);
   }
   return store;

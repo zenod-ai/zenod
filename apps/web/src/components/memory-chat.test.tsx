@@ -182,3 +182,80 @@ describe("memory chat helpers (E12-S1)", () => {
     expect(presentAnswer("Raw source report (not independently verified current state):\nAna.")).toContain("Raw source report")
   })
 })
+
+describe("MemoryChat and the memory desk (EPIC-14 S3)", () => {
+  const JOB = "Idealista and Poly-Maker are tangled, please split them"
+  const STARTED = { id: "j9", title: JOB, status: "working", step: "Waiting for its turn" }
+
+  it("a job message goes to the memory desk and points at the inbox; nothing is saved", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    sendText(JOB)
+    live.push({ type: "route", route: { action: "job", keep: null, question: null, job: JOB, by: "model" } })
+    live.push({ type: "desk", item: STARTED })
+    live.push({ type: "done" })
+    live.close()
+    await waitFor(() => expect(screen.getByTestId("memory-did").textContent).toBe("Passed to the memory desk · nothing saved"))
+    expect(screen.getByTestId("memory-desk").textContent).toContain("I passed it to the memory desk")
+    expect(screen.getByRole("link", { name: "Open the inbox" }).getAttribute("href")).toBe("#inbox")
+    expect(screen.queryByTestId("memory-kept")).toBeNull()
+  })
+
+  it("when unsure it asks, and Do it as a job starts the desk without keeping anything", async () => {
+    const live = streamFetch()
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const inner = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/console/memory-desk/jobs") return new Response(JSON.stringify({ item: STARTED, needsYou: 1 }), { status: 202 })
+      if (url === "/api/console/memory-keep") return new Response(JSON.stringify({ ...SAVED, status: "saving" }), { status: 202 })
+      return inner(url, init)
+    })
+    render(<MemoryChat />)
+    sendText("clean up my notes")
+    live.push({ type: "route", route: { action: "unsure", keep: null, question: null, job: "clean up my notes", by: "rules" } })
+    live.push({ type: "done" })
+    live.close()
+    await waitFor(() => expect(screen.getByTestId("memory-did").textContent).toBe("Waiting for you: keep it, or do it as a job"))
+    fireEvent.click(screen.getByRole("button", { name: "Do it as a job" }))
+    await waitFor(() => expect(screen.getByRole("link", { name: "Open the inbox" })).toBeTruthy())
+    expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/console/memory-desk/jobs" && JSON.parse(String((init as RequestInit).body)).request === "clean up my notes")).toBe(true)
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/console/memory-keep")).toBe(false)
+  })
+
+  it("when unsure, Keep it keeps the message as a memory and starts no job", async () => {
+    const live = streamFetch()
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const inner = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/console/memory-keep") return new Response(JSON.stringify(SAVED), { status: 202 })
+      return inner(url, init)
+    })
+    render(<MemoryChat />)
+    sendText("move my notes about the boat")
+    live.push({ type: "route", route: { action: "unsure", keep: null, question: null, job: "move my notes about the boat", by: "model" } })
+    live.push({ type: "done" })
+    live.close()
+    fireEvent.click(await screen.findByRole("button", { name: "Keep it" }))
+    await waitFor(() => expect(screen.getByTestId("memory-did").textContent).toBe("Kept as a new memory"))
+    expect(screen.queryByTestId("memory-desk")).toBeNull()
+    const keep = fetchMock.mock.calls.find(([url]) => url === "/api/console/memory-keep")!
+    expect(JSON.parse(String((keep[1] as RequestInit).body))).toEqual({ kind: "note", content: "move my notes about the boat" })
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/console/memory-desk/jobs")).toBe(false)
+  })
+
+  it("Ask the desk starts a job from what is written, and says what to write when it is empty", async () => {
+    const calls: string[] = []
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${url} ${String(init?.body ?? "")}`)
+      return new Response(JSON.stringify({ item: { ...STARTED, title: "Move boiler notes under House" }, needsYou: 1 }), { status: 202 })
+    }))
+    render(<MemoryChat />)
+    fireEvent.click(screen.getByRole("button", { name: "Ask the desk" }))
+    expect(screen.getByTestId("memory-desk-hint").textContent).toContain("Write what the desk should do")
+    expect(calls).toEqual([])
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Move boiler notes under House" } })
+    fireEvent.click(screen.getByRole("button", { name: "Ask the desk" }))
+    await waitFor(() => expect(screen.getByTestId("memory-desk").textContent).toContain("Move boiler notes under House"))
+    expect(calls).toEqual(['/api/console/memory-desk/jobs {"request":"Move boiler notes under House"}'])
+  })
+})

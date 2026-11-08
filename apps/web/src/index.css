@@ -247,6 +247,9 @@
 .zp button { font: 500 0.92rem var(--zp-sans); border-radius: 999px; padding: 0.38rem 1rem; cursor: pointer; transition: opacity 150ms ease; }
 .zp button:disabled { opacity: 0.45; cursor: default; }
 .zp-send { background: var(--zp-fill); color: var(--zp-accent-ink); border: 1px solid var(--zp-fill); }
+/* EPIC-14 S3: "Ask the desk" beside Send starts a job on the memory; the desk's choices in a reply. */
+.zp-deskbtn { background: transparent; color: var(--zp-accent); border: 1px solid var(--zp-accent); white-space: nowrap; }
+.zp-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
 .zp-compose { display: flex; gap: 0.5rem; align-items: center; border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.4rem 0.45rem 0.4rem 1.1rem; background: var(--zp-bg); }
 .zp-compose:focus-within { border-color: var(--zp-accent); }
 .zp-compose textarea { flex: 1; resize: none; border: 0; outline: none; background: transparent; font: 400 1rem / 1.4 var(--zp-sans); color: var(--zp-ink); padding: 0.3rem 0; max-height: 8rem; }
