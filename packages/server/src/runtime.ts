@@ -41,6 +41,7 @@ import {
   looksLikeDeskJob,
 } from "zenod";
 import { InboxError, inboxFor, type InboxDeskHooks } from "./inboxStore.js";
+import { channelTurn } from "./channelBrain.js";
 import { answerDeskQuestion, DeskLimitError, deskJobFailed, offerDeskJobFromChat, runDeskJob, settleDeskItems, undoDeskItem } from "./memoryDesk.js";
 import { aiAllowanceExhaustedMessage, nextUtcMonthlyReset } from "./customerMetering.js";
 import {
@@ -481,6 +482,16 @@ export class Runtime {
         offerDeskJobFromChat(inboxFor(this), job.id, job.input.content ?? "", looksLikeDeskJob);
       },
     });
+    // EPIC-20 A1: a typed WhatsApp message gets the cloud chat's brain; a desk job waits in the inbox.
+    this.taskJobQueue.setChannelBrain((job, engine) => channelTurn(engine, job.input.text ?? "", job.id, {
+      keep: (content) => this.taskJobQueue.enqueue("store", {
+        content, source: "whatsapp", contentType: "text",
+        ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
+      }, `whatsapp-keep:${job.idempotencyKey ?? job.id}`),
+      job: (id) => this.taskJobQueue.get(id),
+      offerJob: (captureId, request) => { offerDeskJobFromChat(inboxFor(this), captureId, request, () => true); },
+      appUrl: subscriberPublicBaseUrl(),
+    }));
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
