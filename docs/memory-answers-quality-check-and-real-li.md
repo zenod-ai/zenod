@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Q1 | Ticket worker | run_ff4ff9cf | Judge the latest real questions and answers, build the real-note test set, check digestion is triggered (E15-1..3) | active | none | `wt/e15-q1` | main | none | 2026-11-08 | dispatch |
+| Q1 | Ticket worker | run_ff4ff9cf-9ecb-4ca9-9327-92b9555247a0 — claimed 2026-11-08T15:55Z, lease until 2026-11-08T17:55Z | Judge the latest real questions and answers, build the real-note test set, check digestion is triggered (E15-1..3) | active | none | `wt/e15-q1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 
