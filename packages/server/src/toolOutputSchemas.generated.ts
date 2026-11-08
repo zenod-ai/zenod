@@ -1559,6 +1559,18 @@ export const TOOL_OUTPUT_SCHEMAS = (
               "items": {
                 "type": "string"
               }
+            },
+            "rank": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "matchPercent": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "appPath": {
+              "type": "string"
             }
           }
         }

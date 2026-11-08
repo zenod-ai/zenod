@@ -332,6 +332,10 @@ export interface Hit {
   treePath?: string;
   /** Tier-0 index hits only: which row kind matched (a Log hit's path is its exact evidence ref). */
   indexKind?: "page" | "log" | "root";
+  /** 1–100 match percentage relative to this question (vault/matchPercent.ts); tier-0 index hits only. */
+  matchPercent?: number;
+  /** Tier-0 index hits only: the page title or captured entry's title. */
+  title?: string;
 }
 
 export interface MemoryEntry {

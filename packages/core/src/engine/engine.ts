@@ -696,6 +696,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
             return {
               snippet: hit.snippet || hit.title,
               score: hit.score,
+              matchPercent: hit.matchPercent,
+              ...(hit.title ? { title: hit.title } : {}),
               ...sourceResolver(base!, anchor ? `^${anchor}` : undefined),
               path: hit.path,
               ...(hit.treePath ? { treePath: hit.treePath } : {}),

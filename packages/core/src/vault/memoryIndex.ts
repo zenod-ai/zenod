@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { parseLogCaptures } from "./captureOrigin.js";
 import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
+import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
 import { parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
 
@@ -66,6 +67,8 @@ export interface MemoryIndexHit {
   snippet: string;
   /** Positive relevance (negated bm25), higher is better. */
   score: number;
+  /** 1–100: half how much of the question it contains (rarity-weighted), half its strength vs the best hit (matchPercent.ts). */
+  matchPercent: number;
   /** `Working memory › House › Visits`; "" when the page (or the page a Log entry was filed on) is unplaced. */
   treePath: string;
   /** For a Log entry: the placed page it was filed on, when known. */
@@ -103,6 +106,14 @@ const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
 /** FTS5 MATCH expression: content words OR'd (prefix for longer words), plus alias phrases. */
 export function buildMatch(query: string, aliasGroups: readonly (readonly string[])[]): string | null {
+  return buildMatchTerms(query, aliasGroups).match;
+}
+
+/**
+ * The MATCH expression and, separately, one clause per content word of the query (aliases
+ * excluded): the words a hit's coverage is measured against.
+ */
+export function buildMatchTerms(query: string, aliasGroups: readonly (readonly string[])[]): { match: string | null; terms: string[] } {
   const normalized = normalize(query);
   const words = normalized.split(" ").filter(Boolean);
   let terms = [...new Set(words.filter((word) => !STOP_WORDS.has(word) && word.length >= 2))];
@@ -113,13 +124,14 @@ export function buildMatch(query: string, aliasGroups: readonly (readonly string
     const stem = term.length >= 5 && term.endsWith("s") ? term.slice(0, -1) : term;
     clauses.add(stem.length >= 4 ? `${quote(stem)}*` : quote(stem));
   }
+  const termClauses = [...clauses];
   const padded = ` ${normalized} `;
   for (const group of aliasGroups) {
     const members = group.map(normalize).filter(Boolean);
     if (!members.some((member) => padded.includes(` ${member} `))) continue;
     for (const member of members) if (!terms.includes(member)) clauses.add(quote(member));
   }
-  return clauses.size ? [...clauses].join(" OR ") : null;
+  return { match: clauses.size ? [...clauses].join(" OR ") : null, terms: termClauses };
 }
 
 const SNIPPET_CHARS = 200;
@@ -235,7 +247,7 @@ export class MemoryIndex {
   /** BM25-ranked hits, one per path, freshest index first. Empty when nothing matches. */
   async search(query: string, limit = MAX_HITS): Promise<MemoryIndexHit[]> {
     if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
-    const match = buildMatch(query, this.aliasGroups);
+    const { match, terms } = buildMatchTerms(query, this.aliasGroups);
     if (!match) return [];
     const rows = this.db.prepare(`
       SELECT rowid, kind, path, title, filed, lineage, bm25(docs, ${BM25_WEIGHTS}) AS rank
@@ -256,11 +268,34 @@ export class MemoryIndex {
     const texts = new Map((this.db.prepare(`SELECT rowid, summary, body FROM docs WHERE rowid IN (${picked.map(() => "?").join(", ")})`)
       .all(...picked.map((row) => row.rowid)) as Array<{ rowid: number; summary: string; body: string }>).map((row) => [row.rowid, row]));
     const words = matchWords(match);
-    return picked.map((row) => ({
+    const coverage = this.coverageOf(terms, picked.map((row) => row.rowid));
+    const topScore = -picked[0]!.rank;
+    const percents = monotonic(picked.map((row) => matchPercent({ score: -row.rank, topScore, coverage: coverage.get(row.rowid) ?? 0 })));
+    return picked.map((row, i) => ({
       path: row.path, kind: row.kind, title: row.title, snippet: snippetOf(texts.get(row.rowid), words),
-      score: Math.round(-row.rank * 100) / 100, treePath: row.lineage,
+      score: Math.round(-row.rank * 100) / 100,
+      matchPercent: percents[i]!,
+      treePath: row.lineage,
       ...(row.filed ? { filedOn: row.filed } : {}),
     }));
+  }
+
+  /** Rarity-weighted share (0..1) of the query's words each row contains, by the same FTS5 matching as the search. */
+  private coverageOf(terms: readonly string[], rowids: readonly number[]): Map<number, number> {
+    const out = new Map<number, number>(rowids.map((rowid) => [rowid, 0]));
+    if (terms.length === 0 || rowids.length === 0) return out;
+    const total = (this.db.prepare("SELECT count(*) AS n FROM docs").get() as { n: number }).n;
+    const countOf = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ?");
+    const among = this.db.prepare(`SELECT rowid FROM docs WHERE docs MATCH ? AND rowid IN (${rowids.map(() => "?").join(", ")})`);
+    let weightSum = 0;
+    for (const term of terms) {
+      const df = (countOf.get(term) as { n: number }).n;
+      const weight = idfOf(total, df);
+      weightSum += weight;
+      for (const row of among.all(term, ...rowids) as Array<{ rowid: number }>) out.set(row.rowid, out.get(row.rowid)! + weight);
+    }
+    if (weightSum > 0) for (const [rowid, sum] of out) out.set(rowid, sum / weightSum);
+    return out;
   }
 
   private serialize<T>(fn: () => Promise<T>): Promise<T> {

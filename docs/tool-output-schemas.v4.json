@@ -617,7 +617,10 @@
               "path": { "type": "string" },
               "placement": { "enum": ["placed", "unplaced"] },
               "lineage": { "type": "array", "items": { "$ref": "#/$defs/MemoryLineageNode" } },
-              "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+              "evidenceRefs": { "type": "array", "items": { "type": "string" } },
+              "rank": { "type": "integer", "minimum": 1 },
+              "matchPercent": { "type": "integer", "minimum": 1, "maximum": 100 },
+              "appPath": { "type": "string" }
             }
           }
         },

@@ -53,7 +53,12 @@ function consumeGithubReturn(): boolean {
   return true
 }
 
-function initialTabFromHash(): "channels" | "vault" | "account" | undefined {
+function initialTabFromHash():
+  | "channels"
+  | "vault"
+  | "account"
+  | "memory"
+  | undefined {
   if (
     window.location.hash === "#ring-router-products" ||
     window.location.hash === "#phylax-channels"
@@ -62,6 +67,12 @@ function initialTabFromHash(): "channels" | "vault" | "account" | undefined {
   }
   if (window.location.hash === "#vault") return "vault"
   if (window.location.hash === "#account") return "account"
+  // A memory's in-app link (E12-S3a): #memory?path=<vault path>
+  if (
+    window.location.hash === "#memory" ||
+    window.location.hash.startsWith("#memory?")
+  )
+    return "memory"
   return undefined
 }
 

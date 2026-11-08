@@ -32,6 +32,7 @@ import {
   protectedResourceMetadata,
   publicBaseUrl,
 } from "./oauth.js";
+import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
 import { mountSubscriberRoutes } from "./subscriberRoutes.js";
 import {
   appStatus,
@@ -2952,6 +2953,14 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
     if (!query) return c.json({ error: "q is required" }, 400);
     const engine = await runtime.getEngine();
     return c.json({ hits: await engine.search(query) });
+  });
+
+  // EPIC-12 E12-S3a: the top memories for a question with match percentage and links.
+  app.get("/api/memory/search", async (c) => {
+    const query = (c.req.query("q") ?? "").trim();
+    if (!query) return c.json({ error: "q is required" }, 400);
+    const engine = await runtime.getEngine();
+    return c.json(await rankMemories(engine, query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT)));
   });
 
   app.get("/api/note", async (c) => {
