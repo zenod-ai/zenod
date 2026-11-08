@@ -228,3 +228,6 @@ export const useTheme = () => {
 
   return context
 }
+
+/** Like useTheme, but returns undefined outside a ThemeProvider (isolated renders). */
+export const useOptionalTheme = () => React.useContext(ThemeProviderContext)

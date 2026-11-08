@@ -1,4 +1,5 @@
 import { ZenodLogo } from "@/components/zenod-logo"
+import { ThemeToggle } from "@/components/theme-toggle"
 import * as React from "react"
 import {
   CopyIcon,
@@ -275,17 +276,20 @@ export function HostedAccount() {
             </p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            void fetch("/auth/signout", { method: "POST" }).then(() =>
-              window.location.assign("/")
-            )
-          }}
-        >
-          <LogOutIcon data-icon="inline-start" />
-          Log out
-        </Button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            onClick={() => {
+              void fetch("/auth/signout", { method: "POST" }).then(() =>
+                window.location.assign("/")
+              )
+            }}
+          >
+            <LogOutIcon data-icon="inline-start" />
+            Log out
+          </Button>
+        </div>
       </header>
 
       {!account ? (
@@ -362,7 +366,10 @@ export function HostedAccount() {
             <Card className="rounded-none">
               <CardHeader>
                 <CardTitle>Your MCP endpoint</CardTitle>
-                <CardDescription>Add this URL in your agent, then sign in to Zenod and click Allow.</CardDescription>
+                <CardDescription>
+                  Add this URL in your agent, then sign in to Zenod and click
+                  Allow.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">

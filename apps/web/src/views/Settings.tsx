@@ -46,6 +46,7 @@ import { KeysTab } from "@/views/settings/KeysTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
 import { MemoryChat } from "@/components/memory-chat"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { MemoryNoteViewer } from "@/components/memory-note-viewer"
 import { memoryPathFromHash } from "@/lib/memory-chat"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
@@ -258,6 +259,7 @@ export function Settings({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <ThemeToggle />
           <Button asChild variant="ghost" size="sm">
             <a
               href={
