@@ -112,7 +112,7 @@ function Toggle({
         className={`relative inline-flex h-5 w-8 shrink-0 items-center rounded-full border transition-colors ${on ? "border-primary bg-primary" : "border-input bg-muted"}`}
       >
         <span
-          className={`absolute size-3.5 rounded-full bg-background shadow-sm transition-transform ${on ? "translate-x-3.5" : "translate-x-0.5"}`}
+          className={`absolute size-3.5 rounded-full bg-background ring-1 ring-border transition-transform ${on ? "translate-x-3.5" : "translate-x-0.5"}`}
         />
       </span>
       {on ? "On" : "Off"}
