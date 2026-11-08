@@ -48,7 +48,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| B1 | Ticket worker | run_68834ea4 | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | active | none | `wt/e16-b1` | main | none | 2026-11-08 | dispatch |
+| B1 | Ticket worker | run_68834ea4-ac9e-41b7-96a6-2ba7aa12a7e9 — claimed 2026-11-08T15:55Z, lease until 2026-11-08T17:55Z | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | active | none | `wt/e16-b1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 
