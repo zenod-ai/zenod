@@ -391,6 +391,22 @@ svg.zp-gcompact .zp-gcenter text { font-size: 25px; }
   .zp-glitedge { animation: none; opacity: 1; }
 }
 
+/* EPIC-18 W1: link strengths. Width, green and opacity come inline from strengthLook();
+   weak links (under 20 %) are dashed; a link's percent shows on hover or tap. */
+.zp-gweighted { opacity: 0; stroke-linecap: round; animation: zp-gweightin 600ms ease 400ms forwards; transition: stroke-width 150ms ease; }
+.zp-gweak { stroke-dasharray: 3 5; }
+.zp-gpicked { stroke: var(--zp-accent) !important; opacity: 1 !important; animation: none; }
+.zp-gedgehit { stroke: transparent; stroke-width: 14; cursor: pointer; }
+.zp-gstrength { font: 600 15px var(--zp-sans); fill: var(--zp-accent); paint-order: stroke; stroke: var(--zp-bg); stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+svg.zp-gcompact .zp-gstrength { font-size: 20px; }
+.zp-lstrength { display: inline-flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
+.zp-lstrength svg { display: inline-block; vertical-align: middle; overflow: visible; margin-right: 0.15rem; }
+.zp-gstr { color: var(--zp-accent); font-weight: 600; }
+@keyframes zp-gweightin { from { opacity: 0; } to { opacity: var(--o, 0.8); } }
+@media (prefers-reduced-motion: reduce) {
+  .zp-gweighted { animation: none; opacity: var(--o, 0.8); }
+}
+
 /* EPIC-14 E14-S1: the chat's voice note button and the recording bar that replaces the compose
    field while a note is recorded. */
 .zp-mic { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; padding: 0 !important; background: transparent; color: var(--zp-accent); border: 1px solid var(--zp-line); }

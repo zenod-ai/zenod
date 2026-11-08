@@ -12,6 +12,7 @@ import {
   lineageAbove,
   litFromHash,
   litHash,
+  strengthLook,
   type MemoryGraphNode,
   type MemoryGraphView,
 } from "@/lib/memory-graph"
@@ -269,5 +270,52 @@ describe("an answer lit up in the graph (E12-S13)", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Boiler" }))
     expect(window.location.hash).toBe(graphHash("Home/Boiler.md"))
     await waitFor(() => expect(screen.queryByTestId("lit-question")).toBeNull())
+  })
+})
+
+describe("link strengths in the graph (E18-W1)", () => {
+  const WEIGHTED: MemoryGraphView & { status: "ready" } = {
+    ...SHED,
+    edges: [
+      { from: "Areas/Garden.md", to: "Notes/Shed.md", kind: "tree", strength: 0.8 },
+      { from: "Notes/Shed.md", to: "Notes/Cedar.md", kind: "link", strength: 0.9 },
+      { from: "Notes/Plan.md", to: "Notes/Shed.md", kind: "link", strength: 0.12 },
+    ],
+  }
+
+  it("draws stronger links wider and greener, and weak ones dashed", () => {
+    const strong = strengthLook(0.9)
+    const mid = strengthLook(0.5)
+    const weak = strengthLook(0.12)
+    expect(strong.width).toBeGreaterThan(mid.width)
+    expect(mid.width).toBeGreaterThan(weak.width)
+    expect(strong.green).toBe(100)
+    expect(weak.green).toBe(0)
+    expect([strong.weak, mid.weak, weak.weak]).toEqual([false, false, true])
+  })
+
+  it("styles each line by its strength, shows the percent on tap, a strength key, and strengths in the panel", async () => {
+    mockFetch((url) =>
+      url.startsWith("/api/console/memory-graph") ? { body: WEIGHTED } : graphRoutes(url)
+    )
+    window.history.replaceState(null, "", `/${graphHash("Notes/Shed.md")}`)
+    const { container } = render(<MemoryGraph />)
+    const graph = await screen.findByRole("group", { name: /Memory graph: 4 memories shown/ })
+    const lines = [...graph.querySelectorAll("line.zp-gweighted")] as SVGLineElement[]
+    expect(lines).toHaveLength(3)
+    const weak = graph.querySelectorAll("line.zp-gweak")
+    expect(weak).toHaveLength(1)
+    const widths = lines.map((line) => Number(line.style.strokeWidth))
+    expect(Math.max(...widths)).toBe(strengthLook(0.9).width)
+    expect(graph.querySelector(".zp-gstrength")).toBeNull()
+    fireEvent.click(graph.querySelectorAll("line.zp-gedgehit")[1]!)
+    expect(graph.querySelector(".zp-gstrength")?.textContent).toBe("90%")
+    const legend = container.querySelector(".zp-legend")!
+    expect(legend.textContent).toContain("strong")
+    expect(legend.textContent).toContain("weak, under 20%")
+    expect(legend.textContent).not.toContain("links to")
+    const panel = await screen.findByLabelText("About Shed")
+    expect(panel.textContent).toContain("90%")
+    expect(panel.textContent).toContain("12%")
   })
 })

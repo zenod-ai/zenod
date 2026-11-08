@@ -102,10 +102,12 @@ describe("console memory graph route (E12-S2)", () => {
       const shed = await (await t.get(`/api/console/memory-graph?path=${encodeURIComponent("Notes/Shed.md")}`, t.ada)).json();
       expect(shed.center).toBe("Notes/Shed.md");
       expect(shed.nodes.find((node: { path: string }) => node.path === "Areas/Garden.md")).toMatchObject({ relation: "parent" });
-      expect(shed.edges).toContainEqual({ from: "Areas/Garden.md", to: "Notes/Shed.md", kind: "tree" });
+      expect(shed.edges).toContainEqual(expect.objectContaining({ from: "Areas/Garden.md", to: "Notes/Shed.md", kind: "tree" }));
+      // Each drawn edge carries its link strength (E18-W1 round 2).
+      for (const edge of shed.edges) expect(edge.strength).toBeGreaterThan(0);
 
       const boat = await (await t.get("/api/console/memory-graph?path=Boat", t.bob)).json();
-      expect(boat.edges).toEqual([{ from: "Notes/Boat.md", to: "Notes/Engine.md", kind: "link" }]);
+      expect(boat.edges).toEqual([expect.objectContaining({ from: "Notes/Boat.md", to: "Notes/Engine.md", kind: "link" })]);
       expect(JSON.stringify(boat)).not.toMatch(/Garden|Shed/);
       // Another tenant's page is simply not in your graph.
       expect((await t.get("/api/console/memory-graph?path=Garden", t.bob)).status).toBe(404);
@@ -128,7 +130,7 @@ describe("console memory graph route (E12-S2)", () => {
         { ref: "Boat", path: null },
       ]);
       expect(lit.nodes.filter((node: { relation: string }) => node.relation === "lit").map((node: { path: string }) => node.path)).toEqual(["Notes/Shed.md", "Areas/Garden.md"]);
-      expect(lit.edges).toContainEqual({ from: "Areas/Garden.md", to: "Notes/Shed.md", kind: "tree", lit: true });
+      expect(lit.edges).toContainEqual(expect.objectContaining({ from: "Areas/Garden.md", to: "Notes/Shed.md", kind: "tree", lit: true }));
       expect(JSON.stringify(lit)).not.toMatch(/Engine|Notes\/Boat/);
       const tooMany = Array.from({ length: 13 }, (_, i) => `lit=n${i}`).join("&");
       expect((await t.get(`/api/console/memory-graph?${tooMany}`, t.ada)).status).toBe(400);

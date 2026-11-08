@@ -33,8 +33,8 @@ export type MemoryGraphNode = {
 export type MemoryGraphEdge = {
   from: string
   to: string
-  /** filed: a lit Log entry to a page it was filed into. */
-  kind: "link" | "tree" | "filed"
+  /** filed: a lit Log entry to a page it was filed into. related: two pages that share notes (EPIC-18). */
+  kind: "link" | "tree" | "filed" | "related"
   /** On the way between memories the answer used (E12-S13). */
   lit?: boolean
   /** 0 to 1 once links carry a strength (EPIC-18). */
@@ -325,6 +325,44 @@ export function layoutLit(
     })
   })
   return view.nodes.map((node) => placed.get(node.path)!).filter(Boolean)
+}
+
+/** Below this strength a link is drawn dashed: a weak tie (EPIC-18 W1). */
+export const WEAK_LINK = 0.2
+
+/**
+ * How a link of this strength (0 to 1) is drawn: wider, darker and greener the stronger it is,
+ * from the faint grey of a weak tie to the deck's deep green; dashed below WEAK_LINK.
+ */
+export function strengthLook(strength: number): {
+  width: number
+  green: number
+  opacity: number
+  weak: boolean
+} {
+  const s = Math.max(0, Math.min(1, strength))
+  return {
+    width: Math.round((0.8 + 3.4 * s) * 100) / 100,
+    // Percent of the accent mixed into the faint grey: 0 at a weak tie, all green from 90 %.
+    green: Math.round(Math.max(0, Math.min(1, (s - WEAK_LINK) / 0.7)) * 100),
+    opacity: Math.round((0.45 + 0.55 * s) * 100) / 100,
+    weak: s < WEAK_LINK,
+  }
+}
+
+/** The strength of the link between two drawn memories, either way round, or null. */
+export function strengthBetween(
+  view: MemoryGraphView,
+  a: string,
+  b: string
+): number | null {
+  let best: number | null = null
+  for (const edge of view.edges) {
+    if (edge.strength === undefined) continue
+    if ((edge.from === a && edge.to === b) || (edge.from === b && edge.to === a))
+      best = Math.max(best ?? 0, edge.strength)
+  }
+  return best
 }
 
 /** "Working memory › House › Visits" without the last step (the node itself). */
