@@ -49,7 +49,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| U1 | Ticket worker | run_383b13fc | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | active | none | `wt/e19-u1` | main | none | 2026-11-08 | dispatch |
+| U1 | Ticket worker | run_383b13fc-f1bb-4852-a67f-8c7927016853 — claimed 2026-11-08T16:17Z, lease until 2026-11-08T18:17Z | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | active | none | `wt/e19-u1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 
