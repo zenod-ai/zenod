@@ -108,12 +108,39 @@ function KeepLine({ keep }: { keep: KeepState }) {
   )
 }
 
+/** Why a recent-note question shows a memory (E12-S3c): the note by time, then its place in the graph. */
+const RELATION_LABEL: Record<NonNullable<MemoryChatMemory["relation"]>, string> = {
+  note: "voice note, by time",
+  filed: "filed from the note",
+  linked: "linked",
+  parent: "its topic",
+  child: "under the top match",
+}
+
+function noteFlag(
+  memory: MemoryChatMemory,
+  noteLinks: MemoryChatAnswer["noteLinks"]
+): string | null {
+  if (memory.unlinked) {
+    const count = noteLinks?.unlinked
+      ? ` · ${noteLinks.unlinked} of your ${noteLinks.voiceNotes} voice notes are not`
+      : ""
+    return `not yet linked to topics${count}`
+  }
+  if (memory.unwritten) {
+    return `${memory.unwritten} ${memory.unwritten === 1 ? "topic" : "topics"} not yet written`
+  }
+  return null
+}
+
 function MemoryList({
   memories,
   alsoCited = [],
+  noteLinks,
 }: {
   memories: MemoryChatMemory[]
   alsoCited?: MemoryChatAnswer["alsoCited"]
+  noteLinks?: MemoryChatAnswer["noteLinks"]
 }) {
   return (
     <div className="zp-used" aria-label="Memories used">
@@ -136,6 +163,12 @@ function MemoryList({
             <span className="zp-pct">{memory.matchPercent}%</span>
             <span className="zp-meta">
               {memory.cited ? <b>cited</b> : null}
+              {memory.relation ? (
+                <span className="zp-rel">{RELATION_LABEL[memory.relation]}</span>
+              ) : null}
+              {noteFlag(memory, noteLinks) ? (
+                <span className="zp-unlinked">{noteFlag(memory, noteLinks)}</span>
+              ) : null}
               {memory.treePath ? <span>{memory.treePath}</span> : null}
               {memory.url ? (
                 <a href={memory.url} target="_blank" rel="noreferrer">
@@ -231,7 +264,11 @@ function AnswerTurn({
         ) : null}
       </div>
       {result.memories.length > 0 || result.alsoCited.length > 0 ? (
-        <MemoryList memories={result.memories} alsoCited={result.alsoCited} />
+        <MemoryList
+          memories={result.memories}
+          alsoCited={result.alsoCited}
+          noteLinks={result.noteLinks}
+        />
       ) : (
         <p className="zp-hint">No memory matched this question.</p>
       )}

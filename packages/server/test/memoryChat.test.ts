@@ -70,6 +70,36 @@ describe("answerFromMemory cited memories keep their percentage (E12-S3c)", () =
   });
 });
 
+describe("every cited memory shows a percentage, recent notes show their link state (E12-S3c round 2)", () => {
+  it("scores a cited memory the ranked list never reached and places it by its percentage", async () => {
+    const engine = fakeEngine("gamma");
+    const asked: string[][] = [];
+    engine.matchPercentsFor = async (_question, paths) => {
+      asked.push([...paths]);
+      return { "Log/2026-11-01.md#^e-gamma": 72 };
+    };
+    const result = await answerFromMemory(engine, "gamma plans");
+    expect(asked).toEqual([["Log/2026-11-01.md#^e-gamma"]]);
+    expect(result.alsoCited).toEqual([]);
+    const cited = result.memories.find((memory) => memory.path === "Log/2026-11-01.md#^e-gamma");
+    expect(cited).toMatchObject({ cited: true, matchPercent: 72, kind: "log" });
+    const percents = result.memories.map((memory) => memory.matchPercent);
+    expect(percents).toEqual([...percents].sort((a, b) => b - a));
+  });
+
+  it("adds the voice-note link count when the list shows a note ranked by time", async () => {
+    const engine = fakeEngine("delta");
+    const note = hit("Log/2026-11-08.md#^e-5c0e11", 0, { matchPercent: 100, relation: "note", unlinked: true, indexKind: "log", title: "Latest note" });
+    engine.searchTimed = async () => ({ hits: [note], tier: "index" as const, ms: 1 });
+    engine.memoryNoteLinks = async () => ({ voiceNotes: 45, unlinked: 12, partial: 3, unlinkedPaths: [] });
+    const result = await answerFromMemory(engine, "what was in my last vn?");
+    expect(result.memories[0]).toMatchObject({ relation: "note", unlinked: true, matchPercent: 100 });
+    expect(result.noteLinks).toEqual({ voiceNotes: 45, unlinked: 12 });
+    const plain = await answerFromMemory(fakeEngine("delta"), "delta plans");
+    expect(plain.noteLinks).toBeUndefined();
+  });
+});
+
 describe("answerFromMemory (E12-S1)", () => {
   it("answers with the top 5 ranked memories, marks the cited ones and lists other citations once", async () => {
     const engine = fakeEngine("alpha");

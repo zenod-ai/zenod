@@ -28,6 +28,14 @@ export interface RankedMemory {
   appPath: string;
   treePath: string;
   kind: "page" | "log" | "root" | "note";
+  /** Recent-note questions (E12-S3c): the note itself, or a page it was filed into, links to, or their tree parent. */
+  relation?: NonNullable<Hit["relation"]>;
+  /** For a filed/linked/parent memory: the note it connects to. */
+  via?: string;
+  /** For a note: not yet linked to any topic page. */
+  unlinked?: boolean;
+  /** For a note: topics its filing planned but never wrote. */
+  unwritten?: number;
 }
 
 export interface RankedMemories {
@@ -63,6 +71,10 @@ export async function rankMemories(engine: BrainEngine, query: string, limit = R
     appPath: hit.appPath,
     treePath: hit.treePath ?? "",
     kind: hit.indexKind ?? "note",
+    ...(hit.relation ? { relation: hit.relation } : {}),
+    ...(hit.via ? { via: hit.via } : {}),
+    ...(hit.unlinked ? { unlinked: true } : {}),
+    ...(hit.unwritten ? { unwritten: hit.unwritten } : {}),
   }));
   return { query, tier: timed.tier, ms: Math.round((performance.now() - started) * 10) / 10, results };
 }

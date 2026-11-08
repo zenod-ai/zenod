@@ -704,6 +704,10 @@ export function createEngine(options: EngineOptions): BrainEngine {
               path: hit.path,
               ...(hit.treePath ? { treePath: hit.treePath } : {}),
               indexKind: hit.kind,
+              ...(hit.relation ? { relation: hit.relation } : {}),
+              ...(hit.via ? { via: hit.via } : {}),
+              ...(hit.unlinked ? { unlinked: true } : {}),
+              ...(hit.unwritten ? { unwritten: hit.unwritten } : {}),
             };
           }) };
         }
@@ -3509,6 +3513,16 @@ export function createEngine(options: EngineOptions): BrainEngine {
         throw missing;
       }
       return view;
+    },
+    matchPercentsFor: async (query: string, paths: readonly string[]) => {
+      assertVault(repo);
+      const index = openMemoryIndex();
+      return index ? Object.fromEntries(await index.matchFor(query, paths)) : {};
+    },
+    memoryNoteLinks: async () => {
+      assertVault(repo);
+      const index = openMemoryIndex();
+      return index ? index.noteLinks() : null;
     },
     rebuildMemoryIndex: async () => {
       assertVault(repo);

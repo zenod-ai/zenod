@@ -42,8 +42,13 @@ export interface MemoryChatAnswer {
   answer: string;
   /** Top memories for the question, in rank order, each with its match percentage and links. */
   memories: MemoryChatMemory[];
-  /** Sources the answer cites that are not among the top memories. */
+  /** Sources the answer cites that are not among the top memories (only when the engine cannot score them). */
   alsoCited: MemoryChatSource[];
+  /**
+   * A recent-note question (E12-S3c): how many of the person's voice notes are tied to a topic page,
+   * so a note shown "not yet linked to topics" is put in proportion. Absent for other questions.
+   */
+  noteLinks?: { voiceNotes: number; unlinked: number };
   ms: number;
   /**
    * How the answer was made and checked (E12-S1b): "quoted" when every citation's quote was found in
@@ -95,7 +100,8 @@ export async function streamAnswerFromMemory(
       .map((memory) => ({ ...memory, cited: cited.has(memory.path) }))
       .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited);
   handlers.onMemories?.(shownMemories(new Set()));
-  if (!engine.answerFromMemories) return askAnswer(engine, question, started, ranked.results);
+  const noteLinks = await noteLinksFor(engine, ranked.results);
+  if (!engine.answerFromMemories) return { ...(await askAnswer(engine, question, started, ranked.results)), ...noteLinks };
   if (ranked.results.length === 0) {
     return { question, answered: false, answer: NON_ANSWER_TEXT.none, memories: [], alsoCited: [], ms: Math.round(performance.now() - started), checkedBy: "quoted" };
   }
@@ -104,7 +110,7 @@ export async function streamAnswerFromMemory(
     ranked.results.slice(0, MEMORY_CHAT_CONTEXT).map((memory) => ({ n: memory.rank, path: memory.path, title: memory.title, snippet: memory.snippet })),
     handlers.onText,
   );
-  if (!check) return askAnswer(engine, question, started, ranked.results);
+  if (!check) return { ...(await askAnswer(engine, question, started, ranked.results)), ...noteLinks };
   const citedPaths = new Set(ranked.results.filter((memory) => check.cited.includes(memory.rank)).map((memory) => memory.path));
   const memories = shownMemories(check.checked ? citedPaths : new Set());
   return {
@@ -115,7 +121,15 @@ export async function streamAnswerFromMemory(
     alsoCited: [],
     ms: Math.round(performance.now() - started),
     checkedBy: "quoted",
+    ...noteLinks,
   };
+}
+
+/** The voice-note link count, only when the list shows a note ranked by time (E12-S3c). */
+async function noteLinksFor(engine: BrainEngine, ranked: readonly RankedMemory[]): Promise<{ noteLinks?: { voiceNotes: number; unlinked: number } }> {
+  if (!engine.memoryNoteLinks || !ranked.some((memory) => memory.relation === "note")) return {};
+  const links = await engine.memoryNoteLinks().catch(() => null);
+  return links ? { noteLinks: { voiceNotes: links.voiceNotes, unlinked: links.unlinked } } : {};
 }
 
 export function answerFromMemory(engine: BrainEngine, question: string): Promise<MemoryChatAnswer> {
@@ -125,10 +139,10 @@ export function answerFromMemory(engine: BrainEngine, question: string): Promise
 /** S1's answer: the read-only ask loop next to the ranked memories (engines without a chat model). */
 async function askAnswer(engine: BrainEngine, question: string, started: number, ranked: RankedMemory[]): Promise<MemoryChatAnswer> {
   const answer = await askOnce(engine, question);
-  return { ...fromAsk(question, answer, ranked, started), checkedBy: "ask" };
+  return { ...(await fromAsk(engine, question, answer, ranked, started)), checkedBy: "ask" };
 }
 
-function fromAsk(question: string, answer: Answer, ranked: RankedMemory[], started: number): MemoryChatAnswer {
+async function fromAsk(engine: BrainEngine, question: string, answer: Answer, ranked: RankedMemory[], started: number): Promise<MemoryChatAnswer> {
   const nonAnswer = askNonAnswer(answer.text);
   const cited = new Set(answer.sources.map((source) => basePath(source.path)));
   // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage.
@@ -137,12 +151,31 @@ function fromAsk(question: string, answer: Answer, ranked: RankedMemory[], start
     .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited);
   const shown = new Set(memories.map((memory) => basePath(memory.path)));
   const alsoCited: MemoryChatSource[] = [];
+  const unranked: SourceRef[] = [];
   for (const source of answer.sources as SourceRef[]) {
     const path = basePath(source.path);
     if (shown.has(path)) continue;
     shown.add(path);
-    alsoCited.push({ path, title: titleOf(path), url: source.url, appPath: memoryAppPath(path) });
+    unranked.push(source);
   }
+  // A cited memory the ranked list did not reach still shows its own percentage, in rank order (E12-S3c).
+  const percents = unranked.length && engine.matchPercentsFor
+    ? await engine.matchPercentsFor(question, unranked.map((source) => source.path)).catch(() => ({} as Record<string, number>))
+    : {};
+  for (const source of unranked) {
+    const path = basePath(source.path);
+    const percent = percents[source.path] ?? percents[path];
+    if (percent === undefined) {
+      alsoCited.push({ path, title: titleOf(path), url: source.url, appPath: memoryAppPath(path) });
+      continue;
+    }
+    memories.push({
+      rank: ranked.length + memories.length + 1, path: source.path, title: titleOf(path), snippet: "", matchPercent: percent,
+      url: source.url, provider: source.provider, appPath: memoryAppPath(source.path), treePath: "",
+      kind: path.startsWith("Log/") ? "log" : "page", cited: true,
+    });
+  }
+  memories.sort((a, b) => b.matchPercent - a.matchPercent || a.rank - b.rank);
   return {
     question,
     answered: nonAnswer === null,

@@ -18,6 +18,8 @@ export interface LogCapture {
   date: string;
   anchor: string;
   source: string | null;
+  /** `- content-type:` when recorded (`voice_note`/`audio` for a voice note, E12-S3c). */
+  contentType?: string | null;
   title: string;
   content: string;
   origin: CaptureOrigin;
@@ -96,12 +98,12 @@ const HEADING_RE = /^## (\d{2}:\d{2}) (.*?)\s+\^(e-[0-9a-f]{6})\s*$/;
 /** Parse one `Log/YYYY-MM-DD.md` file into its entries. */
 export function parseLogCaptures(date: string, raw: string): LogCapture[] {
   const out: LogCapture[] = [];
-  let current: { anchor: string; title: string; source: string | null; content: string[] } | null = null;
+  let current: { anchor: string; title: string; source: string | null; contentType: string | null; content: string[] } | null = null;
   const flush = () => {
     if (!current) return;
     const content = current.content.join("\n").trim();
     out.push({
-      key: `${date}#^${current.anchor}`, date, anchor: current.anchor, source: current.source, title: current.title, content,
+      key: `${date}#^${current.anchor}`, date, anchor: current.anchor, source: current.source, contentType: current.contentType, title: current.title, content,
       origin: captureOrigin(current.source, `${current.title}\n${content}`),
     });
   };
@@ -109,11 +111,12 @@ export function parseLogCaptures(date: string, raw: string): LogCapture[] {
     const heading = HEADING_RE.exec(line);
     if (heading) {
       flush();
-      current = { anchor: heading[3]!, title: heading[2]!, source: null, content: [] };
+      current = { anchor: heading[3]!, title: heading[2]!, source: null, contentType: null, content: [] };
       continue;
     }
     if (!current) continue;
     if (line.startsWith("- source: ")) current.source = line.slice("- source: ".length).trim();
+    else if (line.startsWith("- content-type: ")) current.contentType = line.slice("- content-type: ".length).trim();
     else if (line.startsWith("> ")) current.content.push(line.slice(2));
   }
   flush();

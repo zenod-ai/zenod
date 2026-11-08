@@ -158,6 +158,33 @@ export class MemoryGraph {
     return this.targets.get(key) ?? this.targets.get(key.split("/").at(-1)!) ?? null;
   }
 
+  /** Pages that name this node as their tree parent, sorted by path. */
+  childrenOf(path: string): string[] {
+    return [...(this.nodes.get(path)?.children ?? [])].sort();
+  }
+
+  /** Pages this node links to, sorted by path. */
+  linksOf(path: string): string[] {
+    return [...(this.nodes.get(path)?.out ?? [])].sort();
+  }
+
+  /** The tree parent of a node (a root's is Tree.md), or null. */
+  parentOf(path: string): string | null {
+    return this.nodes.get(path)?.parent ?? null;
+  }
+
+  /** Steps from Tree.md down to the node (a root is 1), 0 when unplaced. */
+  depthOf(path: string): number {
+    let depth = 0;
+    const seen = new Set<string>();
+    for (let at = this.nodes.get(path)?.parent ?? null; at && !seen.has(at); at = this.nodes.get(at)?.parent ?? null) {
+      seen.add(at);
+      depth++;
+      if (at === TREE_PATH) return depth;
+    }
+    return 0;
+  }
+
   degreeOf(path: string): number {
     return this.nodes.get(path)?.neighbours.size ?? 0;
   }

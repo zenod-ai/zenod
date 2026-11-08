@@ -12,6 +12,12 @@ export type MemoryChatMemory = {
   appPath: string
   treePath: string
   cited: boolean
+  /** Recent-note questions (E12-S3c): the note itself, or a page it was filed into, links to, or their parent. */
+  relation?: "note" | "filed" | "linked" | "parent" | "child"
+  /** For a note: not yet linked to any topic page. */
+  unlinked?: boolean
+  /** For a note: topics its filing planned but never wrote. */
+  unwritten?: number
 }
 
 export type MemoryChatSource = {
@@ -33,6 +39,8 @@ export type MemoryChatAnswer = {
   ms: number
   /** "quoted": every citation's quote was found in its memory (E12-S1b); "ask": the ask loop's check. */
   checkedBy?: "quoted" | "ask"
+  /** Recent-note questions (E12-S3c): how many voice notes are tied to a topic page. */
+  noteLinks?: { voiceNotes: number; unlinked: number }
 }
 
 export type MemoryChatStreamHandlers = {
