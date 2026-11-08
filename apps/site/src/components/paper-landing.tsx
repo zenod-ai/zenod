@@ -19,6 +19,7 @@ import whatsappScene from "@/scenes/whatsapp.html?raw";
 import graphScene from "@/scenes/graph.html?raw";
 import retrievalScreen from "@/scenes/retrieval-screen.html?raw";
 import retrievalResults from "@/scenes/retrieval-results.html?raw";
+import constellationScene from "@/scenes/constellation.html?raw";
 import log from "@/assets/shots/log.webp";
 import logPhone from "@/assets/shots/log-phone.webp";
 import page from "@/assets/shots/page.webp";
@@ -61,6 +62,17 @@ const WHATSAPP_HTML = { __html: whatsappScene };
 const GRAPH_HTML = { __html: graphScene };
 const RETRIEVAL_SCREEN_HTML = { __html: retrievalScreen };
 const RETRIEVAL_RESULTS_HTML = { __html: retrievalResults };
+const CONSTELLATION_HTML = { __html: constellationScene };
+
+// The constellation walk (EPIC-18 W2): what stays above 80% when strengths
+// multiply along each path, in the order the scene lights it, and what fades.
+const CONSTELLATION_KEPT = [
+  { name: "Leo", sum: "1", at: 4800 },
+  { name: "Saturday morning", sum: "1 × 0.9 = 0.9", at: 5500 },
+  { name: "Ana’s drill", sum: "1 × 0.9 × 0.9 = 0.81", at: 6200 },
+  { name: "Garden shed", sum: "0.9", at: 6900 },
+  { name: "Cedar boards", sum: "1 × 0.9 × 0.95 = 0.855", at: 7600 },
+];
 
 function Nav({ customer }: { customer: PaperCustomer }) {
   return (
@@ -216,6 +228,54 @@ const GraphSection = React.memo(function GraphSection() {
         <span>Large dark nodes are topics</span>
       </p>
       <p className="pp-fine">Coming. A mockup of the graph view with demo memories.</p>
+    </section>
+  );
+});
+
+// One thought as a constellation of weighted links, then a retrieval at 80%
+// that follows the strong paths (EPIC-18 W2). Live since e7840bf: weighted
+// links and path retrieval rank the app's answers and the memory_cloud tool.
+const ConstellationSection = React.memo(function ConstellationSection() {
+  return (
+    <section className="pp-cst scene" id="constellation" data-len="14000" aria-labelledby="constellation-title">
+      <div className="pp-cst-stage">
+        <p className="pp-cst-pill st" data-at="3600">Bring back what stays above 80%</p>
+        <div dangerouslySetInnerHTML={CONSTELLATION_HTML} />
+      </div>
+      <div className="pp-say">
+        <p className="pp-tags">
+          <Tag live>Live</Tag>
+        </p>
+        <h2 id="constellation-title">Every thought links to others, and each link has a strength.</h2>
+        <p>
+          Zenod is a librarian that keeps an index of your memory and connects
+          it. A voice note filed on a page is a strong link. A passing mention
+          is a faint one.
+        </p>
+        <p>
+          When you ask, Zenod follows the links from the best match and
+          multiplies their strengths along the way. Whatever stays above 80%
+          comes back, even three steps away, so the strong paths bring back
+          what matters without reading everything.
+        </p>
+        <ol className="pp-cst-walk">
+          {CONSTELLATION_KEPT.map((row) => (
+            <li key={row.name} className="st" data-at={row.at}>
+              <span>{row.name}</span>
+              <span>{row.sum}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="pp-cst-out st" data-at="7900">
+          Left out, below 0.8: Timber yard receipt 0.77, Home 0.68, Leo’s
+          birthday 0.6, Lisbon trip 0.3, Weather forecast 0.05.
+        </p>
+        <p className="pp-fine">
+          Live. Answers in the Zenod app are ranked this way today, and
+          connected AI tools can ask for the cloud around any memory. Strengths
+          come from how each note was filed and linked. Demo memories.
+        </p>
+      </div>
     </section>
   );
 });
@@ -442,6 +502,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
             </p>
           </Showcase>
           <GraphSection />
+          <ConstellationSection />
         </div>
 
         <div className="pp-agents">
