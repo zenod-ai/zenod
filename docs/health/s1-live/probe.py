@@ -63,9 +63,12 @@ def parse_ts(s: str | None) -> dt.datetime | None:
     return (base - sign * dt.timedelta(hours=hh, minutes=mm)).replace(tzinfo=UTC)
 
 
-def sh(cmd: list[str], timeout: int = 60, stdin: str | None = None) -> str:
+def sh(cmd: list[str], timeout: int = 60, stdin: str | None = None, stderr: bool = False) -> str:
+    """stdout of `cmd`, "" on any failure; stderr=True merges stderr in (`docker logs` replays a container's
+    stderr on its own stderr, and Zenod logs failed jobs with console.error: ZAL-A11)."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=stdin)
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT if stderr else subprocess.PIPE,
+                           text=True, timeout=timeout, input=stdin)
         return r.stdout
     except Exception:
         return ""
@@ -118,6 +121,24 @@ PHYLAX_SVC = "app-index-back-end-panel-6zm3qg"
 RUNNER_APPS = ("epaminon", "callisthenes", "ring", "herald", "zenod-cloud-test")
 
 
+def log_spans(cont: dict | None, past: list[dict], since: dt.datetime, until: dt.datetime) -> list[tuple[str, str, str]]:
+    """(container id, --since, --until) per container of one service whose log overlaps [since, until], oldest
+    first: the exited containers Docker still keeps, then the running one. ZAL-A11: reading only the running
+    container restarted every "since" clock at each roll; on 2026-11-08 production rolled about every 20 min while
+    every save failed from 16:14Z, so the 1 h stall rule never saw an hour of failures and no alert went out."""
+    spans = []
+    for c in sorted(past, key=lambda c: parse_ts(c["startedAt"]) or since):
+        start, end = parse_ts(c.get("startedAt")), parse_ts(c.get("finishedAt"))
+        if not start or not end or end < since:
+            continue
+        spans.append((c["id"], iso(max(since, start - dt.timedelta(seconds=1))),
+                      iso(min(until, end + dt.timedelta(seconds=1)))))
+    if cont:
+        start = parse_ts(cont["startedAt"]) or since
+        spans.append((cont["id"], iso(max(since, start - dt.timedelta(seconds=1))), iso(until)))
+    return spans
+
+
 def remote() -> dict:
     out: dict = {"at": iso(now())}
     sudo = ["sudo", "-n"]
@@ -126,6 +147,7 @@ def remote() -> dict:
     ids = sh(sudo + ["docker", "ps", "-aq", "--no-trunc"]).split()
     fmt = "{{.Id}}|{{.Name}}|{{.RestartCount}}|{{.HostConfig.Memory}}|{{.HostConfig.NanoCpus}}|{{json .State}}"
     conts = {}
+    past: dict[str, list[dict]] = {}
     if ids:
         for line in sh(sudo + ["docker", "inspect", "--format", fmt] + ids).splitlines():
             parts = line.split("|", 5)
@@ -138,6 +160,9 @@ def remote() -> dict:
                     if st.get("Running"):
                         conts[svc] = {"id": parts[0], "restarts": int(parts[2]), "startedAt": st.get("StartedAt"),
                                       "running": True}
+                    else:
+                        past.setdefault(svc, []).append({"id": parts[0], "startedAt": st.get("StartedAt"),
+                                                         "finishedAt": st.get("FinishedAt")})
     out["containers"] = {k: {kk: vv for kk, vv in v.items() if kk != "id"} for k, v in conts.items()}
 
     # dokploy wrapper: non-secret listing only
@@ -152,19 +177,16 @@ def remote() -> dict:
     until = iso(t_now)
 
     def logs(svc: str, since: dt.datetime) -> list[tuple[dt.datetime, str]]:
-        c = conts.get(svc)
-        if not c:
-            return []
-        start = parse_ts(c["startedAt"]) or since
-        s = max(since, start - dt.timedelta(seconds=1))
-        raw = sh(sudo + ["docker", "logs", "--since", iso(s), "--until", until, "--timestamps", c["id"]], timeout=90)
         res = []
-        for line in raw.splitlines():
-            ts, _, rest = line.partition(" ")
-            t = parse_ts(ts)
-            if t:
-                res.append((t, rest))
-        return res
+        for cid, s, u in log_spans(conts.get(svc), past.get(svc, []), since, t_now):
+            raw = sh(sudo + ["docker", "logs", "--since", s, "--until", u, "--timestamps", cid], timeout=90,
+                     stderr=True)
+            for line in raw.splitlines():
+                ts, _, rest = line.partition(" ")
+                t = parse_ts(ts)
+                if t:
+                    res.append((t, rest))
+        return sorted(res, key=lambda x: x[0])   # stdout and stderr arrive as two streams
 
     day = t_now - dt.timedelta(hours=24)
     week = t_now - dt.timedelta(days=7)
