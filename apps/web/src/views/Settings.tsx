@@ -12,6 +12,7 @@ import {
   MessageCircleIcon,
   MessagesSquareIcon,
   WaypointsIcon,
+  InboxIcon,
   PlugZapIcon,
   Settings2Icon,
   UserRoundIcon,
@@ -49,6 +50,8 @@ import { ChatTab } from "@/views/ChatTab"
 import { MemoryChat } from "@/components/memory-chat"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { MemoryGraph } from "@/components/memory-graph"
+import { MemoryInbox } from "@/components/memory-inbox"
+import { useInboxCount } from "@/lib/inbox"
 import { MemoryNoteViewer } from "@/components/memory-note-viewer"
 import { memoryPathFromHash } from "@/lib/memory-chat"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
@@ -68,6 +71,7 @@ import type { ZenodEdition } from "@/views/zenod-edition"
 const SECTION_ICONS = {
   chat: MessagesSquareIcon,
   graph: WaypointsIcon,
+  inbox: InboxIcon,
   overview: GaugeIcon,
   memory: NetworkIcon,
   connect: PlugZapIcon,
@@ -171,6 +175,8 @@ export function Settings({
         setSection("chat")
       } else if (window.location.hash.startsWith("#graph")) {
         setSection("graph")
+      } else if (window.location.hash === "#inbox") {
+        setSection("inbox")
       }
     }
     window.addEventListener("hashchange", onHash)
@@ -182,6 +188,7 @@ export function Settings({
     window.history.replaceState(null, "", window.location.pathname + window.location.search)
   }, [])
   const subscribersAvailability = useSubscribersAvailability()
+  const inboxCount = useInboxCount(edition === "hosted")
   const isRing = overview?.unit?.name === "ring"
   const isHerald = overview?.unit?.name === "herald"
   const isCouncilUnit = isRing || isHerald
@@ -362,6 +369,14 @@ export function Settings({
                   <TabsTrigger key={id} value={id}>
                     <Icon />
                     {label}
+                    {id === "inbox" && inboxCount > 0 ? (
+                      <span
+                        className="ml-0.5 rounded-full bg-[#1f4d3a] px-1.5 text-[11px] leading-[18px] font-semibold text-[#f6f2e9] tabular-nums dark:bg-[#2d6a4e]"
+                        aria-label={`${inboxCount} need you`}
+                      >
+                        {inboxCount}
+                      </span>
+                    ) : null}
                     {id === "subscribers" ? (
                       <span className="text-[10px] font-normal text-muted-foreground">new</span>
                     ) : null}
@@ -374,6 +389,11 @@ export function Settings({
           </TabsContent>
           <TabsContent value="graph" className="mt-4">
             {edition === "hosted" ? <MemoryGraph /> : null}
+          </TabsContent>
+          <TabsContent value="inbox" className="mt-4">
+            {edition === "hosted" ? (
+              <MemoryInbox active={section === "inbox"} />
+            ) : null}
           </TabsContent>
           <TabsContent value="overview" className="mt-4">
             <ZenodOverview

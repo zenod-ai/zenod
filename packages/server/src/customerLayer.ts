@@ -67,6 +67,7 @@ import {
   routeSendMessage,
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
+import { registerInboxRoutes } from "./inboxRoutes.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1604,6 +1605,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);
       return c.json({ error: "not_found" }, 404);
     }
+  });
+
+  // EPIC-14 S2: the inbox of persona questions, findings and memory desk jobs, for the signed-in
+  // customer's own tenant only (inboxRoutes.ts).
+  registerInboxRoutes(app, async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return { response: c.json({ error: "no_account" }, 404) };
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
+    return { runtime, tenantId: account.tenant_id };
   });
 
   if (capabilities.managedAiApplication) {

@@ -27,6 +27,7 @@ describe("Zenod dashboard navigation", () => {
     expect(dashboardSectionsForEdition("hosted").map(({ id }) => id)).toEqual([
       "chat",
       "graph",
+      "inbox",
       "overview",
       "memory",
       "connect",
@@ -40,6 +41,8 @@ describe("Zenod dashboard navigation", () => {
       dashboardSectionsForEdition("self-hosted").map(({ id }) => id)
     ).toEqual(["overview", "connect", "subscribers", "channels", "vault", "usage", "settings"])
     expect(dashboardSectionForTab("subscribers", "hosted")).toBe("subscribers")
+    expect(dashboardSectionForTab("inbox", "hosted")).toBe("inbox")
+    expect(dashboardSectionForTab("inbox", "self-hosted")).toBe("overview")
   })
 
   it("does not expose product or transport internals as navigation", () => {
