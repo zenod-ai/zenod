@@ -166,6 +166,37 @@ describe("memory desk routes (EPIC-14 S3)", { timeout: 30_000 }, () => {
     }
   });
 
+  it("the reply box sends a follow-up to the desk: a new job linked to the first, and on a plan card it replaces the plan", async () => {
+    let next: () => Promise<DeskJobResult> = async () => DONE;
+    const deskJob = vi.fn(async () => next());
+    const t = await setup({ deskJob });
+    try {
+      const { item } = await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "split boat and cabin" })).json();
+      await t.settled(t.ada, item.id);
+      const sent = await t.call("POST", `/api/console/inbox/${item.id}/reply`, t.ada, { text: "Also move the Yard quotes to Boat repair" });
+      expect(sent.status).toBe(200);
+      const body = await sent.json();
+      expect(body.item.replies).toMatchObject([{ kind: "followup", text: "Also move the Yard quotes to Boat repair", followUpItemId: body.followUp.id }]);
+      expect(body.followUp).toMatchObject({ kind: "job", status: "working", title: "Also move the Yard quotes to Boat repair", followUpOf: { id: item.id, title: item.title } });
+      await t.settled(t.ada, body.followUp.id);
+      expect(deskJob).toHaveBeenCalledTimes(2);
+      expect((deskJob.mock.calls[1] as unknown as [DeskJobInput])[0].request).toBe(`Also move the Yard quotes to Boat repair\n\nFollow-up to the job "${item.title}"`);
+      expect((await t.call("POST", `/api/console/inbox/${item.id}/reply`, t.bob, { text: "x" })).status).toBe(404);
+
+      next = async () => ({ status: "needs_go", plan: PLAN, changes: [], touched: 80, agent: { steps: 2, inputChars: 1 } });
+      const big = (await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "move all notes under House" })).json()).item;
+      await t.settled(t.ada, big.id, (candidate) => (candidate.step ?? "").startsWith("Waiting for your yes"));
+      const card = (await t.list(t.ada)).find((candidate) => candidate.kind === "question")!;
+      next = async () => DONE;
+      const instead = await (await t.call("POST", `/api/console/inbox/${card.id}/reply`, t.ada, { text: "Only the kitchen notes" })).json();
+      expect(instead.item).toMatchObject({ status: "answered", answer: { optionId: "no" }, replies: [{ kind: "followup", text: "Only the kitchen notes" }] });
+      expect(await t.settled(t.ada, big.id)).toMatchObject({ status: "failed", step: "Not run: you said not now. Nothing changed." });
+      expect(instead.followUp.followUpOf.id).toBe(card.id);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("Not now on a plan card ends the job with nothing changed; refusals and failures say why", async () => {
     let next: () => Promise<DeskJobResult> = async () => ({ status: "needs_go", plan: PLAN, changes: [], touched: 80, agent: { steps: 2, inputChars: 1 } });
     const t = await setup({ deskJob: vi.fn(async () => next()) });

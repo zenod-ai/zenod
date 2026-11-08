@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import {
+  INBOX_REPLY_MAX_CHARS,
   InboxError,
   inboxAnswerContent,
   inboxFor,
@@ -7,7 +8,7 @@ import {
   postInboxExamples,
   type InboxItem,
 } from "./inboxStore.js";
-import { DESK_REQUEST_MAX_CHARS, DeskLimitError, startDeskJob, type DeskQueue } from "./memoryDesk.js";
+import { DESK_FROM, DESK_REQUEST_MAX_CHARS, DeskLimitError, startDeskJob, type DeskQueue } from "./memoryDesk.js";
 
 /**
  * The inbox's web routes (EPIC-14 S2). The tenant comes from the signed-in session only: the
@@ -97,6 +98,66 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
       }
       return c.json({ item: view(inbox.answer(item.id, option.id, savedJobId)), needsYou: inbox.needsYouCount() });
     } catch (error) {
+      return failure(c, error);
+    }
+  });
+
+  // EPIC-14 S2 round 3: the reply box on every card, like Epic Team's feedback box. A persona's
+  // question: an answer in your own words, filed into the memory like a button's. A finding:
+  // feedback kept on the card, read by that persona on its next run. A desk job, or one of the
+  // desk's own questions: a follow-up, which starts a new desk job linked to this one (a desk
+  // question is first answered "Not now", so its plan does not also run).
+  app.post("/api/console/inbox/:id/reply", async (c) => {
+    const found = await resolve(c);
+    if ("response" in found) return found.response;
+    const body = await c.req.json<{ text?: unknown }>().catch(() => ({}) as { text?: unknown });
+    const words = typeof body.text === "string" ? body.text.trim() : "";
+    if (!words) return c.json({ error: "invalid", message: "Write a few words first." }, 400);
+    if (words.length > INBOX_REPLY_MAX_CHARS) return c.json({ error: "invalid", message: `Keep it under ${INBOX_REPLY_MAX_CHARS} characters.` }, 400);
+    const inbox = inboxFor(found.runtime);
+    const done = (id: string) => c.json({ item: view(inbox.get(id)!), needsYou: inbox.needsYouCount() });
+    try {
+      const item = inbox.get(c.req.param("id"));
+      if (!item) throw new InboxError("not_found", "no such inbox item");
+      if (item.kind === "finding") {
+        inbox.addReply(item.id, { kind: "feedback", text: words, readAt: null });
+        return done(item.id);
+      }
+      const toDesk = item.kind === "job" || item.from === DESK_FROM;
+      if (item.kind === "question" && item.status !== "open") throw new InboxError("conflict", "this question is already answered");
+      if (!toDesk) {
+        let savedJobId: string | null = null;
+        if (!item.example) {
+          const block = found.runtime.aiAllowanceBlock();
+          if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
+          savedJobId = found.runtime.taskJobQueue.enqueue(
+            "store",
+            { content: inboxAnswerContent(item, words), source: "web" },
+            `${found.tenantId}:inbox-answer:${item.id}`,
+          ).id;
+        }
+        inbox.answerInWords(item.id, words, savedJobId);
+        return done(item.id);
+      }
+      // To the desk. Examples start nothing: the words are kept on the card only.
+      if (item.example) {
+        if (item.kind === "question") inbox.answerInWords(item.id, words);
+        else inbox.addReply(item.id, { kind: "followup", text: words, followUpItemId: null });
+        return done(item.id);
+      }
+      const block = found.runtime.aiAllowanceBlock();
+      if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
+      const queue = found.runtime.taskJobQueue;
+      if (!queue.get || !queue.recent) return c.json({ error: "desk_unavailable", message: "The memory desk is not available here." }, 409);
+      const about = item.kind === "job" ? `Follow-up to the job "${item.title}"` : `Instead of: "${item.body ?? item.title}"`;
+      const request = `${words}\n\n${about}`.slice(0, DESK_REQUEST_MAX_CHARS);
+      const next = startDeskJob(inbox, queue as DeskQueue, request);
+      inbox.linkFollowUp(next.id, item);
+      if (item.kind === "question" && inbox.answerByDesk(item, "no")) inbox.answer(item.id, "no", null);
+      inbox.addReply(item.id, { kind: "followup", text: words, followUpItemId: next.id });
+      return c.json({ item: view(inbox.get(item.id)!), followUp: view(inbox.get(next.id)!), needsYou: inbox.needsYouCount() });
+    } catch (error) {
+      if (error instanceof DeskLimitError) return c.json({ error: "desk_limit", message: error.message }, 429);
       return failure(c, error);
     }
   });

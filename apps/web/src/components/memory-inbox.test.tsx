@@ -11,7 +11,7 @@ import { setInboxCount, useInboxCount, type InboxItem } from "@/lib/inbox"
 
 const base = {
   body: null, options: [], recommended: null, answer: null, links: [], step: null, result: null,
-  example: false, createdAt: "2026-11-08T18:00:00Z", updatedAt: "2026-11-08T18:00:00Z", seenAt: null, needsYou: true,
+  replies: [], followUpOf: null, example: false, createdAt: "2026-11-08T18:00:00Z", updatedAt: "2026-11-08T18:00:00Z", seenAt: null, needsYou: true,
 }
 
 const QUESTION: InboxItem = {
@@ -112,21 +112,59 @@ describe("MemoryInbox", () => {
   })
 })
 
-describe("Ask the desk in the inbox (EPIC-14 S3)", () => {
-  it("is there even when the inbox is empty, and the job shows at once as Working", async () => {
-    const started: InboxItem[] = []
-    const job = { ...WORKING, id: "j7", title: "Untangle Idealista and Poly-Maker", step: "Waiting for its turn" }
-    const calls = mockFetch((url) => {
-      if (url !== "/api/console/memory-desk/jobs") return { items: started, needsYou: started.length }
-      started.push(job)
-      return { item: job, needsYou: 1 }
-    })
+describe("one chat, and a reply box on every card (EPIC-14 S2 round 3)", () => {
+  it("has no chat of its own: a new desk job is written in the Chat tab", async () => {
+    mockFetch(() => ({ items: [], needsYou: 0 }))
     render(<MemoryInbox />)
     await waitFor(() => expect(screen.getByText("Nothing needs you.")).toBeTruthy())
-    fireEvent.change(screen.getByRole("textbox", { name: "A job for the memory desk" }), { target: { value: "Untangle Idealista and Poly-Maker" } })
-    fireEvent.click(screen.getByRole("button", { name: "Start the job" }))
-    await waitFor(() => expect(screen.getByText("Untangle Idealista and Poly-Maker")).toBeTruthy())
-    expect(screen.getByText(/Waiting for its turn/)).toBeTruthy()
-    expect(calls.find((call) => call.url === "/api/console/memory-desk/jobs")).toMatchObject({ method: "POST", body: { request: "Untangle Idealista and Poly-Maker" } })
+    expect(screen.queryByRole("textbox")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Start the job" })).toBeNull()
+    expect(screen.getByRole("link", { name: "Chat" }).getAttribute("href")).toBe("#chat")
+  })
+
+  it("answers a question in words, sends feedback to a persona, and a follow-up to the desk", async () => {
+    let items: InboxItem[] = [QUESTION, FINDING, DONE]
+    const followUp: InboxItem = { ...WORKING, id: "j9", title: "Also move Yard quotes", step: "Waiting for its turn", followUpOf: { id: "j2", title: "Split two topics" } }
+    const calls = mockFetch((url, init) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {}
+      const at = "2026-11-08T18:05:00Z"
+      if (url === "/api/console/inbox/q1/reply") {
+        const item = { ...QUESTION, status: "answered" as const, answer: { optionId: "words", label: body.text, at, savedJobId: "s1" }, replies: [{ kind: "answer" as const, text: body.text, at }] }
+        items = items.map((x) => (x.id === "q1" ? item : x))
+        return { item, needsYou: 2 }
+      }
+      if (url === "/api/console/inbox/f1/reply") {
+        const item = { ...FINDING, replies: [{ kind: "feedback" as const, text: body.text, at, readAt: null }] }
+        items = items.map((x) => (x.id === "f1" ? item : x))
+        return { item, needsYou: 1 }
+      }
+      if (url === "/api/console/inbox/j2/reply") {
+        const item = { ...DONE, replies: [{ kind: "followup" as const, text: body.text, at, followUpItemId: "j9" }] }
+        items = [followUp, ...items.map((x) => (x.id === "j2" ? item : x))]
+        return { item, followUp, needsYou: 1 }
+      }
+      return { items, needsYou: items.length }
+    })
+    render(<MemoryInbox />)
+    await waitFor(() => expect(screen.getByText("Join Flat and Apartment?")).toBeTruthy())
+    expect(screen.getAllByRole("textbox")).toHaveLength(3)
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Or answer in your own words" }), { target: { value: "Join them under Home" } })
+    fireEvent.click(screen.getByRole("button", { name: "Send answer" }))
+    await waitFor(() => expect(screen.getByText(/You answered “Join them under Home”/)).toBeTruthy())
+    expect(calls.find((call) => call.url === "/api/console/inbox/q1/reply")).toMatchObject({ method: "POST", body: { text: "Join them under Home" } })
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Feedback for Night reader/ }), { target: { value: "I booked it yesterday" } })
+    fireEvent.click(screen.getByRole("button", { name: "Send feedback" }))
+    await waitFor(() => expect(screen.getByText("Sent. Night reader reads it on its next run.")).toBeTruthy())
+    expect(screen.getByText("“I booked it yesterday”")).toBeTruthy()
+    expect((screen.getByRole("textbox", { name: /Feedback for Night reader/ }) as HTMLTextAreaElement).value).toBe("")
+
+    const desk = screen.getAllByRole("textbox", { name: "A follow-up or a correction for the desk" })
+    fireEvent.change(desk[desk.length - 1]!, { target: { value: "Also move Yard quotes" } })
+    fireEvent.click(screen.getAllByRole("button", { name: "Send to the desk" }).at(-1)!)
+    await waitFor(() => expect(screen.getByText(/Sent to the desk as a new job/)).toBeTruthy())
+    expect(screen.getByText("Also move Yard quotes")).toBeTruthy()
+    expect(screen.getByText(/Follows up/)).toBeTruthy()
   })
 })

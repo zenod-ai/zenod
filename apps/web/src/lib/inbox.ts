@@ -14,6 +14,16 @@ export type InboxStatus =
   | "failed"
   | "undone"
 
+/** What you wrote back on a card (EPIC-14 S2 round 3). */
+export type InboxReply = {
+  kind: "answer" | "feedback" | "followup"
+  text: string
+  at: string
+  savedJobId?: string | null
+  followUpItemId?: string | null
+  readAt?: string | null
+}
+
 export type InboxItem = {
   id: string
   kind: InboxKind
@@ -39,6 +49,8 @@ export type InboxItem = {
     /** The job was a question: summary is the answer, nothing changed. */
     answer?: boolean
   } | null
+  replies: InboxReply[]
+  followUpOf: { id: string; title: string } | null
   example: boolean
   createdAt: string
   updatedAt: string
@@ -47,7 +59,12 @@ export type InboxItem = {
 }
 
 export type InboxList = { items: InboxItem[]; needsYou: number }
-export type InboxChange = { item: InboxItem; needsYou: number }
+export type InboxChange = {
+  item: InboxItem
+  needsYou: number
+  /** A follow-up sent to the desk: the new job it started. */
+  followUp?: InboxItem
+}
 
 const BASE = "/api/console/inbox"
 const itemPath = (id: string, action: string) =>
@@ -67,9 +84,9 @@ export const dismissInbox = (id: string) =>
   api<InboxChange>(itemPath(id, "dismiss"), { method: "POST" })
 export const undoInbox = (id: string) =>
   api<InboxChange>(itemPath(id, "undo"), { method: "POST" })
-/** "Ask the desk" (EPIC-14 S3): start a memory desk job; it is in the inbox at once as Working. */
-export const askInboxDesk = (request: string) =>
-  api<InboxChange>("/api/console/memory-desk/jobs", { method: "POST", body: { request } })
+/** The reply box on a card: an answer in words, feedback to a persona, or a follow-up for the desk. */
+export const replyInbox = (id: string, text: string) =>
+  api<InboxChange>(itemPath(id, "reply"), { method: "POST", body: { text } })
 export const showInboxExamples = () =>
   api<InboxList>(`${BASE}/examples`, { method: "POST" })
 export const clearInboxExamples = () =>

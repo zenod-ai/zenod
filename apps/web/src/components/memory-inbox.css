@@ -46,8 +46,22 @@
 @media (prefers-reduced-motion: reduce) {
   .zi-item, .zi-step i { animation: none; }
 }
-/* EPIC-14 S3: "Ask the desk", the way to start a job on the memory from the inbox. */
-.zi-ask { display: flex; flex-direction: column; gap: 0.45rem; padding-bottom: 0.9rem; margin-bottom: 0.4rem; border-bottom: 1px solid var(--zp-line); }
-.zi-askhead { font: 500 1.05rem var(--zp-serif); margin: 0; }
-.zi-ask input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: 400 1rem / 1.4 var(--zp-sans); color: var(--zp-ink); padding: 0.3rem 0; }
-.zi-ask input::placeholder { color: var(--zp-muted); }
+/* EPIC-14 S2 round 3: each card's reply box, like Epic Team's feedback box. Square and quiet, so it
+   reads as a note on the card, not a second chat (the Chat tab's round Send box is the one chat). */
+.zi-reply { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.2rem; max-width: 64ch; }
+.zi-reply textarea { width: 100%; box-sizing: border-box; min-height: 2.6rem; resize: vertical; border: 1px solid var(--zp-line); border-radius: 6px; background: var(--zp-bg); padding: 0.45rem 0.6rem; font: 400 0.95rem / 1.4 var(--zp-sans); color: var(--zp-ink); outline: none; }
+.zi-reply textarea:focus { border-color: var(--zp-accent); }
+.zi-reply textarea::placeholder { color: var(--zp-muted); }
+.zi-replyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 0.8rem; }
+.zi-replyrow .zp-hint { margin: 0; }
+.zi-replies { list-style: none; margin: 0; padding: 0 0 0 0.8rem; border-left: 2px solid var(--zp-line); display: flex; flex-direction: column; gap: 0.45rem; max-width: 64ch; }
+.zi-said { margin: 0; font-size: 0.86rem; color: var(--zp-muted); display: flex; flex-wrap: wrap; gap: 0.1rem 0.4rem; }
+.zi-said b { font-weight: 600; color: var(--zp-ink); }
+.zi-said span { flex-basis: 100%; font-size: 0.95rem; color: var(--zp-ink); }
+.zi-sent { margin: 0; font-size: 0.86rem; color: var(--zp-accent); }
+.zi-sent::before { content: "✓ "; }
+.zi-follows { margin: 0; font-size: 0.88rem; color: var(--zp-muted); }
+@media (max-width: 640px) {
+  .zi-reply textarea { min-height: 3.8rem; }
+  .zi-replyrow .zp-keep { margin-left: auto; }
+}

@@ -6,13 +6,14 @@ import {
   clearInboxExamples,
   dismissInbox,
   markInboxSeen,
-  askInboxDesk,
   readInbox,
+  replyInbox,
   setInboxCount,
   showInboxExamples,
   undoInbox,
   type InboxChange,
   type InboxItem,
+  type InboxReply,
 } from "@/lib/inbox"
 import "@/components/memory-inbox.css"
 
@@ -21,6 +22,12 @@ import "@/components/memory-inbox.css"
 // changed, See the changes and Undo). The question card follows Epic Team's needs-you card: the
 // recommendation first, two or three buttons, the answer saved back as a memory. Paper language
 // (docs/epic12/DESIGN-LANGUAGE.md). Nothing here goes to WhatsApp.
+//
+// Round 3 (Jordi: "shouldn't we have 1 chat?"): the inbox is a list of cards, and the Chat tab is the
+// one chat. The inbox's own "Ask the desk" box is gone: a job for the desk is written in the chat,
+// whose Send box hands it over. Each card instead has a reply box, like Epic Team's feedback box: it
+// answers a question in your words, sends feedback to the persona that wrote a finding, or sends a
+// follow-up to the desk about a job.
 
 /** While a job is working the list refreshes this often, so its step moves. */
 const WORKING_POLL_MS = 5_000
@@ -43,6 +50,13 @@ function ago(iso: string, now = Date.now()): string {
     day: "numeric",
     month: "short",
   })
+}
+
+/** "just now", "5 min ago", "on 8 Nov". */
+function since(iso: string): string {
+  const when = ago(iso)
+  if (when === "now") return "just now"
+  return /\d (min|h)$/.test(when) ? `${when} ago` : `on ${when}`
 }
 
 /** Still in front of you: an open question or finding, a job working or finished but not yet put away. */
@@ -130,6 +144,165 @@ function Changes({ result }: { result: NonNullable<InboxItem["result"]> }) {
   )
 }
 
+/** Where a card's reply box sends its words, in plain words for the box itself. */
+function replyCopy(item: InboxItem): {
+  placeholder: string
+  send: string
+  hint: string
+} | null {
+  const desk = item.kind === "job" || item.from === "Memory desk"
+  if (item.kind === "question") {
+    if (item.status !== "open") return null
+    return desk
+      ? {
+          placeholder: "Something else? Tell the desk what to do instead",
+          send: "Send to the desk",
+          hint: item.example
+            ? "An example, so no job starts."
+            : "The desk starts a new job instead of this one.",
+        }
+      : {
+          placeholder: "Or answer in your own words",
+          send: "Send answer",
+          hint: item.example
+            ? "An example, so nothing is saved."
+            : "Saved as a memory, like a button.",
+        }
+  }
+  if (item.kind === "finding")
+    return {
+      placeholder: `Feedback for ${item.from}: was it useful, what was wrong?`,
+      send: "Send feedback",
+      hint: item.example
+        ? "An example, so no persona reads it."
+        : `${item.from} reads it on its next run.`,
+    }
+  return {
+    placeholder: "A follow-up or a correction for the desk",
+    send: "Send to the desk",
+    hint: item.example
+      ? "An example, so no job starts."
+      : "Starts a new job, linked to this one.",
+  }
+}
+
+function scrollToItem(id: string) {
+  document
+    .querySelector(`[data-item-id="${CSS.escape(id)}"]`)
+    ?.scrollIntoView({ behavior: "smooth", block: "center" })
+}
+
+/** What you wrote back on this card, and what became of it. Answers show as the card's answer. */
+function Replies({ item }: { item: InboxItem }) {
+  const shown = item.replies.filter(
+    (reply: InboxReply) => reply.kind !== "answer"
+  )
+  if (shown.length === 0) return null
+  return (
+    <ul className="zi-replies" aria-label="What you wrote back">
+      {shown.map((reply, index) => (
+        <li key={index}>
+          <p className="zi-said">
+            <b>You</b> · {ago(reply.at)}
+            <span>“{reply.text}”</span>
+          </p>
+          <p className="zi-sent" role="status">
+            {reply.kind === "feedback"
+              ? item.example
+                ? "Sent. An example, so no persona reads it."
+                : reply.readAt
+                  ? `${item.from} read it on its run ${since(reply.readAt)}.`
+                  : `Sent. ${item.from} reads it on its next run.`
+              : reply.followUpItemId
+                ? (
+                    <>
+                      Sent to the desk as a new job.{" "}
+                      <button
+                        type="button"
+                        className="zi-link"
+                        onClick={() => scrollToItem(reply.followUpItemId!)}
+                      >
+                        See the job
+                      </button>
+                    </>
+                  )
+                : "Sent. An example, so no job started."}
+          </p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** The card's reply box: a short text box and Send, like Epic Team's feedback box. */
+function ReplyBox({
+  item,
+  onChange,
+}: {
+  item: InboxItem
+  onChange: (change: InboxChange) => void
+}) {
+  const [text, setText] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const copy = replyCopy(item)
+  if (!copy) return null
+  async function send() {
+    const words = text.trim()
+    if (!words || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      onChange(await replyInbox(item.id, words))
+      setText("")
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form
+      className="zi-reply"
+      aria-label={`Reply to ${item.from}`}
+      onSubmit={(event) => {
+        event.preventDefault()
+        void send()
+      }}
+    >
+      <textarea
+        aria-label={copy.placeholder}
+        placeholder={copy.placeholder}
+        value={text}
+        rows={1}
+        maxLength={1000}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault()
+            void send()
+          }
+        }}
+      />
+      <div className="zi-replyrow">
+        <span className="zp-hint">{copy.hint}</span>
+        <button
+          type="submit"
+          className="zp-keep"
+          disabled={!text.trim() || busy}
+        >
+          {busy ? "Sending…" : copy.send}
+        </button>
+      </div>
+      {error ? (
+        <p className="zi-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 function InboxCard({
   item,
   onChange,
@@ -164,6 +337,7 @@ function InboxCard({
     <li
       className={`zi-item zi-${item.kind} zi-s-${item.status}${quiet ? " zi-quiet" : ""}`}
       data-testid="inbox-item"
+      data-item-id={item.id}
     >
       <p className="zi-top">
         <span className="zi-kind">{label}</span>
@@ -174,7 +348,21 @@ function InboxCard({
         {item.needsYou ? <span className="zi-new">New</span> : null}
       </p>
       <p className="zi-what">{item.title}</p>
-      {item.body ? <p className="zi-body">{item.body}</p> : null}
+      {item.body && !item.followUpOf ? (
+        <p className="zi-body">{item.body}</p>
+      ) : null}
+      {item.followUpOf ? (
+        <p className="zi-follows">
+          Follows up{" "}
+          <button
+            type="button"
+            className="zi-link"
+            onClick={() => scrollToItem(item.followUpOf!.id)}
+          >
+            {item.followUpOf.title}
+          </button>
+        </p>
+      ) : null}
 
       {item.kind === "question" && item.status === "open" ? (
         <>
@@ -336,65 +524,9 @@ function InboxCard({
           {error}
         </p>
       ) : null}
+      <Replies item={item} />
+      <ReplyBox item={item} onChange={onChange} />
     </li>
-  )
-}
-
-/**
- * "Ask the desk" (EPIC-14 S3): the way to start a worker on your memory from the inbox. The job
- * shows below at once as Working, then Done with what changed and Undo.
- */
-function AskDesk({ onStarted }: { onStarted: (change: InboxChange) => void }) {
-  const [text, setText] = React.useState("")
-  const [busy, setBusy] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  async function submit() {
-    const request = text.trim()
-    if (!request || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      onStarted(await askInboxDesk(request))
-      setText("")
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form
-      className="zi-ask"
-      aria-label="Ask the desk"
-      onSubmit={(event) => {
-        event.preventDefault()
-        void submit()
-      }}
-    >
-      <p className="zi-askhead">Ask the desk</p>
-      <div className="zp-compose">
-        <input
-          aria-label="A job for the memory desk"
-          placeholder="A job or a question, like “Untangle Idealista and Poly-Maker”"
-          value={text}
-          maxLength={600}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <button type="submit" className="zp-send" disabled={!text.trim() || busy}>
-          Start the job
-        </button>
-      </div>
-      <p className="zp-hint">
-        The desk re-files, splits, joins, moves and relinks your topics, and
-        answers questions about them, like what grew this week. It never
-        rewrites your words or deletes, and every job can be undone.
-      </p>
-      {error ? (
-        <p className="zi-warn" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </form>
   )
 }
 
@@ -448,24 +580,20 @@ export function MemoryInbox({ active = true }: { active?: boolean }) {
   }, [active, unseen])
 
   const onChange = React.useCallback((change: InboxChange) => {
-    setState((previous) =>
-      previous.kind === "ready"
-        ? {
-            kind: "ready",
-            items: previous.items.map((item) =>
-              item.id === change.item.id ? change.item : item
-            ),
-          }
-        : previous
-    )
-    setInboxCount(change.needsYou)
-  }, [])
-
-  const onStarted = React.useCallback((change: InboxChange) => {
-    setState((previous) => ({
-      kind: "ready",
-      items: [change.item, ...(previous.kind === "ready" ? previous.items.filter((item) => item.id !== change.item.id) : [])],
-    }))
+    setState((previous) => {
+      if (previous.kind !== "ready") return previous
+      const items = previous.items.map((item) =>
+        item.id === change.item.id ? change.item : item
+      )
+      // A follow-up sent to the desk: its new job comes in at the top, Working.
+      const followUp = change.followUp
+      return {
+        kind: "ready",
+        items: followUp
+          ? [followUp, ...items.filter((item) => item.id !== followUp.id)]
+          : items,
+      }
+    })
     setInboxCount(change.needsYou)
   }, [])
 
@@ -496,12 +624,13 @@ export function MemoryInbox({ active = true }: { active?: boolean }) {
         </p>
         <p className="zp-hint">
           <a href="#personas">Your personas</a> leave their findings here:
-          switch one on or run it now.
+          switch one on or run it now. Each card has its own reply box. To
+          give the desk a new job, write it in the <a href="#chat">Chat</a>{" "}
+          and press Ask the desk.
         </p>
       </div>
       <div className="zp-stage">
         <div className="zp-screen zi-screen">
-          {state.kind !== "error" ? <AskDesk onStarted={onStarted} /> : null}
           {state.kind === "loading" ? (
             <p className="zp-empty">Opening your inbox…</p>
           ) : state.kind === "error" ? (

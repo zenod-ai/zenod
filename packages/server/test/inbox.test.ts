@@ -83,6 +83,41 @@ describe("InboxStore (EPIC-14 S2)", () => {
   });
 });
 
+describe("InboxStore replies (EPIC-14 S2 round 3)", () => {
+  it("keeps words on a card, answers a question in words, and hands a persona its unread feedback once", () => {
+    let clock = Date.parse("2026-11-08T18:00:00Z");
+    const inbox = new InboxStore(join(dir, "inbox.sqlite"), () => new Date((clock += 1000)));
+    const finding = inbox.post({ kind: "finding", from: "Weekly recap", title: "Dentist twice, never booked" });
+    const other = inbox.post({ kind: "finding", from: "Librarian", title: "Flat and Apartment" });
+    const question = inbox.post({ kind: "question", from: "Weekly recap", title: "Keep the garden recap?", options: [{ id: "y", label: "Yes" }, { id: "n", label: "No" }] });
+    expect(() => inbox.addReply(finding.id, { kind: "feedback", text: "   " })).toThrow(/a few words/);
+    const replied = inbox.addReply(finding.id, { kind: "feedback", text: "Useful, but I booked it yesterday", readAt: null });
+    expect(replied.replies).toMatchObject([{ kind: "feedback", text: "Useful, but I booked it yesterday" }]);
+    expect(replied.status).toBe("open");
+    expect(replied.seenAt).not.toBeNull();
+    inbox.addReply(other.id, { kind: "feedback", text: "for the librarian" });
+
+    const answered = inbox.answerInWords(question.id, "Only in spring", "job-9");
+    expect(answered).toMatchObject({ status: "answered", answer: { optionId: "words", label: "Only in spring", savedJobId: "job-9" }, replies: [{ kind: "answer", text: "Only in spring" }] });
+    expect(() => inbox.answerInWords(question.id, "again")).toThrow(InboxError);
+
+    const unread = inbox.unreadFeedback("Weekly recap");
+    expect(unread.map((entry) => entry.reply.text)).toEqual(["Useful, but I booked it yesterday"]);
+    const last = inbox.lastFeedbackAt("Weekly recap");
+    expect(last).toBe(unread[0]!.reply.at);
+    inbox.markFeedbackRead(unread);
+    expect(inbox.unreadFeedback("Weekly recap")).toEqual([]);
+    expect(inbox.get(finding.id)!.replies[0]!.readAt).toBeTruthy();
+    expect(inbox.lastFeedbackAt("Weekly recap")).toBe(last);
+    expect(inbox.unreadFeedback("Librarian")).toHaveLength(1);
+
+    const first = inbox.post({ kind: "job", title: "Split two topics" });
+    const next = inbox.post({ kind: "job", title: "Also move Yard quotes" });
+    expect(inbox.linkFollowUp(next.id, first).followUpOf).toEqual({ id: first.id, title: "Split two topics" });
+    inbox.close();
+  });
+});
+
 describe("inbox routes (EPIC-14 S2)", () => {
   async function setup() {
     const runtimes = new Map<string, Runtime>();
@@ -193,6 +228,38 @@ describe("inbox routes (EPIC-14 S2)", () => {
       expect(cleared.items.map((item: { title: string }) => item.title)).toEqual(["A real finding"]);
       expect(cleared.needsYou).toBe(1);
       expect((await (await t.call("GET", "/api/console/inbox", t.bob)).json()).items).toEqual([]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("the reply box: a persona's question answered in words is filed once, a finding keeps its feedback, examples start nothing", async () => {
+    const t = await setup();
+    try {
+      const a = t.runtimes.get("tenant-a")!;
+      const question = inboxFor(a).post({ kind: "question", from: "Librarian", title: "Who fixes the boiler?", options: [{ id: "ana", label: "Ana" }, { id: "luis", label: "Luis" }] });
+      const finding = inboxFor(a).post({ kind: "finding", from: "Weekly recap", title: "Dentist twice" });
+      expect((await t.call("POST", `/api/console/inbox/${question.id}/reply`, t.ada, { text: "  " })).status).toBe(400);
+      expect((await t.call("POST", `/api/console/inbox/${question.id}/reply`, t.ada, { text: "x".repeat(1001) })).status).toBe(400);
+      expect((await t.call("POST", `/api/console/inbox/${question.id}/reply`, t.bob, { text: "Ana" })).status).toBe(404);
+
+      const enqueue = vi.spyOn(a.taskJobQueue, "enqueue");
+      const answered = await (await t.call("POST", `/api/console/inbox/${question.id}/reply`, t.ada, { text: "Neither, the landlord does" })).json();
+      expect(answered).toMatchObject({ needsYou: 1, item: { status: "answered", answer: { optionId: "words", label: "Neither, the landlord does" } } });
+      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue.mock.calls[0]![1]).toEqual({ content: "Who fixes the boiler?\n\nMy answer: Neither, the landlord does\n\n(Answered in the Zenod inbox, asked by Librarian.)", source: "web" });
+      expect((await t.call("POST", `/api/console/inbox/${question.id}/reply`, t.ada, { text: "again" })).status).toBe(409);
+
+      const fed = await (await t.call("POST", `/api/console/inbox/${finding.id}/reply`, t.ada, { text: "Good catch, keep these" })).json();
+      expect(fed.item).toMatchObject({ status: "open", replies: [{ kind: "feedback", text: "Good catch, keep these", readAt: null }] });
+      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(inboxFor(a).unreadFeedback("Weekly recap")).toHaveLength(1);
+
+      const shown = (await (await t.call("POST", "/api/console/inbox/examples", t.ada)).json()).items as Array<{ id: string; kind: string; status: string }>;
+      const job = shown.find((item) => item.kind === "job" && item.status === "done")!;
+      const kept = await (await t.call("POST", `/api/console/inbox/${job.id}/reply`, t.ada, { text: "Also split Yard quotes" })).json();
+      expect(kept.item.replies).toMatchObject([{ kind: "followup", text: "Also split Yard quotes", followUpItemId: null }]);
+      expect(enqueue).toHaveBeenCalledTimes(1);
     } finally {
       await t.close();
     }

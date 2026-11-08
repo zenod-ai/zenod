@@ -61,6 +61,11 @@ export interface PersonaDefinition {
 /** What a persona may read: the memory, never written through this. */
 export interface PersonaReadContext {
   readonly today: string;
+  /**
+   * What the user wrote back on this persona's cards since its last run (EPIC-14 S2 round 3), oldest
+   * first. Every model call also gets it in its system words, so no persona can miss it.
+   */
+  readonly feedback: ReadonlyArray<{ about: string; text: string; at: string }>;
   /** The memories captured in the last `days` days, newest first. One step. */
   recentMemories(options: { days: number; limit?: number }): Promise<MemoryEntry[]>;
   /** Search the memory (no model). One step. */
@@ -212,8 +217,16 @@ export async function runPersona(
     if (tally.steps >= persona.limits.maxSteps) throw new PersonaCapError("steps", `Stopped at its ${persona.limits.maxSteps} steps`);
     tally.steps += 1;
   };
+  const unread = deps.inbox.unreadFeedback(persona.name);
+  const feedback = unread.map((entry) => ({ about: entry.title, text: entry.reply.text, at: entry.reply.at }));
+  const feedbackWords = feedback.length
+    ? `\n\nThe user wrote back on your earlier inbox cards. Take it into account in this run:\n${feedback
+        .map((entry) => `- On "${entry.about.slice(0, 200)}": ${entry.text}`)
+        .join("\n")}`
+    : "";
   const read: PersonaReadContext = {
     today: isoDay(started),
+    feedback,
     // Spread over the days, newest first within each, so a busy day cannot crowd out the rest of the week.
     async recentMemories({ days, limit = 40 }) {
       step();
@@ -262,7 +275,7 @@ export async function runPersona(
       if (spent.personaUsd + tally.costUsd >= spent.personaCapUsd) throw new PersonaCapError("spend", `Stopped at ${persona.name}'s monthly budget`);
       if (spent.totalUsd + tally.costUsd >= spent.totalCapUsd) throw new PersonaCapError("spend", "Stopped at the personas' monthly budget");
       model ??= deps.model();
-      const result = await model.complete(input);
+      const result = await model.complete(feedbackWords ? { ...input, system: `${input.system}${feedbackWords}` } : input);
       tally.modelCalls += 1;
       tally.inputTokens += result.inputTokens;
       tally.outputTokens += result.outputTokens;
@@ -288,11 +301,15 @@ export async function runPersona(
     const seen = await persona.fingerprint(read);
     if (seen === null) return end("skipped", "Nothing to read yet");
     tally.fingerprint = persona.revisedAt ? `${persona.revisedAt}|${seen}` : seen;
+    // New feedback is something new: the next scheduled wake runs, so the persona reads it.
+    const lastFeedback = deps.inbox.lastFeedbackAt(persona.name);
+    if (lastFeedback) tally.fingerprint += `|feedback:${lastFeedback}`;
     if (trigger === "schedule" && deps.store.lastRealRun(persona.id)?.fingerprint === tally.fingerprint) {
       return end("skipped", "Nothing new since the last run");
     }
     const outcome = await persona.run(ctx);
     tally.revision = await commitNotes(persona, deps, notes, started);
+    if (tally.modelCalls > 0) deps.inbox.markFeedbackRead(unread);
     return end("done", outcome.summary);
   } catch (error) {
     // What it wrote before a cap is still its work: keep it, and say why it stopped.
