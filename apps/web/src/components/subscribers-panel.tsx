@@ -112,7 +112,7 @@ function Toggle({
         className={`relative inline-flex h-5 w-8 shrink-0 items-center rounded-full border transition-colors ${on ? "border-primary bg-primary" : "border-input bg-muted"}`}
       >
         <span
-          className={`absolute size-3.5 rounded-full bg-background shadow-sm transition-transform ${on ? "translate-x-3.5" : "translate-x-0.5"}`}
+          className={`absolute size-3.5 rounded-full bg-background ring-1 ring-border transition-transform ${on ? "translate-x-3.5" : "translate-x-0.5"}`}
         />
       </span>
       {on ? "On" : "Off"}
@@ -241,7 +241,7 @@ function SubscriberRow({
             <span>
               {when(last.at)}
               {last.test ? " · test" : ""} ·{" "}
-              <span className={last.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}>
+              <span className={last.ok ? "text-[var(--zn-link)]" : "text-destructive"}>
                 {result(last)}
               </span>
               {last.duration_ms !== null ? ` · ${seconds(last.duration_ms)}` : ""}
@@ -290,7 +290,7 @@ function SubscriberRow({
       {notice ? (
         <p
           role="status"
-          className={`text-sm ${notice.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}`}
+          className={`text-sm ${notice.ok ? "text-[var(--zn-link)]" : "text-destructive"}`}
         >
           {notice.text}
         </p>
@@ -442,7 +442,7 @@ function AddWebhook({ onCreated }: { onCreated: (sub: Subscriber) => void }) {
             {test ? (
               <p
                 role="status"
-                className={`text-sm ${test.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}`}
+                className={`text-sm ${test.ok ? "text-[var(--zn-link)]" : "text-destructive"}`}
               >
                 {test.ok
                   ? `Test event sent: ${created.subscription.url} answered ${result(test)} in ${seconds(test.duration_ms)}.`

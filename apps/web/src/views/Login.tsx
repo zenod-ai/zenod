@@ -47,7 +47,7 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
       <Card className="w-full max-w-sm">
         <form onSubmit={handleSubmit}>
           <CardHeader>
-            <div className="mb-1 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <div className="mb-1 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <BrainIcon className="size-4.5" />
             </div>
             <CardTitle>Zenod</CardTitle>

@@ -197,7 +197,7 @@ export function HeraldLoopPanels() {
           {briefing === undefined ? (
             <Skeleton className="h-28 w-full" />
           ) : briefing === null ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+            <div className="rounded-md border border-[var(--zn-warn)]/40 p-4 text-sm">
               <p className="font-medium">
                 No briefing approved — Herald will not loop.
               </p>

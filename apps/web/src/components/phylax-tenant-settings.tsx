@@ -897,7 +897,7 @@ export function PhylaxTenantSettings() {
             </div>
           </Field>
           {data.settings.verified ? (
-            <p className="flex items-center gap-2 text-sm text-emerald-600">
+            <p className="flex items-center gap-2 text-sm text-[var(--zn-link)]">
               <CheckCircle2Icon className="size-4" />
               Verified
             </p>
@@ -1409,7 +1409,7 @@ export function PhylaxTenantSettings() {
               role="status"
               className={
                 transcriptionCheck.ok
-                  ? "border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+                  ? "border border-[var(--zn-link)]/40 p-3 text-sm text-[var(--zn-link)]"
                   : "border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
               }
             >

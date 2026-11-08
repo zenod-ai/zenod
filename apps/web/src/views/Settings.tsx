@@ -241,7 +241,7 @@ export function Settings({
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {isRing || isHerald || isPhylax ? (
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <BrainIcon className="size-4.5" />
             </div>
           ) : (

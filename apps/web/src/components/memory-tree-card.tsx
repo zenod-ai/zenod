@@ -41,12 +41,12 @@ export type MemoryTreeState =
 
 /** Same dot language as agent_team's epic tree: one colour per level-0 group. */
 const GROUP_DOT: Record<MemoryTreeNode["memory"], string> = {
-  working: "bg-sky-500",
-  "long-term": "bg-violet-500",
+  working: "bg-primary",
+  "long-term": "bg-muted-foreground",
 }
 const GROUP_RING: Record<MemoryTreeNode["memory"], string> = {
-  working: "border-sky-500",
-  "long-term": "border-violet-500",
+  working: "border-primary",
+  "long-term": "border-muted-foreground",
 }
 
 const SHORT_TITLE = 48
@@ -80,7 +80,7 @@ function MemoryDot({ node }: { node: MemoryTreeNode }) {
           ? cn("border-2 bg-transparent", GROUP_RING[node.memory])
           : GROUP_DOT[node.memory],
         node.provisional &&
-          "ring-2 ring-amber-500 ring-offset-1 ring-offset-background"
+          "ring-2 ring-[var(--zn-warn)] ring-offset-1 ring-offset-background"
       )}
     />
   )
@@ -168,7 +168,7 @@ function TreeRow({
               <span className="font-semibold">{node.title}</span>
             )}
             <span
-              className="font-mono text-xs text-muted-foreground tabular-nums"
+              className="text-xs text-muted-foreground tabular-nums"
               data-testid="memory-count"
             >
               {pageLabel}

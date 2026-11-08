@@ -314,7 +314,7 @@ export function GoogleDriveConnect({
                   </span>
                 ) : model.ready ? (
                   <>
-                    <CheckIcon className="size-3.5 text-emerald-500" />
+                    <CheckIcon className="size-3.5 text-[var(--zn-link)]" />
                     Transcription model ({model.model}) ready
                   </>
                 ) : model.downloading ? (
