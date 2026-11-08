@@ -1,0 +1,165 @@
+{
+ "about": "EPIC-16 E16-B1: a second 40 messages, written blind by a separate agent that never saw the rules; demo data only. The rules scored 32/40 on it before two general fixes (comma-joined questions, 'when I…' and 'do the…' read as statements).",
+ "messages": [
+  {
+   "message": "remind me to renew the passport before june",
+   "expect": "keep"
+  },
+  {
+   "message": "decided to switch the wifi plan to the cheaper one, 25 euros a month",
+   "expect": "keep"
+  },
+  {
+   "message": "What a day, i finally finished the garden shed and my back is killing me",
+   "expect": "keep"
+  },
+  {
+   "message": "remind me to call the dentist tomorrow morning",
+   "expect": "keep"
+  },
+  {
+   "message": "Recordar pagar el alquiler el día 1",
+   "expect": "keep"
+  },
+  {
+   "message": "idea for the podcast: interview local bakers about early mornings",
+   "expect": "keep"
+  },
+  {
+   "message": "show me everything about the cabin trip",
+   "expect": "answer"
+  },
+  {
+   "message": "my brother Tomas just got a puppy named Biscuit",
+   "expect": "keep"
+  },
+  {
+   "message": "when i was nine we moved to Rotterdam and i hated the rain, that's a memory i want to keep",
+   "expect": "keep"
+  },
+  {
+   "message": "just paid the car insurance 320 euros, when is it due again next year",
+   "expect": "both"
+  },
+  {
+   "message": "¿qué me dijo mi tía Carmen sobre la casa?",
+   "expect": "answer"
+  },
+  {
+   "message": "i'm thinking of painting the kitchen green, what colours did i pick for the living room",
+   "expect": "both"
+  },
+  {
+   "message": "um so yeah the wifi password at the cabin is pinecone42 just noting that down",
+   "expect": "keep"
+  },
+  {
+   "message": "When Marta got back from Lisbon she told me she's quitting her job in march",
+   "expect": "keep"
+  },
+  {
+   "message": "what did Marta say about her job",
+   "expect": "answer"
+  },
+  {
+   "message": "remind me to email Sofia about the invoice, and what did she say about the deadline",
+   "expect": "both"
+  },
+  {
+   "message": "what's the wifi password at the cabin",
+   "expect": "answer"
+  },
+  {
+   "message": "had a rough call with dad about the inheritance, can you show me what i wrote about it last time",
+   "expect": "both"
+  },
+  {
+   "message": "when did i last go to the dentist",
+   "expect": "answer"
+  },
+  {
+   "message": "how i feel about the move honestly is mixed, excited but scared of leaving the neighbors",
+   "expect": "keep"
+  },
+  {
+   "message": "need to buy oat milk, batteries and a birthday card for dani",
+   "expect": "keep"
+  },
+  {
+   "message": "list everything i said about the garden shed",
+   "expect": "answer"
+  },
+  {
+   "message": "How the meeting went: they agreed to push the launch to april, kind of relieved",
+   "expect": "keep"
+  },
+  {
+   "message": "what was the name of that restaurant Ines recommended",
+   "expect": "answer"
+  },
+  {
+   "message": "how did i feel after the interview with Priya",
+   "expect": "answer"
+  },
+  {
+   "message": "remind me what i decided about the wifi plan",
+   "expect": "answer"
+  },
+  {
+   "message": "Hoy comí con mi tía Carmen y me dijo que vende la casa de Valencia",
+   "expect": "keep"
+  },
+  {
+   "message": "the plumber is coming wednesday at 10 and his name is Oleg",
+   "expect": "keep"
+  },
+  {
+   "message": "how much was the electricity bill last month",
+   "expect": "answer"
+  },
+  {
+   "message": "summarise my notes from the april launch meeting",
+   "expect": "answer"
+  },
+  {
+   "message": "what are my podcast ideas so far",
+   "expect": "answer"
+  },
+  {
+   "message": "met a guy called Pavel at the gym who sells bikes, what bike shop did Ines mention",
+   "expect": "both"
+  },
+  {
+   "message": "do the taxes by friday",
+   "expect": "keep"
+  },
+  {
+   "message": "do i have anything planned for saturday",
+   "expect": "answer"
+  },
+  {
+   "message": "plan for the weekend, hike up Mount Kell saturday then pizza with Ines",
+   "expect": "keep"
+  },
+  {
+   "message": "who was that guy i met at the book fair who does ceramics",
+   "expect": "answer"
+  },
+  {
+   "message": "when is the plumber coming",
+   "expect": "answer"
+  },
+  {
+   "message": "Hoy empecé yoga con Lucía, qué otros planes tengo esta semana",
+   "expect": "both"
+  },
+  {
+   "message": "give me a summary of this week",
+   "expect": "answer"
+  },
+  {
+   "message": "tell me what Tomas named his puppy",
+   "expect": "answer"
+  }
+ ]
+}

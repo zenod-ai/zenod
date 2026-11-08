@@ -64,6 +64,7 @@ import {
   memoryKeepContent,
   memoryKeepIdempotencyKey,
   parseMemoryKeep,
+  routeSendMessage,
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import {
@@ -1419,8 +1420,10 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
   const memoryChatStart = async (c: Context) => {
     const session = readCustomerSession(c, env);
     if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
-    const body = await c.req.json<{ question?: unknown }>().catch(() => ({}) as { question?: unknown });
-    const question = typeof body.question === "string" ? body.question.trim() : "";
+    // E16-B1: the one Send button posts `message`; the older ask route posts `question`.
+    const body = await c.req.json<{ question?: unknown; message?: unknown }>().catch(() => ({}) as { question?: unknown; message?: unknown });
+    const raw = typeof body.message === "string" ? body.message : body.question;
+    const question = typeof raw === "string" ? raw.trim() : "";
     if (!question) return { response: c.json({ error: "question is required" }, 400) };
     if (question.length > MEMORY_CHAT_MAX_QUESTION_CHARS) return { response: c.json({ error: "question is too long" }, 400) };
     const account = accounts.resolveActiveTenantForUser(session.user_id);
@@ -1475,6 +1478,51 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
           onText: (text) => { void send({ type: "text", text }); },
         });
         await send({ type: "answer", answer });
+      } catch (error) {
+        const failure = memoryChatFailure(tenantId, error);
+        await send({ type: "error", status: failure.status, ...failure.body });
+      } finally {
+        release();
+      }
+    });
+  });
+
+  // EPIC-16 E16-B1: the one Send button. Zenod decides from the message whether to keep new
+  // information, answer from memory, or both, and streams which it did as NDJSON:
+  // {"type":"route"} first, then {"type":"kept"} with the store receipt when something is kept (the
+  // same durable store queue and receipt as Keep), then the answer's memories/text/answer lines when
+  // something is asked, then {"type":"done"}. A question is never kept (the route's guard).
+  app.post("/api/console/memory-send/stream", async (c) => {
+    const start = await memoryChatStart(c);
+    if ("response" in start) return start.response;
+    const { question: message, runtime, tenantId, release } = start;
+    c.header("content-type", "application/x-ndjson; charset=utf-8");
+    c.header("cache-control", "no-store");
+    c.header("x-accel-buffering", "no");
+    return stream(c, async (out) => {
+      out.onAbort(release);
+      const send = (event: Record<string, unknown>) => out.aborted ? Promise.resolve(out) : out.write(`${JSON.stringify(event)}\n`);
+      try {
+        const engine = await runtime.getEngine();
+        const route = await routeSendMessage(engine, message);
+        await send({ type: "route", route });
+        if (route.keep) {
+          try {
+            const job = runtime.taskJobQueue.enqueue("store", { content: route.keep, source: "web" }, memoryKeepIdempotencyKey(tenantId, route.keep));
+            await send({ type: "kept", receipt: projectRecentSave(job, null) });
+          } catch (error) {
+            console.warn(`[memory-send] keep unavailable for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+            await send({ type: "kept", error: "keep unavailable", message: "Zenod could not keep that just now. Send it again in a moment." });
+          }
+        }
+        if (route.question) {
+          const answer = await streamAnswerFromMemory(engine, route.question, {
+            onMemories: (memories) => { void send({ type: "memories", memories }); },
+            onText: (text) => { void send({ type: "text", text }); },
+          });
+          await send({ type: "answer", answer });
+        }
+        await send({ type: "done" });
       } catch (error) {
         const failure = memoryChatFailure(tenantId, error);
         await send({ type: "error", status: failure.status, ...failure.body });

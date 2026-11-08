@@ -366,6 +366,6 @@ describe("Hosted vault onboarding boot", () => {
     expect(
       screen.getByRole("tab", { name: "Vault & sources" }).getAttribute("data-state")
     ).toBe("inactive")
-    expect(screen.getByRole("heading", { name: "Ask your memory." })).toBeTruthy()
+    expect(screen.getByRole("heading", { name: "Talk to your memory." })).toBeTruthy()
   })
 })

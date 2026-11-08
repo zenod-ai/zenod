@@ -3,21 +3,21 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 import {
-  askMemoryStream,
-  keepAnswer,
-  keepNote,
   keepStatus,
   MemoryChatError,
   presentAnswer,
+  sendToMemory,
   vaultLabel,
   type MemoryChatAnswer,
   type MemoryChatMemory,
   type MemoryKeepReceipt,
+  type MemorySendRoute,
 } from "@/lib/memory-chat"
 
-// EPIC-12 E12-S1: the hosted app opens on this chat. It answers from your memory, shows
-// the memories it used with their match percentages and links, and saves nothing unless
-// you tap Keep. Styled in the product deck's paper language (docs/epic12/DESIGN-LANGUAGE.md).
+// EPIC-12 E12-S1: the hosted app opens on this chat. It answers from your memory and shows
+// the memories it used with their match percentages and links. EPIC-16 E16-B1: one Send button;
+// Zenod decides from the message whether to keep it, answer it, or both, and says which it did
+// (a question is never kept). Styled in the product deck's paper language (docs/epic12/DESIGN-LANGUAGE.md).
 // E12-S1b: the memories show as soon as they are found and the answer streams in, marked as a
 // draft until Zenod has checked each citation against the memory it names.
 
@@ -28,16 +28,22 @@ type KeepState =
   | { state: "error"; message: string }
 
 type Turn =
-  | { id: number; kind: "question"; text: string }
-  | { id: number; kind: "answer"; result: MemoryChatAnswer; keep: KeepState }
+  | { id: number; kind: "message"; text: string }
   | {
       id: number
       kind: "pending"
-      question: string
+      route: MemorySendRoute | null
+      keep: KeepState | null
       memories: MemoryChatMemory[] | null
       text: string
     }
-  | { id: number; kind: "kept-note"; text: string; keep: KeepState }
+  | {
+      id: number
+      kind: "reply"
+      route: MemorySendRoute
+      keep: KeepState | null
+      result: MemoryChatAnswer | null
+    }
   | { id: number; kind: "error"; text: string }
 
 type NewTurn = Turn extends infer T
@@ -80,22 +86,27 @@ function useKeepPolling(
   )
 }
 
-function KeepLine({ keep }: { keep: KeepState }) {
-  if (keep.state === "keeping")
-    return <span className="zp-keepnote">Keeping…</span>
+/** What Zenod did with the message (E16-B1): said plainly, with a link once it is saved. */
+function KeepLine({ keep, route }: { keep: KeepState; route: MemorySendRoute }) {
+  const part = route.action === "both" ? (
+    <span className="zp-keptpart">“{route.keep}”</span>
+  ) : null
+  if (keep.state === "keeping" || keep.state === "idle")
+    return <p className="zp-keepnote" data-testid="memory-kept">Saving to your memory… {part}</p>
   if (keep.state === "error")
-    return <span className="zp-keepnote zp-warn">{keep.message}</span>
-  if (keep.state !== "kept") return null
+    return <p className="zp-keepnote zp-warn" data-testid="memory-kept">{keep.message}</p>
   const { receipt } = keep
-  if (receipt.status === "saving")
-    return <span className="zp-keepnote">Kept. Filing it in your vault…</span>
   if (receipt.status === "failed")
     return (
-      <span className="zp-keepnote zp-warn">Not saved. Try Keep again.</span>
+      <p className="zp-keepnote zp-warn" data-testid="memory-kept">
+        Not saved. Send it again.
+      </p>
     )
+  if (receipt.status === "saving")
+    return <p className="zp-keepnote" data-testid="memory-kept">Saved to your memory. Filing it… {part}</p>
   return (
-    <span className="zp-keepnote">
-      Kept ✓ Saved to your vault.
+    <p className="zp-keepnote" data-testid="memory-kept">
+      Saved to your memory ✓ {part}
       {receipt.noteUrl ? (
         <>
           {" "}
@@ -104,7 +115,7 @@ function KeepLine({ keep }: { keep: KeepState }) {
           </a>
         </>
       ) : null}
-    </span>
+    </p>
   )
 }
 
@@ -214,44 +225,43 @@ const answerLinks = {
 }
 
 function PendingTurn({
+  route,
+  keep,
   memories,
   text,
 }: {
+  route: MemorySendRoute | null
+  keep: KeepState | null
   memories: MemoryChatMemory[] | null
   text: string
 }) {
+  const asking = route?.question != null
   return (
     <div className="zp-turn">
-      {text ? (
+      {route && keep ? <KeepLine keep={keep} route={route} /> : null}
+      {!route || (asking && !text) ? (
+        <div className="zp-msg zp-z zp-typing" aria-label="Zenod is working">
+          <i />
+          <i />
+          <i />
+        </div>
+      ) : null}
+      {asking && text ? (
         <div className="zp-msg zp-z zp-draft" data-testid="memory-draft">
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerLinks}>
             {presentAnswer(text, memories ?? [])}
           </ReactMarkdown>
           <span className="zp-checking">Checking against your memories…</span>
         </div>
-      ) : (
-        <div className="zp-msg zp-z zp-typing" aria-label="Zenod is answering">
-          <i />
-          <i />
-          <i />
-        </div>
-      )}
-      {memories && memories.length > 0 ? <MemoryList memories={memories} /> : null}
+      ) : null}
+      {asking && memories && memories.length > 0 ? <MemoryList memories={memories} /> : null}
     </div>
   )
 }
 
-function AnswerTurn({
-  result,
-  keep,
-  onKeep,
-}: {
-  result: MemoryChatAnswer
-  keep: KeepState
-  onKeep: () => void
-}) {
+function AnswerTurn({ result }: { result: MemoryChatAnswer }) {
   return (
-    <div className="zp-turn">
+    <>
       <div
         className={result.answered ? "zp-msg zp-z" : "zp-msg zp-z zp-none"}
         data-testid="memory-answer"
@@ -272,24 +282,33 @@ function AnswerTurn({
       ) : (
         <p className="zp-hint">No memory matched this question.</p>
       )}
+    </>
+  )
+}
+
+/** One reply (E16-B1): what was kept, then the answer, then what Zenod did in one line. */
+function ReplyTurn({
+  route,
+  keep,
+  result,
+}: {
+  route: MemorySendRoute
+  keep: KeepState | null
+  result: MemoryChatAnswer | null
+}) {
+  const did =
+    route.action === "keep"
+      ? "Kept as a new memory"
+      : route.action === "both"
+        ? "Kept the new part and answered the question"
+        : "Answered from your memory · nothing saved"
+  return (
+    <div className="zp-turn">
+      {keep ? <KeepLine keep={keep} route={route} /> : null}
+      {result ? <AnswerTurn result={result} /> : null}
       <div className="zp-actions">
-        {result.answered ? (
-          <button
-            type="button"
-            className="zp-keep"
-            onClick={onKeep}
-            disabled={
-              keep.state === "keeping" ||
-              (keep.state === "kept" && keep.receipt.status !== "failed")
-            }
-          >
-            {keep.state === "kept" && keep.receipt.status !== "failed"
-              ? "Kept"
-              : "Keep"}
-          </button>
-        ) : null}
-        <KeepLine keep={keep} />
-        <span className="zp-time">{(result.ms / 1000).toFixed(1)} s</span>
+        <span className="zp-did" data-testid="memory-did">{did}</span>
+        {result ? <span className="zp-time">{(result.ms / 1000).toFixed(1)} s</span> : null}
       </div>
     </div>
   )
@@ -298,14 +317,14 @@ function AnswerTurn({
 export function MemoryChat() {
   const [turns, setTurns] = React.useState<Turn[]>([])
   const [draft, setDraft] = React.useState("")
-  const [asking, setAsking] = React.useState(false)
+  const [sending, setSending] = React.useState(false)
   const nextId = React.useRef(1)
   const endRef = React.useRef<HTMLDivElement>(null)
 
   const updateKeep = React.useCallback((id: number, keep: KeepState) => {
     setTurns((all) =>
       all.map((turn) =>
-        turn.id === id && (turn.kind === "answer" || turn.kind === "kept-note")
+        turn.id === id && (turn.kind === "reply" || turn.kind === "pending")
           ? { ...turn, keep }
           : turn
       )
@@ -323,23 +342,43 @@ export function MemoryChat() {
     return id
   }
 
-  async function ask() {
-    const question = draft.trim()
-    if (!question || asking) return
+  async function send() {
+    const message = draft.trim()
+    if (!message || sending) return
     setDraft("")
-    setAsking(true)
-    push({ kind: "question", text: question })
-    const pendingId = push({ kind: "pending", question, memories: null, text: "" })
+    setSending(true)
+    push({ kind: "message", text: message })
+    const pendingId = push({ kind: "pending", route: null, keep: null, memories: null, text: "" })
     const updatePending = (change: (turn: Extract<Turn, { kind: "pending" }>) => Turn) =>
       setTurns((all) =>
         all.map((turn) => (turn.id === pendingId && turn.kind === "pending" ? change(turn) : turn))
       )
     try {
-      const result = await askMemoryStream(question, {
+      const sent = await sendToMemory(message, {
+        onRoute: (route) =>
+          updatePending((turn) => ({ ...turn, route, keep: route.keep ? { state: "keeping" } : null })),
+        onKept: (kept) =>
+          updatePending((turn) => ({
+            ...turn,
+            keep: "error" in kept ? { state: "error", message: kept.error } : { state: "kept", receipt: kept },
+          })),
         onMemories: (memories) => updatePending((turn) => ({ ...turn, memories })),
         onText: (text) => updatePending((turn) => ({ ...turn, text: turn.text + text })),
       })
-      updatePending((turn) => ({ id: turn.id, kind: "answer", result, keep: { state: "idle" } }))
+      updatePending((turn) => ({
+        id: turn.id,
+        kind: "reply",
+        route: sent.route,
+        keep: !sent.kept
+          ? sent.route.keep
+            ? { state: "error", message: "Not saved. Send it again." }
+            : null
+          : "error" in sent.kept
+            ? { state: "error", message: sent.kept.error }
+            : { state: "kept", receipt: sent.kept },
+        result: sent.answer,
+      }))
+      if (sent.kept && !("error" in sent.kept)) pollKeep(pendingId, sent.kept)
     } catch (error) {
       updatePending((turn) => ({
         id: turn.id,
@@ -350,48 +389,17 @@ export function MemoryChat() {
             : "Something went wrong. Try again.",
       }))
     } finally {
-      setAsking(false)
-    }
-  }
-
-  async function keepTyped() {
-    const content = draft.trim()
-    if (!content || asking) return
-    setDraft("")
-    const id = push({
-      kind: "kept-note",
-      text: content,
-      keep: { state: "keeping" },
-    })
-    try {
-      pollKeep(id, await keepNote(content))
-    } catch (error) {
-      updateKeep(id, {
-        state: "error",
-        message: error instanceof Error ? error.message : "Not saved.",
-      })
-    }
-  }
-
-  async function keepTurn(id: number, result: MemoryChatAnswer) {
-    updateKeep(id, { state: "keeping" })
-    try {
-      pollKeep(id, await keepAnswer(result.question, result.answer))
-    } catch (error) {
-      updateKeep(id, {
-        state: "error",
-        message: error instanceof Error ? error.message : "Not saved.",
-      })
+      setSending(false)
     }
   }
 
   return (
     <section className="zp" aria-labelledby="memory-chat-heading">
       <div className="zp-head">
-        <h2 id="memory-chat-heading">Ask your memory.</h2>
+        <h2 id="memory-chat-heading">Talk to your memory.</h2>
         <p className="zp-lede">
-          Zenod answers from your own notes and shows the memories it used, with
-          how strongly each one matches.
+          Tell Zenod something and it keeps it. Ask it something and it answers
+          from your own notes, with the memories it used.
         </p>
       </div>
       <div className="zp-stage">
@@ -399,35 +407,28 @@ export function MemoryChat() {
           <div className="zp-log" aria-live="polite">
             {turns.length === 0 ? (
               <p className="zp-empty">
-                Try “What did I decide about the garden shed?” or “Who is our
-                plumber?”
+                Try “The plumber is Ana, 612 445 019” or “Who is our plumber?”
               </p>
             ) : null}
             {turns.map((turn) =>
-              turn.kind === "question" ? (
+              turn.kind === "message" ? (
                 <div key={turn.id} className="zp-msg zp-me">
                   {turn.text}
                 </div>
-              ) : turn.kind === "kept-note" ? (
-                <div key={turn.id} className="zp-turn">
-                  <div className="zp-msg zp-me">{turn.text}</div>
-                  <div className="zp-actions zp-right">
-                    <KeepLine keep={turn.keep} />
-                  </div>
-                </div>
               ) : turn.kind === "pending" ? (
-                <PendingTurn key={turn.id} memories={turn.memories} text={turn.text} />
+                <PendingTurn
+                  key={turn.id}
+                  route={turn.route}
+                  keep={turn.keep}
+                  memories={turn.memories}
+                  text={turn.text}
+                />
               ) : turn.kind === "error" ? (
                 <p key={turn.id} className="zp-msg zp-z zp-warn" role="alert">
                   {turn.text}
                 </p>
               ) : (
-                <AnswerTurn
-                  key={turn.id}
-                  result={turn.result}
-                  keep={turn.keep}
-                  onKeep={() => keepTurn(turn.id, turn.result)}
-                />
+                <ReplyTurn key={turn.id} route={turn.route} keep={turn.keep} result={turn.result} />
               )
             )}
             <div ref={endRef} />
@@ -436,12 +437,12 @@ export function MemoryChat() {
             className="zp-compose"
             onSubmit={(event) => {
               event.preventDefault()
-              void ask()
+              void send()
             }}
           >
             <textarea
-              aria-label="Ask your memory, or write something to keep"
-              placeholder="Ask your memory, or write something to keep"
+              aria-label="Message your memory"
+              placeholder="Tell Zenod something, or ask your memory"
               value={draft}
               rows={1}
               maxLength={2000}
@@ -449,29 +450,21 @@ export function MemoryChat() {
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
-                  void ask()
+                  void send()
                 }
               }}
             />
             <button
-              type="button"
-              className="zp-keep"
-              disabled={!draft.trim() || asking}
-              onClick={() => void keepTyped()}
-            >
-              Keep
-            </button>
-            <button
               type="submit"
               className="zp-send"
-              disabled={!draft.trim() || asking}
+              disabled={!draft.trim() || sending}
             >
-              Ask
+              Send
             </button>
           </form>
           <p className="zp-hint">
-            Asking saves nothing. Tap Keep to save a note or an answer to your
-            vault.
+            Zenod decides: what you tell it is kept, what you ask is answered. A
+            question is never saved.
           </p>
         </div>
       </div>

@@ -33,6 +33,10 @@
     "./answer-protocol": {
       "types": "./dist/llm/askNonAnswer.d.ts",
       "default": "./dist/llm/askNonAnswer.js"
+    },
+    "./send-route": {
+      "types": "./dist/llm/sendRoute.d.ts",
+      "default": "./dist/llm/sendRoute.js"
     }
   },
   "bin": {

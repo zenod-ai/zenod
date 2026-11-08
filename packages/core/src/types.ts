@@ -534,6 +534,12 @@ export interface BrainEngine {
     onText?: (delta: string) => void,
   ): Promise<MemoryChatCheck | null>;
   /**
+   * The web app's one Send button (E16-B1): decide from a message whether it carries new
+   * information to keep, a question to answer, or both. One small call on the chat model, metered
+   * like every call; the plain rules decide when there is no chat model or it slips. Never stores.
+   */
+  routeSend?(message: string): Promise<import("./llm/sendRoute.js").SendRoute>;
+  /**
    * Full conversational turn: ask + optional store, with conversation memory.
    * Pass onDelta to stream the answer text, onToolEvent to surface tool
    * start/end activity (the chat "calling a tool…" indicator). `conversationKey`
