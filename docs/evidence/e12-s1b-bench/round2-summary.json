@@ -1,0 +1,103 @@
+{
+  "before-real": {
+    "n": 45,
+    "model": "google/gemini-3.1-flash-lite",
+    "firstP50": 1090,
+    "firstP95": 1765,
+    "fullP50": 1583,
+    "fullP95": 2473
+  },
+  "after-real": {
+    "n": 45,
+    "model": "google/gemini-3.1-flash-lite",
+    "firstP50": 1143,
+    "firstP95": 1724,
+    "fullP50": 2703,
+    "fullP95": 4755
+  },
+  "demo-base": {
+    "n": 20,
+    "model": "google/gemini-3.1-flash-lite",
+    "firstP50": 922,
+    "firstP95": 1434,
+    "fullP50": 1209,
+    "fullP95": 1777,
+    "checked": 1,
+    "correct": 1,
+    "callsPerAnswer": 1,
+    "costPerAnswerUsd": 0,
+    "inputTokensPerAnswer": 641,
+    "outputTokensPerAnswer": 45
+  },
+  "demo-after": {
+    "n": 20,
+    "model": "google/gemini-3.1-flash-lite",
+    "firstP50": 751,
+    "firstP95": 1032,
+    "fullP50": 1073,
+    "fullP95": 1774,
+    "checked": 1,
+    "correct": 1,
+    "callsPerAnswer": 1,
+    "costPerAnswerUsd": 0,
+    "inputTokensPerAnswer": 1214,
+    "outputTokensPerAnswer": 60
+  },
+  "demo-unans-base": {
+    "n": 5,
+    "model": "google/gemini-3.1-flash-lite",
+    "firstP50": 1223,
+    "firstP95": 1954,
+    "fullP50": 1223,
+    "fullP95": 1954,
+    "checked": 0,
+    "correct": 0,
+    "callsPerAnswer": 1,
+    "costPerAnswerUsd": 0,
+    "inputTokensPerAnswer": 774,
+    "outputTokensPerAnswer": 3
+  },
+  "demo-unans-after": {
+    "n": 5,
+    "model": "google/gemini-3.1-flash-lite",
+    "firstP50": 563,
+    "firstP95": 2205,
+    "fullP50": 563,
+    "fullP95": 2205,
+    "checked": 0,
+    "correct": 0,
+    "callsPerAnswer": 1,
+    "costPerAnswerUsd": 0,
+    "inputTokensPerAnswer": 1526,
+    "outputTokensPerAnswer": 3
+  },
+  "blindGrades": {
+    "before": {
+      "correct": 8,
+      "partly": 11,
+      "wrong": 8,
+      "noAnswer": 18
+    },
+    "after": {
+      "correct": 29,
+      "partly": 11,
+      "wrong": 3,
+      "noAnswer": 2
+    },
+    "firstPass": {
+      "before": {
+        "correct": 10,
+        "partly": 8,
+        "wrong": 9,
+        "noAnswer": 18
+      },
+      "after_lineCheck": {
+        "correct": 33,
+        "partly": 7,
+        "wrong": 3,
+        "noAnswer": 2
+      }
+    }
+  },
+  "note": "Counts and timings only. Questions, answers and grades are private (VPS3 ~/s1b2, tailnet page :8918/round2/)."
+}

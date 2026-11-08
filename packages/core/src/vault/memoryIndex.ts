@@ -172,7 +172,12 @@ export function buildMatch(query: string, aliasGroups: readonly (readonly string
  * The MATCH expression and, separately, one clause per content word of the query (aliases
  * excluded): the words a hit's coverage is measured against.
  */
-export function buildMatchTerms(query: string, aliasGroups: readonly (readonly string[])[]): { match: string | null; terms: string[]; generic: boolean } {
+export function buildMatchTerms(
+  query: string,
+  aliasGroups: readonly (readonly string[])[],
+  /** Other spellings of a query word, each an OR alternative credited as that word (E12-S1b round 2). */
+  variants?: ReadonlyMap<string, readonly string[]>,
+): { match: string | null; terms: string[]; generic: boolean } {
   const normalized = normalize(query);
   const words = normalized.split(" ").filter(Boolean);
   const content = words.filter((word) => !STOP_WORDS.has(word) && word.length >= 2);
@@ -199,6 +204,7 @@ export function buildMatchTerms(query: string, aliasGroups: readonly (readonly s
     const joined = normalize(raw);
     if (split !== joined && split.includes(" ") && terms.includes(joined)) addAlt(joined, quote(split));
   }
+  for (const term of terms) for (const variant of variants?.get(term) ?? []) addAlt(term, quote(variant));
   const clauses = new Set<string>();
   const termClauses: string[] = [];
   for (const term of terms) {
@@ -227,6 +233,19 @@ export function buildMatchTerms(query: string, aliasGroups: readonly (readonly s
 export function connectionWeight(kinds: ReadonlySet<string>, depth: number): number {
   const base = Math.max(kinds.has("cites") ? 0.8 : 0, kinds.has("filed") ? 0.78 : 0, kinds.has("mentions") ? 0.72 : 0);
   return Math.min(0.97, base + 0.03 * Math.max(0, kinds.size - 1) + 0.01 * Math.min(3, Math.max(0, depth - 1)));
+}
+
+/** Edit distance with adjacent swaps (Damerau, optimal string alignment), for short words. */
+function editDistance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + 1);
+    }
+  }
+  return d[a.length]![b.length]!;
 }
 
 /** A voice note's words without the ingest lines (file name, raw artifact, transcriber). */
@@ -292,6 +311,7 @@ export class MemoryIndex {
   /** Bumped by every sync that changed rows: the cached graph is rebuilt on the next read. */
   private version = 0;
   private graphCache: { version: number; graph: MemoryGraph } | null = null;
+  private spokenCache: { version: number; words: Map<string, number> } | null = null;
   private aliasGroups: readonly (readonly string[])[];
   readonly tenantId: string;
   private readonly now: () => number;
@@ -481,6 +501,11 @@ export class MemoryIndex {
       const day = `Log/${intent.window.date}.md`;
       pool = pool.filter((row) => row.file === day);
       if (pool.length === 0) return [];
+    } else if (intent.window.kind === "range") {
+      // A period (E12-S1b round 2): every note from its first day to its last, newest first.
+      const [from, to] = [`Log/${intent.window.from}.md`, `Log/${intent.window.to}.md`];
+      pool = pool.filter((row) => row.file >= from && row.file <= to);
+      if (pool.length === 0) return [];
     }
     pool = pool.slice(0, 200);
     let fit = new Map(pool.map((row) => [row.rowid, 1]));
@@ -500,8 +525,10 @@ export class MemoryIndex {
     }
     const percentOf = (value: number) => Math.max(1, Math.min(100, Math.round(value * 100)));
     const hits: MemoryIndexHit[] = [];
+    // The latest note halves each older one; in a period every note counts, so they fall gently.
+    const decay = intent.window.kind === "range" ? 0.95 : 0.5;
     pool.slice(0, limit).forEach((note, k) => {
-      const notePercent = percentOf((fit.get(note.rowid) ?? 0) * 0.5 ** k);
+      const notePercent = percentOf((fit.get(note.rowid) ?? 0) * decay ** k);
       const links = this.connectionsOf(note.path);
       hits.push({
         path: note.path, kind: "log", title: note.title, snippet: snippetOf({ summary: "", body: spokenWords(note.body) }, words),
@@ -511,7 +538,8 @@ export class MemoryIndex {
         ...(links.unwritten > 0 ? { unwritten: links.unwritten } : {}),
       });
       // The pages it was filed into follow the latest note only: older notes stay one line each.
-      if (k > 0) return;
+      // A period lists its notes alone: the period is the answer, not one note's topics.
+      if (k > 0 || intent.window.kind === "range") return;
       const said = contentWords(note.body);
       // A question with a topic ("what did I say about explainer videos today") keeps only the
       // note's pages that are about it: the others were filed from other parts of the note.
@@ -535,6 +563,70 @@ export class MemoryIndex {
     });
     // Highest first; a tie keeps the order above (stronger tie, deeper page, then title).
     return hits.map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
+  }
+
+  /**
+   * The person's own notes that best match a question (E12-S1b round 2): Log entries they sent,
+   * never agent reports, by how much of the question's words each holds, then BM25. The chat
+   * answer reads them beside the ranked memories: BM25 ranks a long voice note low, so the ranked
+   * list often misses the one note that says it. Empty for a question with no telling word.
+   */
+  async ownNotes(query: string, limit = 6): Promise<string[]> {
+    await this.fresh();
+    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.spellingVariants(query));
+    if (!match || generic) return [];
+    const rows = this.db.prepare(`
+      SELECT rowid, path, bm25(docs, ${BM25_WEIGHTS}) AS rank FROM docs
+      WHERE docs MATCH ? AND kind = 'log' AND meta LIKE 'user%' ORDER BY rank LIMIT 80
+    `).all(match) as Array<{ rowid: number; path: string; rank: number }>;
+    if (rows.length === 0) return [];
+    const coverage = this.coverageOf(terms, rows.map((row) => row.rowid));
+    const best = Math.max(0, ...coverage.values());
+    if (best === 0) return [];
+    return rows
+      .filter((row) => (coverage.get(row.rowid) ?? 0) >= best * 0.6)
+      .sort((a, b) => (coverage.get(b.rowid) ?? 0) - (coverage.get(a.rowid) ?? 0) || a.rank - b.rank)
+      .slice(0, limit)
+      .map((row) => row.path);
+  }
+
+  /**
+   * How a speech-to-text model keeps spelling a word the person writes (E12-S1b round 2): Jordi says
+   * "Zenod" and his transcripts say "Zenot", "Znot", "Zinot". For a question word of five letters or
+   * more that the vault knows (3+ rows) but that is (almost) never in what the person said, the
+   * words of their voice notes that start with the same letter, are at most one letter longer or
+   * shorter, two edits away or less, and recur in 2+ notes. At most four per word.
+   */
+  private spellingVariants(query: string): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    const words = [...new Set(normalize(query).split(" ").filter((word) => word.length >= 5 && !STOP_WORDS.has(word) && !GENERIC_WORDS.has(word) && !/\d/.test(word)))];
+    if (words.length === 0) return out;
+    const spoken = this.spokenVocabulary();
+    const rows = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ?");
+    for (const word of words) {
+      if ((spoken.get(word) ?? 0) > 1) continue;
+      if ((rows.get(`{title aliases summary body} : ${quote(word)}`) as { n: number }).n < 3) continue;
+      const found = [...spoken]
+        .filter(([other, notes]) => notes >= 2 && other !== word && other[0] === word[0] && Math.abs(other.length - word.length) <= 1 && editDistance(word, other) <= 2)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 4)
+        .map(([other]) => other);
+      if (found.length) out.set(word, found);
+    }
+    return out;
+  }
+
+  /** Words of four letters or more in the person's voice notes (spoken words only), by how many notes hold each. */
+  private spokenVocabulary(): Map<string, number> {
+    if (this.spokenCache?.version === this.version) return this.spokenCache.words;
+    const words = new Map<string, number>();
+    for (const row of this.db.prepare("SELECT body FROM docs WHERE kind = 'log' AND meta = 'user voice'").all() as Array<{ body: string }>) {
+      for (const word of new Set(normalize(spokenWords(row.body).split("\n").filter((line) => !/^(?:media type|source|source timestamp|extraction artifact|user context|raw artifact[^:]*):/i.test(line.trim())).join(" ")).split(" "))) {
+        if (word.length >= 4) words.set(word, (words.get(word) ?? 0) + 1);
+      }
+    }
+    this.spokenCache = { version: this.version, words };
+    return words;
   }
 
   /** Of `paths`, the pages whose words or tree place hold at least half the topic (rarity-weighted). */

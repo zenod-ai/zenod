@@ -527,12 +527,14 @@ export interface BrainEngine {
    * The web app's fast chat answer (E12-S1b): one streamed model call over memories ranked
    * retrieval already found (numbered by rank), each citation checked against its memory's text.
    * Read-only; null when the model has no streaming chat call (callers fall back to ask).
+   * `context` lists every memory the model read, numbered: the ranked ones and any of the person's
+   * own notes added after them (E12-S1b round 2), so a citation of an added note can be shown.
    */
   answerFromMemories?(
     question: string,
     memories: ReadonlyArray<{ n: number; path: string; title: string; snippet?: string }>,
     onText?: (delta: string) => void,
-  ): Promise<MemoryChatCheck | null>;
+  ): Promise<(MemoryChatCheck & { context?: Array<{ n: number; path: string; title: string; url: string; provider: Note["provider"] }> }) | null>;
   /**
    * The web app's one Send button (E16-B1): decide from a message whether it carries new
    * information to keep, a question to answer, or both. One small call on the chat model, metered

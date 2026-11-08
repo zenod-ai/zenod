@@ -42,12 +42,33 @@ describe("memory chat answer protocol (E12-S1b)", () => {
   it("refuses an answer with a made-up quote, a citation without a quote, a number not given, or none at all", () => {
     expect(checkMemoryChatAnswer('It is under the doormat [1].\nSOURCES\n[1] "the key is under the doormat"', memories))
       .toMatchObject({ checked: false, reason: "citation_not_found" });
-    expect(checkMemoryChatAnswer('Frog [1], pressure 2.4 [2].\nSOURCES\n[1] "the blue ceramic frog"', memories))
+    // Most claims unchecked: nothing is shown.
+    expect(checkMemoryChatAnswer('Frog [1], pressure 2.4 [2], rear 2.6 [2].\nSOURCES\n[1] "the blue ceramic frog"', memories))
       .toMatchObject({ checked: false, reason: "citation_not_found", cited: [1] });
     expect(checkMemoryChatAnswer('Frog [7].\nSOURCES\n[7] "the blue ceramic frog"', memories)).toMatchObject({ checked: false, reason: "citation_not_found" });
     expect(checkMemoryChatAnswer("The key is in the frog.", memories)).toMatchObject({ checked: false, reason: "no_citation" });
     expect(checkMemoryChatAnswer("NO_ANSWER", memories)).toMatchObject({ checked: false, reason: "no_answer", text: "" });
     expect(checkMemoryChatAnswer("  ", memories)).toMatchObject({ checked: false, reason: "empty" });
+  });
+
+  it("removes only the claims whose citation has no quote, never shows one (E12-S1b round 2)", () => {
+    // [2] is cited but not quoted: its claim goes, the checked one stays, and a claim backed by a
+    // checked note keeps that note even when it also names an unchecked one.
+    const output = [
+      "In your notes:",
+      "- The spare key is in the blue frog [1][2].",
+      "- Tyre pressure is 2.4 bar [2].",
+      "- It sits under the rosemary pot [1], and the car is red [2].",
+      "SOURCES",
+      '[1] "in the blue ceramic frog under the rosemary pot"',
+    ].join("\n");
+    expect(checkMemoryChatAnswer(output, memories)).toEqual({
+      checked: true, reason: null, cited: [1],
+      text: "In your notes:\n- The spare key is in the blue frog [1].\n- It sits under the rosemary pot [1].",
+    });
+    // A made-up quote is no quote: same rule.
+    const madeUp = 'The key is in the frog [1]. The car is red [2].\nSOURCES\n[1] "the blue ceramic frog"\n[2] "the car is red"';
+    expect(checkMemoryChatAnswer(madeUp, memories)).toMatchObject({ checked: true, text: "The key is in the frog [1].", cited: [1] });
   });
 
   it("finds a quote despite case, punctuation and accents, but not a one-word or invented one", () => {
@@ -117,7 +138,9 @@ describe("engine.answerFromMemories (E12-S1b)", () => {
       { n: 2, path: "Log/2026-11-01.md#^e-bbbbbb", title: "note" },
       { n: 3, path: "Notes/Missing.md", title: "Missing" },
     ], (text) => shown.push(text));
-    expect(check).toEqual({ checked: true, reason: null, text: "Ana is your plumber [2].", cited: [2] });
+    expect(check).toMatchObject({ checked: true, reason: null, text: "Ana is your plumber [2].", cited: [2] });
+    // Every memory read, numbered, so the app can show a cited one (E12-S1b round 2).
+    expect(check!.context!.map((memory) => memory.path)).toEqual(["Notes/Car.md", "Log/2026-11-01.md#^e-bbbbbb"]);
     expect(shown.join("").trim()).toBe("Ana is your plumber [2].");
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("Tyre pressure");
