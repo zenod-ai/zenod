@@ -3,6 +3,7 @@ import type { Answer, BrainEngine, SourceRef } from "zenod";
 // Subpath, not the "zenod" entry: customerLayer.ts (and so this module) is bundled into Phylax.
 import { askNonAnswer } from "zenod/answer-protocol";
 import { ruleSendRoute, type SendRoute } from "zenod/send-route";
+import type { TaskJobInput } from "./taskJobStore.js";
 import { memoryAppPath, rankMemories, type RankedMemory } from "./rankedMemory.js";
 
 /**
@@ -255,4 +256,51 @@ export function memoryKeepIdempotencyKey(tenantId: string, content: string): str
 
 export function isMemoryKeepJobKey(tenantId: string, key: string | null): boolean {
   return Boolean(key?.startsWith(`${tenantId}:web-keep:`));
+}
+
+// EPIC-14 E14-S1: a voice note recorded in the web app's chat goes into the same media seam a
+// WhatsApp voice note uses (media_ingest: archive, transcribe, Log entry, filing).
+/** The longest note the chat records (the app stops and sends at this length). */
+export const VOICE_NOTE_MAX_SECONDS = 10 * 60;
+/** Ten minutes of speech at the recorder's 32 kbit/s is about 2.4 MB; this leaves room for other formats. */
+export const VOICE_NOTE_MAX_BYTES = 8 * 1024 * 1024;
+const VOICE_NOTE_EXTENSIONS: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+  "audio/mp4": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/aac": "aac",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+};
+
+/** The recorder's format without codec parameters, or null when it is not a format the chat records. */
+export function voiceNoteMediaType(contentType: string | undefined): string | null {
+  const type = (contentType ?? "").split(";")[0]!.trim().toLowerCase();
+  return VOICE_NOTE_EXTENSIONS[type] ? type : null;
+}
+
+/** The media_ingest input for one recorded note: the audio itself rides as a data URL. */
+export function voiceNoteIngestInput(audio: Buffer, mediaType: string, seconds: number | null, at: Date): TaskJobInput {
+  const stamp = at.toISOString().replace(/[:.]/g, "-");
+  return {
+    mediaType: "audio",
+    contentType: "voice_note",
+    bytesRef: `data:${mediaType};base64,${audio.toString("base64")}`,
+    filename: `zenod-app-voice-note-${stamp}.${VOICE_NOTE_EXTENSIONS[mediaType]}`,
+    sourceHint: "Zenod app voice note",
+    senderTimestamp: at.toISOString(),
+    source: "web",
+    ...(seconds !== null ? { audioDurationSeconds: seconds } : {}),
+  };
+}
+
+/** One filing per recording: a retried upload of the same audio files it once. */
+export function voiceNoteIdempotencyKey(tenantId: string, audio: Buffer): string {
+  return `${tenantId}:web-voice:${createHash("sha256").update(audio).digest("hex").slice(0, 32)}`;
+}
+
+export function isVoiceNoteJobKey(tenantId: string, key: string | null): boolean {
+  return Boolean(key?.startsWith(`${tenantId}:web-voice:`));
 }

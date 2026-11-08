@@ -158,8 +158,11 @@ export function projectRecentSave(job: TaskJob, enrichment: TaskJob | null): Rec
 
 export function recentSaves(store: TaskJobStore, limit = RECENT_SAVES_DEFAULT_LIMIT): RecentSave[] {
   const bounded = Math.min(Math.max(1, Math.floor(limit) || RECENT_SAVES_DEFAULT_LIMIT), RECENT_SAVES_MAX_LIMIT);
-  return store.recentCaptures(bounded).map((job) => {
-    const enrichmentId = job.kind === "media_ingest" ? (job.result as MediaIngestReceipt | null)?.digest?.enrichmentJobId : undefined;
-    return projectRecentSave(job, enrichmentId ? store.get(enrichmentId) : null);
-  });
+  return store.recentCaptures(bounded).map((job) => projectCapture(store, job));
+}
+
+/** One capture with its follow-up filing (a media capture's enrich_memory job), as the app shows it. */
+export function projectCapture(store: TaskJobStore, job: TaskJob): RecentSave {
+  const enrichmentId = job.kind === "media_ingest" ? (job.result as MediaIngestReceipt | null)?.digest?.enrichmentJobId : undefined;
+  return projectRecentSave(job, enrichmentId ? store.get(enrichmentId) : null);
 }

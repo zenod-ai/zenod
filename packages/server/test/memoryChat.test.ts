@@ -11,7 +11,7 @@ import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { aiAllowanceExhaustedMessage } from "../src/customerMetering.js";
 import { issueCustomerSession } from "../src/customerSession.js";
-import { answerFromMemory, memoryKeepContent, parseMemoryKeep, streamAnswerFromMemory } from "../src/memoryChat.js";
+import { answerFromMemory, memoryKeepContent, parseMemoryKeep, streamAnswerFromMemory, VOICE_NOTE_MAX_BYTES } from "../src/memoryChat.js";
 import { Runtime } from "../src/runtime.js";
 
 // EPIC-12 E12-S1: the web app's chat with your memory. Asking answers from your own vault and
@@ -266,7 +266,7 @@ describe("console memory chat routes (E12-S1)", () => {
       tenants.close();
       for (const runtime of runtimes.values()) await runtime.close();
     };
-    return { runtimes, engines, ada, bob, eve: principal("eve"), call, close };
+    return { runtimes, engines, ada, bob, eve: principal("eve"), call, cookieFor, layer, close };
   }
 
   it("answers only from the signed-in customer's own vault and saves nothing", async () => {
@@ -516,6 +516,81 @@ describe("console memory chat routes (E12-S1)", () => {
       const blocked = await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "The shed is green." });
       expect(blocked.status).toBe(429);
       expect(route).not.toHaveBeenCalled();
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("sends a recorded voice note into the tenant's media seam once, and shows its receipt only to them (E14-S1)", async () => {
+    const t = await setup();
+    try {
+      const audio = Buffer.from("OggS fake opus voice note bytes");
+      const send = async (user: CustomerPrincipal | undefined, body: Buffer, type = "audio/webm;codecs=opus", seconds = "4.20") =>
+        t.layer.app.request("/api/console/voice-note", {
+          method: "POST",
+          headers: { ...(user ? { cookie: await t.cookieFor(user) } : {}), "content-type": type, "x-seconds": seconds },
+          body,
+        });
+      expect((await send(undefined, audio)).status).toBe(401);
+      expect((await send(t.ada, audio, "text/plain")).status).toBe(415);
+      expect((await send(t.ada, Buffer.alloc(0))).status).toBe(400);
+      expect((await send(t.ada, Buffer.alloc(VOICE_NOTE_MAX_BYTES + 1))).status).toBe(413);
+      expect((await send(t.eve, audio)).status).toBe(404);
+
+      const enqueue = vi.spyOn(t.runtimes.get("tenant-a")!.taskJobQueue, "enqueue");
+      const sent = await send(t.ada, audio);
+      expect(sent.status).toBe(202);
+      const receipt = await sent.json();
+      expect(receipt).toMatchObject({ channel: "app", kind: "voice", channelLabel: "Zenod app" });
+      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue.mock.calls[0]![0]).toBe("media_ingest");
+      expect(enqueue.mock.calls[0]![1]).toMatchObject({
+        mediaType: "audio",
+        contentType: "voice_note",
+        bytesRef: `data:audio/webm;base64,${audio.toString("base64")}`,
+        filename: expect.stringMatching(/^zenod-app-voice-note-.+\.webm$/),
+        sourceHint: "Zenod app voice note",
+        source: "web",
+        audioDurationSeconds: 4.2,
+      });
+      expect(enqueue.mock.calls[0]![2]).toMatch(/^tenant-a:web-voice:[0-9a-f]{32}$/);
+
+      // iPhone Safari records AAC in mp4.
+      const iphone = await (await send(t.ada, Buffer.from("ftypM4A fake aac"), "audio/mp4")).json();
+      expect(enqueue.mock.calls[1]![1]).toMatchObject({ filename: expect.stringMatching(/\.m4a$/) });
+
+      // A retried upload files it once.
+      const again = await (await send(t.ada, audio)).json();
+      expect(again.id).toBe(receipt.id);
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(2);
+      expect(t.runtimes.get("tenant-b")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+
+      expect((await t.call("GET", `/api/console/voice-note/${iphone.id}`, t.ada)).status).toBe(200);
+      expect((await t.call("GET", `/api/console/voice-note/${receipt.id}`, t.bob)).status).toBe(404);
+      expect((await t.call("GET", `/api/console/voice-note/${receipt.id}`)).status).toBe(401);
+      // A Keep's id is not a voice note.
+      const kept = await (await t.call("POST", "/api/console/memory-keep", t.ada, { content: "typed" })).json();
+      expect((await t.call("GET", `/api/console/voice-note/${kept.id}`, t.ada)).status).toBe(404);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("keeps a voice note out at the AI allowance (E14-S1)", async () => {
+    const t = await setup({ allowance: 0.01 });
+    try {
+      t.runtimes.get("tenant-a")!.usageStore.record({
+        operation: "answer", provider: "openrouter", model: "m", inputTokens: 1, outputTokens: 1,
+        cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 1,
+      });
+      const blocked = await t.layer.app.request("/api/console/voice-note", {
+        method: "POST",
+        headers: { cookie: await t.cookieFor(t.ada), "content-type": "audio/webm" },
+        body: Buffer.from("audio"),
+      });
+      expect(blocked.status).toBe(429);
+      expect(await blocked.json()).toMatchObject({ code: "ai_allowance_exhausted" });
       expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
     } finally {
       await t.close();

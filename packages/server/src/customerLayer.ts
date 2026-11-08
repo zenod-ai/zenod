@@ -5,6 +5,7 @@ import { Hono, type Context } from "hono";
 import type { HttpBindings } from "@hono/node-server";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { stream } from "hono/streaming";
+import { bodyLimit } from "hono/body-limit";
 import { tenantAllowanceEnforcedFromEnv, tenantMonthlyAllowanceFromEnv } from "./settings.js";
 import type { Runtime } from "./runtime.js";
 import { McpTokenStore, type McpTokenRecord } from "./mcpTokens.js";
@@ -58,10 +59,16 @@ const MEMORY_GRAPH_LIMIT = 21;
 /** A lit answer (E12-S13): up to 12 memories, the pages between them and their parents. */
 const MEMORY_GRAPH_LIT_LIMIT = 24;
 const MEMORY_GRAPH_LIT_MAX = 12;
-import { projectRecentSave } from "./recentSaves.js";
+import { projectCapture, projectRecentSave } from "./recentSaves.js";
 import {
   answerFromMemory,
   isMemoryKeepJobKey,
+  isVoiceNoteJobKey,
+  VOICE_NOTE_MAX_BYTES,
+  VOICE_NOTE_MAX_SECONDS,
+  voiceNoteIdempotencyKey,
+  voiceNoteIngestInput,
+  voiceNoteMediaType,
   streamAnswerFromMemory,
   MEMORY_CHAT_MAX_QUESTION_CHARS,
   memoryKeepContent,
@@ -1592,6 +1599,54 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       return c.json({ error: "not_found" }, 404);
     }
     return c.json(projectRecentSave(job, null));
+  });
+
+  // EPIC-14 E14-S1: a voice note recorded in the chat. The body is the audio itself; it goes into the
+  // tenant's media seam as a WhatsApp voice note does (archive, transcribe, Log entry, filing), under
+  // the same AI allowance, and the app polls its receipt like a Keep.
+  app.post("/api/console/voice-note", bodyLimit({
+    maxSize: VOICE_NOTE_MAX_BYTES,
+    onError: (c) => c.json({ error: "too_large", message: "That voice note is too long to send." }, 413),
+  }), async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const mediaType = voiceNoteMediaType(c.req.header("content-type"));
+    if (!mediaType) return c.json({ error: "unsupported_audio", message: "That recording format is not supported." }, 415);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const block = runtime.aiAllowanceBlock();
+    if (block) return allowanceResponse(c, block);
+    const audio = Buffer.from(await c.req.arrayBuffer().catch(() => new ArrayBuffer(0)));
+    if (audio.length === 0) return c.json({ error: "empty", message: "Nothing was recorded." }, 400);
+    const seconds = Number(c.req.header("x-seconds"));
+    const duration = Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, VOICE_NOTE_MAX_SECONDS) : null;
+    try {
+      const job = runtime.taskJobQueue.enqueue(
+        "media_ingest",
+        voiceNoteIngestInput(audio, mediaType, duration, new Date()),
+        voiceNoteIdempotencyKey(account.tenant_id, audio),
+      );
+      return c.json(projectCapture(runtime.taskJobStore, job), 202);
+    } catch (error) {
+      console.warn(`[voice-note] capture unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "keep unavailable" }, 503);
+    }
+  });
+
+  app.get("/api/console/voice-note/:id", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const job = runtime.taskJobQueue.get(c.req.param("id"));
+    if (!job || job.kind !== "media_ingest" || !isVoiceNoteJobKey(account.tenant_id, job.idempotencyKey)) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    return c.json(projectCapture(runtime.taskJobStore, job));
   });
 
   // E12-S1: open one memory of the signed-in customer's own vault in the app (a chat link's target).
