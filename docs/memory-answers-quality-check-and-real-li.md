@@ -33,7 +33,7 @@ Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Waiting on: Jordi, E15-A1 (OpenRouter test credits $1.38 left; does production share the account?)
 Approved work: none
 Next action: Q1 dispatched
 Source revision: uncommitted scaffold
@@ -43,6 +43,10 @@ Verified at: 2026-11-08
 
 - No synthetic fixtures he does not recognise as the main test.
 - Read only on his vault; private content stays off this public repo.
+
+## Waiting on
+
+- [ask E15-A1: provide @Jordi since 2026-11-08 row Q1] Please top up the shared OpenRouter test credits by $20 — only $1.38 of $110 is left, and today it refused 15 of 20 test calls on your real notes. Also tell us whether production's own Zenod key draws on the same OpenRouter account: if it does, filing and answers stop for everyone when it reaches zero — context: the memory quality tests and the accuracy fix both run on that test key — impact: no model test runs until it is topped up; if production shares the account, Zenod itself is at risk — risk: spend only, $20, and we recommend giving the test key its own monthly cap so tests can never drain production — recommend: top up $20, set a monthly cap on the test key — why Jordi: the OpenRouter management key is yours, kept in Bitwarden and deliberately not on the servers — unblocks: Q1 follow-ups, EPIC-12 S1b accuracy, EPIC-18 W1 measuring
 
 ## Issue Ledger
 
