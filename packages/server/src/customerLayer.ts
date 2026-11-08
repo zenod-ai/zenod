@@ -78,6 +78,7 @@ import {
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
+import { registerPersonaRoutes } from "./personaRoutes.js";
 import {
   checkoutEnabledForOwner,
   checkoutOwnerAllowlisted,
@@ -1680,6 +1681,18 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
     return { runtime, tenantId: account.tenant_id };
+  });
+
+  // EPIC-14 S4: the personas' settings (on or off, last runs, spend, Run now) for the signed-in
+  // customer's own tenant only (personaRoutes.ts).
+  registerPersonaRoutes(app, async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return { response: c.json({ error: "no_account" }, 404) };
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
+    return { runtime };
   });
 
   if (capabilities.managedAiApplication) {

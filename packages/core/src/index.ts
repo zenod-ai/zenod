@@ -46,6 +46,7 @@ export type {
   TokenCostOperation,
   TreeSweepInput,
   TreeSweepResult,
+  PersonaNotesInput,
   UnpublishedHeadRecovery,
   WorkInput,
   WorkResult,

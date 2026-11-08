@@ -43,6 +43,7 @@ import type {
   InterruptedFilingState,
   TreeSweepInput,
   TreeSweepResult,
+  PersonaNotesInput,
   UnpublishedHeadRecovery,
   WorkInput,
   WorkResult,
@@ -2242,6 +2243,44 @@ export function createEngine(options: EngineOptions): BrainEngine {
     }, "background");
   }
 
+  /**
+   * EPIC-14 S4: one persona run's notes, into `Personas/<personaId>/` only, as ONE revision on the
+   * background lane (behind any live filing, like the tree sweep). Any path outside the folder, or a
+   * change the run did not make, fails the run and puts the working tree back.
+   */
+  async function writePersonaNotes(input: PersonaNotesInput): Promise<VaultRevision | null> {
+    assertVault(repo);
+    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.personaId)) throw new Error("persona_notes_bad_id");
+    const folder = `Personas/${input.personaId}/`;
+    const files = input.files.map((file) => {
+      const name = file.name.replaceAll("\\", "/");
+      if (!name || name.startsWith("/") || name.split("/").some((part) => !part || part === "." || part === "..") || !name.endsWith(".md")) {
+        throw new Error("persona_notes_bad_path");
+      }
+      return { path: `${folder}${name}`, content: file.content };
+    });
+    if (files.length === 0) return null;
+    return queue.run(async (): Promise<VaultRevision | null> => {
+      await assertNoInterruptedFiling();
+      if ((await repo.pendingChanges()).length > 0) throw new Error("persona_notes_dirty_worktree");
+      await repo.pull().catch(() => {});
+      lastSyncMs = now().getTime();
+      try {
+        for (const file of files) {
+          await mkdir(dirname(join(vaultPath, file.path)), { recursive: true });
+          await writeFile(join(vaultPath, file.path), file.content);
+        }
+        const changes = await repo.pendingChanges();
+        if (changes.length === 0) return null;
+        if (changes.some((change) => !change.path.startsWith(folder))) throw new Error("persona_notes_outside_folder");
+        return await repo.commitAndPublish(input.message.split("\n")[0]!.slice(0, 200));
+      } catch (error) {
+        await repo.discardChanges().catch(() => {});
+        throw error;
+      }
+    }, "background");
+  }
+
   async function enrichEvidence(input: EnrichEvidenceInput): Promise<StoreResult> {
     const result = await enrichEvidenceFiling(input);
     return queue.run(() => recordPlacement(result, input.content, input.assertActive), "background");
@@ -3693,6 +3732,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       return getNote(vaultPath, path, sourceResolver);
     },
     sweepTree,
+    writePersonaNotes,
     memoryTree: async () => {
       assertVault(repo);
       await syncForRead();

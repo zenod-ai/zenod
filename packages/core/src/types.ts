@@ -614,6 +614,12 @@ export interface BrainEngine {
    * background write lane, so never concurrently with a live filing. No LLM.
    */
   sweepTree?(input?: TreeSweepInput): Promise<TreeSweepResult>;
+  /**
+   * EPIC-14 S4: a persona's own notes. Writes only under `Personas/<personaId>/` (never a memory,
+   * the Log or another persona's folder) and publishes them as ONE revision on the background
+   * write lane. Null when nothing changed. No LLM.
+   */
+  writePersonaNotes?(input: PersonaNotesInput): Promise<VaultRevision | null>;
   /** Whole tree for the console Memory tab (EPIC-9 E9-2e); null when the vault has no Tree.md. */
   memoryTreeOutline?(): Promise<MemoryTreeOutline | null>;
   /** Deterministic vault validation. No LLM. */
@@ -736,6 +742,16 @@ export interface TreeSweepInput {
   /** Evidence refs whose filing job is still queued or running; their receipts are left alone. */
   skipEvidenceRefs?: string[];
   assertActive?: () => void;
+}
+
+/** EPIC-14 S4: the files one persona run writes into its own folder. */
+export interface PersonaNotesInput {
+  /** The persona's id, a lower-case slug: its folder is `Personas/<personaId>/`. */
+  personaId: string;
+  /** File names inside the folder (`2026-11-08.md`, `recaps/2026-11-08.md`), with their whole content. */
+  files: Array<{ name: string; content: string }>;
+  /** The commit message, one line. */
+  message: string;
 }
 
 export interface TreeSweepResult {

@@ -1,0 +1,10 @@
+/* EPIC-14 S4: the personas, on the inbox's paper rules (memory-inbox.css). */
+.zr-perms { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; font-size: 0.86rem; color: var(--zp-muted); }
+.zr-perms li::before { content: "· "; color: var(--zp-faint); }
+.zr-run { margin: 0; font-size: 0.92rem; color: var(--zp-ink); display: flex; flex-wrap: wrap; gap: 0.2rem 0.5rem; align-items: baseline; }
+.zr-meta { color: var(--zp-faint); font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+.zr-status { font-weight: 600; }
+.zr-s-done { color: var(--zp-accent); }
+.zr-s-capped, .zr-s-failed { color: var(--zp-warn); }
+.zr-s-skipped, .zr-s-running { color: var(--zp-muted); }
+.zr-item .zp-keep { background: transparent; color: var(--zp-ink); border: 1px solid var(--zp-line); }

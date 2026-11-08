@@ -66,7 +66,12 @@ import { DriveClient, driveVaultAuthFromSettings } from "./drive.js";
 import { buildOutboundTools } from "./outboundTools.js";
 import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
-import { UsageStore } from "./usageStore.js";
+import { UsageStore, estimateCostUsd } from "./usageStore.js";
+import { inboxFor } from "./inboxStore.js";
+import { closePersonasFor, personasFor } from "./personaStore.js";
+import { duePersonas, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
+import type { PersonaRun } from "./personaStore.js";
+import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { NotificationStore } from "./notificationStore.js";
 import { NotificationBus } from "./notificationBus.js";
 import { IngestQueue } from "./ingestQueue.js";
@@ -932,8 +937,82 @@ export class Runtime {
       } catch (error) {
         console.error("[tree-sweep] schedule check failed:", error);
       }
+      // EPIC-14 S4: personas wake in the same off-peak window, on the same clock.
+      void this.wakePersonas().catch((error: unknown) => console.error("[persona] schedule check failed:", error));
     }, intervalMs);
     this.treeSweepTimer.unref();
+  }
+
+  private personaWake: Promise<PersonaRun[]> | null = null;
+
+  /**
+   * EPIC-14 S4: wake the personas that are due (switched on, off-peak window, period not yet run),
+   * one after another, single-flight per tenant. Vault agents with a model key only.
+   */
+  wakePersonas(now: Date = new Date(), personas: readonly PersonaDefinition[] = BUILT_IN_PERSONAS): Promise<PersonaRun[]> {
+    if (this.personaWake) return this.personaWake;
+    if (this.agent.vaultless === true || !this.settings.vaultConfigured() || !this.settings.activeApiKey()) return Promise.resolve([]);
+    const due = duePersonas(personas, personasFor(this), now);
+    if (due.length === 0) return Promise.resolve([]);
+    const active = (async () => {
+      const runs: PersonaRun[] = [];
+      for (const persona of due) {
+        const run = await this.runPersona(persona, "schedule");
+        if (run) runs.push(run);
+      }
+      return runs;
+    })();
+    this.personaWake = active;
+    void active.finally(() => { if (this.personaWake === active) this.personaWake = null; });
+    return active;
+  }
+
+  /** Run one persona with this tenant's memory, inbox and cheap metered model (schedule or Run now). */
+  async runPersona(persona: PersonaDefinition, trigger: "schedule" | "manual"): Promise<PersonaRun | null> {
+    const engine = await this.getEngine();
+    const run = await runPersona(persona, {
+      memory: engine,
+      model: () => this.personaModel(),
+      inbox: inboxFor(this),
+      store: personasFor(this),
+      writeNotes: async (input) => {
+        if (!engine.writePersonaNotes) throw new Error("this memory cannot take persona notes");
+        return engine.writePersonaNotes(input);
+      },
+      aiAllowanceBlock: () => this.aiAllowanceBlock(),
+    }, trigger);
+    if (run) console.log(`[persona] tenant=${this.tenantId} ${persona.id} ${run.trigger} ${run.status}: steps=${run.steps} calls=${run.modelCalls} tokens=${run.inputTokens}/${run.outputTokens} usd=${run.costUsd.toFixed(5)}`);
+    return run;
+  }
+
+  /**
+   * A persona's model: the cheap chat model (one call, no tools), opened per run so the usage it
+   * reports is this run's alone. Every call is checked against and counted in the tenant's AI
+   * allowance, like any other call on the platform key.
+   */
+  personaModel(): PersonaModel {
+    let last: { inputTokens: number; outputTokens: number; costUsd: number } | null = null;
+    const llm = createBrainLlm({
+      provider: this.settings.provider(),
+      apiKey: this.settings.activeApiKey()!,
+      ...(this.settings.get("model_chat") ? { chatModel: this.settings.get("model_chat")! } : {}),
+      ...(this.settings.llmBaseUrl() ? { baseUrl: this.settings.llmBaseUrl()! } : {}),
+      ...(this.settings.platformLlmActive() && this.settings.openrouterUser()
+        ? { user: this.settings.openrouterUser()!, onBeforeCall: () => this.checkTenantAllowance() }
+        : {}),
+      onUsage: (report) => {
+        this.usageStore.record(report);
+        last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
+      },
+    });
+    return {
+      complete: async (input) => {
+        last = null;
+        const text = await llm.streamMemoryChat!(input, () => {});
+        const usage = last ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+        return { text, ...usage };
+      },
+    };
   }
 
   /** Run a tree sweep now (operator/console action); same durable lane and lock as the weekly one. */
@@ -2546,6 +2625,7 @@ export class Runtime {
     close(() => { if (this.treeSweepTimer) clearInterval(this.treeSweepTimer); this.treeSweepTimer = null; });
     close(() => this.journeyStore.close());
     close(() => this.usageStore.close());
+    close(() => closePersonasFor(this));
     close(() => this.notificationStore.close());
     close(() => this.credentialVault.close());
     if (failures.length > 0) throw new AggregateError(failures, "Runtime shutdown failed");
