@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { parseLogCaptures } from "./captureOrigin.js";
+import { parseLogCaptures, withoutOpsRollup } from "./captureOrigin.js";
 import { basenameOf, isFilingReceiptPath, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
@@ -25,9 +25,10 @@ import { buildWeightedLinks, CLOUD_DEFAULT_THRESHOLD, expandCloud, isNote, nodeI
  * they are voice notes (`meta`), and the edges that tie a note to its topics: page citations
  * and filing receipts (E12-S3c). 4: weighted memory graph (E18-W1): a filing's confidence on its
  * `filed` edges, each page's `zid`, and the derived `nodes` and `links` (strength 0..1) tables.
- * An older file is rebuilt once on open.
+ * 5: pages under `Archive/Agent reports/` are marked `agent` and page bodies leave out their
+ * `## Ops rollup` section (E12-S15). An older file is rebuilt once on open.
  */
-const SCHEMA_VERSION = "4";
+const SCHEMA_VERSION = "5";
 const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
@@ -49,6 +50,17 @@ const AGENT_LOG_FACTOR = 0.5;
 /** A hit holding under this share of the best hit's question words is not shown (E12-S3c). */
 const MIN_SHARE_OF_BEST = 0.25;
 const factorOf = (row: { kind: MemoryIndexHitKind; meta?: string }) => KIND_FACTOR[row.kind] * (row.meta?.startsWith("agent") ? AGENT_LOG_FACTOR : 1);
+/** Where moved agent report lines are kept (E12-S14): content, not the person's memories. */
+const AGENT_REPORTS_DIR = "Archive/Agent reports/";
+/**
+ * A question about the agents' own work: agents, reports, tickets, deploys, epic or row codes
+ * (`EPIC-12`, `E12-S15`), run ids. Only then do agent reports rank among the answers (E12-S15);
+ * otherwise they are not the person's memories and stay out of the list.
+ */
+const AGENT_QUESTION_RE = /\b(?:agents?|agent_team|reports?|tickets?|deploy(?:s|ed|ment)?|console|watcher|delivery manager|agentes?|informes?|reportes?)\b|\bEPIC-\d|\b[A-Z]\d{1,3}-[A-Z]{0,3}\d|\brun_[0-9a-f]{6,}/i;
+export function asksAboutAgentWork(query: string): boolean {
+  return AGENT_QUESTION_RE.test(query);
+}
 
 const STOP_WORDS = new Set([
   // English
@@ -459,7 +471,9 @@ export class MemoryIndex {
     `).all(match, Math.max(40, limit * 8)) as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; meta: string; rank: number }>;
     const picked: typeof rows = [];
     const seen = new Set<string>();
-    const scored = rows.map((row) => ({ ...row, rank: row.rank * factorOf(row) })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
+    const aboutAgents = asksAboutAgentWork(query);
+    const scored = rows.filter((row) => aboutAgents || !row.meta.startsWith("agent"))
+      .map((row) => ({ ...row, rank: row.rank * factorOf(row) })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
     for (const row of scored) {
       if (seen.has(row.path)) continue; // a root row and its page share a path: keep the best
       seen.add(row.path);
@@ -1188,7 +1202,8 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
     // Obsidian's own `aliases:` (a list or one string) and tags: the page's metadata, not steering.
     aliases: [...(typeof meta.aliases === "string" ? [meta.aliases] : strings(meta.aliases)), ...strings(meta.tags)].join(" · "),
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
-    body,
-    kind: "page", path, file: path, meta: "",
+    // The rollup section is a list of agent report links, not what the page is about (E12-S15).
+    body: withoutOpsRollup(body),
+    kind: "page", path, file: path, meta: path.startsWith(AGENT_REPORTS_DIR) ? "agent" : "",
   }] };
 }

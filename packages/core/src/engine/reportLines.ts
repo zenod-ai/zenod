@@ -9,7 +9,9 @@ import { isAgentOpsReport, OPS_ROLLUP_HEADING, TrackedWrites } from "./treePlace
  * E12-S8 fix 4 (S6 round 5, cause "not your memory"): before the ops-report filter
  * went live (E9-2h, 2026-11-01) agent reports were filed onto the person's pages as
  * if the person had said them. A report line is a line on a meaning page whose every
- * Log citation is an agent report, outside the page's `## Ops rollup` section.
+ * Log citation is an agent report, other than the dated `- <date> ops (<n>):` lines of
+ * the page's `## Ops rollup` section. E12-S15: topic filing used to append report
+ * lines after that section, so they sat under its heading; they count too.
  *
  * `planReportLines` only reads. `moveReportLines` moves each planned line, byte for
  * byte, to `Archive/Agent reports/Moved report lines.md` under a heading naming its
@@ -17,6 +19,8 @@ import { isAgentOpsReport, OPS_ROLLUP_HEADING, TrackedWrites } from "./treePlace
  * commits it as one revision. Log/ and _attachments/ are never written.
  */
 export const MOVED_REPORT_LINES_PATH = "Archive/Agent reports/Moved report lines.md";
+/** A rollup line (E9-2b rule 5): the agent-reports index of its node, kept where it is. */
+const ROLLUP_LINE_RE = /^- \d{4}-\d{2}-\d{2} ops \(\d+\): /;
 
 export interface ReportLine {
   page: string;
@@ -49,7 +53,7 @@ export async function planReportLines(vaultPath: string): Promise<ReportLinesPla
     for (; i < lines.length; i++) {
       const text = lines[i]!;
       if (/^## /.test(text)) { inRollup = text.trim() === OPS_ROLLUP_HEADING; continue; }
-      if (inRollup || /^#/.test(text)) continue;
+      if ((inRollup && ROLLUP_LINE_RE.test(text)) || /^#/.test(text)) continue;
       const citations = [...text.matchAll(CITATION_RE)].map(match => `${match[1]}#^${match[2]}`);
       if (!citations.length) continue;
       plan.citedLines++;

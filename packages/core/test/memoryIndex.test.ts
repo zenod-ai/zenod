@@ -8,7 +8,7 @@ import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import type { AnswerInput, AnswerResult, BrainLlm, VaultReadTools } from "../src/llm/types.js";
-import { buildMatch, MemoryIndex, MemoryIndexTenantError } from "../src/vault/memoryIndex.js";
+import { asksAboutAgentWork, buildMatch, MemoryIndex, MemoryIndexTenantError } from "../src/vault/memoryIndex.js";
 
 // EPIC-9 E9-5a: the tier-0 index — per-tenant SQLite FTS5 beside the vault, BM25 over pages,
 // Log entries and Tree.md roots, every hit carrying its tree path.
@@ -229,5 +229,44 @@ describe("engine search uses the tier-0 index, scan as fallback (E9-5a)", { time
     await engine.search("Porto");
     const intruder = createEngine({ repo: await VaultRepo.open({ workdir: vault }), llm: {} as BrainLlm, state: new SqliteStateStore(":memory:"), memoryIndex: { path: indexPath, tenantId: "t2" } });
     await expect(intruder.search("Porto")).rejects.toThrow(MemoryIndexTenantError);
+  });
+});
+
+describe("agent reports are not the person's memories (E12-S15)", { timeout: 20_000 }, () => {
+  const LOG = [
+    "# 2026-11-08", "",
+    "## 09:00 Voice note about the greenhouse  ^e-a10001", "- source: whatsapp", "- content-type: voice_note", "",
+    "> The greenhouse heater keeps tripping, ask the electrician about a separate circuit for the greenhouse.", "",
+    "## 10:00 agent_team E41-S2 greenhouse sensor  ^e-b10001", "- source: mcp", "",
+    "> agent_team E41-S2 (2026-11-08, run_1a2b3c4d): greenhouse heater sensor dashboard deployed, live 1a2b3c4, greenhouse heater alerts merged.", "",
+  ].join("\n");
+  const PAGE = (title: string, body: string) => `---\ntitle: ${title}\ntype: project\ntags: []\ncreated: 2026-11-01\nupdated: 2026-11-08\nsummary: ${title}.\n---\n\n# ${title}\n\n${body}\n`;
+
+  it("leaves agent reports and the moved-report archive out unless the question is about them", async () => {
+    const vault = await vaultFrom({
+      "Log/2026-11-08.md": LOG,
+      "Projects/Garden.md": PAGE("Garden", "Beds and compost. See [[Index]].\n\n## Ops rollup\n\nAgent ops reports.\n\n- 2026-11-08 ops (1): [[2026-11-08#^e-b10001]] greenhouse heater sensor"),
+      "Archive/Agent reports/Moved report lines.md": PAGE("Moved report lines", "## 2026-11-08 from [[Projects/Garden]] line 9\n\n- greenhouse heater sensor dashboard deployed [[2026-11-08#^e-b10001]]"),
+      "Index.md": "---\ntitle: Index\n---\n# Index\n",
+    });
+    const index = indexFor(vault, join(dirname(vault), "idx.sqlite"));
+    const mine = (await index.search("greenhouse heater")).map((hit) => hit.path);
+    expect(mine).toContain("Log/2026-11-08.md#^e-a10001");
+    expect(mine).not.toContain("Log/2026-11-08.md#^e-b10001");
+    expect(mine).not.toContain("Archive/Agent reports/Moved report lines.md");
+    // The rollup section is not what the Garden page is about.
+    expect(mine).not.toContain("Projects/Garden.md");
+    const theirs = (await index.search("what did the agents report about the greenhouse heater")).map((hit) => hit.path);
+    expect(theirs).toContain("Log/2026-11-08.md#^e-b10001");
+    expect((await index.search("E41-S2 greenhouse")).map((hit) => hit.path)).toContain("Log/2026-11-08.md#^e-b10001");
+  });
+
+  it("reads a question as about the agents' work only when it names them", () => {
+    for (const q of ["what did the agents report today", "what was deployed on Friday", "status of E12-S15", "EPIC-12 progress", "qué informes hay del agente", "run_51db2710"]) {
+      expect(asksAboutAgentWork(q), q).toBe(true);
+    }
+    for (const q of ["what was in my last vn?", "why is Epic Social stuck", "the boat repair quotes", "how does my memory work", "what did I say about the greenhouse"]) {
+      expect(asksAboutAgentWork(q), q).toBe(false);
+    }
   });
 });
