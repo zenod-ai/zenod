@@ -187,6 +187,9 @@ export interface MemoryIndexHit {
   pathStrength?: number;
 }
 
+/** Most `related` (shared-note) edges one graph view adds (E18-W1 round 2). */
+const RELATED_MAX = 24;
+
 type WeightedLinkIndex = { out: Map<string, Array<{ dst: string; strength: number; reasons: string }>>; total: { nodes: number; links: number } };
 
 export type MemoryIndexRelation = "note" | "filed" | "linked" | "parent" | "child";
@@ -954,13 +957,49 @@ export class MemoryIndex {
    * The memory graph (E12-S2): `center` (a path or link target) with its neighbourhood, or the
    * overview when omitted; null when `center` is not a memory. Built from stored rows, cached
    * until the next sync changes something, so a view of a large vault costs milliseconds.
+   * Each drawn edge carries its weighted link's strength (E18-W1 round 2), so the view can show it.
    */
   async graph(options: { center?: string | null; limit?: number; lit?: readonly string[] | null } = {}): Promise<MemoryGraphView | null> {
     await this.fresh();
     const graph = this.memoryGraph();
     const limit = options.limit ?? MEMORY_GRAPH_DEFAULT_LIMIT;
-    if (options.lit?.length) return graph.litView(options.lit, { limit, notes: this.litNotes(graph, options.lit) });
-    return options.center ? graph.neighbourhood(options.center, limit) : graph.overview(limit);
+    const view = options.lit?.length
+      ? graph.litView(options.lit, { limit, notes: this.litNotes(graph, options.lit) })
+      : options.center ? graph.neighbourhood(options.center, limit) : graph.overview(limit);
+    if (view) this.withStrengths(view, { related: !options.lit?.length });
+    return view;
+  }
+
+  /**
+   * Each edge's strength: the weighted link in its own direction (a wikilink's 0.9, a parent's 0.8
+   * to its child), else the link back. Edges with no weighted link (Tree.md to its roots) keep none.
+   * With `related`, two drawn pages that only share notes (co-mention, often weak) get a `related`
+   * edge too, strongest first and at most RELATED_MAX, so the view shows its weak ties.
+   */
+  private withStrengths(view: MemoryGraphView, options: { related?: boolean } = {}): void {
+    const out = this.weightedLinks().out;
+    const linkOf = (from: string, to: string) => out.get(from)?.find((link) => link.dst === to);
+    const round = (value: number) => Math.round(value * 1000) / 1000;
+    for (const edge of view.edges) {
+      if (edge.strength !== undefined) continue;
+      const strength = (linkOf(edge.from, edge.to) ?? linkOf(edge.to, edge.from))?.strength;
+      if (strength !== undefined) edge.strength = round(strength);
+    }
+    if (!options.related) return;
+    const drawn = new Set(view.nodes.map((node) => node.path));
+    const pair = (a: string, b: string) => (a < b ? `${a}\n${b}` : `${b}\n${a}`);
+    const seen = new Set(view.edges.map((edge) => pair(edge.from, edge.to)));
+    const related: MemoryGraphView["edges"] = [];
+    for (const from of drawn) {
+      for (const link of out.get(from) ?? []) {
+        if (!drawn.has(link.dst) || seen.has(pair(from, link.dst)) || !link.reasons.includes("co-mention")) continue;
+        seen.add(pair(from, link.dst));
+        const back = linkOf(link.dst, from)?.strength ?? 0;
+        related.push({ from, to: link.dst, kind: "related", strength: round(Math.max(link.strength, back)) });
+      }
+    }
+    related.sort((a, b) => b.strength! - a.strength! || a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+    view.edges.push(...related.slice(0, RELATED_MAX));
   }
 
   /** Of an answer's memories (E12-S13), the Log entries: each with the pages it is tied to, so it can join the lit graph. */

@@ -22,6 +22,8 @@ import {
   readMemoryGraph,
   searchMemories,
   shortTitle,
+  strengthBetween,
+  strengthLook,
   type LitAnswer,
   type MemoryGraphNode,
   type MemoryGraphView,
@@ -36,6 +38,8 @@ import {
 // graph (docs/epic12/DESIGN-LANGUAGE.md): ink tree lines, dashed links, one accent on the focus.
 // E12-S13: an answer's memories light up here too (`#graph?q=…&m=…`, the chat's "Show in graph"),
 // one after another with their match percentages, and the links between them in green.
+// EPIC-18 W1: a link's strength shows in its line: wider and greener the stronger, dashed when
+// weak (below 20 %), its percent on hover or tap, and a strength key in the legend.
 
 /** The last answer, for the center it was asked for: a newer center shows it dimmed until its own arrives. */
 type GraphState = { for: string | null | undefined } & (
@@ -247,6 +251,26 @@ function GraphCanvas({
     () => new Map(placed.map((node) => [node.path, node])),
     [placed]
   )
+  // The link whose strength is shown (hover or tap), for this view only.
+  const [picked, setPicked] = React.useState<{
+    view: MemoryGraphView
+    key: string
+  } | null>(null)
+  const pickedKey = picked?.view === view ? picked.key : null
+  const pick = (key: string | null) =>
+    setPicked(key ? { view, key } : null)
+  const label = React.useMemo(() => {
+    if (!pickedKey) return null
+    const edge = view.edges.find((e) => edgeKey(e) === pickedKey)
+    const a = edge && at.get(edge.from)
+    const b = edge && at.get(edge.to)
+    if (!edge || !a || !b || edge.strength === undefined) return null
+    return {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+      text: `${Math.round(edge.strength * 100)}%`,
+    }
+  }, [pickedKey, view, at])
   return (
     <div ref={box}>
       <svg
@@ -269,34 +293,71 @@ function GraphCanvas({
               order.get(edge.from) ?? 0,
               order.get(edge.to) ?? 0
             )
+            const look =
+              !edge.lit && edge.strength !== undefined
+                ? strengthLook(edge.strength)
+                : null
+            const key = edgeKey(edge)
             return (
-              <line
-                key={`${view.center}|${edge.from}|${edge.to}|${edge.kind}`}
-                className={cn(
-                  "zp-gedge",
-                  edge.lit ? "zp-glitedge" : `zp-g${edge.kind}`,
-                  focus && "zp-gfocus"
-                )}
-                style={
-                  edge.lit
-                    ? ({
-                        "--d": `${litDelay(step) + 250}ms`,
-                        ...(edge.strength !== undefined
-                          ? { strokeWidth: 1 + 3 * edge.strength }
-                          : {}),
-                      } as React.CSSProperties)
-                    : undefined
-                }
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                pathLength={edge.kind === "tree" ? 1 : undefined}
-              >
+              <g key={`${view.center}|${key}`}>
+                <line
+                  className={cn(
+                    "zp-gedge",
+                    edge.lit
+                      ? "zp-glitedge"
+                      : look
+                        ? "zp-gweighted"
+                        : `zp-g${edge.kind}`,
+                    look?.weak && "zp-gweak",
+                    focus && !look && "zp-gfocus",
+                    pickedKey === key && "zp-gpicked"
+                  )}
+                  style={
+                    edge.lit
+                      ? ({
+                          "--d": `${litDelay(step) + 250}ms`,
+                          ...(edge.strength !== undefined
+                            ? { strokeWidth: 1 + 3 * edge.strength }
+                            : {}),
+                        } as React.CSSProperties)
+                      : look
+                        ? ({
+                            "--o": look.opacity,
+                            strokeWidth: look.width,
+                            stroke: `color-mix(in srgb, var(--zp-accent) ${look.green}%, var(--zp-faint))`,
+                          } as React.CSSProperties)
+                        : undefined
+                  }
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  pathLength={edge.kind === "tree" && !look ? 1 : undefined}
+                >
+                  {edge.strength !== undefined ? (
+                    <title>{`strength ${Math.round(edge.strength * 100)}%`}</title>
+                  ) : null}
+                </line>
                 {edge.strength !== undefined ? (
-                  <title>{`strength ${Math.round(edge.strength * 100)}%`}</title>
+                  // A wide, invisible line over it: easy to hover or tap.
+                  <line
+                    className="zp-gedgehit"
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    onPointerEnter={(event) =>
+                      event.pointerType === "mouse" && pick(key)
+                    }
+                    onPointerLeave={(event) =>
+                      event.pointerType === "mouse" && pick(null)
+                    }
+                    onClick={() => pick(pickedKey === key ? null : key)}
+                  >
+                    <title>{`${shortTitle(a.title, 40)} – ${shortTitle(b.title, 40)}: strength ${Math.round(edge.strength * 100)}%${edge.kind === "related" ? ", in the same notes" : ""}`}</title>
+                  </line>
                 ) : null}
-              </line>
+              </g>
             )
           })}
         </g>
@@ -320,9 +381,24 @@ function GraphCanvas({
             step={order.get(node.path)}
           />
         ))}
+        {label ? (
+          <text
+            className="zp-gstrength"
+            x={label.x}
+            y={label.y + 5}
+            textAnchor="middle"
+            aria-live="polite"
+          >
+            {label.text}
+          </text>
+        ) : null}
       </svg>
     </div>
   )
+}
+
+function edgeKey(edge: { from: string; to: string; kind: string }): string {
+  return `${edge.from}|${edge.to}|${edge.kind}`
 }
 
 /** When the n-th memory of a lit answer lights up, after the graph has drawn. */
@@ -418,16 +494,59 @@ function GraphNode({
   )
 }
 
+/** The strength key: what a strong, a middling and a weak link look like. */
+const STRENGTH_KEY = [
+  { strength: 0.9, label: "strong" },
+  { strength: 0.5, label: "medium" },
+  { strength: 0.15, label: "weak, under 20%" },
+]
+
+function StrengthKey() {
+  return (
+    <span className="zp-lstrength" aria-label="Link strength">
+      {STRENGTH_KEY.map(({ strength, label }) => {
+        const look = strengthLook(strength)
+        return (
+          <span key={label}>
+            <svg width="28" height="8" aria-hidden="true">
+              <line
+                x1="1"
+                y1="4"
+                x2="27"
+                y2="4"
+                strokeWidth={look.width}
+                strokeDasharray={look.weak ? "3 3" : undefined}
+                style={{
+                  stroke: `color-mix(in srgb, var(--zp-accent) ${look.green}%, var(--zp-faint))`,
+                  opacity: look.opacity,
+                }}
+              />
+            </svg>{" "}
+            {label}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
 function Legend({ view }: { view: MemoryGraphView }) {
   const shown = React.useMemo(() => layoutGraph(view).length, [view])
+  const weighted = view.edges.some((edge) => edge.strength !== undefined)
+  const plain = view.edges.filter((edge) => edge.strength === undefined)
   return (
     <div className="zp-legend">
-      <span>
-        <i className="zp-ltree" /> part of
-      </span>
-      <span>
-        <i className="zp-llink" /> links to
-      </span>
+      {weighted ? <StrengthKey /> : null}
+      {!weighted || plain.some((edge) => edge.kind === "tree") ? (
+        <span>
+          <i className="zp-ltree" /> part of
+        </span>
+      ) : null}
+      {!weighted || plain.some((edge) => edge.kind === "link") ? (
+        <span>
+          <i className="zp-llink" /> links to
+        </span>
+      ) : null}
       <span className="zp-time">
         {shown} of {view.total.nodes.toLocaleString()} memories ·{" "}
         {view.total.edges.toLocaleString()} links in all
@@ -482,9 +601,15 @@ function GraphPanel({
     }
   }, [notePath])
 
+  // Each neighbour with the strength of its link to the opened memory, strongest first.
+  const strengthOf = (path: string) =>
+    view.center ? strengthBetween(view, view.center, path) : null
   const lists = RELATION_LISTS.map((list) => ({
     ...list,
-    nodes: view.nodes.filter((n) => n.relation === list.relation),
+    nodes: view.nodes
+      .filter((n) => n.relation === list.relation)
+      .map((n) => ({ ...n, strength: strengthOf(n.path) }))
+      .sort((a, b) => (b.strength ?? -1) - (a.strength ?? -1)),
   }))
   const title = node ? node.title : "Your memory"
   return (
@@ -534,7 +659,16 @@ function GraphPanel({
                   <button type="button" onClick={() => onOpen(n.path)}>
                     {n.title}
                   </button>
-                  <span className="zp-gcount">{n.degree}</span>
+                  {n.strength !== null ? (
+                    <span
+                      className="zp-gcount zp-gstr"
+                      title={`Link strength ${Math.round(n.strength * 100)}%, ${n.degree} connections`}
+                    >
+                      {Math.round(n.strength * 100)}%
+                    </span>
+                  ) : (
+                    <span className="zp-gcount">{n.degree}</span>
+                  )}
                 </li>
               ))}
             </ul>

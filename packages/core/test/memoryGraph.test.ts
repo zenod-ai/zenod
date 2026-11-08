@@ -102,6 +102,56 @@ describe("memory graph (E12-S2)", { timeout: 30_000 }, () => {
     expect(await index.graph({ center: "Log/2026-10-31.md" })).toBeNull();
   });
 
+  it("gives each drawn edge its weighted link's strength, in its own direction (E18-W1 round 2)", async () => {
+    const vault = await vaultFrom({
+      "Notes/Engine.md": page("Engine", "The yard quoted the engine with the [[2023 Porto quotes]] and the [[Travel insurance]] covers it.", "[[Boat repair]]"),
+    }, TREE_FIXTURE);
+    const index = indexFor(vault);
+    const engine = await index.graph({ center: "Engine" });
+    const edge = (from: string, to: string) => engine!.edges.find((e) => e.from === from && e.to === to);
+    // A wikilink is 0.9 forward; the tree's parent → child 0.8 (memoryWeights.ts).
+    expect(edge("Notes/Engine.md", "Notes/Travel insurance.md")?.strength).toBeCloseTo(0.9, 2);
+    expect(edge("Projects/Boat repair.md", "Notes/Engine.md")?.strength).toBeGreaterThanOrEqual(0.5);
+    for (const e of engine!.edges) expect(e.strength).toBeGreaterThan(0);
+    // Tree.md ties every root to one hub and has no weighted link: its edges carry no strength.
+    const overview = await index.graph();
+    expect(overview!.edges.find((e) => e.from === "Tree.md")).not.toHaveProperty("strength");
+  });
+
+  it("adds a related edge between drawn pages that share notes: weak for an old note, stronger for a recent one (E18-W1 round 2)", async () => {
+    const log = (date: string, id: string, text: string) => `# ${date}\n\n## 10:00 ${text} ^${id}\n- source: whatsapp\n\n> ${text}\n`;
+    const vault = await vaultFrom({
+      "Log/2024-01-10.md": log("2024-01-10", "e-aaa111", "Old note about the shed and the fence"),
+      "Log/2026-11-07.md": log("2026-11-07", "e-bbb222", "New note about the shed and the gate"),
+      "Notes/Shed.md": page("Shed", "Cedar. [[Fence]] [[Gate]] Seen in [[2024-01-10#^e-aaa111]] and [[2026-11-07#^e-bbb222]]."),
+      "Notes/Fence.md": page("Fence", "Posts. [[2024-01-10#^e-aaa111]]"),
+      "Notes/Gate.md": page("Gate", "Hinges. [[2026-11-07#^e-bbb222]]"),
+    });
+    const index = MemoryIndex.open({ path: join(dirname(vault), "memory-index.sqlite"), vaultPath: vault, tenantId: "t", now: () => Date.parse("2026-11-08T12:00:00Z") });
+    open.push(index);
+    const shed = await index.graph({ center: "Shed" });
+    const related = shed!.edges.filter((edge) => edge.kind === "related");
+    // Shed links to Fence and Gate already; only Fence and Gate share nothing, so no chord between them.
+    expect(related).toEqual([]);
+    const fence = await index.graph({ center: "Fence" });
+    // Fence and Shed: a wikilink (drawn as a link) plus the old shared note, so no second edge.
+    expect(fence!.edges.filter((edge) => edge.kind === "related")).toEqual([]);
+    // Unlink them: what is left between Fence and Shed is the shared old note, weak.
+    await writeFile(join(vault, "Notes/Shed.md"), page("Shed", "Cedar. [[Gate]] Seen in [[2024-01-10#^e-aaa111]] and [[2026-11-07#^e-bbb222]]."));
+    index.markDirty();
+    const gate = await index.graph({ center: "Gate" });
+    const shedGate = gate!.edges.find((edge) => edge.kind === "link");
+    expect(shedGate?.strength).toBeGreaterThan(0.8);
+    const shedView = await index.graph({ center: "Shed" });
+    expect(shedView!.nodes.map((node) => node.path)).not.toContain("Notes/Fence.md");
+    const overview = await index.graph();
+    const weak = overview!.edges.find((edge) => edge.kind === "related" && [edge.from, edge.to].sort().join() === "Notes/Fence.md,Notes/Shed.md");
+    expect(weak?.strength).toBeLessThan(0.2);
+    // Lit views keep their own edges: no related edges are added there.
+    const lit = await index.graph({ lit: ["Notes/Fence.md", "Notes/Shed.md"] });
+    expect(lit!.edges.some((edge) => edge.kind === "related")).toBe(false);
+  });
+
   it("updates incrementally on a new filing: a new page joins, links written before it resolve, a removed page leaves", async () => {
     const vault = await vaultFrom({
       "Notes/Garden.md": page("Garden", "Order boards for the [[Shed]] before Friday."),
@@ -113,8 +163,8 @@ describe("memory graph (E12-S2)", { timeout: 30_000 }, () => {
     const garden = await index.graph({ center: "Garden" });
     expect(paths(garden)).toEqual(["Notes/Garden.md", "Notes/Shed.md"]);
     expect(garden!.edges).toEqual(expect.arrayContaining([
-      { from: "Notes/Garden.md", to: "Notes/Shed.md", kind: "link" },
-      { from: "Notes/Shed.md", to: "Notes/Garden.md", kind: "link" },
+      expect.objectContaining({ from: "Notes/Garden.md", to: "Notes/Shed.md", kind: "link" }),
+      expect.objectContaining({ from: "Notes/Shed.md", to: "Notes/Garden.md", kind: "link" }),
     ]));
     await unlink(join(vault, "Notes/Shed.md"));
     index.markDirty();
@@ -228,7 +278,7 @@ describe("lit answers in the graph (E12-S13)", { timeout: 30_000 }, () => {
     expect(note).toMatchObject({ kind: "note", relation: "lit" });
     expect(relationOf(view, "Projects/Boat repair.md")).toBe("lit");
     expect(relationOf(view, "Projects/Boat repair/2023 Porto quotes.md")).toBe("bridge");
-    expect(view!.edges).toContainEqual({ from: entry, to: "Projects/Boat repair/2023 Porto quotes.md", kind: "filed", lit: true });
+    expect(view!.edges).toContainEqual({ from: entry, to: "Projects/Boat repair/2023 Porto quotes.md", kind: "filed", lit: true, strength: 0.9 });
   });
 
   it("stays a neighbourhood on a large vault", () => {

@@ -71,8 +71,8 @@ export interface MemoryGraphEdge {
   /** link: the page that links. tree: the parent. */
   from: string;
   to: string;
-  /** filed: a lit Log entry to a page it is tied to (lit views only). */
-  kind: "link" | "tree" | "filed";
+  /** filed: a lit Log entry to a page it is tied to (lit views only). related: two pages that share notes (E18-W1). */
+  kind: "link" | "tree" | "filed" | "related";
   /** Lit views: the edge is on the way between memories the answer used. */
   lit?: boolean;
   /** 0 to 1 when links carry a strength (EPIC-18); absent until then. */
