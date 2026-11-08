@@ -98,6 +98,7 @@ Verified at: 2026-11-03 (child Current States read from main; live health ok, sh
 | plan-personas-inbox-voice-and-calls-come-to-zenod | child | [EPIC-14: Plan: personas, inbox, voice and calls come to Zenod](plan-personas-inbox-voice-and-calls-come.md) | none | draft | none | fill Goal, Serves and Done means |
 | memory-answers-quality-check-and-real-life-tests | child | [EPIC-15: Memory answers: quality check and real-life tests](memory-answers-quality-check-and-real-li.md) | none | draft | none | fill Goal, Serves and Done means |
 | one-send-button-the-agent-decides-keep-or-ask | child | [EPIC-16: One Send button: the agent decides keep or ask](one-send-button-the-agent-decides-keep-o.md) | none | draft | none | fill Goal, Serves and Done means |
+| cloud-app-in-the-new-zenod-style | child | [EPIC-17: Cloud app in the new Zenod style](cloud-app-in-the-new-zenod-style.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
