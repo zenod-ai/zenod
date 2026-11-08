@@ -29,6 +29,10 @@
     "./match-percent": {
       "types": "./dist/vault/matchPercent.d.ts",
       "default": "./dist/vault/matchPercent.js"
+    },
+    "./answer-protocol": {
+      "types": "./dist/llm/askNonAnswer.d.ts",
+      "default": "./dist/llm/askNonAnswer.js"
     }
   },
   "bin": {

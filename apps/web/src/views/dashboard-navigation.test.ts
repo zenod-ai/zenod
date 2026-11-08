@@ -25,6 +25,7 @@ describe("Zenod dashboard navigation", () => {
 
   it("uses one capability-driven profile for both approved editions", () => {
     expect(dashboardSectionsForEdition("hosted").map(({ id }) => id)).toEqual([
+      "chat",
       "overview",
       "memory",
       "connect",
@@ -64,11 +65,19 @@ describe("Zenod dashboard navigation", () => {
   })
 
   it("cannot deep-link into a section unavailable in the active edition", () => {
-    expect(dashboardSectionForTab("settings", "hosted")).toBe("overview")
+    expect(dashboardSectionForTab("settings", "hosted")).toBe("chat")
     expect(dashboardSectionForTab("account", "self-hosted")).toBe("overview")
     expect(dashboardSectionForTab("account", "hosted")).toBe("account")
     expect(dashboardSectionForTab("memory", "hosted")).toBe("memory")
     expect(dashboardSectionForTab("memory", "self-hosted")).toBe("overview")
+  })
+
+  it("opens the hosted app on its chat and keeps self-hosted on the overview (E12-S1)", () => {
+    expect(dashboardSectionForTab(undefined, "hosted")).toBe("chat")
+    expect(dashboardSectionForTab("chat", "hosted")).toBe("chat")
+    expect(dashboardSectionForTab("overview", "hosted")).toBe("overview")
+    expect(dashboardSectionForTab(undefined, "self-hosted")).toBe("overview")
+    expect(dashboardSectionForTab("chat", "self-hosted")).toBe("overview")
   })
 
   it("links back to the canonical public landing", () => {

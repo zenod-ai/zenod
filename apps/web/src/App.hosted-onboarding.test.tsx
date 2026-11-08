@@ -360,7 +360,12 @@ describe("Hosted vault onboarding boot", () => {
 
     render(<App />)
 
-    const overviewTab = await screen.findByRole("tab", { name: "Overview" })
-    expect(overviewTab.getAttribute("data-state")).toBe("active")
+    // A verified vault lands on the chat with your memory (E12-S1), not the vault step.
+    const chatTab = await screen.findByRole("tab", { name: "Chat" })
+    expect(chatTab.getAttribute("data-state")).toBe("active")
+    expect(
+      screen.getByRole("tab", { name: "Vault & sources" }).getAttribute("data-state")
+    ).toBe("inactive")
+    expect(screen.getByRole("heading", { name: "Ask your memory." })).toBeTruthy()
   })
 })

@@ -30,6 +30,8 @@ const allowedCoreInputs = new Set([
   "version.ts",
   // Pure ranking arithmetic for search_memory (E12-S3a): no imports, no I/O.
   "vault/matchPercent.ts",
+  // The ask loop's two non-answer texts for the web chat (E12-S1): no imports, no I/O.
+  "llm/askNonAnswer.ts",
 ]);
 const reachedCoreInputs = inputs
   .filter((input) => input.includes("/core/src/"))

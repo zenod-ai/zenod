@@ -13,7 +13,7 @@ export const RECENT_SAVES_DEFAULT_LIMIT = 20;
 export const RECENT_SAVES_MAX_LIMIT = 50;
 const SNIPPET_CHARS = 140;
 
-export type RecentSaveChannel = "whatsapp" | "telegram" | "connector";
+export type RecentSaveChannel = "whatsapp" | "telegram" | "app" | "connector";
 export type RecentSaveKind = "voice" | "text" | "image" | "document" | "link";
 export type RecentSaveStatus = "saved" | "saving" | "failed";
 
@@ -67,7 +67,9 @@ function channelOf(job: TaskJob): RecentSaveChannel {
   // Channel captures carry `<tenant>:<channel>:<messageId>` idempotency keys.
   const keyed = job.idempotencyKey?.match(/^[^:]+:(whatsapp|telegram):/)?.[1];
   const channel = keyed ?? job.input.source;
-  return channel === "whatsapp" || channel === "telegram" ? channel : "connector";
+  if (channel === "whatsapp" || channel === "telegram") return channel;
+  // E12-S1: a Keep from the web app's chat.
+  return channel === "web" ? "app" : "connector";
 }
 
 function kindOf(job: TaskJob): RecentSaveKind {
@@ -88,6 +90,7 @@ function kindOf(job: TaskJob): RecentSaveKind {
 const CHANNEL_LABEL: Record<RecentSaveChannel, string> = {
   whatsapp: "WhatsApp",
   telegram: "Telegram",
+  app: "Zenod app",
   connector: "AI assistant",
 };
 
@@ -124,7 +127,7 @@ export function projectRecentSave(job: TaskJob, enrichment: TaskJob | null): Rec
     savedAt: new Date(job.createdAt).toISOString(),
     channel,
     kind,
-    channelLabel: channel === "connector" ? CHANNEL_LABEL.connector : `${CHANNEL_LABEL[channel]} ${kind}`,
+    channelLabel: channel === "connector" || channel === "app" ? CHANNEL_LABEL[channel] : `${CHANNEL_LABEL[channel]} ${kind}`,
     snippet: snippet(job.kind === "media_ingest" ? job.input.providedTranscript : job.input.content, KIND_FALLBACK[kind]),
   };
   if (job.status === "queued" || job.status === "running") {
