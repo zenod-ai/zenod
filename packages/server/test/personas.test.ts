@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -6,12 +7,25 @@ import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine, SqliteStateStore, VaultRepo, type BrainEngine, type BrainLlm, type MemoryEntry } from "zenod";
 import { InboxStore } from "../src/inboxStore.js";
-import { BUILT_IN_PERSONAS, memoryTitle, memoryWords, parseRecapReply, WEEKLY_RECAP } from "../src/personaCatalog.js";
+import { answerDeskQuestion } from "../src/memoryDesk.js";
+import {
+  BUILT_IN_PERSONAS,
+  IDEAS_DIGEST,
+  MEMORY_HEALTH,
+  memoryTitle,
+  memoryWords,
+  OPEN_LOOPS,
+  parseRecapReply,
+  PEOPLE_FOLLOW_UPS,
+  TOPIC_GARDENER,
+  WEEKLY_RECAP,
+} from "../src/personaCatalog.js";
 import { registerPersonaRoutes } from "../src/personaRoutes.js";
 import {
   duePersonas,
   nextPersonaWakeAt,
   personaPeriodKey,
+  personaView,
   runPersona,
   type PersonaDefinition,
   type PersonaModel,
@@ -143,7 +157,7 @@ describe("persona runner (EPIC-14 S4)", () => {
 
   it("stops at its step cap and keeps the run logged as capped", async () => {
     const greedy: PersonaDefinition = {
-      ...WEEKLY_RECAP, id: "greedy", limits: { ...WEEKLY_RECAP.limits, maxSteps: 3 },
+      ...WEEKLY_RECAP, id: "greedy", skills: [...WEEKLY_RECAP.skills, "search"], limits: { ...WEEKLY_RECAP.limits, maxSteps: 3 },
       async run(ctx) {
         for (let i = 0; i < 10; i += 1) await ctx.search(`q${i}`);
         return { summary: "never" };
@@ -369,9 +383,13 @@ describe("persona settings routes (EPIC-14 S4)", () => {
     let signedIn = true;
     registerPersonaRoutes(app, async (c) => (signedIn ? { runtime } : { response: c.json({ error: "unauthorized" }, 401) }));
     try {
-      const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; permissions: string[] }>; budget: { capUsd: number } };
-      expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([["weekly-recap", true, null]]);
-      expect(first.personas[0]!.permissions).toContain("Writes only into its own folder");
+      const first = await (await app.request("/api/console/personas")).json() as { personas: Array<{ id: string; enabled: boolean; lastRun: unknown; skills: Array<{ label: string }> }>; budget: { capUsd: number }; skills: unknown[] };
+      expect(first.personas.map((p) => [p.id, p.enabled, p.lastRun])).toEqual([
+        ["weekly-recap", true, null], ["open-loops", false, null], ["people-follow-ups", false, null],
+        ["topic-gardener", false, null], ["ideas-digest", false, null], ["memory-health", false, null],
+      ]);
+      expect(first.personas[0]!.skills.map((skill) => skill.label)).toContain("Write only into its own folder");
+      expect(first.skills).toHaveLength(6);
       expect(first.budget.capUsd).toBe(1);
 
       const ran = await (await app.request("/api/console/personas/weekly-recap/run", { method: "POST" })).json() as { run: { status: string }; personas: Array<{ lastRun: { summary: string } | null; budget: { totalUsd: number } }> };
@@ -384,11 +402,128 @@ describe("persona settings routes (EPIC-14 S4)", () => {
 
       expect((await app.request("/api/console/personas/nobody/run", { method: "POST" })).status).toBe(404);
       expect((await app.request("/api/console/personas/weekly-recap", { method: "POST", body: "{}" })).status).toBe(400);
+
+      // A persona that is off never runs, not even with Run now.
+      expect((await app.request("/api/console/personas/open-loops/run", { method: "POST" })).status).toBe(409);
+      // Its cadence: every 3 days; setting it leaves the switch alone; nonsense is refused; null goes back to its default.
+      const post = (body: unknown) => app.request("/api/console/personas/open-loops", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+      type Listed = { personas: Array<{ id: string; enabled: boolean; schedule: string; cadence: unknown }> };
+      const every3 = await (await post({ cadence: { every: "days", days: 3 } })).json() as Listed;
+      expect(every3.personas[1]).toMatchObject({ id: "open-loops", enabled: false, schedule: "Every 3 days, at night", cadence: { every: "days", days: 3 } });
+      expect((await post({ cadence: { every: "days", days: 1 } })).status).toBe(400);
+      expect((await post({ cadence: { every: "hourly" } })).status).toBe(400);
+      const daily = await (await post({ enabled: true, cadence: { every: "night" } })).json() as Listed;
+      expect(daily.personas[1]).toMatchObject({ enabled: true, schedule: "Daily, at night" });
+      const back = await (await post({ cadence: null })).json() as Listed;
+      expect(back.personas[1]).toMatchObject({ enabled: true, schedule: "Weekly, Sunday night" });
+      expect((await app.request("/api/console/personas/open-loops/run", { method: "POST" })).status).toBe(200);
       signedIn = false;
       expect((await app.request("/api/console/personas")).status).toBe(401);
-      expect(runtime.runs).toBe(1);
+      expect(runtime.runs).toBe(2);
     } finally {
       closePersonasFor(runtime);
     }
+  });
+});
+
+describe("persona catalog (EPIC-14 S4 round 2)", () => {
+  const fourWeeks = [
+    ...[1, 2, 3, 4, 5, 6].map((n) => entry(n, "2026-10-14", `Older memory ${n}`)),
+    ...[7, 8, 9, 10, 11].map((n) => entry(n, "2026-10-21", `Older memory ${n}`)),
+    ...[12, 13, 14, 15].map((n) => entry(n, "2026-10-28", `Older memory ${n}`)),
+    entry(16, "2026-11-06", "Only one this week"),
+  ].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+
+  it("lists six personas with a purpose and their skills; only Weekly recap is on, so only it wakes", () => {
+    expect(BUILT_IN_PERSONAS.map((p) => p.name)).toEqual(["Weekly recap", "Open loops finder", "People and follow-ups", "Topic gardener", "Ideas digest", "Health of your memory"]);
+    expect(BUILT_IN_PERSONAS.filter((p) => p.defaultEnabled).map((p) => p.id)).toEqual(["weekly-recap"]);
+    for (const persona of BUILT_IN_PERSONAS) {
+      expect(persona.purpose.length).toBeGreaterThan(10);
+      expect(persona.skills).toContain("read");
+      expect(persona.limits.maxMonthUsd).toBeLessThanOrEqual(0.1);
+    }
+    const store = new PersonaStore(join(dir, "catalog.sqlite"));
+    const noon = new Date("2026-11-08T12:00:00Z");
+    expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap"]);
+    // Switched on: it wakes at once, the same day.
+    store.setEnabled("ideas-digest", true);
+    expect(duePersonas(BUILT_IN_PERSONAS, store, noon).map((p) => p.id)).toEqual(["weekly-recap", "ideas-digest"]);
+    // All six together stay within the $1 for personas.
+    expect(BUILT_IN_PERSONAS.reduce((sum, p) => sum + p.limits.maxMonthUsd, 0)).toBeLessThanOrEqual(1);
+  });
+
+  it("keeps a cadence per persona: every 3 days runs once per 3-day period, the switch untouched", async () => {
+    const store = new PersonaStore(join(dir, "cadence.sqlite"));
+    store.setCadence("open-loops", { every: "days", days: 3 }, false);
+    expect(store.enabled("open-loops")).toBe(false);
+    const view = personaView(OPEN_LOOPS, store, new Date("2026-11-08T12:00:00Z"));
+    expect(view).toMatchObject({ schedule: "Every 3 days, at night", enabled: false, nextWakeAt: null });
+    store.setEnabled("open-loops", true);
+    expect(store.cadence("open-loops")).toEqual({ every: "days", days: 3 });
+    const a = personaPeriodKey(OPEN_LOOPS, new Date("2026-11-08T03:00:00Z"), { every: "days", days: 3 });
+    const b = personaPeriodKey(OPEN_LOOPS, new Date("2026-11-09T03:00:00Z"), { every: "days", days: 3 });
+    const c = personaPeriodKey(OPEN_LOOPS, new Date("2026-11-11T03:00:00Z"), { every: "days", days: 3 });
+    expect(new Set([a, b, c]).size).toBe(2);
+    expect(a.startsWith("days3:")).toBe(true);
+    store.start("open-loops", "schedule", a);
+    const next = personaView(OPEN_LOOPS, store, new Date("2026-11-08T03:30:00Z")).nextWakeAt!;
+    expect(Date.parse(next)).toBeGreaterThan(Date.parse("2026-11-08T03:30:00Z"));
+    expect(next.endsWith("T02:00:00.000Z")).toBe(true);
+  });
+
+  it("Open loops finder asks about the top loop in the inbox; a persona without a skill cannot use it", async () => {
+    const stub = stubModel(JSON.stringify({ loops: [{ title: "Book the dentist", sources: [1] }, { title: "Renew the boat insurance", sources: [2] }] }));
+    const { deps: d, written, inbox } = deps({ model: () => stub.model });
+    expect(await runPersona(OPEN_LOOPS, d, "manual")).toMatchObject({ status: "done", modelCalls: 1, summary: "Read 2 memories, found 2 open loops and asked about one" });
+    expect(written[0]!.personaId).toBe("open-loops");
+    expect(written[0]!.files[0]!.content).toContain("- Renew the boat insurance");
+    expect(inbox.list()[0]).toMatchObject({ kind: "question", from: "Open loops finder", title: "Is this still open? Book the dentist" });
+
+    // Ideas digest has no "ask" skill: a question from it fails the run, nothing reaches the inbox.
+    const sneaky: PersonaDefinition = { ...IDEAS_DIGEST, id: "sneaky", async run(ctx) { ctx.postQuestion({ title: "?", options: [{ id: "a", label: "A" }] }); return { summary: "" }; } };
+    const e = deps({ model: () => stubModel().model });
+    e.deps.store = new PersonaStore(join(dir, "sneaky.sqlite"));
+    expect(await runPersona(sneaky, e.deps, "manual")).toMatchObject({ status: "failed", summary: 'Failed: It does not have the skill "Ask you a question"' });
+  });
+
+  it("People and follow-ups and Ideas digest post one finding each", async () => {
+    const people = deps({ model: () => stubModel(JSON.stringify({ people: [{ name: "Ana", followUp: "", sources: [] }, { name: "Marc", followUp: "Send him the photos", sources: [2] }] })).model });
+    expect(await runPersona(PEOPLE_FOLLOW_UPS, people.deps, "manual")).toMatchObject({ status: "done" });
+    expect(people.inbox.list()[0]).toMatchObject({ kind: "finding", from: "People and follow-ups", title: "Marc: Send him the photos" });
+
+    rmSync(join(dir, "inbox.sqlite"), { force: true });
+    rmSync(join(dir, "personas.sqlite"), { force: true });
+    const ideas = deps({ model: () => stubModel(JSON.stringify({ ideas: [{ title: "A shed for the bikes", sources: [1] }] })).model });
+    expect(await runPersona(IDEAS_DIGEST, ideas.deps, "manual")).toMatchObject({ status: "done" });
+    expect(ideas.inbox.list()[0]!.title).toBe("1 ideas this fortnight. Most on your mind: A shed for the bikes");
+  });
+
+  it("Topic gardener proposes a desk job as Run it or Not now and changes nothing itself", async () => {
+    const reply = JSON.stringify({ tidy: { request: "Join Garden and Allotment into one topic", why: "Garden and Allotment hold the same notes." } });
+    const { deps: d, inbox, written } = deps({ model: () => stubModel(reply).model });
+    expect(await runPersona(TOPIC_GARDENER, d, "manual")).toMatchObject({ status: "done", summary: "Read 2 memories and proposed one tidy-up" });
+    const card = inbox.list()[0]!;
+    expect(card).toMatchObject({ kind: "question", from: "Topic gardener", title: "Garden and Allotment hold the same notes. Run it?", body: "Join Garden and Allotment into one topic" });
+    expect(card.sourceKey!.startsWith("desk-ask:")).toBe(true);
+    expect(written[0]!.files[0]!.content).toContain("Proposed: Join Garden and Allotment");
+    // The desk owns the answer: Not now starts nothing.
+    const queue = { enqueued: 0, enqueue() { this.enqueued += 1; return { id: "j1" }; }, get: () => null, recent: () => [] };
+    expect(answerDeskQuestion(card, "no", inbox, queue)).toBe(true);
+    expect(queue.enqueued).toBe(0);
+  });
+
+  it("Health of your memory makes no model call and posts only when saving has gone quiet", async () => {
+    const noModel = () => { throw new Error("no model for this persona"); };
+    const quiet = deps({ entries: fourWeeks, model: noModel });
+    const run = await runPersona(MEMORY_HEALTH, quiet.deps, "manual");
+    expect(run).toMatchObject({ status: "done", modelCalls: 0, costUsd: 0 });
+    expect(quiet.written[0]!.files[0]!.content).toContain("- Saved this week: 1, the three weeks before: 4, 5, 6");
+    expect(quiet.inbox.list()[0]!.title).toBe("You saved 1 memories this week, against about 5 a week before.");
+
+    const calm = deps({ model: noModel });
+    calm.deps.store = new PersonaStore(join(dir, "calm.sqlite"));
+    calm.deps.inbox = new InboxStore(join(dir, "calm-inbox.sqlite"));
+    expect(await runPersona(MEMORY_HEALTH, calm.deps, "manual")).toMatchObject({ status: "done", summary: "Counted 2 memories, all looks normal" });
+    expect(calm.deps.inbox.list()).toHaveLength(0);
   });
 });

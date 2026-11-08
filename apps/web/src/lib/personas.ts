@@ -21,12 +21,25 @@ export type PersonaRun = {
   revision: string | null
 }
 
+export type PersonaCadence =
+  | { every: "night" }
+  | { every: "week" }
+  | { every: "days"; days: number }
+
+export type PersonaSkill = { id: string; label: string }
+
 export type Persona = {
   id: string
   name: string
+  /** One plain line: what it is for. */
+  purpose: string
   brief: string
+  cadence: PersonaCadence
+  defaultCadence: PersonaCadence
+  /** The cadence in words. */
   schedule: string
-  permissions: string[]
+  /** Its pre-loaded skills: the only things it can do. */
+  skills: PersonaSkill[]
   enabled: boolean
   limits: { maxSteps: number; maxRunUsd: number; maxMonthUsd: number }
   budget: {
@@ -43,6 +56,8 @@ export type Persona = {
 export type PersonaList = {
   personas: Persona[]
   budget: { spentUsd: number; capUsd: number }
+  /** Every skill a persona can be given. */
+  skills: PersonaSkill[]
 }
 
 const BASE = "/api/console/personas"
@@ -52,6 +67,11 @@ export const setPersonaEnabled = (id: string, enabled: boolean) =>
   api<PersonaList>(`${BASE}/${encodeURIComponent(id)}`, {
     method: "POST",
     body: { enabled },
+  })
+export const setPersonaCadence = (id: string, cadence: PersonaCadence) =>
+  api<PersonaList>(`${BASE}/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: { cadence },
   })
 export const runPersonaNow = (id: string) =>
   api<PersonaList & { run: PersonaRun | null }>(

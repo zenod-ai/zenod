@@ -15,12 +15,55 @@ import { inTreeSweepWindow, treeSweepWeekStart, TREE_SWEEP_WINDOW_START_HOUR_UTC
  * monthly AI allowance by default), and every model call also counts in that AI allowance.
  *
  * Shapes copied from Epic Team (agent_team `team/personaRecord.ts`, `cycle/skipUnchanged.ts`): a
- * persona record with a name, a brief, a schedule and permissions, and a no-model check before a
+ * persona record with a name, a brief, a schedule and its skills, and a no-model check before a
  * scheduled wake that skips it when nothing is new since the last real run. It runs inside Zenod
  * only: no calls to the team console (root L-7).
  */
 
-export type PersonaSchedule = { every: "night" } | { every: "week" };
+/** How often a persona wakes: nightly (shown as Daily), weekly, or every N days. The user can change it. */
+export type PersonaSchedule = { every: "night" } | { every: "week" } | { every: "days"; days: number };
+
+export const PERSONA_MIN_EVERY_DAYS = 2;
+export const PERSONA_MAX_EVERY_DAYS = 30;
+
+/** A valid cadence from user input, or null. */
+export function parsePersonaSchedule(value: unknown): PersonaSchedule | null {
+  if (!value || typeof value !== "object") return null;
+  const { every, days } = value as { every?: unknown; days?: unknown };
+  if (every === "night" || every === "week") return { every };
+  if (every === "days" && Number.isInteger(days) && (days as number) >= PERSONA_MIN_EVERY_DAYS && (days as number) <= PERSONA_MAX_EVERY_DAYS) {
+    return { every: "days", days: days as number };
+  }
+  return null;
+}
+
+export function personaScheduleLabel(schedule: PersonaSchedule): string {
+  if (schedule.every === "week") return "Weekly, Sunday night";
+  if (schedule.every === "days") return `Every ${schedule.days} days, at night`;
+  return "Daily, at night";
+}
+
+/**
+ * The skills a persona can be given. The runner hands it only the calls for its own skills: a call
+ * outside them fails the run, so the list on the settings screen is what it can really do.
+ */
+export type PersonaSkill = "read" | "search" | "write-own-folder" | "post-inbox" | "ask" | "propose-desk-job";
+
+export const PERSONA_SKILLS: Record<PersonaSkill, string> = {
+  read: "Read your memory",
+  search: "Search your memory",
+  "write-own-folder": "Write only into its own folder",
+  "post-inbox": "Post findings to your inbox",
+  ask: "Ask you a question",
+  "propose-desk-job": "Propose a tidy-up job you run or skip",
+};
+
+export class PersonaSkillError extends Error {
+  constructor(readonly skill: PersonaSkill) {
+    super(`It does not have the skill "${PERSONA_SKILLS[skill]}"`);
+    this.name = "PersonaSkillError";
+  }
+}
 
 export interface PersonaLimits {
   /** Steps per run: each read, model call, note and inbox post is one. */
@@ -36,11 +79,14 @@ export interface PersonaDefinition {
   id: string;
   /** Shown as the sender of its inbox items. */
   name: string;
+  /** One plain line: what it is for, shown in the catalog. */
+  purpose: string;
   /** One or two sentences, shown in settings. */
   brief: string;
+  /** Its default cadence; the user's choice in settings wins. */
   schedule: PersonaSchedule;
-  /** Plain words for the settings screen; the context below is what enforces them. */
-  permissions: string[];
+  /** Its pre-loaded skills: the runner gives it these calls and no others. It never messages anyone. */
+  skills: PersonaSkill[];
   /** On for a new user, until they switch it off. */
   defaultEnabled: boolean;
   limits: PersonaLimits;
@@ -83,6 +129,11 @@ export interface PersonaContext extends PersonaReadContext {
   postFinding(input: { title: string; body?: string; links?: InboxLink[] }): InboxItem;
   /** A question for the user's inbox, the recommended choice first. One step. */
   postQuestion(input: { title: string; body?: string; options: InboxOption[]; recommended?: string; links?: InboxLink[] }): InboxItem;
+  /**
+   * Propose a job on the memory to the memory desk: an inbox card "Run it?". Nothing changes and
+   * nothing is spent unless the user says Run it; then the desk runs it, with Undo. One step.
+   */
+  proposeDeskJob(input: { request: string; why: string }): InboxItem;
 }
 
 /** The memory a persona reads (the tenant's engine). */
@@ -142,9 +193,20 @@ const monthStart = (date: Date) => new Date(Date.UTC(date.getUTCFullYear(), date
  * period runs at most once (the run log's unique period key), in the first off-peak window the
  * tenant is awake, so a restart never runs a night twice and never runs at peak time.
  */
-export function personaPeriodKey(persona: Pick<PersonaDefinition, "schedule" | "revisedAt">, now: Date): string {
-  const base = persona.schedule.every === "week" ? `week:${isoDay(new Date(treeSweepWeekStart(now.getTime())))}` : `night:${isoDay(now)}`;
+export function personaPeriodKey(persona: Pick<PersonaDefinition, "schedule" | "revisedAt">, now: Date, schedule: PersonaSchedule = persona.schedule): string {
+  const base = schedule.every === "week"
+    ? `week:${isoDay(new Date(treeSweepWeekStart(now.getTime())))}`
+    : schedule.every === "days"
+      ? `days${schedule.days}:${isoDay(new Date(everyDaysStart(now.getTime(), schedule.days)))}`
+      : `night:${isoDay(now)}`;
   return persona.revisedAt ? `${base}@${persona.revisedAt}` : base;
+}
+
+const DAY_MS = 24 * 3_600_000;
+
+/** The start (midnight UTC) of the N-day period holding `t`, counted from 1970-01-01. */
+function everyDaysStart(t: number, days: number): number {
+  return Math.floor(t / DAY_MS / days) * days * DAY_MS;
 }
 
 /** Never ran, or last ran before its latest revision: wakes at once, at any hour. */
@@ -166,12 +228,20 @@ export function nextPersonaWakeAt(schedule: PersonaSchedule, now: Date, ranThisP
     }
     return new Date(start + 7 * day);
   }
+  if (schedule.every === "days" && ranThisPeriod) {
+    return new Date(everyDaysStart(t, schedule.days) + schedule.days * day + TREE_SWEEP_WINDOW_START_HOUR_UTC * 3_600_000);
+  }
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + TREE_SWEEP_WINDOW_START_HOUR_UTC * 3_600_000;
   return new Date(today > t ? today : today + day);
 }
 
 export function personaEnabled(store: PersonaStore, persona: PersonaDefinition): boolean {
   return store.enabled(persona.id) ?? persona.defaultEnabled;
+}
+
+/** Its cadence: the user's choice, else its default. */
+export function personaSchedule(store: PersonaStore, persona: PersonaDefinition): PersonaSchedule {
+  return parsePersonaSchedule(store.cadence(persona.id)) ?? persona.schedule;
 }
 
 /** Month-to-date spend against the caps: this persona's and all personas'. */
@@ -197,7 +267,7 @@ export async function runPersona(
 ): Promise<PersonaRun | null> {
   const now = deps.now ?? (() => new Date());
   const started = now();
-  const periodKey = trigger === "schedule" ? personaPeriodKey(persona, started) : null;
+  const periodKey = trigger === "schedule" ? personaPeriodKey(persona, started, personaSchedule(deps.store, persona)) : null;
   const run = deps.store.start(persona.id, trigger, periodKey);
   if (!run) return null;
 
@@ -213,6 +283,9 @@ export async function runPersona(
   if (budget.totalUsd >= budget.totalCapUsd) return end("capped", "The personas' monthly budget is used up");
   if (budget.personaUsd >= budget.personaCapUsd) return end("capped", `${persona.name}'s monthly budget is used up`);
 
+  const skilled = (skill: PersonaSkill) => {
+    if (!persona.skills.includes(skill)) throw new PersonaSkillError(skill);
+  };
   const step = () => {
     if (tally.steps >= persona.limits.maxSteps) throw new PersonaCapError("steps", `Stopped at its ${persona.limits.maxSteps} steps`);
     tally.steps += 1;
@@ -229,6 +302,7 @@ export async function runPersona(
     feedback,
     // Spread over the days, newest first within each, so a busy day cannot crowd out the rest of the week.
     async recentMemories({ days, limit = 40 }) {
+      skilled("read");
       step();
       const span = Math.max(1, Math.min(days, 31));
       const max = Math.min(limit, 100);
@@ -246,10 +320,12 @@ export async function runPersona(
         .slice(0, max);
     },
     async search(query) {
+      skilled("search");
       step();
       return deps.memory.search(query);
     },
     async read(path) {
+      skilled("read");
       step();
       return deps.memory.get(path);
     },
@@ -283,17 +359,31 @@ export async function runPersona(
       return result.text;
     },
     writeNote(name, content) {
+      skilled("write-own-folder");
       if (notes.length >= PERSONA_MAX_NOTES_PER_RUN) throw new PersonaCapError("notes", `Stopped at ${PERSONA_MAX_NOTES_PER_RUN} notes`);
       step();
       notes.push({ name, content: content.slice(0, MAX_NOTE_CHARS) });
     },
     postFinding(input) {
+      skilled("post-inbox");
       beforePost();
       return posted(deps.inbox.post({ kind: "finding", from: persona.name, sourceKey: sourceKey(), ...input }));
     },
     postQuestion(input) {
+      skilled("ask");
       beforePost();
       return posted(deps.inbox.post({ kind: "question", from: persona.name, sourceKey: sourceKey(), ...input }));
+    },
+    proposeDeskJob({ request, why }) {
+      skilled("propose-desk-job");
+      beforePost();
+      // The desk owns a `desk-ask:` card: Run it starts the job with the card's body as its request.
+      return posted(deps.inbox.post({
+        kind: "question", from: persona.name, sourceKey: `desk-ask:${sourceKey()}`,
+        title: `${why.trim().slice(0, 300)} Run it?`,
+        body: request.trim().slice(0, 600),
+        options: [{ id: "run", label: "Run it" }, { id: "no", label: "Not now" }],
+      }));
     },
   };
 
@@ -339,7 +429,7 @@ async function commitNotes(persona: PersonaDefinition, deps: PersonaRunnerDeps, 
 export function duePersonas(personas: readonly PersonaDefinition[], store: PersonaStore, now: Date): PersonaDefinition[] {
   const inWindow = inTreeSweepWindow(now.getTime());
   return personas.filter((persona) => {
-    if (!personaEnabled(store, persona) || store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now))) return false;
+    if (!personaEnabled(store, persona) || store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, personaSchedule(store, persona)))) return false;
     return inWindow || wantsFirstWake(store, persona);
   });
 }
@@ -348,16 +438,20 @@ export function duePersonas(personas: readonly PersonaDefinition[], store: Perso
 export function personaView(persona: PersonaDefinition, store: PersonaStore, now: Date, totalMonthUsd = PERSONA_TOTAL_MONTH_USD) {
   const enabled = personaEnabled(store, persona);
   const runs = store.runs(persona.id, 5);
+  const cadence = personaSchedule(store, persona);
   return {
     id: persona.id,
     name: persona.name,
+    purpose: persona.purpose,
     brief: persona.brief,
-    schedule: persona.schedule.every === "week" ? "Weekly, Sunday night" : "Nightly",
-    permissions: persona.permissions,
+    cadence,
+    defaultCadence: persona.schedule,
+    schedule: personaScheduleLabel(cadence),
+    skills: persona.skills.map((id) => ({ id, label: PERSONA_SKILLS[id] })),
     enabled,
     limits: persona.limits,
     budget: personaBudget(store, persona, now, totalMonthUsd),
-    nextWakeAt: enabled ? nextPersonaWakeAt(persona.schedule, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now))).toISOString() : null,
+    nextWakeAt: enabled ? nextPersonaWakeAt(cadence, now, store.hasRunForPeriod(persona.id, personaPeriodKey(persona, now, cadence))).toISOString() : null,
     lastRun: runs[0] ?? null,
     runs,
   };

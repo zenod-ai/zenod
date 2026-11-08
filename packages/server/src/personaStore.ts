@@ -125,6 +125,9 @@ export class PersonaStore {
       CREATE INDEX IF NOT EXISTS persona_runs_persona ON persona_runs(persona_id, started_at);
       CREATE UNIQUE INDEX IF NOT EXISTS persona_runs_period ON persona_runs(persona_id, period_key) WHERE period_key IS NOT NULL;
     `);
+    // Round 2: the user's own cadence per persona (JSON, null = its default).
+    const columns = this.db.prepare(`PRAGMA table_info(persona_settings)`).all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "cadence")) this.db.exec(`ALTER TABLE persona_settings ADD COLUMN cadence TEXT`);
   }
 
   /** On or off; null when the user never switched it (the persona's default applies). */
@@ -133,11 +136,30 @@ export class PersonaStore {
     return row ? row.enabled === 1 : null;
   }
 
+  /** `defaultEnabled` fills a new row when only the cadence is set, so setting it never switches one on. */
   setEnabled(personaId: string, enabled: boolean): void {
     this.db
       .prepare(`INSERT INTO persona_settings (persona_id, enabled, updated_at) VALUES (?, ?, ?)
                 ON CONFLICT(persona_id) DO UPDATE SET enabled=excluded.enabled, updated_at=excluded.updated_at`)
       .run(personaId, enabled ? 1 : 0, this.now().toISOString());
+  }
+
+  /** The user's cadence for a persona, as stored (the runner validates it); null for its default. */
+  cadence(personaId: string): unknown {
+    const row = this.db.prepare(`SELECT cadence FROM persona_settings WHERE persona_id=?`).get(personaId) as { cadence: string | null } | undefined;
+    if (!row?.cadence) return null;
+    try {
+      return JSON.parse(row.cadence) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  setCadence(personaId: string, cadence: object | null, defaultEnabled: boolean): void {
+    this.db
+      .prepare(`INSERT INTO persona_settings (persona_id, enabled, updated_at, cadence) VALUES (?, ?, ?, ?)
+                ON CONFLICT(persona_id) DO UPDATE SET cadence=excluded.cadence, updated_at=excluded.updated_at`)
+      .run(personaId, defaultEnabled ? 1 : 0, this.now().toISOString(), cadence ? JSON.stringify(cadence) : null);
   }
 
   /**
