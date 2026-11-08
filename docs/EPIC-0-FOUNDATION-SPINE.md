@@ -54,7 +54,7 @@ Phase: Zenod is ready for its first five real testers apart from a dress rehears
 Last attempted: 2026-11-06 repo cleanup (D35): only zenod and zenod-social stay active, the other three Zenod repos are archived and marked DEPRECATED. Before: 2026-11-03 roll-up from children (above); 2026-11-02 roll-up of EPIC-7 and EPIC-9 work
 Result: Zenod runs in production and a new tester could sign up, get a free pass and be capped, but nobody outside the team has used it yet. Live `cloud.zenod.dev/api/health` ok on `5aa4fe4` (2026-11-03); live billing never performed.
 Waiting on: Jordi, most urgent first: E7-A15 sign in operations@alpha9.io once in the agents' browser (~1 min; unblocks T7, EPIC-11 and EPIC-10 R1); E7-A14 follow the one key page (~15–20 min); EPIC-9 verdict on its Outcome
-Monitoring: E12-S8 run_b3b8aa23 (seat5) until done, next check 2026-11-08T10:43:37Z · next check 2026-11-08T10:43:37.000Z
+Monitoring: E14-P1 run_7c8bcea2 (seat3), E15-Q1 run_ff4ff9cf (seat1), E16-B1 run_68834ea4 (seat2) until done, next check 2026-11-08T17:55:37Z · next check 2026-11-08T17:55:37.000Z
 Next action: once Jordi signs in (E7-A15), the agents run the T7 dress rehearsal, then T8 go/no-go and the five tester invites
 Verified at: 2026-11-03 (child Current States read from main; live health ok, sha 5aa4fe4)
 
