@@ -106,18 +106,25 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(mcp).toMatch(/class="pp-mcp-stage scene"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/);
   });
 
-  it("brings in the deck's three scenes, marking what is coming", () => {
+  it("marks the graph view and match strengths live, each with a real screen of the app (EPIC-18 W4)", () => {
     const html = render("/");
-    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(5);
-    const graph = html.slice(html.indexOf('id="graph"'), html.indexOf('id="save"'));
-    expect(graph).toContain("Coming");
-    expect(graph).toContain("Voice note, today");
+    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(4);
+    // Everything on the page shipped: no Coming tag is left.
+    expect(html).not.toContain("pp-tag-soon");
+    const graph = html.slice(html.indexOf('id="graph"'), html.indexOf('id="constellation"'));
+    expect(graph.match(/pp-tag-live/g)!.length).toBe(2);
+    expect(graph).toContain("Graph tab");
+    expect(graph).toMatch(/<img[^>]*src="[^"]*graph-live[^"]*\.webp"[^>]*alt="[^"]{60,}"/);
+    expect(graph).toMatch(/srcSet="[^"]*graph-live-phone[^"]*\.webp"/);
     const strength = html.slice(html.indexOf('id="strength"'), html.indexOf('id="yours"'));
-    expect(strength).toContain("Coming");
+    expect(strength).toContain("pp-tag-live");
+    expect(strength).not.toContain("is coming");
+    expect(strength).toContain("Show in graph");
+    expect(strength).toMatch(/<img[^>]*src="[^"]*lit[^"]*\.webp"[^>]*alt="[^"]{60,}"/);
     expect(strength).toMatch(/data-p="92"/);
     expect(strength).toContain('data-type="Lisbon flat and the landlord"');
     // The scene markup is static: without script every step is visible, and no link leads nowhere.
-    for (const name of ["whatsapp", "graph", "retrieval-screen", "retrieval-results", "constellation"]) {
+    for (const name of ["whatsapp", "retrieval-screen", "retrieval-results", "constellation"]) {
       const scene = readFileSync(new URL(`./src/scenes/${name}.html`, import.meta.url), "utf8");
       expect(scene).not.toMatch(/href=/);
     }

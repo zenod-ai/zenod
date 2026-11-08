@@ -5,9 +5,10 @@
 // self-custody); voice first. Iteration 3 brings in the EPIC-12 deck's three
 // scenes (WhatsApp, a memory joining the graph, retrieval with strengths), an
 // early MCP-from-the-cloud section, and pricing at the end. Every claim must
-// hold for production today (the graph view and match strengths are marked
-// Coming), and WhatsApp only captures and acknowledges (root L-6). The
-// screenshots are rendered by apps/site/shots/capture.mjs with demo content.
+// hold for production today, and WhatsApp only captures and acknowledges
+// (root L-6). The screenshots are rendered by apps/site/shots/capture.mjs with
+// demo content; the graph view and lit answer screens (EPIC-18 W4) are the
+// shipped web app on the made-up demo vault.
 import * as React from "react";
 import "@fontsource-variable/newsreader";
 import "@fontsource/instrument-sans/400.css";
@@ -16,7 +17,6 @@ import "@/paper.css";
 import "@/scenes.css";
 
 import whatsappScene from "@/scenes/whatsapp.html?raw";
-import graphScene from "@/scenes/graph.html?raw";
 import retrievalScreen from "@/scenes/retrieval-screen.html?raw";
 import retrievalResults from "@/scenes/retrieval-results.html?raw";
 import constellationScene from "@/scenes/constellation.html?raw";
@@ -32,6 +32,10 @@ import history from "@/assets/shots/history.webp";
 import historyPhone from "@/assets/shots/history-phone.webp";
 import consoleShot from "@/assets/shots/console.webp";
 import consolePhone from "@/assets/shots/console-phone.webp";
+import graphLive from "@/assets/shots/graph-live.webp";
+import graphLivePhone from "@/assets/shots/graph-live-phone.webp";
+import lit from "@/assets/shots/lit.webp";
+import litPhone from "@/assets/shots/lit-phone.webp";
 import {
   DASHBOARD_URL,
   GOOGLE_SIGN_IN_PATH,
@@ -59,7 +63,6 @@ const AI_TOOLS = ["Claude", "ChatGPT", "Cursor", "VS Code", "Gemini CLI"];
 // components are memoised, so a re-render (sign-in state, readiness) never
 // resets markup the scene player is animating.
 const WHATSAPP_HTML = { __html: whatsappScene };
-const GRAPH_HTML = { __html: graphScene };
 const RETRIEVAL_SCREEN_HTML = { __html: retrievalScreen };
 const RETRIEVAL_RESULTS_HTML = { __html: retrievalResults };
 const CONSTELLATION_HTML = { __html: constellationScene };
@@ -206,28 +209,36 @@ const McpSection = React.memo(function McpSection() {
   );
 });
 
-// A memory joining the graph: the filing is live, the graph view is coming.
+// A memory joining the graph: filing and the graph view are both live (E12-S2),
+// the lines drawn by link strength (E18-W1). A real screen, demo memories.
 const GraphSection = React.memo(function GraphSection() {
   return (
     <section className="pp-wide" id="graph" aria-labelledby="graph-title">
       <div className="pp-wide-head" data-reveal>
         <p className="pp-tags">
-          <Tag live>Live</Tag> filing <Tag live={false}>Coming</Tag> the graph view
+          <Tag live>Live</Tag> filing <Tag live>Live</Tag> the graph view
         </p>
         <h2 id="graph-title">Every memory finds its place, and its links.</h2>
         <p>
           The voice note above lands on the two pages its receipt names, and
-          Zenod finds your topics by itself. Soon the app shows it as a graph
-          you can walk, from each topic to the moment you said it.
+          Zenod finds your topics by itself. The Graph tab in the app shows it
+          as a graph you can walk, from each topic to the moment you said it.
+          The stronger the link, the darker its line.
         </p>
       </div>
-      <div className="app scene" data-len="10500" dangerouslySetInnerHTML={GRAPH_HTML} />
-      <p className="pp-legend">
-        <span><i />belongs to a topic</span>
-        <span><i className="d" />a link one memory makes to another</span>
-        <span>Large dark nodes are topics</span>
-      </p>
-      <p className="pp-fine">Coming. A mockup of the graph view with demo memories.</p>
+      <figure className="pp-real" data-reveal>
+        <picture>
+          <source media="(max-width: 560px)" srcSet={graphLivePhone} width={716} height={1034} />
+          <img
+            src={graphLive}
+            width={1272}
+            height={1114}
+            loading="lazy"
+            alt="The Zenod graph view: one memory in the middle, its topic above, and lines to linked memories drawn strong, medium or weak."
+          />
+        </picture>
+        <figcaption className="pp-fine">Live. The graph view in the Zenod app today, with demo memories.</figcaption>
+      </figure>
     </section>
   );
 });
@@ -280,24 +291,38 @@ const ConstellationSection = React.memo(function ConstellationSection() {
   );
 });
 
-// Retrieval with strengths: search over MCP is live, the percentages are coming.
+// Retrieval with strengths: percentages are live in the app's chat and graph
+// (E12-S3a, S13) and in search over MCP; the real lit answer follows the scene.
 const StrengthSection = React.memo(function StrengthSection() {
   return (
     <section className="pp-strength scene" id="strength" data-len="11500" aria-labelledby="strength-title">
       <div className="app" dangerouslySetInnerHTML={RETRIEVAL_SCREEN_HTML} />
       <div className="pp-say">
         <p className="pp-tags">
-          <Tag live={false}>Coming</Tag>
+          <Tag live>Live</Tag>
         </p>
         <h2 id="strength-title">Ask, and see how strongly each memory answers.</h2>
         <div dangerouslySetInnerHTML={RETRIEVAL_RESULTS_HTML} />
         <p className="pp-fine">
-          Search over MCP already returns ranked results today. The strength of
-          each match is coming, in the app and for Claude, ChatGPT or Cursor
-          alike. It is how well each memory matches against the best one, not
-          a probability. Demo memories.
+          Live. Each answer in the app lists the memories it used with their
+          match, and Show in graph lights them up. Claude, ChatGPT or Cursor
+          get the same percentage over MCP. It is how well each memory matches
+          against the best one, not a probability. Demo memories.
         </p>
       </div>
+      <figure className="pp-real pp-real-full" data-reveal>
+        <picture>
+          <source media="(max-width: 560px)" srcSet={litPhone} width={716} height={1744} />
+          <img
+            src={lit}
+            width={1952}
+            height={1214}
+            loading="lazy"
+            alt="An answer lit up in the Zenod graph: the five memories it used in green with their percentages, and the list beside it from 100% to 92%."
+          />
+        </picture>
+        <figcaption className="pp-fine">Live. An answer lit up in the Zenod app today, with demo memories.</figcaption>
+      </figure>
     </section>
   );
 });
