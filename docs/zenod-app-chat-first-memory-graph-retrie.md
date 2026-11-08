@@ -37,7 +37,7 @@ Result: P1 done (fed E12-A1): vision deck with mockups at http://vps3.taild81fbb
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: S3a worker
 Approved work: none
-Next action: S3a ranked retrieval with % over MCP (run_4477c7b0) ; then S1 chat-first landing, S2 graph, S3b, S4 in the deck's order ; Jordi answers E12-A7
+Next action: S1 chat-first landing (run_14791928) ; S3a in Jordi's review ; then S2 graph view ; Jordi answers E12-A8
 Source revision: uncommitted scaffold
 Verified at: 2026-11-07
 
@@ -66,7 +66,7 @@ Steps: each is independently testable and closes only with evidence.
 |---|---|---|---|---|---|---|---|---|---|---|
 | P1 | Ticket worker | run_b3181074 (round 4) | Plan + vision deck with mockups at one URL: chat-first landing, memory graph view, lit-up retrieval with scores, self-digestion, the vision and the proposed order of steps (E12-1..5) | done (fed E12-A6, deck is the product deck) | none | main (docs only) | main | [epic12-p1-2026-11-07](evidence/epic12-p1-2026-11-07.md), deck source [docs/epic12/](epic12/README.md) | 2026-11-08 | round 4 deck at http://vps3.taild81fbb.ts.net:8912/ (pricing moved to the end; style written down as [DESIGN-LANGUAGE.md](epic12/DESIGN-LANGUAGE.md) with a [starter kit](epic12/design-kit/README.md)); waits on E12-A6 |
 | S3a | Ticket worker | run_4477c7b0-c100-4a81-9668-9b2544edc4dc | E12-3 part 1: ranked retrieval returns the top 5 with a match percentage and a link, also over MCP (BM25 already p95 46 ms, no vectors needed), ~1 day | review | E12-A6 answered | [#1505](https://github.com/zenod-ai/zenod/pull/1505) merged 9e45917 | main | [evidence](evidence/e12-s3a-2026-11-08.md), [card](cards/E12-S3a.md), page http://vps3.taild81fbb.ts.net:8916/: live health sha 9e45917 (2026-11-08 02:57Z); search_memory hits carry rank, matchPercent, url, appPath, optional hitLimit; /api/console/memory-search; demo vault 714 notes, whole MCP call 0.44–0.67 s, index 3–7 ms; live test-account call not done (no non-Jordi account with a vault) | 2026-11-08 | followups: start S1 chat-first landing — next in the deck's order, its chat cites these ranked memories; start faster fallback search — questions with no whole-word match fall back to the substring scan, 0.9–1.4 s, over the 1 s budget; park live test-account MCP check — needs a non-Jordi account with a vault, which comes with E7-A15; confirm: yes — Jordi asks his own AI app for the top 5 and judges whether the percentages and links make sense |
-| S1 | Ticket worker | unassigned | E12-1: chat-first cloud landing for hosted users that answers from your memory with links (ChatTab exists, /api/chat not yet in the customer layer), ~2 days | draft | P1; E12-A6 | - | main | - | 2026-11-07 | after E12-A6 |
+| S1 | Ticket worker | run_14791928 | E12-1: chat-first cloud landing for hosted users that answers from your memory with links (ChatTab exists, /api/chat not yet in the customer layer), ~2 days | active | E12-A6 answered; S3a shipped | - | main | - | 2026-11-07 | after E12-A6 |
 | S2 | Ticket worker | unassigned | E12-2: memory graph view from stored wikilinks, navigable, ~2–3 days | draft | P1; E12-A6 | - | main | - | 2026-11-07 | after E12-A6 |
 | S3b | Ticket worker | unassigned | E12-3 part 2: a query lights up its top 5 in the graph view, ~1 day, after S2 | draft | P1; E12-A6 | - | main | - | 2026-11-07 | after E12-A6 |
 | S4 | Ticket worker | unassigned | E12-4: nightly digestion sweep plus "last run" in the app (with EPIC-9), ~1 day | draft | P1; E12-A6 | - | main | - | 2026-11-07 | after E12-A6 |
