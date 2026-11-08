@@ -64,7 +64,7 @@ Steps: each is independently testable and closes only with evidence.
 | S5 | Ticket worker | unassigned | Three starter personas tried on real notes (2–3 d) | blocked | S4 done; E15-A6 (OpenRouter credit: trying three personas on real notes spends model calls on the account production depends on, about $0.33 left) | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | dispatch as soon as E15-A6 adds credit |
 | S6 | Ticket worker | unassigned | Call button: library hotline over OpenAI Realtime that asks Zenod's answer engine and passes jobs to the desk, cost capped (4–5 d; needs an OpenAI account for Zenod, asked when it starts) | draft | S3 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S3 |
 | S7 | Ticket worker | unassigned | Price and limits for personas, calls and desk jobs (1 d) | draft | S4, S6 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S4, S6 |
-| S8 | Ticket worker | run_e6d8ab9e | the call button, which also passes spoken jobs and questions to the desk: follow-up of S3 | active | S3 | none | main | Jordi started it when closing S3 2026-11-08 | 2026-11-08 | build on a stubbed call now; the live call needs E14-A3 (an OpenAI key for Zenod) |
+| S8 | Ticket worker | run_e6d8ab9e-2ebe-4e9d-9539-57a8a5207612 — claimed 2026-11-08T21:26Z, lease until 2026-11-08T23:26Z | the call button, which also passes spoken jobs and questions to the desk: follow-up of S3 | active | S3 | none | main | Jordi started it when closing S3 2026-11-08 | 2026-11-08 | build on a stubbed call now; the live call needs E14-A3 (an OpenAI key for Zenod) |
 
 ## Decisions
 
