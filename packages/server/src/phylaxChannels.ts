@@ -15,6 +15,7 @@ import {
 import { normalizeWhatsAppIdentifier } from "./whatsappConfig.js";
 import { normalizeTelegramEntry } from "./telegramConfig.js";
 import { appendPhylaxCaptureReceiptInvitation } from "./phylaxCaptureReceipt.js";
+import { CAPTURE_NOT_SAVED_REPLY } from "./whatsappStore.js";
 import {
   formatConversationTranscript,
   transcriptQueryFromToolArgs,
@@ -604,6 +605,13 @@ class PhylaxCaptureJournal {
              WHEN phylax_capture_jobs.state = 'done' THEN 'done'
              ELSE 'polling'
            END,
+           receipt_text = CASE WHEN phylax_capture_jobs.state = 'error' THEN NULL ELSE phylax_capture_jobs.receipt_text END,
+           evidence_ref = CASE WHEN phylax_capture_jobs.state = 'error' THEN NULL ELSE phylax_capture_jobs.evidence_ref END,
+           delivered_at = CASE WHEN phylax_capture_jobs.state = 'error' THEN NULL ELSE phylax_capture_jobs.delivered_at END,
+           delivery_completed_at = CASE
+             WHEN phylax_capture_jobs.state = 'error' THEN NULL
+             ELSE phylax_capture_jobs.delivery_completed_at
+           END,
            updated_at = excluded.updated_at`,
       ).run(
         input.tenantId,
@@ -1021,7 +1029,7 @@ export function terminalCaptureReceipt(
       state: "error",
       text: tool === "chat_with_zenod"
         ? "⚠️ I could not confirm the result of that request. Please check your Zenod activity before trying it again."
-        : "⚠️ Zenod could not finish saving that memory. Please try again.",
+        : CAPTURE_NOT_SAVED_REPLY,
       evidenceRef: null,
     };
   }
@@ -1968,6 +1976,9 @@ export class PhylaxChannelsOrgan {
     // assistants remain synchronous and are never sent an invented argument.
     let durableChat = false;
     let durableCall = false;
+    // Zenod itself answered that the save job failed. Retrying the same key only
+    // returns the same failed job, so this ends in the try-again text, not a retry.
+    let captureJobFailed = false;
     try {
       if (binding || fixedAdapterCall) {
         try {
@@ -2004,7 +2015,7 @@ export class PhylaxChannelsOrgan {
             },
           },
         };
-      } else if (existing?.state === "error" && existing.receiptText) {
+      } else if (existing?.state === "error" && existing.receiptText && !retryableCapture) {
         downstream = {
           isError: true,
           content: [{ type: "text", text: existing.receiptText }],
@@ -2015,10 +2026,11 @@ export class PhylaxChannelsOrgan {
             error: { code: "job_failed", message: existing.receiptText },
           },
         };
-      } else if (existing) {
+      } else if (existing && existing.state !== "error") {
         const deadline = Date.now() + this.foregroundDeadlineMs(call.tool);
         const completed = await this.pollCapture(existing, route, handoff, deadline);
         if (completed?.receipt) {
+          captureJobFailed = completed.receipt.state === "error";
           downstream = {
             ...completed.result,
             content: [{ type: "text", text: completed.receipt.text }],
@@ -2064,6 +2076,7 @@ export class PhylaxChannelsOrgan {
           );
           const completed = await this.pollCapture(job, route, handoff, deadline);
           if (completed?.receipt) {
+            captureJobFailed = completed.receipt.state === "error";
             downstream = {
               ...completed.result,
               content: [{ type: "text", text: completed.receipt.text }],
@@ -2115,7 +2128,7 @@ export class PhylaxChannelsOrgan {
         "downstream_error",
         "Zenod could not process that message. Please try again.",
         failureAudit(downstreamMs, failureCode, audit),
-        durableCall && providerMessageId ? "idempotent_capture" : null,
+        durableCall && providerMessageId && !captureJobFailed ? "idempotent_capture" : null,
       );
     }
     if (fixedAdapterCall && !terminalTransportReceipt(downstream)) {

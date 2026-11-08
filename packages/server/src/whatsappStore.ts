@@ -359,6 +359,29 @@ function safeJson(value: unknown): string {
 
 const MAX_RECOVERY_REPLY_CHARS = 65_536;
 
+/** Scenario 1 (ZAL-A10): the transcript is kept and the relay retries the save by itself. */
+export const CAPTURE_RETRY_NOTICE =
+  "⚠️ I couldn't save that voice note yet. It's kept safe, and I'll confirm here when it's saved.";
+/** Scenario 2 (ZAL-A10): nothing is retried, so the user is asked to send it again. */
+export const CAPTURE_NOT_SAVED_REPLY =
+  "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.";
+/**
+ * Waits between automatic save retries of a kept voice note (about 24 h in all).
+ * After the last one fails the note is given up and the user gets CAPTURE_NOT_SAVED_REPLY.
+ */
+export const CAPTURE_RETRY_DELAYS_MS: readonly number[] = [
+  60_000,
+  2 * 60_000,
+  5 * 60_000,
+  15 * 60_000,
+  30 * 60_000,
+  60 * 60_000,
+  2 * 60 * 60_000,
+  4 * 60 * 60_000,
+  8 * 60 * 60_000,
+  8 * 60 * 60_000,
+];
+
 function boundedRecoveryReply(value: string | null | undefined): string | null {
   const text = value?.trim();
   return text ? text.slice(0, MAX_RECOVERY_REPLY_CHARS) : null;
@@ -665,6 +688,14 @@ export class WhatsAppStore {
     }
     if (!voiceColumns.some((column) => column.name === "failure_http_status")) {
       this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN failure_http_status INTEGER");
+    }
+    // ZAL-A10: a kept voice note is retried on a bounded schedule. Rows deferred before
+    // this column existed have no retry time and are picked up on the next retry tick.
+    if (!voiceColumns.some((column) => column.name === "capture_retry_count")) {
+      this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN capture_retry_count INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!voiceColumns.some((column) => column.name === "capture_retry_at")) {
+      this.db.exec("ALTER TABLE whatsapp_voice_jobs ADD COLUMN capture_retry_at INTEGER");
     }
     for (const column of [
       "media_download_ms",
@@ -1283,8 +1314,7 @@ export class WhatsAppStore {
   }
 
   markVoiceRingOutcomeUnknown(providerMessageId: string, now = Date.now()): void {
-    const notice =
-      "⚠️ Your voice note was transcribed, but Zenod could not confirm the final result. I will not retry it automatically because that could perform the request twice.";
+    const notice = CAPTURE_NOT_SAVED_REPLY;
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const changed = this.db.prepare(
@@ -1315,59 +1345,114 @@ export class WhatsAppStore {
     }
   }
 
-  deferIdempotentVoiceCapture(providerMessageId: string, replyText: string, now = Date.now()): boolean {
+  /**
+   * Park a kept voice note whose save did not land for an automatic retry. The notice is
+   * sent once per note (a later failed retry stays quiet); after the last scheduled retry
+   * the note is given up and the user is told to send it again.
+   */
+  deferIdempotentVoiceCapture(
+    providerMessageId: string,
+    replyText: string,
+    now = Date.now(),
+  ): "retrying" | "gave_up" | null {
     const bounded = boundedRecoveryReply(replyText);
     if (!bounded) throw new Error("capture retry notice is empty");
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const changed = this.db.prepare(
-        `UPDATE whatsapp_voice_jobs
-         SET job_state = 'capture_retry_pending', error_text = ?, updated_at = ?
+      const row = this.db.prepare(
+        `SELECT capture_retry_count AS retries FROM whatsapp_voice_jobs
          WHERE provider_message_id = ? AND job_state = 'forwarding'`,
-      ).run(bounded, now, providerMessageId).changes;
-      if (!changed) {
+      ).get(providerMessageId) as { retries: number } | undefined;
+      if (!row) {
         this.db.exec("COMMIT");
-        return false;
+        return null;
       }
-      this.db.prepare(
-        `INSERT INTO whatsapp_media_recovery (
-           provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
-         ) VALUES (?, 'interrupted_failure', 'pending', ?, ?, ?)
-         ON CONFLICT(provider_message_id) DO UPDATE SET
-           recovery_kind = 'interrupted_failure',
-           recovery_state = 'pending',
-           reply_text = excluded.reply_text,
-           outbound_provider_id = NULL,
-           error_text = NULL,
-           claimed_at = NULL,
-           completed_at = NULL,
-           updated_at = excluded.updated_at`,
-      ).run(providerMessageId, bounded, now, now);
+      const retries = Number(row.retries) || 0;
+      const outcome = retries >= CAPTURE_RETRY_DELAYS_MS.length ? "gave_up" : "retrying";
+      if (outcome === "gave_up") {
+        this.db.prepare(
+          `UPDATE whatsapp_voice_jobs
+           SET job_state = 'failed', error_text = 'Capture retries exhausted', capture_retry_at = NULL, updated_at = ?
+           WHERE provider_message_id = ?`,
+        ).run(now, providerMessageId);
+        this.db.prepare(
+          `INSERT INTO whatsapp_media_recovery (
+             provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
+           ) VALUES (?, 'interrupted_failure', 'pending', ?, ?, ?)
+           ON CONFLICT(provider_message_id) DO UPDATE SET
+             recovery_state = 'pending',
+             reply_text = excluded.reply_text,
+             outbound_provider_id = NULL,
+             error_text = NULL,
+             claimed_at = NULL,
+             completed_at = NULL,
+             updated_at = excluded.updated_at
+           WHERE whatsapp_media_recovery.recovery_kind = 'interrupted_failure'`,
+        ).run(providerMessageId, CAPTURE_NOT_SAVED_REPLY, now, now);
+      } else {
+        this.db.prepare(
+          `UPDATE whatsapp_voice_jobs
+           SET job_state = 'capture_retry_pending', error_text = ?,
+               capture_retry_count = ?, capture_retry_at = ?, updated_at = ?
+           WHERE provider_message_id = ?`,
+        ).run(bounded, retries + 1, now + CAPTURE_RETRY_DELAYS_MS[retries]!, now, providerMessageId);
+        this.db.prepare(
+          `INSERT INTO whatsapp_media_recovery (
+             provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
+           ) VALUES (?, 'interrupted_failure', 'pending', ?, ?, ?)
+           ON CONFLICT(provider_message_id) DO NOTHING`,
+        ).run(providerMessageId, bounded, now, now);
+      }
       this.db.prepare(
         `UPDATE whatsapp_media_coalescing SET outcome_state = 'failed', updated_at = ?
          WHERE canonical_provider_message_id = ?`,
       ).run(now, providerMessageId);
       this.db.exec("COMMIT");
-      return true;
+      return outcome;
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
     }
   }
 
+  /** Kept voice notes whose next automatic retry is due go back to the voice worker. */
+  resumeDueVoiceCaptureRetries(now = Date.now()): number {
+    return this.resumeVoiceCaptureRetries(
+      "(capture_retry_at IS NULL OR capture_retry_at <= ?)",
+      [now],
+      now,
+    );
+  }
+
+  /** Count of kept voice notes still waiting for an automatic retry (no content). */
+  pendingVoiceCaptureRetries(): number {
+    const row = this.db.prepare(
+      `SELECT COUNT(*) AS n FROM whatsapp_voice_jobs WHERE job_state = 'capture_retry_pending'`,
+    ).get() as { n: number };
+    return Number(row.n);
+  }
+
   resumeIdempotentVoiceCaptures(tenantId: string, now = Date.now()): number {
+    return this.resumeVoiceCaptureRetries("tenant_id = ?", [tenantId], now);
+  }
+
+  private resumeVoiceCaptureRetries(
+    filter: string,
+    params: Array<string | number>,
+    now: number,
+  ): number {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const pending = this.db.prepare(
         `SELECT provider_message_id AS providerMessageId
          FROM whatsapp_voice_jobs
-         WHERE tenant_id = ? AND job_state = 'capture_retry_pending'`,
-      ).all(tenantId) as unknown as Array<{ providerMessageId: string }>;
+         WHERE job_state = 'capture_retry_pending' AND ${filter}`,
+      ).all(...params) as unknown as Array<{ providerMessageId: string }>;
       const changed = this.db.prepare(
         `UPDATE whatsapp_voice_jobs
          SET job_state = 'transcribed', error_text = NULL, updated_at = ?
-         WHERE tenant_id = ? AND job_state = 'capture_retry_pending'`,
-      ).run(now, tenantId).changes;
+         WHERE job_state = 'capture_retry_pending' AND ${filter}`,
+      ).run(now, ...params).changes;
       for (const row of pending) {
         this.db.prepare(
           `UPDATE whatsapp_media_coalescing SET outcome_state = 'processing', updated_at = ?

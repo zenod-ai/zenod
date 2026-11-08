@@ -35,6 +35,7 @@ import {
   type WhatsAppSettings,
 } from "./whatsappConfig.js";
 import {
+  CAPTURE_NOT_SAVED_REPLY,
   WhatsAppStore,
   type WhatsAppInboundEvent,
   type WhatsAppChannelTiming,
@@ -1852,7 +1853,7 @@ export class WhatsAppGateway {
       // successful delivery. Keep those two states independent for support.
       await this.sendReply(
         event,
-        "⚠️ Zenod could not process that message. Please try again.",
+        CAPTURE_NOT_SAVED_REPLY,
         "failure_notice_sent",
       ).catch(() => {});
       this.options.store.recordChannelTiming(event.messageId, {
