@@ -92,7 +92,48 @@ const GENERIC_WORDS = new Set([
   "thing", "things", "everything", "anything", "much", "many", "let", "make", "give", "show", "find", "look",
   // The kind of capture, not its subject (E12-S3c round 2): "my voice note about the fence" is about the fence.
   "voice", "vn", "vns", "audio", "audios",
+  // How a question is put, not what it is about (E12-S19): "did I ever mention…", "what was that thing
+  // about…", "what did I ask for…", "the tweet saying…", "from my laptop or somewhere else?".
+  "ever", "once", "mention", "mentioned", "talk", "talked", "talking", "told", "says", "saying", "ask", "asked", "asking",
+  "wanted", "thought", "stuff", "kind", "sort", "maybe", "else", "more", "they", "anymore",
 ]);
+
+/**
+ * The same word in the person's other language (E12-S19): Jordi speaks English and Spanish, and asks
+ * in English about a note he spoke in Spanish ("the tweet saying businesses have no moats" is a
+ * Spanish voice note about "negocios" and "fosos"). A small fixed list, each an OR alternative of the
+ * question word; no model, no translation service.
+ */
+const OTHER_LANGUAGE: ReadonlyArray<readonly string[]> = [
+  ["business", "businesses", "negocio", "negocios", "empresa", "empresas"],
+  ["moat", "moats", "foso", "fosos"],
+  ["company", "companies", "empresa", "empresas", "sociedad"],
+  ["accounting", "accountant", "contabilidad", "contable", "gestor", "gestoria"],
+  ["partner", "partners", "socio", "socios"],
+  ["house", "houses", "casa", "casas", "vivienda"],
+  ["apartment", "apartments", "piso", "pisos", "apartamento", "apartamentos"],
+  ["price", "prices", "precio", "precios"],
+  ["rent", "renting", "alquiler", "alquilar"],
+  ["money", "dinero"],
+  ["decision", "decide", "decided", "decidir", "decidido"],
+  ["family", "familia"],
+  ["friend", "friends", "amigo", "amigos", "amiga", "amigas"],
+  ["health", "salud"],
+  ["doctor", "medico"],
+  ["tax", "taxes", "impuesto", "impuestos", "hacienda"],
+  ["bank", "banco"],
+  ["school", "colegio", "escuela"],
+  ["travel", "viaje", "viajar"],
+    ["defense", "defence", "defensa"],
+  ["copy", "copied", "copiar", "copia"],
+];
+/** A passage the asked-note pick reads: about this many words, overlapping by half (E12-S19). */
+const PASSAGE_WORDS = 90;
+/**
+ * A person's note with one passage holding at least this share of the question (rarity-weighted)
+ * is the note the question asks about, and joins the top of the ranked list (E12-S19).
+ */
+export const ASKED_NOTE_LIFT = 0.7;
 
 export interface MemoryIndexOptions {
   /** SQLite file in the tenant's data dir, e.g. `<dataDir>/memory-index.sqlite`. */
@@ -298,6 +339,30 @@ export function buildMatchTerms(
   return { match: clauses.size ? [...clauses].join(" OR ") : null, terms: termClauses, generic };
 }
 
+/** The alternatives of one MATCH clause (`"word"*`, `("word"* OR "two words")`): words, and whether the last is a prefix. */
+function clauseAlternatives(clause: string): Array<{ words: string[]; prefix: boolean }> {
+  return [...clause.matchAll(/"((?:[^"]|"")+)"(\*?)/g)].map((m) => ({ words: fold(m[1]!.replace(/""/g, '"')).split(" ").filter(Boolean), prefix: m[2] === "*" }));
+}
+
+/** Where in a note's words one of the alternatives starts: the words in a row, the last as a prefix when it is one. */
+function wordPositions(words: readonly string[], alternatives: ReadonlyArray<{ words: string[]; prefix: boolean }>): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const hit = alternatives.some((alt) => {
+      const n = alt.words.length;
+      if (n === 0 || i + n > words.length) return false;
+      for (let k = 0; k < n; k++) {
+        const want = alt.words[k]!;
+        const have = words[i + k]!;
+        if (k === n - 1 && alt.prefix ? !have.startsWith(want) : have !== want) return false;
+      }
+      return true;
+    });
+    if (hit) out.push(i);
+  }
+  return out;
+}
+
 /** Edit distance with adjacent swaps (Damerau, optimal string alignment), for short words. */
 function editDistance(a: string, b: string): number {
   const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
@@ -375,6 +440,8 @@ export class MemoryIndex {
   private version = 0;
   private graphCache: { version: number; graph: MemoryGraph } | null = null;
   private spokenCache: { version: number; words: Map<string, number> } | null = null;
+  /** The person's notes as plain words, for the asked-note pick (E12-S19). */
+  private noteWordsCache: { version: number; words: Map<number, string[]> } | null = null;
   private linkCache: { version: number; links: WeightedLinkIndex } | null = null;
   private aliasGroups: readonly (readonly string[])[];
   readonly tenantId: string;
@@ -472,7 +539,7 @@ export class MemoryIndex {
       const recent = this.recentSearch(intent, limit);
       if (recent.length > 0) return recent;
     }
-    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
+    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.queryVariants(query));
     if (!match) return [];
     const rows = this.db.prepare(`
       SELECT rowid, kind, path, title, filed, lineage, meta, bm25(docs, ${BM25_WEIGHTS}) AS rank
@@ -506,13 +573,47 @@ export class MemoryIndex {
     // A question made only of generic words ("how does my memory work") matches on nothing in
     // particular: whatever it finds reads weak.
     const percents = monotonic(kept.map((row) => matchPercent({ score: -row.rank, topScore, coverage: (coverage.get(row.rowid) ?? 0) * (generic ? 0.3 : 1) })));
-    return this.withGraphNeighbours(kept.map((row, i): MemoryIndexHit => ({
+    const hits = kept.map((row, i): MemoryIndexHit => ({
       path: row.path, kind: row.kind, title: row.title, snippet: snippetOf(texts.get(row.rowid), words),
       score: Math.round(-row.rank * 100) / 100,
       matchPercent: percents[i]!,
       treePath: row.lineage,
       ...(row.filed ? { filedOn: row.filed } : {}),
-    })), limit, aboutAgents);
+    }));
+    const walked = this.withGraphNeighbours(hits, limit, aboutAgents);
+    return generic ? walked : this.withAskedNotes(walked, query, limit);
+  }
+
+  /**
+   * The note the question asks about joins the top of the list (E12-S19). BM25 ranks a long voice note
+   * low, and a note scores its words over the whole text, so a ten-minute note that mentions everything
+   * ties with the one that says it. A person's note with one passage holding most of the question
+   * (asked notes) reads the best hit's percent times that share, and is placed by it: a note holding
+   * the whole question sits next to the best hit. At most two join or move up.
+   */
+  private withAskedNotes(hits: MemoryIndexHit[], query: string, limit: number): MemoryIndexHit[] {
+    if (hits.length === 0) return hits;
+    const asked = this.askedNotesNow(query, 2).filter((note) => note.share >= ASKED_NOTE_LIFT);
+    if (asked.length === 0) return hits;
+    const top = hits[0]!.matchPercent;
+    const out = [...hits];
+    for (const note of asked) {
+      const percent = Math.max(1, Math.round(top * note.share));
+      const at = out.findIndex((hit) => hit.path === note.path);
+      if (at >= 0) {
+        if (out[at]!.matchPercent < percent) out[at] = { ...out[at]!, matchPercent: percent };
+        continue;
+      }
+      const row = this.db.prepare("SELECT title, body, lineage, filed FROM docs WHERE path = ? AND kind = 'log' LIMIT 1")
+        .get(note.path) as { title: string; body: string; lineage: string; filed: string } | undefined;
+      if (!row) continue;
+      out.push({
+        path: note.path, kind: "log", title: row.title, snippet: snippetOf({ summary: "", body: spokenWords(row.body) }, note.words),
+        score: 0, matchPercent: percent, treePath: row.lineage, ...(row.filed ? { filedOn: row.filed } : {}),
+      });
+    }
+    // Stable: a word match keeps its place before an asked note at the same percent.
+    return out.map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
   }
 
   /**
@@ -798,7 +899,7 @@ export class MemoryIndex {
    */
   async ownNotes(query: string, limit = 6): Promise<string[]> {
     await this.fresh();
-    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.spellingVariants(query));
+    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.queryVariants(query));
     if (!match || generic) return [];
     const rows = this.db.prepare(`
       SELECT rowid, path, bm25(docs, ${BM25_WEIGHTS}) AS rank FROM docs
@@ -813,6 +914,84 @@ export class MemoryIndex {
       .sort((a, b) => (coverage.get(b.rowid) ?? 0) - (coverage.get(a.rowid) ?? 0) || a.rank - b.rank)
       .slice(0, limit)
       .map((row) => row.path);
+  }
+
+  /**
+   * The person's own notes (never agent reports) that hold the question in one passage (E12-S19),
+   * best first: each note's best ~90-word passage, by the rarity-weighted share of the question's
+   * words it holds (other spellings and the other language count), then recency. Empty for a question
+   * with no telling word. The ranked list lifts those at ASKED_NOTE_LIFT or more; the chat reads them whole.
+   */
+  async askedNotes(query: string, limit = 2): Promise<Array<{ path: string; share: number }>> {
+    await this.fresh();
+    return this.askedNotesNow(query, limit).map(({ path, share }) => ({ path, share }));
+  }
+
+  private askedNotesNow(query: string, limit: number): Array<{ path: string; share: number; words: string[] }> {
+    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups, this.queryVariants(query));
+    if (!match || generic || terms.length === 0) return [];
+    // Which of the person's notes hold each question word anywhere; a passage never holds more of the
+    // question than its whole note, so only notes that could reach the lift are read word by word.
+    const total = (this.db.prepare("SELECT count(*) AS n FROM docs").get() as { n: number }).n;
+    const countOf = this.db.prepare("SELECT count(*) AS n FROM docs WHERE docs MATCH ?");
+    const ownWith = this.db.prepare("SELECT rowid FROM docs WHERE docs MATCH ? AND kind = 'log' AND meta LIKE 'user%'");
+    const clauses = terms.map((term) => {
+      const scoped = `{title aliases summary body} : ${term}`;
+      return { alternatives: clauseAlternatives(term), weight: idfOf(total, (countOf.get(scoped) as { n: number }).n), rows: new Set((ownWith.all(scoped) as Array<{ rowid: number }>).map((row) => row.rowid)) };
+    });
+    const weightSum = clauses.reduce((sum, clause) => sum + clause.weight, 0);
+    if (weightSum <= 0) return [];
+    const whole = new Map<number, number>();
+    for (const clause of clauses) for (const rowid of clause.rows) whole.set(rowid, (whole.get(rowid) ?? 0) + clause.weight / weightSum);
+    if (whole.size === 0) return [];
+    const floor = Math.min(ASKED_NOTE_LIFT, Math.max(...whole.values())) * 0.999;
+    const ids = [...whole].filter(([, share]) => share >= floor).sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 120).map(([rowid]) => rowid);
+    // BM25 among them breaks ties (how often and how densely the note says it).
+    // FTS5 does not hold a MATCH query to a rowid list: the candidates are kept here.
+    const candidates = new Set(ids);
+    const rows = (this.db.prepare(`SELECT rowid, path FROM docs WHERE docs MATCH ? AND kind = 'log' AND meta LIKE 'user%' ORDER BY bm25(docs, ${BM25_WEIGHTS})`)
+      .all(match) as Array<{ rowid: number; path: string }>).filter((row) => candidates.has(row.rowid));
+    if (rows.length === 0) return [];
+    if (this.noteWordsCache?.version !== this.version) this.noteWordsCache = { version: this.version, words: new Map() };
+    const cache = this.noteWordsCache.words;
+    const wordsOf = (rowid: number): string[] => {
+      let words = cache.get(rowid);
+      if (!words) {
+        const row = this.db.prepare("SELECT body, meta FROM docs WHERE rowid = ?").get(rowid) as { body: string; meta: string };
+        words = normalize(fold(row.meta.endsWith("voice") ? spokenWords(row.body) : row.body)).split(" ").filter(Boolean);
+        cache.set(rowid, words);
+      }
+      return words;
+    };
+    const scored = rows.map((row, order) => {
+      const words = wordsOf(row.rowid);
+      // Where each question word is said, then the ~90-word passage holding the most of them.
+      const at = clauses.map((clause) => wordPositions(words, clause.alternatives));
+      let share = 0;
+      const step = PASSAGE_WORDS / 2;
+      for (let start = 0; start === 0 || start + step < words.length; start += step) {
+        const held = clauses.reduce((sum, clause, k) => sum + (at[k]!.some((i) => i >= start && i < start + PASSAGE_WORDS) ? clause.weight : 0), 0);
+        share = Math.max(share, held / weightSum);
+        if (share >= 1) break;
+      }
+      return { path: row.path, share: Math.round(share * 1000) / 1000, order };
+    }).filter((note) => note.share > 0);
+    const words = matchWords(match);
+    // Equal shares: BM25 decides (how often and how densely the note says it).
+    return scored.sort((a, b) => b.share - a.share || a.order - b.order)
+      .slice(0, limit).map(({ path, share }) => ({ path, share, words }));
+  }
+
+  /** Other spellings of the question's words: the transcriber's and the other language's (E12-S19). */
+  private queryVariants(query: string): Map<string, string[]> {
+    const out = this.spellingVariants(query);
+    for (const word of new Set(normalize(query).split(" "))) {
+      const group = OTHER_LANGUAGE.find((members) => members.includes(fold(word)));
+      if (!group) continue;
+      const others = group.filter((member) => member !== fold(word));
+      out.set(word, [...new Set([...(out.get(word) ?? []), ...others])]);
+    }
+    return out;
   }
 
   /**
