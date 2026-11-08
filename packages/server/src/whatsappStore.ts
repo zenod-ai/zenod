@@ -1367,6 +1367,7 @@ export class WhatsAppStore {
         this.db.exec("COMMIT");
         return null;
       }
+      // capture_retry_count counts the retries already made (see resumeVoiceCaptureRetries).
       const retries = Number(row.retries) || 0;
       const outcome = retries >= CAPTURE_RETRY_DELAYS_MS.length ? "gave_up" : "retrying";
       if (outcome === "gave_up") {
@@ -1393,9 +1394,9 @@ export class WhatsAppStore {
         this.db.prepare(
           `UPDATE whatsapp_voice_jobs
            SET job_state = 'capture_retry_pending', error_text = ?,
-               capture_retry_count = ?, capture_retry_at = ?, updated_at = ?
+               capture_retry_at = ?, updated_at = ?
            WHERE provider_message_id = ?`,
-        ).run(bounded, retries + 1, now + CAPTURE_RETRY_DELAYS_MS[retries]!, now, providerMessageId);
+        ).run(bounded, now + CAPTURE_RETRY_DELAYS_MS[retries]!, now, providerMessageId);
         this.db.prepare(
           `INSERT INTO whatsapp_media_recovery (
              provider_message_id, recovery_kind, recovery_state, reply_text, created_at, updated_at
@@ -1424,12 +1425,19 @@ export class WhatsAppStore {
     );
   }
 
-  /** Count of kept voice notes still waiting for an automatic retry (no content). */
-  pendingVoiceCaptureRetries(): number {
+  /**
+   * Counts only, no content: kept voice notes still waiting, saved after at least one
+   * retry, and given up after the last one.
+   */
+  voiceCaptureRetryCounts(): { pending: number; recovered: number; gaveUp: number } {
     const row = this.db.prepare(
-      `SELECT COUNT(*) AS n FROM whatsapp_voice_jobs WHERE job_state = 'capture_retry_pending'`,
-    ).get() as { n: number };
-    return Number(row.n);
+      `SELECT
+         COALESCE(SUM(job_state = 'capture_retry_pending'), 0) AS pending,
+         COALESCE(SUM(job_state IN ('reply_ready', 'completed') AND capture_retry_count > 0), 0) AS recovered,
+         COALESCE(SUM(job_state = 'failed' AND error_text = 'Capture retries exhausted'), 0) AS gaveUp
+       FROM whatsapp_voice_jobs`,
+    ).get() as { pending: number; recovered: number; gaveUp: number };
+    return { pending: Number(row.pending), recovered: Number(row.recovered), gaveUp: Number(row.gaveUp) };
   }
 
   resumeIdempotentVoiceCaptures(tenantId: string, now = Date.now()): number {
@@ -1450,7 +1458,8 @@ export class WhatsAppStore {
       ).all(...params) as unknown as Array<{ providerMessageId: string }>;
       const changed = this.db.prepare(
         `UPDATE whatsapp_voice_jobs
-         SET job_state = 'transcribed', error_text = NULL, updated_at = ?
+         SET job_state = 'transcribed', error_text = NULL,
+             capture_retry_count = capture_retry_count + 1, updated_at = ?
          WHERE job_state = 'capture_retry_pending' AND ${filter}`,
       ).run(now, ...params).changes;
       for (const row of pending) {
