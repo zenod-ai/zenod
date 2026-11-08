@@ -30,7 +30,11 @@ type Turn =
   | { id: number; kind: "kept-note"; text: string; keep: KeepState }
   | { id: number; kind: "error"; text: string }
 
-type NewTurn = Turn extends infer T ? (T extends Turn ? Omit<T, "id"> : never) : never
+type NewTurn = Turn extends infer T
+  ? T extends Turn
+    ? Omit<T, "id">
+    : never
+  : never
 
 const KEEP_POLL_MS = 1500
 const KEEP_POLL_TRIES = 40
@@ -67,7 +71,8 @@ function useKeepPolling(
 }
 
 function KeepLine({ keep }: { keep: KeepState }) {
-  if (keep.state === "keeping") return <span className="zp-keepnote">Keeping…</span>
+  if (keep.state === "keeping")
+    return <span className="zp-keepnote">Keeping…</span>
   if (keep.state === "error")
     return <span className="zp-keepnote zp-warn">{keep.message}</span>
   if (keep.state !== "kept") return null
@@ -75,7 +80,9 @@ function KeepLine({ keep }: { keep: KeepState }) {
   if (receipt.status === "saving")
     return <span className="zp-keepnote">Kept. Filing it in your vault…</span>
   if (receipt.status === "failed")
-    return <span className="zp-keepnote zp-warn">Not saved. Try Keep again.</span>
+    return (
+      <span className="zp-keepnote zp-warn">Not saved. Try Keep again.</span>
+    )
   return (
     <span className="zp-keepnote">
       Kept ✓ Saved to your vault.
@@ -102,12 +109,20 @@ function AnswerTurn({
 }) {
   return (
     <div className="zp-turn">
-      <div className="zp-msg zp-z" data-testid="memory-answer">
+      <div
+        className={result.answered ? "zp-msg zp-z" : "zp-msg zp-z zp-none"}
+        data-testid="memory-answer"
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             a: ({ href, children }) => (
-              <a href={href} target="_blank" rel="noreferrer" className="zp-src">
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="zp-src"
+              >
                 {children}
               </a>
             ),
@@ -125,7 +140,10 @@ function AnswerTurn({
           </p>
           <ol>
             {result.memories.map((memory) => (
-              <li key={memory.path} className={memory.cited ? "zp-cited" : undefined}>
+              <li
+                key={memory.path}
+                className={memory.cited ? "zp-cited" : undefined}
+              >
                 <a className="zp-title" href={memory.appPath}>
                   {memory.title}
                 </a>
@@ -167,19 +185,21 @@ function AnswerTurn({
         <p className="zp-hint">No memory matched this question.</p>
       )}
       <div className="zp-actions">
-        <button
-          type="button"
-          className="zp-keep"
-          onClick={onKeep}
-          disabled={
-            keep.state === "keeping" ||
-            (keep.state === "kept" && keep.receipt.status !== "failed")
-          }
-        >
-          {keep.state === "kept" && keep.receipt.status !== "failed"
-            ? "Kept"
-            : "Keep"}
-        </button>
+        {result.answered ? (
+          <button
+            type="button"
+            className="zp-keep"
+            onClick={onKeep}
+            disabled={
+              keep.state === "keeping" ||
+              (keep.state === "kept" && keep.receipt.status !== "failed")
+            }
+          >
+            {keep.state === "kept" && keep.receipt.status !== "failed"
+              ? "Kept"
+              : "Keep"}
+          </button>
+        ) : null}
         <KeepLine keep={keep} />
         <span className="zp-time">{(result.ms / 1000).toFixed(1)} s</span>
       </div>
@@ -241,7 +261,11 @@ export function MemoryChat() {
     const content = draft.trim()
     if (!content || asking) return
     setDraft("")
-    const id = push({ kind: "kept-note", text: content, keep: { state: "keeping" } })
+    const id = push({
+      kind: "kept-note",
+      text: content,
+      keep: { state: "keeping" },
+    })
     try {
       pollKeep(id, await keepNote(content))
     } catch (error) {
@@ -308,7 +332,10 @@ export function MemoryChat() {
               )
             )}
             {asking ? (
-              <div className="zp-msg zp-z zp-typing" aria-label="Zenod is answering">
+              <div
+                className="zp-msg zp-z zp-typing"
+                aria-label="Zenod is answering"
+              >
                 <i />
                 <i />
                 <i />

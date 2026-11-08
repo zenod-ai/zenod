@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LlmAllowanceExceededError, type Answer, type BrainEngine, type Hit } from "zenod";
+import { ANSWER_PROTOCOL_FAILURE_TEXT, LlmAllowanceExceededError, type Answer, type BrainEngine, type Hit } from "zenod";
 import { createSqliteTenantStore } from "@zenod/mcp-chassis";
 import type { CustomerAccount } from "../src/customerAccounts.js";
 import type { CustomerStripeClient } from "../src/customerBilling.js";
@@ -57,6 +57,7 @@ describe("answerFromMemory (E12-S1)", () => {
     const engine = fakeEngine("alpha");
     const result = await answerFromMemory(engine, "alpha plans");
     expect(result.answer).toContain("alpha notes");
+    expect(result.answered).toBe(true);
     expect(result.memories).toHaveLength(5);
     expect(result.memories[0]).toMatchObject({ rank: 1, path: "Notes/alpha 1.md", matchPercent: 100, cited: false, appPath: "/#memory?path=Notes%2Falpha%201.md" });
     expect(result.memories[1]).toMatchObject({ rank: 2, path: "Notes/alpha 2.md", cited: true });
@@ -65,6 +66,26 @@ describe("answerFromMemory (E12-S1)", () => {
       { path: "Log/2026-11-01.md", title: "2026-11-01", url: "https://github.com/o/r/blob/main/Log/2026-11-01.md", appPath: "/#memory?path=Log%2F2026-11-01.md" },
     ]);
     expect(engine.storeCalls).toHaveLength(0);
+  });
+
+  it("asks again once after a protocol slip, and marks a non-answer so it cannot be kept", async () => {
+    const slip = { text: ANSWER_PROTOCOL_FAILURE_TEXT, sources: [] };
+    const recovered = fakeEngine("alpha", { ask: vi.fn().mockResolvedValueOnce(slip).mockResolvedValueOnce({ text: "Ana fixes it.", sources: [] }) });
+    const ok = await answerFromMemory(recovered, "boiler");
+    expect(ok).toMatchObject({ answered: true, answer: "Ana fixes it." });
+    expect(recovered.askCalls).toHaveLength(2);
+
+    const stuck = fakeEngine("alpha", { ask: async () => slip });
+    const failed = await answerFromMemory(stuck, "boiler");
+    expect(failed.answered).toBe(false);
+    expect(failed.answer).toContain("could not put a checked answer together");
+    expect(failed.memories).toHaveLength(5);
+    expect(stuck.askCalls).toHaveLength(2);
+
+    const unverified = fakeEngine("alpha", { ask: async () => ({ text: "I couldn't verify an answer from source text read for this question.", sources: [] }) });
+    const none = await answerFromMemory(unverified, "boiler");
+    expect(none).toMatchObject({ answered: false, answer: expect.stringContaining("found no note that answers this directly") });
+    expect(unverified.askCalls).toHaveLength(1);
   });
 
   it("files an answer with its question and a note as typed", () => {

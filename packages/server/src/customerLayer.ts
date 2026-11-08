@@ -52,7 +52,6 @@ import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
 import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
-import { isLlmAllowanceExceededError } from "zenod";
 import { projectRecentSave } from "./recentSaves.js";
 import {
   answerFromMemory,
@@ -1406,7 +1405,11 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     try {
       return c.json(await answerFromMemory(await runtime.getEngine(), question));
     } catch (error) {
-      if (isLlmAllowanceExceededError(error)) return allowanceResponse(c, { message: error.message, resetsAt: error.resetsAt ?? null });
+      // By name: this module is bundled into Phylax, which must not import the "zenod" runtime.
+      if ((error as Error | null)?.name === "LlmAllowanceExceededError") {
+        const exceeded = error as Error & { resetsAt?: string | null };
+        return allowanceResponse(c, { message: exceeded.message, resetsAt: exceeded.resetsAt ?? null });
+      }
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);
       console.warn(`[memory-chat] answer unavailable for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: "memory chat unavailable" }, 503);

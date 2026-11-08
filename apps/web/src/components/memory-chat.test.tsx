@@ -10,6 +10,7 @@ import { memoryPathFromHash, plainWikilinks, presentAnswer } from "@/lib/memory-
 
 const ANSWER = {
   question: "Who fixes the boiler?",
+  answered: true,
   answer: "Ana, the plumber from [[Home/Plumber|your plumber note]].",
   memories: [
     {
@@ -85,6 +86,16 @@ describe("MemoryChat (E12-S1)", () => {
     expect(keeps).toHaveLength(1)
     expect(keeps[0]!.body).toEqual({ kind: "answer", question: ANSWER.question, answer: ANSWER.answer })
     expect((screen.getByRole("button", { name: "Kept" }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("offers no Keep when Zenod has no checked answer", async () => {
+    mockFetch(() => ({ body: { ...ANSWER, answered: false, answer: "Zenod found no note that answers this directly. The closest memories are below." } }))
+    render(<MemoryChat />)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Who fixes the boiler?" } })
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+    expect((await screen.findByTestId("memory-answer")).textContent).toContain("found no note")
+    expect(screen.getAllByRole("button", { name: "Keep" }).filter((button) => button.closest(".zp-turn"))).toHaveLength(0)
+    expect(screen.getByLabelText("Memories used").textContent).toContain("92%")
   })
 
   it("lets the user tap Keep again when filing failed", async () => {

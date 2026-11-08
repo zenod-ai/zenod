@@ -23,6 +23,8 @@ export type MemoryChatSource = {
 
 export type MemoryChatAnswer = {
   question: string
+  /** False: no checked answer; `answer` is a plain note and the app offers no Keep. */
+  answered: boolean
   answer: string
   memories: MemoryChatMemory[]
   alsoCited: MemoryChatSource[]

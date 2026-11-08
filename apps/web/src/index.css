@@ -246,3 +246,4 @@
 }
 .zp-src { font-size: 0.86em; white-space: nowrap; }
 .zp-src::before { content: "↗ "; }
+.zp-none { background: transparent; border: 1px dashed var(--zp-line); color: var(--zp-muted); }

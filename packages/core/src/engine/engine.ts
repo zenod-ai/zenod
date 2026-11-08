@@ -410,6 +410,7 @@ const ASK_FALLBACK_STOP_WORDS = new Set([
   "which", "who", "why", "will", "with", "would", "you", "your", "only", "come", "came", "know", "said", "one",
 ]);
 // Both the no-source refusal and the grounding filter's empty result start this way.
+// Kept in step with askNonAnswer (llm/askNonAnswer.ts).
 const ASK_UNVERIFIED_PREFIX = "I couldn't verify";
 const EVIDENCE_CONTEXT_REF_RE = new RegExp(EVIDENCE_CONTEXT_REF_PATTERN);
 

@@ -20,4 +20,4 @@ export function decodeSupportedAnswer(text: string, readPaths: string[], require
   } catch { return {text:"",readPaths,supportProtocolError:"invalid_submission"}; }
 }
 
-export const ANSWER_PROTOCOL_FAILURE_TEXT = "The model did not submit a valid memory-answer selection. Repeat the question; the source evidence was not rejected as invalid.";
+export { ANSWER_PROTOCOL_FAILURE_TEXT, askNonAnswer } from "./askNonAnswer.js";

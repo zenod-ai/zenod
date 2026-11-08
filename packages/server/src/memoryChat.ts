@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import type { BrainEngine, SourceRef } from "zenod";
+import type { Answer, BrainEngine, SourceRef } from "zenod";
+// Subpath, not the "zenod" entry: customerLayer.ts (and so this module) is bundled into Phylax.
+import { askNonAnswer } from "zenod/answer-protocol";
 import { memoryAppPath, rankMemories, type RankedMemory } from "./rankedMemory.js";
 
 /**
@@ -29,6 +31,8 @@ export interface MemoryChatSource {
 
 export interface MemoryChatAnswer {
   question: string;
+  /** False when Zenod has no checked answer; the app then shows `answer` as a note and offers no Keep. */
+  answered: boolean;
   answer: string;
   /** Top memories for the question, in rank order, each with its match percentage and links. */
   memories: MemoryChatMemory[];
@@ -41,13 +45,25 @@ const basePath = (path: string) => path.split("#")[0]!;
 
 const titleOf = (path: string) => basePath(path).split("/").pop()!.replace(/\.md$/i, "");
 
+const NON_ANSWER_TEXT = {
+  retry: "Zenod could not put a checked answer together this time. The memories below match your question: open them, or ask again.",
+  unverified: "Zenod found no note that answers this directly. The closest memories are below.",
+} as const;
+
+/** One read-only ask; a protocol slip by the model is asked once more before giving up. */
+async function askOnce(engine: BrainEngine, question: string): Promise<Answer> {
+  const first = await engine.ask(question);
+  return askNonAnswer(first.text) === "retry" ? engine.ask(question) : first;
+}
+
 export async function answerFromMemory(engine: BrainEngine, question: string): Promise<MemoryChatAnswer> {
   const started = performance.now();
-  // Retrieval is deterministic (no LLM); the answer is one read-only ask over the same vault.
+  // Retrieval is deterministic (no LLM); the answer is a read-only ask over the same vault.
   const [ranked, answer] = await Promise.all([
     rankMemories(engine, question, MEMORY_CHAT_TOP),
-    engine.ask(question),
+    askOnce(engine, question),
   ]);
+  const nonAnswer = askNonAnswer(answer.text);
   const cited = new Set(answer.sources.map((source) => basePath(source.path)));
   const memories = ranked.results.map((memory) => ({ ...memory, cited: cited.has(basePath(memory.path)) }));
   const shown = new Set(memories.map((memory) => basePath(memory.path)));
@@ -60,7 +76,8 @@ export async function answerFromMemory(engine: BrainEngine, question: string): P
   }
   return {
     question,
-    answer: answer.text,
+    answered: nonAnswer === null,
+    answer: nonAnswer ? NON_ANSWER_TEXT[nonAnswer] : answer.text,
     memories,
     alsoCited,
     ms: Math.round(performance.now() - started),
