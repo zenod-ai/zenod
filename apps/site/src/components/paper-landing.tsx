@@ -2,16 +2,23 @@
 // real product screen first, then names the benefit in plain words. Story, per
 // Jordi's brief of 2026-11-04: WhatsApp and code agents as the ways in, then
 // ingestion, digestion and retrieval, then owning the library (mining it,
-// self-custody); voice first. Every claim must hold for production today, and
-// WhatsApp only captures and acknowledges (root L-6). The screenshots are
-// rendered by apps/site/shots/capture.mjs with demo content only.
+// self-custody); voice first. Iteration 3 brings in the EPIC-12 deck's three
+// scenes (WhatsApp, a memory joining the graph, retrieval with strengths), an
+// early MCP-from-the-cloud section, and pricing at the end. Every claim must
+// hold for production today (the graph view and match strengths are marked
+// Coming), and WhatsApp only captures and acknowledges (root L-6). The
+// screenshots are rendered by apps/site/shots/capture.mjs with demo content.
 import * as React from "react";
 import "@fontsource-variable/newsreader";
 import "@fontsource/instrument-sans/400.css";
 import "@fontsource/instrument-sans/500.css";
 import "@/paper.css";
+import "@/scenes.css";
 
-import whatsapp from "@/assets/shots/whatsapp.webp";
+import whatsappScene from "@/scenes/whatsapp.html?raw";
+import graphScene from "@/scenes/graph.html?raw";
+import retrievalScreen from "@/scenes/retrieval-screen.html?raw";
+import retrievalResults from "@/scenes/retrieval-results.html?raw";
 import log from "@/assets/shots/log.webp";
 import logPhone from "@/assets/shots/log-phone.webp";
 import page from "@/assets/shots/page.webp";
@@ -28,7 +35,10 @@ import {
   DASHBOARD_URL,
   GOOGLE_SIGN_IN_PATH,
   type PaidTier,
+  SIGN_IN_PATH,
 } from "@/lib/customer";
+import { MCP_SERVER_URL } from "@/lib/connect";
+import { startScenes } from "@/lib/scenes";
 
 const GITHUB_URL = "https://github.com/zenod-ai/zenod";
 
@@ -37,8 +47,20 @@ export interface PaperCustomer {
   busyTier: PaidTier | null;
   error: string | null;
   paidSignupReady: boolean;
-  subscribe: (tier: PaidTier) => void;
+  // Signed out, Hosted first signs in with the chosen provider, then returns
+  // to zenod.dev and opens the live Stripe checkout.
+  subscribe: (tier: PaidTier, signInPath?: string) => void;
 }
+
+const AI_TOOLS = ["Claude", "ChatGPT", "Cursor", "VS Code", "Gemini CLI"];
+
+// The deck's scene markup, verbatim. The objects stay constant and the scene
+// components are memoised, so a re-render (sign-in state, readiness) never
+// resets markup the scene player is animating.
+const WHATSAPP_HTML = { __html: whatsappScene };
+const GRAPH_HTML = { __html: graphScene };
+const RETRIEVAL_SCREEN_HTML = { __html: retrievalScreen };
+const RETRIEVAL_RESULTS_HTML = { __html: retrievalResults };
 
 function Nav({ customer }: { customer: PaperCustomer }) {
   return (
@@ -49,6 +71,7 @@ function Nav({ customer }: { customer: PaperCustomer }) {
         </a>
         <nav aria-label="Primary">
           <a href="#how">How it works</a>
+          <a href="#mcp">Your AI tools</a>
           <a href="#yours">Your library</a>
           <a href="#start">Pricing</a>
           <a href="/connect">Connect</a>
@@ -99,6 +122,126 @@ interface ShowcaseProps {
   children: React.ReactNode;
 }
 
+function Tag({ live, children }: { live: boolean; children: React.ReactNode }) {
+  return <span className={live ? "pp-tag pp-tag-live" : "pp-tag pp-tag-soon"}>{children}</span>;
+}
+
+// Zenod runs in the cloud at one MCP address; any connected AI tool reaches
+// the same library. The figure draws the path once it is on screen.
+const WhatsappScene = React.memo(function WhatsappScene() {
+  return <div className="pp-hero-stage scene" data-len="13500" dangerouslySetInnerHTML={WHATSAPP_HTML} />;
+});
+
+const McpSection = React.memo(function McpSection() {
+  return (
+    <section className="pp-mcp" id="mcp" aria-labelledby="mcp-title">
+      <div className="pp-mcp-say" data-reveal>
+        <h2 id="mcp-title">Your AI tools reach it over MCP, from the cloud.</h2>
+        <p>
+          Zenod runs in the cloud at one address. Add it once as a connector
+          and Claude, ChatGPT, Cursor, VS Code or Gemini CLI can search your
+          memory, open a note and save what you worked out, from any computer.
+          There is nothing to host or keep running.
+        </p>
+        <p className="pp-actions">
+          <a className="pp-btn pp-btn-primary" href="/connect">
+            Connect your AI tool
+          </a>
+        </p>
+        <p className="pp-fine">
+          Listed in the official MCP Registry as dev.zenod/memory. Your tool
+          asks you to sign in to Zenod once, with Google or GitHub.
+        </p>
+      </div>
+      <figure className="pp-mcp-fig">
+        <div
+          className="pp-mcp-stage scene"
+          data-len="9000"
+          role="img"
+          aria-label="Claude, ChatGPT, Cursor, VS Code and Gemini CLI connect over MCP to Zenod at cloud.zenod.dev/mcp, which reads and writes your library of Markdown files in GitHub or Google Drive"
+        >
+          <ul className="pp-mcp-tools">
+            {AI_TOOLS.map((tool, index) => (
+              <li key={tool} className="st" data-at={300 + index * 220}>
+                {tool}
+              </li>
+            ))}
+          </ul>
+          <div className="pp-wire st" data-at="1600">
+            <span>MCP</span>
+          </div>
+          <div className="pp-hub st" data-at="2000">
+            <b>Zenod</b>
+            <span>
+              {MCP_SERVER_URL.replace("https://", "").replace("/mcp", "")}
+              <wbr />
+              /mcp
+            </span>
+          </div>
+          <div className="pp-wire st" data-at="2600">
+            <span>Markdown</span>
+          </div>
+          <div className="pp-vault st" data-at="3000">
+            <b>Your library</b>
+            <span>GitHub or Google Drive</span>
+          </div>
+        </div>
+        <figcaption>
+          <Tag live>Live</Tag> One connector address for every tool.
+        </figcaption>
+      </figure>
+    </section>
+  );
+});
+
+// A memory joining the graph: the filing is live, the graph view is coming.
+const GraphSection = React.memo(function GraphSection() {
+  return (
+    <section className="pp-wide" id="graph" aria-labelledby="graph-title">
+      <div className="pp-wide-head" data-reveal>
+        <p className="pp-tags">
+          <Tag live>Live</Tag> filing <Tag live={false}>Coming</Tag> the graph view
+        </p>
+        <h2 id="graph-title">Every memory finds its place, and its links.</h2>
+        <p>
+          The voice note above lands on the two pages its receipt names, and
+          Zenod finds your topics by itself. Soon the app shows it as a graph
+          you can walk, from each topic to the moment you said it.
+        </p>
+      </div>
+      <div className="app scene" data-len="10500" dangerouslySetInnerHTML={GRAPH_HTML} />
+      <p className="pp-legend">
+        <span><i />belongs to a topic</span>
+        <span><i className="d" />a link one memory makes to another</span>
+        <span>Large dark nodes are topics</span>
+      </p>
+      <p className="pp-fine">Coming. A mockup of the graph view with demo memories.</p>
+    </section>
+  );
+});
+
+// Retrieval with strengths: search over MCP is live, the percentages are coming.
+const StrengthSection = React.memo(function StrengthSection() {
+  return (
+    <section className="pp-strength scene" id="strength" data-len="11500" aria-labelledby="strength-title">
+      <div className="app" dangerouslySetInnerHTML={RETRIEVAL_SCREEN_HTML} />
+      <div className="pp-say">
+        <p className="pp-tags">
+          <Tag live={false}>Coming</Tag>
+        </p>
+        <h2 id="strength-title">Ask, and see how strongly each memory answers.</h2>
+        <div dangerouslySetInnerHTML={RETRIEVAL_RESULTS_HTML} />
+        <p className="pp-fine">
+          Search over MCP already returns ranked results today. The strength of
+          each match is coming, in the app and for Claude, ChatGPT or Cursor
+          alike. It is how well each memory matches against the best one, not
+          a probability. Demo memories.
+        </p>
+      </div>
+    </section>
+  );
+});
+
 // Show it, then name it: the screenshot comes first, the benefit follows.
 function Showcase({ id, title, shot, layout, children }: ShowcaseProps) {
   return (
@@ -113,10 +256,46 @@ function Showcase({ id, title, shot, layout, children }: ShowcaseProps) {
   );
 }
 
+function HostedAction({ customer }: { customer: PaperCustomer }) {
+  if (customer.busyTier === "monthly")
+    return (
+      <button className="pp-btn pp-btn-primary" disabled>
+        Opening checkout…
+      </button>
+    );
+  if (!customer.paidSignupReady)
+    return (
+      <button className="pp-btn pp-btn-primary" disabled>
+        Hosted beta opening soon
+      </button>
+    );
+  if (customer.signedIn)
+    return (
+      <button className="pp-btn pp-btn-primary" onClick={() => customer.subscribe("monthly")}>
+        Choose Hosted
+      </button>
+    );
+  return (
+    <>
+      <p className="pp-plan-actions">
+        <button className="pp-btn pp-btn-primary" onClick={() => customer.subscribe("monthly", GOOGLE_SIGN_IN_PATH)}>
+          Start with Google
+        </button>
+        <button className="pp-btn pp-btn-ghost" onClick={() => customer.subscribe("monthly", SIGN_IN_PATH)}>
+          Start with GitHub
+        </button>
+      </p>
+      <p className="pp-fine pp-plan-note">
+        Sign in, then pay on Stripe’s secure checkout.
+      </p>
+    </>
+  );
+}
+
 function Plans({ customer }: { customer: PaperCustomer }) {
   return (
     <section className="pp-plans-sec" id="start" aria-labelledby="start-title">
-      <h2 id="start-title" data-reveal>Run it your way.</h2>
+      <h2 id="start-title" data-reveal>Free to run yourself. Nine euros a month hosted.</h2>
       <div className="pp-plans">
         <div className="pp-plan" data-reveal>
           <h3>Self-hosted</h3>
@@ -138,17 +317,7 @@ function Plans({ customer }: { customer: PaperCustomer }) {
             We run it for you. Managed AI usage and WhatsApp are included. Keep
             your library in GitHub or in a Google Drive folder the app creates.
           </p>
-          <button
-            className="pp-btn pp-btn-primary"
-            disabled={customer.busyTier !== null || !customer.paidSignupReady}
-            onClick={() => customer.subscribe("monthly")}
-          >
-            {customer.busyTier === "monthly"
-              ? "Opening checkout…"
-              : customer.paidSignupReady
-                ? "Choose Hosted"
-                : "Hosted beta opening soon"}
-          </button>
+          <HostedAction customer={customer} />
         </div>
       </div>
       {customer.error ? (
@@ -188,8 +357,13 @@ function useReveal() {
   }, []);
 }
 
+function useScenes() {
+  React.useEffect(() => startScenes(document), []);
+}
+
 export function PaperLanding({ customer }: { customer: PaperCustomer }) {
   useReveal();
+  useScenes();
   return (
     <div className="pp">
       <Nav customer={customer} />
@@ -201,34 +375,30 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
               <span className="pp-line"><span>for your memory.</span></span>
             </h1>
             <p className="pp-lead">
-              Send Zenod a voice note on WhatsApp, or ask your coding agent to
-              save what you just worked out. Zenod transcribes it, files it and
+              Send Zenod a voice note on WhatsApp, or ask Claude, ChatGPT or
+              Cursor to save what you just worked out: they connect to Zenod
+              over MCP, from the cloud. Zenod transcribes it, files it and
               keeps it as plain Markdown in your own GitHub or Google Drive.
             </p>
             <p className="pp-actions">
               <a className="pp-btn pp-btn-primary" href="#start">
                 Get started
               </a>
-              <a className="pp-btn" href="#how">
-                See how it works
+              <a className="pp-btn" href="/connect">
+                Connect your AI tool
               </a>
             </p>
           </div>
           <figure className="pp-hero-shot">
-            <div className="pp-hero-stage">
-              <img
-                src={whatsapp}
-                width={1170}
-                height={2532}
-                alt="WhatsApp chat with Zenod: a 14 second voice note, Zenod's reply that it was queued for transcription, then its receipt with a recap, the transcript and the two pages it was filed on"
-              />
-            </div>
+            <WhatsappScene />
             <figcaption>
-              A voice note to Zenod on WhatsApp and its two replies, word for
-              word.
+              <Tag live>Live</Tag> A voice note to Zenod on WhatsApp and its two
+              replies, word for word, with demo content.
             </figcaption>
           </figure>
         </section>
+
+        <McpSection />
 
         <div id="how" className="pp-how">
           <Showcase
@@ -271,6 +441,7 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
               can check any summary against your own words.
             </p>
           </Showcase>
+          <GraphSection />
         </div>
 
         <div className="pp-agents">
@@ -319,6 +490,8 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
           </Showcase>
         </div>
 
+        <StrengthSection />
+
         <Showcase
           id="yours"
           layout="left"
@@ -346,10 +519,10 @@ export function PaperLanding({ customer }: { customer: PaperCustomer }) {
           title="Everything on one page."
           shot={{
             src: consoleShot,
-            phone: { src: consolePhone, width: 780, height: 1604 },
+            phone: { src: consolePhone, width: 780, height: 1010 },
             width: 1560,
-            height: 2124,
-            alt: "The Zenod console overview: MCP, vault and channel cards, included usage at 18 percent, and recent saves from a WhatsApp voice note, an AI assistant and a WhatsApp photo",
+            height: 1600,
+            alt: "The Zenod console overview: MCP, vault and channel cards, included usage at 18 percent, and the latest save, a WhatsApp voice note filed on the Garden shed page",
             caption: "The Zenod console overview.",
           }}
         >

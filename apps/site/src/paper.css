@@ -77,16 +77,55 @@ body:has(.pp) {
 .pp-lead { font-size: clamp(1.2rem, 1.7vw, 1.45rem); line-height: 1.5; margin: 0 0 2.25rem; max-width: 34rem; }
 .pp-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 0; }
 .pp-hero-shot { margin: 0; }
-.pp-hero-stage { background: var(--pp-stage); height: min(46rem, calc(100svh - 6rem)); min-height: 34rem; overflow: hidden; display: flex; justify-content: center; padding-top: clamp(2rem, 4vw, 3.5rem); }
-.pp-hero-stage img { width: min(22rem, 78%); height: auto; align-self: flex-start; border-radius: 2rem; }
-.pp-hero-shot figcaption { font: 400 0.95rem/1.5 var(--pp-sans); color: var(--pp-muted); margin-top: 0.85rem; }
+.pp-hero-stage { background: var(--pp-stage); border-radius: 6px; display: flex; justify-content: center; padding: clamp(1.25rem, 3vw, 2.5rem) 1rem; }
+.pp-hero-stage .wa { height: min(40rem, calc(100svh - 9rem)); min-height: 30rem; }
+.pp-hero-shot figcaption, .pp-mcp-fig figcaption { font: 400 0.95rem/1.5 var(--pp-sans); color: var(--pp-muted); margin-top: 0.85rem; }
+
+/* Live and Coming: every product claim on a scene says which it is. */
+.pp-tag { display: inline-block; font: 500 0.875rem/1.2 var(--pp-sans); padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid; margin-right: 0.35rem; vertical-align: 0.05em; }
+.pp-tag-live { border-color: #8a4b1c; color: #8a4b1c; }
+.pp-tag-soon { border-color: var(--pp-accent); color: var(--pp-accent); }
+.pp-tags { font: 400 0.95rem/1.5 var(--pp-sans); color: var(--pp-muted); margin: 0 0 1rem; }
+.pp-tags .pp-tag + .pp-tag, .pp-tags .pp-tag:not(:first-child) { margin-left: 0.6rem; }
+
+/* MCP from the cloud: the words left, the path from your tools to your library right. */
+.pp-mcp { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(2rem, 4vw, 4rem); align-items: center; max-width: var(--pp-max); margin: 0 auto; padding: var(--pp-gap) var(--pp-edge) 0; }
+.pp-mcp-say p { margin: 0 0 1.1rem; }
+.pp-mcp-say .pp-actions { margin: 1.75rem 0 1.25rem; }
+.pp-mcp-fig { margin: 0; }
+.pp-mcp-stage { background: var(--pp-stage); border-radius: 6px; padding: clamp(1.25rem, 3vw, 2.5rem); display: grid; grid-template-columns: minmax(0, 1fr) minmax(2.5rem, 0.7fr) minmax(0, 1.15fr) minmax(2.5rem, 0.7fr) minmax(0, 1fr); align-items: center; font-family: var(--pp-sans); }
+.pp-mcp-tools { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
+.pp-mcp-tools li { background: var(--pp-bg); border: 1px solid var(--pp-ink); border-radius: 999px; padding: 0.45rem 0.8rem; font: 500 0.95rem/1.2 var(--pp-sans); text-align: center; white-space: nowrap; }
+.pp-hub, .pp-vault { border-radius: 6px; padding: 1rem 0.9rem; text-align: center; }
+.pp-hub { background: var(--pp-accent); color: var(--pp-accent-ink); }
+.pp-vault { background: var(--pp-bg); border: 1px solid var(--pp-ink); }
+.pp-hub b, .pp-vault b { display: block; font: 500 1.35rem/1.15 var(--pp-serif); margin-bottom: 0.3rem; }
+.pp-hub span, .pp-vault span { display: block; font: 400 0.85rem/1.35 var(--pp-sans); }
+.pp-hub span { color: #cfe0d4; }
+.pp-vault span { color: var(--pp-muted); }
+.pp-wire { position: relative; height: 1px; background: var(--pp-ink); margin: 0 0.4rem; }
+.pp-wire span { position: absolute; left: 50%; bottom: 0.45rem; transform: translateX(-50%); font: 400 0.8rem var(--pp-sans); color: var(--pp-muted); white-space: nowrap; }
+.pp-wire::after { content: ""; position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--pp-accent); opacity: 0; }
+.pp .scene.js .pp-wire.go::after { animation: pp-flow 2.2s 0.4s ease-in-out infinite; }
+@keyframes pp-flow { 0% { left: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { left: calc(100% - 7px); opacity: 0; } }
+
+/* Scenes that need the full width: the graph, then retrieval with its results beside it. */
+.pp-wide { max-width: var(--pp-max); margin: 0 auto; padding: var(--pp-gap) var(--pp-edge) 0; }
+.pp-wide-head { max-width: 46rem; margin-bottom: 2rem; }
+.pp-wide-head p { margin: 0 0 1.1rem; }
+.pp-legend { display: flex; gap: 0.5rem 1.5rem; flex-wrap: wrap; font: 400 0.9rem var(--pp-sans); color: var(--pp-muted); margin: 0.85rem 0 0.25rem; }
+.pp-legend i { display: inline-block; width: 1.8rem; height: 0; border-top: 1.5px solid var(--pp-ink); vertical-align: middle; margin-right: 0.4rem; }
+.pp-legend i.d { border-top-style: dashed; border-color: var(--pp-muted); }
+.pp .panel b, .pp .results b { font-weight: 500; color: var(--pp-accent); }
+.pp-strength { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: clamp(2rem, 4vw, 4rem); align-items: center; max-width: var(--pp-max); margin: 0 auto; padding: var(--pp-gap) var(--pp-edge) 0; }
+.pp-strength .pp-fine { margin-top: 1.25rem; }
 
 /* Showcases: screen first on a flat stage, the benefit beside it. */
 .pp-show {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   column-gap: clamp(1.5rem, 3vw, 3rem);
-  align-items: end;
+  align-items: center;
   max-width: var(--pp-max);
   margin: 0 auto;
   padding: var(--pp-gap) var(--pp-edge) 0;
@@ -107,9 +146,9 @@ body:has(.pp) {
 /* The page that was filed is wide: give it ten columns. */
 #filed .pp-shot { grid-column: 4 / span 9; }
 #filed .pp-say { grid-column: 1 / span 3; }
-/* The console screen is tall: seven columns, words lower beside it. */
+/* The console is cropped to its first save so it stands about as tall as its words. */
 #console .pp-shot { grid-column: 6 / span 7; }
-#console .pp-say { grid-column: 1 / span 4; }
+#console .pp-say { grid-column: 1 / span 5; }
 
 /* Code agents: one field of deep green, terminals on a darker stage. */
 .pp-agents { background: var(--pp-field); color: var(--pp-field-ink); margin-top: var(--pp-gap); padding-bottom: var(--pp-gap); }
@@ -128,6 +167,11 @@ body:has(.pp) {
 .pp .pp-price { font: 400 clamp(2.9rem, 5.5vw, 5.5rem)/1 var(--pp-serif); margin: 0 0 1.25rem; letter-spacing: -0.03em; }
 .pp-price small { font: 400 1rem var(--pp-sans); color: var(--pp-muted); letter-spacing: 0; }
 .pp-plan .pp-btn { margin-top: auto; }
+.pp-plan .pp-plan-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: auto 0 0; }
+.pp-plan .pp-plan-actions .pp-btn { margin-top: 0; }
+.pp-plan .pp-plan-note { margin: 0.85rem 0 0; color: var(--pp-field-muted); }
+.pp .pp-plan-hosted .pp-btn-ghost { border-color: var(--pp-field-ink); color: var(--pp-field-ink); }
+.pp .pp-plan-hosted .pp-btn-ghost:hover { background: var(--pp-field-ink); color: var(--pp-ink); }
 .pp .pp-plan-hosted .pp-btn-primary { background: var(--pp-field-ink); border-color: var(--pp-field-ink); color: var(--pp-ink); }
 .pp .pp-plan-hosted .pp-btn-primary:hover { background: var(--pp-bg); }
 .pp .pp-plan-hosted .pp-btn-primary:disabled:hover { background: var(--pp-field-ink); border-color: var(--pp-field-ink); color: var(--pp-ink); }
@@ -159,8 +203,10 @@ body:has(.pp) {
   .pp-nav-link { margin-left: auto; }
   .pp-hero { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 2rem; }
   .pp-hero-text { padding-bottom: 2.5rem; }
-  .pp-hero-stage { height: min(40rem, 118vw); min-height: 0; }
-  .pp-hero-stage img { width: min(20rem, 80%); }
+  .pp-hero-stage .wa { height: min(36rem, 150vw); min-height: 0; }
+  .pp-mcp, .pp-strength { grid-template-columns: minmax(0, 1fr); }
+  .pp-strength .app { order: 1; }
+  .pp-strength .pp-say { order: 2; }
   .pp-show { grid-template-columns: minmax(0, 1fr); }
   .pp-show .pp-shot, .pp-show .pp-say, #filed .pp-shot, #filed .pp-say, #console .pp-shot, #console .pp-say { grid-column: 1; }
   .pp-show .pp-shot { grid-row: 1; }
@@ -173,6 +219,22 @@ body:has(.pp) {
   .pp-stage { padding: 1rem; }
   .pp-stage img { border-radius: 0.4rem; }
 }
+@media (max-width: 720px) {
+  .pp-mcp-stage { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: 1.25rem; }
+  .pp-mcp-tools { grid-template-columns: repeat(3, auto); justify-content: center; }
+  .pp-mcp-tools li { padding: 0.4rem 0.7rem; font-size: 0.9rem; }
+  .pp-hub, .pp-vault { width: min(100%, 16rem); box-sizing: border-box; }
+  .pp-wire { width: 1px; height: 2.75rem; margin: 0.4rem 0; }
+  .pp-wire span { left: 0.6rem; bottom: auto; top: 50%; transform: translateY(-50%); }
+  .pp-wire::after { left: -3px; top: 0; }
+  .pp .scene.js .pp-wire.go::after { animation-name: pp-flow-down; }
+  @keyframes pp-flow-down { 0% { top: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { top: calc(100% - 7px); opacity: 0; } }
+}
+@media (max-width: 560px) {
+  .pp .query { padding: 0.5rem 0.9rem; }
+  .pp .query .t { display: none; }
+  .pp .qtext { white-space: nowrap; overflow: hidden; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .pp *, .pp *::before { animation: none !important; transition: none !important; }
+  .pp *, .pp *::before, .pp *::after { animation: none !important; transition: none !important; }
 }

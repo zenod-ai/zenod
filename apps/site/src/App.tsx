@@ -44,7 +44,7 @@ interface CustomerJourney {
   busyTier: PaidTier | null;
   error: string | null;
   paidSignupReady: boolean;
-  subscribe: (tier: PaidTier) => void;
+  subscribe: (tier: PaidTier, signInPath?: string) => void;
 }
 
 function useCustomerJourney(): CustomerJourney {
@@ -114,10 +114,10 @@ function useCustomerJourney(): CustomerJourney {
   }, []);
 
   const subscribe = React.useCallback(
-    (tier: PaidTier) => {
+    (tier: PaidTier, signInPath: string = SIGN_IN_PATH) => {
       if (loading || !session) {
         window.sessionStorage.setItem(PENDING_TIER_KEY, tier);
-        window.location.assign(SIGN_IN_PATH);
+        window.location.assign(signInPath);
         return;
       }
       void beginCheckout(tier);

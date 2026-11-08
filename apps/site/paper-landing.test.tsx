@@ -12,10 +12,10 @@ function render(pathname: string) {
 }
 
 describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
-  it("tells Jordi's story in order: voice in, kept, filed, editor, ask, custody, console, offer", () => {
+  it("tells Jordi's story in order: voice in, MCP, kept, filed, graph, editor, ask, strength, custody, console, pricing last", () => {
     const html = render("/");
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    const order = ["how", "kept", "filed", "save", "ask", "yours", "console", "start"];
+    const order = ["mcp", "how", "kept", "filed", "graph", "save", "ask", "strength", "yours", "console", "start"];
     const at = order.map((id) => html.indexOf(`id="${id}"`));
     for (const index of at) expect(index).toBeGreaterThan(-1);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
@@ -46,7 +46,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
 
   it("keeps anchors unique and resolvable, with /pricing and /connect reachable", () => {
     const html = render("/");
-    const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+    const ids = [...html.matchAll(/(?<![\w-])id="([^"]+)"/g)].map((match) => match[1]);
     expect(new Set(ids).size).toBe(ids.length);
     for (const match of html.matchAll(/href="\/?#([^"]+)"/g)) expect(ids).toContain(match[1]);
     expect(html).toContain('href="/pricing"');
@@ -92,6 +92,68 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     // Commits carry the engine's author and message prefix.
     expect(shot("history")).toContain("zenod-bot");
     expect(shot("history")).toContain("memory: capture voice_note");
+  });
+
+  it("says early that AI tools connect over MCP from the cloud, with a visual and the real connect page", () => {
+    const html = render("/");
+    const mcp = html.slice(html.indexOf('id="mcp"'), html.indexOf('id="how"'));
+    expect(html.indexOf('id="mcp"')).toBeLessThan(html.indexOf('id="kept"'));
+    expect(mcp).toContain("over MCP, from the cloud");
+    expect(mcp).toContain("cloud.zenod.dev/mcp");
+    for (const tool of ["Claude", "ChatGPT", "Cursor", "VS Code", "Gemini CLI"]) expect(mcp).toContain(tool);
+    expect(mcp).toContain("dev.zenod/memory");
+    expect(mcp).toContain('href="/connect"');
+    expect(mcp).toMatch(/class="pp-mcp-stage scene"[^>]*role="img"[^>]*aria-label="[^"]{60,}"/);
+  });
+
+  it("brings in the deck's three scenes, marking what is coming", () => {
+    const html = render("/");
+    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(4);
+    const graph = html.slice(html.indexOf('id="graph"'), html.indexOf('id="save"'));
+    expect(graph).toContain("Coming");
+    expect(graph).toContain("Voice note, today");
+    const strength = html.slice(html.indexOf('id="strength"'), html.indexOf('id="yours"'));
+    expect(strength).toContain("Coming");
+    expect(strength).toMatch(/data-p="92"/);
+    expect(strength).toContain('data-type="Lisbon flat and the landlord"');
+    // The scene markup is static: without script every step is visible, and no link leads nowhere.
+    for (const name of ["whatsapp", "graph", "retrieval-screen", "retrieval-results"]) {
+      const scene = readFileSync(new URL(`./src/scenes/${name}.html`, import.meta.url), "utf8");
+      expect(scene).not.toMatch(/href=/);
+    }
+  });
+
+  it("plays the WhatsApp scene with production's replies word for word (root L-6)", () => {
+    const scene = readFileSync(new URL("./src/scenes/whatsapp.html", import.meta.url), "utf8");
+    const runtime = readFileSync(new URL("../../packages/server/src/phylaxPortedRuntime.ts", import.meta.url), "utf8");
+    const channels = readFileSync(new URL("../../packages/server/src/phylaxChannels.ts", import.meta.url), "utf8");
+    const files = readFileSync(new URL("../../packages/core/src/vault/files.ts", import.meta.url), "utf8");
+    const ack = scene.match(/data-at="2900">(I received your voice note[^<]+)</)![1];
+    expect(runtime).toContain(`'${ack}'`);
+    for (const line of ['"Saved ✓"', "`Recap: ${recap}`", '"Google Drive audio"', '"Transcription: completed."', "`Transcript: ${", "`Filed: ${"])
+      expect(channels).toContain(line);
+    for (const line of ["Saved ✓", "Recap: ", "Google Drive audio: ", "Transcription: completed.", "Transcript: ", "Filed: ", "reply to this message to discuss or act on it"])
+      expect(scene).toContain(line);
+    for (const folder of [...scene.matchAll(/(\w+)\/[\w ]+\.md/g)].map((match) => match[1])) expect(files).toContain(`${folder}: "`);
+  });
+
+  it("points Hosted at the real sign-in and live checkout, and every other action at a live page", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { PaperLanding } = await import("./src/components/paper-landing");
+    vi.stubGlobal("window", { location: { pathname: "/" } });
+    const subscribe = vi.fn();
+    const ready = renderToStaticMarkup(createElement(PaperLanding, { customer: { signedIn: false, busyTier: null, error: null, paidSignupReady: true, subscribe } }));
+    expect(ready).toContain("Start with Google");
+    expect(ready).toContain("Start with GitHub");
+    expect(ready).not.toContain("Hosted beta opening soon");
+    const signedIn = renderToStaticMarkup(createElement(PaperLanding, { customer: { signedIn: true, busyTier: null, error: null, paidSignupReady: true, subscribe } }));
+    expect(signedIn).toContain("Choose Hosted");
+    expect(signedIn).toContain('href="https://cloud.zenod.dev/app"');
+    const app = readFileSync(new URL("./src/App.tsx", import.meta.url), "utf8");
+    expect(app).toContain("window.location.assign(signInPath)");
+    expect(app).toContain("window.location.assign(await createHostedCheckout(tier))");
+    const hrefs = [...ready.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
+    for (const href of hrefs) expect(href).toMatch(/^(#|\/connect$|\/pricing$|\/legal\/|\/auth\/google\/start$|\/$|https:\/\/github\.com\/zenod-ai\/zenod)/);
   });
 
   it("names the demo data in the footer", () => {
