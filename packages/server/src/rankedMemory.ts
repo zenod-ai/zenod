@@ -1,4 +1,5 @@
-import { withMatchPercent, type BrainEngine, type Hit } from "zenod";
+import type { BrainEngine, Hit } from "zenod";
+import { withMatchPercent } from "zenod/match-percent";
 
 /**
  * Ranked retrieval (EPIC-12 E12-3, row S3a): the top memories for a question, each with a

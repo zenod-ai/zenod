@@ -25,6 +25,10 @@
     "./evidence-context": {
       "types": "./dist/evidenceContext.d.ts",
       "default": "./dist/evidenceContext.js"
+    },
+    "./match-percent": {
+      "types": "./dist/vault/matchPercent.d.ts",
+      "default": "./dist/vault/matchPercent.js"
     }
   },
   "bin": {
