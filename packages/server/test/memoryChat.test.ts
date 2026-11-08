@@ -73,7 +73,7 @@ describe("answerFromMemory (E12-S1)", () => {
     expect(parseMemoryKeep({ content: "x".repeat(8_001) })).toBeNull();
     expect(memoryKeepContent(parseMemoryKeep({ content: " The plumber is Ana. " })!)).toBe("The plumber is Ana.");
     expect(memoryKeepContent(parseMemoryKeep({ kind: "answer", question: "Who fixes the boiler?", answer: "Ana." })!))
-      .toBe("Kept from a chat in the Zenod app.\n\nQuestion: Who fixes the boiler?\n\nAnswer: Ana.");
+      .toBe("Who fixes the boiler?\n\nAna.\n\n(Answer kept from a chat in the Zenod app.)");
   });
 });
 
@@ -227,7 +227,7 @@ describe("console memory chat routes (E12-S1)", () => {
       expect(receipt).toMatchObject({ channel: "app", channelLabel: "Zenod app" });
       expect(enqueue).toHaveBeenCalledTimes(1);
       expect(enqueue.mock.calls[0]![0]).toBe("store");
-      expect(enqueue.mock.calls[0]![1]).toEqual({ content: "Kept from a chat in the Zenod app.\n\nQuestion: Who fixes the boiler?\n\nAnswer: Ana.", source: "web" });
+      expect(enqueue.mock.calls[0]![1]).toEqual({ content: "Who fixes the boiler?\n\nAna.\n\n(Answer kept from a chat in the Zenod app.)", source: "web" });
       expect(enqueue.mock.calls[0]![2]).toMatch(/^tenant-a:web-keep:[0-9a-f]{32}$/);
 
       // A double tap files it once.

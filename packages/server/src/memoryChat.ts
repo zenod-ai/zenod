@@ -86,10 +86,13 @@ export function parseMemoryKeep(body: unknown): MemoryKeepInput | null {
   return { kind: "note", content };
 }
 
-/** The words a Keep files: a note as typed, an answer with the question it answered. */
+/**
+ * The words a Keep files: a note as typed, an answer under the question it answered (the first
+ * line names the entry in the Log, so the question leads).
+ */
 export function memoryKeepContent(input: MemoryKeepInput): string {
   if (input.kind === "note") return input.content;
-  return `Kept from a chat in the Zenod app.\n\nQuestion: ${input.question}\n\nAnswer: ${input.answer}`;
+  return `${input.question}\n\n${input.answer}\n\n(Answer kept from a chat in the Zenod app.)`;
 }
 
 /** One Keep per content: a double tap or a retry files it once. */

@@ -130,6 +130,25 @@ export function plainWikilinks(text: string): string {
   })
 }
 
+/** A vault path as a short name: `Log/2026-10-31.md#^e-1` → `2026-10-31`. */
+export function memoryName(path: string): string {
+  return (path.split("#")[0]!.split("/").pop() ?? path).replace(/\.md$/i, "")
+}
+
+/**
+ * How the app shows an answer (the text itself stays the verified answer shared with MCP):
+ * wikilinks as words, a citation link named by its memory instead of its raw vault path, and no
+ * bare "Source summary:" label (the summary is followed by the source it summarises).
+ */
+export function presentAnswer(text: string): string {
+  return plainWikilinks(text)
+    .replace(/^Source summary:\s*\n/gm, "")
+    .replace(
+      /\[([^\]\n]+?\.md(?:#[^\]\n]*)?)\]\((https?:\/\/[^)\s]+)\)/g,
+      (_raw, path: string, url: string) => `[${memoryName(path)}](${url})`
+    )
+}
+
 export function vaultLabel(provider: string): string {
   return provider === "google-drive" || provider === "google_drive"
     ? "Drive"

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import { MemoryChat } from "@/components/memory-chat"
-import { memoryPathFromHash, plainWikilinks } from "@/lib/memory-chat"
+import { memoryPathFromHash, plainWikilinks, presentAnswer } from "@/lib/memory-chat"
 
 // EPIC-12 E12-S1: the hosted app's chat with your memory. Asking saves nothing; only Keep does.
 
@@ -87,6 +87,22 @@ describe("MemoryChat (E12-S1)", () => {
     expect((screen.getByRole("button", { name: "Kept" }) as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it("lets the user tap Keep again when filing failed", async () => {
+    mockFetch((url) =>
+      url === "/api/console/memory-chat"
+        ? { body: ANSWER }
+        : { status: 202, body: { id: "job-3", status: "failed", reply: "Not saved.", notePath: null, noteUrl: null } }
+    )
+    render(<MemoryChat />)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Who fixes the boiler?" } })
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+    await screen.findByTestId("memory-answer")
+    const keep = () => screen.getAllByRole("button", { name: "Keep" }).find((button) => button.closest(".zp-turn"))! as HTMLButtonElement
+    fireEvent.click(keep())
+    expect(await screen.findByText(/Not saved/)).toBeTruthy()
+    expect(keep().disabled).toBe(false)
+  })
+
   it("keeps a typed note with the composer's Keep, without asking", async () => {
     const calls = mockFetch(() => ({ status: 202, body: { id: "job-2", status: "saved", reply: "Saved.", notePath: null, noteUrl: null } }))
     render(<MemoryChat />)
@@ -111,5 +127,9 @@ describe("memory chat helpers (E12-S1)", () => {
     expect(memoryPathFromHash("#memory")).toBeNull()
     expect(memoryPathFromHash("#vault")).toBeNull()
     expect(plainWikilinks("see [[Home/Plumber]] and [[A/B.md#x|that]]")).toBe("see Plumber and that")
+    expect(presentAnswer("Source summary:\nQuotes were 4,000 euros.\n[Log/2026-10-31.md#^e-c64e3b](https://github.com/o/v/blob/x/Log/2026-10-31.md)"))
+      .toBe("Quotes were 4,000 euros.\n[2026-10-31](https://github.com/o/v/blob/x/Log/2026-10-31.md)")
+    // Labels that carry meaning stay.
+    expect(presentAnswer("Raw source report (not independently verified current state):\nAna.")).toContain("Raw source report")
   })
 })

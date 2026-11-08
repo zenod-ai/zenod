@@ -8,7 +8,7 @@ import {
   keepNote,
   keepStatus,
   MemoryChatError,
-  plainWikilinks,
+  presentAnswer,
   vaultLabel,
   type MemoryChatAnswer,
   type MemoryKeepReceipt,
@@ -78,7 +78,7 @@ function KeepLine({ keep }: { keep: KeepState }) {
     return <span className="zp-keepnote zp-warn">Not saved. Try Keep again.</span>
   return (
     <span className="zp-keepnote">
-      Kept ✓ {receipt.reply.replace(/^Saved\.?\s*/, "")}
+      Kept ✓ Saved to your vault.
       {receipt.noteUrl ? (
         <>
           {" "}
@@ -103,8 +103,17 @@ function AnswerTurn({
   return (
     <div className="zp-turn">
       <div className="zp-msg zp-z" data-testid="memory-answer">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {plainWikilinks(result.answer)}
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: ({ href, children }) => (
+              <a href={href} target="_blank" rel="noreferrer" className="zp-src">
+                {children}
+              </a>
+            ),
+          }}
+        >
+          {presentAnswer(result.answer)}
         </ReactMarkdown>
       </div>
       {result.memories.length > 0 || result.alsoCited.length > 0 ? (
@@ -162,9 +171,14 @@ function AnswerTurn({
           type="button"
           className="zp-keep"
           onClick={onKeep}
-          disabled={keep.state === "keeping" || keep.state === "kept"}
+          disabled={
+            keep.state === "keeping" ||
+            (keep.state === "kept" && keep.receipt.status !== "failed")
+          }
         >
-          {keep.state === "kept" ? "Kept" : "Keep"}
+          {keep.state === "kept" && keep.receipt.status !== "failed"
+            ? "Kept"
+            : "Keep"}
         </button>
         <KeepLine keep={keep} />
         <span className="zp-time">{(result.ms / 1000).toFixed(1)} s</span>
@@ -192,7 +206,7 @@ export function MemoryChat() {
   const pollKeep = useKeepPolling(updateKeep)
 
   React.useEffect(() => {
-    endRef.current?.scrollIntoView?.({ block: "end" })
+    if (turns.length > 0) endRef.current?.scrollIntoView?.({ block: "end" })
   }, [turns])
 
   const push = (turn: NewTurn) => {

@@ -235,6 +235,7 @@
 @keyframes zp-dot { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
 @media (max-width: 640px) {
   .zp-msg { max-width: 92%; }
+  .zp-screen { min-height: 52svh; }
   .zp-used li { grid-template-columns: minmax(0, 1fr) 4rem 2.6rem; }
   .zp-compose { border-radius: 14px; flex-wrap: wrap; padding: 0.5rem 0.6rem; }
   .zp-compose textarea { flex-basis: 100%; }
@@ -243,3 +244,5 @@
 @media (prefers-reduced-motion: reduce) {
   .zp-msg, .zp-used, .zp-bar i, .zp-typing i { animation: none; }
 }
+.zp-src { font-size: 0.86em; white-space: nowrap; }
+.zp-src::before { content: "↗ "; }

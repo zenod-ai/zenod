@@ -346,7 +346,7 @@ export function Settings({
           value={section}
           onValueChange={(value) => setSection(value as DashboardSection)}
         >
-          <TabsList className="max-w-full overflow-x-auto">
+          <TabsList className="max-w-full justify-start overflow-x-auto">
             {dashboardSectionsForEdition(edition)
               .filter(({ id }) => id !== "subscribers" || subscribersAvailability === "on")
               .map(({ id, label }) => {
