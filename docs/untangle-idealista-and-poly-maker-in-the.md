@@ -49,7 +49,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| U1 | Ticket worker | run_383b13fc-f1bb-4852-a67f-8c7927016853 | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | review | none | vault commit AlfaBlok/obsidian-brain `32bb6ae` (no code change; merge cause fixed by E12-S8 #1517, live `dce775e`) | vault `e1537ed` | [evidence](evidence/e19-u1-2026-11-08.md) · [card](cards/E19-U1.md) · tailnet page http://vps3.taild81fbb.ts.net:8922/ · live search_memory after 16:51Z: Idealista and Poly-Maker each return only their own pages | 2026-11-08 | Jordi opens the before and after and judges; revert `git revert 32bb6ae` in the vault (tag pre-e19-u1-2026-11-08); followups: none; confirm: yes — only Jordi can say whether his Idealista questions now come back clean |
+| U1 | Ticket worker | run_383b13fc-f1bb-4852-a67f-8c7927016853 | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | review | none | vault `32bb6ae` (no code change) | vault `e1537ed` | [evidence](evidence/e19-u1-2026-11-08.md) · [card](cards/E19-U1.md) · live search clean 16:51Z | 2026-11-08 | Jordi judges the before and after; followups: none; confirm: yes — only Jordi can say whether his Idealista questions now come back clean |
 
 ## Decisions
 
