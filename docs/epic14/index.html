@@ -59,6 +59,12 @@
 .lines .l { color: var(--faint); font-style: italic; }
 .scene.js.fade .lines, .scene.js.fade .items, .scene.js.fade .chat { opacity: 0; transition: opacity .5s ease; }
 
+.cols5 { list-style: none; padding: 0; margin: 2.25rem 0 0; display: grid; gap: 1.5rem; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--ink); font: 400 0.95rem/1.5 var(--sans); color: var(--muted); }
+.cols5 > * { padding-top: 1.25rem; }
+.cols5 b { display: block; font: 500 1.3rem/1.2 var(--serif); color: var(--ink); margin-bottom: 0.5rem; }
+.cols5 .k { display: block; font: 500 0.9rem var(--sans); color: var(--accent); }
+@media (max-width: 900px) { .cols5 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.lines .d { color: var(--muted); font: 500 0.82rem var(--sans); }
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(2rem, 4vw, 4rem); margin-top: 2rem; border-top: 1px solid var(--ink); }
 .two > div { padding-top: 1.25rem; }
 .two h3 { margin-bottom: 0.6rem; }
@@ -75,10 +81,10 @@ td code, p code { font: 500 0.9em var(--sans); }
 <section class="slide" id="cover">
   <div class="in split">
     <div>
-      <p class="no">Zenod, the plan &nbsp;·&nbsp; 8 November 2026</p>
+      <p class="no">Zenod, the plan &nbsp;·&nbsp; 8 November 2026 &nbsp;·&nbsp; round 2</p>
       <h1>Your memory gets helpers, an inbox and a line you can call.</h1>
-      <p class="lede">Helpers read your memory while you sleep, leave what they find in one inbox, and you can talk to the whole thing by voice.</p>
-      <p class="small">A plan for Jordi to approve before anything is built. Frames marked Live are the product today. Frames marked Coming are not built yet. Every mockup uses demo data.</p>
+      <p class="lede">Helpers read your memory while you sleep, leave what they find in one inbox, and you can talk to the whole thing by voice. When you ask for a job on the memory itself, a memory desk hands it to an agent.</p>
+      <p class="small">A plan for Jordi to approve before anything is built. Round 2 adds the memory desk (slides 7 and 8) and which Epic Team parts Zenod reuses (slide 9). Frames marked Live are the product today. Frames marked Coming are not built yet. Every mockup uses demo data.</p>
     </div>
     <figure class="shot">
       <div class="screen app" role="img" aria-label="Mockup of the Zenod web app: a chat with one Send button, a voice note button and a call button, and an inbox showing two items need you">
@@ -98,13 +104,14 @@ From: Home, Boiler</div>
 <!-- 1. The four pieces -->
 <section class="slide" id="pieces">
   <div class="in">
-    <p class="no">1 &nbsp; What you asked for, in four pieces</p>
-    <h2>Four new pieces, and the memory stays a memory.</h2>
-    <ol class="cols4">
+    <p class="no">1 &nbsp; What you asked for, in five pieces</p>
+    <h2>Five new pieces, and the memory stays a memory.</h2>
+    <ol class="cols5">
       <li><span class="k">1</span><b>Personas</b>Small helpers that wake on your memory, at night or when something new lands, and look for links, repeats and loose ends. Like dreaming. <span class="tag soon">Coming</span></li>
       <li><span class="k">2</span><b>Inbox</b>One list of things that need you: a persona asks for a decision, or tells you what it found. <span class="tag soon">Coming</span></li>
       <li><span class="k">3</span><b>Voice note</b>A record button in the web chat. The note goes through the same filing as a WhatsApp voice note. <span class="tag soon">Coming</span></li>
       <li><span class="k">4</span><b>Call</b>Call your memory. You talk to a fast hotline voice, and she asks the librarian for anything deep. <span class="tag soon">Coming</span></li>
+      <li><span class="k">5</span><b>Memory desk</b>Ask for a job on the memory itself, like "untangle these two topics", and an agent does it, with an undo. <span class="tag soon">Coming</span></li>
     </ol>
     <p class="small" style="margin-top:2rem;max-width:52rem">What does not change: Zenod keeps no goals, no board of tasks and does not guess what you intend. Your WhatsApp chat keeps replying exactly as today. Everything a persona writes is a memory in your repo, marked with who wrote it.</p>
   </div>
@@ -245,29 +252,95 @@ Filed on: Home, Kitchen</div>
   </div>
 </section>
 
-<!-- 7. Bootstrap or merge -->
-<section class="slide" id="merge">
+<!-- 7. Memory desk (round 2) -->
+<section class="slide" id="desk">
+  <div class="in split">
+    <div>
+      <p class="no">7 &nbsp; The memory desk <span class="tag soon">Coming</span></p>
+      <h2>Some things you say are jobs on the memory, not new memories.</h2>
+      <p class="lede">"Idealista and Poly-Maker are tangled, they are two separate things." That is not a note to keep or a question to answer. It is a task, so the desk hands it to an agent that works on your memory.</p>
+      <ul class="facts">
+        <li><b>Like the Team desk:</b> you talk to one desk; when you want work done, it starts an agent for that job and tells you it did.</li>
+        <li><b>Where you can ask:</b> the web chat, the voice note button and a call. On a call the hotline says "I have passed that to the memory desk".</li>
+        <li><b>What you see:</b> the job appears in your inbox, shows its progress, and ends with a result card: what changed, a before and after search, and an Undo button.</li>
+        <li><b>First real job:</b> untangling Idealista and Poly-Maker, which the team is doing by hand now. How that goes becomes the desk agent's playbook.</li>
+      </ul>
+    </div>
+    <figure class="shot scene" data-len="14000">
+      <div class="screen app" role="img" aria-label="Animation: the user says two topics are tangled; Zenod says this is a job on the memory and passes it to the memory desk; the inbox shows the job working, then done, with what changed and an Undo button">
+        <div class="app-top"><b>Zenod</b><span class="nav"><span class="here">Chat</span><span>Inbox<span class="badge">1</span></span><span>Personas</span><span>Memory</span></span></div>
+        <div class="chat">
+          <div class="b me st" data-at="400">Idealista and Poly-Maker are tangled. They are two separate things, please split them.</div>
+          <div class="typing st" data-at="1400" data-off="2600"><i></i><i></i><i></i></div>
+          <div class="b them st" data-at="2600">That is a job on your memory, so I passed it to the memory desk.
+You will see it in your inbox.</div>
+        </div>
+        <ul class="items">
+          <li class="st" data-at="5000" data-off="8200"><span class="kind">Working</span><span class="who">Memory desk · now</span><p class="what">Split Idealista and Poly-Maker: found 23 memories under one shared topic, sorting them.</p></li>
+          <li class="st" data-at="8200"><span class="kind">Done</span><span class="who">Memory desk · 4 min</span><p class="what">Two topics again. 15 memories moved to Idealista, 8 to Poly-Maker, 6 links fixed. Idealista searches no longer return Poly-Maker.</p><span class="row"><span class="btn">See the changes</span><span class="btn">Undo</span><span class="btn go-btn">Good</span></span></li>
+        </ul>
+      </div>
+      <figcaption>Coming. Demo numbers. The job runs on its own and reports back in the inbox, like a persona's finding.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 8. How the desk works (round 2) -->
+<section class="slide" id="desk-how">
   <div class="in">
-    <p class="no">7 &nbsp; Build it in Zenod, or merge with Epic Team</p>
-    <h2>Build it in Zenod, copying Epic Team's screens and code.</h2>
-    <p class="lede">Recommendation: do not merge now. Both apps are built the same way, so copying the pieces is cheap and leaves each product free to move.</p>
+    <p class="no">8 &nbsp; How the memory desk works</p>
+    <h2>Keep, answer, or a job: one Send decides.</h2>
     <table>
-      <thead><tr><th>Piece</th><th>What we copy from Epic Team</th><th>What we write new for Zenod</th></tr></thead>
+      <thead><tr><th>Question</th><th>Answer in the plan</th></tr></thead>
       <tbody>
-        <tr><td>Call</td><td>The browser voice engine and call panel, about 1,300 lines; the server's short-lived key, caps and price counting, about 1,000 lines.</td><td>Her instructions and four tools pointed at Zenod's own search and answer; per-account minutes.</td></tr>
-        <tr><td>Voice note</td><td>The record button and its segment recorder, about 900 lines.</td><td>The upload into Zenod's existing voice note filing.</td></tr>
-        <tr><td>Personas</td><td>The idea of a persona as a short file with its job written in plain words, and the wake on a timer.</td><td>The runner itself: one model call per wake on Zenod's job queue, with the allowance share.</td></tr>
-        <tr><td>Inbox</td><td>The shape of a question: recommendation first, two or three buttons, an answer that is written back to the repo.</td><td>A small inbox screen and list. Epic Team's inbox is 8,000 lines tied to goals and reviews; none of that is copied.</td></tr>
+        <tr><td>How it is recognised</td><td>The one Send button, planned in its own epic, already decides between keep and answer from what you wrote. The desk adds a third outcome, a job on the memory: you ask to split, join, move, relink, rename or clean up topics, or say the memory is wrong. Voice notes and calls use the same decision on the words. When it is unsure, it asks "keep this, or should I do it as a job?" and never runs a job on a guess.</td></tr>
+        <tr><td>Who does the job</td><td>An agent on Zenod's job queue, inside your account, with tools to search and read the memory, see the tree and its links, and make changes. It works in steps, up to a cap, with the answer model Zenod already pays for. A typical job costs a few cents and counts against the AI allowance.</td></tr>
+        <tr><td>What it may change</td><td>Where memories are filed, the topics of the tree, the links between memories and how strong they are. Every job is one change to your memory repo, saved in git with the job's name, so Undo puts everything back exactly. It never rewrites your words and never deletes a memory; a delete is always a question in the inbox first.</td></tr>
+        <tr><td>Big jobs</td><td>If a job would touch more than about 50 memories, the agent first sends its plan to the inbox and waits for your yes. Small jobs run straight away and keep the Undo.</td></tr>
+        <tr><td>Progress and result</td><td>One inbox item per job: Working with its current step, then Done with what changed, a before and after search, See the changes and Undo. Nothing is sent to WhatsApp.</td></tr>
+        <tr><td>WhatsApp</td><td>Your WhatsApp chat keeps replying exactly as today. A WhatsApp message that looks like a job is kept as usual and also shows up in the inbox as "Looks like a job: run it?". Letting WhatsApp start jobs directly waits for your own word.</td></tr>
       </tbody>
     </table>
-    <p class="small" style="margin-top:1rem">Why not merge: Epic Team is about 108,000 lines built around goals, epics and agent sessions on servers, for one team. Zenod is a paid app for many people with its own sign-in, billing and deploys. Merging would drag the goal machinery into a memory product. Revisit when the names are final and the same voice code has run in both for a month; then the shared part can become one package both use.</p>
+    <p class="small" style="margin-top:1rem">Unlike a persona, which only reads and notices, the desk agent changes the memory, because you asked it to. The weighted links planned in their own epic are what it edits when it untangles two topics.</p>
+  </div>
+</section>
+
+<!-- 9. Zenod stays the product; reuse Epic Team parts (round 2) -->
+<section class="slide" id="merge">
+  <div class="in">
+    <p class="no">9 &nbsp; Zenod stays the product, built from Epic Team's parts</p>
+    <h2>No new Epic Memory product. Zenod reuses Epic Team wherever it can.</h2>
+    <p class="lede">Zenod, with Phylax and its connections, stays the product. Each new Zenod piece starts from the Epic Team part that already does it.</p>
+    <table>
+      <thead><tr><th>Epic Team part</th><th>Used in Zenod for</th><th>How</th></tr></thead>
+      <tbody>
+        <tr><td>Desk chat and dispatch</td><td>The memory desk: request in, job started, progress, result</td><td>The desk that starts a worker for a request and reports back. Copy the shape: job record, parent request, claim, status, result. The worker runs on Zenod's job queue, not as a server agent session.</td></tr>
+        <tr><td>Personas and wakes</td><td>Personas</td><td>Persona as a short file, the wake timer, skip when nothing changed, caps per wake. Copy those rules; write the one-call runner new.</td></tr>
+        <tr><td>Inbox and needs-you</td><td>The inbox, plan cards for big desk jobs</td><td>The question with a recommendation and buttons, answers written back to the repo. Copy that shape; leave out its goals, reviews and spine ties.</td></tr>
+        <tr><td>Voice: engine, call panel, recorder</td><td>Voice note button and call</td><td>Browser voice engine, call panel, recorder, one-minute key, caps and prices. Copy now, about 3,200 lines. After a month in both apps, move into one shared package both use.</td></tr>
+        <tr><td>Console: activity, usage, connections</td><td>A "Jobs" list with Stop, the usage card</td><td>Copy the activity list and usage collector. Keep Zenod's own connections page; Phylax already does that job.</td></tr>
+      </tbody>
+    </table>
+    <div class="two">
+      <div><h3>Three ways to reuse</h3><ul>
+        <li><b>Copy</b> the code into Zenod once. Fast, no ties at run time. The cost: a fix in one app has to be made in the other.</li>
+        <li><b>Shared package</b> both apps install. One fix for both. The cost: versions to keep in step, and every change must suit both apps.</li>
+        <li><b>Shared service</b>, Zenod calling Epic Team's console to run its jobs. Least code. The cost: Zenod, a paid app for many people, would stop working whenever the team's console does, and the team console was built for one team.</li>
+      </ul></div>
+      <div><h3>Recommendation</h3><ul>
+        <li>Copy now, for every piece above.</li>
+        <li>Turn the voice engine and the question card into a shared package once the same code has run in both apps for a month.</li>
+        <li>Never a shared service: Zenod must not depend on the team's console being up.</li>
+        <li>Why not merge the apps: Epic Team is about 108,000 lines built around goals and server agents for one team; Zenod has its own sign-in, billing and deploys.</li>
+      </ul></div>
+    </div>
   </div>
 </section>
 
 <!-- 8. What stays separate -->
 <section class="slide" id="separate">
   <div class="in">
-    <p class="no">8 &nbsp; What stays separate</p>
+    <p class="no">10 &nbsp; What stays separate</p>
     <h2>Filing stays Zenod's, goals stay Epic Team's.</h2>
     <ol class="cols3">
       <li><span class="k">Zenod keeps</span><b>Voice note filing</b>WhatsApp and web voice notes go through Zenod's own path: transcribe, keep word for word, archive the audio, file in the tree. Personas only read what was filed; they never sit inside the filing.</li>
@@ -281,7 +354,7 @@ Filed on: Home, Kitchen</div>
 <section class="slide" id="epicspine">
   <div class="in split">
     <div>
-      <p class="no">9 &nbsp; Does Zenod rest on EpicSpine?</p>
+      <p class="no">11 &nbsp; Does Zenod rest on EpicSpine?</p>
       <h2>No. They share one idea, not one system.</h2>
       <p class="answer">Zenod rests on your memory repo. EpicSpine is how the team runs work.</p>
     </div>
@@ -297,21 +370,22 @@ Filed on: Home, Kitchen</div>
 <!-- 10. The L-7 line -->
 <section class="slide" id="line">
   <div class="in">
-    <p class="no">10 &nbsp; Where the line with Epic Team now sits</p>
-    <h2>You asked for personas, an inbox and calls. Nothing more crosses.</h2>
-    <p class="small" style="max-width:52rem">Today's rule says Zenod gets none of Epic Team's machinery unless you ask for it in your own words. Your voice note of 8 November asks for exactly three things, so the rule moves by exactly those three and is rewritten that way once you approve.</p>
+    <p class="no">12 &nbsp; Where the line with Epic Team now sits</p>
+    <h2>You asked for personas, an inbox, calls and a memory desk. Nothing more crosses.</h2>
+    <p class="small" style="max-width:52rem">Today's rule says Zenod gets none of Epic Team's machinery unless you ask for it in your own words. Your voice notes of 8 November ask for exactly these things, so the rule moves by exactly those and is rewritten that way once you approve. The memory desk is the closest Zenod comes to Epic Team: it starts agents on your request. That is a loud line, so it is spelled out here.</p>
     <div class="two">
       <div><h3>Now allowed in Zenod</h3><ul>
         <li>Personas that read your memory and write marked notes and inbox items.</li>
         <li>An inbox of questions and findings, in the web app.</li>
         <li>A voice note button and a call button in the web chat.</li>
-        <li>Copying Epic Team code for these, once, into Zenod.</li>
+        <li>A memory desk that runs jobs you ask for on your memory, from the web chat, voice notes and calls, each one undoable.</li>
+        <li>Copying Epic Team code for these into Zenod, later a shared package.</li>
       </ul></div>
       <div><h3>Still not, unless you say so</h3><ul>
         <li>Goals, epics, milestones, a board of tasks, guessing intent.</li>
-        <li>Commands or new replies in WhatsApp or Telegram chats.</li>
+        <li>Commands or new replies in WhatsApp or Telegram chats; WhatsApp jobs only appear in the inbox.</li>
         <li>Personas messaging you or anyone outside the web app.</li>
-        <li>Zenod calling Epic Team, or sharing its code at run time.</li>
+        <li>Zenod calling Epic Team at run time, or a separate Epic Memory product.</li>
       </ul></div>
     </div>
   </div>
@@ -320,32 +394,33 @@ Filed on: Home, Kitchen</div>
 <!-- 11. Build steps -->
 <section class="slide" id="steps">
   <div class="in">
-    <p class="no">11 &nbsp; The build, in order</p>
-    <h2>Six steps, each one usable on its own.</h2>
+    <p class="no">13 &nbsp; The build, in order</p>
+    <h2>Seven steps, each one usable on its own.</h2>
     <ol class="plan">
       <li class="head"><span></span><span>Step</span><span>How you check it</span><span class="eff">Effort</span></li>
       <li><span class="k">1</span><span><b>Voice note button</b>Record in the web chat, filed by Zenod's existing voice note path.</span><span>Record 20 seconds on zenod.dev; the note shows in your memory with the usual receipt.</span><span class="eff">1 to 2 days</span></li>
       <li><span class="k">2</span><span><b>Inbox</b>The list, the tab count, questions with buttons, findings, answers written to the repo.</span><span>A test question appears, you answer it, and the answer is a memory.</span><span class="eff">2 to 3 days</span></li>
-      <li><span class="k">3</span><span><b>Persona runner</b>Persona files, the nightly wake, read-only tools, its own folder, caps and the allowance share.</span><span>A test persona wakes overnight on a demo memory and leaves a finding; the cost shows on its screen.</span><span class="eff">3 to 4 days</span></li>
-      <li><span class="k">4</span><span><b>Three starter personas</b>Night reader, Librarian and Loose ends, tried on your real notes.</span><span>You read a week of their findings and keep the ones worth it.</span><span class="eff">2 to 3 days</span></li>
-      <li><span class="k">5</span><span><b>Call</b>Copy the desk call, point her tools at Zenod, caps and minutes per account.</span><span>You call your memory from your phone and get a real answer from the librarian.</span><span class="eff">4 to 5 days</span></li>
-      <li><span class="k">6</span><span><b>Price and limits</b>Fold persona cost and call minutes into the hosted plan.</span><span>The usage card shows personas and call minutes next to the AI allowance.</span><span class="eff">1 day</span></li>
+      <li><span class="k">3</span><span><b>Memory desk</b>Job as a third outcome of Send, voice note and call; the desk agent on the job queue; one git change per job with Undo; progress and result in the inbox.</span><span>You say "split these two topics" on zenod.dev, the inbox shows the job and its before and after search, and Undo puts it back.</span><span class="eff">4 to 5 days</span></li>
+      <li><span class="k">4</span><span><b>Persona runner</b>Persona files, the nightly wake, read-only tools, its own folder, caps and the allowance share.</span><span>A test persona wakes overnight on a demo memory and leaves a finding; the cost shows on its screen.</span><span class="eff">3 to 4 days</span></li>
+      <li><span class="k">5</span><span><b>Three starter personas</b>Night reader, Librarian and Loose ends, tried on your real notes.</span><span>You read a week of their findings and keep the ones worth it.</span><span class="eff">2 to 3 days</span></li>
+      <li><span class="k">6</span><span><b>Call</b>Copy the desk call, point her tools at Zenod and the memory desk, caps and minutes per account.</span><span>You call your memory from your phone, get a real answer from the librarian, and pass a job to the desk.</span><span class="eff">4 to 5 days</span></li>
+      <li><span class="k">7</span><span><b>Price and limits</b>Fold persona cost, desk jobs and call minutes into the hosted plan.</span><span>The usage card shows personas, desk jobs and call minutes next to the AI allowance.</span><span class="eff">1 day</span></li>
     </ol>
-    <p class="small" style="margin-top:1rem">About three weeks of agent work in all. Step 5 needs a paid OpenAI account for Zenod, a new provider; that is asked for on its own when step 5 starts, not now. The single Send button and the answer quality checks run in their own epics alongside.</p>
+    <p class="small" style="margin-top:1rem">About four weeks of agent work in all. The memory desk comes after the inbox, because that is where its jobs report, and after the single Send button, because it adds the third outcome to it. Step 6 needs a paid OpenAI account for Zenod, a new provider; that is asked for on its own when step 6 starts, not now. The single Send button, the weighted links and the answer quality checks run in their own epics alongside.</p>
   </div>
 </section>
 
 <!-- Close -->
 <section class="slide close" id="next">
   <div class="in">
-    <p class="no">12 &nbsp; What we propose next</p>
+    <p class="no">14 &nbsp; What we propose next</p>
     <h2>Say yes, and the voice note button is built first.</h2>
     <p class="lede">It is the smallest step, uses only what Zenod already has, and you can try it the same week.</p>
     <div class="box"><b>How you will check it</b>Open zenod.dev on your phone, tap Voice note, speak, and find the note filed in your memory with the usual receipt. Each later step comes back to you the same way, one at a time.</div>
   </div>
 </section>
 
-<p class="foot">Sources: Jordi's voice note of 8 November 2026, 15:51 UTC. Epic Team code read on 8 November: desk call (OpenAI live voice, small model; caps and the measured 2 to 20 cents a minute from its cheaper-voice study), record button, personas, inbox. Zenod code read the same day: web chat, job queue, nightly tree sweep window, transcription price table (Voxtral 0.3 cents a minute), answer model price (DeepSeek, 0.20 and 0.80 dollars per million tokens in and out), and the 3 dollar monthly AI allowance per user. Persona cost per wake is an estimate from those prices. Line counts are rounded. Every name, note and number in the mockups is demo data.</p>
+<p class="foot">Sources: Jordi's voice notes of 8 November 2026, 15:51 and 16:09 UTC (round 2: memory desk, reuse Epic Team parts, no Epic Memory product). Epic Team desk, dispatch, wake, inbox and console code read on 8 November for slide 9; line counts rounded. Epic Team code read on 8 November: desk call (OpenAI live voice, small model; caps and the measured 2 to 20 cents a minute from its cheaper-voice study), record button, personas, inbox. Zenod code read the same day: web chat, job queue, nightly tree sweep window, transcription price table (Voxtral 0.3 cents a minute), answer model price (DeepSeek, 0.20 and 0.80 dollars per million tokens in and out), and the 3 dollar monthly AI allowance per user. Persona cost per wake is an estimate from those prices. Line counts are rounded. Every name, note and number in the mockups is demo data.</p>
 <script src="scenes.js"></script>
 </body>
 </html>
