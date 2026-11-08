@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P1 | Ticket worker | run_7c8bcea2 | Plan at one URL: personas, inbox, voice and call buttons, bootstrap or merge, what stays separate (E14-1) | active | none | `wt/e14-p1` | main | none | 2026-11-08 | build the plan page, then E14-A1 |
+| P1 | Ticket worker | run_7c8bcea2-7110-4e91-8181-a0e620e7d6bf — claimed 2026-11-08T15:55Z, lease until 2026-11-08T17:55Z | Plan at one URL: personas, inbox, voice and call buttons, bootstrap or merge, what stays separate (E14-1) | active | none | `wt/e14-p1` | main | none | 2026-11-08 | build the plan page, then E14-A1 |
 
 ## Decisions
 
