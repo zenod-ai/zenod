@@ -61,6 +61,7 @@ function kindLabel(item: InboxItem): string {
   if (item.status === "working") return "Working"
   if (item.status === "failed") return "Stopped"
   if (item.status === "undone") return "Undone"
+  if (item.result?.answer) return "Answered"
   return "Done"
 }
 
@@ -246,9 +247,27 @@ function InboxCard({
         </p>
       ) : null}
       {item.kind === "job" && item.status === "failed" ? (
-        <p className="zi-step zi-warn">Stopped at: {item.step}</p>
+        <p className="zi-step zi-warn">Stopped. {item.step}</p>
       ) : null}
-      {item.kind === "job" && item.result && item.status !== "working" ? (
+      {item.kind === "job" && item.result?.answer && item.status !== "working" ? (
+        <>
+          <p className="zi-summary">{item.result.summary}</p>
+          <p className="zp-hint">This was a question, so nothing in your memory changed.</p>
+          {item.status === "done" ? (
+            <div className="zi-row">
+              <button
+                type="button"
+                className="zp-keep"
+                disabled={busy}
+                onClick={() => act(() => dismissInbox(item.id))}
+              >
+                Good
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {item.kind === "job" && item.result && !item.result.answer && item.status !== "working" ? (
         <>
           <p className="zi-summary">{item.result.summary}</p>
           {open ? <Changes result={item.result} /> : null}
@@ -356,7 +375,7 @@ function AskDesk({ onStarted }: { onStarted: (change: InboxChange) => void }) {
       <div className="zp-compose">
         <input
           aria-label="A job for the memory desk"
-          placeholder="A job on your memory, like “Untangle Idealista and Poly-Maker”"
+          placeholder="A job or a question, like “Untangle Idealista and Poly-Maker”"
           value={text}
           maxLength={600}
           onChange={(event) => setText(event.target.value)}
@@ -366,8 +385,9 @@ function AskDesk({ onStarted }: { onStarted: (change: InboxChange) => void }) {
         </button>
       </div>
       <p className="zp-hint">
-        The desk re-files, splits, joins, moves and relinks your topics. It
-        never rewrites your words or deletes, and every job can be undone.
+        The desk re-files, splits, joins, moves and relinks your topics, and
+        answers questions about them, like what grew this week. It never
+        rewrites your words or deletes, and every job can be undone.
       </p>
       {error ? (
         <p className="zi-warn" role="alert">

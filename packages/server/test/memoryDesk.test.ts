@@ -182,7 +182,48 @@ describe("memory desk routes (EPIC-14 S3)", { timeout: 30_000 }, () => {
 
       next = async () => { throw new Error("desk_dirty_worktree"); };
       const broken = (await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "rename the Garden topic to Allotment" })).json()).item;
-      expect(await t.settled(t.ada, broken.id)).toMatchObject({ status: "failed", step: "The desk stopped before changing anything. Your memory is as it was." });
+      expect(await t.settled(t.ada, broken.id)).toMatchObject({ status: "failed", step: "Your memory was busy finishing an earlier save. Nothing changed. Try again in a minute." });
+
+      next = async () => { throw new Error("OpenRouter 402: Insufficient credits"); };
+      const broke = (await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "rename the Garden topic to Plot" })).json()).item;
+      expect(await t.settled(t.ada, broke.id)).toMatchObject({ status: "failed", step: "Zenod's AI service did not answer just now. Nothing changed. Try again in a while." });
+
+      next = async () => { throw new Error("TypeError: something odd"); };
+      const odd = (await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "rename the Garden topic to Yard" })).json()).item;
+      expect(await t.settled(t.ada, odd.id)).toMatchObject({ status: "failed", step: "The desk stopped before changing anything. Your memory is as it was." });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("Jordi's question is answered in the inbox: Answered with the answer, nothing to undo", async () => {
+    const answer = "In the last 7 days you saved 31 notes, filed under 6 topics; Zenod got the most.";
+    const deskJob = vi.fn(async (): Promise<DeskJobResult> => ({ status: "answered", answer, agent: { steps: 2, inputChars: 9_000 } }));
+    const t = await setup({ deskJob });
+    try {
+      const { item } = await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "How many root memories added to in last 7 days?" })).json();
+      const done = await t.settled(t.ada, item.id);
+      expect(done).toMatchObject({ status: "done", title: "How many root memories added to in last 7 days?", result: { summary: answer, changes: [], answer: true } });
+      expect((await t.call("POST", `/api/console/inbox/${item.id}/undo`, t.ada)).status).not.toBe(200);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("a job behind a backlog says how many are ahead, and the count drains as the queue does", async () => {
+    const t = await setup({ deskJob: vi.fn(async () => DONE) });
+    try {
+      const a = t.runtimes.get("tenant-a")!;
+      const queue = a.taskJobQueue;
+      // The queue is held (as during the 2026-11-08 outage, when 24 saves waited) so nothing runs.
+      const drain = vi.spyOn(queue as unknown as { requestDrains: () => void }, "requestDrains").mockImplementation(() => {});
+      const held = [queue.enqueue("store", { content: "a" } as never), queue.enqueue("store", { content: "b" } as never)];
+      const { item } = await (await t.call("POST", "/api/console/memory-desk/jobs", t.ada, { request: "split boat and cabin" })).json();
+      expect(item.step).toBe("Waiting for its turn: 2 saves and jobs are ahead of it");
+      const store = (queue as unknown as { store: { update(id: string, patch: { status: string }): void } }).store;
+      store.update(held[0]!.id, { status: "done" });
+      expect((await t.list(t.ada)).find((candidate) => candidate.id === item.id)?.step).toBe("Waiting for its turn: 1 save or job is ahead of it");
+      drain.mockRestore();
     } finally {
       await t.close();
     }

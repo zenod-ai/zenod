@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { parseNote } from "../vault/frontmatter.js";
 import { basenameOf } from "../vault/files.js";
 import type { FileChange } from "../vault/immutability.js";
-import { CITATION_RE, WIKILINK_RE, scanVault } from "../vault/pages.js";
+import { CITATION_RE, WIKILINK_RE, scanVault, type VaultSnapshot } from "../vault/pages.js";
 import {
   buildTreeIndex,
   formatLineage,
@@ -264,6 +264,7 @@ const nodeId = (path: string) => `n-${createHash("sha256").update(path).digest("
 
 interface DeskVault {
   index: TreeIndex;
+  snapshot: VaultSnapshot;
   /** Lowercased link targets and page titles → path. */
   resolve(ref: string): string | null;
   title(path: string): string;
@@ -289,7 +290,7 @@ async function loadDeskVault(vaultPath: string): Promise<DeskVault> {
     const lineage = index.lineage(path);
     return lineage.ok ? formatLineage(lineage) : "not placed";
   };
-  return { index, resolve, title, place };
+  return { index, snapshot, resolve, title, place };
 }
 
 function requirePage(vault: DeskVault, ref: string, role: string): string {
@@ -557,10 +558,21 @@ export interface DeskReadTools {
   tree(): Promise<string>;
   children(page: string): Promise<string>;
   links(page: string): Promise<string>;
+  /** What grew lately: notes saved in the last N days, and under which topics they were filed. */
+  recent(days: string): Promise<string>;
 }
 
+/** The longest window the recent tool looks back. */
+const RECENT_MAX_DAYS = 90;
+const topicCount = (n: number) => `${n} topic${n === 1 ? "" : "s"}`;
+const noteCount = (n: number) => `${n} note${n === 1 ? "" : "s"}`;
+
 /** The desk's read-only tools over a vault working tree (search comes from the engine's index). */
-export function deskReadTools(vaultPath: string, search: (query: string) => Promise<Array<{ path: string; title?: string; treePath?: string }>>): DeskReadTools {
+export function deskReadTools(
+  vaultPath: string,
+  search: (query: string) => Promise<Array<{ path: string; title?: string; treePath?: string }>>,
+  now: () => Date = () => new Date(),
+): DeskReadTools {
   const vault = () => loadDeskVault(vaultPath);
   const count = (index: TreeIndex, path: string): number => index.children(path).reduce((sum, child) => sum + 1 + count(index, child), 0);
   return {
@@ -608,17 +620,48 @@ export function deskReadTools(vaultPath: string, search: (query: string) => Prom
       const notes = body.split("\n").filter((line) => [...line.matchAll(CITATION_RE)].length > 0).slice(0, 30);
       return [...out, ...(notes.length ? ["note lines on this page:", ...notes.map((line) => line.trim().slice(0, 200))] : [])].join("\n") || "no links";
     },
+    async recent(days) {
+      const v = await vault();
+      const span = Math.min(RECENT_MAX_DAYS, Math.max(1, Number.parseInt(days, 10) || 7));
+      const today = now();
+      const since = new Date(today.getTime() - (span - 1) * 86_400_000).toISOString().slice(0, 10);
+      let saved = 0;
+      for (const [date, anchors] of v.snapshot.anchors) if (date >= since) saved += anchors.size;
+      // Each recent note counts once per topic it was filed under, wherever under that topic.
+      const byTopic = new Map<string, { notes: Set<string>; pages: Set<string> }>();
+      const filed = new Set<string>();
+      for (const path of v.index.fields.keys()) {
+        const body = parseNote(await readText(vaultPath, path)).body;
+        const notes = [...body.matchAll(CITATION_RE)].filter((m) => m[1]! >= since).map((m) => `${m[1]}#${m[2]}`);
+        if (notes.length === 0) continue;
+        const lineage = v.index.lineage(path);
+        const topic = lineage.ok ? `root topic "${lineage.root.name}" (${lineage.group})` : "pages not placed in the tree";
+        const entry = byTopic.get(topic) ?? { notes: new Set<string>(), pages: new Set<string>() };
+        for (const note of notes) { entry.notes.add(note); filed.add(note); }
+        entry.pages.add(v.title(path));
+        byTopic.set(topic, entry);
+      }
+      const rows = [...byTopic].sort((a, b) => b[1].notes.size - a[1].notes.size);
+      return [
+        `last ${span} days (${since} to ${today.toISOString().slice(0, 10)}): ${noteCount(saved)} saved, ${filed.size} of them filed on pages; ${rows.filter(([topic]) => topic.startsWith("root topic")).length} of your ${topicCount(v.index.tree?.nodes.length ?? 0).replace("topic", "root topic")} (the top-level topics of the tree) got new notes, all listed here`,
+        ...rows.slice(0, 25).map(([topic, entry]) => `- ${topic}: ${entry.notes.size} new ${entry.notes.size === 1 ? "note" : "notes"} on ${entry.pages.size} ${entry.pages.size === 1 ? "page" : "pages"} (${[...entry.pages].slice(0, 4).join("; ")}${entry.pages.size > 4 ? "; …" : ""})`),
+        ...(rows.length > 25 ? [`- and ${rows.length - 25} more topics`] : []),
+      ].join("\n");
+    },
   };
 }
 
 const DESK_SYSTEM = [
-  "You are the memory desk of a personal memory app. The person asked for a job on their memory: re-file, split, join, move, relink or rename topics. You work in steps. Each step you reply with ONE line of JSON and nothing else.",
+  "You are the memory desk of a personal memory app. The person asks for a job on their memory (re-file, split, join, move, relink or rename topics) or asks a question about it (what grew lately, how many, where something is filed). You work in steps. Each step you reply with ONE line of JSON and nothing else.",
   "Read with these tools (one per step):",
   '{"tool":"tree"} the topics of the tree, with how many pages are under each',
   '{"tool":"search","query":"words"} pages that match, with their place in the tree',
   '{"tool":"read","page":"path"} one page: its place, parent, summary and text',
   '{"tool":"children","page":"path"} the pages directly under a page',
   '{"tool":"links","page":"path"} the pages it links to and the note lines it cites',
+  '{"tool":"recent","days":7} notes saved in the last N days and the topics they were filed under, with counts',
+  "When the person asked a question, read what you need (one or two steps is usually enough) and finish with:",
+  '{"answer":"plain sentences: first the number or fact asked for, then each topic it covers by name with its count, most first (up to ten)"}',
   "When you know what to change, finish with:",
   '{"done":true,"title":"short name of the job","summary":"one or two sentences: what changes","search":"a search the person would run to see the difference","changes":[...]}',
   "Changes you may make (use page paths you have seen):",
@@ -629,11 +672,12 @@ const DESK_SYSTEM = [
   '{"op":"unlink","from":"path","to":"path or 2026-01-31#^e-abc123"} remove a link line, or a note line cited on the wrong page (only when the note is cited on another page too)',
   "A topic's name must fit the page it sits on (share a word with that page's title).",
   "Playbook to split a topic that holds two subjects A and B: rename the topic to fit the page it sits on (say that page is about A); make B's main page its own topic with op root; move B's pages that hang elsewhere under B's page; unlink note lines about A that were copied onto B's pages when the same note is cited on an A page.",
-  "Rules: you never rewrite the person's words and never delete anything; you only change where things are filed, the topics, and links. If the job asks to delete, rewrite text, or anything else outside these changes, or it is unclear, reply {\"refuse\":\"one plain sentence why\"}. Make the fewest changes that do the job. Reply in the person's language for title and summary.",
+  "Rules: you never rewrite the person's words and never delete anything; you only change where things are filed, the topics, and links. If the job asks to delete, rewrite text, or anything else outside these changes, or it is unclear, reply {\"refuse\":\"one plain sentence why\"}. Never change anything to answer a question. Make the fewest changes that do the job. Reply in the person's language for title, summary and answer.",
 ].join("\n");
 
 export type DeskAgentOutcome =
   | { status: "plan"; plan: DeskPlan; steps: number; inputChars: number }
+  | { status: "answer"; answer: string; steps: number; inputChars: number }
   | { status: "refused"; reason: string; steps: number; inputChars: number };
 
 export interface DeskAgentOptions {
@@ -692,7 +736,22 @@ function stepLabel(tool: string, arg: string): string {
   if (tool === "read") return `Reading ${name}`;
   if (tool === "children") return `Looking under ${name}`;
   if (tool === "links") return `Checking the links of ${name}`;
+  if (tool === "recent") return `Looking at what you saved in the last ${Number.parseInt(arg, 10) || 7} days`;
   return "Thinking";
+}
+
+const QUESTION_START = /^(how|what|when|which|who|whom|where|why|is|are|was|were|do|does|did|have|has|can|could|should|show me|list|tell me|give me|qu[eé]|cu[aá]nt[oa]s?|cu[aá]l(es)?|c[oó]mo|d[oó]nde|cu[aá]ndo|por qu[eé])\b/i;
+const CHANGE_WORDS = /\b(move|moving|split|separate|untangle|join|merge|combine|rename|re-?file|refile|file .+ under|put .+ under|hang .+ under|link|unlink|relink|tidy|clean up|reorgani[sz]e|make .+ (its own )?topic|filed wrong|mueve|mover|separa|une|junta|renombra|enlaza|archiva)\b/i;
+
+/**
+ * True when a request reads as a question about the memory rather than a change to it ("How many
+ * root memories added to in last 7 days?"). Plain rules only: a question that also names a change
+ * ("can you move the boiler notes under House?") is a job.
+ */
+export function isDeskQuestion(request: string): boolean {
+  const text = request.trim();
+  if (!text || CHANGE_WORDS.test(text)) return false;
+  return text.endsWith("?") || text.startsWith("¿") || QUESTION_START.test(text);
 }
 
 /**
@@ -704,6 +763,7 @@ export async function runDeskAgent(options: DeskAgentOptions): Promise<DeskAgent
   const maxSteps = Math.max(2, options.maxSteps ?? DESK_MAX_STEPS);
   const budget = options.maxInputChars ?? DESK_MAX_INPUT_CHARS;
   const transcript: string[] = [];
+  const question = isDeskQuestion(options.request);
   let inputChars = 0;
   for (let step = 1; step <= maxSteps; step++) {
     options.assertActive?.();
@@ -714,8 +774,9 @@ export async function runDeskAgent(options: DeskAgentOptions): Promise<DeskAgent
     const history = `${kept.length < transcript.length ? "(earlier steps trimmed)\n\n" : ""}${kept.join("\n\n")}`;
     const prompt = [
       `JOB\n${options.request}`,
+      question ? 'This reads as a question about the memory, not a change: read what you need and reply with {"answer":"..."}. Change nothing.' : "",
       history ? `SO FAR\n${history}` : "",
-      `Step ${step} of ${maxSteps}.${last ? " This is your last step: reply with done or refuse." : ""} Reply with one line of JSON.`,
+      `Step ${step} of ${maxSteps}.${last ? ` This is your last step: reply with ${question ? "answer, from what you read so far" : "done, answer or refuse"}.` : ""} Reply with one line of JSON.`,
     ].filter(Boolean).join("\n\n");
     inputChars += DESK_SYSTEM.length + prompt.length;
     if (inputChars > budget) return { status: "refused", reason: "The job needed more reading than one job may do. Ask for a smaller part of it.", steps: step - 1, inputChars };
@@ -725,6 +786,7 @@ export async function runDeskAgent(options: DeskAgentOptions): Promise<DeskAgent
       transcript.push(`step ${step}: your reply was not JSON. Reply with one line of JSON.`);
       continue;
     }
+    if (str(value.answer)) return { status: "answer", answer: str(value.answer).slice(0, 1_500), steps: step, inputChars };
     if (str(value.refuse)) return { status: "refused", reason: str(value.refuse).slice(0, 300), steps: step, inputChars };
     if (value.done === true || Array.isArray(value.changes)) {
       const plan = parseDeskPlan(value, options.request);
@@ -740,9 +802,9 @@ export async function runDeskAgent(options: DeskAgentOptions): Promise<DeskAgent
       continue;
     }
     const tool = str(value.tool);
-    const arg = str(value.query) || str(value.page);
-    if (!["tree", "search", "read", "children", "links"].includes(tool) || (tool !== "tree" && !arg)) {
-      transcript.push(`step ${step}: unknown tool. Use tree, search, read, children or links.`);
+    const arg = str(value.query) || str(value.page) || (typeof value.days === "number" || typeof value.days === "string" ? String(value.days).trim() : "");
+    if (!["tree", "search", "read", "children", "links", "recent"].includes(tool) || (tool !== "tree" && tool !== "recent" && !arg)) {
+      transcript.push(`step ${step}: unknown tool. Use tree, search, read, children, links or recent.`);
       continue;
     }
     options.onStep?.(stepLabel(tool, arg));
@@ -754,7 +816,14 @@ export async function runDeskAgent(options: DeskAgentOptions): Promise<DeskAgent
     }
     transcript.push(`step ${step}: ${JSON.stringify({ tool, ...(arg ? { arg } : {}) })}\n${result.slice(0, TOOL_RESULT_CHARS)}`);
   }
-  return { status: "refused", reason: "The desk ran out of steps before it knew what to change. Ask for a smaller part of the job.", steps: maxSteps, inputChars };
+  return {
+    status: "refused",
+    reason: question
+      ? `The desk read your memory ${maxSteps} times and still had no answer. Nothing changed.`
+      : `The desk read your memory ${maxSteps} times without settling on a change. Nothing changed. Say exactly what to move, split, join, link or rename.`,
+    steps: maxSteps,
+    inputChars,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -789,6 +858,7 @@ export type DeskJobResult =
     agent: DeskAgentUse;
   }
   | { status: "needs_go"; plan: DeskPlan; changes: DeskChangeView[]; touched: number; agent: DeskAgentUse }
+  | { status: "answered"; answer: string; agent: DeskAgentUse }
   | { status: "refused" | "nothing"; reason: string; plan?: DeskPlan; agent: DeskAgentUse };
 
 export interface DeskUndoResult {

@@ -47,6 +47,8 @@ export interface InboxJobResult {
   search?: { query: string; before: string[]; after: string[] };
   /** Where the full change can be read, for example the job's commit. */
   changesUrl?: string;
+  /** True when the job was a question: the summary is the answer, nothing changed, nothing to undo. */
+  answer?: boolean;
 }
 
 export interface InboxItem {
@@ -176,6 +178,7 @@ function cleanResult(result: InboxJobResult): InboxJobResult {
       ? { search: { query: text(result.search.query, 300), before: list(result.search.before), after: list(result.search.after) } }
       : {}),
     ...(result.changesUrl && /^https?:\/\//.test(result.changesUrl) ? { changesUrl: result.changesUrl } : {}),
+    ...(result.answer === true ? { answer: true } : {}),
   };
 }
 
