@@ -2,7 +2,7 @@ import { branchContext, BRANCH_CONTEXT_MAX_CHARS } from "../src/engine/meaningNo
 import { scanVault } from "../src/vault/pages.js";
 import { withVaultWriteLock } from "../src/git/vaultWriteLock.js";
 import { sealFilingReceipt, renderFilingReceipt, filingReceiptPath, filingInputFingerprint } from "../src/engine/filingReceipt.js";
-import { cp, mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1920,6 +1920,31 @@ describe("BrainEngine", { timeout: 20_000 }, () => {
     expect((await e.enrichEvidence!(input)).filing).toBe("filed");
     expect(await e.inspectInterruptedFiling!()).toMatchObject({ interrupted: false });
     expect((await e.evidenceEnrichInput!(captured.evidenceRef))).toMatchObject({ evidenceRef: captured.evidenceRef, content, source: "whatsapp" });
+  });
+
+  it("files again on the current memory when another writer published while a filing sat interrupted", async () => {
+    const content = "Insurance renewal is in October.";
+    const reconcile = vi.fn(async (request: import("../src/engine/reconciliation.js").ReconciliationInput) => request.ideas.map(idea => ({ kind: "add" as const, ideaIds: [idea.id], sourceIds: idea.sourceIds,
+      sourceQuote: request.sources.find(source => source.id === idea.sourceIds[0])!.text, statement: null, targetId: null, factKey: null, correctionQuote: null, reason: null })));
+    Object.assign(llm, { reconcile });
+    const e = engine(); const captured = await e.captureEvidence!({ content, source: "whatsapp" });
+    const input = { content, source: "whatsapp" as const, evidenceRef: captured.evidenceRef };
+    let calls = 0;
+    await expect(e.enrichEvidence!({ ...input, assertActive: () => { if (++calls >= 6) throw new Error("synthetic crash"); } })).rejects.toThrow("synthetic crash");
+    expect(await e.inspectInterruptedFiling!()).toMatchObject({ interrupted: true, conditions: ["pending_receipt"] });
+    // An agent publishes straight to the vault meanwhile (EPIC-20 A1: E12-S14, E12-S15, E19-U1 on 2026-11-08).
+    const other = await VaultRepo.open({ workdir: join(dir, "other-writer"), remoteUrl: join(dir, "origin.git") });
+    await writeFile(join(other.path, "Areas/Remote.md"), "# Remote\nwritten by another agent\n"); await other.commitAndPublish("remote change");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const refiled = await e.enrichEvidence!(input);
+      expect(refiled.filing).toBe("filed");
+      expect(warn.mock.calls.map(call => String(call[0])).some(line => line.startsWith("[vault-recovery] stale filing plan set aside") && !line.includes("Insurance renewal"))).toBe(true);
+    } finally { warn.mockRestore(); }
+    expect(await e.inspectInterruptedFiling!()).toMatchObject({ interrupted: false });
+    expect(await readFile(join(repo.path, "Areas/Remote.md"), "utf8")).toContain("another agent");
+    expect((await readdir(join(repo.path, ".git", "zenod-stale-filings"))).length).toBe(1);
+    expect((await e.captureEvidence!({ content: "after the conflict", source: "whatsapp" })).evidenceRef).toMatch(/^Log\//);
   });
 
   it("publishes a receipt-less unpublished local commit only when it fast-forwards the authority", async () => {
