@@ -133,13 +133,35 @@ export function buildMatchTerms(query: string, aliasGroups: readonly (readonly s
   const generic = terms.length === 0;
   if (terms.length === 0) terms = [...new Set(content)];
   if (terms.length === 0) terms = [...new Set(words)];
+  // Joined and split spellings (E12-S3d): "Epic Spine" finds "EpicSpine" (adjacent words joined),
+  // "EpicSpine" finds "Epic Spine" / "epic-spine" (camel-case split into a phrase). Each is an OR
+  // alternative of the word it belongs to, so coverage credits the joined match for both words.
+  const alts = new Map<string, Set<string>>();
+  const addAlt = (term: string, clause: string) => {
+    if (!alts.has(term)) alts.set(term, new Set());
+    alts.get(term)!.add(clause);
+  };
+  for (let i = 0; i + 1 < words.length; i++) {
+    const [a, b] = [words[i]!, words[i + 1]!];
+    if (!terms.includes(a) || !terms.includes(b) || a === b) continue;
+    addAlt(a, quote(a + b));
+    addAlt(b, quote(a + b));
+  }
+  for (const raw of query.normalize("NFKC").match(/[\p{L}\p{N}]+/gu) ?? []) {
+    const split = normalize(raw.replace(/(\p{Ll}|\p{N})(\p{Lu})/gu, "$1 $2"));
+    const joined = normalize(raw);
+    if (split !== joined && split.includes(" ") && terms.includes(joined)) addAlt(joined, quote(split));
+  }
   const clauses = new Set<string>();
+  const termClauses: string[] = [];
   for (const term of terms) {
     // Light, language-neutral stemming: "visits"/"quotes" → visit*/quote*. No Porter (English-only).
     const stem = term.length >= 5 && term.endsWith("s") ? term.slice(0, -1) : term;
-    clauses.add(stem.length >= 4 ? `${quote(stem)}*` : quote(stem));
+    const clause = stem.length >= 4 ? `${quote(stem)}*` : quote(stem);
+    const own = [clause, ...(alts.get(term) ?? [])];
+    for (const c of own) clauses.add(c);
+    termClauses.push(own.length > 1 ? `(${own.join(" OR ")})` : clause);
   }
-  const termClauses = [...clauses];
   const padded = ` ${normalized} `;
   for (const group of aliasGroups) {
     const members = group.map(normalize).filter(Boolean);
