@@ -82,6 +82,10 @@ export interface TaskJobInput {
   senderTimestamp?: string;
   /** media_ingest: optional filing hints. */
   mediaHints?: string[];
+  /** media_ingest (EPIC-21 V1): the app a forwarded voice note was recorded in, e.g. "EpicTeam Chat". */
+  sourceApp?: string;
+  /** media_ingest (EPIC-21 V1): the OAuth client that forwarded it; its own subscriptions are not told about it. */
+  forwardedBy?: string;
   /** enrich_memory: exact already-committed immutable evidence entry. */
   evidenceRef?: string;
   /** desk_job (EPIC-14 S3): the person's request, in their words. */
@@ -103,6 +107,8 @@ export interface MediaIngestReceipt {
     senderTimestamp?: string;
     contentHint?: string;
     hints?: string[];
+    /** EPIC-21 V1: the app a forwarded voice note came from. */
+    app?: string;
   };
   rawArtifact: {
     handle: string | null;

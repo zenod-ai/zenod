@@ -4,6 +4,7 @@ import type { Context, Hono } from "hono";
 import type { Runtime } from "./runtime.js";
 import {
   deliveryJson,
+  FORWARD_SCOPE,
   SUBSCRIBER_EVENT,
   SubscriberUrlError,
   subscriberUrlPolicyFromEnv,
@@ -21,7 +22,7 @@ import {
 
 export const SUBSCRIBER_ACTOR_HEADER = "x-zenod-actor";
 
-export function apiError(c: Context, status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 503, code: string, message: string, extra: Record<string, unknown> = {}): Response {
+export function apiError(c: Context, status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 503, code: string, message: string, extra: Record<string, unknown> = {}): Response {
   return c.json({ error: { code, message, ...extra } }, status);
 }
 
@@ -54,10 +55,26 @@ export function mountSubscriberRoutes(
     return store.list().map((sub) => ({ ...subscriptionJson(store.view(sub)), deliveries: store.deliveries(sub.id).map(deliveryJson) }));
   };
 
+  // EPIC-21 V1: apps allowed to forward their voice notes in. They hold a grant, not a subscription, so they are listed apart.
+  const forwarders = () => runtime.subscribers!.grants()
+    .filter((grant) => grant.scope.split(/\s+/).includes(FORWARD_SCOPE))
+    .map((grant) => ({ grant_id: grant.id, name: grant.clientName, scope: grant.scope, account: grant.account, created_at: grant.createdAt }));
+
   app.get("/api/subscribers", (c) => {
     if (!runtime.subscribers) return subscribersDisabled(c);
     runtime.subscribers.pruneDeliveries();
-    return c.json({ subscribers: views(), event: SUBSCRIBER_EVENT });
+    return c.json({ subscribers: views(), forwarders: forwarders(), event: SUBSCRIBER_EVENT });
+  });
+
+  app.delete("/api/subscribers/forwarders/:grantId", (c) => {
+    const store = runtime.subscribers;
+    if (!store) return subscribersDisabled(c);
+    const grant = store.grant(c.req.param("grantId"));
+    if (!grant || !grant.scope.split(/\s+/).includes(FORWARD_SCOPE)) return apiError(c, 404, "not_found", "No such forwarding app.");
+    // The token stops at once; a subscription made with the same grant goes with it.
+    for (const sub of store.forGrant(grant.id)) runtime.subscriberDispatcher?.cancel(sub.id);
+    store.revokeGrant(grant.id);
+    return c.body(null, 204);
   });
 
   app.post("/api/subscribers", async (c) => {

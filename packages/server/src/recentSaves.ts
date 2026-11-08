@@ -127,7 +127,10 @@ export function projectRecentSave(job: TaskJob, enrichment: TaskJob | null): Rec
     savedAt: new Date(job.createdAt).toISOString(),
     channel,
     kind,
-    channelLabel: channel === "connector" || channel === "app" ? CHANNEL_LABEL[channel] : `${CHANNEL_LABEL[channel]} ${kind}`,
+    // EPIC-21 V1: a voice note forwarded from another app is labelled with that app.
+    channelLabel: job.input.sourceApp
+      ? `${job.input.sourceApp} ${kind}`
+      : channel === "connector" || channel === "app" ? CHANNEL_LABEL[channel] : `${CHANNEL_LABEL[channel]} ${kind}`,
     snippet: snippet(job.kind === "media_ingest" ? job.input.providedTranscript : job.input.content, KIND_FALLBACK[kind]),
   };
   if (job.status === "queued" || job.status === "running") {

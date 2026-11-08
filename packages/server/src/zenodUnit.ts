@@ -453,6 +453,8 @@ function hostedCustomerHttpAllowed(method: string, path: string): boolean {
   // agent_team E42-S22: the Subscribers tab (pause, test, remove one subscriber).
   if ((normalizedMethod === "PATCH" || normalizedMethod === "DELETE") && /^\/api\/subscribers\/sub_[A-Za-z0-9_-]+$/.test(path)) return true;
   if (normalizedMethod === "POST" && /^\/api\/subscribers\/sub_[A-Za-z0-9_-]+\/test$/.test(path)) return true;
+  // EPIC-21 V1: remove an app that forwards voice notes in.
+  if (normalizedMethod === "DELETE" && /^\/api\/subscribers\/forwarders\/grt_[A-Za-z0-9_-]+$/.test(path)) return true;
   return normalizedMethod === "POST" && /^\/api\/ingest\/jobs\/[^/]+\/(retry|cancel)$/.test(path);
 }
 
