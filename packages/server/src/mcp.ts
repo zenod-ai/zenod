@@ -48,6 +48,7 @@ import {
   GET_INGEST_RESULT_SHAPE,
   READ_LLM_TIMELINE_SHAPE,
   GET_MEMORY_SHAPE,
+  MEMORY_CLOUD_SHAPE,
   INGEST_MEMORY_SHAPE,
   SEARCH_MEMORY_SHAPE,
   V4_FIND_ISSUE_SHAPE,
@@ -1042,6 +1043,37 @@ export function buildMcpServer(
         ],
         structuredContent: { ...note, ...placement },
       };
+    },
+  );
+
+  server.registerTool(
+    "memory_cloud",
+    {
+      title: "Memory cloud",
+      description:
+        "Follow the strong links in the user's memory. Each memory (a vault page or a captured entry) links to others with a strength from 0 to 1, set by how it was filed, cited, linked and placed in the memory tree. Starting from a question's best matching memories (query) or from one memory (path), this walks the links and multiplies their strengths along each path, keeping every memory whose path stays at or above the threshold (default 0.8): 1.0, then 0.9, then 0.95 gives 0.855, kept. Returns the memories strongest first, each with its node id, strength, hops, the path walked and its evidence reference for get_memory, plus the links between them. Suited to gathering what is closely tied to a topic without reading weakly related notes.",
+      inputSchema: MEMORY_CLOUD_SHAPE,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ query, path, threshold, maxNodes }) => {
+      const engine = await getEngine();
+      if (!query && !path) {
+        return { content: [{ type: "text", text: "Give a query or a path to start the cloud from." }], structuredContent: { code: "invalid_request", message: "query or path is required" }, isError: true };
+      }
+      const cloud = engine.memoryCloud
+        ? await engine.memoryCloud({ ...(path ? { center: path } : { query: query! }), ...(threshold !== undefined ? { threshold } : {}), ...(maxNodes ? { maxNodes } : {}) })
+          .catch((error: unknown) => { if (error instanceof Error && error.name === "NoteNotFoundError") return undefined; throw error; })
+        : null;
+      if (cloud === undefined) {
+        return { content: [{ type: "text", text: `No memory at ${path}.` }], structuredContent: { code: "not_found", message: `No memory at ${path}.` }, isError: true };
+      }
+      if (cloud === null) {
+        return { content: [{ type: "text", text: "The memory index is not available on this vault yet." }], structuredContent: { code: "unavailable", message: "no memory index" }, isError: true };
+      }
+      const text = cloud.nodes.length === 0
+        ? `No memory is tied strongly enough (threshold ${cloud.threshold}).`
+        : cloud.nodes.map((node) => `${Math.round(node.strength * 100)}% ${node.path} (${node.id}, ${node.hops} hop${node.hops === 1 ? "" : "s"}${node.via ? ` via ${node.via}` : ""}) — ${node.title}`).join("\n");
+      return { content: [{ type: "text", text }], structuredContent: { ...cloud } };
     },
   );
 

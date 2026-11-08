@@ -181,6 +181,7 @@ describe("Zenod chassis unit", () => {
       "get_memory",
       "get_task_result",
       "list_drive_files",
+      "memory_cloud",
       "read_llm_timeline",
       "search_memory",
     ]);

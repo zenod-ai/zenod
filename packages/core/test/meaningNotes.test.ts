@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { candidatePages, relevantLinks, classifyCandidates, composeFocusedPage, SUMMARY_MAX_CHARS, boundExistingSummary, appendAliasEvidence } from "../src/engine/meaningNotes.js";
 import { parseNote, serializeNote } from "../src/vault/frontmatter.js";
+import { derivedNodeId } from "../src/vault/memoryWeights.js";
 import { scanVault } from "../src/vault/pages.js";
 import type { BrainLlm, ComposePageInput } from "../src/llm/types.js";
 const dirs: string[] = [];
@@ -29,6 +30,16 @@ describe("focused meaning notes", () => {
     expect(parsed.body).toContain("Old policy remains.");
     expect(parsed.frontmatter!.custom).toEqual({ retained: true });
     expect(String(parsed.frontmatter!.summary).length).toBeLessThanOrEqual(SUMMARY_MAX_CHARS);
+  });
+  it("gives a page its node id once and keeps it, never taking one from the model (E18-W1)", async () => {
+    const created = await composeFocusedPage(llm(async () => serializeNote({ ...fm, zid: "p-forged0001" }, `## Travel\n\nApril renewal ${citation}.\n`)), input(null));
+    expect(parseNote(created).frontmatter!.zid).toBe(derivedNodeId("Areas/Insurance.md"));
+    const kept = serializeNote({ ...fm, zid: "p-insurance1" }, "## Travel\n\nOld policy remains.\n");
+    const updated = await composeFocusedPage(llm(async (value) => {
+      const parsed = parseNote(value.currentContent!);
+      return serializeNote(parsed.frontmatter!, parsed.body + `\nNew renewal (${value.citation}).\n`);
+    }), input(kept));
+    expect(parseNote(updated).frontmatter!.zid).toBe("p-insurance1");
   });
   it("rejects destructive section edits, malformed output, unbounded summary and missing new evidence", async () => {
     const current = serializeNote(fm, "## Travel\n\nOriginal claim [[2026-06-10#^e-7f3a2c]].\n");

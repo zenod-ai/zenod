@@ -43,6 +43,7 @@ export const MEMORY_TOOLS: ReadonlyArray<{
 }> = [
   { name: "search_memory", title: "Search memory", does: "Finds entries in your vault by words, category or date, with their paths and sources.", access: "Reads" },
   { name: "get_memory", title: "Get memory", does: "Opens one note from your vault.", access: "Reads" },
+  { name: "memory_cloud", title: "Memory cloud", does: "Follows the strong links around a topic and returns the memories tied to it, strongest first.", access: "Reads" },
   { name: "ask_brain", title: "Ask the brain", does: "Answers a question across many notes and cites the vault pages it used.", access: "Reads" },
   { name: "store_memory", title: "Store memory", does: "Saves something new: keeps the original as evidence and files it onto the right page.", access: "Writes" },
   { name: "ingest_memory", title: "Ingest memory artifact", does: "Files a voice note, screenshot, PDF or link: keeps the original and files what it says onto the right pages.", access: "Writes" },

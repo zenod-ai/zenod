@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`hosted customer MCP tool surface > gives an OAuth directory connector only the seven memory tools, each with a title, hints and a describing description 1`] = `
+exports[`hosted customer MCP tool surface > gives an OAuth directory connector only the eight memory tools, each with a title, hints and a describing description 1`] = `
 [
   {
     "annotations": {
@@ -56,6 +56,17 @@ exports[`hosted customer MCP tool surface > gives an OAuth directory connector o
     "description": "Queue a file or link for the user's memory: audio and voice notes, screenshots and images, PDFs and documents, or web links, given as a fetchable URL or a handle the caller has already staged. Zenod archives the original, transcribes or extracts its content, records that as evidence and files the meaning into the vault. Google Drive file references are not accepted on Zenod Hosted, where Drive is the archive. Runs in the background: the call returns a jobId at once, and get_task_result returns the receipt (archived original, transcript or extraction, evidence reference, pages touched, saved revision and links) or a structured error.",
     "name": "ingest_memory",
     "title": "Ingest memory artifact",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Follow the strong links in the user's memory. Each memory (a vault page or a captured entry) links to others with a strength from 0 to 1, set by how it was filed, cited, linked and placed in the memory tree. Starting from a question's best matching memories (query) or from one memory (path), this walks the links and multiplies their strengths along each path, keeping every memory whose path stays at or above the threshold (default 0.8): 1.0, then 0.9, then 0.95 gives 0.855, kept. Returns the memories strongest first, each with its node id, strength, hops, the path walked and its evidence reference for get_memory, plus the links between them. Suited to gathering what is closely tied to a topic without reading weakly related notes.",
+    "name": "memory_cloud",
+    "title": "Memory cloud",
   },
   {
     "annotations": {

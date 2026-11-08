@@ -32,6 +32,14 @@ export const GET_MEMORY_SHAPE = {
   path: z.string().min(1).describe("Vault-relative path, e.g. Areas/Insurance.md, or an exact evidence reference, e.g. Log/2026-08-01.md#^e-123abc"),
 };
 
+/** memory_cloud (E18-W1): the weighted cloud around a question or one memory. */
+export const MEMORY_CLOUD_SHAPE = {
+  query: z.string().min(1).optional().describe("A question or topic: the cloud grows from its best matching memories."),
+  path: z.string().min(1).optional().describe("Or one memory to start from: a vault path (Areas/House.md) or an evidence reference (Log/2026-08-01.md#^e-123abc)."),
+  threshold: z.number().min(0).max(1).optional().describe("Keep a memory while the multiplied link strength along its path stays at or above this (0 to 1). Defaults to 0.8."),
+  maxNodes: z.number().int().min(1).max(60).optional().describe("At most this many memories, the starting ones included. Defaults to 12."),
+};
+
 export const ASK_BRAIN_SHAPE = {
   question: z.string().min(1).describe("The question, in natural language"),
   contextRefs: z

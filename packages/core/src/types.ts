@@ -1,6 +1,6 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
 import type { MemoryTreeOutline } from "./vault/treeOutline.js";
-import type { MemoryIndexStats, MemoryNoteLinks } from "./vault/memoryIndex.js";
+import type { MemoryCloud, MemoryCloudRequest, MemoryIndexStats, MemoryNoteLinks } from "./vault/memoryIndex.js";
 import type { MemoryGraphView } from "./vault/memoryGraph.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
@@ -588,6 +588,12 @@ export interface BrainEngine {
    * unresolved throws an error named NoteNotFoundError.
    */
   memoryGraph?(request?: { center?: string | null; limit?: number; lit?: readonly string[] | null }): Promise<MemoryGraphView | null>;
+  /**
+   * The weighted cloud (E18-W1): the memories a question's best matches (or one memory, `center`)
+   * reach along links whose multiplied strength stays at or above `threshold` (default 0.8). Null
+   * when this engine has no tier-0 index; an unknown `center` throws NoteNotFoundError.
+   */
+  memoryCloud?(request: MemoryCloudRequest): Promise<MemoryCloud | null>;
   /** Deterministic retrieval of immutable memory entries by structural metadata. */
   searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
   /** Internal tenant/vault boundary for entry pagination; never a client parameter. */

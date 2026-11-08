@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { BrainLlm, Classification, ClassifyInput, ComposePageInput } from "../llm/types.js";
 import { searchVault } from "../ops/search.js";
 import { parseNote, serializeNote } from "../vault/frontmatter.js";
+import { derivedNodeId } from "../vault/memoryWeights.js";
 import { extractCitations, pageRevision, catalogSections, SUMMARY_MAX_CHARS, type PageIndexEntry, type VaultSnapshot } from "../vault/pages.js";
 import { buildTreeIndex, type TreeIndex } from "../vault/tree.js";
 
@@ -322,7 +323,9 @@ export async function composeFocusedPage(llm: Pick<BrainLlm, "composePage">, inp
     classification: { ...input.classification, pages: input.classification.pages.map((page) => page.path === input.path ? { ...page, action: original ? "update" : "create" } : page) } });
   const next = parseNote(raw);
   // Model-authored frontmatter may not bypass the explicit quote validation below.
-  if (next.frontmatter) { delete next.frontmatter.memoryFacts; delete next.frontmatter.aliasEvidence; delete next.frontmatter.aliases; }
+  if (next.frontmatter) { delete next.frontmatter.memoryFacts; delete next.frontmatter.aliasEvidence; delete next.frontmatter.aliases; delete next.frontmatter.zid; }
+  // The page's node id in the weighted memory graph (E18-W1): set once, kept through renames and updates.
+  const zid = typeof original?.frontmatter?.zid === "string" && original.frontmatter.zid.trim() ? original.frontmatter.zid : derivedNodeId(input.path);
   const title = String(original?.frontmatter?.title ?? next.frontmatter?.title ?? "");
   const aliasEvidence = validatedAliases(input.classification.pages.find((page) => page.path === input.path), title, input.evidenceEntry, input.citation);
   const existingAliases = Array.isArray(original?.frontmatter?.aliasEvidence) ? original.frontmatter.aliasEvidence : [];
@@ -330,7 +333,7 @@ export async function composeFocusedPage(llm: Pick<BrainLlm, "composePage">, inp
   if (!next.frontmatter || typeof next.frontmatter.summary !== "string" || !next.frontmatter.summary.trim()
     || Array.from(next.frontmatter.summary).length > SUMMARY_MAX_CHARS || /[\r\n]/.test(next.frontmatter.summary)) return "Invalid composed summary budget or frontmatter.\n";
   if (!next.body.includes(input.citation)) return "Composition omitted the assigned evidence citation.\n";
-  if (!original) return serializeNote({ ...next.frontmatter, description: next.frontmatter.summary, ...(aliases.length ? { aliasEvidence: aliases } : {}) }, next.body);
+  if (!original) return serializeNote({ ...next.frontmatter, description: next.frontmatter.summary, ...(aliases.length ? { aliasEvidence: aliases } : {}), zid }, next.body);
   // A section update may add claims, but may not erase/rephrase any old claim, link, or citation.
   const oldLines = (section?.text ?? "").split("\n").filter((line) => line.trim());
   let offset = 0;
@@ -349,7 +352,7 @@ export async function composeFocusedPage(llm: Pick<BrainLlm, "composePage">, inp
   const history = Array.from(priorSummary).length > SUMMARY_MAX_CHARS && !body.includes(priorSummary)
     ? `\n\n## Previous summary\n\n${priorSummary}\n` : "";
   return serializeNote({ ...original.frontmatter, updated: input.today, summary: next.frontmatter.summary,
-    description: next.frontmatter.summary, ...(aliases.length ? { aliasEvidence: aliases } : {}) }, body + history);
+    description: next.frontmatter.summary, ...(aliases.length ? { aliasEvidence: aliases } : {}), zid }, body + history);
 }
 
 /** Shorten only a touched legacy summary and retain its exact former text in the body. */

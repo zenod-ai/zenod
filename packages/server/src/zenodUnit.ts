@@ -93,6 +93,7 @@ export const HOSTED_CUSTOMER_MCP_TOOLS = Object.freeze([
   "get_memory",
   "get_task_result",
   "ingest_memory",
+  "memory_cloud",
   "search_memory",
   "store_memory",
 ] as const);
@@ -361,6 +362,7 @@ export const ZENOD_READ_TOOLS = [
   "get_memory",
   "get_task_result",
   "list_drive_files",
+  "memory_cloud",
   "read_llm_timeline",
   "search_memory",
 ] as const;
