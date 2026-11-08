@@ -79,7 +79,8 @@ export function startDeskJob(inbox: InboxStore, queue: DeskQueue, request: strin
   return inbox.post({
     kind: "job", from: DESK_FROM, sourceKey: jobKey(job.id),
     title: options.plan?.title ?? deskTitle(text),
-    body: options.plan ? `You said yes to the plan. "${clip(text, 300)}"` : `"${clip(text, 300)}"`,
+    // The request in full under its title, unless the title already holds all of it.
+    ...(options.plan ? { body: `You said yes to the plan. "${clip(text, 300)}"` } : deskTitle(text).endsWith("…") || text.includes("\n") ? { body: `"${clip(text, 300)}"` } : {}),
     step: "Waiting for its turn",
   });
 }
