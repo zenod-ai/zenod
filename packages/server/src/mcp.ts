@@ -66,6 +66,7 @@ import {
 } from "./mcpToolSchemas.js";
 import { evidence, type ToolResponse, toolResponse, toMcpToolResult } from "./toolOutput.js";
 import { storeReceiptHeadline } from "./recentSaves.js";
+import { rankHits } from "./rankedMemory.js";
 
 /**
  * The long tools (task_brain, run_task, store_memory) run a multi-minute LLM
@@ -953,14 +954,15 @@ export function buildMcpServer(
     {
       title: "Search memory",
       description:
-        "Search the user's memory vault and return matching notes and captured entries, each with its vault path, capture time, source and evidence reference. A query matches literal words in titles and text; filters narrow results by source, content type and capture date, and order sorts them by newest, oldest or relevance. Without a query, entries are listed by filters alone. Each entry's capturedAt is the original capture time; Log headings can show the later processing time. Entries are paginated: hasMore and nextCursor return the next page for the same query, filters and order, until the vault changes or the server restarts. Note hits are a separate ranked top 20 that ignores entry filters. Each result carries its place in the memory tree, and its evidence reference opens with get_memory.",
+        "Search the user's memory vault and return matching notes and captured entries, each with its vault path, capture time, source and evidence reference. A query matches literal words in titles and text; filters narrow results by source, content type and capture date, and order sorts them by newest, oldest or relevance. Without a query, entries are listed by filters alone. Each entry's capturedAt is the original capture time; Log headings can show the later processing time. Entries are paginated: hasMore and nextCursor return the next page for the same query, filters and order, until the vault changes or the server restarts. Note hits are a separate ranked top 20 (hitLimit narrows it, e.g. to the top 5) that ignores entry filters; each note hit has its rank, a matchPercent from 1 to 100 (half how much of the query it contains, weighted by word rarity, half its strength relative to the best hit; relative to this query, not a probability), its vault url (GitHub or Google Drive) and appPath, the path that opens it in the Zenod app. Each result carries its place in the memory tree, and its evidence reference opens with get_memory.",
       inputSchema: SEARCH_MEMORY_SHAPE,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ query, source, sourceId, contentType, capturedAfter, capturedBefore, order, limit, cursor }) => {
+    async ({ query, source, sourceId, contentType, capturedAfter, capturedBefore, order, limit, cursor, hitLimit }) => {
       const engine = await getEngine();
       const timed = query ? engine.searchTimed ? await engine.searchTimed(query) : { hits: await engine.search(query), tier: "scan" as const, ms: null } : null;
-      const rankedHits = timed?.hits ?? [];
+      // E12-S3a: rank, matchPercent and appPath are additive; existing hit fields are unchanged.
+      const rankedHits = rankHits((timed?.hits ?? []).slice(0, hitLimit ?? undefined));
       const tree = rankedHits.length ? await loadTree(engine) : null;
       const hits = await Promise.all(rankedHits.map(async (hit) => {
         const { placement, lineage, evidenceRefs } = await lineageFields(tree, hit.path);
@@ -984,7 +986,7 @@ export function buildMcpServer(
       const noteText = hits.length === 0
         ? query ? `No note paths match '${query}'.` : ""
         // Tree lineage stays in structured output only (E9-5j, root L-6): the text is as before EPIC-9.
-        : hits.map((hit) => `${hit.path} (score ${hit.score}) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}`).join("\n");
+        : hits.map((hit) => `${hit.path} (score ${hit.score}, ${hit.matchPercent}% match) — ${hit.snippet}${hit.url ? `\n  ${hit.url}` : ""}\n  app: ${hit.appPath}`).join("\n");
       if (timed?.ms != null && rankedHits.length) {
         console.info(`[memory-search] ${timed.tier === "index" ? "tier-0 index" : "scan"}, ${timed.ms} ms${"index" in timed && timed.index ? ` (${timed.index.rows} rows, ${(timed.index.bytes / 1_048_576).toFixed(1)} MB)` : ""}`);
       }

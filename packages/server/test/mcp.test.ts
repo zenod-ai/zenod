@@ -618,6 +618,33 @@ describe("MCP endpoint", () => {
     }
   });
 
+  it("search_memory ranks the top hits with a match percentage and links; hitLimit narrows them (E12-S3a)", async () => {
+    const original = fakeEngine.search;
+    fakeEngine.search = async () => [9, 7, 4.5, 3, 2, 1].map((score, i) => ({
+      path: `Notes/Hit ${i + 1}.md`, snippet: `hit ${i + 1}`, score, url: `https://github.com/o/r/blob/main/Notes/Hit%20${i + 1}.md`, provider: "github" as const,
+    }));
+    const client = await connect();
+    try {
+      const all = await client.callTool({ name: "search_memory", arguments: { query: "hit" } });
+      expect((all.structuredContent as { hits: unknown[] }).hits).toHaveLength(6);
+      const top = await client.callTool({ name: "search_memory", arguments: { query: "hit", hitLimit: 5 } });
+      const hits = (top.structuredContent as { hits: Array<{ rank: number; matchPercent: number; url: string; appPath: string; path: string }> }).hits;
+      expect(hits.map((hit) => hit.rank)).toEqual([1, 2, 3, 4, 5]);
+      // The scan fallback has no coverage figure: strength vs the best hit (9) alone.
+      expect(hits.map((hit) => hit.matchPercent)).toEqual([100, 78, 50, 33, 22]);
+      expect(hits[0]).toMatchObject({ url: "https://github.com/o/r/blob/main/Notes/Hit%201.md", appPath: "/#memory?path=Notes%2FHit%201.md" });
+      expect(validateToolResponse("zenod.search_memory", top.structuredContent)).toBeTruthy();
+      const text = top.content.map((item) => (item as { text: string }).text).join("\n");
+      expect(text).toContain("Notes/Hit 2.md (score 7, 78% match) — hit 2");
+      expect(text).toContain("app: /#memory?path=Notes%2FHit%202.md");
+      const bad = await client.callTool({ name: "search_memory", arguments: { query: "hit", hitLimit: 0 } });
+      expect(bad.isError).toBe(true);
+    } finally {
+      fakeEngine.search = original;
+      await client.close();
+    }
+  });
+
   it("search_memory and store_memory round-trip", async () => {
     const client = await connect();
 
@@ -625,8 +652,11 @@ describe("MCP endpoint", () => {
     expect(JSON.stringify(search.structuredContent)).toContain("Areas/Insurance.md");
     // An engine without a memory tree (and every vault before E9-2c) reports unplaced hits, unchanged ranking.
     expect((search.structuredContent as { hits: unknown[] }).hits).toEqual([
-      { path: "Areas/Insurance.md", snippet: "about insurance", score: 9, githubUrl: "", placement: "unplaced", lineage: [], evidenceRefs: [] },
+      // E12-S3a: rank, matchPercent and appPath are additive; every earlier field is unchanged.
+      { path: "Areas/Insurance.md", snippet: "about insurance", score: 9, githubUrl: "", rank: 1, matchPercent: 100, appPath: "/#memory?path=Areas%2FInsurance.md", placement: "unplaced", lineage: [], evidenceRefs: [] },
     ]);
+    const searchText = search.content.map((item) => (item as { text: string }).text).join("\n");
+    expect(searchText).toContain("Areas/Insurance.md (score 9, 100% match) — about insurance");
     const plain = await client.callTool({ name: "get_memory", arguments: { path: "Areas/Insurance.md" } });
     expect(plain.structuredContent).toMatchObject({ path: "Areas/Insurance.md", placement: "unplaced", lineage: [], parent: null, children: [] });
 

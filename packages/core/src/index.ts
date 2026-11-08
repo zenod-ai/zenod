@@ -68,6 +68,7 @@ export { lintTree, lintTreeIndex, type TreeLintIssue, type TreeLintReport, type 
 export { seedTreeFiles, renderTreeFile, renderRootPage, type SeedNode, type SeedFile } from "./vault/treeSeed.js";
 export { heat as treeHeat, jaccard, matchRootIds, newRootId } from "./engine/treeIdentity.js";
 export { memoryTreeOutline, pageCaptureDate, type MemoryTreeOutline, type MemoryTreeOutlineNode, type MemoryTreeCapture } from "./vault/treeOutline.js";
+export { idfOf, matchPercent, monotonic, withMatchPercent, type MatchInput } from "./vault/matchPercent.js";
 export { MemoryIndex, MemoryIndexTenantError, type MemoryIndexHit, type MemoryIndexOptions, type MemoryIndexStats } from "./vault/memoryIndex.js";
 export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryLineage, type MemoryTreeNodeView, type LineageNode } from "./vault/lineage.js";
 export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } from "./engine/treePlacement.js";

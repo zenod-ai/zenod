@@ -51,6 +51,7 @@ import { cleanupLegacyManagedAi } from "./legacyManagedAiCleanup.js";
 import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
+import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import {
   checkoutEnabledForOwner,
@@ -1344,6 +1345,26 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     } catch (error) {
       console.warn(`[memory-tree] console tree unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: "memory tree unavailable" }, 503);
+    }
+  });
+
+  // EPIC-12 E12-S3a: ranked retrieval for the signed-in customer's own vault: the top
+  // memories for a question with a match percentage and links (rankedMemory.ts).
+  app.get("/api/console/memory-search", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const query = (c.req.query("q") ?? "").trim();
+    if (!query) return c.json({ error: "q is required" }, 400);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      return c.json(await rankMemories(await runtime.getEngine(), query, Number(c.req.query("limit") ?? RANKED_MEMORY_DEFAULT_LIMIT)));
+    } catch (error) {
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ query, tier: "scan", ms: null, results: [] });
+      console.warn(`[memory-search] console search unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "memory search unavailable" }, 503);
     }
   });
 

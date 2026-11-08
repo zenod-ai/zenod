@@ -28,6 +28,8 @@ const allowedCoreInputs = new Set([
   "evidenceContext.ts",
   "state/sqlite.ts",
   "version.ts",
+  // Pure ranking arithmetic for search_memory (E12-S3a): no imports, no I/O.
+  "vault/matchPercent.ts",
 ]);
 const reachedCoreInputs = inputs
   .filter((input) => input.includes("/core/src/"))

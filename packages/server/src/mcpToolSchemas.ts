@@ -25,6 +25,7 @@ export const SEARCH_MEMORY_SHAPE = {
   capturedBefore: z.string().min(1).optional().describe("Optional inclusive ISO-8601 upper bound for the source capture time."),
   order: z.enum(["newest", "oldest", "relevance"]).optional().describe("Ordering. Defaults to relevance for text queries and newest for structural entry queries."),
   limit: z.number().int().min(1).max(100).optional().describe("Maximum entry page size. Defaults to 20. Note hits retain their independent ranked top-20 contract."),
+  hitLimit: z.number().int().min(1).max(20).optional().describe("Maximum ranked note hits, e.g. 5 for the top five. Defaults to 20."),
 };
 
 export const GET_MEMORY_SHAPE = {
