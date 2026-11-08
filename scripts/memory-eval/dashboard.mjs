@@ -22,6 +22,8 @@ const recorded = existsSync(opt("recorded", join(HERE, "recorded.json"))) ? JSON
 const out = opt("out");
 if (!out) { console.error("--out is required"); process.exit(2); }
 
+// The error rate includes the answer check; before the chat had an answer step (S1b) it cannot be compared.
+const val = (r, key) => (r == null ? null : key === "errorRate" && !r.retrieval?.factsReachAnswer ? null : r[key]);
 const vaultRev = (r) => String(r.vault ?? "").replace(/^private@/, "");
 const latest = (rows) => rows.at(-1) ?? null;
 // One step per change; the newest record wins when a change ran more than once.
@@ -58,7 +60,7 @@ function verdict(metric, from, to) {
 
 function chart(metric) {
   const W = 920, H = 230, L = 44, R = 16, T = 14, B = 46;
-  const vals = steps.flatMap((s) => SERIES.map((se) => s[se.key]?.[metric.key])).filter((v) => v != null);
+  const vals = steps.flatMap((s) => SERIES.map((se) => val(s[se.key], metric.key))).filter((v) => v != null);
   const top = metric.better === "down" ? Math.max(20, Math.ceil(Math.max(...vals, 0) / 10) * 10) : 100;
   const x = (i) => L + (steps.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (steps.length - 1));
   const y = (v) => T + (H - T - B) * (1 - v / top);
@@ -69,8 +71,9 @@ function chart(metric) {
     svg += `<text x="${x(i)}" y="${H - B + 16}" text-anchor="middle" class="ax${s.vaultChange ? " vault" : ""}">${esc(s.short)}</text>`;
     svg += `<text x="${x(i)}" y="${H - B + 30}" text-anchor="middle" class="ax small">${esc((s.at ?? "").slice(11, 16))}</text>`;
   });
+  const used = [];
   for (const se of SERIES) {
-    const pts = steps.map((s, i) => [i, s[se.key]?.[metric.key]]).filter(([, v]) => v != null);
+    const pts = steps.map((s, i) => [i, val(s[se.key], metric.key)]).filter(([, v]) => v != null);
     if (!pts.length) continue;
     svg += `<polyline fill="none" stroke="${se.color}" stroke-width="2" stroke-dasharray="${se.dash}" points="${pts.map(([i, v]) => `${x(i)},${y(v)}`).join(" ")}"/>`;
     for (const [i, v] of pts) {
@@ -78,17 +81,21 @@ function chart(metric) {
       svg += `<g class="pt"><circle cx="${x(i)}" cy="${y(v)}" r="10" fill="transparent"/><circle cx="${x(i)}" cy="${y(v)}" r="4.5" fill="${se.color}" stroke="#fbf8f1" stroke-width="2"/><title>${esc(`${se.name} · ${steps[i].label} (${r.sha})\n${metric.name}: ${v}%\n${metric.detail(r)}`)}</title></g>`;
     }
     const [li, lv] = pts.at(-1);
-    svg += `<text x="${Math.min(x(li) + 8, W - R - 4)}" y="${y(lv) - 8}" class="lab" text-anchor="${x(li) > W - 120 ? "end" : "start"}">${esc(se.name)} ${lv}%</text>`;
+    // End labels never sit on top of each other: a close second one goes below its line.
+    let ly = y(lv) - 8;
+    if (used.some((u) => Math.abs(u - ly) < 14)) ly = y(lv) + 18;
+    used.push(ly);
+    svg += `<text x="${Math.min(x(li) + 8, W - R - 4)}" y="${ly}" class="lab" text-anchor="${x(li) > W - 120 ? "end" : "start"}">${esc(se.name)} ${lv}%</text>`;
   }
   return `${svg}</svg>`;
 }
 
-const first = (k) => steps.find((s) => s[k]) ?? null;
-const last = (k) => [...steps].reverse().find((s) => s[k]) ?? null;
+const first = (k, m) => steps.find((s) => val(s[k], m)) ?? null;
+const last = (k, m) => [...steps].reverse().find((s) => val(s[k], m) != null) ?? null;
 const fmt = (v) => (v == null ? "–" : `${v}%`);
 const bottom = METRICS.map((m) => {
   const parts = SERIES.map((se) => {
-    const a = first(se.key)?.[se.key]?.[m.key], b = last(se.key)?.[se.key]?.[m.key];
+    const a = val(first(se.key, m.key)?.[se.key], m.key), b = val(last(se.key, m.key)?.[se.key], m.key);
     return a == null ? null : `${se.name.toLowerCase()} ${fmt(a)} → ${fmt(b)}, ${verdict(m, a, b)}`;
   }).filter(Boolean);
   return `<li><b>${m.name}</b>: ${parts.join("; ")}</li>`;
@@ -97,11 +104,11 @@ const bottom = METRICS.map((m) => {
 const movers = [];
 for (let i = 1; i < steps.length; i++) {
   for (const se of SERIES) {
-    const prev = [...steps.slice(0, i)].reverse().find((s) => s[se.key]);
-    if (!prev || !steps[i][se.key]) continue;
     for (const m of METRICS) {
-      const v = verdict(m, prev[se.key][m.key], steps[i][se.key][m.key]);
-      if (v.startsWith("better") || v.startsWith("worse")) movers.push(`${steps[i].short}: ${m.name.toLowerCase()} ${v} on the ${se.name.toLowerCase()}`);
+      const prev = [...steps.slice(0, i)].reverse().find((s) => val(s[se.key], m.key) != null);
+      if (!prev || val(steps[i][se.key], m.key) == null) continue;
+      const v = verdict(m, val(prev[se.key], m.key), val(steps[i][se.key], m.key));
+      if (v.startsWith("better") || v.startsWith("worse")) movers.push(`${steps[i].short}: ${m.name.toLowerCase()} ${v} on ${se.key === "demo" ? "the demo vault" : "your real notes"}`);
     }
   }
 }
@@ -110,8 +117,9 @@ const rows = steps.map((s, i) => {
   const cell = (se, m) => {
     const r = s[se.key];
     if (!r) return "–";
-    const prev = [...steps.slice(0, i)].reverse().find((p) => p[se.key]);
-    const v = prev ? verdict(m, prev[se.key][m.key], r[m.key]) : "start";
+    if (val(r, m.key) == null) return `<span class="muted">no answer step to check</span>`;
+    const prev = [...steps.slice(0, i)].reverse().find((p) => val(p[se.key], m.key) != null);
+    const v = prev ? verdict(m, val(prev[se.key], m.key), r[m.key]) : "start";
     return `${fmt(r[m.key])} <span class="${v.split(" ")[0]}">${esc(v)}</span>`;
   };
   return `<tr><td><b>${esc(s.label)}</b><br><span class="muted">${esc(s.what)} · ${esc(s.sha)}${s.pr ? ` · <a href="https://github.com/zenod-ai/zenod/pull/${s.pr.slice(1)}">${esc(s.pr)}</a>` : ""}${s.vaultChange ? ` · vault ${esc(s.privateVault)}` : ""}</span></td>${METRICS.map((m) => `<td>${SERIES.map((se) => `<div><span class="sw" style="background:${se.color}"></span>${cell(se, m)}</div>`).join("")}</td>`).join("")}</tr>`;
@@ -119,7 +127,7 @@ const rows = steps.map((s, i) => {
 
 const rec = recorded.map((r) => `<tr><td>${esc(r.change)}</td><td>${esc(r.suite)}</td><td>${esc(r.value)}</td><td>${r.source.endsWith(".md") ? `<a href="https://github.com/zenod-ai/zenod/blob/main/docs/evidence/${esc(r.source)}">${esc(r.source)}</a>` : esc(r.source)}</td></tr>`).join("");
 
-const newest = last("demo")?.demo ?? last("real")?.real;
+const newest = last("demo", "ingestionSuccess")?.demo ?? last("real", "ingestionSuccess")?.real;
 const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod memory tests</title>
 <style>
 body{font:16px/1.5 system-ui,sans-serif;max-width:980px;margin:32px auto;padding:0 18px;background:#fbf8f1;color:#1d1b17}
