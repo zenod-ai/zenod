@@ -99,6 +99,7 @@ Verified at: 2026-11-03 (child Current States read from main; live health ok, sh
 | memory-answers-quality-check-and-real-life-tests | child | [EPIC-15: Memory answers: quality check and real-life tests](memory-answers-quality-check-and-real-li.md) | none | draft | none | fill Goal, Serves and Done means |
 | one-send-button-the-agent-decides-keep-or-ask | child | [EPIC-16: One Send button: the agent decides keep or ask](one-send-button-the-agent-decides-keep-o.md) | none | draft | none | fill Goal, Serves and Done means |
 | cloud-app-in-the-new-zenod-style | child | [EPIC-17: Cloud app in the new Zenod style](cloud-app-in-the-new-zenod-style.md) | none | draft | none | fill Goal, Serves and Done means |
+| weighted-memory-graph-strengths-path-retrieval-on-the-landing | child | [EPIC-18: Weighted memory graph: strengths, path retrieval, on the landing](weighted-memory-graph-strengths-path-ret.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
