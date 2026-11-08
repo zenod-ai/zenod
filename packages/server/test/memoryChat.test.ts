@@ -60,7 +60,7 @@ describe("answerFromMemory cited memories keep their percentage (E12-S3c)", () =
     const engine = fakeEngine("beta", {
       ask: async () => ({ text: "From [[Notes/beta 8]].", sources: [{ path: "Notes/beta 8.md", title: "beta 8", url: "https://github.com/o/r/blob/main/Notes/beta%208.md", provider: "github" }] }) as unknown as Answer,
     });
-    const more = [...(await engine.search("x"))];
+    const more = [...(await engine.search("x"))].slice(0, 6);
     for (const n of [7, 8, 9]) more.push(hit(`Notes/beta ${n}.md`, 3 - n / 10, { matchPercent: 60 - n }));
     engine.searchTimed = async () => ({ hits: more, tier: "index" as const, ms: 2 });
     const result = await answerFromMemory(engine, "beta plans");
@@ -125,8 +125,9 @@ describe("answerFromMemory (E12-S1)", () => {
     expect(events).toEqual(["memories:5:0", "model", "text:Alpha is in note two [2]", "text: and seven [7]."]);
     expect(seen.map((memory) => memory.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]); // the five shown plus three more
     expect(result).toMatchObject({ answered: true, answer: "Alpha is in note two [2] and seven [7].", checkedBy: "quoted" });
-    expect(result.memories.map((memory) => memory.cited)).toEqual([false, true, false, false, false]);
-    expect(result.alsoCited).toEqual([{ rank: 7, path: "Notes/alpha 7.md", title: "alpha 7", url: "https://github.com/o/r/blob/main/Notes/alpha%207.md", appPath: "/#memory?path=Notes%2Falpha%207.md" }]);
+    // The top 5, plus the cited memory that ranked 7th with its own percentage (E12-S3c).
+    expect(result.memories.map((memory) => [memory.rank, memory.cited])).toEqual([[1, false], [2, true], [3, false], [4, false], [5, false], [7, true]]);
+    expect(result.alsoCited).toEqual([]);
     expect(engine.askCalls).toHaveLength(0);
     expect(engine.storeCalls).toHaveLength(0);
   });
