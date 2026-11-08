@@ -23,7 +23,7 @@ Goal sentence: A plan at one link for personas, an inbox and calling your memory
 ## Done means
 
 - [ ] E14-1 One plan at one URL Jordi can open: personas that wake on your memory, the inbox of decisions and findings, the voice-note and call buttons (library hotline), bootstrap in Zenod versus merge with Epic Team, what stays separate (voice-note ingestion), and whether Zenod rests on EpicSpine.
-- [ ] E14-2 Jordi approves the plan (coded ask), and its build steps become rows here.
+- [x] E14-2 Jordi approves the plan (coded ask), and its build steps become rows here. (E14-A2 APPROVED 2026-11-08, 8df02cb2)
 
 ## Current State
 
@@ -32,9 +32,9 @@ Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: nobody
+Waiting on: none ; S6 will need an OpenAI account for Zenod when it starts
 Approved work: none
-Next action: Jordi answers E14-A2; then the seven build steps become rows
+Next action: S1 voice note button and S2 inbox in parallel ; then S3 memory desk
 Source revision: uncommitted scaffold
 Verified at: 2026-11-08
 
@@ -46,7 +46,7 @@ Verified at: 2026-11-08
 
 ## Waiting on
 
-- [answered E14-A2 2026-11-08 @Jordi] Is this the plan for personas, the inbox, calling your memory and the memory desk? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — now 15 slides. New since your voice note of 16:09: a memory desk — when you ask for a job on the memory (like untangling Idealista and Poly-Maker) instead of saving or asking, Zenod hands it to an agent; each job is one change you can undo, it never rewrites your words or deletes, big jobs show a plan card first, and progress and results land in your inbox; no new "Epic Memory" product, Zenod stays, and it copies Epic Team's desk, personas, inbox, voice call and activity screens now (a shared package later for the voice and question card). Seven build steps, about four weeks, the memory desk is step 3. We recommend WhatsApp does not start memory jobs directly for now: a job asked on WhatsApp shows in your inbox as "run it?", so WhatsApp replies stay as they are — context: your voice notes of 8 Nov 15:51 and 16:09 — impact: yes turns the seven steps into rows and starts the first — risk: low, each step ships alone; calls cost a few cents a minute, capped — recommend: approve — why Jordi: it shapes what Zenod becomes — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/) — answer: APPROVED
+- [answered E14-A2 2026-11-08 @Jordi · done 2026-11-08] Is this the plan for personas, the inbox, calling your memory and the memory desk? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — now 15 slides. New since your voice note of 16:09: a memory desk — when you ask for a job on the memory (like untangling Idealista and Poly-Maker) instead of saving or asking, Zenod hands it to an agent; each job is one change you can undo, it never rewrites your words or deletes, big jobs show a plan card first, and progress and results land in your inbox; no new "Epic Memory" product, Zenod stays, and it copies Epic Team's desk, personas, inbox, voice call and activity screens now (a shared package later for the voice and question card). Seven build steps, about four weeks, the memory desk is step 3. We recommend WhatsApp does not start memory jobs directly for now: a job asked on WhatsApp shows in your inbox as "run it?", so WhatsApp replies stay as they are — context: your voice notes of 8 Nov 15:51 and 16:09 — impact: yes turns the seven steps into rows and starts the first — risk: low, each step ships alone; calls cost a few cents a minute, capped — recommend: approve — why Jordi: it shapes what Zenod becomes — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/) — answer: APPROVED — acted: seven build steps added as S1–S7; S1 and S2 dispatched
 - [superseded E14-A1 2026-11-08 by E14-A2] Is this how personas, an inbox and calling your memory should come to Zenod? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — 13 slides: personas that wake nightly on your memory, mostly reading, writing only into their own folder and your inbox, capped at $1 of your $3 monthly allowance; a web inbox of their questions and findings; a voice-note button that goes into the filing Zenod already has; a call button, a "library hotline" that talks to Zenod's answer engine (about 2 to 20 cents a minute, capped); we recommend building it in Zenod and copying Epic Team's screens and code, not merging the two; voice-note ingestion and goals stay separate; Zenod does not rest on EpicSpine; six build steps, about three weeks — context: your voice note of 8 Nov 15:51 asked for a plan at one link before any build — impact: yes turns the six steps into rows and starts the first — risk: low, each step ships alone; the call costs money per minute, capped — recommend: approve — why Jordi: it changes what Zenod is — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/)
 
 ## Issue Ledger
@@ -56,6 +56,13 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | P1 | Ticket worker | run_476d6c3c (round 2) | Plan at one URL: personas, inbox, voice and call buttons, memory desk, Epic Team modules reused, what stays separate (E14-1) | done (fed E14-A2) | none | main (docs, main-direct) | main | [evidence](evidence/e14-p1-2026-11-08.md) | 2026-11-08 | round 2 plan at http://vps3.taild81fbb.ts.net:8921/e14-plan/; waits on E14-A2 |
+| S1 | Ticket worker | unassigned | Voice note button in the cloud chat: record, send into Zenod's existing filing (1–2 d) | ready | none | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | dispatch |
+| S2 | Ticket worker | unassigned | Inbox: one place for persona questions, findings and desk jobs, Working → Done with Undo (2–3 d) | ready | none | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | dispatch |
+| S3 | Ticket worker | unassigned | Memory desk: a job on the memory is a third Send outcome; agent on the job queue, one undoable commit per job, plan card over ~50 memories, results in the inbox; WhatsApp jobs show as "run it?" (4–5 d) | draft | S2; EPIC-16 B1 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S2; EPIC-16 B1 |
+| S4 | Ticket worker | unassigned | Persona runner: personas wake nightly on your memory, mostly reading, writing to their own folder and the inbox, capped at $1 of the $3 allowance (3–4 d) | draft | S2 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S2 |
+| S5 | Ticket worker | unassigned | Three starter personas tried on real notes (2–3 d) | draft | S4 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S4 |
+| S6 | Ticket worker | unassigned | Call button: library hotline over OpenAI Realtime that asks Zenod's answer engine and passes jobs to the desk, cost capped (4–5 d; needs an OpenAI account for Zenod, asked when it starts) | draft | S3 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S3 |
+| S7 | Ticket worker | unassigned | Price and limits for personas, calls and desk jobs (1 d) | draft | S4, S6 | - | main | [plan](http://vps3.taild81fbb.ts.net:8921/e14-plan/) | 2026-11-08 | after S4, S6 |
 
 ## Decisions
 
