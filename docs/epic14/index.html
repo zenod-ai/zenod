@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod plan: personas, an inbox, voice notes and calls</title>
+<!-- EPIC-14 P1 plan page (docs/plan-personas-inbox-voice-and-calls-come.md). Paper deck style, kit copied from
+     ../epic12/design-kit (spec ../epic12/DESIGN-LANGUAGE.md). Plan only: nothing here is built. Demo data only. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="paper.css">
+<style>
+/* page-local patterns: the ruled plan list (from the product deck), the web chat mock, inbox items, two-column line */
+.plan { list-style: none; padding: 0; margin: 2rem 0 0; }
+.plan li { display: grid; grid-template-columns: 3rem minmax(0, 2.2fr) minmax(0, 2.4fr) 6.5rem; gap: 1.25rem; padding: 0.9rem 0; border-top: 1px solid var(--line); font: 400 0.98rem/1.45 var(--sans); color: var(--muted); }
+.plan li.head { padding: 0 0 0.5rem; border-top: 0; font-size: 0.9rem; }
+.plan li.head + li { border-top: 1px solid var(--ink); }
+.plan .k { font: 500 1.6rem var(--serif); color: var(--accent); }
+.plan b { display: block; font: 500 1.2rem/1.25 var(--serif); color: var(--ink); margin-bottom: 0.2rem; }
+.plan .eff { text-align: right; color: var(--ink); }
+@media (max-width: 900px) { .plan li.head { display: none; } .plan li { grid-template-columns: 2.5rem minmax(0, 1fr); } .plan li > :nth-child(3), .plan li > :nth-child(4) { grid-column: 2; text-align: left; } }
+
+.app { display: flex; flex-direction: column; min-height: 22rem; }
+.app-top { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--line); }
+.app-top b { font: 500 1.1rem var(--serif); }
+.app-top .nav { margin-left: auto; display: flex; gap: 1rem; color: var(--muted); font-size: 0.9rem; }
+.app-top .nav .here { color: var(--ink); font-weight: 500; }
+.badge { display: inline-block; min-width: 1.2rem; text-align: center; font: 600 0.75rem/1.2rem var(--sans); border-radius: 999px; background: var(--accent); color: var(--accent-ink); margin-left: 0.3rem; }
+.app .chat { flex: 1; }
+.compose { display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.8rem; border-top: 1px solid var(--line); }
+.compose .field { flex: 1; border: 1px solid var(--line); border-radius: 999px; padding: 0.5rem 0.9rem; color: var(--faint); }
+.btn { border: 1px solid var(--ink); border-radius: 999px; padding: 0.45rem 0.9rem; font: 500 0.88rem var(--sans); background: var(--bg); color: var(--ink); white-space: nowrap; }
+.btn.go-btn { background: var(--ink); color: var(--bg); }
+.btn.call { border-color: var(--accent); color: var(--accent); }
+.btn.live { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.items { list-style: none; padding: 0; margin: 0; }
+.items li { padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); }
+.items .who { font: 500 0.82rem var(--sans); color: var(--muted); }
+.items .what { font: 500 1.05rem/1.35 var(--serif); color: var(--ink); margin: 0.2rem 0 0.5rem; }
+.items .row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.items .kind { float: right; font: 500 0.78rem var(--sans); color: var(--accent); }
+
+.people { list-style: none; padding: 0; margin: 0; }
+.people li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 1rem; padding: 0.8rem 1rem; border-bottom: 1px solid var(--line); }
+.people b { font: 500 1.05rem var(--serif); color: var(--ink); }
+.people small { grid-column: 1; color: var(--muted); }
+.people .sw { grid-row: 1 / span 2; grid-column: 2; align-self: center; font: 500 0.8rem var(--sans); border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 0.15rem 0.6rem; }
+.people .sw.off { border-color: var(--line); color: var(--faint); }
+
+.callbox { text-align: center; padding: 1.5rem 1rem; }
+.callbox .ring2 { width: 5rem; height: 5rem; border-radius: 50%; background: var(--accent); margin: 0.5rem auto 1rem; display: grid; place-items: center; color: var(--accent-ink); font: 500 1.6rem var(--serif); }
+.callbox .t { font: 400 0.82rem var(--sans); color: var(--muted); }
+.lines { text-align: left; font: 400 0.9rem/1.45 var(--sans); margin-top: 1rem; }
+.lines p { margin: 0.35rem 0; }
+.lines .u { color: var(--ink); }
+.lines .h { color: var(--accent); }
+.lines .l { color: var(--faint); font-style: italic; }
+.scene.js.fade .lines, .scene.js.fade .items, .scene.js.fade .chat { opacity: 0; transition: opacity .5s ease; }
+
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(2rem, 4vw, 4rem); margin-top: 2rem; border-top: 1px solid var(--ink); }
+.two > div { padding-top: 1.25rem; }
+.two h3 { margin-bottom: 0.6rem; }
+.two ul { margin: 0; padding-left: 1.1rem; font: 400 0.98rem/1.5 var(--sans); color: var(--muted); }
+.two li { margin: 0.35rem 0; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.answer { font: 400 clamp(1.6rem, 2.6vw, 2.2rem)/1.2 var(--serif); color: var(--accent); margin: 0 0 1rem; }
+td code, p code { font: 500 0.9em var(--sans); }
+</style>
+</head>
+<body>
+
+<!-- Cover -->
+<section class="slide" id="cover">
+  <div class="in split">
+    <div>
+      <p class="no">Zenod, the plan &nbsp;·&nbsp; 8 November 2026</p>
+      <h1>Your memory gets helpers, an inbox and a line you can call.</h1>
+      <p class="lede">Helpers read your memory while you sleep, leave what they find in one inbox, and you can talk to the whole thing by voice.</p>
+      <p class="small">A plan for Jordi to approve before anything is built. Frames marked Live are the product today. Frames marked Coming are not built yet. Every mockup uses demo data.</p>
+    </div>
+    <figure class="shot">
+      <div class="screen app" role="img" aria-label="Mockup of the Zenod web app: a chat with one Send button, a voice note button and a call button, and an inbox showing two items need you">
+        <div class="app-top"><b>Zenod</b><span class="nav"><span class="here">Chat</span><span>Inbox<span class="badge">2</span></span><span>Personas</span><span>Memory</span></span></div>
+        <div class="chat">
+          <div class="b me">When does the boiler service run out?</div>
+          <div class="b them">March 2027. You noted it on 14 March when the engineer came.
+From: Home, Boiler</div>
+        </div>
+        <div class="compose"><span class="field">Say or ask anything</span><span class="btn go-btn">Send</span><span class="btn">Voice note</span><span class="btn call">Call</span></div>
+      </div>
+      <figcaption>Coming. The web chat with the three ways in and the inbox badge. The single Send button is its own epic, already planned.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 1. The four pieces -->
+<section class="slide" id="pieces">
+  <div class="in">
+    <p class="no">1 &nbsp; What you asked for, in four pieces</p>
+    <h2>Four new pieces, and the memory stays a memory.</h2>
+    <ol class="cols4">
+      <li><span class="k">1</span><b>Personas</b>Small helpers that wake on your memory, at night or when something new lands, and look for links, repeats and loose ends. Like dreaming. <span class="tag soon">Coming</span></li>
+      <li><span class="k">2</span><b>Inbox</b>One list of things that need you: a persona asks for a decision, or tells you what it found. <span class="tag soon">Coming</span></li>
+      <li><span class="k">3</span><b>Voice note</b>A record button in the web chat. The note goes through the same filing as a WhatsApp voice note. <span class="tag soon">Coming</span></li>
+      <li><span class="k">4</span><b>Call</b>Call your memory. You talk to a fast hotline voice, and she asks the librarian for anything deep. <span class="tag soon">Coming</span></li>
+    </ol>
+    <p class="small" style="margin-top:2rem;max-width:52rem">What does not change: Zenod keeps no goals, no board of tasks and does not guess what you intend. Your WhatsApp chat keeps replying exactly as today. Everything a persona writes is a memory in your repo, marked with who wrote it.</p>
+  </div>
+</section>
+
+<!-- 2. Personas, for the user -->
+<section class="slide" id="personas">
+  <div class="in split">
+    <div>
+      <p class="no">2 &nbsp; Personas <span class="tag soon">Coming</span></p>
+      <h2>Helpers that read your memory while you sleep.</h2>
+      <p class="lede">You switch a persona on, and it wakes on its own. You never have to ask it.</p>
+      <ul class="facts">
+        <li><b>Night reader:</b> once a night, reads what came in today and links it to older memories. It leaves a short morning note of what it found.</li>
+        <li><b>Librarian:</b> spots two topics that are really one, or a memory filed in the wrong place, and asks you before it moves anything.</li>
+        <li><b>Loose ends:</b> notices things you said you would do and never mentioned again, and tells you once.</li>
+        <li><b>Your own:</b> later, a persona you describe in one paragraph, like a weekly look back at what mattered.</li>
+      </ul>
+    </div>
+    <figure class="shot">
+      <div class="screen" role="img" aria-label="Mockup of the personas screen: three personas with an on or off switch and when each last woke">
+        <div class="app-top"><b>Personas</b><span class="nav"><span>Chat</span><span>Inbox<span class="badge">2</span></span><span class="here">Personas</span><span>Memory</span></span></div>
+        <ul class="people">
+          <li><b>Night reader</b><span class="sw">On</span><small>Woke at 03:10 · read 6 new memories · 1 finding</small></li>
+          <li><b>Librarian</b><span class="sw">On</span><small>Woke at 03:14 · 1 question for you</small></li>
+          <li><b>Loose ends</b><span class="sw off">Off</span><small>Switch on to have it look each Sunday</small></li>
+        </ul>
+        <p class="small" style="padding:0.8rem 1rem;margin:0">This month: 9 cents of your AI allowance used by personas.</p>
+      </div>
+      <figcaption>Coming. Demo data. Each persona is a short file in your own memory, so you can read what it was told to do.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 3. How personas run -->
+<section class="slide" id="run">
+  <div class="in">
+    <p class="no">3 &nbsp; How a persona runs on your memory</p>
+    <h2>Cheap, read-mostly, and only inside your own memory.</h2>
+    <table>
+      <thead><tr><th>Question</th><th>Answer in the plan</th></tr></thead>
+      <tbody>
+        <tr><td>What wakes it</td><td>A nightly window, 02:00 to 06:00 in your time zone, the same window the weekly tree sweep uses today. Optionally when a new memory has been filed. A "wake now" button on its screen. If nothing new came in, it does not wake at all.</td></tr>
+        <tr><td>What it may do</td><td>Search and read your memory. Write only two things: a note under its own folder, marked as written by it, and an item in your inbox. It never edits or deletes what you said, never moves a memory without your yes, never messages anyone, never touches WhatsApp.</td></tr>
+        <tr><td>What it costs</td><td>Each wake is one call to the cheap model Zenod already uses for answers. Reading a night's new memories and the older ones they touch, about 30,000 tokens in and 2,000 out, costs under one cent. Personas get a fixed share of the monthly AI allowance, one dollar of today's three, and stop for the month when it is spent. Each persona also has a cap per wake.</td></tr>
+        <tr><td>Privacy</td><td>A persona runs inside your own account on the Zenod server, with the same model provider your answers already use. It never sees another user's memory and nothing leaves the account. Switching it off stops it at once; its past notes stay, clearly marked, and can be deleted.</td></tr>
+        <tr><td>Many users</td><td>Each account has its own personas and its own queue. Wakes run on Zenod's existing job queue as one new kind of job, spread across the night so users do not all wake at once.</td></tr>
+      </tbody>
+    </table>
+    <p class="small" style="margin-top:1rem">This is deliberately unlike Epic Team, where a persona is a full agent session on a server. A Zenod persona is one short model call, which is what makes it affordable at a few euros a month.</p>
+  </div>
+</section>
+
+<!-- 4. The inbox -->
+<section class="slide" id="inbox">
+  <div class="in split rev">
+    <figure class="shot scene" data-len="10000">
+      <div class="screen" role="img" aria-label="Animation: two items arrive in the inbox, a question from the librarian with yes and no buttons, and a finding from the night reader">
+        <div class="app-top"><b>Inbox</b><span class="nav"><span>Chat</span><span class="here">Inbox<span class="badge">2</span></span><span>Personas</span><span>Memory</span></span></div>
+        <ul class="items">
+          <li class="st" data-at="600"><span class="kind">Question</span><span class="who">Librarian · 03:14</span><p class="what">"Flat" and "Apartment" look like the same place. Join them under Flat?</p><span class="row"><span class="btn go-btn">Yes, join</span><span class="btn">No, keep both</span><span class="btn">Tell me more</span></span></li>
+          <li class="st" data-at="2400"><span class="kind">Finding</span><span class="who">Night reader · 03:10</span><p class="what">You mentioned the dentist three times in two weeks and never booked.</p><span class="row"><span class="btn">Open the memories</span><span class="btn">Got it</span></span></li>
+          <li class="st" data-at="4600" style="color:var(--muted);font:400 0.88rem var(--sans)">Your answer is saved as a memory, so the persona and you both see it later.</li>
+        </ul>
+      </div>
+      <figcaption>Coming. Demo data. Two kinds of item: a question that needs a decision, and a finding you only read.</figcaption>
+    </figure>
+    <div>
+      <p class="no">4 &nbsp; The inbox <span class="tag soon">Coming</span></p>
+      <h2>One place for what needs you.</h2>
+      <ul class="facts">
+        <li><b>Questions:</b> a persona asks before it changes anything, with its recommendation first and two or three buttons.</li>
+        <li><b>Findings:</b> something it noticed. You read it, open the memories behind it, or dismiss it.</li>
+        <li><b>Your answers are memories:</b> each answer is written into your memory repo, so nothing lives only in a database.</li>
+        <li><b>Where you see it:</b> in the web app, with a count on the tab. No WhatsApp messages from personas; that would change what your chat does, so it waits for your own word.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Voice note button -->
+<section class="slide" id="note">
+  <div class="in split">
+    <div>
+      <p class="no">5 &nbsp; The voice note button <span class="tag soon">Coming</span></p>
+      <h2>Record in the browser, filed like a WhatsApp voice note.</h2>
+      <ul class="facts">
+        <li><b>What you do:</b> tap Voice note, talk, tap again. You see the words appear as you speak.</li>
+        <li><b>What Zenod does:</b> the recording goes into the same filing path as a WhatsApp voice note: kept word for word, the audio archived, filed in your tree, with the same receipt.</li>
+        <li><b>Ask or keep:</b> the same rule as the one Send button, decided in its own epic. A question gets an answer; anything else is kept.</li>
+        <li><b>Cost:</b> transcription with the model Zenod already uses, about 0.3 cents a minute.</li>
+      </ul>
+    </div>
+    <figure class="shot scene" data-len="9000">
+      <div class="screen app" role="img" aria-label="Animation: the voice note button records, the words appear, then Zenod says it saved the note and where it filed it">
+        <div class="app-top"><b>Zenod</b><span class="nav"><span class="here">Chat</span><span>Inbox</span><span>Personas</span><span>Memory</span></span></div>
+        <div class="chat">
+          <div class="b me st" data-at="400">🎙 0:12  "The plumber says the kitchen tap needs a new cartridge, he comes back Thursday."</div>
+          <div class="typing st" data-at="1600" data-off="3000"><i></i><i></i><i></i></div>
+          <div class="b them st" data-at="3000">Saved ✓
+Filed on: Home, Kitchen</div>
+        </div>
+        <div class="compose"><span class="field">Say or ask anything</span><span class="btn go-btn">Send</span><span class="btn live">Voice note</span><span class="btn call">Call</span></div>
+      </div>
+      <figcaption>Coming. Demo data. The receipt wording is today's WhatsApp receipt.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 6. Call -->
+<section class="slide" id="call">
+  <div class="in split rev">
+    <figure class="shot scene" data-len="13000">
+      <div class="screen callbox" role="img" aria-label="Animation: a call to the memory. The user asks a question, the hotline answers a simple fact at once, then checks with the librarian for a deeper question and reads back the answer">
+        <div class="ring2">Z</div>
+        <div class="t">Your memory · 1:42 · Hang up</div>
+        <div class="lines">
+          <p class="u st" data-at="500">You: When is the boiler service due?</p>
+          <p class="h st" data-at="1800">Hotline: March 2027, from your note in March.</p>
+          <p class="u st" data-at="3600">You: And what did I decide about the garden shed?</p>
+          <p class="l st" data-at="4800">Hotline: Let me ask the librarian, one moment.</p>
+          <p class="h st" data-at="8200">Hotline: You chose cedar, ordered the boards, and wanted it done before winter. Three memories, the last one from Tuesday.</p>
+        </div>
+      </div>
+      <figcaption>Coming. Demo data. The hotline answers simple things herself and asks the librarian, which is Zenod's own answer engine, for the rest.</figcaption>
+    </figure>
+    <div>
+      <p class="no">6 &nbsp; Call your memory <span class="tag soon">Coming</span></p>
+      <h2>A library hotline that talks to the librarian.</h2>
+      <ul class="facts">
+        <li><b>How it works:</b> the same design as the Epic Team desk call. A live voice in the browser answers at once; for anything deep she asks the librarian and reads you the answer when it comes.</li>
+        <li><b>Voice stack:</b> OpenAI's live voice model, the small one, straight from the browser. Zenod hands the browser a key that lasts one minute, so the real key never leaves the server.</li>
+        <li><b>What she can do:</b> search your memory, ask the librarian, keep something when you say "remember this", hang up. Nothing else.</li>
+        <li><b>Cost:</b> about 2 to 3 cents a minute for short questions, up to 20 cents for long monologues, measured on the Epic Team desk. Calls stop at 10 minutes, and each account gets a monthly number of minutes.</li>
+        <li><b>What is kept:</b> only what you ask to keep. The call itself is not saved as a memory.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 7. Bootstrap or merge -->
+<section class="slide" id="merge">
+  <div class="in">
+    <p class="no">7 &nbsp; Build it in Zenod, or merge with Epic Team</p>
+    <h2>Build it in Zenod, copying Epic Team's screens and code.</h2>
+    <p class="lede">Recommendation: do not merge now. Both apps are built the same way, so copying the pieces is cheap and leaves each product free to move.</p>
+    <table>
+      <thead><tr><th>Piece</th><th>What we copy from Epic Team</th><th>What we write new for Zenod</th></tr></thead>
+      <tbody>
+        <tr><td>Call</td><td>The browser voice engine and call panel, about 1,300 lines; the server's short-lived key, caps and price counting, about 1,000 lines.</td><td>Her instructions and four tools pointed at Zenod's own search and answer; per-account minutes.</td></tr>
+        <tr><td>Voice note</td><td>The record button and its segment recorder, about 900 lines.</td><td>The upload into Zenod's existing voice note filing.</td></tr>
+        <tr><td>Personas</td><td>The idea of a persona as a short file with its job written in plain words, and the wake on a timer.</td><td>The runner itself: one model call per wake on Zenod's job queue, with the allowance share.</td></tr>
+        <tr><td>Inbox</td><td>The shape of a question: recommendation first, two or three buttons, an answer that is written back to the repo.</td><td>A small inbox screen and list. Epic Team's inbox is 8,000 lines tied to goals and reviews; none of that is copied.</td></tr>
+      </tbody>
+    </table>
+    <p class="small" style="margin-top:1rem">Why not merge: Epic Team is about 108,000 lines built around goals, epics and agent sessions on servers, for one team. Zenod is a paid app for many people with its own sign-in, billing and deploys. Merging would drag the goal machinery into a memory product. Revisit when the names are final and the same voice code has run in both for a month; then the shared part can become one package both use.</p>
+  </div>
+</section>
+
+<!-- 8. What stays separate -->
+<section class="slide" id="separate">
+  <div class="in">
+    <p class="no">8 &nbsp; What stays separate</p>
+    <h2>Filing stays Zenod's, goals stay Epic Team's.</h2>
+    <ol class="cols3">
+      <li><span class="k">Zenod keeps</span><b>Voice note filing</b>WhatsApp and web voice notes go through Zenod's own path: transcribe, keep word for word, archive the audio, file in the tree. Personas only read what was filed; they never sit inside the filing.</li>
+      <li><span class="k">Epic Team keeps</span><b>Goals and the board</b>Epics, milestones, review cards, asks about work, agents on servers. None of it comes to Zenod. A Zenod persona has no goal, only a job: read and notice.</li>
+      <li><span class="k">The seam stays</span><b>Two clean wires</b>Epic Team reads a memory through Zenod's tools, and Zenod tells it "a new voice note landed". Copied code becomes Zenod's own code; nothing calls across at run time.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 9. EpicSpine -->
+<section class="slide" id="epicspine">
+  <div class="in split">
+    <div>
+      <p class="no">9 &nbsp; Does Zenod rest on EpicSpine?</p>
+      <h2>No. They share one idea, not one system.</h2>
+      <p class="answer">Zenod rests on your memory repo. EpicSpine is how the team runs work.</p>
+    </div>
+    <ul class="facts">
+      <li><b>The idea they share:</b> plain files in a git repo are the truth, and every database is only a copy. A Zenod memory repo is to your life what a spine is to a project.</li>
+      <li><b>Where they differ:</b> a spine is a tree of goals with owners, steps and proof. A memory repo is a dated log and a tree of topics, with no goals at all. Putting a spine under Zenod would bring the productivity shape you said Zenod should not have.</li>
+      <li><b>What personas borrow:</b> three small habits from EpicSpine's agents: wake, do one job, report; ask with a recommendation first; write the answer back to the repo. That is a pattern, not a dependency.</li>
+      <li><b>Where EpicSpine is used:</b> building Zenod. This plan, its steps and its approval live in Zenod's spine, as always.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 10. The L-7 line -->
+<section class="slide" id="line">
+  <div class="in">
+    <p class="no">10 &nbsp; Where the line with Epic Team now sits</p>
+    <h2>You asked for personas, an inbox and calls. Nothing more crosses.</h2>
+    <p class="small" style="max-width:52rem">Today's rule says Zenod gets none of Epic Team's machinery unless you ask for it in your own words. Your voice note of 8 November asks for exactly three things, so the rule moves by exactly those three and is rewritten that way once you approve.</p>
+    <div class="two">
+      <div><h3>Now allowed in Zenod</h3><ul>
+        <li>Personas that read your memory and write marked notes and inbox items.</li>
+        <li>An inbox of questions and findings, in the web app.</li>
+        <li>A voice note button and a call button in the web chat.</li>
+        <li>Copying Epic Team code for these, once, into Zenod.</li>
+      </ul></div>
+      <div><h3>Still not, unless you say so</h3><ul>
+        <li>Goals, epics, milestones, a board of tasks, guessing intent.</li>
+        <li>Commands or new replies in WhatsApp or Telegram chats.</li>
+        <li>Personas messaging you or anyone outside the web app.</li>
+        <li>Zenod calling Epic Team, or sharing its code at run time.</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- 11. Build steps -->
+<section class="slide" id="steps">
+  <div class="in">
+    <p class="no">11 &nbsp; The build, in order</p>
+    <h2>Six steps, each one usable on its own.</h2>
+    <ol class="plan">
+      <li class="head"><span></span><span>Step</span><span>How you check it</span><span class="eff">Effort</span></li>
+      <li><span class="k">1</span><span><b>Voice note button</b>Record in the web chat, filed by Zenod's existing voice note path.</span><span>Record 20 seconds on zenod.dev; the note shows in your memory with the usual receipt.</span><span class="eff">1 to 2 days</span></li>
+      <li><span class="k">2</span><span><b>Inbox</b>The list, the tab count, questions with buttons, findings, answers written to the repo.</span><span>A test question appears, you answer it, and the answer is a memory.</span><span class="eff">2 to 3 days</span></li>
+      <li><span class="k">3</span><span><b>Persona runner</b>Persona files, the nightly wake, read-only tools, its own folder, caps and the allowance share.</span><span>A test persona wakes overnight on a demo memory and leaves a finding; the cost shows on its screen.</span><span class="eff">3 to 4 days</span></li>
+      <li><span class="k">4</span><span><b>Three starter personas</b>Night reader, Librarian and Loose ends, tried on your real notes.</span><span>You read a week of their findings and keep the ones worth it.</span><span class="eff">2 to 3 days</span></li>
+      <li><span class="k">5</span><span><b>Call</b>Copy the desk call, point her tools at Zenod, caps and minutes per account.</span><span>You call your memory from your phone and get a real answer from the librarian.</span><span class="eff">4 to 5 days</span></li>
+      <li><span class="k">6</span><span><b>Price and limits</b>Fold persona cost and call minutes into the hosted plan.</span><span>The usage card shows personas and call minutes next to the AI allowance.</span><span class="eff">1 day</span></li>
+    </ol>
+    <p class="small" style="margin-top:1rem">About three weeks of agent work in all. Step 5 needs a paid OpenAI account for Zenod, a new provider; that is asked for on its own when step 5 starts, not now. The single Send button and the answer quality checks run in their own epics alongside.</p>
+  </div>
+</section>
+
+<!-- Close -->
+<section class="slide close" id="next">
+  <div class="in">
+    <p class="no">12 &nbsp; What we propose next</p>
+    <h2>Say yes, and the voice note button is built first.</h2>
+    <p class="lede">It is the smallest step, uses only what Zenod already has, and you can try it the same week.</p>
+    <div class="box"><b>How you will check it</b>Open zenod.dev on your phone, tap Voice note, speak, and find the note filed in your memory with the usual receipt. Each later step comes back to you the same way, one at a time.</div>
+  </div>
+</section>
+
+<p class="foot">Sources: Jordi's voice note of 8 November 2026, 15:51 UTC. Epic Team code read on 8 November: desk call (OpenAI live voice, small model; caps and the measured 2 to 20 cents a minute from its cheaper-voice study), record button, personas, inbox. Zenod code read the same day: web chat, job queue, nightly tree sweep window, transcription price table (Voxtral 0.3 cents a minute), answer model price (DeepSeek, 0.20 and 0.80 dollars per million tokens in and out), and the 3 dollar monthly AI allowance per user. Persona cost per wake is an estimate from those prices. Line counts are rounded. Every name, note and number in the mockups is demo data.</p>
+<script src="scenes.js"></script>
+</body>
+</html>
