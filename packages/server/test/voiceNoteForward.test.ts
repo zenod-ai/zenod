@@ -170,7 +170,7 @@ describe("voice_notes.write: the forwarding grant", () => {
     const url = new URL("/oauth/authorize", h.base);
     for (const [k, v] of Object.entries({ client_id: "zc_team", redirect_uri: REDIRECT, state: "s", code_challenge: CHALLENGE, code_challenge_method: "S256", scope: "voice_notes.write" })) url.searchParams.set(k, v);
     const html = await (await fetch(url)).text();
-    for (const text of ["Epic Team wants to send its voice notes to your Zenod", "Adding voice notes you record in it to your Zenod, tagged with its name", "Reading anything in your Zenod", "Any right to change or delete in your Zenod", "scope: voice_notes.write"]) expect(html).toContain(text);
+    for (const text of ["Epic Team wants to send its voice notes to your Zenod", "Adding voice notes you record in it to your Zenod, tagged with its name", "Reading anything in your Zenod", "Any right to change or delete in your Zenod", "where you can remove it any time", "scope: voice_notes.write"]) expect(html).toContain(text);
 
     const token = await h.signIn("voice_notes.write");
     const me = await fetch(`${h.base}/api/subscribers/v1/me`, { headers: { authorization: `Bearer ${token}` } });

@@ -334,7 +334,7 @@ function consentPage(input: {
 <ul>${gets.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
 <h2>It will not get</h2>
 <ul class="not">${getsNot.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
-<p class="note">It shows up in Zenod under <strong>Subscribers</strong>, where you can pause or remove it any time.</p>
+<p class="note">It shows up in Zenod under <strong>Subscribers</strong>, where you can ${subscribe ? "pause or remove" : "remove"} it any time.</p>
 <form method="post" action="${DECISION_PATH}">${hidden}
 <div class="row"><button type="submit" name="decision" value="deny">Cancel</button><button class="allow" type="submit" name="decision" value="approve">Allow</button></div>
 </form>
