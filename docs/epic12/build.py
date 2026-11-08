@@ -9,7 +9,7 @@ CX, CY = 600, 360
 ROOTS = [("work", "Work", -90), ("home", "Home", -18), ("travel", "Travel", 54), ("health", "Health", 126), ("reading", "Reading", 198)]
 KIDS = {
     "work": [("atlas", "Project Atlas"), ("hiring", "Hiring a designer"), ("q4", "Q4 plan")],
-    "home": [("flat", "The Lisbon flat"), ("boiler", "Boiler service"), ("garden", "Garden ideas")],
+    "home": [("flat", "The Lisbon flat"), ("boiler", "Boiler service"), ("garden", "Garden shed")],
     "travel": [("lisbon", "Lisbon trip ideas"), ("visa", "Visa checklist")],
     "health": [("run", "10k running plan"), ("sleep", "Sleep notes")],
     "reading": [("overstory", "The Overstory"), ("habits", "Atomic Habits notes")],
@@ -39,22 +39,37 @@ LABEL = {n[0]: n[1] for n in NODES}
 KIND = {n[0]: n[4] for n in NODES}
 
 
-def graph_svg(lit=None, focus=None, cls="g", vb="0 0 1200 720"):
+RANK = {}  # filled below from RESULTS: node id -> rank 1..5 (the retrieval animation lights them in this order)
+NEW = ("new", "Voice note, today", 1000, 470)  # round 3: the memory that arrives in the graph animation
+NEW_EDGES = [("new", "garden", "e-tree"), ("new", "home", "e-link")]  # filed on Garden shed and Home, as the WhatsApp receipt says
+
+
+def graph_svg(lit=None, focus=None, cls="g", vb="0 0 1200 720", new=False):
     lit = lit or {}
     out = [f'<svg class="{cls}" viewBox="{vb}" role="img" aria-label="Demo memory graph">']
+    if new:
+        nx, ny = NEW[2], NEW[3]
+        for a, b, c in NEW_EDGES:
+            x2, y2 = POS[b]
+            ln = round(math.hypot(x2 - nx, y2 - ny))
+            out.append(f'<line class="{c} e-new" style="--len:{ln}" x1="{nx}" y1="{ny}" x2="{x2}" y2="{y2}"/>')
     for a, b in TREE:
         (x1, y1), (x2, y2) = POS[a], POS[b]
         on = " on" if (a in lit and (b in lit or KIND[b] == "root")) else ""
-        out.append(f'<line class="e-tree{on}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>')
+        k = RANK.get(a, 0) if on else 0
+        out.append(f'<line class="e-tree{on}"{f' data-k="{k}"' if k else ''} x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>')
     for a, b in LINKS:
         (x1, y1), (x2, y2) = POS[a], POS[b]
         on = " on" if (a in lit and b in lit) else ""
-        out.append(f'<line class="e-link{on}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>')
+        k = max(RANK.get(a, 0), RANK.get(b, 0)) if on else 0
+        out.append(f'<line class="e-link{on}"{f' data-k="{k}"' if k else ''} x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}"/>')
     for nid, label, x, y, kind in NODES:
         r = {"root": 20, "page": 11, "log": 6}[kind]
         state = " lit" if nid in lit else (" dim" if lit else "")
         state += " focus" if nid == focus else ""
-        out.append(f'<g class="n {kind}{state}">')
+        if new and nid in ("garden", "home"):
+            state += " target"
+        out.append(f'<g class="n {kind}{state}" data-id="{nid}"{f' data-k="{RANK[nid]}"' if nid in lit and nid in RANK else ''}>')
         if nid in lit:
             out.append(f'<circle class="halo" cx="{x}" cy="{y}" r="{r + 14}"/>')
         out.append(f'<circle cx="{x}" cy="{y}" r="{r}"/>')
@@ -66,8 +81,12 @@ def graph_svg(lit=None, focus=None, cls="g", vb="0 0 1200 720"):
         else:
             out.append(f'<text x="{x}" y="{y + dy}" text-anchor="middle">{label}</text>')
         if nid in lit:
-            out.append(f'<text class="pct" x="{x}" y="{y - r - 10}" text-anchor="middle">{lit[nid]}%</text>')
+            out.append(f'<text class="pct" data-p="{lit[nid]}" x="{x}" y="{y - r - 10}" text-anchor="middle">{lit[nid]}%</text>')
         out.append('</g>')
+    if new:
+        nx, ny = NEW[2], NEW[3]
+        out.append(f'<g class="n log newn" data-id="new"><circle class="ring" cx="{nx}" cy="{ny}" r="20"/><circle cx="{nx}" cy="{ny}" r="8"/>'
+                   f'<text class="lt" x="{nx + 14}" y="{ny + 5}" text-anchor="start">{NEW[1]}</text></g>')
     out.append('</svg>')
     return "\n".join(out)
 
@@ -78,15 +97,16 @@ RESULTS = [("flat", "The Lisbon flat", "Home / The Lisbon flat", 92),
            ("visa", "Visa checklist", "Travel / Visa checklist", 74),
            ("lisbon", "Lisbon trip ideas", "Travel / Lisbon trip ideas", 63),
            ("l3", "Photo of a receipt", "Home / Boiler service", 48)]
+RANK.update({nid: i for i, (nid, *_rest) in enumerate(RESULTS, 1)})
 
 
 def results_list(compact=False):
     rows = []
     for i, (nid, title, path, pct) in enumerate(RESULTS, 1):
         rows.append(
-            f'<li><span class="rank">{i}</span><span class="rt"><a href="#" tabindex="-1">{title}</a>'
+            f'<li data-k="{i}"><span class="rank">{i}</span><span class="rt"><a href="#" tabindex="-1">{title}</a>'
             f'<small>{path}</small></span><span class="bar"><span style="--w:{pct}%"></span></span>'
-            f'<span class="p">{pct}%</span></li>')
+            f'<span class="p" data-p="{pct}">{pct}%</span></li>')
     return '<ol class="results">' + "".join(rows) + '</ol>'
 
 
@@ -122,7 +142,8 @@ def digestion_svg():
 
 
 HTML = open(sys.argv[2]).read()
-HTML = (HTML.replace("{{GRAPH}}", graph_svg(focus="flat"))
+HTML = (HTML.replace("{{GRAPH_NEW}}", graph_svg(cls="g grow-graph", new=True))
+        .replace("{{GRAPH}}", graph_svg(focus="flat"))
         .replace("{{GRAPH_LIT}}", graph_svg(lit=LIT, cls="g lit-graph", vb="440 75 760 635"))
         .replace("{{RESULTS}}", results_list())
         .replace("{{GRAPH_MINI}}", graph_svg(lit=LIT, cls="g lit-graph", vb="440 75 760 635"))

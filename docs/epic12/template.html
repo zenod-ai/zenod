@@ -128,9 +128,7 @@ svg.g .n text.pct { font: 600 17px var(--sans); fill: var(--accent); }
 .results .bar { height: 6px; background: var(--stage-2); border-radius: 3px; overflow: hidden; }
 .results .bar span { display: block; height: 100%; width: var(--w); background: var(--accent); }
 .results .p { font-weight: 600; text-align: right; }
-svg.lit-graph .n.lit { animation: glow 2.4s ease-out 1; }
-@keyframes glow { from { opacity: 0.2; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { svg.lit-graph .n.lit { animation: none; } html { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 /* flow */
 svg.flow { width: 100%; height: auto; display: block; margin: 1rem 0 1.5rem; }
@@ -198,6 +196,101 @@ svg.flow .ahp { fill: var(--ink); }
 .adopt { list-style: none; padding: 0; margin: 1.25rem 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; font: 400 0.98rem/1.5 var(--sans); color: var(--muted); }
 .adopt b { display: block; font: 500 1.15rem var(--serif); color: var(--ink); margin-bottom: 0.3rem; }
 @media (max-width: 900px) { .adopt { grid-template-columns: minmax(0, 1fr); } }
+
+/* round 3: three looping scenes (WhatsApp, a memory joining the graph, retrieval with strengths), ownership, pricing.
+   Without script, or with reduced motion, every scene shows its final frame. Steps get .go on a timeline (script at the end). */
+.wa { width: min(100%, 23rem); margin: 0 auto; background: #efeae2; border-radius: 28px; border: 9px solid var(--ink); overflow: hidden; display: flex; flex-direction: column; height: min(72svh, 40rem); font: 400 0.8rem/1.38 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111b21; box-sizing: border-box; }
+.wa-top { display: flex; align-items: center; gap: 0.6rem; background: #f6f6f6; padding: 0.9rem 0.9rem 0.6rem; border-bottom: 1px solid #ddd; }
+.wa-top .bk { color: #007aff; font-size: 1.5rem; line-height: 1; }
+.wa-av { width: 2.1rem; height: 2.1rem; border-radius: 50%; background: #efe7d6; display: grid; place-items: center; font: 500 1.25rem var(--serif); color: var(--ink); }
+.wa-top b { display: block; font-size: 0.95rem; }
+.wa-top small { color: #667781; font-size: 0.72rem; }
+.wa-chat { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 0.45rem; padding: 0.6rem 0.65rem; overflow: hidden; }
+.wa-day { align-self: center; background: #fff; border-radius: 6px; padding: 0.15rem 0.6rem; color: #54656f; font-size: 0.7rem; box-shadow: 0 1px 0.5px rgba(0,0,0,.13); margin-bottom: auto; }
+.wa-b { position: relative; max-width: 84%; padding: 0.4rem 0.55rem 1.05rem; border-radius: 8px; box-shadow: 0 1px 0.5px rgba(0,0,0,.13); white-space: pre-line; overflow-wrap: anywhere; }
+.wa-b.me { align-self: flex-end; background: #d9fdd3; }
+.wa-b.z { align-self: flex-start; background: #fff; }
+.wa-b time { position: absolute; right: 0.5rem; bottom: 0.25rem; font-size: 0.64rem; color: #667781; }
+.wa-b .tk { color: #8696a0; margin-left: 0.2rem; transition: color .4s; }
+.wa-b .tk.go { color: #53bdeb; }
+.wa-voice { display: flex; align-items: center; gap: 0.45rem; min-width: 12rem; }
+.wa-voice .pl { width: 0; height: 0; border-left: 0.6rem solid #54656f; border-top: 0.38rem solid transparent; border-bottom: 0.38rem solid transparent; }
+.wa-voice .wv { display: flex; gap: 2px; align-items: center; height: 1.4rem; flex: 1; }
+.wa-voice .wv i { width: 2.5px; border-radius: 2px; background: #8fa59a; }
+.wa-voice .ds { font-size: 0.64rem; color: #667781; position: absolute; left: 2.05rem; bottom: 0.25rem; }
+.wa-b.saved span { display: block; }
+.wa-typing { display: none; align-self: flex-start; background: #fff; border-radius: 8px; padding: 0.55rem 0.7rem; gap: 0.25rem; box-shadow: 0 1px 0.5px rgba(0,0,0,.13); }
+.wa-typing i { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: #8696a0; animation: wadot 1s infinite; }
+.wa-typing i:nth-child(2) { animation-delay: .15s; } .wa-typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes wadot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+.wa-compose { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem 0.8rem; background: #f6f6f6; color: #007aff; font-size: 1.1rem; }
+.wa-compose span { flex: 1; height: 1.8rem; border-radius: 999px; background: #fff; border: 1px solid #ddd; }
+.scene.js .st { transition: opacity .45s ease, transform .45s ease; }
+.scene.js .st:not(.go) { opacity: 0; transform: translateY(8px); }
+.scene.js .wa-chat > .st:not(.go):not(.wa-day) { display: none; }
+.scene.js .wa-typing.go { display: flex; }
+.scene.js .wa-b.saved span { transition: opacity .35s ease; }
+.scene.js .wa-b.saved span:not(.go) { opacity: 0; }
+.scene.js.fade .st, .scene.js.fade svg .n, .scene.js.fade svg line { transition: opacity .5s ease; }
+.scene.js.fade .wa-chat, .scene.js.fade .results, .scene.js.fade .panel ul { opacity: 0; transition: opacity .5s ease; }
+/* a memory joins the graph */
+svg.g .n.newn circle { fill: var(--accent); stroke: var(--accent); }
+svg.g .n.newn circle.ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+svg.g .newn text.lt { fill: var(--accent); font-weight: 600; }
+svg.g line.e-new { stroke: var(--accent); stroke-width: 2.4; opacity: 1; stroke-dasharray: none; }
+.scene.js svg.g .newn { transition: opacity .6s ease; }
+.scene.js svg.g .newn:not(.go) { opacity: 0; }
+.scene.js svg.g .newn.go circle.ring { animation: ring 1.6s ease-out infinite; }
+@keyframes ring { from { opacity: .9; transform: scale(.4); } to { opacity: 0; transform: scale(1.6); } }
+.scene.js svg.g line.e-new { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); transition: stroke-dashoffset .9s ease; }
+.scene.js svg.g line.e-new.go { stroke-dashoffset: 0; }
+svg.g .n.target circle { transition: fill .5s, stroke .5s, stroke-width .5s; }
+svg.g .n.target.go circle, .scene:not(.js) svg.g .n.target circle { stroke: var(--accent); stroke-width: 3.5; }
+svg.g .n.page.target.go circle, .scene:not(.js) svg.g .n.page.target circle { fill: var(--accent-soft); }
+.panel .new-tag { font: 600 0.78rem var(--sans); color: var(--accent); }
+.scene.js .panel li.st:not(.go), .scene.js .panel .st:not(.go) { opacity: 0; transform: translateY(6px); }
+/* retrieval with strengths */
+.qtext { min-height: 1.2em; }
+.scene.js .query .caret { display: inline-block; width: 1.5px; height: 1.05em; background: var(--accent); vertical-align: -0.15em; animation: caret 1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.query .caret { display: none; }
+.scene.js .query .t:not(.go) { opacity: 0; }
+.scene.js .query .t { transition: opacity .4s; }
+.scene.js svg.lit-graph .n { transition: opacity .5s ease; }
+.scene.js:not(.q) svg.lit-graph .n.dim { opacity: 1; }
+.scene.js svg.lit-graph .n circle { transition: fill .4s, stroke .4s; }
+.scene.js svg.lit-graph .n.lit:not(.go) circle { fill: var(--bg); stroke: var(--ink); }
+.scene.js svg.lit-graph .n.lit.log:not(.go) circle { fill: var(--faint); stroke: var(--faint); }
+.scene.js svg.lit-graph .n.lit circle.halo { transform-box: fill-box; transform-origin: center; transition: opacity .5s, transform .6s ease-out; }
+.scene.js svg.lit-graph .n.lit:not(.go) circle.halo { opacity: 0; transform: scale(.3); }
+.scene.js svg.lit-graph .n.lit .pct { transition: opacity .3s; }
+.scene.js svg.lit-graph .n.lit:not(.go) .pct { opacity: 0; }
+.scene.js svg.lit-graph .n.lit:not(.go) text { font-weight: 400; }
+.scene.js svg.lit-graph line { transition: stroke .5s, stroke-width .5s, opacity .5s; }
+.scene.js svg.lit-graph line.e-tree.on:not(.go) { stroke: var(--ink); stroke-width: 1.2; opacity: 0.55; }
+.scene.js svg.lit-graph line.e-link.on:not(.go) { stroke: var(--muted); stroke-width: 1.2; opacity: 0.6; }
+.scene.js .results li { transition: opacity .45s ease, transform .45s ease; }
+.scene.js .results li:not(.go) { opacity: 0; transform: translateY(6px); }
+.scene.js .results .bar span { transition: width .9s cubic-bezier(.2,.7,.2,1); }
+.scene.js .results li:not(.go) .bar span { width: 0; }
+.tag.soon { border-color: var(--accent); color: var(--accent); }
+.no .tag { margin-left: 0.5rem; vertical-align: 0.05em; }
+/* ownership */
+.remit { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.75rem; align-items: center; margin: 1.5rem 0 0.5rem; font: 400 0.95rem/1.4 var(--sans); }
+.remit .bx { border: 1px solid var(--ink); border-radius: 4px; padding: 0.8rem 0.9rem; }
+.remit .bx b { display: block; font: 500 1.15rem var(--serif); }
+.remit .bx.you { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.remit .ar { text-align: center; font-size: 0.82rem; color: var(--muted); line-height: 1.3; }
+.remit .ar::before { content: "\2190\00a0\2192"; display: block; font-size: 1.3rem; color: var(--accent); }
+/* pricing */
+.prices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-top: 2rem; }
+.prices article { border: 1px solid var(--line); border-radius: 6px; padding: 1.5rem 1.4rem; font: 400 0.98rem/1.5 var(--sans); color: var(--muted); background: var(--bg); }
+.prices article.hosted { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.prices h3 { font: 500 1.05rem var(--sans); color: var(--ink); margin: 0 0 0.6rem; }
+.prices .amt { font: 400 clamp(2.4rem, 4vw, 3.3rem)/1 var(--serif); color: var(--ink); margin: 0 0 0.9rem; letter-spacing: -0.02em; }
+.prices .amt small { font: 400 0.95rem var(--sans); color: var(--muted); letter-spacing: 0; }
+.prices p { margin: 0; }
+@media (max-width: 900px) { .prices { grid-template-columns: minmax(0, 1fr); } .remit { grid-template-columns: minmax(0, 1fr); } .remit .ar::before { content: "\2191\00a0\2193"; } }
 </style>
 </head>
 <body>
@@ -205,10 +298,10 @@ svg.flow .ahp { fill: var(--ink); }
 <section class="slide cover" id="s1">
   <div class="in split">
     <div>
-      <p class="no">Zenod, the next chapter &nbsp;·&nbsp; 7 November 2026</p>
+      <p class="no">Zenod, the product deck &nbsp;·&nbsp; 8 November 2026</p>
       <h1>The AI librarian of your memory.</h1>
       <p class="lede">It ingests and digests, so you can reach your memory from any agent and build on it.</p>
-      <p class="meta">Zenod is live in production today at zenod.dev. This deck shows what it already does, then what the next chapter adds on top: a way to see and talk to your library. Screens marked live are the real product with demo notes. Screens marked mockup are not built yet.</p>
+      <p class="meta">Zenod is live in production today at zenod.dev. This is its product deck: what it does today, who owns the memory, what it costs, and what the next chapter adds. zenod.dev will follow it. Frames marked Live are the real product with demo notes. Frames marked Coming are not built yet.</p>
     </div>
     <div class="cover-g">{{GRAPH}}</div>
   </div>
@@ -222,7 +315,7 @@ svg.flow .ahp { fill: var(--ink); }
       <p>Zenod is the AI librarian of your memory, and it is already working in production. It ingests what you send it: WhatsApp voice notes, photos and messages, and the lessons your coding agent saves. It digests them: transcribes, keeps the original word for word, files each one onto the right page and finds your topics by itself. It keeps the library as plain Markdown in your own GitHub or Google Drive, so any agent you use can reach your memory over MCP and build on it.</p>
       <p>This chapter does not change what Zenod is. It gives the library a window: a chat to ask it, a graph to walk it, retrieval that shows which memories it used, and digestion that runs every night.</p>
     </blockquote>
-    <p class="small" style="margin-top:1.5rem">Confirm or correct this paragraph. Every slide here, and the landing proposal on slide 12, follows it.</p>
+    <p class="small" style="margin-top:1.5rem">Confirmed on 8 November: we are in line. Every slide here follows this paragraph, and zenod.dev will follow this deck (slide 14).</p>
   </div>
 </section>
 
@@ -242,22 +335,37 @@ svg.flow .ahp { fill: var(--ink); }
 <section class="slide" id="s4">
   <div class="in split">
     <div>
-      <p class="no">3 &nbsp; Live today: ingest</p>
+      <p class="no">3 &nbsp; Live today: ingest <span class="tag today">Live</span></p>
       <h2>Send a voice note. Zenod takes it from there.</h2>
-      <p class="lede">The real WhatsApp flow in production: a receipt at once, then the recap, the transcript and the pages it was filed on.</p>
+      <p class="lede">The real replies, word for word: a receipt at once, then Saved with the recap, the transcript and the pages it was filed on.</p>
       <ul class="facts">
         <li><b>Ways in:</b> WhatsApp on the hosted plan, Telegram when self-hosted, and any MCP agent.</li>
+        <li><b>When filing takes longer:</b> Zenod says “I’m still filing this memory — I’ll confirm here when it is saved.” and confirms in the same chat.</li>
         <li><b>Kept:</b> every capture lands first in a dated log, word for word, and recordings are archived to Google Drive.</li>
         <li><b>Unchanged by this chapter:</b> WhatsApp only captures and acknowledges.</li>
       </ul>
     </div>
-    <figure class="shot tall"><img src="shots/whatsapp.webp" width="1170" height="2532" alt="WhatsApp chat with Zenod: a 14 second voice note, the queued receipt, then the recap, transcript and the two pages it was filed on" loading="lazy"><figcaption>Live. The production WhatsApp flow, with demo content.</figcaption></figure>
+    <figure class="shot scene" data-anim="wa" data-len="13500" style="margin:0">
+      <div class="wa" role="img" aria-label="Animation of the production WhatsApp flow with demo content: a 14 second voice note is sent, Zenod replies that it received and queued it, then replies Saved with the recap, the Google Drive audio link, the transcript and the two pages it was filed on">
+        <div class="wa-top"><span class="bk">‹</span><span class="wa-av">Z</span><span><b>Zenod</b><small>Business account</small></span></div>
+        <div class="wa-chat">
+          <span class="wa-day">Today</span>
+          <div class="wa-b me st" data-at="300"><div class="wa-voice"><span class="wa-av" style="width:1.6rem;height:1.6rem;font-size:0.9rem;background:#cdbfa6">J</span><span class="pl"></span><span class="wv"><i style="height:30%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:75%"></i><i style="height:50%"></i><i style="height:90%"></i><i style="height:35%"></i><i style="height:60%"></i><i style="height:80%"></i><i style="height:45%"></i><i style="height:70%"></i><i style="height:30%"></i><i style="height:85%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:65%"></i><i style="height:95%"></i><i style="height:50%"></i><i style="height:35%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:30%"></i><i style="height:50%"></i></span></div><span class="ds">0:14</span><time>9:28<span class="tk" data-at="1300">✓✓</span></time></div>
+          <div class="wa-typing st" data-at="1600" data-off="2900"><i></i><i></i><i></i></div>
+          <div class="wa-b z st" data-at="2900">I received your voice note and queued it for transcription. Transcription is usually quick; Google Drive archiving and filing continue in the background. Send “cancel transcription” to cancel the latest pending voice note in this conversation.<time>9:28</time></div>
+          <div class="wa-typing st" data-at="4700" data-off="6300"><i></i><i></i><i></i></div>
+          <div class="wa-b z st saved" data-at="6300"><span data-at="6300">Saved ✓</span><span data-at="6600">Recap: Leo can help put up the garden shed frame on Saturday morning. Order the cedar boards before Friday.</span><span data-at="6900">Google Drive audio: https://drive.google.com/file/d/1hQ7demo</span><span data-at="7150">Transcription: completed.</span><span data-at="7400">Transcript: Just talked to Leo about the shed. He can come Saturday morning to help put up the frame, so I need to order the cedar boards before Friday.</span><span data-at="7700">Filed: Projects/Garden shed.md, Areas/Home.md</span><span data-at="7950">&#10;reply to this message to discuss or act on it</span><time>9:29</time></div>
+        </div>
+        <div class="wa-compose">+<span></span>🎙</div>
+      </div>
+      <figcaption>Live. The production replies, word for word, with demo content, replayed as an animation.</figcaption>
+    </figure>
   </div>
 </section>
 
 <section class="slide" id="s5">
   <div class="in">
-    <p class="no">4 &nbsp; Live today: digest, then access from any agent</p>
+    <p class="no">4 &nbsp; Live today: digest, then access from any agent <span class="tag today">Live</span></p>
     <h2>Filed on the right page, and any agent can find it.</h2>
     <div class="shots2">
       <figure class="shot"><img src="shots/page.webp" width="2080" height="1000" alt="The Garden shed project page in Obsidian, each line linking back to the log entry it came from" loading="lazy"><figcaption>Live. The page the voice note was filed on, each line linked to the moment it was said.</figcaption></figure>
@@ -267,9 +375,44 @@ svg.flow .ahp { fill: var(--ink); }
   </div>
 </section>
 
+<section class="slide" id="own">
+  <div class="in split">
+    <div>
+      <p class="no">5 &nbsp; Live today: your memory, your remit <span class="tag today">Live</span></p>
+      <h2>You own the memory. Zenod works on it.</h2>
+      <p class="lede">Zenod is the intelligent layer for ingestion and digestion. The library stays in your own GitHub or Google Drive as plain Markdown.</p>
+      <div class="remit" aria-label="Your GitHub or Drive holds the library; you grant Zenod the right to work on it and can take it back">
+        <div class="bx you"><b>Your GitHub or Drive</b>the library, yours</div>
+        <div class="ar">you grant,<br>you revoke</div>
+        <div class="bx"><b>Zenod</b>ingests and digests</div>
+      </div>
+      <ul class="facts">
+        <li><b>Where it lives:</b> a GitHub repository you own, or a Google Drive folder Zenod creates in your own Drive. Self-hosted uses your GitHub repository.</li>
+        <li><b>What you grant:</b> on GitHub, you install the Zenod Memory app on the repositories you choose, with access to their files only. On Google Drive, Zenod reaches only the folder and files it created, never the rest of your Drive.</li>
+        <li><b>Every change kept:</b> each capture and filing is a commit in your history. On Drive the Git history sits in the same folder.</li>
+        <li><b>Take it back any time:</b> uninstall the app on GitHub or remove Zenod in your Google account. Zenod stops working on it, and every file stays yours.</li>
+      </ul>
+    </div>
+    <figure class="shot"><img src="shots/history.webp" width="1840" height="1298" alt="The commit history of a private GitHub repository called memory: commits from zenod-bot for each capture and filing, and one from the owner made in Obsidian" loading="lazy"><figcaption>Live. Every change Zenod makes is a commit in your own repository, the same screen zenod.dev shows.</figcaption></figure>
+  </div>
+</section>
+
+<section class="slide" id="price">
+  <div class="in">
+    <p class="no">6 &nbsp; Live today: pricing <span class="tag today">Live</span></p>
+    <h2>Free to run yourself. Nine euros a month hosted.</h2>
+    <div class="prices">
+      <article><h3>Self-hosted</h3><p class="amt">Free</p><p>Run Zenod on your own server with your AI provider key, a Telegram bot and a GitHub repository for your library.</p></article>
+      <article class="hosted"><h3>Zenod Hosted</h3><p class="amt">€9 <small>per month + VAT</small></p><p>We run it for you. Managed AI usage and WhatsApp are included. Your library in GitHub or in a Google Drive folder the app creates. Checkout is open on zenod.dev.</p></article>
+      <article><h3>Tester pass</h3><p class="amt">€0 <small>by invite</small></p><p>Zenod Hosted with an invite code: checkout comes to €0 with no card, and AI usage has a cap. For the first five testers.</p></article>
+    </div>
+    <p class="small" style="margin-top:1.25rem">These are the only plans, as on zenod.dev/pricing today. The same open-source engine runs in each, and your memory is ordinary Markdown either way.</p>
+  </div>
+</section>
+
 <section class="slide" id="s6">
   <div class="in">
-    <p class="no">5 &nbsp; What this chapter adds on top</p>
+    <p class="no">7 &nbsp; What this chapter adds on top</p>
     <h2>The librarian works. Next, you can see into the library.</h2>
     <table>
       <thead><tr><th>Piece</th><th>Live today</th><th>This chapter adds</th></tr></thead>
@@ -286,7 +429,7 @@ svg.flow .ahp { fill: var(--ink); }
 <section class="slide" id="s7">
   <div class="in split">
     <div>
-      <p class="no">6 &nbsp; Mockup: the app opens on a chat</p>
+      <p class="no">8 &nbsp; Coming: the app opens on a chat <span class="tag soon">Coming</span></p>
       <h2>Sign in, and you are talking to your library.</h2>
       <p class="lede">The same answers your agents get over MCP today, now in the app, with the memories used as links. Settings move to the side.</p>
       <p class="small">Proposed default: a question is answered and nothing is saved. Tap keep to save a message, as WhatsApp does today. WhatsApp itself does not change.</p>
@@ -314,38 +457,39 @@ svg.flow .ahp { fill: var(--ink); }
 
 <section class="slide" id="s8">
   <div class="in">
-    <p class="no">7 &nbsp; Mockup: walk the library</p>
-    <h2>The shelves, drawn as a graph.</h2>
-    <div class="app">
+    <p class="no">9 &nbsp; Coming: a new memory joins the library <span class="tag soon">Coming</span></p>
+    <h2>The voice note finds its place, and its links.</h2>
+    <div class="app scene" data-anim="grow" data-len="10500">
       <div class="screen graph-ui" style="display:grid">
-        <div>{{GRAPH}}</div>
+        <div>{{GRAPH_NEW}}</div>
         <div class="panel">
-          <h3>The Lisbon flat</h3>
-          <p>Home. Updated 3 Nov from a voice note.</p>
+          <p class="new-tag st" data-at="600">New memory</p>
+          <h3 class="st" data-at="600">Voice note, today</h3>
+          <p class="st" data-at="900">Leo can help put up the garden shed frame on Saturday morning. Order the cedar boards before Friday.</p>
           <ul>
-            <li>Parent: <a href="#s8" tabindex="-1">Home</a></li>
-            <li>Links to: <a href="#s8" tabindex="-1">Lisbon trip ideas</a></li>
-            <li>Linked from: <a href="#s8" tabindex="-1">Visa checklist</a>, <a href="#s8" tabindex="-1">Photo of a receipt</a></li>
-            <li>From the log: <a href="#s8" tabindex="-1">Voice note, 3 Nov</a></li>
+            <li class="st" data-at="1500">Filed under: <a href="#s8" tabindex="-1">Garden shed</a></li>
+            <li class="st" data-at="2300">Links to: <a href="#s8" tabindex="-1">Home</a></li>
+            <li class="st" data-at="3000">From the log: <a href="#s8" tabindex="-1">today, 9:28</a></li>
           </ul>
         </div>
       </div>
     </div>
+    <p class="small" style="margin-top:0.75rem">The voice note from slide 3 lands on the two pages its receipt names. That filing is live today. The graph view that shows it is coming.</p>
     <div class="legend"><span><i></i>belongs to a topic</span><span><i class="d"></i>a link one memory makes to another</span><span>Large dark nodes are topics Zenod already finds by itself today</span></div>
   </div>
 </section>
 
 <section class="slide" id="s9">
-  <div class="in split rev">
+  <div class="in split rev scene" data-anim="lit" data-len="11500">
     <div class="app">
       <div class="screen" style="display:block;min-height:0">
-        <div class="query">Lisbon flat and the landlord<span class="t">5 found in 0.2 s</span></div>
+        <div class="query"><span class="qtext" data-type="Lisbon flat and the landlord">Lisbon flat and the landlord</span><span class="caret"></span><span class="t" data-at="1800">5 found in 0.2 s</span></div>
         {{GRAPH_LIT}}
       </div>
     </div>
     <div>
-      <p class="no">8 &nbsp; Mockup: retrieval that lights up</p>
-      <h2>Ask, and five memories light up.</h2>
+      <p class="no">10 &nbsp; Coming: retrieval that shows its strength <span class="tag soon">Coming</span></p>
+      <h2>Ask, and see how strongly each memory answers.</h2>
       {{RESULTS}}
       <p class="small" style="margin-top:1rem">Search over MCP already returns a ranked five today. This adds the percentage and the link, in the app and for Claude, ChatGPT or Cursor alike. The score is how well each memory matches against the best match, not a probability.</p>
     </div>
@@ -354,7 +498,7 @@ svg.flow .ahp { fill: var(--ink); }
 
 <section class="slide" id="s10">
   <div class="in">
-    <p class="no">9 &nbsp; Digestion: live, and nightly next</p>
+    <p class="no">11 &nbsp; Digestion: live, and nightly next</p>
     <h2>Already digests on arrival. Next, every night too.</h2>
     {{FLOW}}
     <div class="cols3">
@@ -367,7 +511,7 @@ svg.flow .ahp { fill: var(--ink); }
 
 <section class="slide" id="s11">
   <div class="in">
-    <p class="no">10 &nbsp; The build plan, in proposed order</p>
+    <p class="no">12 &nbsp; The build plan, in proposed order</p>
     <h2>Six steps on the live product, each one you can open and judge.</h2>
     <ol class="plan">
       <li class="head" aria-hidden="true"><span></span><span>What it delivers</span><span>How you check it</span><span class="eff">Effort</span></li>
@@ -376,7 +520,7 @@ svg.flow .ahp { fill: var(--ink); }
       <li><span class="k">3</span><span><b>Memory graph view</b>A graph built from topics and links, opened node by node.</span><span>You open Memory, click a node, follow a link.</span><span class="eff">2 to 3 days</span></li>
       <li><span class="k">4</span><span><b>Lights up in the graph</b>Joins steps 1 and 3: a query lights up its five nodes.</span><span>You type a question in the memory view and watch five nodes light up.</span><span class="eff">about 1 day</span></li>
       <li><span class="k">5</span><span><b>Nightly digestion, last run shown</b>Weekly sweep becomes nightly and shows when it ran.</span><span>The app shows last digested today, and a new memory appears in the graph.</span><span class="eff">about 1 day</span></li>
-      <li><span class="k">6</span><span><b>zenod.dev in this look, this deck kept current</b>The landing takes on the deck’s shape with the demo graph (slide 12). Each delivery updates this deck with a next step.</span><span>You open zenod.dev and this deck and both show the latest.</span><span class="eff">half a day, then ongoing</span></li>
+      <li><span class="k">6</span><span><b>zenod.dev in this look, this deck kept current</b>The landing follows this deck, with these animations, the remit and the prices (slide 14). Each delivery updates this deck with a next step.</span><span>You open zenod.dev and this deck and both show the latest.</span><span class="eff">half a day, then ongoing</span></li>
     </ol>
     <p class="small" style="margin-top:1rem">Efforts are estimates. Each step ships into production on its own, next to everything already live, and stays once it passes.</p>
   </div>
@@ -384,7 +528,7 @@ svg.flow .ahp { fill: var(--ink); }
 
 <section class="slide" id="s12">
   <div class="in">
-    <p class="no">11 &nbsp; What could go wrong</p>
+    <p class="no">13 &nbsp; What could go wrong</p>
     <h2>Four risks, planned for without touching what works.</h2>
     <div class="cols3" style="grid-template-columns:repeat(2,minmax(0,1fr))">
       <div><b>Privacy</b>The graph and chat show a whole vault to its owner only. The public page uses invented demo data, never a real vault.</div>
@@ -397,9 +541,9 @@ svg.flow .ahp { fill: var(--ink); }
 
 <section class="slide" id="s13">
   <div class="in">
-    <p class="no">12 &nbsp; Proposal: zenod.dev takes on this look</p>
-    <h2>Make the landing read like this deck.</h2>
-    <p class="lede">It already shares the paper, the green and the type. What it lacks is the deck's shape: the librarian line first, the four verbs as its spine, and one idea per screen.</p>
+    <p class="no">14 &nbsp; Confirmed: zenod.dev will follow this deck</p>
+    <h2>The landing will read like this deck.</h2>
+    <p class="lede">Confirmed on 8 November. It already shares the paper, the green and the type. It takes on the deck's shape: the librarian line first, the four verbs as its spine, one idea per screen, these animations, the remit and the prices.</p>
     <div class="compare">
       <div><p class="lab">Live today on zenod.dev</p><figure class="shot" style="padding:0.75rem"><img src="shots/landing-today.webp" width="1440" height="900" alt="The live zenod.dev hero: Hire a librarian for your memory, with a WhatsApp screenshot" loading="lazy"></figure></div>
       <div><p class="lab">Proposed opening screen, mockup</p><div class="shot" style="padding:0.75rem"><div class="mini">
@@ -411,21 +555,21 @@ svg.flow .ahp { fill: var(--ink); }
     <ul class="adopt">
       <li><b>Keep</b>The real product screens, the plans, the connect page and the legal pages, word for word where still true.</li>
       <li><b>Change</b>Open on the librarian line beside the demo graph, then one full screen per verb, each with its live screen, then a green closing band with one action.</li>
-      <li><b>How</b>A separate build step after you confirm, through the site's normal review and release. Nothing on zenod.dev changes from this deck.</li>
+      <li><b>How</b>A separate build step, through the site's normal review and release. Nothing on zenod.dev changes from this deck itself.</li>
     </ul>
   </div>
 </section>
 
 <section class="slide next" id="s14">
   <div class="in">
-    <p class="no">13 &nbsp; What we propose next</p>
-    <h2>Confirm the positioning, and step 1 starts.</h2>
+    <p class="no">15 &nbsp; What we propose next</p>
+    <h2>Approve this deck, and step 1 starts.</h2>
     <p class="lede">Ranked retrieval with a match percentage, on MCP first. It is the engine the chat and the lit-up graph both run on, and every agent that already reaches Zenod gets it the same day.</p>
     <div class="box"><b>How you will check it</b>Ask Zenod a question from Claude. Five memories come back, each with a percentage and a link that opens it, in under a second. Then the chat-first app, and the landing in this look as its own step.</div>
   </div>
 </section>
 
-<p class="foot">Zenod, the next chapter: EPIC-12 plan, round 2. Live screens are the real product with demo people and notes, the same ones zenod.dev shows. Mockups use invented demo data. Today's figures: zenod.dev, cloud.zenod.dev health, the MCP Registry entry dev.zenod/memory, and the memory-tree evidence of 2 November 2026.</p>
+<p class="foot">Zenod, the product deck: EPIC-12 plan, round 3. Live frames are the real product with demo people and notes, the same ones zenod.dev shows, and the WhatsApp replies are production wording. Coming frames use invented demo data. Prices as on zenod.dev/pricing on 8 November 2026. Today's figures: zenod.dev, cloud.zenod.dev health, the MCP Registry entry dev.zenod/memory, and the memory-tree evidence of 2 November 2026.</p>
 
 <script>
 document.addEventListener('keydown', function (e) {
@@ -437,6 +581,64 @@ document.addEventListener('keydown', function (e) {
   e.preventDefault();
   s[t].scrollIntoView();
 });
+
+/* round 3 scenes: each .scene replays its steps (.go on [data-at], off at [data-off]) while on screen.
+   ?still or reduced motion: final frame, no loop. */
+(function () {
+  var still = /[?&]still\b/.test(location.search) || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function prep(sc) {
+    var kind = sc.getAttribute('data-anim');
+    if (kind === 'grow') {
+      var at = { 'new': 500, garden: 1500, home: 2300 };
+      sc.querySelectorAll('svg [data-id]').forEach(function (n) { var t = at[n.getAttribute('data-id')]; if (t !== undefined) n.setAttribute('data-at', t); });
+      var e = sc.querySelectorAll('line.e-new'); if (e[0]) e[0].setAttribute('data-at', 900); if (e[1]) e[1].setAttribute('data-at', 1700);
+    }
+    if (kind === 'lit') {
+      sc.querySelectorAll('[data-k]').forEach(function (n) { n.setAttribute('data-at', 2000 + (+n.getAttribute('data-k') - 1) * 520 + (n.tagName === 'LI' ? 120 : 0)); });
+    }
+  }
+  function count(el) {
+    var to = +el.getAttribute('data-p'), t0 = performance.now();
+    (function f(now) { var k = Math.min(1, (now - t0) / 700); el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))) + '%'; if (k < 1) requestAnimationFrame(f); })(t0);
+  }
+  function play(sc) {
+    stop(sc);
+    var steps = sc.querySelectorAll('[data-at]'), len = +sc.getAttribute('data-len'), T = sc._t = [];
+    var q = sc.querySelector('[data-type]');
+    sc.classList.remove('fade', 'q');
+    steps.forEach(function (el) { el.classList.remove('go'); });
+    if (q) q.textContent = '';
+    steps.forEach(function (el) {
+      T.push(setTimeout(function () {
+        el.classList.add('go');
+        el.querySelectorAll('[data-p]').forEach(count);
+        if (el.hasAttribute('data-p')) count(el);
+      }, +el.getAttribute('data-at')));
+      if (el.hasAttribute('data-off')) T.push(setTimeout(function () { el.classList.remove('go'); }, +el.getAttribute('data-off')));
+    });
+    if (q) {
+      var txt = q.getAttribute('data-type');
+      for (var i = 1; i <= txt.length; i++) (function (i) { T.push(setTimeout(function () { q.textContent = txt.slice(0, i); }, 300 + i * 45)); })(i);
+      T.push(setTimeout(function () { sc.classList.add('q'); }, 1800));
+    }
+    T.push(setTimeout(function () { sc.classList.add('fade'); }, len - 600));
+    T.push(setTimeout(function () { if (sc._on) play(sc); }, len));
+  }
+  function stop(sc) { (sc._t || []).forEach(clearTimeout); sc._t = []; }
+  function final(sc) {
+    stop(sc); sc.classList.remove('fade'); sc.classList.add('q');
+    sc.querySelectorAll('[data-at]').forEach(function (el) { el.classList.toggle('go', !el.hasAttribute('data-off')); });
+    var q = sc.querySelector('[data-type]'); if (q) q.textContent = q.getAttribute('data-type');
+  }
+  document.querySelectorAll('.scene').forEach(function (sc) {
+    prep(sc); sc.classList.add('js');
+    if (still || !('IntersectionObserver' in window)) { final(sc); return; }
+    final(sc);
+    new IntersectionObserver(function (es) {
+      es.forEach(function (e) { sc._on = e.isIntersecting; if (e.isIntersecting) play(sc); else { stop(sc); final(sc); } });
+    }, { threshold: 0.35 }).observe(sc);
+  });
+})();
 </script>
 </body>
 </html>
