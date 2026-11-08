@@ -1,0 +1,23 @@
+{
+ "_about": "Zenod's feature list (same shape as agent_team docs/features/epicteam.json and epicsocial.json; started by EPIC-14 S8's worker 2026-11-08). Each line is true today and names the rows that built it. Habit: when Jordi closes a row done (approved) for something new a Zenod user can see, add it here in the same change or the next wake. `title` and `text` are public words: no row codes, no file paths. A line drafted for a row still in review has \"draft\": true until he closes it.",
+ "service": "Zenod",
+ "title": "What Zenod does for you",
+ "updated": "2026-11-08",
+ "groups": [
+  {
+   "id": "talk-to-your-memory",
+   "title": "Talk to your memory",
+   "intro": "Ask, tell and call your memory from the web app.",
+   "features": [
+    {
+     "id": "call-your-memory",
+     "title": "Call your memory",
+     "text": "Press the phone button in the chat and ask your memory out loud. It answers from your own notes and passes jobs to the memory desk. Nothing from a call is saved unless you keep it.",
+     "rows": ["E14-S8"],
+     "since": "2026-11-08",
+     "draft": true
+    }
+   ]
+  }
+ ]
+}
