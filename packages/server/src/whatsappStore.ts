@@ -1426,18 +1426,34 @@ export class WhatsAppStore {
   }
 
   /**
-   * Counts only, no content: kept voice notes still waiting, saved after at least one
-   * retry, and given up after the last one.
+   * Counts only, no content, for kept voice notes: still waiting for a retry, handed back
+   * and not finished yet, saved after at least one retry, ended in the try-again text after a
+   * retry (Zenod said the save failed), and given up after the last retry.
    */
-  voiceCaptureRetryCounts(): { pending: number; recovered: number; gaveUp: number } {
+  voiceCaptureRetryCounts(): {
+    pending: number;
+    inFlight: number;
+    recovered: number;
+    notSaved: number;
+    gaveUp: number;
+  } {
     const row = this.db.prepare(
       `SELECT
          COALESCE(SUM(job_state = 'capture_retry_pending'), 0) AS pending,
+         COALESCE(SUM(capture_retry_count > 0 AND job_state IN ('transcribed', 'forwarding')), 0) AS inFlight,
          COALESCE(SUM(job_state IN ('reply_ready', 'completed') AND capture_retry_count > 0), 0) AS recovered,
+         COALESCE(SUM(capture_retry_count > 0 AND (job_state = 'ring_outcome_unknown'
+           OR (job_state = 'failed' AND COALESCE(error_text, '') <> 'Capture retries exhausted'))), 0) AS notSaved,
          COALESCE(SUM(job_state = 'failed' AND error_text = 'Capture retries exhausted'), 0) AS gaveUp
        FROM whatsapp_voice_jobs`,
-    ).get() as { pending: number; recovered: number; gaveUp: number };
-    return { pending: Number(row.pending), recovered: Number(row.recovered), gaveUp: Number(row.gaveUp) };
+    ).get() as { pending: number; inFlight: number; recovered: number; notSaved: number; gaveUp: number };
+    return {
+      pending: Number(row.pending),
+      inFlight: Number(row.inFlight),
+      recovered: Number(row.recovered),
+      notSaved: Number(row.notSaved),
+      gaveUp: Number(row.gaveUp),
+    };
   }
 
   resumeIdempotentVoiceCaptures(tenantId: string, now = Date.now()): number {

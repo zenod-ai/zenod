@@ -4302,7 +4302,7 @@ describe("ported gateway integration", () => {
         expect(sent[2]).toContain("Saved ✓");
         expect(new Set(storeKeys)).toEqual(new Set([`alpha:whatsapp:${event.messageId}`]));
         expect(jobsByKey.size).toBe(1);
-        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, recovered: 1, gaveUp: 0 });
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, inFlight: 0, recovered: 1, notSaved: 0, gaveUp: 0 });
       } finally {
         await runtime.close();
       }
@@ -4324,7 +4324,7 @@ describe("ported gateway integration", () => {
         await vi.waitFor(() => expect(sent).toHaveLength(3));
         expect(sent[1]).toBe(KEPT);
         expect(sent[2]).toBe(NOT_SAVED);
-        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, recovered: 0, gaveUp: 1 });
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, inFlight: 0, recovered: 0, notSaved: 0, gaveUp: 1 });
         expect(runtime.retryDueVoiceCaptures(Date.now() + 9 * 60 * 60_000)).toBe(0);
       } finally {
         await runtime.close();
@@ -4368,6 +4368,7 @@ describe("ported gateway integration", () => {
         await vi.waitFor(() => expect(sent).toHaveLength(3));
         expect(sent[2]).toContain("Saved ✓");
         expect(storeKeys).toEqual([`alpha:whatsapp:${event.messageId}`, `alpha:whatsapp:${event.messageId}`]);
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toMatchObject({ pending: 0, recovered: 1, notSaved: 0 });
         expect(jobsByKey.size).toBe(1);
       } finally {
         await runtime.close();
