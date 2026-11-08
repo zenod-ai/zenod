@@ -100,7 +100,7 @@ export function VoiceNoteButton({
       </span>
       <button
         type="button"
-        className="zp-keep"
+        className="zp-recdiscard"
         aria-label="Discard voice note"
         disabled={phase === "sending"}
         onClick={() => void engine.discard()}

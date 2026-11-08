@@ -402,6 +402,7 @@ svg.zp-gcompact .zp-gcenter text { font-size: 25px; }
 .zp-reclen { font: 600 1rem var(--zp-sans); color: var(--zp-ink); font-variant-numeric: tabular-nums; min-width: 2.6rem; }
 .zp-reclevel { flex: 1; min-width: 3rem; height: 2px; background: var(--zp-line); overflow: hidden; }
 .zp-reclevel i { display: block; height: 100%; background: var(--zp-accent); transform-origin: left; transition: transform 120ms linear; }
+.zp-recdiscard { background: transparent; color: var(--zp-accent); border: 1px solid var(--zp-accent); }
 .zp-recstate { font-size: 0.85rem; color: var(--zp-muted); }
 .zp-voicemsg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--zp-muted); }
 .zp-voice { font-variant-numeric: tabular-nums; }
