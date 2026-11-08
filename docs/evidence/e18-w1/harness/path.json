@@ -1,0 +1,12 @@
+{
+  "title": "Zenod follows strong links and stops when a path gets weak",
+  "subtitle": "Strengths multiply along the path. Anything still at 80% or more joins the answer.",
+  "layout": "flow",
+  "nodes": [
+    {"id": "q", "label": "Your question", "sub": "best match counts as 100%", "tone": "warm"},
+    {"id": "a", "label": "A page", "sub": "1 × 0.9 = 90%"},
+    {"id": "b", "label": "A voice note", "sub": "0.9 × 0.95 = 85.5%, kept", "tone": "accent"},
+    {"id": "c", "label": "One step further", "sub": "85.5% × 0.9 = 77%, left out", "tone": "muted"}
+  ],
+  "edges": [["q","a","link 0.9"],["a","b","link 0.95"],["b","c","link 0.9"]]
+}

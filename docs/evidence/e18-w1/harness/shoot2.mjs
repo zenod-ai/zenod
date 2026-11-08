@@ -1,0 +1,60 @@
+// E18-W1 round 2: link strengths in the graph, on the made-up demo vault. Desktop and phone.
+import { chromium } from "playwright-core";
+const OUT = process.argv[2], BASE = process.argv[3] ?? "http://127.0.0.1:18961";
+const exe = process.env.HOME + "/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome";
+const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
+const out = {};
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1 });
+const page = await ctx.newPage();
+page.on("pageerror", (e) => console.log("pageerror", e.message));
+const ms = [];
+page.on("response", (r) => { if (r.url().includes("memory-graph")) ms.push(Math.round(r.request().timing().responseEnd)); });
+await page.goto(`${BASE}/dev-login`);
+await page.waitForSelector("textarea");
+await page.goto(`${BASE}/#graph?path=${encodeURIComponent("Projects/Westcombe.md")}`);
+await page.waitForSelector("svg.zp-g line.zp-gweighted");
+await page.waitForTimeout(1800);
+await page.screenshot({ path: `${OUT}/desktop.png` });
+out.weighted = await page.$$eval("svg.zp-g line.zp-gweighted", (els) => els.length);
+out.weak = await page.$$eval("svg.zp-g line.zp-gweak", (els) => els.length);
+out.legend = await page.locator(".zp-legend").textContent();
+out.panel = (await page.locator(".zp-gpanel .zp-glist").first().textContent()).slice(0, 200);
+// Hover a weak link: its percent appears.
+const weakHit = await page.$$eval("svg.zp-g line.zp-gweak", (els) => {
+  const l = els[0]; const g = l.parentElement; const hit = g.querySelector(".zp-gedgehit");
+  const r = hit.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+});
+await page.mouse.move(weakHit.x, weakHit.y);
+await page.waitForTimeout(300);
+out.hoverLabel = await page.locator(".zp-gstrength").textContent().catch(() => null);
+await page.screenshot({ path: `${OUT}/desktop-hover.png` });
+const box = await page.locator(".zp-graphgrid .zp-stage").boundingBox();
+await page.screenshot({ path: `${OUT}/graph-close.png`, clip: box });
+await page.goto(`${BASE}/#graph`);
+await page.waitForTimeout(2200);
+await page.screenshot({ path: `${OUT}/overview.png` });
+out.ms = ms;
+await ctx.close();
+const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const p2 = await phone.newPage();
+await p2.goto(`${BASE}/dev-login`);
+await p2.waitForSelector("textarea");
+await p2.goto(`${BASE}/#graph?path=${encodeURIComponent("Projects/Westcombe.md")}`);
+await p2.waitForSelector("svg.zp-g line.zp-gweighted");
+await p2.waitForTimeout(1800);
+const svg = await p2.locator("svg.zp-g").boundingBox();
+await p2.evaluate((y) => window.scrollTo(0, y - 120), svg.y);
+await p2.waitForTimeout(300);
+// Tap a strong link: its percent appears.
+const strongHit = await p2.$$eval("svg.zp-g line.zp-gweighted:not(.zp-gweak)", (els) => {
+  const l = els.sort((a, b) => Number(b.style.strokeWidth) - Number(a.style.strokeWidth))[3]; const hit = l.parentElement.querySelector(".zp-gedgehit");
+  const r = hit.getBoundingClientRect(); return { x: r.x + r.width * 0.5, y: r.y + r.height * 0.5 };
+});
+await p2.touchscreen.tap(strongHit.x, strongHit.y);
+await p2.waitForTimeout(400);
+out.tapLabel = await p2.locator(".zp-gstrength").textContent().catch(() => null);
+out.phoneHash = await p2.evaluate(() => location.hash);
+await p2.screenshot({ path: `${OUT}/phone.png` });
+await phone.close();
+await browser.close();
+console.log(JSON.stringify(out, null, 1));
