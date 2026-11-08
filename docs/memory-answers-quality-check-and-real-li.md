@@ -69,6 +69,7 @@ One line per decision; detail goes to a linked page.
 | 2026-11-08 | accepted | epic “Memory answers: quality check and real-life tests” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (WhatsApp → Zenod), 2026-11-08 15:51Z Zenod: Log/2026-11-08.md#^e-7821a0 So the more I think about it, the") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
 | 2026-11-08 | revised | E15-A1 was feedback, not a top-up (9a00e536): Jordi asked for a task Q1 depends on — "bringing your subscription", a conversation about enabling OpenCode with DeepSeek flash 4.1 as provider, provisioned so it does not become expensive. Q0 added (run_7702b24b): inventory, options with costs, a capped recommendation; back as E15-A2. | no spend before the conversation | 9a00e536 | when E15-A2 is answered |
 | 2026-11-08 | revised | Q0 delivered the provisioning proposal (E15-A2) and found production's OpenRouter key very likely shares the nearly empty test account (about $1.12 left), raised separately as urgent E15-A3. | production risk raised first | e15-q0 proposal | when E15-A2/A3 are answered |
+| 2026-11-08 | revised | E15-A2 was feedback (2f0f417f): Jordi asks to verify which accounts are active, and whether "bring your own subscription" is an option, preferably connecting his Claude account with a button in the app. Q0 round 2 verifies keys and checks what each provider allows for BYO; back as E15-A4. | no spend before the answer | 2f0f417f | when E15-A4 is answered |
 
 
 
