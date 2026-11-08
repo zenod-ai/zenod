@@ -124,5 +124,32 @@
   "pr": "#1531",
   "privateVault": "ceb4757",
   "vaultChange": false
+ },
+ {
+  "sha": "806d1f6",
+  "at": "2026-11-08T22:20Z",
+  "label": "S19 note read, E14 calls",
+  "what": "latest main before S20: the asked note is read (S19), desk calls (E14-S8)",
+  "pr": "#1542",
+  "privateVault": "c52bf1a",
+  "vaultChange": false
+ },
+ {
+  "sha": "e32c0cf",
+  "at": "2026-11-08T22:50Z",
+  "label": "S20 filing links",
+  "what": "a rescued point lands on its subject's branch; stuck receipts filed point by point",
+  "pr": "#1543",
+  "privateVault": "c52bf1a",
+  "vaultChange": false
+ },
+ {
+  "sha": "e32c0cf",
+  "at": "2026-11-08T22:51Z",
+  "label": "S20 notes linked (your vault)",
+  "what": "11 voice notes no topic held linked as 19 provisional leaves",
+  "pr": null,
+  "privateVault": "01ef521",
+  "vaultChange": true
  }
 ]
