@@ -95,7 +95,7 @@ const llm = {
     return text;
   },
 };
-const engine = core.createEngine({ repo, llm, state: new SqliteStateStore(join(DATA, "zenod.sqlite")), memoryIndex: { path: join(DATA, "memory-index.sqlite"), tenantId: "tenant-demo" } });
+const engine = core.createEngine({ repo, llm, state: new SqliteStateStore(join(DATA, "zenod.sqlite")), ...(process.env.DESK_NOW ? { now: () => new Date(process.env.DESK_NOW) } : {}), memoryIndex: { path: join(DATA, "memory-index.sqlite"), tenantId: "tenant-demo" } });
 
 // ---- the tenant: its job queue and inbox, wired as runtime.ts wires them
 const jobs = new TaskJobStore(join(DATA, "tasks.sqlite"), "tenant-demo");
