@@ -1,0 +1,48 @@
+/* EPIC-14 S2: the inbox, in the paper language of the chat and graph (.zp tokens in index.css,
+   docs/epic12/DESIGN-LANGUAGE.md): rules not boxes, one accent on what needs a decision. */
+.zi-screen { min-height: min(56svh, 520px); gap: 0.5rem; }
+.zi-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--zp-ink); }
+.zi-item { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.95rem 0; border-bottom: 1px solid var(--zp-line); animation: zp-in 450ms ease both; }
+.zi-quiet .zi-what, .zi-quiet .zi-summary { color: var(--zp-muted); }
+.zi-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.8rem; margin: 0; font-size: 0.84rem; color: var(--zp-muted); }
+.zi-kind { font: 500 0.82rem var(--zp-sans); border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.08rem 0.6rem; color: var(--zp-ink); }
+.zi-question.zi-s-open .zi-kind { border-color: var(--zp-accent); color: var(--zp-accent); }
+.zi-job.zi-s-working .zi-kind { border-color: var(--zp-warn); color: var(--zp-warn); }
+.zi-who { font-variant-numeric: tabular-nums; }
+.zi-example { font-style: italic; color: var(--zp-faint); }
+.zi-new { margin-left: auto; font-weight: 600; color: var(--zp-accent); }
+.zi-what { font: 400 1.22rem / 1.35 var(--zp-serif); margin: 0; max-width: 60ch; text-wrap: pretty; }
+.zi-body, .zi-summary { font-size: 0.96rem; line-height: 1.5; color: var(--zp-muted); margin: 0; max-width: 64ch; }
+.zi-summary { color: var(--zp-ink); }
+.zi-rec { margin: 0; font-size: 0.86rem; color: var(--zp-accent); }
+.zi-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.15rem; }
+.zi-done { margin: 0; font-size: 0.9rem; color: var(--zp-accent); }
+.zi-done::before { content: "✓ "; }
+.zi-warn { color: var(--zp-warn); margin: 0; font-size: 0.9rem; }
+.zi-step { display: flex; align-items: center; gap: 0.55rem; margin: 0; font-size: 0.95rem; color: var(--zp-ink); }
+.zi-step i { width: 7px; height: 7px; border-radius: 50%; background: var(--zp-warn); flex: none; animation: zp-dot 1.2s ease infinite; }
+.zi-links { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; font-size: 0.9rem; }
+.zi-links a::before { content: "↗ "; }
+.zi-changes { display: flex; flex-direction: column; gap: 0.7rem; border-top: 1px solid var(--zp-line); padding-top: 0.6rem; font-size: 0.9rem; }
+.zi-changes ul { list-style: none; margin: 0; padding: 0; }
+.zi-changes li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.2rem 1rem; padding: 0.3rem 0; border-bottom: 1px solid var(--zp-line); }
+.zi-move { color: var(--zp-muted); }
+.zi-move i { font-style: normal; color: var(--zp-accent); }
+.zi-searchhead { font: 500 1rem var(--zp-serif); margin: 0 0 0.3rem; }
+.zi-ba { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.zi-ba b { display: block; font-weight: 600; border-bottom: 1px solid var(--zp-ink); padding-bottom: 0.2rem; margin-bottom: 0.2rem; }
+.zi-ba ol { margin: 0; padding-left: 1.2rem; color: var(--zp-muted); }
+.zi-ba div:last-child ol { color: var(--zp-ink); }
+.zi-earlier { font: 500 1.05rem var(--zp-serif); margin: 1rem 0 0.2rem; color: var(--zp-muted); }
+.zi-clear { color: var(--zp-faint); font: 400 1.05rem / 1.5 var(--zp-serif); margin: 0.6rem 0; }
+.zi-empty { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 0.6rem; text-align: center; }
+.zi-empty .zp-empty { margin: 0; }
+.zi-foot { margin-top: 0.8rem; }
+.zp .zi-link { all: unset; cursor: pointer; color: var(--zp-accent); text-decoration: underline; text-underline-offset: 2px; }
+@media (max-width: 640px) {
+  .zi-ba { grid-template-columns: 1fr; }
+  .zi-what { font-size: 1.12rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zi-item, .zi-step i { animation: none; }
+}

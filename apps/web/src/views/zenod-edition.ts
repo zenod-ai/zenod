@@ -13,6 +13,7 @@ export type ZenodCapability =
 export type ZenodPortalSection =
   | "chat"
   | "graph"
+  | "inbox"
   | "overview"
   | "memory"
   | "connect"
@@ -35,6 +36,8 @@ const HOSTED_SECTIONS = Object.freeze([
   { id: "chat", label: "Chat" },
   // E12-S2: your memory as a graph, next to the chat.
   { id: "graph", label: "Graph" },
+  // EPIC-14 S2: questions, findings and memory desk jobs addressed to you.
+  { id: "inbox", label: "Inbox" },
   { id: "overview", label: "Overview" },
   { id: "memory", label: "Memory" },
   { id: "connect", label: "Connect / MCP" },

@@ -22,6 +22,7 @@ export function dashboardSectionForTab(
   )
   if (tab === "chat" && available.has("chat")) return "chat"
   if (tab === "graph" && available.has("graph")) return "graph"
+  if (tab === "inbox" && available.has("inbox")) return "inbox"
   if (tab === "overview" && available.has("overview")) return "overview"
   if (tab === "memory" && available.has("memory")) return "memory"
   if (tab === "connect" && available.has("connect")) return "connect"
