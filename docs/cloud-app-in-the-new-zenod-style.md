@@ -33,7 +33,7 @@ Status: active
 Last attempted: 2026-11-08 D1 (run_09a7cd57): whole cloud app restyled in the paper look, Z favicon set on every Zenod surface, PR #1519 merged and live
 Result: live on production sha 9ef8c0c7 (contains merge 5cd14132); the Z shows in real browser tabs on cloud.zenod.dev, zenod.dev, /connect and health.zenod.dev; the paper landing is live on zenod.dev. Signed-in screens checked on demo data only (no tester account yet, E7-A15)
 Evidence: [e17-d1 evidence](http://vps3.taild81fbb.ts.net:8921/e17-d1/) · [docs/evidence/e17-d1-2026-11-08.md](evidence/e17-d1-2026-11-08.md) · card [docs/cards/E17-D1.md](cards/E17-D1.md)
-Waiting on: Jordi judges the new look (D1 card)
+Waiting on: nobody; the D1 card is in review
 Approved work: D1
 Next action: Jordi opens the D1 card; on his close, E17-1 is ticked and the epic closes
 Source revision: main 9ef8c0c7 (code), docs after
@@ -49,7 +49,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| D1 | Ticket worker | run_09a7cd57 | Harmonize the whole cloud app to the Zenod design language and put the Z favicon on every Zenod surface (E17-1..3) | review | none | PR #1519 merged (5cd14132) | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e17-d1/), live sha 9ef8c0c7, card E17-D1 | 2026-11-08 18:05Z | followups: park Check the signed-in screens on production — needs the first tester account (E7-A15, T7 rehearsal covers it); confirm: yes — Jordi opens the cloud app and judges the new look himself |
+| D1 | Ticket worker | run_09a7cd57 | Harmonize the whole cloud app to the Zenod design language and put the Z favicon on every Zenod surface (E17-1..3) | review | none | PR #1519 merged (5cd14132) | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e17-d1/), live sha 9ef8c0c7, card E17-D1 | 2026-11-08 18:05Z | followups: park Check signed-in screens on production — needs a tester account (E7-A15); confirm: yes — Jordi judges the new look in the cloud app |
 
 ## Decisions
 
