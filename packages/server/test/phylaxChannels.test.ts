@@ -4157,7 +4157,8 @@ describe("ported gateway integration", () => {
     const KEPT = "⚠️ I couldn't save that voice note yet. It's kept safe, and I'll confirm here when it's saved.";
     const NOT_SAVED = "⚠️ Sorry, Zenod couldn't save this. Please try again in a few minutes.";
 
-    async function keptVoiceHarness(name: string) {
+    async function keptVoiceHarness(name: string, options: { pauseSecondSettlement?: boolean } = {}) {
+      const usageBegins: boolean[] = [];
       const dataDir = await mkdtemp(join(tmpdir(), `phylax-zal-a10-${name}-`));
       dirs.push(dataDir);
       const sent: string[] = [];
@@ -4246,6 +4247,25 @@ describe("ported gateway integration", () => {
       });
       const runtime = new PhylaxPortedRuntime(dataDir, organ, {}, {
         probeVoiceDuration: async () => 60,
+        ...(options.pauseSecondSettlement
+          ? {
+              // The allowance ledger refuses to settle the same transcription twice.
+              beginVoiceTranscriptionUsage(input) {
+                usageBegins.push(Boolean(input.persistedResult));
+                return {
+                  state: usageBegins.length > 1 ? "paused" : "compatibility_pending",
+                  tenantId: input.tenantId,
+                  providerEventId: input.providerMessageId,
+                  operation: "transcription.audio",
+                  amountUnits: 60,
+                  provider: "local",
+                  model: "base",
+                  costBasis: "estimated",
+                };
+              },
+              completeVoiceTranscriptionUsage() {},
+            }
+          : {}),
         whatsappSocketFactory: async () => ({
           ev: { on() {} },
           async sendMessage(_jid, content) {
@@ -4271,7 +4291,7 @@ describe("ported gateway integration", () => {
         fileName: null,
         mediaRaw: { testBytes: `zal-a10-${name}-audio` },
       };
-      return { runtime, sent, storeKeys, jobsByKey, control, event };
+      return { runtime, sent, storeKeys, jobsByKey, control, event, usageBegins };
     }
 
     it("retries a kept voice note on its own schedule, files it once and then sends Saved", async () => {
@@ -4302,7 +4322,27 @@ describe("ported gateway integration", () => {
         expect(sent[2]).toContain("Saved ✓");
         expect(new Set(storeKeys)).toEqual(new Set([`alpha:whatsapp:${event.messageId}`]));
         expect(jobsByKey.size).toBe(1);
-        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, inFlight: 0, recovered: 1, notSaved: 0, gaveUp: 0 });
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, inFlight: 0, forwarding: 0, recovered: 1, notSaved: 0, gaveUp: 0 });
+      } finally {
+        await runtime.close();
+      }
+    });
+
+    it("does not settle the transcription allowance again on a retry, so a retry cannot stall", async () => {
+      const { runtime, sent, jobsByKey, control, event, usageBegins } =
+        await keptVoiceHarness("settled-once", { pauseSecondSettlement: true });
+      try {
+        await runtime.whatsapp.handleEvent(event);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("capture_retry_pending"));
+        expect(usageBegins).toHaveLength(1);
+        control.reachable = true;
+        expect(runtime.retryDueVoiceCaptures(Date.now() + 61_000)).toBe(1);
+        await vi.waitFor(() =>
+          expect(runtime.whatsappStore.voiceJob(event.messageId)?.state).toBe("completed"));
+        await vi.waitFor(() => expect(sent.at(-1)).toContain("Saved ✓"));
+        expect(usageBegins).toHaveLength(1);
+        expect(jobsByKey.size).toBe(1);
       } finally {
         await runtime.close();
       }
@@ -4324,7 +4364,7 @@ describe("ported gateway integration", () => {
         await vi.waitFor(() => expect(sent).toHaveLength(3));
         expect(sent[1]).toBe(KEPT);
         expect(sent[2]).toBe(NOT_SAVED);
-        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, inFlight: 0, recovered: 0, notSaved: 0, gaveUp: 1 });
+        expect(runtime.whatsappStore.voiceCaptureRetryCounts()).toEqual({ pending: 0, inFlight: 0, forwarding: 0, recovered: 0, notSaved: 0, gaveUp: 1 });
         expect(runtime.retryDueVoiceCaptures(Date.now() + 9 * 60 * 60_000)).toBe(0);
       } finally {
         await runtime.close();
