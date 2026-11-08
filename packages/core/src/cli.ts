@@ -14,6 +14,7 @@ import { createEngine } from "./engine/engine.js";
 import { discoverTree } from "./engine/treeDiscover.js";
 import { rediscoverTree, refileAgentLeaves } from "./engine/treeSweep.js";
 import { moveReportLines, planReportLines } from "./engine/reportLines.js";
+import { applyNoteLinks, planNoteLinks } from "./engine/noteLinker.js";
 import { TrackedWrites } from "./engine/treePlacement.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
 import { cleanSlateVault, type CleanSlateResult } from "./vault/cleanSlate.js";
@@ -43,6 +44,7 @@ function usage(): string {
     "  tree lineage <path>       print a page's path root → leaf",
     "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print an empty Tree.md (no roots), or write it into <dir>; `tree discover --apply` finds the roots",
     "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
+    "  tree link-notes [--apply] [--partial] [--skip REF,REF] [--today YYYY-MM-DD] [--json]  list your voice notes no topic page holds, whole or in part (dry run); --apply links each point of a note no page cites (with --partial also the dropped points of half-filed notes) as a provisional leaf on its subject's branch (no commit)",
     "  tree report-lines [--apply] [--today YYYY-MM-DD] [--json]  list agent-report lines on your pages (dry run); --apply moves them to Archive/Agent reports/ with their page and line (no commit)",
     "  index rebuild             rebuild the tier-0 memory index (SQLite FTS5 beside the vault) from scratch; idempotent",
     "  index search <query>      query the tier-0 index (refreshes changed files first), with tree paths and timing",
@@ -274,6 +276,23 @@ async function main(): Promise<number> {
         }
         for (const subject of applied?.subjects ?? []) console.log(`subject    ${subject.display}  ·  ${subject.created ? "new page" : `${subject.added} new capture(s) on`} ${subject.path}`);
         console.log(`${plan.stats.pages} tree pages · ${plan.stats.topics} topics · ${plan.fresh ? "fresh (current roots ignored)" : "continuing"}${changed ? ` · ${changed.length} file(s) written · ${refiled.length} agent-report leaf(s) moved to the ops rollup` : " · dry run"}`);
+        return 0;
+      }
+      if (sub === "link-notes") {
+        const flag = (name: string) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
+        const skip = new Set((flag("--skip") ?? "").split(",").map(ref => ref.trim()).filter(Boolean));
+        const plan = await planNoteLinks(vaultPath(), { skip });
+        const written = rest.includes("--apply")
+          ? await applyNoteLinks(vaultPath(), plan, flag("--today") ?? new Date().toISOString().slice(0, 10), { partial: rest.includes("--partial") }) : null;
+        if (rest.includes("--json")) {
+          console.log(JSON.stringify({ ...plan, written }, null, 2));
+          return 0;
+        }
+        for (const note of plan.notes) {
+          console.log(`${note.state.padEnd(8)}  ${note.evidenceRef}  ${note.points.length} point(s)${note.receipt ? ` · ${note.receipt}` : " · no receipt"}`);
+          for (const point of note.points) console.log(`          ${point.topic ?? "(whole note)"}${point.anchors[0] ? ` → under ${point.anchors[0]}` : ""}`);
+        }
+        console.log(`${plan.voiceNotes} voice note(s) · ${plan.linked} linked · ${plan.unlinked} with no topic link · ${plan.partial} half filed · ${plan.evidenceOnly.length} kept as evidence only${written ? ` · ${written.length} leaf link(s) written` : " · dry run"}`);
         return 0;
       }
       if (sub === "report-lines") {

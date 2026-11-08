@@ -28,7 +28,7 @@ import { buildWeightedLinks, CLOUD_DEFAULT_THRESHOLD, expandCloud, isNote, nodeI
  * 5: pages under `Archive/Agent reports/` are marked `agent` and page bodies leave out their
  * `## Ops rollup` lines (E12-S15). An older file is rebuilt once on open.
  */
-const SCHEMA_VERSION = "5";
+const SCHEMA_VERSION = "6";
 const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
@@ -241,8 +241,10 @@ export interface MemoryNoteLinks {
   voiceNotes: number;
   /** Of those, notes no page cites, no receipt files and that link to nothing. */
   unlinked: number;
-  /** Of those, notes whose filing planned topics it never wrote. */
+  /** Of those, notes whose filing planned topics it never wrote (a point rescued onto a leaf counts as written, E12-S20). */
   partial: number;
+  /** Notes no page cites whose filing kept them as evidence only (a test recording): nothing to link, not counted as unlinked (E12-S20). */
+  evidenceOnly?: number;
   /** The newest unlinked notes, newest first (paths), at most 20. */
   unlinkedPaths: string[];
 }
@@ -1054,7 +1056,7 @@ export class MemoryIndex {
       .filter((link) => link.dst !== TREE_PATH && /\b(?:cites|filed|mentions)\b/.test(link.reasons) && graph.has(link.dst))
       .map((link) => ({ path: link.dst, relation: (/\b(?:cites|filed)\b/.test(link.reasons) ? "filed" : "linked") as MemoryIndexRelation, weight: link.strength }));
     const tied = new Set(pages.map((page) => page.path));
-    const unwritten = (this.db.prepare("SELECT target FROM edges WHERE src = ? AND kind = 'planned'").all(notePath) as Array<{ target: string }>).filter((edge) => {
+    const unwritten = (this.db.prepare("SELECT target FROM edges WHERE src = ? AND kind = 'dropped'").all(notePath) as Array<{ target: string }>).filter((edge) => {
       const path = graph.has(edge.target) ? edge.target : graph.resolve(edge.target);
       return !path || !tied.has(path);
     }).length;
@@ -1121,15 +1123,18 @@ export class MemoryIndex {
       .sort((a, b) => b.file.localeCompare(a.file) || b.rowid - a.rowid);
     let unlinked = 0;
     let partial = 0;
+    let evidenceOnly = 0;
     const unlinkedPaths: string[] = [];
+    const kept = new Set((this.db.prepare("SELECT src FROM edges WHERE kind = 'kept'").all() as Array<{ src: string }>).map((row) => row.src));
     for (const note of notes) {
       const links = this.connectionsOf(note.path);
-      if (links.pages.length === 0) {
+      if (links.pages.length === 0 && kept.has(note.path)) evidenceOnly++;
+      else if (links.pages.length === 0) {
         unlinked++;
         if (unlinkedPaths.length < 20) unlinkedPaths.push(note.path);
       } else if (links.unwritten > 0) partial++;
     }
-    return { voiceNotes: notes.length, unlinked, partial, unlinkedPaths };
+    return { voiceNotes: notes.length, unlinked, partial, evidenceOnly, unlinkedPaths };
   }
 
   /**
@@ -1340,7 +1345,7 @@ async function lineageResolver(vaultPath: string): Promise<LineageResolver> {
  * entry to its topics (E12-S3c): `cites` page → entry (the page quotes it), `filed` / `planned`
  * entry → page (its filing receipt wrote, or only planned, that page), `mentions` entry → page.
  */
-type StoredEdge = { from: string; target: string; kind: MemoryGraphRawEdge["kind"] | "cites" | "filed" | "planned" | "mentions"; weight?: number | null };
+type StoredEdge = { from: string; target: string; kind: MemoryGraphRawEdge["kind"] | "cites" | "filed" | "planned" | "dropped" | "kept" | "mentions"; weight?: number | null };
 
 /** The note → page edges of a filing receipt (`Inbox/filing-<date>-e-xxxxxx.md`); none when it does not parse. */
 function receiptEdges(raw: string): StoredEdge[] {
@@ -1349,8 +1354,8 @@ function receiptEdges(raw: string): StoredEdge[] {
   try {
     const value = JSON.parse(body) as {
       evidenceRef?: unknown;
-      outcomes?: Array<{ filedPages?: unknown; uncertainPages?: unknown; pages?: unknown; confidence?: unknown }>;
-      classification?: { topics?: Array<{ pages?: Array<{ path?: unknown } | string> }> };
+      outcomes?: Array<{ filedPages?: unknown; uncertainPages?: unknown; pages?: unknown; confidence?: unknown; ideaId?: unknown; status?: unknown; disposition?: unknown }>;
+      classification?: { disposition?: unknown; topics?: Array<{ pages?: Array<{ path?: unknown } | string>; ideaId?: unknown; disposition?: unknown }> };
     };
     if (typeof value.evidenceRef !== "string") return [];
     const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
@@ -1373,10 +1378,33 @@ function receiptEdges(raw: string): StoredEdge[] {
         if (path) planned.add(path);
       }
     }
+    // E12-S20: `dropped` pages are those of points that reached no page at all (a point rescued onto a
+    // leaf is written); `kept` marks a filing that kept the note as evidence only, so it is not "unlinked".
+    const dropped = new Set<string>();
+    const topics = value.classification?.topics ?? [];
+    const outcomeOf = (ideaId: unknown) => (value.outcomes ?? []).find((outcome) => typeof ideaId === "string" && outcome.ideaId === ideaId);
+    for (const topic of topics) {
+      const outcome = outcomeOf(topic.ideaId);
+      if (topic.disposition === "evidence_only" || outcome?.status === "filed" || strings(outcome?.filedPages).length || strings(outcome?.uncertainPages).length) continue;
+      for (const page of topic.pages ?? []) {
+        const path = typeof page === "string" ? page : typeof page?.path === "string" ? page.path : null;
+        if (path && !filed.has(path)) dropped.add(path);
+      }
+    }
+    if (!topics.length) {
+      for (const outcome of value.outcomes ?? []) {
+        if (outcome.status === "filed" || outcome.disposition === "evidence_only" || strings(outcome.filedPages).length || strings(outcome.uncertainPages).length) continue;
+        for (const page of strings(outcome.pages)) if (!filed.has(page)) dropped.add(page);
+      }
+    }
+    const evidenceOnly = value.classification?.disposition === "evidence_only"
+      || (topics.length > 0 && topics.every((topic) => topic.disposition === "evidence_only"));
     const from = value.evidenceRef;
     return [
       ...[...filed].map(([target, weight]) => ({ from, target, kind: "filed" as const, weight })),
       ...[...planned].filter((page) => !filed.has(page)).map((target) => ({ from, target, kind: "planned" as const })),
+      ...[...dropped].map((target) => ({ from, target, kind: "dropped" as const })),
+      ...(evidenceOnly && filed.size === 0 ? [{ from, target: from, kind: "kept" as const }] : []),
     ];
   } catch {
     return [];

@@ -153,7 +153,27 @@ describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () =>
 
   it("counts voice notes not yet linked to topics", async () => {
     const index = await indexOf(LAST_VOICE_NOTE_VAULT);
-    expect(await index.noteLinks()).toEqual({ voiceNotes: 3, unlinked: 1, partial: 1, unlinkedPaths: [UNLINKED_VOICE_NOTE] });
+    expect(await index.noteLinks()).toEqual({ voiceNotes: 3, unlinked: 1, evidenceOnly: 0, partial: 1, unlinkedPaths: [UNLINKED_VOICE_NOTE] });
+  });
+
+  it("counts a point rescued onto a leaf as written, and a test recording kept as evidence as not unlinked (E12-S20)", async () => {
+    const receipt = (evidenceRef: string, classification: unknown, outcomes: unknown[]) => [
+      "---", "status: filing-record", `evidence: ${JSON.stringify(evidenceRef)}`, "---", "", "# Topic filing receipt", "",
+      "```json", JSON.stringify({ version: 1, evidenceRef, phase: "ready", classification, outcomes, files: {} }, null, 2), "```", ""].join("\n");
+    const leaf = "Notes/Gate sticks.md";
+    const index = await indexOf({
+      ...LAST_VOICE_NOTE_VAULT,
+      [leaf]: "---\ntitle: Gate sticks\ntype: note\nprovisional: true\n---\n\n# Gate sticks\n\n> the gate sticks [[2026-11-06#^e-6b0e33]]\n",
+      // The fence note: its one point was rejected for Travel and rescued onto a leaf.
+      "Inbox/filing-2026-11-06-e-6b0e33.md": receipt(UNLINKED_VOICE_NOTE,
+        { topics: [{ ideaId: "f1", topic: "Gate", disposition: "append_compact_note", pages: [{ path: "Areas/Travel.md" }] }] },
+        [{ ideaId: "f1", status: "uncertain", reason: "provisional_leaf: reconciliation_needs_clarification", pages: [leaf], filedPages: [leaf], reroutedFrom: ["Areas/Travel.md"] }]),
+      "Log/2026-11-05.md": ["# 2026-11-05", "", "## 09:00 Voice test  ^e-7e5700", "- source: whatsapp", "- verbatim: yes", "- content-type: voice_note", "", "> Testing, say banana.", ""].join("\n"),
+      "Inbox/filing-2026-11-05-e-7e5700.md": receipt("Log/2026-11-05.md#^e-7e5700",
+        { disposition: "evidence_only", topics: [{ ideaId: "t1", topic: "Voice test", disposition: "evidence_only", pages: [] }] },
+        [{ ideaId: "t1", status: "filed", filedPages: [] }]),
+    });
+    expect(await index.noteLinks()).toEqual({ voiceNotes: 4, unlinked: 0, evidenceOnly: 1, partial: 1, unlinkedPaths: [] });
   });
 
   it("leaves subject questions to the word search, and roots no longer match by being roots", async () => {

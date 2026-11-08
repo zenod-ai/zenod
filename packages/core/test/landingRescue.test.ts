@@ -137,6 +137,36 @@ describe("E12-S8 a rejected memory is never dropped", { timeout: 120_000 }, () =
   });
 });
 
+/** The re-route finds the right page, but writing it fails (a technical error, not a rejection). */
+class FailingRerouteLlm extends RejectingLlm {
+  override async reconcile(request: ReconciliationInput): Promise<ReconciliationOperation[]> {
+    if (request.branch?.title === "Tide Cart brand") throw new Error("model timed out");
+    return super.reconcile(request);
+  }
+}
+
+describe("E12-S20 a rescued memory lands on its subject's branch", { timeout: 120_000 }, () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "zenod-e12s20-")); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it("hangs the leaf on the branch of the page the re-route chose, not where words overlap", async () => {
+    const repo = await vaultRepo(dir);
+    const llm = new FailingRerouteLlm([{ path: "Projects/Tide Cart brand.md", action: "update", title: "Tide Cart brand" }]);
+    const { captured, result } = await enrich(repo, llm);
+    const topic = result.topics![0]!;
+    expect(topic.status).toBe("uncertain");
+    expect(topic.reason).toMatch(/^provisional_leaf: reconciliation_needs_clarification/);
+    const raw = await readFile(join(repo.path, topic.filedPages[0]!), "utf8");
+    // Tide Cart brand sits under Launching Tide Cart: the sister apps' branch, not Moss Lantern's.
+    expect(parseNote(raw).frontmatter).toMatchObject({ parent: "[[Projects/Launching Tide Cart]]", provisional: true });
+    expect(raw).toContain(SENTENCE);
+    expect(raw).toContain(`#^${captured.evidenceRef.split("#^")[1]}]]`);
+    expect(await readFile(join(repo.path, "Projects/Tide Cart brand.md"), "utf8")).toBe(TIDE_BRAND);
+    expect((await lintVault(repo.path)).errors).toEqual([]);
+  });
+});
+
 describe("E12-S8 the organiser sees the tree", { timeout: 60_000 }, () => {
   let dir: string;
   beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "zenod-e12s8-tree-")); });
