@@ -27,7 +27,7 @@ Goal sentence: One Send button in the cloud chat, and Zenod decides whether to k
 
 ## Current State
 
-Owner: unassigned
+Owner: Delivery Manager (Zenod launch)
 Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
@@ -48,7 +48,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| B1 | Ticket worker | unassigned | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | ready | none | `wt/e16-b1` | main | none | 2026-11-08 | dispatch |
+| B1 | Ticket worker | run_68834ea4 | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | active | none | `wt/e16-b1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 

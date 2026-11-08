@@ -28,7 +28,7 @@ Goal sentence: Zenod answers questions about your memory well, tested on your ow
 
 ## Current State
 
-Owner: unassigned
+Owner: Delivery Manager (Zenod launch)
 Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Q1 | Ticket worker | unassigned | Judge the latest real questions and answers, build the real-note test set, check digestion is triggered (E15-1..3) | ready | none | `wt/e15-q1` | main | none | 2026-11-08 | dispatch |
+| Q1 | Ticket worker | run_ff4ff9cf | Judge the latest real questions and answers, build the real-note test set, check digestion is triggered (E15-1..3) | active | none | `wt/e15-q1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 

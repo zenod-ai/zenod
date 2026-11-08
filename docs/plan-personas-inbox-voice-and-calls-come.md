@@ -27,7 +27,7 @@ Goal sentence: A plan at one link for personas, an inbox and calling your memory
 
 ## Current State
 
-Owner: unassigned
+Owner: Delivery Manager (Zenod launch)
 Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| P1 | Ticket worker | unassigned | Plan at one URL: personas, inbox, voice and call buttons, bootstrap or merge, what stays separate (E14-1) | ready | none | `wt/e14-p1` | main | none | 2026-11-08 | build the plan page, then E14-A1 |
+| P1 | Ticket worker | run_7c8bcea2 | Plan at one URL: personas, inbox, voice and call buttons, bootstrap or merge, what stays separate (E14-1) | active | none | `wt/e14-p1` | main | none | 2026-11-08 | build the plan page, then E14-A1 |
 
 ## Decisions
 
