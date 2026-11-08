@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| A1 | Ticket worker | run_b72ff779-04e1-4467-8292-655206a85cac — claimed 2026-11-08T18:55Z, lease until 2026-11-08T20:55Z | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | active | E14-S3 (for #1532) | [#1530](https://github.com/zenod-ai/zenod/pull/1530) merged 05c9815 · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `wt/e20-a1` | main | [review](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/) | 2026-11-08 | verify #1530 live, merge #1532 after S3, prove live, card |
+| A1 | Ticket worker | unassigned (lease of run_b72ff779-04e1-4467-8292-655206a85cac expired 2026-11-08T20:55Z: re-dispatch) | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | ready | E14-S3 (for #1532) | [#1530](https://github.com/zenod-ai/zenod/pull/1530) merged 05c9815 · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `wt/e20-a1` | main | [review](http://vps3.taild81fbb.ts.net:8921/e20-a1-private/) | 2026-11-08 | verify #1530 live, merge #1532 after S3, prove live, card |
 
 ## Decisions
 
