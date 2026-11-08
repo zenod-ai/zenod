@@ -36,6 +36,8 @@ export type InboxItem = {
     changes: { what: string; before?: string; after?: string }[]
     search?: { query: string; before: string[]; after: string[] }
     changesUrl?: string
+    /** The job was a question: summary is the answer, nothing changed. */
+    answer?: boolean
   } | null
   example: boolean
   createdAt: string

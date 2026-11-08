@@ -118,7 +118,7 @@ if (MODE === "job") {
   const started = Date.now();
   const steps = [];
   const result = await engine.deskJob({ request: ARG, onStep: (s) => steps.push(s), ...(process.env.MAX_TOUCHED ? { maxTouched: Number(process.env.MAX_TOUCHED) } : {}) });
-  const out = { ms: Date.now() - started, steps, usage, status: result.status, ...(result.status === "refused" || result.status === "nothing" ? { reason: result.reason } : {}),
+  const out = { ms: Date.now() - started, steps, usage, status: result.status, ...(result.status === "refused" || result.status === "nothing" ? { reason: result.reason } : {}), ...(result.status === "answered" ? { answer: result.answer } : {}),
     ...(result.plan ? { plan: result.plan } : {}), ...(result.status === "done" || result.status === "needs_go" ? { touched: result.touched, changes: result.changes } : {}),
     ...(result.status === "done" ? { search: result.search, revision: result.revision.commitSha ?? result.revision.id, edits: result.edits } : {}) };
   await writeFile(join(DATA, "job-result.json"), JSON.stringify(out, null, 2));

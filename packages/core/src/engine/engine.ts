@@ -2995,7 +2995,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           reportTokenCost("ask", [system, prompt], undefined, "memory_desk");
           return llm.streamMemoryChat!({ system, prompt }, () => {});
         },
-        tools: deskReadTools(vaultPath, (query) => rankedSearch(query)),
+        tools: deskReadTools(vaultPath, (query) => rankedSearch(query), now),
         check: (plan) => checkDeskPlan(vaultPath, plan),
         ...(input.maxSteps ? { maxSteps: input.maxSteps } : {}),
         onStep: step,
@@ -3003,6 +3003,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
       });
       agent = { steps: outcome.steps, inputChars: outcome.inputChars };
       if (outcome.status === "refused") return { status: "refused", reason: outcome.reason, agent };
+      if (outcome.status === "answer") return { status: "answered", answer: outcome.answer, agent };
       plan = outcome.plan;
     }
     const approved = plan;

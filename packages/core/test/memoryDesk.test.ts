@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
-import { checkDeskChanges, nameFitsPage, runDeskAgent, type DeskReadTools } from "../src/engine/memoryDesk.js";
+import { checkDeskChanges, deskReadTools, isDeskQuestion, nameFitsPage, runDeskAgent, type DeskReadTools } from "../src/engine/memoryDesk.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import { buildTreeIndex, formatLineage } from "../src/vault/tree.js";
@@ -119,7 +119,7 @@ describe("EPIC-14 S3 memory desk", { timeout: 60_000 }, () => {
     const tools: DeskReadTools = {
       tree: async () => { used.push("tree"); return "- Boat and cabin | long-term | Projects/Boat repair.md | 3 pages under it"; },
       read: async (p) => { used.push(`read ${p}`); return "title: Cabin decision"; },
-      search: async () => "", children: async () => "", links: async () => "",
+      search: async () => "", children: async () => "", links: async () => "", recent: async () => "",
     };
     const outcome = await runDeskAgent({ request: "Boat and cabin are tangled, split them", call: (input) => llm.streamMemoryChat(input), tools, onStep: (s) => steps.push(s) });
     expect(outcome.status).toBe("plan");
@@ -147,7 +147,7 @@ describe("EPIC-14 S3 memory desk", { timeout: 60_000 }, () => {
   });
 
   it("stops at the step cap and on the model's refusal, never half done", async () => {
-    const tools: DeskReadTools = { tree: async () => "t", read: async () => "", search: async () => "", children: async () => "", links: async () => "" };
+    const tools: DeskReadTools = { tree: async () => "t", read: async () => "", search: async () => "", children: async () => "", links: async () => "", recent: async () => "" };
     const looping = new ScriptedLlm(Array(10).fill(JSON.stringify({ tool: "tree" })));
     const capped = await runDeskAgent({ request: "tidy everything", call: (i) => looping.streamMemoryChat(i), tools, maxSteps: 4 });
     expect(capped.status).toBe("refused");
@@ -160,6 +160,62 @@ describe("EPIC-14 S3 memory desk", { timeout: 60_000 }, () => {
     const spent = await runDeskAgent({ request: "x", call: (i) => budget.streamMemoryChat(i), tools, maxInputChars: 5_000 });
     expect(spent.status).toBe("refused");
     expect(budget.calls.length).toBeLessThan(3);
+  });
+
+  // Jordi's first real desk job (2026-11-08 20:15Z), word for word: a question, not a change. The
+  // round-1 desk read for all 8 steps and stopped with "ran out of steps before it knew what to change".
+  const JORDI_ASKED = "How many root memories added to in last 7 days?";
+
+  it("reads a question as a question and a job as a job, with plain rules", () => {
+    for (const question of [JORDI_ASKED, "what grew this week?", "Which topics got new notes", "¿Cuántas notas guardé esta semana?"]) expect(isDeskQuestion(question)).toBe(true);
+    for (const job of [
+      "Boat and cabin are tangled, split them", "Link the Garden page to the House page",
+      "Move the boiler notes under House please, they are filed wrong", "can you move the boiler notes under House?",
+      "Idealista and Poly-Maker are tangled, they are two separate things, please split them",
+    ]) expect(isDeskQuestion(job)).toBe(false);
+  });
+
+  it("the recent tool counts the notes saved in the last days and the topics they were filed under", async () => {
+    await writeVault(dir, KNOTTED_VAULT);
+    const tools = deskReadTools(dir, async () => [], () => new Date("2026-10-05T12:00:00Z"));
+    const week = await tools.recent("7");
+    expect(week).toContain("last 7 days (2026-09-29 to 2026-10-05): 3 notes saved, 3 of them filed on pages; 1 of your 2 root topics (the top-level topics of the tree) got new notes, all listed here");
+    expect(week).toContain('- root topic "Boat and cabin" (long-term): 3 new notes on 4 pages');
+    // From 2026-10-03 on: only the cabin survey note, on the cabin and survey pages.
+    const three = await tools.recent("3");
+    expect(three).toContain("1 note saved, 1 of them filed on pages; 1 of your 2 root topics");
+    expect(three).toContain('- root topic "Boat and cabin" (long-term): 1 new note on 2 pages');
+    expect(await deskReadTools(dir, async () => [], () => new Date("2026-12-01T00:00:00Z")).recent("7")).toContain("0 notes saved, 0 of them filed on pages; 0 of your 2 root topics");
+  });
+
+  it("Jordi's question gets an answer from the recent tool in two steps, and nothing is committed", async () => {
+    const { repo } = await gitVault(dir, KNOTTED_VAULT);
+    const git = simpleGit(repo.path);
+    const commits = (await git.log()).total;
+    const llm = new ScriptedLlm([
+      JSON.stringify({ tool: "recent", days: 7 }),
+      JSON.stringify({ answer: "In the last 7 days you saved 3 notes. One topic got them all: Boat and cabin, on 4 pages." }),
+    ]);
+    const steps: string[] = [];
+    const engine = createEngine({ repo, llm, state: new SqliteStateStore(":memory:"), now: () => new Date("2026-10-05T12:00:00Z") });
+    const result = await engine.deskJob!({ request: JORDI_ASKED, onStep: (s) => steps.push(s) });
+    expect(result).toMatchObject({ status: "answered", answer: "In the last 7 days you saved 3 notes. One topic got them all: Boat and cabin, on 4 pages.", agent: { steps: 2 } });
+    expect(llm.calls[0]!.prompt).toContain("This reads as a question about the memory, not a change");
+    expect(llm.calls[0]!.system).toContain('{"tool":"recent","days":7}');
+    expect(llm.calls[1]!.prompt).toContain('root topic "Boat and cabin" (long-term): 3 new notes on 4 pages');
+    expect(steps).toEqual(["Looking at what you saved in the last 7 days"]);
+    expect((await git.log()).total).toBe(commits);
+  });
+
+  it("a question the model never answers stops with a plain reason, not 'ask for a smaller part of the job'", async () => {
+    const tools: DeskReadTools = { tree: async () => "t", read: async () => "", search: async () => "", children: async () => "", links: async () => "", recent: async () => "r" };
+    const looping = new ScriptedLlm(Array(8).fill(JSON.stringify({ tool: "tree" })));
+    const out = await runDeskAgent({ request: JORDI_ASKED, call: (i) => looping.streamMemoryChat(i), tools });
+    expect(out).toMatchObject({ status: "refused", reason: "The desk read your memory 8 times and still had no answer. Nothing changed." });
+    expect(looping.calls[7]!.prompt).toContain("This is your last step: reply with answer, from what you read so far.");
+    const job = new ScriptedLlm(Array(8).fill(JSON.stringify({ tool: "tree" })));
+    const stuck = await runDeskAgent({ request: "tidy the boat topics", call: (i) => job.streamMemoryChat(i), tools });
+    expect(stuck).toMatchObject({ status: "refused", reason: expect.stringContaining("without settling on a change. Nothing changed.") });
   });
 
   it("untangles the knot as ONE commit: Log untouched, nothing deleted or rewritten, search before and after; Undo puts it back exactly", async () => {

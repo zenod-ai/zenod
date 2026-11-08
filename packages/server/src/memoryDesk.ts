@@ -51,6 +51,17 @@ const askKey = (captureJobId: string) => `desk-ask:${captureJobId}`;
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
+/** The jobs the queue runs before this one (one serial lane: saves, filings, sweeps, desk jobs). */
+export function jobsAhead(queue: DeskQueue, job: TaskJob): number {
+  return queue.recent(500).filter((other) => other.id !== job.id && (other.status === "queued" || other.status === "running") && other.createdAt <= job.createdAt).length;
+}
+
+/** "Waiting for its turn", and how many jobs are ahead when there are any. */
+export function waitingStep(ahead: number, prefix = "Waiting for its turn"): string {
+  if (ahead <= 0) return prefix;
+  return `${prefix}: ${ahead} ${ahead === 1 ? "save or job is" : "saves and jobs are"} ahead of it`;
+}
+
 /** A short job name from the request, until the desk names it. */
 export function deskTitle(request: string): string {
   const line = request.trim().split("\n")[0]!.replace(/\s+/g, " ");
@@ -71,17 +82,19 @@ export function startDeskJob(inbox: InboxStore, queue: DeskQueue, request: strin
     // The yes on a plan card: the same inbox item carries on.
     const existing = inbox.get(findItemId(inbox, options.itemKey));
     if (existing) {
-      queue.enqueue("desk_job", { deskRequest: text, deskItemKey: options.itemKey, ...(options.plan ? { deskPlan: options.plan } : {}) });
-      return inbox.updateJob(existing.id, { status: "working", step: "You said yes. Waiting for its turn" });
+      const again = queue.enqueue("desk_job", { deskRequest: text, deskItemKey: options.itemKey, ...(options.plan ? { deskPlan: options.plan } : {}) });
+      const queued = queue.get(again.id);
+      return inbox.updateJob(existing.id, { status: "working", step: waitingStep(queued ? jobsAhead(queue, queued) : 0, "You said yes. Waiting for its turn") });
     }
   }
   const job = queue.enqueue("desk_job", { deskRequest: text, ...(options.plan ? { deskPlan: options.plan } : {}) });
+  const queued = queue.get(job.id);
   return inbox.post({
     kind: "job", from: DESK_FROM, sourceKey: jobKey(job.id),
     title: options.plan?.title ?? deskTitle(text),
     // The request in full under its title, unless the title already holds all of it.
     ...(options.plan ? { body: `You said yes to the plan. "${clip(text, 300)}"` } : deskTitle(text).endsWith("…") || text.includes("\n") ? { body: `"${clip(text, 300)}"` } : {}),
-    step: "Waiting for its turn",
+    step: waitingStep(queued ? jobsAhead(queue, queued) : 0),
   });
 }
 
@@ -118,6 +131,11 @@ export async function runDeskJob(job: TaskJob, engine: BrainEngine, inbox: Inbox
     ...(assertActive ? { assertActive } : {}),
   });
   const use = { steps: result.agent.steps, inputChars: result.agent.inputChars };
+  if (result.status === "answered") {
+    // A question about the memory: the answer is the result, nothing changed, nothing to undo.
+    inbox.updateJob(item.id, { status: "done", result: { summary: result.answer, changes: [], answer: true } });
+    return { kind: "desk_job", status: "answered", title: item.title, reason: result.answer, ...use };
+  }
   if (result.status === "refused" || result.status === "nothing") {
     inbox.updateJob(item.id, { status: "failed", step: failStep(result.reason) });
     return { kind: "desk_job", status: result.status, title: item.title, reason: result.reason, ...use };
@@ -155,7 +173,11 @@ export function deskJobFailed(inbox: InboxStore, job: TaskJob, error: string): v
   if (!item || item.status !== "working") return;
   const reason = /allowance/i.test(error) ? error : /^The desk|^Undo|is not a page|cannot go|no link line|already a topic|cited only|changed since/.test(error)
     ? error
-    : "The desk stopped before changing anything. Your memory is as it was.";
+    : /\b402\b|credit|insufficient|quota|rate.?limit|\b429\b/i.test(error)
+      ? "Zenod's AI service did not answer just now. Nothing changed. Try again in a while."
+      : /filing_recovery_pending|desk_dirty_worktree/.test(error)
+        ? "Your memory was busy finishing an earlier save. Nothing changed. Try again in a minute."
+        : "The desk stopped before changing anything. Your memory is as it was.";
   inbox.updateJob(id, { status: "failed", step: failStep(reason) });
 }
 
@@ -166,6 +188,12 @@ export function settleDeskItems(inbox: InboxStore, queue: DeskQueue): void {
     const jobs = deskJobsFor(item, queue);
     const job = jobs[0];
     if (job && (job.status === "error" || job.status === "interrupted")) deskJobFailed(inbox, job, job.error ?? "interrupted");
+    else if (job?.status === "queued" && item.step?.includes("Waiting for its turn")) {
+      // Keep "how many are ahead" true while the queue drains (after an outage it can be dozens).
+      const prefix = item.step.startsWith("You said yes") ? "You said yes. Waiting for its turn" : "Waiting for its turn";
+      const step = waitingStep(jobsAhead(queue, job), prefix);
+      if (step !== item.step) inbox.updateJob(item.id, { status: "working", step });
+    }
   }
 }
 
