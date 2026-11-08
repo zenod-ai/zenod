@@ -13,6 +13,7 @@ import {
   MessagesSquareIcon,
   WaypointsIcon,
   InboxIcon,
+  BotIcon,
   PlugZapIcon,
   Settings2Icon,
   UserRoundIcon,
@@ -51,6 +52,7 @@ import { MemoryChat } from "@/components/memory-chat"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { MemoryGraph } from "@/components/memory-graph"
 import { MemoryInbox } from "@/components/memory-inbox"
+import { MemoryPersonas } from "@/components/memory-personas"
 import { useInboxCount } from "@/lib/inbox"
 import { MemoryNoteViewer } from "@/components/memory-note-viewer"
 import { memoryPathFromHash } from "@/lib/memory-chat"
@@ -72,6 +74,7 @@ const SECTION_ICONS = {
   chat: MessagesSquareIcon,
   graph: WaypointsIcon,
   inbox: InboxIcon,
+  personas: BotIcon,
   overview: GaugeIcon,
   memory: NetworkIcon,
   connect: PlugZapIcon,
@@ -179,6 +182,8 @@ export function Settings({
         if (window.location.hash.includes("m=")) window.scrollTo?.({ top: 0 })
       } else if (window.location.hash === "#inbox") {
         setSection("inbox")
+      } else if (window.location.hash === "#personas") {
+        setSection("personas")
       }
     }
     window.addEventListener("hashchange", onHash)
@@ -395,6 +400,11 @@ export function Settings({
           <TabsContent value="inbox" className="mt-4">
             {edition === "hosted" ? (
               <MemoryInbox active={section === "inbox"} />
+            ) : null}
+          </TabsContent>
+          <TabsContent value="personas" className="mt-4">
+            {edition === "hosted" ? (
+              <MemoryPersonas active={section === "personas"} />
             ) : null}
           </TabsContent>
           <TabsContent value="overview" className="mt-4">

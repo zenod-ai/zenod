@@ -408,6 +408,10 @@ export function MemoryInbox({ active = true }: { active?: boolean }) {
           Questions and findings from the helpers that read your memory, and
           the jobs the memory desk does for you.
         </p>
+        <p className="zp-hint">
+          <a href="#personas">Your personas</a> leave their findings here:
+          switch one on or run it now.
+        </p>
       </div>
       <div className="zp-stage">
         <div className="zp-screen zi-screen">

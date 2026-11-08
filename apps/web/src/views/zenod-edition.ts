@@ -14,6 +14,7 @@ export type ZenodPortalSection =
   | "chat"
   | "graph"
   | "inbox"
+  | "personas"
   | "overview"
   | "memory"
   | "connect"
@@ -38,6 +39,8 @@ const HOSTED_SECTIONS = Object.freeze([
   { id: "graph", label: "Graph" },
   // EPIC-14 S2: questions, findings and memory desk jobs addressed to you.
   { id: "inbox", label: "Inbox" },
+  // EPIC-14 S4: the helpers that read your memory and leave findings in the inbox.
+  { id: "personas", label: "Personas" },
   { id: "overview", label: "Overview" },
   { id: "memory", label: "Memory" },
   { id: "connect", label: "Connect / MCP" },

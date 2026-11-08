@@ -28,6 +28,7 @@ describe("Zenod dashboard navigation", () => {
       "chat",
       "graph",
       "inbox",
+      "personas",
       "overview",
       "memory",
       "connect",
@@ -43,6 +44,7 @@ describe("Zenod dashboard navigation", () => {
     expect(dashboardSectionForTab("subscribers", "hosted")).toBe("subscribers")
     expect(dashboardSectionForTab("inbox", "hosted")).toBe("inbox")
     expect(dashboardSectionForTab("inbox", "self-hosted")).toBe("overview")
+    expect(dashboardSectionForTab("personas", "hosted")).toBe("personas")
   })
 
   it("does not expose product or transport internals as navigation", () => {
