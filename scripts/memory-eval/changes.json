@@ -1,0 +1,128 @@
+[
+ {
+  "sha": "cd597ca",
+  "at": "2026-11-08T04:03Z",
+  "label": "S1 chat opens on your memory",
+  "what": "start of the day: the chat answers from memory",
+  "pr": "#1508",
+  "privateVault": "7f35d26",
+  "vaultChange": false
+ },
+ {
+  "sha": "9dd5eb7",
+  "at": "2026-11-08T05:02Z",
+  "label": "S3c match percentages",
+  "what": "generic words dropped, tree-path-only hits removed",
+  "pr": "#1510",
+  "privateVault": "7f35d26",
+  "vaultChange": false
+ },
+ {
+  "sha": "20f634b",
+  "at": "2026-11-08T05:23Z",
+  "label": "S1b fast checked answers",
+  "what": "one streamed call over the found memories, every quote checked",
+  "pr": "#1512",
+  "privateVault": "7f35d26",
+  "vaultChange": false
+ },
+ {
+  "sha": "b83dfbf",
+  "at": "2026-11-08T06:30Z",
+  "label": "S3c round 2",
+  "what": "the note behind an answer ranks with its own percentage",
+  "pr": "#1516",
+  "privateVault": "7f35d26",
+  "vaultChange": false
+ },
+ {
+  "sha": "dce775e",
+  "at": "2026-11-08T09:07Z",
+  "label": "S8 where memories land",
+  "what": "rejected memories re-filed, a page per subject, organiser sees the tree",
+  "pr": "#1517",
+  "privateVault": "7f35d26",
+  "vaultChange": false
+ },
+ {
+  "sha": "dce775e",
+  "at": "2026-11-08T16:23Z",
+  "label": "U1 Idealista and Poly-Maker split",
+  "what": "two roots again in your vault, no code change",
+  "pr": null,
+  "privateVault": "32bb6ae",
+  "vaultChange": true
+ },
+ {
+  "sha": "dce775e",
+  "at": "2026-11-08T16:58Z",
+  "label": "S14 old report lines moved",
+  "what": "372 agent report lines moved off 32 of your pages",
+  "pr": null,
+  "privateVault": "12961ca",
+  "vaultChange": true
+ },
+ {
+  "sha": "670e329",
+  "at": "2026-11-08T17:21Z",
+  "label": "S1b round 2",
+  "what": "your own notes added to the answer's reading",
+  "pr": "#1522",
+  "privateVault": "12961ca",
+  "vaultChange": false
+ },
+ {
+  "sha": "670e329",
+  "at": "2026-11-08T17:37Z",
+  "label": "S15 report lines under Ops rollup moved",
+  "what": "29 more report lines moved in your vault",
+  "pr": null,
+  "privateVault": "ceb4757",
+  "vaultChange": true
+ },
+ {
+  "sha": "e7840bf",
+  "at": "2026-11-08T18:07Z",
+  "label": "W1 weighted links",
+  "what": "strong links walked from the best match",
+  "pr": "#1524",
+  "privateVault": "ceb4757",
+  "vaultChange": false
+ },
+ {
+  "sha": "fd86d51",
+  "at": "2026-11-08T18:49Z",
+  "label": "S15 reports kept off pages",
+  "what": "new agent reports stay in the Log, hidden from search",
+  "pr": "#1526",
+  "privateVault": "ceb4757",
+  "vaultChange": false
+ },
+ {
+  "sha": "d85488b",
+  "at": "2026-11-08T19:10Z",
+  "label": "W1 round 2 graph view",
+  "what": "link strengths drawn in the graph",
+  "pr": "#1528",
+  "privateVault": "ceb4757",
+  "vaultChange": false
+ },
+ {
+  "sha": "05c9815",
+  "at": "2026-11-08T19:38Z",
+  "label": "A1 stuck filings re-filed",
+  "what": "a filing whose base another writer moved is filed again, not stuck",
+  "pr": "#1530",
+  "privateVault": "ceb4757",
+  "vaultChange": false
+ },
+ {
+  "sha": "7cf333f",
+  "at": "2026-11-08T19:42Z",
+  "label": "E14-S3 desk plans",
+  "what": "the desk checks a plan before returning it; latest code on main",
+  "pr": "#1531",
+  "privateVault": "ceb4757",
+  "vaultChange": false
+ }
+]

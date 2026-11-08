@@ -1,0 +1,10 @@
+{"id": "r01", "question": "What did the Porto yard quote to fix the hull?", "notes": ["n02"], "expect": [["4,200", "4200"]]}
+{"id": "r02", "question": "When can the Porto yard do the hull inspection?", "notes": ["n03"], "expect": [["21 November"]]}
+{"id": "r03", "question": "How much is the Fernhill cabin listing now?", "notes": ["n04"], "expect": [["182,000", "182000"]]}
+{"id": "r04", "question": "Who teaches me the cello?", "notes": ["n05"], "expect": [["Marguerite"]]}
+{"id": "r05", "question": "When is my appointment with Dr. Ilse Varga?", "notes": ["n06"], "expect": [["3 December"]]}
+{"id": "r06", "question": "What pressure does the spare wheel need?", "notes": ["n07"], "expect": [["3.1"]]}
+{"id": "r07", "question": "How full is the backup disk on the second VPS?", "notes": ["n09"], "expect": [["91"]]}
+{"id": "r08", "question": "Where is the spare house key now?", "notes": ["n14"], "expect": [["watering can"]]}
+{"id": "r09", "question": "What should I add to the lentil soup?", "notes": ["n15"], "expect": [["paprika"]]}
+{"id": "r10", "question": "When does the Tide Cart alpha launch?", "notes": ["n16"], "expect": [["Monday"]]}
