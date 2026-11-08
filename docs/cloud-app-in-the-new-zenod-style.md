@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | D1 | Ticket worker | run_09a7cd57 | Harmonize the whole cloud app to the Zenod design language and put the Z favicon on every Zenod surface (E17-1..3) | done (approved by Jordi 2026-11-08) | none | PR #1519 merged (5cd14132) | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e17-d1/), live sha 9ef8c0c7, card E17-D1 | 2026-11-08 18:05Z | followups: started D2 |
-| D2 | Ticket worker | unassigned | check the signed-in screens on production once the first tester signs in: follow-up of D1 | ready | D1 | none | main | Jordi started it when closing D1 2026-11-08 | 2026-11-08 | worker |
+| D2 | Ticket worker | Delivery Manager (waits) | check the signed-in screens on production once the first tester signs in: follow-up of D1 | blocked | E7-A15 (the team sign-in; no non-Jordi hosted account yet) | none | main | Jordi started it when closing D1 2026-11-08 | 2026-11-08 | dispatch a worker the moment a tester or the team account signs in on production; nothing to check before |
 
 ## Decisions
 
