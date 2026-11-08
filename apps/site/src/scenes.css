@@ -125,3 +125,51 @@
 .pp .scene.js .results li:not(.go) { opacity: 0; transform: translateY(6px); }
 .pp .scene.js .results .bar span { transition: width .9s cubic-bezier(.2,.7,.2,1); }
 .pp .scene.js .results li:not(.go) .bar span { width: 0; }
+/* One thought as a constellation of weighted links, then a retrieval at 80% that follows the strong paths (EPIC-18 W2).
+   Line thickness is the link's strength. Final frame (no script, reduced motion): paths lit, faint links faded. */
+.pp-cst { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: clamp(2rem, 4vw, 4rem); align-items: center; max-width: var(--pp-max); margin: 0 auto; padding: var(--pp-gap) var(--pp-edge) 0; }
+.pp-cst-stage { background: var(--stage); border-radius: 6px; padding: clamp(0.75rem, 2vw, 1.5rem); }
+.pp-cst-pill { display: inline-block; margin: 0 0 0.5rem; border: 1.5px solid var(--accent); border-radius: 999px; padding: 0.4rem 1rem; background: var(--bg); font: 500 0.95rem var(--sans); color: var(--accent); }
+.pp svg.cst { width: 100%; height: auto; display: block; overflow: visible; }
+.pp svg.cst .cl { stroke: var(--ink); stroke-linecap: round; opacity: 0.32; }
+.pp svg.cst .cp { stroke: var(--accent); stroke-linecap: round; }
+.pp svg.cst .cw { font: 600 17px var(--sans); fill: var(--muted); paint-order: stroke; stroke: var(--stage); stroke-width: 6px; stroke-linejoin: round; }
+.pp svg.cst .cn circle { fill: var(--bg); stroke: var(--ink); stroke-width: 1.6; }
+.pp svg.cst .cn text { font: 400 19px var(--sans); fill: var(--ink); paint-order: stroke; stroke: var(--stage); stroke-width: 5px; stroke-linejoin: round; }
+.pp svg.cst .ct circle { fill: var(--accent); stroke: var(--accent); }
+.pp svg.cst .ct circle.ring { fill: none; stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.pp svg.cst .ct text { font: 500 23px var(--serif); fill: var(--accent); }
+.pp svg.cst .ck circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 3; }
+.pp svg.cst .ck text { font-weight: 600; }
+.pp svg.cst .ck text.cpc { font: 600 18px var(--sans); fill: var(--accent); }
+.pp svg.cst .weak { opacity: 0.22; }
+.pp-cst-walk { list-style: none; padding: 0; margin: 0.25rem 0 0.9rem; font: 400 0.95rem/1.4 var(--sans); border-top: 1px solid var(--ink); }
+.pp-cst-walk li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
+.pp-cst-walk li span:first-child { font-weight: 500; color: var(--accent); }
+.pp-cst-walk li span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.pp .pp-say .pp-cst-out { font: 400 0.95rem/1.5 var(--sans); color: var(--faint); margin: 0 0 0.5rem; }
+.pp .pp-cst .pp-fine { margin-top: 1rem; }
+/* Transitions only on the way in, so a loop restarts from a clean frame. */
+.pp .scene.js svg.cst .cl, .pp .scene.js svg.cst .cp { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); }
+.pp .scene.js svg.cst .cl:not(.go), .pp .scene.js svg.cst .cp:not(.go) { opacity: 0; }
+.pp .scene.js svg.cst .cl.go, .pp .scene.js svg.cst .cp.go { stroke-dashoffset: 0; transition: stroke-dashoffset .9s ease; }
+.pp .scene.js svg.cst .cw:not(.go), .pp .scene.js svg.cst .cin:not(.go) { opacity: 0; }
+.pp .scene.js svg.cst .cw.go, .pp .scene.js svg.cst .cin.go { transition: opacity .45s ease; }
+.pp .scene.js svg.cst .ck:not(.go) circle { fill: var(--bg); stroke: var(--ink); stroke-width: 1.6; }
+.pp .scene.js svg.cst .ck:not(.go) text { font-weight: 400; }
+.pp .scene.js svg.cst .ck:not(.go) .cpc { opacity: 0; }
+.pp .scene.js svg.cst .ck.go circle { transition: fill .4s ease-out, stroke .4s ease-out, stroke-width .4s; }
+.pp .scene.js svg.cst .ck.go .cpc { transition: opacity .3s; }
+.pp .scene.js svg.cst .weak:not(.go) { opacity: 1; }
+.pp .scene.js svg.cst .weak.go { transition: opacity .6s ease; }
+.pp .scene.js:not(.q) svg.cst .ct circle.ring { animation: pp-ring 1.6s ease-out 3; }
+.pp .scene.js.fade svg.cst, .pp .scene.js.fade .pp-cst-walk, .pp .scene.js.fade .pp-cst-out, .pp .scene.js.fade .pp-cst-pill { opacity: 0; transition: opacity .5s ease; }
+@media (max-width: 900px) { .pp-cst { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  .pp-cst-stage { padding: 0.75rem 0.5rem; }
+  .pp-cst-pill { font-size: 0.85rem; padding: 0.35rem 0.8rem; }
+  .pp svg.cst .cn text { font-size: 25px; }
+  .pp svg.cst .ct text { font-size: 28px; }
+  .pp svg.cst .cw { font-size: 21px; }
+  .pp svg.cst .ck text.cpc { font-size: 23px; }
+}

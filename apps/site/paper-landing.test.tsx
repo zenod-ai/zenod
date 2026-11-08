@@ -15,7 +15,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
   it("tells Jordi's story in order: voice in, MCP, kept, filed, graph, editor, ask, strength, custody, console, pricing last", () => {
     const html = render("/");
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    const order = ["mcp", "how", "kept", "filed", "graph", "save", "ask", "strength", "yours", "console", "start"];
+    const order = ["mcp", "how", "kept", "filed", "graph", "constellation", "save", "ask", "strength", "yours", "console", "start"];
     const at = order.map((id) => html.indexOf(`id="${id}"`));
     for (const index of at) expect(index).toBeGreaterThan(-1);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
@@ -108,7 +108,7 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
 
   it("brings in the deck's three scenes, marking what is coming", () => {
     const html = render("/");
-    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(4);
+    expect(html.match(/class="[^"]*\bscene\b[^"]*"/g)!.length).toBe(5);
     const graph = html.slice(html.indexOf('id="graph"'), html.indexOf('id="save"'));
     expect(graph).toContain("Coming");
     expect(graph).toContain("Voice note, today");
@@ -117,10 +117,26 @@ describe("Paper landing (ZAL-A9 redo of ZAL-A6)", () => {
     expect(strength).toMatch(/data-p="92"/);
     expect(strength).toContain('data-type="Lisbon flat and the landlord"');
     // The scene markup is static: without script every step is visible, and no link leads nowhere.
-    for (const name of ["whatsapp", "graph", "retrieval-screen", "retrieval-results"]) {
+    for (const name of ["whatsapp", "graph", "retrieval-screen", "retrieval-results", "constellation"]) {
       const scene = readFileSync(new URL(`./src/scenes/${name}.html`, import.meta.url), "utf8");
       expect(scene).not.toMatch(/href=/);
     }
+  });
+
+  it("explains the weighted memory graph as a constellation, with a retrieval at 80% that follows the strong paths (EPIC-18 W2)", () => {
+    const html = render("/").replace(/\s+/g, " ");
+    const cst = html.slice(html.indexOf('id="constellation"'), html.indexOf('id="save"'));
+    expect(cst).toContain("Live");
+    expect(cst).toContain("librarian that keeps an index of your memory");
+    expect(cst).toContain("above 80%");
+    for (const weight of ["100%", "60%", "5%"]) expect(cst).toContain(`>${weight}<`);
+    expect(cst).toContain("1 × 0.9 × 0.95 = 0.855");
+    expect(cst).toMatch(/<svg class="g cst"[^>]*role="img"[^>]*aria-label="[^"]{80,}"/);
+    // Every kept memory is a path whose multiplied strength stays at or above 0.8; every faded one falls below.
+    const scene = readFileSync(new URL("./src/scenes/constellation.html", import.meta.url), "utf8");
+    expect(scene.match(/class="cp"/g)).toHaveLength(5);
+    expect(scene.match(/class="c[en] weak"/g)).toHaveLength(10);
+    expect(cst).toMatch(/Left out, below 0\.8: Timber yard receipt 0\.77/);
   });
 
   it("plays the WhatsApp scene with production's replies word for word (root L-6)", () => {
