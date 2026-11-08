@@ -193,7 +193,7 @@ def remote() -> dict:
 
     # zenod-mt
     z = {"lastJob": None, "jobs24h": 0, "lastIndex": None, "lastError": None, "errors24h": 0, "lines": 0,
-         "capturesFailingSince": None}
+         "capturesFailingSince": None, "chatReplies": []}
     for t, rest in logs(ZENOD_SVC, week):
         z["lines"] += 1
         m = re.match(r"\[task-job\] \S+ done: (\w+)", rest)
@@ -203,6 +203,8 @@ def remote() -> dict:
                 z["jobs24h"] += 1
             if m.group(1) in CAPTURE_KINDS:
                 z["capturesFailingSince"] = None
+            if m.group(1) == "chat" and t >= day:
+                z["chatReplies"] = (z["chatReplies"] + [iso(t)])[-50:]
         # ZAL-A8: a save that failed with no save finished after it (kind logged since ZAL-A8; older lines count
         # only when the vault guard refused them)
         m = re.match(r"\[task-job\] \S+ failed(?: \((\w+)\))?:", rest)

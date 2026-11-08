@@ -170,6 +170,16 @@ class StatusRules(unittest.TestCase):
         d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T10:30:00Z", "2026-11-03T11:30:00Z"]
         self.assertEqual(status(d)["phylax"], "green")  # replied after every message
 
+    def test_a_question_answered_by_chat_is_not_a_reply_stall(self):
+        # ZAL-A12: the 2026-11-08 18:50Z WhatsApp question got its chat answer at 18:50:22Z and no "Saved" (none due)
+        d = raw()
+        d["vps1"]["accounts"]["lastSavedReply"] = "2026-11-03T09:00:00Z"
+        d["vps1"]["phylax_log"]["inboundTimes"] = ["2026-11-03T10:30:00Z"]
+        d["vps1"]["zenod_log"]["chatReplies"] = ["2026-11-03T10:30:22Z"]
+        self.assertEqual(status(d)["phylax"], "green")
+        d["vps1"]["zenod_log"]["chatReplies"] = ["2026-11-03T10:40:00Z"]  # a later, unrelated chat (web app)
+        self.assertEqual(status(d)["phylax"], "red")
+
     def test_saves_failing_for_an_hour_turn_database_red(self):
         d = raw()
         d["vps1"]["zenod_log"]["capturesFailingSince"] = "2026-11-03T11:20:00Z"

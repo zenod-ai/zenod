@@ -105,12 +105,18 @@ def newest_publish(runs: list[dict] | None) -> dict | None:
 STALL_MIN = 60  # ZAL-A8: saves failing or WhatsApp messages without a "Saved" reply for this long turn a row red
 
 
+CHAT_REPLY_S = 300  # ZAL-A12: a chat job finished this soon after a WhatsApp message answered it (a question, no "Saved")
+
+
 def reply_stall(inbound_times: list[str] | None, last_saved_reply: str | None, ref: dt.datetime,
-                minutes: int = STALL_MIN) -> dt.datetime | None:
+                minutes: int = STALL_MIN, chat_replies: list[str] | None = None) -> dt.datetime | None:
     """The first WhatsApp message after the last "Saved" reply, when it is older than `minutes`: messages are
-    getting no reply (2026-11-04 to 11-06 went 45 h unnoticed). None while every older message had a reply after it."""
+    getting no reply (2026-11-04 to 11-06 went 45 h unnoticed). None while every older message had a reply after it.
+    A message answered by a chat job within CHAT_REPLY_S was a question, not a save, and counts as replied."""
     last = parse_ts(last_saved_reply)
-    waiting = [t for t in (parse_ts(x) for x in inbound_times or []) if t and (last is None or t > last)]
+    chats = [c for c in (parse_ts(x) for x in chat_replies or []) if c]
+    waiting = [t for t in (parse_ts(x) for x in inbound_times or []) if t and (last is None or t > last)
+               and not any(0 <= (c - t).total_seconds() <= CHAT_REPLY_S for c in chats)]
     first = min(waiting, default=None)
     return first if first and (ref - first).total_seconds() > minutes * 60 else None
 
@@ -253,7 +259,8 @@ def components(d: dict) -> list[dict]:
     hb_age = (ref.timestamp() * 1000 - hb) / 1000 if hb else None
     pl = v.get("phylax_log") or {}
     col, prob = "green", None
-    stall = reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref)
+    stall = reply_stall(pl.get("inboundTimes"), ac.get("lastSavedReply"), ref,
+                        chat_replies=(v.get("zenod_log") or {}).get("chatReplies"))
     if p.get("status") != 200 or pj.get("status") != "ok" or wa.get("state") != "connected":
         col, prob = "red", f"/api/health → {p.get('status')} “{pj.get('status')}”, WhatsApp {wa.get('state')}"
     elif stall:
