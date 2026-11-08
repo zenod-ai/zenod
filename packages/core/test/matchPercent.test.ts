@@ -34,7 +34,9 @@ describe("match percentage (E12-S3a)", () => {
 
   it("measures coverage over the question's own words, not alias phrases", () => {
     const built = buildMatchTerms("the Porto boat quotes", [["porto", "oporto"]]);
-    expect(built.terms).toEqual(['"porto"*', '"boat"*', '"quote"*']);
+    // One clause per question word (joined-neighbour spellings are alternatives of the word, E12-S3d); no alias phrase.
+    expect(built.terms).toEqual(['("porto"* OR "portoboat")', '("boat"* OR "portoboat" OR "boatquotes")', '("quote"* OR "boatquotes")']);
+    expect(built.terms.join(" ")).not.toContain("oporto");
     expect(built.match).toContain('"oporto"');
   });
 });
@@ -95,6 +97,30 @@ describe("index search percentages and latency (E12-S3a)", { timeout: 60_000 }, 
     expect(hits.some((hit) => hit.path.startsWith("Log/"))).toBe(true);
     // Only generic words: nothing to find, and whatever turns up reads weak, never a tied 61 %.
     for (const hit of await index.search("how does my memory work", 5)) expect(hit.matchPercent).toBeLessThanOrEqual(30);
+  });
+
+  it("joined and split spellings find each other, both ways (E12-S3d)", async () => {
+    const page = (title: string, body: string, extra = "") => `---\ntitle: ${title}\n${extra}---\n${body}\n`;
+    const index = await vaultOf({
+      "Areas/EpicSpine.md": page("EpicSpine", "The document-centric method."),
+      "Areas/AgentTeam.md": page("AgentTeam", "The agent roster."),
+      "Areas/Hyphen.md": page("Working method", "Notes.", "aliases: [epic-spine]\n"),
+      "Areas/Spine.md": page("Spine care", "Back exercises and posture."),
+      "Areas/Epic.md": page("Epic trip", "A long holiday."),
+      "Areas/Spaced.md": page("Dev Ops", "Pipelines."),
+    });
+    const top = async (q: string) => (await index.search(q, 5));
+    const spine = await top("Should we adopt Epic Spine as our doctrine?");
+    expect(spine[0]).toMatchObject({ title: "EpicSpine" });
+    expect((await top("what is Epic Spine"))[0]!.matchPercent).toBeGreaterThanOrEqual(90);
+    expect((await top("Agent Team"))[0]).toMatchObject({ title: "AgentTeam", matchPercent: 100 });
+    expect((await top("epic-spine"))[0]).toMatchObject({ title: "EpicSpine" });
+    // Camel-case in the question finds the spaced and hyphenated spellings.
+    expect((await top("DevOps"))[0]).toMatchObject({ title: "Dev Ops" });
+    expect((await top("EpicSpine")).map((h) => h.title)).toContain("Working method");
+    // Unrelated pages that share only one word stay below the joined match.
+    const titles = spine.map((h) => h.title);
+    expect(titles.indexOf("EpicSpine")).toBeLessThan(titles.indexOf("Spine care") === -1 ? 99 : titles.indexOf("Spine care"));
   });
 
   it("answers the top 5 well under a second on a vault of about 1,500 rows", async () => {
