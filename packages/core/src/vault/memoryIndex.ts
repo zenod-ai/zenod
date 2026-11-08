@@ -3,12 +3,13 @@ import { mkdirSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { parseLogCaptures } from "./captureOrigin.js";
-import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
+import { basenameOf, isFilingReceiptPath, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
-import { pageTreeFields, parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
-import { extractPageLinks } from "./pages.js";
+import { pageTreeFields, parseTree, TREE_PATH } from "./tree.js";
+import { extractCitations, extractPageLinks } from "./pages.js";
+import { isVoiceCapture, recentIntent, type RecentIntent } from "./recentIntent.js";
 import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphRawEdge, type MemoryGraphView } from "./memoryGraph.js";
 
 /**
@@ -18,8 +19,12 @@ import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphRawEdge, type 
  * milliseconds for $0, the same way every time. Rebuildable from the vault at any time.
  */
 
-/** 2: the `edges` table (E12-S2 memory graph); an older file is rebuilt once on open. */
-const SCHEMA_VERSION = "2";
+/**
+ * 2: the `edges` table (E12-S2 memory graph). 3: Log entries carry who sent them and whether
+ * they are voice notes (`meta`), and the edges that tie a note to its topics: page citations
+ * and filing receipts (E12-S3c). An older file is rebuilt once on open.
+ */
+const SCHEMA_VERSION = "3";
 const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
@@ -32,6 +37,14 @@ const STALE_AFTER_MS = 60_000;
  * unless they match clearly better.
  */
 const KIND_FACTOR: Record<MemoryIndexHitKind, number> = { page: 1, root: 1, log: 0.5 };
+/**
+ * An agent's report in the Log (deploy notes, wake reads: captureOrigin.ts) is content, not what
+ * the person said: it ranks below the person's own words on the same match (E12-S3c round 2).
+ */
+const AGENT_LOG_FACTOR = 0.5;
+/** A hit holding under this share of the best hit's question words is not shown (E12-S3c). */
+const MIN_SHARE_OF_BEST = 0.25;
+const factorOf = (row: { kind: MemoryIndexHitKind; meta?: string }) => KIND_FACTOR[row.kind] * (row.meta?.startsWith("agent") ? AGENT_LOG_FACTOR : 1);
 
 const STOP_WORDS = new Set([
   // English
@@ -55,6 +68,8 @@ const GENERIC_WORDS = new Set([
   "memory", "memories", "memoria", "memorias", "remember", "remind", "recall", "note", "notes", "nota", "notas", "know", "knowledge",
   "use", "using", "used", "usar", "want", "need", "think", "say", "said", "mean", "means", "work", "works", "going", "something",
   "thing", "things", "everything", "anything", "much", "many", "let", "make", "give", "show", "find", "look",
+  // The kind of capture, not its subject (E12-S3c round 2): "my voice note about the fence" is about the fence.
+  "voice", "vn", "vns", "audio", "audios",
 ]);
 
 export interface MemoryIndexOptions {
@@ -88,6 +103,33 @@ export interface MemoryIndexHit {
   treePath: string;
   /** For a Log entry: the placed page it was filed on, when known. */
   filedOn?: string;
+  /**
+   * Why a recent-note question shows this hit (E12-S3c): `note` the note itself, ranked by time;
+   * `filed` a page the note was filed into; `linked` a page the note links to; `parent` the tree
+   * parent of such a page. On other questions, `child` / `linked` a page under, or linked from, the
+   * best hit (withGraphNeighbours). Absent for an ordinary word match.
+   */
+  relation?: MemoryIndexRelation;
+  /** For a `filed`/`linked`/`parent`/`child` hit: the note or best hit it connects to. */
+  via?: string;
+  /** For a note: its filing never tied it to any topic page. */
+  unlinked?: boolean;
+  /** For a note: topics its filing planned but never wrote to a page (filing stopped half way). */
+  unwritten?: number;
+}
+
+export type MemoryIndexRelation = "note" | "filed" | "linked" | "parent" | "child";
+
+/** Voice notes and whether each is tied to a topic page (E12-S3c, the gap S8 fixes). */
+export interface MemoryNoteLinks {
+  /** Voice notes from the person (agent reports excluded). */
+  voiceNotes: number;
+  /** Of those, notes no page cites, no receipt files and that link to nothing. */
+  unlinked: number;
+  /** Of those, notes whose filing planned topics it never wrote. */
+  partial: number;
+  /** The newest unlinked notes, newest first (paths), at most 20. */
+  unlinkedPaths: string[];
 }
 
 export interface MemoryIndexStats {
@@ -114,6 +156,8 @@ interface Row {
   path: string;
   file: string;
   filed: string;
+  /** Log rows: `user`/`agent`, plus ` voice` for a voice note. "" otherwise. */
+  meta: string;
 }
 
 const normalize = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -174,6 +218,43 @@ export function buildMatchTerms(query: string, aliasGroups: readonly (readonly s
   return { match: clauses.size ? [...clauses].join(" OR ") : null, terms: termClauses, generic };
 }
 
+/**
+ * How strongly a page is tied to a note (E12-S3c), before how much of the note it holds is added
+ * (recentSearch, up to +0.12): cited by the page 0.8, written by its filing 0.78, linked from the
+ * note 0.72; each further tie of the same page +0.03, and a deeper (more specific) page +0.01 per
+ * level up to three. Never above 0.97: a page is never the note itself.
+ */
+export function connectionWeight(kinds: ReadonlySet<string>, depth: number): number {
+  const base = Math.max(kinds.has("cites") ? 0.8 : 0, kinds.has("filed") ? 0.78 : 0, kinds.has("mentions") ? 0.72 : 0);
+  return Math.min(0.97, base + 0.03 * Math.max(0, kinds.size - 1) + 0.01 * Math.min(3, Math.max(0, depth - 1)));
+}
+
+/** A voice note's words without the ingest lines (file name, raw artifact, transcriber). */
+function spokenWords(body: string): string {
+  return body.split("\n").filter((line) => !/^(?:voice note "|raw artifact:|transcribed by\b|\s*$)/i.test(line.trim())).join("\n") || body;
+}
+
+/** The lines of a page that cite a Log entry (what the filing wrote there), without the citation. */
+function citingLines(body: string, notePath: string): string[] {
+  const match = /^Log\/(\d{4}-\d{2}-\d{2})\.md#\^(e-[0-9a-f]{6})$/.exec(notePath);
+  if (!match) return [];
+  return body.split("\n")
+    .filter((text) => text.includes(`[[${match[1]}#^${match[2]}`))
+    .map((line) => line.replace(/\[\[\d{4}-\d{2}-\d{2}#\^e-[0-9a-f]{6}(?:\|[^\]]*)?\]\]/g, "").replace(/^\s*(?:[-*]|\d+\.)\s+/, "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function citingSnippet(lines: readonly string[]): string | null {
+  const text = lines.join(" ");
+  if (!text) return null;
+  return text.length > SNIPPET_CHARS ? `${text.slice(0, SNIPPET_CHARS).trim()}…` : text;
+}
+
+/** Distinct words of four letters or more that say something (stop and generic words left out). */
+function contentWords(text: string): Set<string> {
+  return new Set(normalize(text).split(" ").filter((word) => word.length >= 4 && !STOP_WORDS.has(word) && !GENERIC_WORDS.has(word)));
+}
+
 const SNIPPET_CHARS = 200;
 const fold = (value: string) => value.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
 
@@ -225,13 +306,19 @@ export class MemoryIndex {
       CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, size INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS edges (file TEXT NOT NULL, src TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS edges_file ON edges (file);
+    `);
+    const meta = new Map((this.db.prepare("SELECT key, value FROM meta").all() as Array<{ key: string; value: string }>).map((row) => [row.key, row.value]));
+    // The docs columns changed with the schema: an older table is dropped, not just emptied.
+    if (meta.get("schema") !== SCHEMA_VERSION) this.db.exec("DROP TABLE IF EXISTS docs;");
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS edges_src ON edges (src);
+      CREATE INDEX IF NOT EXISTS edges_target ON edges (target);
       CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(
         title, aliases, lineage, summary, body,
-        kind UNINDEXED, path UNINDEXED, file UNINDEXED, filed UNINDEXED,
+        kind UNINDEXED, path UNINDEXED, file UNINDEXED, filed UNINDEXED, meta UNINDEXED,
         tokenize = "unicode61 remove_diacritics 2"
       );
     `);
-    const meta = new Map((this.db.prepare("SELECT key, value FROM meta").all() as Array<{ key: string; value: string }>).map((row) => [row.key, row.value]));
     const stamped = meta.get("tenant");
     if (stamped && options.tenantId && stamped !== options.tenantId) {
       this.db.close();
@@ -292,15 +379,21 @@ export class MemoryIndex {
   /** BM25-ranked hits, one per path, freshest index first. Empty when nothing matches. */
   async search(query: string, limit = MAX_HITS): Promise<MemoryIndexHit[]> {
     await this.fresh();
+    // "What was in my last voice note?" is answered by time and the graph, not by its words (E12-S3c).
+    const intent = recentIntent(query, this.now());
+    if (intent) {
+      const recent = this.recentSearch(intent, limit);
+      if (recent.length > 0) return recent;
+    }
     const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
     if (!match) return [];
     const rows = this.db.prepare(`
-      SELECT rowid, kind, path, title, filed, lineage, bm25(docs, ${BM25_WEIGHTS}) AS rank
+      SELECT rowid, kind, path, title, filed, lineage, meta, bm25(docs, ${BM25_WEIGHTS}) AS rank
       FROM docs WHERE docs MATCH ? ORDER BY rank LIMIT ?
-    `).all(match, Math.max(40, limit * 8)) as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; rank: number }>;
+    `).all(match, Math.max(40, limit * 8)) as Array<{ rowid: number; kind: MemoryIndexHitKind; path: string; title: string; filed: string; lineage: string; meta: string; rank: number }>;
     const picked: typeof rows = [];
     const seen = new Set<string>();
-    const scored = rows.map((row) => ({ ...row, rank: row.rank * KIND_FACTOR[row.kind] })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
+    const scored = rows.map((row) => ({ ...row, rank: row.rank * factorOf(row) })).sort((a, b) => a.rank - b.rank || a.path.localeCompare(b.path));
     for (const row of scored) {
       if (seen.has(row.path)) continue; // a root row and its page share a path: keep the best
       seen.add(row.path);
@@ -313,7 +406,7 @@ export class MemoryIndex {
     // A page that only matches on its tree path (or on nothing a person wrote) is not an answer:
     // drop it, and drop hits holding under a quarter of what the best one does. Never drop to empty.
     const best = Math.max(0, ...picked.map((row) => coverage.get(row.rowid) ?? 0));
-    const kept = best > 0 ? picked.filter((row) => (coverage.get(row.rowid) ?? 0) >= best * 0.25) : picked;
+    const kept = best > 0 ? picked.filter((row) => (coverage.get(row.rowid) ?? 0) >= best * MIN_SHARE_OF_BEST) : picked;
     kept.splice(limit);
     const topScore = -kept[0]!.rank;
 
@@ -324,13 +417,235 @@ export class MemoryIndex {
     // A question made only of generic words ("how does my memory work") matches on nothing in
     // particular: whatever it finds reads weak.
     const percents = monotonic(kept.map((row) => matchPercent({ score: -row.rank, topScore, coverage: (coverage.get(row.rowid) ?? 0) * (generic ? 0.3 : 1) })));
-    return kept.map((row, i) => ({
+    return this.withGraphNeighbours(kept.map((row, i): MemoryIndexHit => ({
       path: row.path, kind: row.kind, title: row.title, snippet: snippetOf(texts.get(row.rowid), words),
       score: Math.round(-row.rank * 100) / 100,
       matchPercent: percents[i]!,
       treePath: row.lineage,
       ...(row.filed ? { filedOn: row.filed } : {}),
+    })), limit);
+  }
+
+  /**
+   * The top memories follow the graph (E12-S3c round 2): when the best hit is a page that clearly
+   * answers (60 % or more), up to two of the pages under it or linked from it join the list at
+   * the best hit's percent times their tie (0.5 for a page under it, 0.45 for a link, +0.02 per
+   * note filed into it, up to five), so its own topic outranks pages that share only a word.
+   */
+  private withGraphNeighbours(hits: MemoryIndexHit[], limit: number): MemoryIndexHit[] {
+    const top = hits[0];
+    if (!top || top.kind === "log" || top.matchPercent < 60 || hits.length === 0) return hits;
+    const graph = this.memoryGraph();
+    if (!graph.has(top.path)) return hits;
+    const shown = new Set(hits.map((hit) => hit.path));
+    const cites = this.db.prepare("SELECT count(*) AS n FROM edges WHERE kind = 'cites' AND src = ?");
+    const near = [
+      ...graph.childrenOf(top.path).map((path) => ({ path, relation: "child" as const, base: 0.5 })),
+      ...graph.linksOf(top.path).map((path) => ({ path, relation: "linked" as const, base: 0.45 })),
+    ].filter((item, i, all) => !shown.has(item.path) && item.path !== TREE_PATH && all.findIndex((other) => other.path === item.path) === i)
+      .map((item) => ({ ...item, weight: item.base + 0.02 * Math.min(5, (cites.get(item.path) as { n: number }).n) }))
+      .sort((a, b) => b.weight - a.weight || graph.titleOf(a.path).localeCompare(graph.titleOf(b.path)))
+      .slice(0, 2);
+    if (near.length === 0) return hits;
+    const added: MemoryIndexHit[] = [];
+    for (const item of near) {
+      const page = this.db.prepare("SELECT title, summary, body, lineage FROM docs WHERE path = ? AND kind IN ('page', 'root') ORDER BY kind = 'page' DESC LIMIT 1")
+        .get(item.path) as { title: string; summary: string; body: string; lineage: string } | undefined;
+      if (!page) continue;
+      added.push({
+        path: item.path, kind: "page", title: page.title, snippet: snippetOf(page, []), score: 0,
+        matchPercent: Math.max(1, Math.round(top.matchPercent * item.weight)), treePath: page.lineage, relation: item.relation, via: top.path,
+      });
+    }
+    return [...hits, ...added].map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
+  }
+
+  /**
+   * A recent-note question (recentIntent.ts): the person's latest notes (voice notes when it
+   * asks for one), newest first, then the pages the latest one was filed into or links to and
+   * their tree parents. A note's percent is its fit (1 without a topic, else how much of the
+   * topic it holds) halved per newer note before it; a page's is the note's times how strongly
+   * the graph ties them (connectionWeight). Empty when no note fits, so the word search answers.
+   */
+  private recentSearch(intent: RecentIntent, limit: number): MemoryIndexHit[] {
+    const rows = this.db.prepare("SELECT rowid, path, title, file, meta, summary, body, lineage, filed FROM docs WHERE kind = 'log'").all() as Array<{
+      rowid: number; path: string; title: string; file: string; meta: string; summary: string; body: string; lineage: string; filed: string;
+    }>;
+    const person = rows.filter((row) => row.meta.startsWith("user"));
+    const voice = person.filter((row) => row.meta.endsWith(" voice"));
+    let pool = intent.voice && voice.length > 0 ? voice : person;
+    if (pool.length === 0) return [];
+    // Newest first: a Log file is named by its day and its entries are appended in time order.
+    pool.sort((a, b) => b.file.localeCompare(a.file) || b.rowid - a.rowid);
+    if (intent.window.kind === "day") {
+      const day = `Log/${intent.window.date}.md`;
+      pool = pool.filter((row) => row.file === day);
+      if (pool.length === 0) return [];
+    }
+    pool = pool.slice(0, 200);
+    let fit = new Map(pool.map((row) => [row.rowid, 1]));
+    let words: string[] = [];
+    let topicTerms: string[] = [];
+    if (intent.topic) {
+      const { match, terms, generic } = buildMatchTerms(intent.topic, this.aliasGroups);
+      if (match && !generic) {
+        const coverage = this.coverageOf(terms, pool.map((row) => row.rowid));
+        const best = Math.max(0, ...coverage.values());
+        if (best === 0) return [];
+        pool = pool.filter((row) => (coverage.get(row.rowid) ?? 0) >= best * 0.5);
+        fit = coverage;
+        words = matchWords(match);
+        topicTerms = terms;
+      }
+    }
+    const percentOf = (value: number) => Math.max(1, Math.min(100, Math.round(value * 100)));
+    const hits: MemoryIndexHit[] = [];
+    pool.slice(0, limit).forEach((note, k) => {
+      const notePercent = percentOf((fit.get(note.rowid) ?? 0) * 0.5 ** k);
+      const links = this.connectionsOf(note.path);
+      hits.push({
+        path: note.path, kind: "log", title: note.title, snippet: snippetOf({ summary: "", body: spokenWords(note.body) }, words),
+        score: 0, matchPercent: notePercent, treePath: note.lineage, ...(note.filed ? { filedOn: note.filed } : {}),
+        relation: "note",
+        ...(links.pages.length === 0 ? { unlinked: true } : {}),
+        ...(links.unwritten > 0 ? { unwritten: links.unwritten } : {}),
+      });
+      // The pages it was filed into follow the latest note only: older notes stay one line each.
+      if (k > 0) return;
+      const said = contentWords(note.body);
+      // A question with a topic ("what did I say about explainer videos today") keeps only the
+      // note's pages that are about it: the others were filed from other parts of the note.
+      const onTopic = topicTerms.length ? this.pagesMatching(topicTerms, links.pages.map((link) => link.path)) : null;
+      for (const link of links.pages) {
+        if (onTopic && !onTopic.has(link.path)) continue;
+        const page = this.db.prepare("SELECT title, summary, body, lineage FROM docs WHERE path = ? AND kind IN ('page', 'root') ORDER BY kind = 'page' DESC LIMIT 1")
+          .get(link.path) as { title: string; summary: string; body: string; lineage: string } | undefined;
+        if (!page) continue;
+        // How much of the note this page holds: the share of the note's words in the lines that cite it.
+        const lines = citingLines(page.body, note.path);
+        const held = said.size ? [...contentWords(lines.join(" "))].filter((word) => said.has(word)).length / said.size : 0;
+        const weight = link.relation === "parent" ? link.weight : Math.min(0.97, link.weight + Math.min(0.12, 0.4 * held));
+        hits.push({
+          path: link.path, kind: "page", title: page.title,
+          snippet: citingSnippet(lines) ?? snippetOf(page, words),
+          score: 0, matchPercent: percentOf((notePercent / 100) * weight), treePath: page.lineage,
+          relation: link.relation, via: note.path,
+        });
+      }
+    });
+    // Highest first; a tie keeps the order above (stronger tie, deeper page, then title).
+    return hits.map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
+  }
+
+  /** Of `paths`, the pages whose words or tree place hold at least half the topic (rarity-weighted). */
+  private pagesMatching(terms: readonly string[], paths: readonly string[]): Set<string> {
+    if (paths.length === 0) return new Set();
+    const rows = this.db.prepare(`SELECT rowid, path FROM docs WHERE kind IN ('page', 'root') AND path IN (${paths.map(() => "?").join(", ")})`).all(...paths) as Array<{ rowid: number; path: string }>;
+    const coverage = this.coverageOf(terms, rows.map((row) => row.rowid), "{title aliases lineage summary body}");
+    return new Set(rows.filter((row) => (coverage.get(row.rowid) ?? 0) >= 0.5).map((row) => row.path));
+  }
+
+  /**
+   * The pages a Log entry is tied to in the graph, strongest first: pages that cite it, pages its
+   * filing receipt wrote, pages it links to, then those pages' tree parents. `unwritten` counts
+   * the pages its filing planned but no page shows (filing stopped half way, S6/S8).
+   */
+  private connectionsOf(notePath: string): { pages: Array<{ path: string; relation: MemoryIndexRelation; weight: number }>; unwritten: number } {
+    const graph = this.memoryGraph();
+    const signals = new Map<string, Set<string>>();
+    const add = (ref: string, kind: string) => {
+      const path = graph.has(ref) ? ref : graph.resolve(ref);
+      if (!path || path === TREE_PATH) return null;
+      if (!signals.has(path)) signals.set(path, new Set());
+      signals.get(path)!.add(kind);
+      return path;
+    };
+    for (const edge of this.db.prepare("SELECT src FROM edges WHERE kind = 'cites' AND target = ?").all(notePath) as Array<{ src: string }>) add(edge.src, "cites");
+    const planned: string[] = [];
+    for (const edge of this.db.prepare("SELECT target, kind FROM edges WHERE src = ? AND kind IN ('filed', 'mentions', 'planned')").all(notePath) as Array<{ target: string; kind: string }>) {
+      if (edge.kind === "planned") planned.push(edge.target);
+      else add(edge.target, edge.kind);
+    }
+    const unwritten = planned.filter((target) => {
+      const path = graph.has(target) ? target : graph.resolve(target);
+      return !path || !signals.has(path);
+    }).length;
+    const pages = [...signals].map(([path, kinds]) => ({
+      path,
+      relation: (kinds.has("cites") || kinds.has("filed") ? "filed" : "linked") as MemoryIndexRelation,
+      weight: connectionWeight(kinds, graph.depthOf(path)),
     }));
+    // Each parent once, stronger when several of the note's pages hang off it.
+    const parents = new Map<string, number>();
+    for (const page of pages) {
+      const parent = graph.parentOf(page.path);
+      if (parent && parent !== TREE_PATH && !signals.has(parent)) parents.set(parent, (parents.get(parent) ?? 0) + 1);
+    }
+    const byStrength = (a: { path: string; weight: number }, b: { path: string; weight: number }) =>
+      b.weight - a.weight || graph.depthOf(b.path) - graph.depthOf(a.path) || graph.titleOf(a.path).localeCompare(graph.titleOf(b.path)) || a.path.localeCompare(b.path);
+    // A parent is a step further from the note: 0.6, +0.05 per further page of the note under it.
+    const tied = [...parents].map(([path, children]) => ({ path, relation: "parent" as const, weight: Math.min(0.75, 0.6 + 0.05 * (children - 1)) }));
+    return { pages: [...pages.sort(byStrength), ...tied.sort(byStrength)], unwritten };
+  }
+
+  /**
+   * Percentages for memories a caller already has (E12-S3c): an answer's cited sources that the
+   * ranked list did not reach, so every cited memory shows a number. A recent-note question uses
+   * its own ranking; otherwise a memory's share of the question's words and its strength against
+   * the best hit (matchPercent), at least 1. A Log file path without an anchor scores its best
+   * entry. Paths that are not memories are left out.
+   */
+  async matchFor(query: string, paths: readonly string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (paths.length === 0) return out;
+    await this.fresh();
+    const intent = recentIntent(query, this.now());
+    if (intent) {
+      for (const hit of this.recentSearch(intent, MAX_HITS)) {
+        for (const path of paths) if (!out.has(path) && (hit.path === path || hit.path.split("#")[0] === path)) out.set(path, hit.matchPercent);
+      }
+    }
+    const rest = paths.filter((path) => !out.has(path));
+    if (rest.length === 0) return out;
+    const rows = this.db.prepare(`SELECT rowid, path, file FROM docs WHERE path IN (${rest.map(() => "?").join(", ")}) OR (kind = 'log' AND file IN (${rest.map(() => "?").join(", ")}))`)
+      .all(...rest, ...rest) as Array<{ rowid: number; path: string; file: string }>;
+    if (rows.length === 0) return out;
+    const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
+    const coverage = match ? this.coverageOf(terms, rows.map((row) => row.rowid)) : new Map<number, number>();
+    const scores = new Map<number, number>();
+    if (match) {
+      const matched = this.db.prepare(`SELECT rowid, kind, meta, bm25(docs, ${BM25_WEIGHTS}) AS rank FROM docs WHERE docs MATCH ? AND rowid IN (${rows.map(() => "?").join(", ")})`)
+        .all(match, ...rows.map((row) => row.rowid)) as Array<{ rowid: number; kind: MemoryIndexHitKind; meta: string; rank: number }>;
+      for (const row of matched) scores.set(row.rowid, -row.rank * factorOf(row));
+    }
+    const topScore = Math.max(0, ...(await this.search(query, 1)).map((hit) => hit.score), ...scores.values());
+    for (const path of rest) {
+      const own = rows.filter((row) => row.path === path || row.file === path);
+      if (own.length === 0) continue;
+      const best = Math.max(...own.map((row) => matchPercent({
+        score: scores.get(row.rowid) ?? 0, topScore, coverage: (coverage.get(row.rowid) ?? 0) * (generic ? 0.3 : 1),
+      })));
+      out.set(path, best);
+    }
+    return out;
+  }
+
+  /** How many of the person's voice notes are tied to a topic page (E12-S3c; the gap S8 closes). */
+  async noteLinks(): Promise<MemoryNoteLinks> {
+    await this.fresh();
+    const notes = (this.db.prepare("SELECT path, file, rowid FROM docs WHERE kind = 'log' AND meta = 'user voice'").all() as Array<{ path: string; file: string; rowid: number }>)
+      .sort((a, b) => b.file.localeCompare(a.file) || b.rowid - a.rowid);
+    let unlinked = 0;
+    let partial = 0;
+    const unlinkedPaths: string[] = [];
+    for (const note of notes) {
+      const links = this.connectionsOf(note.path);
+      if (links.pages.length === 0) {
+        unlinked++;
+        if (unlinkedPaths.length < 20) unlinkedPaths.push(note.path);
+      } else if (links.unwritten > 0) partial++;
+    }
+    return { voiceNotes: notes.length, unlinked, partial, unlinkedPaths };
   }
 
   /**
@@ -348,7 +663,7 @@ export class MemoryIndex {
   private memoryGraph(): MemoryGraph {
     if (this.graphCache?.version === this.version) return this.graphCache.graph;
     const pages = this.db.prepare("SELECT path, title, summary, lineage AS treePath FROM docs WHERE kind = 'page'").all() as Array<{ path: string; title: string; summary: string; treePath: string }>;
-    const edges = this.db.prepare("SELECT src AS \"from\", target, kind FROM edges ORDER BY rowid").all() as unknown as MemoryGraphRawEdge[];
+    const edges = this.db.prepare("SELECT src AS \"from\", target, kind FROM edges WHERE kind IN ('link', 'tree') ORDER BY rowid").all() as unknown as MemoryGraphRawEdge[];
     const hasTree = Boolean(this.db.prepare("SELECT 1 FROM files WHERE path = ?").get(TREE_PATH));
     const graph = MemoryGraph.build(pages, edges, { hasTree });
     this.graphCache = { version: this.version, graph };
@@ -360,7 +675,7 @@ export class MemoryIndex {
   }
 
   /** Rarity-weighted share (0..1) of the query's words each row contains, by the same FTS5 matching as the search. */
-  private coverageOf(terms: readonly string[], rowids: readonly number[]): Map<number, number> {
+  private coverageOf(terms: readonly string[], rowids: readonly number[], columns = "{title aliases summary body}"): Map<number, number> {
     const out = new Map<number, number>(rowids.map((rowid) => [rowid, 0]));
     if (terms.length === 0 || rowids.length === 0) return out;
     const total = (this.db.prepare("SELECT count(*) AS n FROM docs").get() as { n: number }).n;
@@ -369,7 +684,7 @@ export class MemoryIndex {
     const among = this.db.prepare(`SELECT rowid FROM docs WHERE docs MATCH ? AND rowid IN (${rowids.map(() => "?").join(", ")})`);
     let weightSum = 0;
     for (const term of terms) {
-      const scoped = `{title aliases summary body} : ${term}`;
+      const scoped = `${columns} : ${term}`;
       const df = (countOf.get(scoped) as { n: number }).n;
       const weight = idfOf(total, df);
       weightSum += weight;
@@ -408,7 +723,7 @@ export class MemoryIndex {
     // Lineage depends on other pages' parents, so any change re-derives it for every row.
     const lineage = await lineageResolver(vaultPath);
 
-    const insert = this.db.prepare("INSERT INTO docs (title, aliases, lineage, summary, body, kind, path, file, filed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const insert = this.db.prepare("INSERT INTO docs (title, aliases, lineage, summary, body, kind, path, file, filed, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     const upsertFile = this.db.prepare("INSERT INTO files (path, mtime_ms, size) VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size");
     const deleteRows = this.db.prepare("DELETE FROM docs WHERE file = ?");
     const deleteFile = this.db.prepare("DELETE FROM files WHERE path = ?");
@@ -427,7 +742,7 @@ export class MemoryIndex {
       for (const file of resolved) {
         deleteRows.run(file.path);
         deleteEdges.run(file.path);
-        for (const row of file.rows) insert.run(row.title, row.aliases, row.lineage, row.summary, row.body, row.kind, row.path, row.file, row.filed);
+        for (const row of file.rows) insert.run(row.title, row.aliases, row.lineage, row.summary, row.body, row.kind, row.path, row.file, row.filed, row.meta);
         for (const edge of file.edges) insertEdge.run(file.path, edge.from, edge.kind, edge.target);
         upsertFile.run(file.path, file.mtimeMs, file.size);
       }
@@ -456,7 +771,7 @@ export class MemoryIndex {
 }
 
 function indexable(path: string): boolean {
-  if (path === TREE_PATH || LOG_FILE_RE.test(path)) return true;
+  if (path === TREE_PATH || LOG_FILE_RE.test(path) || isFilingReceiptPath(path)) return true;
   return tierOf(path) === "meaning" && !isIndexFile(path);
 }
 
@@ -484,28 +799,74 @@ async function lineageResolver(vaultPath: string): Promise<LineageResolver> {
   };
 }
 
+/**
+ * Stored edges: the graph's own (`link`, `tree`, MemoryGraphRawEdge) and the ones that tie a Log
+ * entry to its topics (E12-S3c): `cites` page → entry (the page quotes it), `filed` / `planned`
+ * entry → page (its filing receipt wrote, or only planned, that page), `mentions` entry → page.
+ */
+type StoredEdge = { from: string; target: string; kind: MemoryGraphRawEdge["kind"] | "cites" | "filed" | "planned" | "mentions" };
+
+/** The note → page edges of a filing receipt (`Inbox/filing-<date>-e-xxxxxx.md`); none when it does not parse. */
+function receiptEdges(raw: string): StoredEdge[] {
+  const body = /\n```json\n([\s\S]*)\n```\n?$/.exec(raw)?.[1];
+  if (!body) return [];
+  try {
+    const value = JSON.parse(body) as {
+      evidenceRef?: unknown;
+      outcomes?: Array<{ filedPages?: unknown; uncertainPages?: unknown; pages?: unknown }>;
+      classification?: { topics?: Array<{ pages?: Array<{ path?: unknown } | string> }> };
+    };
+    if (typeof value.evidenceRef !== "string") return [];
+    const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
+    const filed = new Set<string>();
+    const planned = new Set<string>();
+    for (const outcome of value.outcomes ?? []) {
+      for (const page of [...strings(outcome.filedPages), ...strings(outcome.uncertainPages)]) filed.add(page);
+      for (const page of strings(outcome.pages)) planned.add(page);
+    }
+    for (const topic of value.classification?.topics ?? []) {
+      for (const page of topic.pages ?? []) {
+        const path = typeof page === "string" ? page : typeof page?.path === "string" ? page.path : null;
+        if (path) planned.add(path);
+      }
+    }
+    const from = value.evidenceRef;
+    return [
+      ...[...filed].map((target) => ({ from, target, kind: "filed" as const })),
+      ...[...planned].filter((page) => !filed.has(page)).map((target) => ({ from, target, kind: "planned" as const })),
+    ];
+  } catch {
+    return [];
+  }
+}
+
 /** A file's index rows and its graph edges (links and tree parent, targets as written). */
-async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft[]; edges: MemoryGraphRawEdge[] }> {
+async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft[]; edges: StoredEdge[] }> {
   const raw = await readFile(join(vaultPath, path), "utf8").catch(() => null);
   if (raw === null) return { rows: [], edges: [] };
+  if (isFilingReceiptPath(path)) return { rows: [], edges: receiptEdges(raw) };
   if (path === TREE_PATH) {
     // Root rows: RAPTOR's collapsed tree, every level in one pool. The hit points at the root's page.
+    // The group heading ("Long-term memory") is in the lineage, not the body: a root must not match
+    // a question only by being a root (E12-S3c).
     const nodes = parseTree(raw).nodes;
     return {
       rows: nodes.map((node) => ({
-        title: node.name, aliases: "", summary: node.summary, body: GROUP_HEADINGS[node.kind], kind: "root", path: node.path, file: path,
+        title: node.name, aliases: "", summary: node.summary, body: "", kind: "root", path: node.path, file: path, meta: "",
       })),
       edges: nodes.map((node) => ({ from: TREE_PATH, target: node.path, kind: "tree" })),
     };
   }
   const log = LOG_FILE_RE.exec(path);
   if (log) {
+    const entries = parseLogCaptures(log[1]!, raw);
     return {
-      rows: parseLogCaptures(log[1]!, raw).map((entry) => ({
+      rows: entries.map((entry) => ({
         title: entry.title, aliases: "", summary: [log[1], entry.source].filter(Boolean).join(" "), body: entry.content,
         kind: "log", path: `${path}#^${entry.anchor}`, file: path,
+        meta: `${entry.origin}${isVoiceCapture(entry.contentType, entry.title, entry.content) ? " voice" : ""}`,
       })),
-      edges: [],
+      edges: entries.flatMap((entry) => extractPageLinks(entry.content).map((target) => ({ from: `${path}#^${entry.anchor}`, target, kind: "mentions" as const }))),
     };
   }
   const { frontmatter, body } = parseNote(raw);
@@ -513,9 +874,10 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
   const title = typeof meta.title === "string" && meta.title.trim() ? meta.title : body.match(/^# +([^\n]+)/m)?.[1]?.trim() || basenameOf(path);
   const parent = pageTreeFields(frontmatter).parent;
-  const edges: MemoryGraphRawEdge[] = [
+  const edges: StoredEdge[] = [
     ...(parent ? [{ from: path, target: parent, kind: "tree" as const }] : []),
     ...extractPageLinks(body).map((target) => ({ from: path, target, kind: "link" as const })),
+    ...[...new Set(extractCitations(body).map((cite) => `Log/${cite.date}.md#^${cite.anchor}`))].map((target) => ({ from: path, target, kind: "cites" as const })),
   ];
   return { edges, rows: [{
     title,
@@ -523,6 +885,6 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
     aliases: [...(typeof meta.aliases === "string" ? [meta.aliases] : strings(meta.aliases)), ...strings(meta.tags)].join(" · "),
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
     body,
-    kind: "page", path, file: path,
+    kind: "page", path, file: path, meta: "",
   }] };
 }

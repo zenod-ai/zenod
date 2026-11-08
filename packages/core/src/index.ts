@@ -73,7 +73,7 @@ export {
   MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, MEMORY_GRAPH_MAX_LIMIT, MEMORY_GRAPH_TREE_TITLE,
   type MemoryGraphEdge, type MemoryGraphNode, type MemoryGraphPage, type MemoryGraphRawEdge, type MemoryGraphRelation, type MemoryGraphView,
 } from "./vault/memoryGraph.js";
-export { MemoryIndex, MemoryIndexTenantError, type MemoryIndexHit, type MemoryIndexOptions, type MemoryIndexStats } from "./vault/memoryIndex.js";
+export { MemoryIndex, MemoryIndexTenantError, type MemoryIndexHit, type MemoryIndexOptions, type MemoryIndexStats, type MemoryNoteLinks } from "./vault/memoryIndex.js";
 export { loadMemoryTree, formatMemoryLineage, type MemoryTreeIndex, type MemoryLineage, type MemoryTreeNodeView, type LineageNode } from "./vault/lineage.js";
 export { isAgentOpsReport, parseFiledLines, OPS_ROLLUP_HEADING, FILED_PREFIX } from "./engine/treePlacement.js";
 export {

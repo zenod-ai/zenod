@@ -224,6 +224,8 @@
 .zp-pct { grid-area: pct; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .zp-meta { grid-area: meta; display: flex; flex-wrap: wrap; gap: 0.6rem; font-size: 0.82rem; color: var(--zp-muted); }
 .zp-meta b { color: var(--zp-accent); font-weight: 600; }
+.zp-meta .zp-rel { font-style: italic; }
+.zp-meta .zp-unlinked { color: var(--zp-warn); font-weight: 600; }
 .zp-actions { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; font-size: 0.88rem; color: var(--zp-muted); }
 .zp-right { justify-content: flex-end; }
 .zp-time { margin-left: auto; color: var(--zp-faint); font-variant-numeric: tabular-nums; }

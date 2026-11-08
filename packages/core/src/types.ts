@@ -1,6 +1,6 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
 import type { MemoryTreeOutline } from "./vault/treeOutline.js";
-import type { MemoryIndexStats } from "./vault/memoryIndex.js";
+import type { MemoryIndexStats, MemoryNoteLinks } from "./vault/memoryIndex.js";
 import type { MemoryGraphView } from "./vault/memoryGraph.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
@@ -338,6 +338,17 @@ export interface Hit {
   matchPercent?: number;
   /** Tier-0 index hits only: the page title or captured entry's title. */
   title?: string;
+  /**
+   * Recent-note questions only (E12-S3c): `note` the note itself, ranked by time; `filed` a page
+   * the note was filed into; `linked` a page it links to; `parent` the tree parent of such a page.
+   */
+  relation?: "note" | "filed" | "linked" | "parent" | "child";
+  /** For a `filed`/`linked`/`parent` hit: the note (Log entry path) it connects to. */
+  via?: string;
+  /** For a note: its filing never tied it to a topic page. */
+  unlinked?: boolean;
+  /** For a note: topics its filing planned but never wrote (filing stopped half way). */
+  unwritten?: number;
 }
 
 export interface MemoryEntry {
@@ -552,6 +563,13 @@ export interface BrainEngine {
   search(query: string): Promise<Hit[]>;
   /** search() plus which tier answered and its server-side time (index refresh included, vault pull excluded). */
   searchTimed?(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number } }>;
+  /**
+   * Match percentages for memories the caller already has, e.g. an answer's cited sources the
+   * ranked list did not reach (E12-S3c). Keyed by the given path; a path that is not a memory is absent.
+   */
+  matchPercentsFor?(query: string, paths: readonly string[]): Promise<Record<string, number>>;
+  /** How many of the person's voice notes are tied to a topic page (E12-S3c); null without a tier-0 index. */
+  memoryNoteLinks?(): Promise<MemoryNoteLinks | null>;
   /** Rebuild the tier-0 memory index from the vault (`zenod index rebuild`); null when this engine has none. */
   rebuildMemoryIndex?(): Promise<MemoryIndexStats | null>;
   /**

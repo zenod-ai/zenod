@@ -962,7 +962,8 @@ export function buildMcpServer(
       const engine = await getEngine();
       const timed = query ? engine.searchTimed ? await engine.searchTimed(query) : { hits: await engine.search(query), tier: "scan" as const, ms: null } : null;
       // E12-S3a: rank, matchPercent and appPath are additive; existing hit fields are unchanged.
-      const rankedHits = rankHits((timed?.hits ?? []).slice(0, hitLimit ?? undefined));
+      // E12-S3c: the chat's recent-note fields (relation, via, unlinked, unwritten) stay out of this tool's output.
+      const rankedHits = rankHits((timed?.hits ?? []).slice(0, hitLimit ?? undefined).map(({ relation: _r, via: _v, unlinked: _u, unwritten: _w, ...hit }) => hit));
       const tree = rankedHits.length ? await loadTree(engine) : null;
       const hits = await Promise.all(rankedHits.map(async (hit) => {
         const { placement, lineage, evidenceRefs } = await lineageFields(tree, hit.path);
