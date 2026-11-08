@@ -6,7 +6,7 @@ import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine, SqliteStateStore, VaultRepo, type BrainEngine, type BrainLlm, type MemoryEntry } from "zenod";
 import { InboxStore } from "../src/inboxStore.js";
-import { BUILT_IN_PERSONAS, memoryWords, parseRecapReply, WEEKLY_RECAP } from "../src/personaCatalog.js";
+import { BUILT_IN_PERSONAS, memoryTitle, memoryWords, parseRecapReply, WEEKLY_RECAP } from "../src/personaCatalog.js";
 import { registerPersonaRoutes } from "../src/personaRoutes.js";
 import {
   duePersonas,
@@ -225,6 +225,9 @@ describe("persona runner (EPIC-14 S4)", () => {
     expect(memoryWords(voice)).toBe("I still have not booked the dentist.");
     expect(memoryWords("Note: buy milk\n\nand eggs")).toBe("Note: buy milk and eggs");
     expect(memoryWords("Plain words.")).toBe("Plain words.");
+    expect(memoryTitle(entry(1, "2026-11-06", 'Audio "AC60.ogg" ingested thr...'))).toBe("Audio");
+    expect(memoryTitle(entry(2, "2026-11-06", 'Voice note "AB12.ogg" ingeste...'))).toBe("Voice note");
+    expect(memoryTitle(entry(3, "2026-11-06", "Dentist next week"))).toBe("Dentist next week");
   });
 
   it("marks runs a restart interrupted as failed so their period can run again", () => {

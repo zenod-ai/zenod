@@ -29,9 +29,10 @@ export function memoryWords(content: string): string {
   return (header ? blocks.slice(1).join("\n\n") : content).replace(/\s+/g, " ").trim();
 }
 
-/** A short name for a memory: "Voice note" instead of its file name. */
+/** A short name for a memory: "Voice note" or "Audio" instead of its file name. */
 export function memoryTitle(entry: MemoryEntry): string {
-  if (/^Voice note "/.test(entry.title)) return "Voice note";
+  const media = /^(Voice note|Audio|Image|Screenshot|PDF|Document|Link) "/.exec(entry.title);
+  if (media) return media[1]!;
   return entry.title.replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
