@@ -1,0 +1,54 @@
+{
+ "strong": [
+  [
+   "Notes/Home/Spare key.md",
+   "Areas/Life admin.md"
+  ],
+  [
+   "Notes/Car.md",
+   "Areas/Life admin.md"
+  ],
+  [
+   "Projects/Boat repair/2023 Porto quotes.md",
+   "Projects/Boat repair.md"
+  ],
+  [
+   "Projects/Boat repair/Hull paint.md",
+   "Projects/Boat repair.md"
+  ],
+  [
+   "Projects/Cabin decision/Cabin options.md",
+   "Projects/Cabin decision.md"
+  ],
+  [
+   "Projects/Launching Tide Cart/Pricing.md",
+   "Projects/Launching Tide Cart.md"
+  ],
+  [
+   "Projects/Launching Moss Lantern/Launch channels.md",
+   "Projects/Launching Moss Lantern.md"
+  ],
+  [
+   "Notes/Travel insurance/Policy.md",
+   "Notes/Travel insurance.md"
+  ]
+ ],
+ "apart": [
+  [
+   "Notes/Home/Spare key.md",
+   "Projects/Boat repair.md"
+  ],
+  [
+   "Notes/Car.md",
+   "Projects/Launching Tide Cart.md"
+  ],
+  [
+   "Projects/Cabin decision/Cabin options.md",
+   "Projects/Launching Moss Lantern.md"
+  ],
+  [
+   "Notes/Travel insurance/Policy.md",
+   "Projects/Boat repair/Hull paint.md"
+  ]
+ ]
+}

@@ -25,3 +25,5 @@ jobs:
       - run: npm run build:phylax -w @zenod/server
       - run: npm run test:phylax-image-contract
       - run: npm test
+      # E15-Q2: the memory test suite on the demo vault; numbers in the job summary, fails under the floor.
+      - run: node scripts/memory-eval/run.mjs --checkout . --dataset demo --out memory-eval.json --floor scripts/memory-eval/floor.json

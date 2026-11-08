@@ -1,0 +1,8 @@
+{"id": "a01", "store": "The office alarm code was changed to 4471 on 8 November.", "query": "office alarm code", "expect": ["4471"]}
+{"id": "a02", "store": "Preferred airline seat: aisle, near the front, never the last row.", "query": "airline seat preference", "expect": ["aisle"]}
+{"id": "a03", "store": "Decision: the Heron Desk beta closes on 30 November and moves to paid plans.", "query": "Heron Desk beta", "expect": ["30 November"]}
+{"id": "a04", "store": "Mara Holloway prefers to be called Mar, not Mara.", "query": "Mara Holloway called", "expect": ["Mar,"]}
+{"id": "a05", "store": "The Wool House hotel in Bergen gave us a 15 percent returning-guest discount code WOOL15.", "query": "Wool House discount code", "expect": ["WOOL15"]}
+{"id": "a06", "store": "Orchard Sync release 2.3 ships with offline mode turned off by default.", "query": "Orchard Sync offline mode", "expect": ["offline mode"]}
+{"id": "a07", "store": "Water the bonsai on the balcony twice a week in summer, once a week in winter.", "query": "bonsai watering", "expect": ["twice a week"]}
+{"id": "a08", "store": "The landlord's new bank account for rent is at Banco Lumen, reference FLAT-12.", "query": "rent bank account landlord", "expect": ["FLAT-12"]}

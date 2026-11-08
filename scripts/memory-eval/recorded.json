@@ -1,0 +1,9 @@
+[
+  {"change": "before S8", "sha": "67d53e3", "suite": "filing, live model, 12 made-up notes", "metric": "ingestion", "value": "63% and 70% landing quality in two runs; 4 and 5 of 12 notes stopped half way", "source": "e12-s6-2026-11-08.md"},
+  {"change": "S8", "sha": "dce775e", "suite": "filing, live model, 12 made-up notes", "metric": "ingestion", "value": "landing quality 64% to 82%; memories never written 9 to 1; notes stopped half way 6 to 0; wrong branch 2 to 5", "source": "e12-s8-2026-11-08.md"},
+  {"change": "S8", "sha": "dce775e", "suite": "filing, live model, your judged notes", "metric": "ingestion", "value": "memories in the right place 3 of 10 to 5 of 10", "source": "e12-s8-2026-11-08.md"},
+  {"change": "before S8", "sha": "production", "suite": "your own verdicts on the trial page", "metric": "ingestion", "value": "8 of 34 placements judged right, 21 wrong, 5 unsure", "source": "private trial page"},
+  {"change": "S8", "sha": "dce775e", "suite": "answers, live model, your 45 questions", "metric": "error", "value": "14 of 45 facts right, 30 of 45 right memory in the top 5, 3 of 4 live ask_brain calls timed out", "source": "e15-q1-2026-11-08.md"},
+  {"change": "S1b round 2", "sha": "670e329", "suite": "answers, live model, your 45 questions, blind graded", "metric": "error", "value": "correct 8 to 29 of 45; no answer 18 to 2; wrong 8 to 3", "source": "e12-s1b-2026-11-08.md"},
+  {"change": "W1", "sha": "e7840bf", "suite": "retrieval, your 45 questions", "metric": "retrieval", "value": "right note in the top 5 for 18 to 21 of 45; search 113 to 89 ms", "source": "e18-w1-2026-11-08.md"}
+]
