@@ -32,9 +32,9 @@ Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: Jordi, E14-A1 (approve the plan at http://vps3.taild81fbb.ts.net:8921/e14-plan/)
+Waiting on: Jordi, E14-A2 (approve the round 2 plan at http://vps3.taild81fbb.ts.net:8921/e14-plan/)
 Approved work: none
-Next action: Jordi answers E14-A1; then the six build steps become rows
+Next action: Jordi answers E14-A2; then the seven build steps become rows
 Source revision: uncommitted scaffold
 Verified at: 2026-11-08
 
@@ -46,7 +46,8 @@ Verified at: 2026-11-08
 
 ## Waiting on
 
-- [ask E14-A1: approve @Jordi since 2026-11-08 row P1] Is this how personas, an inbox and calling your memory should come to Zenod? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — 13 slides: personas that wake nightly on your memory, mostly reading, writing only into their own folder and your inbox, capped at $1 of your $3 monthly allowance; a web inbox of their questions and findings; a voice-note button that goes into the filing Zenod already has; a call button, a "library hotline" that talks to Zenod's answer engine (about 2 to 20 cents a minute, capped); we recommend building it in Zenod and copying Epic Team's screens and code, not merging the two; voice-note ingestion and goals stay separate; Zenod does not rest on EpicSpine; six build steps, about three weeks — context: your voice note of 8 Nov 15:51 asked for a plan at one link before any build — impact: yes turns the six steps into rows and starts the first — risk: low, each step ships alone; the call costs money per minute, capped — recommend: approve — why Jordi: it changes what Zenod is — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/)
+- [ask E14-A2: approve @Jordi since 2026-11-08 row P1] Is this the plan for personas, the inbox, calling your memory and the memory desk? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — now 15 slides. New since your voice note of 16:09: a memory desk — when you ask for a job on the memory (like untangling Idealista and Poly-Maker) instead of saving or asking, Zenod hands it to an agent; each job is one change you can undo, it never rewrites your words or deletes, big jobs show a plan card first, and progress and results land in your inbox; no new "Epic Memory" product, Zenod stays, and it copies Epic Team's desk, personas, inbox, voice call and activity screens now (a shared package later for the voice and question card). Seven build steps, about four weeks, the memory desk is step 3. We recommend WhatsApp does not start memory jobs directly for now: a job asked on WhatsApp shows in your inbox as "run it?", so WhatsApp replies stay as they are — context: your voice notes of 8 Nov 15:51 and 16:09 — impact: yes turns the seven steps into rows and starts the first — risk: low, each step ships alone; calls cost a few cents a minute, capped — recommend: approve — why Jordi: it shapes what Zenod becomes — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/)
+- [superseded E14-A1 2026-11-08 by E14-A2] Is this how personas, an inbox and calling your memory should come to Zenod? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — 13 slides: personas that wake nightly on your memory, mostly reading, writing only into their own folder and your inbox, capped at $1 of your $3 monthly allowance; a web inbox of their questions and findings; a voice-note button that goes into the filing Zenod already has; a call button, a "library hotline" that talks to Zenod's answer engine (about 2 to 20 cents a minute, capped); we recommend building it in Zenod and copying Epic Team's screens and code, not merging the two; voice-note ingestion and goals stay separate; Zenod does not rest on EpicSpine; six build steps, about three weeks — context: your voice note of 8 Nov 15:51 asked for a plan at one link before any build — impact: yes turns the six steps into rows and starts the first — risk: low, each step ships alone; the call costs money per minute, capped — recommend: approve — why Jordi: it changes what Zenod is — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/)
 
 ## Issue Ledger
 
