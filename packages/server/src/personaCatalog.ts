@@ -18,12 +18,29 @@ const READS_WRITES = [
   "Never messages anyone",
 ];
 
+/**
+ * What the user said, without the capture header a voice note or file carries ("Voice note … ingested",
+ * "Raw artifact: …", "Transcribed by …"): the first block goes when it is that header.
+ */
+export function memoryWords(content: string): string {
+  const blocks = content.split(/\n\s*\n/);
+  const first = blocks[0] ?? "";
+  const header = blocks.length > 1 && (/ingested through Zenod/i.test(first) || (first.split("\n").length >= 2 && first.split("\n").every((line) => /^[A-Z][A-Za-z0-9 ]{1,40}: /.test(line))));
+  return (header ? blocks.slice(1).join("\n\n") : content).replace(/\s+/g, " ").trim();
+}
+
+/** A short name for a memory: "Voice note" instead of its file name. */
+export function memoryTitle(entry: MemoryEntry): string {
+  if (/^Voice note "/.test(entry.title)) return "Voice note";
+  return entry.title.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
 function recapPrompt(entries: MemoryEntry[]): string {
   const lines: string[] = [];
   let used = 0;
   entries.forEach((entry, index) => {
-    const text = entry.content.replace(/\s+/g, " ").trim().slice(0, 400);
-    const line = `[${index + 1}] ${entry.capturedAt.slice(0, 10)} ${entry.title}: ${text}`;
+    const text = memoryWords(entry.content).slice(0, 300);
+    const line = `[${index + 1}] ${entry.capturedAt.slice(0, 10)} ${memoryTitle(entry)}: ${text}`;
     if (used + line.length > RECAP_PROMPT_CHARS) return;
     used += line.length;
     lines.push(line);
@@ -80,6 +97,8 @@ export const WEEKLY_RECAP: PersonaDefinition = {
   defaultEnabled: true,
   // One model call a week on the cheap chat model: well under a cent each run.
   limits: { maxSteps: 6, maxRunUsd: 0.02, maxMonthUsd: 0.1 },
+  // Reads what was said, not the voice-note header, spread over all 7 days.
+  revisedAt: "2026-11-08T19:30:00.000Z",
 
   async fingerprint(ctx) {
     const entries = await ctx.recentMemories({ days: RECAP_DAYS, limit: RECAP_MAX_MEMORIES });
@@ -108,11 +127,11 @@ export const WEEKLY_RECAP: PersonaDefinition = {
       ...(reply.recap.length ? reply.recap.map((line) => `- ${line}`) : ["- Nothing to recap."]),
       "",
       ...(reply.finding ? ["## Finding", "", reply.finding.title, "", ...(reply.finding.detail ? [reply.finding.detail, ""] : [])] : []),
-      ...(sources.length ? ["## From", "", ...sources.map((entry) => `- [[${entry.evidenceRef.replace(/\.md(?=#)/, "")}|${entry.title}]]`), ""] : []),
+      ...(sources.length ? ["## From", "", ...sources.map((entry) => `- [[${entry.evidenceRef.replace(/\.md(?=#)/, "")}|${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}]]`), ""] : []),
     ].join("\n"));
     if (!reply.finding) return { summary: `Read ${entries.length} memories and wrote a recap, no finding` };
     const links: InboxLink[] = [
-      ...sources.slice(0, 5).map((entry) => ({ label: entry.title.slice(0, 120), path: entry.path })),
+      ...sources.slice(0, 5).map((entry) => ({ label: `${memoryTitle(entry)} ${entry.capturedAt.slice(0, 10)}`, path: entry.path })),
       { label: "This week's recap", path: notePath },
     ];
     ctx.postFinding({ title: reply.finding.title, ...(reply.finding.detail ? { body: reply.finding.detail } : {}), links });
