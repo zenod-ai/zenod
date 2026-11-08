@@ -48,7 +48,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| B1 | Ticket worker | run_68834ea4-ac9e-41b7-96a6-2ba7aa12a7e9 | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | review | none | [#1518](https://github.com/zenod-ai/zenod/pull/1518) merged `db093a5`, live (health sha db093a5) | main | [evidence page](http://vps3.taild81fbb.ts.net:8921/e16-b1/) ([md](evidence/e16-b1-2026-11-08.md), [card](cards/E16-B1.md)): one Send live; hosted model decided 80/80 demo messages right (40 + 40 blind), 0 questions kept; ✗ signed-in production send waits on E7-A15 | 2026-11-08 | followups: none — signed-in live check rides on E7-A15 like the other chat rows; confirm: yes — Jordi judges whether one Send feels right and whether Zenod's keep or answer choices match what he meant |
+| B1 | Ticket worker | run_68834ea4-ac9e-41b7-96a6-2ba7aa12a7e9 | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | review | none | [#1518](https://github.com/zenod-ai/zenod/pull/1518) merged `db093a5`, live | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e16-b1/), [card](cards/E16-B1.md): 80/80 decisions right, 0 questions kept; ✗ signed-in send waits on E7-A15 | 2026-11-08 | followups: none; confirm: yes — Jordi judges whether one Send feels right and whether its keep or answer choices match what he meant |
 
 ## Decisions
 
