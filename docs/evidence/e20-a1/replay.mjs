@@ -10,7 +10,7 @@
 // env: BENCH_BASE_URL (default http://127.0.0.1:18978/api/v1), BENCH_MODEL (default the hosted
 //      chat model google/gemini-3.1-flash-lite). Private rows stay outside the repo.
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, lstatSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -26,8 +26,11 @@ const model = process.env.BENCH_MODEL ?? "google/gemini-3.1-flash-lite";
 const dir = mkdtempSync(join(tmpdir(), "e20-a1-replay-"));
 const bare = join(dir, "origin.git");
 const seed = join(dir, "seed");
-cpSync(vaultSrc, seed, { recursive: true });
-rmSync(join(seed, ".git"), { recursive: true, force: true });
+// Copy the vault's files, never its .git, from the real directory (a symlinked checkout must not
+// be copied as a link: the seed would then BE the checkout).
+const source = realpathSync(vaultSrc);
+cpSync(source, seed, { recursive: true, filter: (src) => src === source || !src.slice(source.length).split("/").includes(".git") });
+if (lstatSync(seed).isSymbolicLink()) throw new Error("the vault copy is a link, refusing to touch it");
 const git = (cwd, ...args) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "user.email=replay@example.invalid", "-c", "user.name=replay", ...args], { cwd, stdio: "ignore" });
 git(seed, "init", "-q", "-b", "main"); git(seed, "add", "-A"); git(seed, "commit", "-q", "-m", "vault copy");
 execFileSync("git", ["clone", "-q", "--bare", seed, bare]);
