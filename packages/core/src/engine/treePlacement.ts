@@ -213,24 +213,50 @@ function oneLine(text: string, max: number): string {
 }
 
 /**
+ * E12-S20: the node a rescued point belongs under: the branch of the page the organiser chose for
+ * its subject, the first such page in the tree. The leaf hangs under that page's parent, not the
+ * page itself: a point lands here because its merge into the page was rejected or failed, and the
+ * page may be a near miss on the right branch. A root page is its own branch; a provisional
+ * ancestor hands over to the nearest confirmed one. Null when no chosen page is in the tree.
+ */
+/** A reconcile that rejected the chosen page as another subject (E12-S8): that page is no anchor for the point. */
+export const REJECTED_FOR_PAGE_RE = /reconciliation_(?:needs_clarification|incompatible_decisions)/;
+
+export function anchorNode(index: TreeIndex, anchors: readonly string[]): NodeChoice | null {
+  for (const raw of anchors) {
+    const path = raw.endsWith(".md") ? raw : `${raw}.md`;
+    if (!index.fields.has(path)) continue;
+    const lineage = index.lineage(path);
+    if (!lineage.ok) continue;
+    const above = lineage.steps.length > 1 ? lineage.steps.slice(0, -1) : lineage.steps;
+    const branch = [...above].reverse().find(step => index.fields.has(step.path) && !index.fields.get(step.path)?.provisional);
+    if (branch) return { path: branch.path, score: CONFIDENT_SCORE, weak: false };
+  }
+  return null;
+}
+
+/**
  * Rule 4: a capture that reached no page becomes a provisional leaf under the
  * closest node, quoting the capture and citing its Log entry. Returns the page path.
+ * With `anchors` (E12-S20), the leaf hangs on the branch of the point's own subject page when one
+ * is in the tree; word overlap picks the node only when none is.
  */
 export async function writeProvisionalLeaf(
   vaultPath: string,
   index: TreeIndex,
-  input: { content: string; evidenceRef: string; reason: string; today: string },
+  input: { content: string; evidenceRef: string; reason: string; today: string; title?: string },
   writes: TrackedWrites = new TrackedWrites(vaultPath),
-  options: { rootsOnly?: boolean } = {},
+  options: { rootsOnly?: boolean; anchors?: readonly string[] } = {},
 ): Promise<{ path: string; parent: string } | null> {
-  const choice = await chooseTreeNode(vaultPath, index, input.content, options.rootsOnly ? { rootsOnly: true } : {});
+  const anchored = anchorNode(index, options.anchors ?? []);
+  const choice = anchored ?? await chooseTreeNode(vaultPath, index, input.title ? `${input.title}\n\n${input.content}` : input.content, options.rootsOnly ? { rootsOnly: true } : {});
   if (!choice) return null;
   const { date, anchor } = splitEvidenceRef(input.evidenceRef);
   const citation = `[[${date}#^${anchor}]]`;
   const parentTitle = index.fields.get(choice.path)?.title ?? basenameOf(choice.path);
   const quoted = input.content.trimEnd().split("\n").map(line => `> ${line}`).join("\n");
   const block = [`## Capture ${date} ${citation}`, "", quoted, "", `Filing note: ${oneLine(input.reason, 200)}`, ""].join("\n");
-  let title = safeTitle(input.content);
+  let title = safeTitle(input.title ?? input.content);
   for (let n = 2; ; n++) {
     const path = `Notes/${title}.md`;
     const existing = await readFile(join(vaultPath, path), "utf8").catch(() => null);
@@ -248,7 +274,8 @@ export async function writeProvisionalLeaf(
         "provisional: true",
         "---",
       ].join("\n");
-      const body = `# ${title}\n\nA provisional leaf under [[${choice.path.replace(/\.md$/, "")}|${parentTitle}]]: nothing in the tree fitted this capture well, so the weekly sweep reviews where it belongs.\n\n${block}`;
+      const why = anchored ? "the filing chose a page on this branch for it but could not merge it there" : "nothing in the tree fitted this capture well";
+      const body = `# ${title}\n\nA provisional leaf under [[${choice.path.replace(/\.md$/, "")}|${parentTitle}]]: ${why}, so the weekly sweep reviews where it belongs.\n\n${block}`;
       await writes.write(path, `${frontmatter}\n\n${body}`);
       return { path, parent: choice.path };
     }
@@ -258,7 +285,7 @@ export async function writeProvisionalLeaf(
       await writes.write(path, `${existing}${existing.endsWith("\n") ? "\n" : "\n\n"}${block}`);
       return { path, parent: choice.path };
     }
-    title = `${safeTitle(input.content)} ${n}`;
+    title = `${safeTitle(input.title ?? input.content)} ${n}`;
   }
 }
 

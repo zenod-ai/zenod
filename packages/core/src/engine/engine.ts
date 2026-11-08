@@ -67,7 +67,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
-import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
+import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, REJECTED_FOR_PAGE_RE, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { lintTree } from "../vault/treeLint.js";
@@ -1943,7 +1943,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     // organiser could not place, or one still pending on its last attempt, becomes a
     // provisional leaf under the closest tree node (vaults with a Tree.md); the weekly
     // sweep reviews it and roots still emerge from content (EPIC-9 L-1).
-    const rejectedForPage = /reconciliation_(?:needs_clarification|incompatible_decisions)/;
+    const rejectedForPage = REJECTED_FOR_PAGE_RE;
     const finalAttempt = !!filingPlan?.prior;
     const unplaced = outcomes.filter(outcome => outcome.ideaId && !outcome.filedPages.length && outcome.sourceSpans.length
       && outcome.disposition !== "evidence_only" && outcome.status !== "filed"
@@ -1955,6 +1955,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
       const why = outcome.reason ?? "filing_needs_clarification";
       const text = outcome.sourceSpans.map(span => content.slice(span.start, span.end)).join("\n\n");
       const rejectedPages = rejectedForPage.test(why) ? [...outcome.pages] : [];
+      // E12-S20: the subject page a rescued leaf hangs beside. A page the reconciler rejected as another
+      // subject is no anchor; the re-route's own pick is. A point that failed for another reason keeps its page.
+      let anchors = rejectedPages.length ? [] : [...outcome.pages];
       if (rejectedPages.length) {
         try {
           const rerouted = await classifyCandidates({ classify: async (bounded: ClassifyInput) => {
@@ -1971,6 +1974,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
             Object.assign(outcome, { pages: [page.path], reroutedFrom: rejectedPages, status: "pending", reason: `rerouted after ${why}`.slice(0, 240) });
             await fileGroup(page.path, { page, outcomes: [outcome], facts: [] });
             if (outcome.status === "filed") { await checkpoint(); continue; }
+            if (!rejectedForPage.test(outcome.reason ?? "")) anchors = [page.path];
             Object.assign(outcome, before, { filedPages: before.filedPages });
           }
         } catch (error) {
@@ -1979,9 +1983,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
       }
       if (!(await readTree(vaultPath))) continue;
       const writes = new TrackedWrites(vaultPath);
+      // E12-S20: a rescued memory hangs on the branch of its subject page when that page is in the tree;
+      // otherwise under a top-level branch, never deep under a page that only shares a word with it.
       const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath),
-        // A rescued memory hangs under a top-level branch, never deep under a page that only shares a word with it.
-        { content: `${outcome.topic}\n\n${text}`, evidenceRef, reason: why, today: todayString(now()) }, writes, { rootsOnly: true }).catch(() => null);
+        { title: outcome.topic, content: text, evidenceRef, reason: why, today: todayString(now()) }, writes,
+        { rootsOnly: true, anchors: [...new Set(anchors.map(normalizeMarkdownNotePath))] }).catch(() => null);
       const after = leaf ? await readFile(join(vaultPath, leaf.path), "utf8").catch(() => null) : null;
       const before = leaf ? writes.original(leaf.path) ?? null : null;
       await writes.revert();

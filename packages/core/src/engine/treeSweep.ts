@@ -10,6 +10,7 @@ import { lintVault } from "../vault/lint.js";
 import { getEvidenceEntry } from "./evidence.js";
 import { applyTreeDiscovery, discoverTree, type DiscoveredRoot } from "./treeDiscover.js";
 import { materializeNamedSubjects, type MaterializedSubject } from "./treeSubjects.js";
+import { receiptPoints, unwrittenPoints } from "./noteLinker.js";
 import { readLogCaptures } from "../vault/captureOrigin.js";
 import {
   appendOpsRollup,
@@ -275,10 +276,28 @@ async function sweepReceipt(
     const archivedTo = await archiveReceipt(vaultPath, path, raw, writes);
     return { path, outcome: "archived", reason: "Log entry not found; receipt kept in Archive", archivedTo };
   }
-  const leaf = await writeProvisionalLeaf(vaultPath, index, { content: entry.content, evidenceRef: ref, reason: receipt.reason, today: options.today }, writes);
-  if (!leaf) return { path, outcome: "skipped", reason: "no node to place under" };
+  // E12-S20: each point the filing never wrote becomes its own leaf, in the person's words, on the
+  // branch of the page the organiser chose for it; a receipt with no such point re-files the whole entry.
+  const parsed = receiptPoints(path, raw);
+  if (parsed?.evidenceOnly) {
+    const archivedTo = await archiveReceipt(vaultPath, path, raw, writes);
+    return { path, outcome: "archived", reason: "kept as evidence only; nothing to file", archivedTo };
+  }
+  const points = parsed ? unwrittenPoints(entry.content, parsed) : [];
+  const leaves: string[] = [];
+  for (const point of points) {
+    const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath), {
+      ...(point.topic ? { title: point.topic } : {}), content: point.text, evidenceRef: ref, reason: point.reason, today: options.today,
+    }, writes, { anchors: point.anchors, rootsOnly: true });
+    if (leaf && !leaves.includes(leaf.path)) leaves.push(leaf.path);
+  }
+  if (!points.length) {
+    const leaf = await writeProvisionalLeaf(vaultPath, index, { content: entry.content, evidenceRef: ref, reason: receipt.reason, today: options.today }, writes);
+    if (leaf) leaves.push(leaf.path);
+  }
+  if (!leaves.length) return { path, outcome: "skipped", reason: "no node to place under" };
   const archivedTo = await archiveReceipt(vaultPath, path, raw, writes);
-  return { path, outcome: "refiled", reason: "provisional leaf under the closest node", pages: [leaf.path], archivedTo };
+  return { path, outcome: "refiled", reason: points.length ? "each unwritten point a provisional leaf on its branch" : "provisional leaf under the closest node", pages: leaves, archivedTo };
 }
 
 export interface RefiledAgentLeaf {
