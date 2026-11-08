@@ -32,6 +32,8 @@ const allowedCoreInputs = new Set([
   "vault/matchPercent.ts",
   // The ask loop's two non-answer texts for the web chat (E12-S1): no imports, no I/O.
   "llm/askNonAnswer.ts",
+  // The one Send button's rules and guard for the web chat (E16-B1): no imports, no I/O.
+  "llm/sendRoute.ts",
 ]);
 const reachedCoreInputs = inputs
   .filter((input) => input.includes("/core/src/"))

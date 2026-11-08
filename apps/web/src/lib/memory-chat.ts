@@ -1,5 +1,6 @@
-// EPIC-12 E12-S1: the web app's chat with your memory (hosted). Asking saves nothing;
-// only Keep files something (packages/server/src/memoryChat.ts).
+// EPIC-12 E12-S1: the web app's chat with your memory (hosted). EPIC-16 E16-B1: one Send button;
+// Zenod decides from the message whether to keep it, answer it, or both, and says which it did.
+// A question is never kept (packages/core/src/llm/sendRoute.ts, packages/server/src/memoryChat.ts).
 
 export type MemoryChatMemory = {
   rank: number
@@ -58,6 +59,29 @@ export type MemoryKeepReceipt = {
   noteUrl: string | null
 }
 
+/** What Zenod decided to do with a sent message (E16-B1). */
+export type MemorySendRoute = {
+  action: "keep" | "answer" | "both"
+  /** The part kept as a new memory, in the person's words. */
+  keep: string | null
+  /** The part answered from memory. */
+  question: string | null
+  by: "model" | "rules"
+}
+
+export type MemorySendHandlers = MemoryChatStreamHandlers & {
+  /** The decision, before anything is kept or answered. */
+  onRoute?: (route: MemorySendRoute) => void
+  /** The keep's receipt (or why it could not be kept), as soon as it is queued. */
+  onKept?: (kept: MemoryKeepReceipt | { error: string }) => void
+}
+
+export type MemorySendResult = {
+  route: MemorySendRoute
+  kept: MemoryKeepReceipt | { error: string } | null
+  answer: MemoryChatAnswer | null
+}
+
 export type MemoryNote = {
   path: string
   body: string
@@ -108,60 +132,55 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 })
 
-export function askMemory(question: string): Promise<MemoryChatAnswer> {
-  return request("/api/console/memory-chat", json({ question }))
-}
-
 type StreamEvent =
+  | { type: "route"; route: MemorySendRoute }
+  | { type: "kept"; receipt?: MemoryKeepReceipt; error?: string; message?: string }
   | { type: "memories"; memories: MemoryChatMemory[] }
   | { type: "text"; text: string }
   | { type: "answer"; answer: MemoryChatAnswer }
+  | { type: "done" }
   | { type: "error"; status: number; error?: string; code?: string; message?: string }
 
+function failure(status: number, data: { error?: string; code?: string; message?: string } | null): MemoryChatError {
+  const code = data?.code ?? data?.error
+  return new MemoryChatError(
+    status,
+    data?.message ?? (code ? FRIENDLY[code] : undefined) ?? "Something went wrong. Try again.",
+    code
+  )
+}
+
 /**
- * Ask with the answer streamed (E12-S1b): the memories arrive at once, the answer as it is written,
- * then the checked answer. Falls back to the one-shot request where the browser cannot stream.
+ * Send one message (E16-B1): Zenod decides, then the keep's receipt arrives, then (when something
+ * was asked) the memories at once, the answer as it is written and the checked answer (E12-S1b).
  */
-export async function askMemoryStream(
-  question: string,
-  handlers: MemoryChatStreamHandlers = {}
-): Promise<MemoryChatAnswer> {
-  if (typeof ReadableStream === "undefined" || typeof TextDecoder === "undefined")
-    return askMemory(question)
-  const response = await fetch("/api/console/memory-chat/stream", json({ question }))
-  if (response.status === 404 && !response.headers.get("content-type")?.includes("json"))
-    return askMemory(question)
+export async function sendToMemory(
+  message: string,
+  handlers: MemorySendHandlers = {}
+): Promise<MemorySendResult> {
+  const response = await fetch("/api/console/memory-send/stream", json({ message }))
   if (!response.ok || !response.body) {
-    const data = (await response.json().catch(() => null)) as {
-      error?: string
-      code?: string
-      message?: string
-    } | null
-    const code = data?.code ?? data?.error
-    throw new MemoryChatError(
-      response.status,
-      data?.message ?? (code ? FRIENDLY[code] : undefined) ?? "Something went wrong. Try again.",
-      code
-    )
+    throw failure(response.status, (await response.json().catch(() => null)) as { error?: string } | null)
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
-  let final: MemoryChatAnswer | null = null
+  let route: MemorySendRoute | null = null
+  let kept: MemorySendResult["kept"] = null
+  let answer: MemoryChatAnswer | null = null
   const handle = (line: string) => {
     if (!line.trim()) return
     const event = JSON.parse(line) as StreamEvent
-    if (event.type === "memories") handlers.onMemories?.(event.memories)
+    if (event.type === "route") {
+      route = event.route
+      handlers.onRoute?.(event.route)
+    } else if (event.type === "kept") {
+      kept = event.receipt ?? { error: event.message ?? FRIENDLY["keep unavailable"]! }
+      handlers.onKept?.(kept)
+    } else if (event.type === "memories") handlers.onMemories?.(event.memories)
     else if (event.type === "text") handlers.onText?.(event.text)
-    else if (event.type === "answer") final = event.answer
-    else if (event.type === "error") {
-      const code = event.code ?? event.error
-      throw new MemoryChatError(
-        event.status,
-        event.message ?? (code ? FRIENDLY[code] : undefined) ?? "Something went wrong. Try again.",
-        code
-      )
-    }
+    else if (event.type === "answer") answer = event.answer
+    else if (event.type === "error") throw failure(event.status, event)
   }
   for (;;) {
     const { done, value } = await reader.read()
@@ -175,22 +194,8 @@ export async function askMemoryStream(
     if (done) break
   }
   handle(buffer)
-  if (!final) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
-  return final
-}
-
-export function keepNote(content: string): Promise<MemoryKeepReceipt> {
-  return request("/api/console/memory-keep", json({ kind: "note", content }))
-}
-
-export function keepAnswer(
-  question: string,
-  answer: string
-): Promise<MemoryKeepReceipt> {
-  return request(
-    "/api/console/memory-keep",
-    json({ kind: "answer", question, answer })
-  )
+  if (!route) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
+  return { route, kept, answer }
 }
 
 export function keepStatus(id: string): Promise<MemoryKeepReceipt> {

@@ -229,10 +229,13 @@
 .zp-actions { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; font-size: 0.88rem; color: var(--zp-muted); }
 .zp-right { justify-content: flex-end; }
 .zp-time { margin-left: auto; color: var(--zp-faint); font-variant-numeric: tabular-nums; }
+.zp-keepnote { align-self: flex-start; margin: 0; font-size: 0.92rem; color: var(--zp-accent); font-weight: 500; animation: zp-in 450ms ease both; }
 .zp-keepnote a { margin-left: 0.2rem; }
+/* E16-B1: the part of a mixed message that was kept, and what Zenod did with the message. */
+.zp-keptpart { color: var(--zp-muted); font-weight: 400; font-style: italic; }
+.zp-did { color: var(--zp-faint); font-size: 0.82rem; }
 .zp button { font: 500 0.92rem var(--zp-sans); border-radius: 999px; padding: 0.38rem 1rem; cursor: pointer; transition: opacity 150ms ease; }
 .zp button:disabled { opacity: 0.45; cursor: default; }
-.zp-keep { background: transparent; color: var(--zp-accent); border: 1px solid var(--zp-accent); }
 .zp-send { background: var(--zp-fill); color: var(--zp-accent-ink); border: 1px solid var(--zp-fill); }
 .zp-compose { display: flex; gap: 0.5rem; align-items: center; border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.4rem 0.45rem 0.4rem 1.1rem; background: var(--zp-bg); }
 .zp-compose:focus-within { border-color: var(--zp-accent); }
@@ -259,7 +262,7 @@
   .zp-used li { grid-template-columns: minmax(0, 1fr) 4rem 2.6rem; }
   .zp-compose { border-radius: 14px; flex-wrap: wrap; padding: 0.5rem 0.6rem; }
   .zp-compose textarea { flex-basis: 100%; }
-  .zp-compose .zp-keep { margin-left: auto; }
+  .zp-compose .zp-send { margin-left: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .zp-msg, .zp-used, .zp-bar i, .zp-typing i { animation: none; }

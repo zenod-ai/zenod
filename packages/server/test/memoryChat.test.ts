@@ -419,6 +419,88 @@ describe("console memory chat routes (E12-S1)", () => {
     }
   });
 
+  // EPIC-16 E16-B1: the one Send button.
+  const sendLines = async (response: Response) => (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+
+  it("one Send: a statement is kept in the sender's own tenant, a question is answered and kept nowhere (E16-B1)", async () => {
+    const t = await setup();
+    try {
+      expect((await t.call("POST", "/api/console/memory-send/stream", undefined, { message: "x" })).status).toBe(401);
+      expect((await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: " " })).status).toBe(400);
+      expect((await t.call("POST", "/api/console/memory-send/stream", t.eve, { message: "x" })).status).toBe(404);
+
+      // No model route on this engine: the plain rules decide.
+      const told = await sendLines(await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "Remember the gate code is 4411." }));
+      expect(told.map((line) => line.type)).toEqual(["route", "kept", "done"]);
+      expect(told[0].route).toMatchObject({ action: "keep", keep: "the gate code is 4411.", question: null, by: "rules" });
+      expect(told[1].receipt).toMatchObject({ channel: "app" });
+      const captures = t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50);
+      expect(captures).toHaveLength(1);
+      expect(t.runtimes.get("tenant-b")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+      expect((await t.call("GET", `/api/console/memory-keep/${told[1].receipt.id}`, t.ada)).status).toBe(200);
+      expect((await t.call("GET", `/api/console/memory-keep/${told[1].receipt.id}`, t.bob)).status).toBe(404);
+      expect(t.engines.get("tenant-a")!.askCalls).toHaveLength(0);
+
+      const asked = await sendLines(await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "Who fixes the boiler?" }));
+      expect(asked.map((line) => line.type)).toEqual(["route", "memories", "answer", "done"]);
+      expect(asked[0].route).toMatchObject({ action: "answer", keep: null, question: "Who fixes the boiler?" });
+      expect(asked[2].answer.answer).toContain("alpha");
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(1);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("one Send: a mixed message keeps only the told part and answers the question; the model's route is guarded (E16-B1)", async () => {
+    const t = await setup();
+    try {
+      const engine = t.engines.get("tenant-a")!;
+      const enqueue = vi.spyOn(t.runtimes.get("tenant-a")!.taskJobQueue, "enqueue");
+      engine.routeSend = async (message) => {
+        const { parseSendRoute } = await import("zenod");
+        // The model tries to keep the question too: the guard keeps only what was told.
+        return parseSendRoute('{"keep": "Ana\'s new phone is 699 120 334. What did I say about her birthday?", "ask": "What did I say about her birthday?"}', message)!;
+      };
+      const lines = await sendLines(await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "Ana's new phone is 699 120 334. What did I say about her birthday?" }));
+      expect(lines.map((line) => line.type)).toEqual(["route", "kept", "memories", "answer", "done"]);
+      expect(lines[0].route).toMatchObject({ action: "both", keep: "Ana's new phone is 699 120 334.", question: "What did I say about her birthday?", by: "model" });
+      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue.mock.calls[0]![1]).toEqual({ content: "Ana's new phone is 699 120 334.", source: "web" });
+      expect(engine.askCalls).toEqual(["What did I say about her birthday?"]);
+
+      // A failing model route falls back to the rules; a cap hit stops the send with its reason.
+      engine.routeSend = async () => { throw new Error("model down"); };
+      const fallback = await sendLines(await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "Where is the spare key?" }));
+      expect(fallback[0].route).toMatchObject({ action: "answer", by: "rules" });
+      const resetsAt = "2026-12-01T00:00:00.000Z";
+      engine.routeSend = async () => { throw new LlmAllowanceExceededError(aiAllowanceExhaustedMessage(resetsAt), resetsAt); };
+      const capped = await sendLines(await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "The shed is green." }));
+      expect(capped.map((line) => line.type)).toEqual(["error"]);
+      expect(capped[0]).toMatchObject({ status: 429, code: "ai_allowance_exhausted" });
+      expect(enqueue).toHaveBeenCalledTimes(1);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("one Send stops at the AI allowance before deciding anything (E16-B1)", async () => {
+    const t = await setup({ allowance: 1 });
+    try {
+      t.runtimes.get("tenant-a")!.usageStore.record({
+        operation: "answer", provider: "openrouter", model: "m", inputTokens: 1, outputTokens: 1,
+        cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 1.5,
+      });
+      const route = vi.fn();
+      t.engines.get("tenant-a")!.routeSend = route;
+      const blocked = await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "The shed is green." });
+      expect(blocked.status).toBe(429);
+      expect(route).not.toHaveBeenCalled();
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("opens a linked memory from the customer's own vault only", async () => {
     const t = await setup();
     try {

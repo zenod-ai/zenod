@@ -2,14 +2,16 @@ import { createHash } from "node:crypto";
 import type { Answer, BrainEngine, SourceRef } from "zenod";
 // Subpath, not the "zenod" entry: customerLayer.ts (and so this module) is bundled into Phylax.
 import { askNonAnswer } from "zenod/answer-protocol";
+import { ruleSendRoute, type SendRoute } from "zenod/send-route";
 import { memoryAppPath, rankMemories, type RankedMemory } from "./rankedMemory.js";
 
 /**
  * The web app's chat with your memory (EPIC-12 E12-1, row S1). A question is answered from the
  * user's own vault by the read-only ask loop (engine.ask: no store tool, no conversation history),
  * next to the top memories from ranked retrieval (S3a) with their match percentages and links.
- * Nothing is saved by asking: only an explicit Keep files something, through the same durable
- * store job MCP store_memory uses (E12-A1). Web app only; the WhatsApp and Telegram chat paths
+ * Nothing is saved by asking. Since EPIC-16 E16-B1 the app has one Send button: Zenod decides from
+ * the message what to keep (routeSendMessage) and files it through the same durable store job MCP
+ * store_memory uses (E12-A1); a question is never kept. Web app only; the WhatsApp and Telegram chat paths
  * are untouched (root L-6).
  */
 
@@ -184,6 +186,22 @@ async function fromAsk(engine: BrainEngine, question: string, answer: Answer, ra
     alsoCited,
     ms: Math.round(performance.now() - started),
   };
+}
+
+/**
+ * The one Send button (EPIC-16 E16-B1): what a message is for. The engine's small model call decides,
+ * guarded so a question is never kept; the plain rules decide when there is no model or it fails.
+ * A cap hit is not a model failure: it stops the send with its own reason.
+ */
+export async function routeSendMessage(engine: BrainEngine, message: string): Promise<SendRoute> {
+  if (!engine.routeSend) return ruleSendRoute(message);
+  try {
+    return await engine.routeSend(message);
+  } catch (error) {
+    if ((error as Error | null)?.name === "LlmAllowanceExceededError") throw error;
+    console.warn(`[memory-send] route fell back to rules: ${error instanceof Error ? error.message : String(error)}`);
+    return ruleSendRoute(message);
+  }
 }
 
 export type MemoryKeepInput =

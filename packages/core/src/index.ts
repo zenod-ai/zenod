@@ -252,4 +252,5 @@ export { paginateMemoryEntries, memoryEntrySummaries, type MemoryEntryPage, type
 export type { AnswerCoverage } from "./engine/retrievalCoverage.js";
 
 export { ANSWER_PROTOCOL_FAILURE_TEXT, askNonAnswer } from "./llm/askNonAnswer.js";
+export { guardSendRoute, isQuestionClause, parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendAction, type SendRoute } from "./llm/sendRoute.js";
 export { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, quoteFound, MEMORY_CHAT_NO_ANSWER, type MemoryChatCheck, type MemoryChatContext, type MemoryChatUnchecked } from "./llm/memoryChatAnswer.js";

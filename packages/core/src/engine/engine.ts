@@ -3,6 +3,7 @@ import {safeCandidateClassification} from "./meaningNotes.js";
 import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
+import { parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendRoute } from "../llm/sendRoute.js";
 import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -2816,6 +2817,18 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   /**
+   * E16-B1: the one Send button's decision. One small call on the chat model, no tools, no vault
+   * read; the plain rules decide when there is no chat model or its reply does not parse. Read-only.
+   */
+  async function routeSend(message: string): Promise<SendRoute> {
+    if (!llm.streamMemoryChat) return ruleSendRoute(message);
+    const { system, prompt } = sendRoutePrompt(message);
+    reportTokenCost("ask", [system, prompt]);
+    const output = await llm.streamMemoryChat({ system, prompt }, () => {});
+    return parseSendRoute(output, message) ?? ruleSendRoute(message);
+  }
+
+  /**
    * E9-3c host fallback: search the question's content words, then read the best
    * relevant hit (a page placed in the tree first) through the ask's own tracked
    * read tool, so the read registers supports and sources exactly like a model read.
@@ -3563,6 +3576,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     evidenceEnrichInput,
     ask,
     answerFromMemories,
+    routeSend,
     chat,
     handleTasking,
     work,
