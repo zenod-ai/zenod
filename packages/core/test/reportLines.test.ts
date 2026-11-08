@@ -52,3 +52,28 @@ describe("E12-S8 report lines on the person's pages", () => {
     expect(await readFile(join(dir, "Notes/Garden.md"), "utf8")).toBe(PAGE);
   });
 });
+
+describe("E12-S15 report lines under the Ops rollup heading", () => {
+  let dir: string;
+  // Topic filing appended these after the rollup section, so they sit under its heading.
+  const UNDER = `${PAGE}- Garden plan: rows two and three get the tomatoes [[2026-11-01#^e-a00001]].\n- Second proof, idea I-11 dispatched [[2026-11-01#^e-b00001]].\n`;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "zenod-e12s15-report-"));
+    for (const [path, content] of [["Log/2026-11-01.md", LOG], ["Notes/Garden.md", UNDER]] as const) {
+      await mkdir(dirname(join(dir, path)), { recursive: true });
+      await writeFile(join(dir, path), content);
+    }
+  });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it("lists a report line there, keeps the dated rollup line and the person's own line", async () => {
+    const plan = await planReportLines(dir);
+    expect(plan.lines.map(line => line.line)).toEqual([13, 20]);
+    expect(plan.lines[1]!.text).toBe("- Second proof, idea I-11 dispatched [[2026-11-01#^e-b00001]].");
+    await moveReportLines(dir, plan, "2026-11-08");
+    const page = await readFile(join(dir, "Notes/Garden.md"), "utf8");
+    expect(page).toContain("## Ops rollup\n\n- 2026-11-01 ops (1): [[2026-11-01#^e-b00001]]");
+    expect(page).toContain("- Garden plan: rows two and three get the tomatoes");
+    expect(page).not.toContain("idea I-11");
+  });
+});

@@ -55,6 +55,29 @@ export async function lintVault(vaultPath: string, paths?: string[]): Promise<Li
   return { ok: errors.length === 0, errors, checkedFiles: checked };
 }
 
+/**
+ * Errors on `paths` that the pages did not already have before this write (`before`
+ * gives a page's earlier bytes, null when it is new). A one-line append is judged on
+ * what it adds: an old over-long summary on the page must not block it (E12-S15:
+ * that failure sent agent reports to ordinary topic filing).
+ */
+export async function newLintErrors(vaultPath: string, paths: string[], before: (path: string) => string | null | undefined): Promise<LintError[]> {
+  const report = await lintVault(vaultPath, paths);
+  if (report.errors.length === 0) return [];
+  let config: BrainConfig | null = null;
+  try { config = await loadBrainConfig(vaultPath); } catch { /* lintVault already reported it */ }
+  const snapshot = await scanVault(vaultPath);
+  const old = new Set<string>();
+  for (const path of new Set(report.errors.map((error) => error.path))) {
+    const raw = before(path);
+    if (typeof raw !== "string" || tierOf(path) !== "meaning" || isIndexFile(path)) continue;
+    const earlier: LintError[] = [];
+    lintMeaningPage(path, raw, config, snapshot, earlier);
+    for (const error of earlier) old.add(`${error.path}\u0000${error.rule}\u0000${error.message}`);
+  }
+  return report.errors.filter((error) => !old.has(`${error.path}\u0000${error.rule}\u0000${error.message}`));
+}
+
 function lintMeaningPage(
   file: string,
   raw: string,

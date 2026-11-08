@@ -51,7 +51,7 @@ import type {
 import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
-import { lintVault } from "../vault/lint.js";
+import { lintVault, newLintErrors } from "../vault/lint.js";
 import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks, rerouteHint } from "./meaningNotes.js";
 import { prepareReconciliation, applyReconciliation, newPageAdditions, reconciliationIdeaId } from "./reconciliation.js";
 import { branchContext } from "./meaningNotes.js";
@@ -400,6 +400,8 @@ export interface EngineOptions {
 // worst case — costly on long, multi-page stores. On exhaustion we fall back to
 // an Inbox stub, so a hard case is parked for the user, never half-applied.
 const COMPOSE_RETRIES = 1;
+/** The `filed:` reason of an agent report kept off the person's pages (E12-S15). */
+const AGENT_REPORT_LOG_ONLY = "agent report, kept in the Log";
 const CLASSIFY_RETRIES = 1;
 export { LONG_MEMORY_SEGMENT_CHARS, segmentLongMemoryContent } from "./sourcePassages.js";
 const WORK_RETRIES = 2;
@@ -2099,17 +2101,38 @@ export function createEngine(options: EngineOptions): BrainEngine {
     try {
       const page = await appendOpsRollup(vaultPath, await buildTreeIndex(vaultPath), { content, evidenceRef }, writes);
       if (!page) return null;
-      const report = await lintVault(vaultPath, [page]);
-      const errors = [...report.errors, ...checkEvidenceImmutability(await repo.pendingChanges())];
+      // Judged on the line it adds: an error the page already had is not the rollup's (E12-S15).
+      const errors = [...await newLintErrors(vaultPath, [page], (path) => writes.original(path)), ...checkEvidenceImmutability(await repo.pendingChanges())];
       if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
       rolledUp.add(evidenceRef);
       return page;
     } catch (error) {
-      // The Log entry is not committed yet: undo only the rollup, then file normally.
+      // Undo only the rollup; the caller keeps the report in the Log (keepReportInLog), never on a topic page.
       await writes.revert();
       console.warn(`[librarian] ops rollup unavailable for ${evidenceRef}: ${(error as Error).message}`);
       return null;
     }
+  }
+
+  /**
+   * E12-S15: in a vault with a Tree.md, an agent report whose rollup is unavailable
+   * stays in the Log with a `filed: log only (agent report, kept in the Log)` line. It is
+   * never topic-filed onto the person's pages: that fallback is how reports kept
+   * reaching them after the E9-2h filter. A tree-less vault files as before.
+   */
+  async function keepReportInLog(evidenceRef: string): Promise<VaultRevision | null> {
+    assertVault(repo);
+    const writes = new TrackedWrites(vaultPath);
+    try {
+      await appendFiledLines(vaultPath, evidenceRef, [filedTarget({ logOnly: AGENT_REPORT_LOG_ONLY })], writes);
+      const errors = checkEvidenceImmutability(await repo.pendingChanges());
+      if (errors.length > 0) throw new Error(errors.map((entry) => `${entry.path} [${entry.rule}] ${entry.message}`).join("; "));
+    } catch (error) {
+      await writes.revert();
+      console.warn(`[librarian] filed line unavailable for ${evidenceRef}: ${(error as Error).message}`);
+    }
+    if ((await repo.pendingChanges()).length === 0) return null;
+    return repo.commitAndPublish(`memory: agent report ${evidenceRef.split("#^")[1]} kept in the Log`);
   }
 
   /**
@@ -2340,13 +2363,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (input.content.trimEnd() !== evidence.content) return evidenceResult(evidence, capturedRevision);
       prior = await loadReceipt();
       if (prior?.phase === "ready" && !prior.outcomes.some(outcome => outcome.status === "pending")) return receiptFilingResult(prior, capturedRevision, recoveredPaths);
-      if (!prior) {
-        const rollup = await fileOpsRollup(input.content, input.evidenceRef, input.source);
+      if (isAgentOpsReport(input.content, input.source) && await readTree(vaultPath)) {
+        const rollup = prior ? null : await fileOpsRollup(input.content, input.evidenceRef, input.source);
+        input.assertActive?.();
         if (rollup) {
-          input.assertActive?.();
           const revision = await commitFiling(`memory: ops rollup ${input.evidenceRef.split("#^")[1]}`, { evidenceRef: input.evidenceRef, content: input.content });
           return { evidenceRef: input.evidenceRef, pagesTouched: [rollup], ...storePublication(revision, evidence.path, undefined, [rollup]), filing: "filed" };
         }
+        return evidenceResult(evidence, (await keepReportInLog(input.evidenceRef)) ?? capturedRevision, "filed");
       }
       const config = await loadBrainConfig(vaultPath);
       const snapshot = await scanVault(vaultPath);
@@ -2510,6 +2534,11 @@ export function createEngine(options: EngineOptions): BrainEngine {
           ...storePublication(revision, evidence.logPath, `L${evidence.line}`, [rollup]),
           filing: "filed",
         };
+      }
+      if (isAgentOpsReport(input.content, input.source) && await readTree(vaultPath)) {
+        // The Log entry is still uncommitted, so keepReportInLog always has a change to publish.
+        const revision = (await keepReportInLog(evidenceRef)) ?? await repo.commitAndPublish(`memory: agent report ${evidence.anchor} kept in the Log`);
+        return { evidenceRef, pagesTouched: [], ...storePublication(revision, evidence.logPath, `L${evidence.line}`, []), filing: "filed" };
       }
 
       // 3. Classify. Long voice notes keep one immutable evidence entry but

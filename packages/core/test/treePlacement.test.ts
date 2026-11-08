@@ -15,6 +15,7 @@ import { buildTreeIndex } from "../src/vault/tree.js";
 import { lintTree } from "../src/vault/treeLint.js";
 import { seedTreeFiles } from "../src/vault/treeSeed.js";
 import { NEUTRAL_TREE } from "./fixtures/neutralTree.js";
+import { REAL_SHAPED_REPORTS } from "./fixtures/agentReports.js";
 import type { StoreResult } from "../src/types.js";
 import type { BrainLlm, Classification, ClassifyInput, ComposePageInput } from "../src/llm/types.js";
 
@@ -290,6 +291,61 @@ describe("E9-2b capture-first enrichment (WhatsApp path)", { timeout: 120_000 },
     // Touched pages lint clean (the fixture's untouched orphan `Notes/Travel insurance.md` is not this test's capture).
     expect((await lintTree(repo.path)).issues.filter(issue => issue.severity === "error" && issue.path !== "Notes/Travel insurance.md")).toEqual([]);
     expect((await lintVault(repo.path)).errors).toEqual([]);
+  });
+});
+
+/**
+ * E12-S15: agent reports kept reaching the person's pages after the E9-2h filter. Their
+ * rollup failed on a lint error the chosen root page already had (an over-long summary),
+ * and a failed rollup fell back to ordinary topic filing (fixtures/agentReports.ts).
+ */
+
+describe("E12-S15 agent reports stay off the person's pages", { timeout: 120_000 }, () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "zenod-e12s15-")); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  /** Counts classifier calls: a report must never reach topic filing. */
+  class CountingLlm extends ReplayLlm {
+    classified: string[] = [];
+    override async classify(input: ClassifyInput): Promise<Classification> {
+      this.classified.push(input.content);
+      if (REAL_SHAPED_REPORTS.some(report => input.content.includes(report.slice(0, 40)))) {
+        return { disposition: "integrate_page", confidence: 0.95, summary: "report", tags: [], pages: [{ path: "Projects/Launching Moss Lantern.md", action: "update", title: "Launching Moss Lantern" }] };
+      }
+      return super.classify(input);
+    }
+  }
+
+  async function commitAll(repo: VaultRepo, message: string): Promise<void> {
+    const git = simpleGit(repo.path);
+    await git.addConfig("user.name", "seed").addConfig("user.email", "seed@test");
+    await git.add(["-A"]); await git.commit(message); await git.push("origin", "main");
+  }
+
+  it("recognises every real-shaped report from MCP and none of the person's notes", () => {
+    for (const report of REAL_SHAPED_REPORTS) expect(isAgentOpsReport(report, "mcp"), report.slice(0, 30)).toBe(true);
+    for (const capture of CAPTURES.filter(c => !c.ops)) expect(isAgentOpsReport(capture.content, "whatsapp"), capture.key).toBe(false);
+  });
+
+  it("rolls a report up even when every root page already has an over-long summary", async () => {
+    const repo = await vaultRepo(dir, true);
+    const roots = (await listMarkdownFiles(repo.path)).filter(path => /^(?:Projects|Areas)\//.test(path));
+    for (const path of roots) {
+      const { frontmatter, body } = parseNote(await readFile(join(repo.path, path), "utf8"));
+      await writeFile(join(repo.path, path), serializeNote({ ...frontmatter!, summary: "x ".repeat(300).trim() }, body));
+    }
+    await commitAll(repo, "old over-long summaries");
+    const llm = new CountingLlm();
+    const engine = createEngine({ repo, llm, state: new SqliteStateStore(":memory:") });
+    for (const report of REAL_SHAPED_REPORTS) {
+      const result = await engine.store({ content: report, source: "mcp" });
+      const [logPath, anchor] = result.evidenceRef.split("#^") as [string, string];
+      const filed = parseFiledLines(await readFile(join(repo.path, logPath), "utf8"), anchor);
+      expect(filed, report.slice(0, 30)).toHaveLength(1);
+      expect(filed[0], report.slice(0, 30)).toMatch(/· ops rollup$/);
+    }
+    expect(llm.classified).toEqual([]);
   });
 });
 

@@ -125,8 +125,13 @@ describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () =>
       ["Explainer videos", "Projects/Epic Social.md"],
     ]);
     // EpicSpine and Epic Team share only the word "epic": they fall below Epic Social's own pages.
-    expect(hits.map((hit) => hit.title)).not.toContain("EpicSpine");
-    expect(hits.map((hit) => hit.title)).not.toContain("Epic Team");
+    const lastChild = hits.findLastIndex((hit) => hit.relation === "child");
+    for (const title of ["EpicSpine", "Epic Team"]) {
+      const at = hits.findIndex((hit) => hit.title === title);
+      if (at >= 0) expect(at, title).toBeGreaterThan(lastChild);
+    }
+    // The agent's deploy note is not the person's memory (E12-S15): it no longer takes a place.
+    expect(hits.map((hit) => hit.title)).not.toContain("zenod-social, EPIC-12 deploy note");
     for (let i = 1; i < hits.length; i++) expect(hits[i]!.matchPercent).toBeLessThanOrEqual(hits[i - 1]!.matchPercent);
   });
 
