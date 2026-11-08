@@ -7,7 +7,9 @@ import { basenameOf, isIndexFile, listMarkdownFiles, tierOf } from "./files.js";
 import { parseNote } from "./frontmatter.js";
 import { idfOf, matchPercent, monotonic } from "./matchPercent.js";
 import { formatMemoryLineage, loadMemoryTree } from "./lineage.js";
-import { parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
+import { pageTreeFields, parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
+import { extractPageLinks } from "./pages.js";
+import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphRawEdge, type MemoryGraphView } from "./memoryGraph.js";
 
 /**
  * Tier-0 memory index (EPIC-9 E9-5a): one SQLite FTS5 file per tenant, derived from the
@@ -16,7 +18,8 @@ import { parseTree, TREE_PATH, GROUP_HEADINGS } from "./tree.js";
  * milliseconds for $0, the same way every time. Rebuildable from the vault at any time.
  */
 
-const SCHEMA_VERSION = "1";
+/** 2: the `edges` table (E12-S2 memory graph); an older file is rebuilt once on open. */
+const SCHEMA_VERSION = "2";
 const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
@@ -205,6 +208,9 @@ export class MemoryIndex {
   private dirty = true;
   private lastCheck = Number.NEGATIVE_INFINITY;
   private inflight: Promise<unknown> | null = null;
+  /** Bumped by every sync that changed rows: the cached graph is rebuilt on the next read. */
+  private version = 0;
+  private graphCache: { version: number; graph: MemoryGraph } | null = null;
   private aliasGroups: readonly (readonly string[])[];
   readonly tenantId: string;
   private readonly now: () => number;
@@ -217,6 +223,8 @@ export class MemoryIndex {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, size INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS edges (file TEXT NOT NULL, src TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS edges_file ON edges (file);
       CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(
         title, aliases, lineage, summary, body,
         kind UNINDEXED, path UNINDEXED, file UNINDEXED, filed UNINDEXED,
@@ -233,7 +241,7 @@ export class MemoryIndex {
     const setMeta = this.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     // A different vault location or schema invalidates every row: start clean.
     if (meta.get("schema") !== SCHEMA_VERSION || meta.get("vault") !== options.vaultPath) {
-      this.db.exec("DELETE FROM docs; DELETE FROM files;");
+      this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges;");
     }
     setMeta.run("tenant", this.tenantId);
     setMeta.run("schema", SCHEMA_VERSION);
@@ -283,7 +291,7 @@ export class MemoryIndex {
 
   /** BM25-ranked hits, one per path, freshest index first. Empty when nothing matches. */
   async search(query: string, limit = MAX_HITS): Promise<MemoryIndexHit[]> {
-    if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
+    await this.fresh();
     const { match, terms, generic } = buildMatchTerms(query, this.aliasGroups);
     if (!match) return [];
     const rows = this.db.prepare(`
@@ -323,6 +331,32 @@ export class MemoryIndex {
       treePath: row.lineage,
       ...(row.filed ? { filedOn: row.filed } : {}),
     }));
+  }
+
+  /**
+   * The memory graph (E12-S2): `center` (a path or link target) with its neighbourhood, or the
+   * overview when omitted; null when `center` is not a memory. Built from stored rows, cached
+   * until the next sync changes something, so a view of a large vault costs milliseconds.
+   */
+  async graph(options: { center?: string | null; limit?: number } = {}): Promise<MemoryGraphView | null> {
+    await this.fresh();
+    const graph = this.memoryGraph();
+    const limit = options.limit ?? MEMORY_GRAPH_DEFAULT_LIMIT;
+    return options.center ? graph.neighbourhood(options.center, limit) : graph.overview(limit);
+  }
+
+  private memoryGraph(): MemoryGraph {
+    if (this.graphCache?.version === this.version) return this.graphCache.graph;
+    const pages = this.db.prepare("SELECT path, title, summary, lineage AS treePath FROM docs WHERE kind = 'page'").all() as Array<{ path: string; title: string; summary: string; treePath: string }>;
+    const edges = this.db.prepare("SELECT src AS \"from\", target, kind FROM edges ORDER BY rowid").all() as unknown as MemoryGraphRawEdge[];
+    const hasTree = Boolean(this.db.prepare("SELECT 1 FROM files WHERE path = ?").get(TREE_PATH));
+    const graph = MemoryGraph.build(pages, edges, { hasTree });
+    this.graphCache = { version: this.version, graph };
+    return graph;
+  }
+
+  private async fresh(): Promise<void> {
+    if (this.dirty || this.now() - this.lastCheck > STALE_AFTER_MS) await this.refresh();
   }
 
   /** Rarity-weighted share (0..1) of the query's words each row contains, by the same FTS5 matching as the search. */
@@ -370,7 +404,7 @@ export class MemoryIndex {
     this.dirty = false;
     if (!full && changed.length === 0 && removed.length === 0) return { changed: 0, removed: 0 };
 
-    const parsed = await Promise.all(changed.map(async (file) => ({ ...file, rows: await rowsOf(vaultPath, file.path) })));
+    const parsed = await Promise.all(changed.map(async (file) => ({ ...file, ...(await rowsOf(vaultPath, file.path)) })));
     // Lineage depends on other pages' parents, so any change re-derives it for every row.
     const lineage = await lineageResolver(vaultPath);
 
@@ -378,6 +412,8 @@ export class MemoryIndex {
     const upsertFile = this.db.prepare("INSERT INTO files (path, mtime_ms, size) VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size");
     const deleteRows = this.db.prepare("DELETE FROM docs WHERE file = ?");
     const deleteFile = this.db.prepare("DELETE FROM files WHERE path = ?");
+    const insertEdge = this.db.prepare("INSERT INTO edges (file, src, kind, target) VALUES (?, ?, ?, ?)");
+    const deleteEdges = this.db.prepare("DELETE FROM edges WHERE file = ?");
     const resolved = await Promise.all(parsed.map(async (file) => ({
       ...file,
       rows: await Promise.all(file.rows.map(async (row) => ({ ...row, ...(await lineage(row)) }))),
@@ -386,11 +422,13 @@ export class MemoryIndex {
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      if (full) this.db.exec("DELETE FROM docs; DELETE FROM files;");
-      for (const path of removed) { deleteRows.run(path); deleteFile.run(path); }
+      if (full) this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges;");
+      for (const path of removed) { deleteRows.run(path); deleteEdges.run(path); deleteFile.run(path); }
       for (const file of resolved) {
         deleteRows.run(file.path);
+        deleteEdges.run(file.path);
         for (const row of file.rows) insert.run(row.title, row.aliases, row.lineage, row.summary, row.body, row.kind, row.path, row.file, row.filed);
+        for (const edge of file.edges) insertEdge.run(file.path, edge.from, edge.kind, edge.target);
         upsertFile.run(file.path, file.mtimeMs, file.size);
       }
       const update = this.db.prepare("UPDATE docs SET lineage = ?, filed = ? WHERE rowid = ?");
@@ -400,6 +438,7 @@ export class MemoryIndex {
       this.db.exec("ROLLBACK");
       throw error;
     }
+    this.version++;
     return { changed: changed.length, removed: removed.length };
   }
 
@@ -445,32 +484,45 @@ async function lineageResolver(vaultPath: string): Promise<LineageResolver> {
   };
 }
 
-async function rowsOf(vaultPath: string, path: string): Promise<RowDraft[]> {
+/** A file's index rows and its graph edges (links and tree parent, targets as written). */
+async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft[]; edges: MemoryGraphRawEdge[] }> {
   const raw = await readFile(join(vaultPath, path), "utf8").catch(() => null);
-  if (raw === null) return [];
+  if (raw === null) return { rows: [], edges: [] };
   if (path === TREE_PATH) {
     // Root rows: RAPTOR's collapsed tree, every level in one pool. The hit points at the root's page.
-    return parseTree(raw).nodes.map((node) => ({
-      title: node.name, aliases: "", summary: node.summary, body: GROUP_HEADINGS[node.kind], kind: "root", path: node.path, file: path,
-    }));
+    const nodes = parseTree(raw).nodes;
+    return {
+      rows: nodes.map((node) => ({
+        title: node.name, aliases: "", summary: node.summary, body: GROUP_HEADINGS[node.kind], kind: "root", path: node.path, file: path,
+      })),
+      edges: nodes.map((node) => ({ from: TREE_PATH, target: node.path, kind: "tree" })),
+    };
   }
   const log = LOG_FILE_RE.exec(path);
   if (log) {
-    return parseLogCaptures(log[1]!, raw).map((entry) => ({
-      title: entry.title, aliases: "", summary: [log[1], entry.source].filter(Boolean).join(" "), body: entry.content,
-      kind: "log", path: `${path}#^${entry.anchor}`, file: path,
-    }));
+    return {
+      rows: parseLogCaptures(log[1]!, raw).map((entry) => ({
+        title: entry.title, aliases: "", summary: [log[1], entry.source].filter(Boolean).join(" "), body: entry.content,
+        kind: "log", path: `${path}#^${entry.anchor}`, file: path,
+      })),
+      edges: [],
+    };
   }
   const { frontmatter, body } = parseNote(raw);
   const meta = frontmatter ?? {};
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
   const title = typeof meta.title === "string" && meta.title.trim() ? meta.title : body.match(/^# +([^\n]+)/m)?.[1]?.trim() || basenameOf(path);
-  return [{
+  const parent = pageTreeFields(frontmatter).parent;
+  const edges: MemoryGraphRawEdge[] = [
+    ...(parent ? [{ from: path, target: parent, kind: "tree" as const }] : []),
+    ...extractPageLinks(body).map((target) => ({ from: path, target, kind: "link" as const })),
+  ];
+  return { edges, rows: [{
     title,
     // Obsidian's own `aliases:` (a list or one string) and tags: the page's metadata, not steering.
     aliases: [...(typeof meta.aliases === "string" ? [meta.aliases] : strings(meta.aliases)), ...strings(meta.tags)].join(" · "),
     summary: [typeof meta.summary === "string" ? meta.summary : "", typeof meta.description === "string" ? meta.description : ""].filter(Boolean).join(" "),
     body,
     kind: "page", path, file: path,
-  }];
+  }] };
 }

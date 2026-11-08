@@ -11,6 +11,7 @@ import {
   LogOutIcon,
   MessageCircleIcon,
   MessagesSquareIcon,
+  WaypointsIcon,
   PlugZapIcon,
   Settings2Icon,
   UserRoundIcon,
@@ -47,6 +48,7 @@ import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
 import { MemoryChat } from "@/components/memory-chat"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { MemoryGraph } from "@/components/memory-graph"
 import { MemoryNoteViewer } from "@/components/memory-note-viewer"
 import { memoryPathFromHash } from "@/lib/memory-chat"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
@@ -65,6 +67,7 @@ import type { ZenodEdition } from "@/views/zenod-edition"
 
 const SECTION_ICONS = {
   chat: MessagesSquareIcon,
+  graph: WaypointsIcon,
   overview: GaugeIcon,
   memory: NetworkIcon,
   connect: PlugZapIcon,
@@ -166,6 +169,8 @@ export function Settings({
         window.scrollTo?.({ top: 0 })
       } else if (window.location.hash === "#chat") {
         setSection("chat")
+      } else if (window.location.hash.startsWith("#graph")) {
+        setSection("graph")
       }
     }
     window.addEventListener("hashchange", onHash)
@@ -366,6 +371,9 @@ export function Settings({
           </TabsList>
           <TabsContent value="chat" className="mt-4">
             {edition === "hosted" ? <MemoryChat /> : null}
+          </TabsContent>
+          <TabsContent value="graph" className="mt-4">
+            {edition === "hosted" ? <MemoryGraph /> : null}
           </TabsContent>
           <TabsContent value="overview" className="mt-4">
             <ZenodOverview

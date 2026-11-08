@@ -659,7 +659,7 @@ describe("Zenod chassis unit", () => {
           name: "zenod",
           hostedMode: "managed",
         });
-        expect(safeAgentBody.panels).toEqual(["chat", "overview", "memory", "connect", "subscribers", "channels", "vault", "usage", "account"]);
+        expect(safeAgentBody.panels).toEqual(["chat", "graph", "overview", "memory", "connect", "subscribers", "channels", "vault", "usage", "account"]);
         for (const hiddenPanel of ["keys", "transcription", "costs", "test"]) {
           expect(safeAgentBody.panels).not.toContain(hiddenPanel);
         }

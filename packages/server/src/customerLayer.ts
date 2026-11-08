@@ -53,6 +53,8 @@ import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
 import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
+/** Nodes per graph view (E12-S2): what the app draws legibly; core caps a request at 120. */
+const MEMORY_GRAPH_LIMIT = 21;
 import { projectRecentSave } from "./recentSaves.js";
 import {
   answerFromMemory,
@@ -1376,6 +1378,31 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ query, tier: "scan", ms: null, results: [] });
       console.warn(`[memory-search] console search unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: "memory search unavailable" }, 503);
+    }
+  });
+
+  // EPIC-12 E12-S2: the signed-in customer's memory graph: one memory's neighbourhood
+  // (`path`: a vault path or link target) or, without it, the tree's roots and busiest pages.
+  // Built from the tenant's own tier-0 index (links stored per file, refreshed on each filing).
+  app.get("/api/console/memory-graph", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const center = (c.req.query("path") ?? "").trim();
+    if (center.length > 512) return c.json({ error: "path is too long" }, 400);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      const engine = await runtime.getEngine();
+      const view = engine.memoryGraph ? await engine.memoryGraph({ center: center || null, limit: Number(c.req.query("limit") ?? MEMORY_GRAPH_LIMIT) }) : null;
+      return c.json(view ? { status: "ready", ...view } : { status: "empty" });
+    } catch (error) {
+      const name = (error as Error | null)?.name;
+      if (name === "NotConfiguredError") return c.json({ status: "empty" });
+      if (name === "NoteNotFoundError") return c.json({ error: "not_found" }, 404);
+      console.warn(`[memory-graph] console graph unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "memory graph unavailable" }, 503);
     }
   });
 

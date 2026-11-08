@@ -55,6 +55,7 @@ function consumeGithubReturn(): boolean {
 
 function initialTabFromHash():
   | "chat"
+  | "graph"
   | "channels"
   | "vault"
   | "account"
@@ -67,6 +68,12 @@ function initialTabFromHash():
     return "channels"
   }
   if (window.location.hash === "#chat") return "chat"
+  // The memory graph (E12-S2), optionally opened on one memory: #graph?path=<vault path>
+  if (
+    window.location.hash === "#graph" ||
+    window.location.hash.startsWith("#graph?")
+  )
+    return "graph"
   if (window.location.hash === "#vault") return "vault"
   if (window.location.hash === "#account") return "account"
   // A memory's in-app link (E12-S3a): #memory?path=<vault path>

@@ -487,6 +487,7 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
 // These are product sections, not the chassis settings-panel capabilities.
 const HOSTED_CUSTOMER_PANELS = Object.freeze([
   "chat",
+  "graph",
   "overview",
   "memory",
   "connect",

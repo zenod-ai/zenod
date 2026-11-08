@@ -54,7 +54,7 @@ import { prepareReconciliation, applyReconciliation, newPageAdditions, reconcili
 import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
 import { githubUrl, type VaultLocation } from "../vault/github.js";
-import { getNote } from "../ops/get.js";
+import { getNote, NoteNotFoundError } from "../ops/get.js";
 import { formatMemoryLineage, loadMemoryTree, memoryTreeBriefing, type MemoryTreeIndex } from "../vault/lineage.js";
 import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
@@ -3495,6 +3495,20 @@ export function createEngine(options: EngineOptions): BrainEngine {
       assertVault(repo);
       await syncForRead();
       return timedSearch(query);
+    },
+    memoryGraph: async (request = {}) => {
+      assertVault(repo);
+      await syncForRead();
+      const index = openMemoryIndex();
+      if (!index) return null;
+      const view = await index.graph(request);
+      if (!view) {
+        // Named, so callers that may not import core (the Phylax bundle) can tell it apart.
+        const missing = new NoteNotFoundError(String(request.center));
+        missing.name = "NoteNotFoundError";
+        throw missing;
+      }
+      return view;
     },
     rebuildMemoryIndex: async () => {
       assertVault(repo);
