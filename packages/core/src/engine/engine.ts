@@ -70,7 +70,7 @@ import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, file
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { lintTree } from "../vault/treeLint.js";
-import { applyDeskChanges, checkDeskChanges, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
+import { applyDeskChanges, checkDeskChanges, checkDeskPlan, DeskChangeError, deskReadTools, deskTouched, DESK_MAX_TOUCHED, runDeskAgent, undoDeskEdits, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskUndoResult } from "./memoryDesk.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
 import { isGithubConnectionRequiredError } from "../connections/github.js";
 import { paginateMemoryEntries, memoryEntrySummaries, type EntrySearchInput, type EntrySearchResult } from "./entryPagination.js";
@@ -2971,6 +2971,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
           return llm.streamMemoryChat!({ system, prompt }, () => {});
         },
         tools: deskReadTools(vaultPath, (query) => rankedSearch(query)),
+        check: (plan) => checkDeskPlan(vaultPath, plan),
         ...(input.maxSteps ? { maxSteps: input.maxSteps } : {}),
         onStep: step,
         ...(input.assertActive ? { assertActive: input.assertActive } : {}),

@@ -255,7 +255,7 @@ export type { AnswerCoverage } from "./engine/retrievalCoverage.js";
 
 export { ANSWER_PROTOCOL_FAILURE_TEXT, askNonAnswer } from "./llm/askNonAnswer.js";
 export {
-  applyDeskChanges, checkDeskChanges, deskReadTools, DESK_MAX_STEPS, DESK_MAX_TOUCHED, DeskChangeError, invertDeskEdit, parseDeskPlan, runDeskAgent, undoDeskEdits,
+  applyDeskChanges, checkDeskChanges, checkDeskPlan, deskReadTools, nameFitsPage, DESK_MAX_STEPS, DESK_MAX_TOUCHED, DeskChangeError, invertDeskEdit, parseDeskPlan, runDeskAgent, undoDeskEdits,
   type DeskAgentOutcome, type DeskChange, type DeskChangeView, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskPlan, type DeskReadTools, type DeskUndoResult,
 } from "./engine/memoryDesk.js";
 export { guardSendRoute, isQuestionClause, looksLikeDeskJob, parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendAction, type SendRoute } from "./llm/sendRoute.js";

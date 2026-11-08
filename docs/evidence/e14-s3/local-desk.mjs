@@ -5,6 +5,7 @@
 //
 //   node local-desk.mjs <worktree> <data dir> <vault: demo | path to a git bundle> serve [port]
 //   node local-desk.mjs <worktree> <data dir> <vault> job "<request>"      (headless, prints the receipt)
+//   node local-desk.mjs <worktree> <data dir> <vault> undo                 (undoes the last headless job)
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, extname, join } from "node:path";
@@ -125,6 +126,13 @@ if (MODE === "job") {
   process.exit(0);
 }
 
+if (MODE === "undo") {
+  const last = JSON.parse(await readFile(join(DATA, "job-result.json"), "utf8"));
+  const result = await engine.undoDeskJob({ title: last.plan.title, edits: last.edits });
+  console.log(JSON.stringify({ undone: result.undone, skipped: result.skipped, revision: result.revision?.commitSha ?? null }));
+  process.exit(0);
+}
+
 // ---- serve: the customer routes behind a real session, and the built web app
 const PORT = Number(ARG ?? 18932);
 const { Hono } = await imp("node_modules/hono/dist/index.js");
@@ -142,7 +150,7 @@ const app = new Hono();
 app.get("/dev-login", (c) => { issueCustomerSession(c, user, env); return c.redirect(`/#${c.req.query("to") ?? "chat"}`); });
 app.get("/dev/usage", (c) => c.json(usage));
 app.get("/dev/head", (c) => c.json({ head: git(["rev-parse", "HEAD"], join(DATA, "vault")).trim(), log: git(["log", "--format=%h %s", "-5"], join(DATA, "vault")).trim().split("\n") }));
-app.post("/dev/whatsapp", async (c) => { const { content } = await c.req.json(); const id = `wa-${Date.now()}`; queue.setDeskHooks; desk.offerDeskJobFromChat(inboxFor(runtime), id, content, core.looksLikeDeskJob); return c.json({ ok: true }); });
+app.post("/dev/whatsapp", async (c) => { const { content } = await c.req.json(); const id = `wa-${Date.now()}`; desk.offerDeskJobFromChat(inboxFor(runtime), id, content, core.looksLikeDeskJob); return c.json({ ok: true }); });
 app.get("/api/auth/status", (c) => c.json({ customerAuth: true, signInMethods: ["google"], authMethod: "google" }));
 app.get("/api/me", (c) => c.json({ user: { display_name: "Demo user" } }));
 app.get("/api/vault/provider", (c) => c.json({ ready: true, provider: "github" }));

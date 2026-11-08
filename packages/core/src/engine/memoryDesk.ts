@@ -361,11 +361,14 @@ export async function applyDeskChanges(vaultPath: string, changes: readonly Desk
         if (!line) throw new DeskChangeError(`the topic line of "${root.name}" was not found`);
         await edit({ kind: "tree_remove", line, group: root.kind });
       }
+      const count = edits.length;
       const parent = fieldValue(raw, "parent");
       if (parent !== parentValue(to)) await edit({ kind: "field", file: page, key: "parent", before: parent, after: parentValue(to) });
       const memory = fieldValue(raw, "memory");
       const target = vault.index.lineage(to);
       if (memory !== null && target.ok && memory !== target.group) await edit({ kind: "field", file: page, key: "memory", before: memory, after: target.group });
+      // Already there: nothing to report.
+      if (edits.length === count) continue;
       const after = await loadDeskVault(vaultPath);
       views.push({ what: `${vault.title(page)} moved under ${after.title(to)}`, before, after: after.place(page) });
     } else if (change.op === "root") {
@@ -427,6 +430,62 @@ export async function applyDeskChanges(vaultPath: string, changes: readonly Desk
     }
   }
   return { edits, views };
+}
+
+const NAME_STOP = new Set(["and", "the", "for", "with", "notes", "note", "page", "topic", "project", "projects", "about", "from", "into", "los", "las", "del", "con", "para"]);
+const nameWords = (text: string) => new Set((text.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((word) => !NAME_STOP.has(word)));
+
+/** A topic's name fits the page it sits on when they share a word (so "Idealista" never lands on the Poly-Maker page). */
+export function nameFitsPage(name: string, title: string, path: string): boolean {
+  const page = new Set([...nameWords(title), ...nameWords(basenameOf(path))]);
+  return [...nameWords(name)].some((word) => page.has(word));
+}
+
+/**
+ * Read-only check of a plan against the memory as it is, before anything is written: every page
+ * exists, a move does not go under itself, a topic's name fits its
+ * page and is not taken, an unlink has a line to remove. The problems are plain sentences for the
+ * model to fix. The full check still runs when the plan is applied.
+ */
+export async function checkDeskPlan(vaultPath: string, plan: DeskPlan): Promise<string[]> {
+  const vault = await loadDeskVault(vaultPath);
+  const problems: string[] = [];
+  const names = new Map((vault.index.tree?.nodes ?? []).map((node) => [node.name.toLowerCase(), vault.index.resolveRef(node.path)]));
+  const roots = new Set([...vault.index.rootsByPath.keys()]);
+  for (const change of plan.changes) {
+    try {
+      if (change.op === "move") {
+        const page = requirePage(vault, change.page, "page");
+        const to = requirePage(vault, change.to, "new place");
+        if (page === to || isUnder(vault, to, page)) problems.push(`"${vault.title(page)}" cannot go under itself or under a page below it`);
+      } else if (change.op === "root" || change.op === "rename") {
+        const page = requirePage(vault, change.page, change.op === "root" ? "page" : "topic");
+        const title = vault.index.fields.get(page)?.title ?? basenameOf(page);
+        if (change.op === "root" && roots.has(page.toLowerCase())) problems.push(`"${title}" is already a topic; use rename`);
+        if (change.op === "rename" && !roots.has(page.toLowerCase())) problems.push(`"${title}" is not a topic; only topics are renamed (use root to make it one)`);
+        const name = change.name.trim();
+        if (name && !nameFitsPage(name, title, page)) problems.push(`the name "${name}" does not fit the page it sits on, "${title}"; name the topic after that page, or put the topic on another page`);
+        const holder = names.get(name.toLowerCase());
+        if (name && holder && holder !== page) problems.push(`there is already a topic called "${name}"`);
+        if (change.op === "rename") for (const [key, value] of names) if (value === page) names.delete(key);
+        if (name) names.set(name.toLowerCase(), page);
+        roots.add(page.toLowerCase());
+      } else if (change.op === "link") {
+        requirePage(vault, change.from, "page");
+        requirePage(vault, change.to, "linked page");
+      } else {
+        const from = requirePage(vault, change.from, "page");
+        const citation = citationOf(change.to);
+        const target = citation ? undefined : requirePage(vault, change.to, "linked page");
+        const body = parseNote(await readText(vaultPath, from)).body;
+        if (linkLines(body, citation ? { citation } : { page: target! }, vault).length === 0) problems.push(`"${vault.title(from)}" has no link line to ${change.to} that may be removed`);
+        else if (citation && !(await citedElsewhere(vaultPath, vault, citation, from))) problems.push(`the note ${citation} is cited only on "${vault.title(from)}"; keep it there`);
+      }
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return problems;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -524,7 +583,9 @@ export function deskReadTools(vaultPath: string, search: (query: string) => Prom
       const v = await vault();
       const lines = (v.index.tree?.nodes ?? []).map((node) => {
         const path = v.index.resolveRef(node.path) ?? node.path;
-        return `- ${node.name} | ${node.kind} | ${path} | ${count(v.index, path)} pages under it | ${node.summary}`;
+        const kids = v.index.children(path);
+        const shown = kids.slice(0, 6).map((child) => `${v.title(child)} (${count(v.index, child)} under it)`).join("; ");
+        return `- topic "${node.name}" | ${node.kind} | sits on page ${path} titled "${v.index.fields.get(path)?.title ?? basenameOf(path)}" | ${count(v.index, path)} pages under it${shown ? ` | directly under it: ${shown}${kids.length > 6 ? `; and ${kids.length - 6} more` : ""}` : ""}`;
       });
       return lines.length ? lines.join("\n") : "the memory has no tree yet";
     },
@@ -566,6 +627,8 @@ const DESK_SYSTEM = [
   '{"op":"rename","page":"path of a topic","name":"New name","summary":"one sentence"} rename a topic or fix its one-line summary',
   '{"op":"link","from":"path","to":"path"} add a link between two pages',
   '{"op":"unlink","from":"path","to":"path or 2026-01-31#^e-abc123"} remove a link line, or a note line cited on the wrong page (only when the note is cited on another page too)',
+  "A topic's name must fit the page it sits on (share a word with that page's title).",
+  "Playbook to split a topic that holds two subjects A and B: rename the topic to fit the page it sits on (say that page is about A); make B's main page its own topic with op root; move B's pages that hang elsewhere under B's page; unlink note lines about A that were copied onto B's pages when the same note is cited on an A page.",
   "Rules: you never rewrite the person's words and never delete anything; you only change where things are filed, the topics, and links. If the job asks to delete, rewrite text, or anything else outside these changes, or it is unclear, reply {\"refuse\":\"one plain sentence why\"}. Make the fewest changes that do the job. Reply in the person's language for title and summary.",
 ].join("\n");
 
@@ -575,6 +638,8 @@ export type DeskAgentOutcome =
 
 export interface DeskAgentOptions {
   request: string;
+  /** Read-only check of a plan before it is returned; its problems go back to the model as a step. */
+  check?(plan: DeskPlan): Promise<string[]>;
   /** One call on the chat model: system and prompt in, its whole reply out. */
   call(input: { system: string; prompt: string }): Promise<string>;
   tools: DeskReadTools;
@@ -663,7 +728,14 @@ export async function runDeskAgent(options: DeskAgentOptions): Promise<DeskAgent
     if (str(value.refuse)) return { status: "refused", reason: str(value.refuse).slice(0, 300), steps: step, inputChars };
     if (value.done === true || Array.isArray(value.changes)) {
       const plan = parseDeskPlan(value, options.request);
-      if (plan) return { status: "plan", plan, steps: step, inputChars };
+      const problems = plan && options.check ? await options.check(plan) : [];
+      if (plan && problems.length === 0) return { status: "plan", plan, steps: step, inputChars };
+      if (plan) {
+        if (last) return { status: "refused", reason: `The desk's plan did not fit your memory: ${problems[0]}`, steps: step, inputChars };
+        options.onStep?.("Checking the plan again");
+        transcript.push(`step ${step}: your plan was not accepted:\n${problems.slice(0, 5).map((problem) => `- ${problem}`).join("\n")}\nFix it (read more if you need to) and reply with done again.`);
+        continue;
+      }
       transcript.push(`step ${step}: done had no usable changes. Use the change shapes listed.`);
       continue;
     }

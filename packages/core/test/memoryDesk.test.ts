@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
-import { checkDeskChanges, runDeskAgent, type DeskReadTools } from "../src/engine/memoryDesk.js";
+import { checkDeskChanges, nameFitsPage, runDeskAgent, type DeskReadTools } from "../src/engine/memoryDesk.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import { SqliteStateStore } from "../src/state/sqlite.js";
 import { buildTreeIndex, formatLineage } from "../src/vault/tree.js";
@@ -133,6 +133,19 @@ describe("EPIC-14 S3 memory desk", { timeout: 60_000 }, () => {
     expect(llm.calls[0]!.system).toContain("never rewrite the person's words and never delete");
   });
 
+  it("a plan whose topic name does not fit its page goes back to the model, which fixes it", async () => {
+    const { repo } = await gitVault(dir, KNOTTED_VAULT);
+    const wrong = { ...UNTANGLE_PLAN, changes: [{ op: "rename", page: "Projects/Boat repair.md", name: "Cabin decision" }] };
+    const llm = new ScriptedLlm([JSON.stringify(wrong), JSON.stringify(UNTANGLE_PLAN)]);
+    const steps: string[] = [];
+    const engine = createEngine({ repo, llm, state: new SqliteStateStore(":memory:") });
+    const result = await engine.deskJob!({ request: "split boat and cabin", onStep: (s) => steps.push(s) });
+    expect(result.status).toBe("done");
+    expect(llm.calls[1]!.prompt).toContain('the name "Cabin decision" does not fit the page it sits on, "Boat repair"');
+    expect(steps[0]).toBe("Checking the plan again");
+    expect(result.agent.steps).toBe(2);
+  });
+
   it("stops at the step cap and on the model's refusal, never half done", async () => {
     const tools: DeskReadTools = { tree: async () => "t", read: async () => "", search: async () => "", children: async () => "", links: async () => "" };
     const looping = new ScriptedLlm(Array(10).fill(JSON.stringify({ tool: "tree" })));
@@ -219,18 +232,21 @@ describe("EPIC-14 S3 memory desk", { timeout: 60_000 }, () => {
 
   it("a change that does not fit the memory stops the job before anything is written", async () => {
     const { repo, work } = await gitVault(dir, KNOTTED_VAULT);
-    const bad = { ...UNTANGLE_PLAN, changes: [UNTANGLE_PLAN.changes[1], { op: "move", page: "Projects/Nowhere.md", to: "Projects/Garden.md" }] };
-    const engine = createEngine({ repo, llm: new ScriptedLlm([JSON.stringify(bad)]), state: new SqliteStateStore(":memory:") });
+    const engine = createEngine({ repo, llm: new ScriptedLlm([]), state: new SqliteStateStore(":memory:") });
     const start = (await work.revparse(["HEAD"])).trim();
-    await expect(engine.deskJob!({ request: "move nowhere under garden" })).rejects.toThrow(/Nowhere\.md" is not a page in the tree/);
+    const plan = (changes: unknown[]) => ({ ...UNTANGLE_PLAN, changes } as never);
+    // Plans given straight to the apply step (as an approved plan is): the host still checks each change.
+    await expect(engine.deskJob!({ request: "x", plan: plan([UNTANGLE_PLAN.changes[1], { op: "move", page: "Projects/Nowhere.md", to: "Projects/Garden.md" }]) })).rejects.toThrow(/Nowhere\.md" is not a page in the tree/);
     expect((await work.revparse(["HEAD"])).trim()).toBe(start);
     expect((await work.status()).isClean()).toBe(true);
-    // A move under its own child is refused too.
-    const cycle = createEngine({ repo, llm: new ScriptedLlm([JSON.stringify({ ...UNTANGLE_PLAN, changes: [{ op: "move", page: "Projects/Cabin decision.md", to: "Projects/Oakmere survey.md" }] })]), state: new SqliteStateStore(":memory:") });
-    await expect(cycle.deskJob!({ request: "x" })).rejects.toThrow(/cannot go under itself/);
-    // Unlinking a note cited nowhere else would leave it unplaced: refused.
-    const orphan = createEngine({ repo, llm: new ScriptedLlm([JSON.stringify({ ...UNTANGLE_PLAN, changes: [{ op: "unlink", from: "Projects/Garden.md", to: "2026-10-03#^e-333333" }] })]), state: new SqliteStateStore(":memory:") });
-    await expect(orphan.deskJob!({ request: "x" })).rejects.toThrow(/no link line/);
+    await expect(engine.deskJob!({ request: "x", plan: plan([{ op: "move", page: "Projects/Cabin decision.md", to: "Projects/Oakmere survey.md" }]) })).rejects.toThrow(/cannot go under itself/);
+    await expect(engine.deskJob!({ request: "x", plan: plan([{ op: "unlink", from: "Projects/Garden.md", to: "2026-10-03#^e-333333" }]) })).rejects.toThrow(/no link line/);
+    expect((await work.status()).isClean()).toBe(true);
+    // From the agent, a plan that still does not fit on its last step is refused, never applied.
+    const stubborn = createEngine({ repo, llm: new ScriptedLlm(Array(3).fill(JSON.stringify({ ...UNTANGLE_PLAN, changes: [{ op: "move", page: "Projects/Nowhere.md", to: "Garden" }] }))), state: new SqliteStateStore(":memory:") });
+    const refused = await stubborn.deskJob!({ request: "x", maxSteps: 3 });
+    expect(refused.status).toBe("refused");
+    expect((await work.revparse(["HEAD"])).trim()).toBe(start);
   });
 
   it("moves, links and unlinks pages, and refuses a job that only repeats what is there", async () => {
@@ -252,6 +268,12 @@ describe("EPIC-14 S3 memory desk", { timeout: 60_000 }, () => {
     const unlinked = await engine.deskJob!({ request: "unlink garden and the survey" });
     expect(unlinked.status).toBe("done");
     expect(await readFile(join(repo.path, "Projects/Garden.md"), "utf8")).not.toContain("## Related");
+  });
+
+  it("a topic's name must share a word with its page", () => {
+    expect(nameFitsPage("Poly-Maker", "Poly-Maker Campaign July 2026", "Projects/Poly-Maker Campaign July 2026.md")).toBe(true);
+    expect(nameFitsPage("Idealista Data Relationship", "Poly-Maker Campaign July 2026", "Projects/Poly-Maker Campaign July 2026.md")).toBe(false);
+    expect(nameFitsPage("Idealista", "Idealista Data Relationship", "Projects/Idealista Data Relationship/Idealista Data Relationship.md")).toBe(true);
   });
 
   it("the guard refuses rewritten words, deletes, new files, Log changes and other front matter", () => {
