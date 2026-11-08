@@ -747,7 +747,11 @@ export class PhylaxPortedRuntime {
         let transcription: PhylaxTranscriptionReceipt;
         if (job.state === "transcribed") {
           transcription = (job.transcription ?? {}) as PhylaxTranscriptionReceipt;
-          if (transcription.transcription_failed?.code !== "duration_limit") {
+          // A kept note handed back for a save retry (ZAL-A10) settled its
+          // transcription allowance before its first forward. Settling again
+          // can only pause it for good, and the oldest job would block the rest.
+          const retriedCapture = this.whatsappStore.voiceCaptureRetryCount(job.providerMessageId) > 0;
+          if (!retriedCapture && transcription.transcription_failed?.code !== "duration_limit") {
             usageClaim = this.beginVoiceTranscriptionUsage?.({
               tenantId: job.tenantId,
               providerMessageId: job.providerMessageId,

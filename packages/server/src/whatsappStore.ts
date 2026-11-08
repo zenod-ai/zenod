@@ -1425,6 +1425,14 @@ export class WhatsAppStore {
     );
   }
 
+  /** Automatic save retries already made for this voice note (0 for a fresh note). */
+  voiceCaptureRetryCount(providerMessageId: string): number {
+    const row = this.db.prepare(
+      `SELECT capture_retry_count AS retries FROM whatsapp_voice_jobs WHERE provider_message_id = ?`,
+    ).get(providerMessageId) as { retries: number } | undefined;
+    return Number(row?.retries ?? 0);
+  }
+
   /**
    * Counts only, no content, for kept voice notes: still waiting for a retry, handed back
    * and not finished yet, saved after at least one retry, ended in the try-again text after a
@@ -1433,6 +1441,7 @@ export class WhatsAppStore {
   voiceCaptureRetryCounts(): {
     pending: number;
     inFlight: number;
+    forwarding: number;
     recovered: number;
     notSaved: number;
     gaveUp: number;
@@ -1441,15 +1450,24 @@ export class WhatsAppStore {
       `SELECT
          COALESCE(SUM(job_state = 'capture_retry_pending'), 0) AS pending,
          COALESCE(SUM(capture_retry_count > 0 AND job_state IN ('transcribed', 'forwarding')), 0) AS inFlight,
+         COALESCE(SUM(capture_retry_count > 0 AND job_state = 'forwarding'), 0) AS forwarding,
          COALESCE(SUM(job_state IN ('reply_ready', 'completed') AND capture_retry_count > 0), 0) AS recovered,
          COALESCE(SUM(capture_retry_count > 0 AND (job_state = 'ring_outcome_unknown'
            OR (job_state = 'failed' AND COALESCE(error_text, '') <> 'Capture retries exhausted'))), 0) AS notSaved,
          COALESCE(SUM(job_state = 'failed' AND error_text = 'Capture retries exhausted'), 0) AS gaveUp
        FROM whatsapp_voice_jobs`,
-    ).get() as { pending: number; inFlight: number; recovered: number; notSaved: number; gaveUp: number };
+    ).get() as {
+      pending: number;
+      inFlight: number;
+      forwarding: number;
+      recovered: number;
+      notSaved: number;
+      gaveUp: number;
+    };
     return {
       pending: Number(row.pending),
       inFlight: Number(row.inFlight),
+      forwarding: Number(row.forwarding),
       recovered: Number(row.recovered),
       notSaved: Number(row.notSaved),
       gaveUp: Number(row.gaveUp),
