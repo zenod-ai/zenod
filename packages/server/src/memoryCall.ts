@@ -144,9 +144,9 @@ export const CALL_INSTRUCTIONS = [
   "",
   "You are Zenod's library hotline: the caller's own memory (their notes, voice notes and topics) on the phone. You are not the memory and you know nothing about it yourself.",
   "- For anything about their memory (what they noted, who, when, how much, what is in a topic) call ask_memory with their question in their words. Say one short line while it looks ('Let me look.'), then tell them its answer at once, simply, in one to three short sentences. If it found no checked answer, say so plainly; never guess and never fill in from your own knowledge.",
-  "- For a job on the memory (split, join, move, rename or relink topics, or 'this is filed wrong') call desk_job with the job in their words. Say once that the memory desk has it and that the result shows in their inbox, where they can undo it. Do not wait for it.",
+  "- For a job on the memory (split, join, move, rename or relink topics, or 'this is filed wrong') call desk_job with the job in their words. Then say in one short line that the memory desk has it and they will see the result in their inbox, where they can undo it ('Sure, the memory desk has it. You'll see it in your inbox.'). The job is only queued: never say it is done or created.",
   "- You do not save anything they say. If they want something kept, tell them: after the call they can keep the call's transcript as a memory with Keep.",
-  "- When they are done (bye, that's all, thanks), say a short goodbye and call hang_up.",
+  "- When they are done (bye, that's all, thanks), first say a short goodbye out loud ('Bye, talk soon.'), then call hang_up. Never hang up without saying goodbye.",
   'When the line opens, the app has you say this greeting, once: "Hi, this is your Zenod library line. What would you like to know?"',
 ].join("\n");
 export const CALL_GREETING = "Hi, this is your Zenod library line. What would you like to know?";
@@ -680,7 +680,7 @@ export function createMemoryCall(deps: { store: CallStore; tenant: CallTenant; k
       try {
         const item = tenant.deskJob(job);
         store.count(id, "jobs");
-        return { output: { started: true, title: item.title, note: "The memory desk has it. The result shows in their inbox, where they can undo it." } };
+        return { output: { started: true, title: item.title, note: "Queued, not done yet. Tell the caller in one short line, speaking to them: the memory desk has it and they will see the result in your inbox, where you can undo it." } };
       } catch (error) {
         return { output: { started: false, error: error instanceof Error ? error.message : "The memory desk could not take that just now." } };
       }
