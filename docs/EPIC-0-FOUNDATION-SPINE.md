@@ -95,6 +95,7 @@ Verified at: 2026-11-03 (child Current States read from main; live health ok, sh
 | zenod-in-every-mcp-directory-listing-sprint-and-mcp-seo | child | [EPIC-10: Zenod in every MCP directory: listing sprint and MCP SEO](zenod-in-every-mcp-directory-listing-spr.md) | none | draft | none | fill Goal, Serves and Done means |
 | zenod-app-chat-first-memory-graph-retrieval-that-lights-up | child | [EPIC-12: Zenod app: chat first, memory graph, retrieval that lights up](zenod-app-chat-first-memory-graph-retrie.md) | none | draft | none | fill Goal, Serves and Done means |
 | zenod-as-a-whatsapp-gateway-we-can-sell | child | [EPIC-13: Zenod as a WhatsApp gateway we can sell](zenod-as-a-whatsapp-gateway-we-can-sell.md) | none | draft | none | Jordi readies it (or says not now) |
+| plan-personas-inbox-voice-and-calls-come-to-zenod | child | [EPIC-14: Plan: personas, inbox, voice and calls come to Zenod](plan-personas-inbox-voice-and-calls-come.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
