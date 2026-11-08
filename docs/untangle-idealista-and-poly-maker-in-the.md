@@ -14,31 +14,34 @@ Integration policy: main-direct
 
 Idealista and Poly-Maker share one node, so Idealista questions return Poly-Maker results; split them into separate memories, fix their links, prove with before/after retrieval.
 
+Goal sentence: Idealista and Poly-Maker are two separate memories again, and questions about one find only it.
+
 ## Serves
 
-[EPIC-0: Zenod — a paying user on WhatsApp](EPIC-0-FOUNDATION-SPINE.md): <one sentence: how this serves its parent>
+[EPIC-0: Zenod — a paying user on WhatsApp](EPIC-0-FOUNDATION-SPINE.md): a memory that knots two subjects together gives wrong answers; untangling it is the first memory-desk task.
 
 ## Done means
 
-- [ ] E19-1 <observable outcome and how it is measured>
-- [ ] E19-2 <a second outcome (2-5 in all), or delete this line>
+- [ ] E19-1 The tree no longer has one shared node for Idealista and Poly-Maker: each has its own place, and the links that belong to each point to the right one, done through a reversible, logged change to his vault.
+- [ ] E19-2 Before and after on Idealista and Poly-Maker questions: answers about one no longer return the other, and why they got knotted is explained with the fix that stops it recurring.
 
 ## Current State
 
-Owner: unassigned
-Status: ready
+Owner: Delivery Manager (Zenod launch)
+Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
 Waiting on: none
 Approved work: none
-Next action: fill Goal, Serves and Done means
+Next action: U1 dispatched
 Source revision: uncommitted scaffold
 Verified at: 2026-11-08
 
 ## Non-Goals
 
-TBD
+- Only these two subjects; general untangling is the memory desk in EPIC-14.
+- Every vault change is a git commit he can revert.
 
 ## Issue Ledger
 
@@ -46,7 +49,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| draft | Ticket worker | unassigned | first step | draft | none | none | none | none | 2026-11-08 | write the first step |
+| U1 | Ticket worker | unassigned | Untangle Idealista and Poly-Maker: find why they knotted, split the node, fix the links, before/after retrieval (E19-1, E19-2) | ready | none | `wt/e19-u1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 
@@ -56,6 +59,7 @@ One line per decision; detail goes to a linked page.
 |---|---|---|---|---|---|
 | 2026-11-08 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
 | 2026-11-08 | accepted | epic “Untangle Idealista and Poly-Maker in the memory” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (WhatsApp → Zenod), 2026-11-08 16:09Z Zenod: Log/2026-11-08.md#^e-6d07aa So this graph functionality is in") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
+| 2026-11-08 | accepted | Planned by the Delivery Manager from Jordi's voice note Log/2026-11-08.md#^e-6d07aa (read in full) and the Team desk brief. | his note is the ready stamp | Log/2026-11-08.md#^e-6d07aa | — |
 
 ## Operating Learnings
 

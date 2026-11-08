@@ -64,8 +64,7 @@ One line per decision; detail goes to a linked page.
 |---|---|---|---|---|---|
 | 2026-11-08 | accepted | Created as a goal under Foundation | one node in the epic log | EPIC-0-FOUNDATION-SPINE.md | never |
 | 2026-11-08 | accepted | epic “Plan: personas, inbox, voice and calls come to Zenod” ready on Jordi's ask (L-37, Team desk: "🎙 Voice note (WhatsApp → Zenod), 2026-11-08 15:51Z Zenod: Log/2026-11-08.md#^e-7821a0 So the more I think about it, the") | Jordi's ask is his ready stamp: the Delivery manager's next wake works it | console commit | — |
-
-
+| 2026-11-08 | revised | Plan input from Jordi's voice note Log/2026-11-08.md#^e-6d07aa: a "memory desk" — requests that are tasks on the memory (e.g. untangle Idealista and Poly-Maker), not new memories, are recognised and dispatched to an agent working on the memory, reached from the cloud chat, voice notes and calls like the Team desk; no new "Epic Memory" product, Zenod with Phylax stays, but new Zenod features reuse Epic Team modules as much as possible. P1 round 2 adds this to the plan before E14-A1 is answered. | plan updated, ask re-posted as E14-A2 | Log/2026-11-08.md#^e-6d07aa | when E14-A2 is answered |
 
 ## Operating Learnings
 
