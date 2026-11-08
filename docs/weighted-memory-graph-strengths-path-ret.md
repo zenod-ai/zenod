@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | W1 | Ticket worker | run_0bb3512b | Audit what exists, then weighted edges in a fast DB with node ids, and path retrieval with a multiplied-strength threshold, measured on real questions (E18-1, E18-2) | review | none | [#1524](https://github.com/zenod-ai/zenod/pull/1524) merged e7840bf | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e18-w1/) ([md](evidence/e18-w1-2026-11-08.md)), [card](cards/E18-W1.md): live sha e7840bf since 2026-11-08 18:25Z; real questions: right note in top 5 18 to 21, tokens unchanged; S3c set unchanged; not model-judged (E15-A1); signed-in waits on E7-A15 | 2026-11-08 | followups: start Judged answer check with path retrieval, then an answer that reads the path cloud — better answers and fewer tokens not shown yet, needs EPIC-15 Q0; start The constellation idea on zenod.dev — E18-3, row W2; park Write zid into older pages in one pass — derived ids work meanwhile; confirm: yes — only Jordi can judge in the cloud chat whether the ranked memories and percents make sense |
-| W2 | Ticket worker | unassigned | The constellation idea on zenod.dev (E18-3) | draft | W1 | - | main | - | 2026-11-08 | after W1 |
+| W2 | Ticket worker | run_8db27ba9 | The constellation idea on zenod.dev (E18-3) | active | W1 | - | main | - | 2026-11-08 | after W1 |
 
 ## Decisions
 
