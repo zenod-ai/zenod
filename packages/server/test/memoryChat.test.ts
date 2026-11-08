@@ -153,7 +153,7 @@ describe("answerFromMemory (E12-S1)", () => {
       onText: (text) => events.push(`text:${text}`),
     });
     expect(events).toEqual(["memories:5:0", "model", "text:Alpha is in note two [2]", "text: and seven [7]."]);
-    expect(seen.map((memory) => memory.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]); // the five shown plus three more
+    expect(seen.map((memory) => memory.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]); // the five shown plus up to 11 more (E12-S1b round 2)
     expect(result).toMatchObject({ answered: true, answer: "Alpha is in note two [2] and seven [7].", checkedBy: "quoted" });
     // The top 5, plus the cited memory that ranked 7th with its own percentage (E12-S3c).
     expect(result.memories.map((memory) => [memory.rank, memory.cited])).toEqual([[1, false], [2, true], [3, false], [4, false], [5, false], [7, true]]);
@@ -173,6 +173,27 @@ describe("answerFromMemory (E12-S1)", () => {
     const none = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "no_answer", text: "", cited: [] }) });
     expect(await answerFromMemory(none, "alpha")).toMatchObject({ answered: false, answer: expect.stringContaining("found no note that answers this directly") });
     expect(none.askCalls).toHaveLength(0);
+  });
+
+  it("fast path: a cited note the engine read beside the ranked list is shown, with its own percentage (E12-S1b round 2)", async () => {
+    const note = "Log/2026-11-05.md#^e-aaaaa1";
+    const engine = fakeEngine("alpha", {
+      fast: async () => ({
+        checked: true, reason: null, text: "You said Mexico City first [10].", cited: [10],
+        context: [{ n: 1, path: "Notes/alpha 1.md", title: "alpha 1", url: "u1", provider: "github" as const },
+          { n: 10, path: note, title: "Your voice note", url: "https://github.com/o/r/blob/main/Log/2026-11-05.md", provider: "github" as const }],
+      }),
+    });
+    const percents = vi.fn(async () => ({ [note]: 64 }));
+    engine.matchPercentsFor = percents;
+    const result = await answerFromMemory(engine, "which cities?");
+    expect(percents).toHaveBeenCalledWith("which cities?", [note]);
+    expect(result.memories.find((memory) => memory.path === note)).toMatchObject({
+      cited: true, matchPercent: 64, title: "Your voice note", kind: "log", url: "https://github.com/o/r/blob/main/Log/2026-11-05.md", appPath: expect.stringContaining("Log%2F2026-11-05.md"),
+    });
+    // Not cited, not shown: an unchecked answer adds nothing.
+    const quiet = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "citation_not_found", text: "x [10].", cited: [], context: [{ n: 10, path: note, title: "n", url: "", provider: "github" as const }] }) });
+    expect((await answerFromMemory(quiet, "which cities?")).memories.some((memory) => memory.path === note)).toBe(false);
   });
 
   it("fast path: no memory found means no model call", async () => {

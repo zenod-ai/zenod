@@ -20,8 +20,12 @@ export const MEMORY_KEEP_MAX_CHARS = 8_000;
 const MEMORY_CHAT_TOP = 5;
 /** Ranked pool the cited memories are looked up in, so a cited memory shows its own percentage (E12-S3c). */
 const MEMORY_CHAT_POOL = 20;
-/** Memories the fast answer reads (E12-S1b): the five shown plus three more it may cite. */
-const MEMORY_CHAT_CONTEXT = 8;
+/**
+ * Memories the fast answer reads (E12-S1b): the five shown plus more it may cite. Round 2 (accuracy):
+ * 16, not 8. On Jordi's real questions the note that answers ranked 9th to 16th in about a third
+ * of the misses; the engine also adds the person's own best-matching notes after these.
+ */
+const MEMORY_CHAT_CONTEXT = 16;
 
 export interface MemoryChatMemory extends RankedMemory {
   /** The answer cites this memory. */
@@ -114,7 +118,19 @@ export async function streamAnswerFromMemory(
   );
   if (!check) return { ...(await askAnswer(engine, question, started, ranked.results)), ...noteLinks };
   const citedPaths = new Set(ranked.results.filter((memory) => check.cited.includes(memory.rank)).map((memory) => memory.path));
-  const memories = shownMemories(check.checked ? citedPaths : new Set());
+  const memories: MemoryChatMemory[] = shownMemories(check.checked ? citedPaths : new Set());
+  // A cited note the engine added beside the ranked list (E12-S1b round 2) shows too, with its own percentage.
+  const added = check.checked ? (check.context ?? []).filter((memory) => check.cited.includes(memory.n) && !ranked.results.some((r) => r.path === memory.path)) : [];
+  if (added.length) {
+    const percents = engine.matchPercentsFor ? await engine.matchPercentsFor(question, added.map((memory) => memory.path)).catch(() => ({} as Record<string, number>)) : {};
+    for (const memory of added) {
+      memories.push({
+        rank: memory.n, path: memory.path, title: memory.title, snippet: "", matchPercent: percents[memory.path] ?? 1,
+        url: memory.url, provider: memory.provider, appPath: memoryAppPath(memory.path), treePath: "",
+        kind: memory.path.startsWith("Log/") ? "log" : "page", cited: true,
+      });
+    }
+  }
   return {
     question,
     answered: check.checked,

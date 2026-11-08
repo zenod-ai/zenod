@@ -4,7 +4,8 @@ import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendRoute } from "../llm/sendRoute.js";
-import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
+import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
+import { recentIntent } from "../vault/recentIntent.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { withVaultWriteLock, VaultWriteBusyError } from "../git/vaultWriteLock.js";
@@ -94,6 +95,11 @@ import {
   hasAnyLiveApprovalToken,
   hydrateApprovalTokens,
 } from "../approvalTokens.js";
+
+/** E12-S1b round 2: own notes read beside the ranked memories, and the excerpt sizes past the top ten and in a period. */
+const ANSWER_OWN_NOTES = 4;
+const ANSWER_TAIL_CHARS = 1_000;
+const ANSWER_PERIOD_CHARS = 1_500;
 
 const LONG_MESSAGE_DIGEST_CHARS = 1_200;
 const ZENOD_DIGEST_TOOL = "zenod_digest_message";
@@ -2780,40 +2786,75 @@ export function createEngine(options: EngineOptions): BrainEngine {
    * E12-S1b: the web app's fast chat answer. Reads each ranked memory (an exact Log entry by its
    * anchor, otherwise the page), gives the model a bounded excerpt of each, streams the prose and
    * checks every citation's quote against the memory it names. Read-only, no tools, one call.
+   *
+   * Round 2 (accuracy, Jordi 2026-11-08 "what about accuracy??"): the person's own notes that best
+   * match the question are read too (the ranked list often misses a long voice note), the best
+   * memories are read deeper and by the passages that match, each Log entry carries its capture
+   * time and the topics it was filed into, and the model is told today's date.
    */
   async function answerFromMemories(
     question: string,
     memories: ReadonlyArray<{ n: number; path: string; title: string; snippet?: string }>,
     onText?: (delta: string) => void,
-  ): Promise<MemoryChatCheck | null> {
+  ): Promise<(MemoryChatCheck & { context: Array<{ n: number; path: string; title: string; url: string; provider: Note["provider"] }> }) | null> {
     if (!llm.streamMemoryChat) return null;
     assertVault(repo);
     await syncForRead();
+    const today = now();
+    const timed = recentIntent(question, today.getTime());
+    const all: Array<{ n: number; path: string; title: string; snippet?: string }> = [...memories];
+    if (!timed) {
+      // The person's own words first: a note they sent that holds the question, if ranking missed it.
+      const index = openMemoryIndex();
+      const own = index ? await index.ownNotes(question, ANSWER_OWN_NOTES).catch(() => [] as string[]) : [];
+      let next = Math.max(0, ...memories.map((memory) => memory.n)) + 1;
+      for (const path of own) {
+        if (all.some((memory) => memory.path === path)) continue;
+        all.push({ n: next++, path, title: "Your note" });
+      }
+    }
     const context: MemoryChatContext[] = [];
-    for (const memory of memories) {
+    const links = new Map<number, { url: string; provider: Note["provider"] }>();
+    for (const [i, memory] of all.entries()) {
       const [file, anchor] = memory.path.split("#^") as [string, string | undefined];
       try {
         const note = await getNote(vaultPath, file, sourceResolver);
+        links.set(memory.n, { url: note.url, provider: note.provider });
         let body = note.body;
+        let when: string | undefined;
+        let filed: string[] | undefined;
         if (anchor) {
           const start = body.search(new RegExp(`^## .*?\\s+\\^${anchor.replace(/[^\w-]/g, "")}\\s*$`, "m"));
           if (start >= 0) {
             const following = body.slice(start + 1).search(/^## /m);
             body = body.slice(start, following < 0 ? body.length : start + 1 + following);
+            const captured = /^- captured-at: (\S+)/m.exec(body)?.[1] ?? null;
+            const day = /^Log\/(\d{4}-\d{2}-\d{2})\.md$/.exec(file)?.[1];
+            const clock = /^## (\d{2}:\d{2})/.exec(body)?.[1];
+            const type = /^- content-type: (\S+)/m.exec(body)?.[1]?.replace(/_/g, " ");
+            const at = captured && !Number.isNaN(Date.parse(captured)) ? new Date(captured).toISOString().slice(0, 16).replace("T", " ") : day ? `${day}${clock ? ` ${clock}` : ""}` : null;
+            if (at) when = `${at} UTC${type ? `, ${type}` : ""}`;
+            filed = [...body.matchAll(/^- filed: \[\[([^\]|#]+)/gm)].map((m) => m[1]!.split("/").pop()!).filter((title, k, list) => list.indexOf(title) === k);
+            // The heading is the start of the note: the excerpt does not need it twice.
+            body = body.replace(/^## [^\n]*\n/, "");
           }
         }
-        context.push({ n: memory.n, path: memory.path, title: memory.title, text: memoryChatExcerpt(body, memory.snippet ?? "") });
+        const budget = timed?.window.kind === "range" ? ANSWER_PERIOD_CHARS : i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : i < 10 ? MEMORY_CHAT_CONTEXT_CHARS : ANSWER_TAIL_CHARS;
+        const title = memory.title === "Your note" && when ? `Your ${/voice/.test(when) ? "voice note" : "note"}` : memory.title;
+        context.push({ n: memory.n, path: memory.path, title, text: memoryChatExcerpt(body, `${question} ${memory.snippet ?? ""}`, budget), ...(when ? { when } : {}), ...(filed?.length ? { filed } : {}) });
       } catch {
         // A memory that cannot be read now is left out; the rest still answer.
       }
     }
-    if (context.length === 0) return { checked: false, reason: "no_answer", text: "", cited: [] };
-    const { system, prompt } = memoryChatPrompt(question, context);
+    const shown = context.map(({ n, path, title }) => ({ n, path, title, url: links.get(n)?.url ?? "", provider: links.get(n)?.provider ?? "github" }));
+    if (context.length === 0) return { checked: false, reason: "no_answer", text: "", cited: [], context: shown };
+    const day = today.toISOString().slice(0, 10);
+    const { system, prompt } = memoryChatPrompt(question, context, `${day} (${today.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })}), now ${today.toISOString().slice(11, 16)} UTC`);
     reportTokenCost("ask", [system, prompt]);
     const filter = memoryChatStreamFilter((text) => onText?.(text));
     const output = await llm.streamMemoryChat({ system, prompt }, (delta) => filter.push(delta));
     filter.end();
-    return checkMemoryChatAnswer(output || "", context);
+    return { ...checkMemoryChatAnswer(output || "", context), context: shown };
   }
 
   /**

@@ -8,6 +8,10 @@ export interface MemoryChatContext {
   path: string;
   title: string;
   text: string;
+  /** When a Log entry was captured and what it is ("2026-11-07 22:44 UTC, voice note"), E12-S1b round 2. */
+  when?: string;
+  /** The topic pages a Log entry was filed into, by title. */
+  filed?: readonly string[];
 }
 
 export interface MemoryChatPrompt {
@@ -32,32 +36,97 @@ export const MEMORY_CHAT_NO_ANSWER = "NO_ANSWER";
 const SOURCES_HEADING = "SOURCES";
 /** Characters per memory given to the model: enough for a note, small enough to answer fast. */
 export const MEMORY_CHAT_CONTEXT_CHARS = 1_800;
+/**
+ * Characters for the best three memories (E12-S1b round 2): a voice note runs to thousands of
+ * characters and the answer is often past the first window, so the top memories are read deeper.
+ */
+export const MEMORY_CHAT_TOP_CONTEXT_CHARS = 4_500;
 
 const SYSTEM = [
   "You answer a person's question from their own memory notes, which are given to you numbered [1], [2], ...",
+  "Many notes are their voice notes, transcribed: what they said, in their words.",
   "Rules:",
   "- Use only what the notes say. Never add facts from general knowledge, never guess.",
-  "- Answer in one to four short sentences, plain words, in the language of the question. Speak to the person as \"you\".",
+  "- Answer completely: give every main point the notes hold on the question, with its specifics (names, numbers, places, dates), not a vague summary.",
+  "- Plain words, in the language of the question. Speak to the person as \"you\". Lead with the direct answer. When there are several points, use a short list, one point per line starting with \"- \". At most about 8 lines.",
+  "- Questions about a time (\"today\", \"yesterday\", \"last week\", a date, \"my last voice note\") are about the notes captured then: use each note's capture date and TODAY below, and name the dates you answer from.",
+  "- Questions over many notes (\"top topics\", \"what did I talk about\") are answered from all the notes given: group them by subject and lead with the subjects that come up most.",
   "- After each claim, cite the note it comes from by its number in square brackets, like [2] or [1][3].",
-  `- Then write a line with only ${SOURCES_HEADING} and, for each note you cited, one line: the number in brackets and a short exact quote copied word for word from that note that supports your answer, in double quotes. Example:`,
+  `- Then write a line with only ${SOURCES_HEADING} and, for EVERY note number you cited above, one line: the number in brackets and a short exact quote copied word for word from that note's text (not its title or the lines above it) that supports your answer, in double quotes. A claim whose note has no quote line is removed. Example:`,
   `  ${SOURCES_HEADING}`,
   "  [2] \"the spare key is under the blue pot\"",
   `- If the notes do not answer the question, write only ${MEMORY_CHAT_NO_ANSWER} and nothing else.`,
 ].join("\n");
 
-/** Trim a memory to the model's budget, keeping the part around the search snippet when it is long. */
-export function memoryChatExcerpt(body: string, snippet = "", max = MEMORY_CHAT_CONTEXT_CHARS): string {
-  const text = body.replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/\n{3,}/g, "\n\n").trim();
+/** Ingest lines of a captured file (where the audio is, its hash, who transcribed it): not what was said. */
+const INGEST_LINE = /^(?:>\s*)?(?:(?:voice note|audio|screenshot\/image|image|document|pdf|file) "[^"]*" ingested\b|raw artifact(?: url| sha256)?:|media type:|source(?: timestamp)?:|transcribed by\b|extraction artifact:|user context:|- (?:source|source-id|verbatim|content-type|captured-at|filed|filing|receipt|ops)\b)/i;
+
+const focusWords = (value: string) =>
+  new Set((value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").match(/[\p{L}\p{N}]{4,}/gu) ?? []).filter((word) => !FOCUS_STOP.has(word)));
+const FOCUS_STOP = new Set(["what", "when", "where", "which", "that", "this", "with", "have", "about", "from", "your", "they", "them", "there", "were", "would", "could", "should", "said", "tell", "does", "know", "want", "like", "just", "really", "think", "voice", "note", "notes"]);
+
+/**
+ * Trim a memory to the model's budget. Ingest lines go first; a long text keeps the passages that
+ * hold the most of the focus words (the question, or the search snippet), in their original order,
+ * with "…" where text was left out, so the part that answers is read even deep in a long note.
+ */
+export function memoryChatExcerpt(body: string, focus = "", max = MEMORY_CHAT_CONTEXT_CHARS): string {
+  const stripped = body.replace(/^---\n[\s\S]*?\n---\n?/, "").split("\n").filter((line) => !INGEST_LINE.test(line.trim())).map((line) => line.replace(/^>\s?/, "")).join("\n");
+  const text = stripped.replace(/\n{3,}/g, "\n\n").trim();
   if (text.length <= max) return text;
-  const probe = snippet.replace(/[*_`>#]/g, "").trim().slice(0, 40);
-  const at = probe ? text.toLowerCase().indexOf(probe.toLowerCase()) : -1;
-  const start = at > max / 2 ? Math.min(at - Math.floor(max / 3), text.length - max) : 0;
-  return `${start > 0 ? "…" : ""}${text.slice(start, start + max).trim()}…`;
+  // Passages of about 300 characters, cut at sentence ends.
+  const passages: Array<{ at: number; text: string }> = [];
+  const sentences = text.match(/[^.!?\n]+(?:[.!?]+|\n+|$)/g) ?? [text];
+  let at = 0;
+  let current = "";
+  let start = 0;
+  for (const sentence of sentences) {
+    if (current && current.length + sentence.length > 300) {
+      passages.push({ at: start, text: current });
+      start = at;
+      current = "";
+    }
+    current += sentence;
+    at += sentence.length;
+  }
+  if (current) passages.push({ at: start, text: current });
+  const wanted = focusWords(focus);
+  const scored = passages.map((passage, i) => {
+    const words = focusWords(passage.text);
+    const hits = [...wanted].filter((word) => words.has(word) || [...words].some((w) => w.startsWith(word.slice(0, 5)) && word.length >= 5)).length;
+    return { i, ...passage, score: hits + (i === 0 ? 0.5 : 0) };
+  });
+  if (!wanted.size || scored.every((passage) => passage.score <= 0.5)) {
+    return `${text.slice(0, max).trim()}…`;
+  }
+  // The best passages, each with its neighbour after it, until the budget is spent.
+  const keep = new Set<number>();
+  let used = 0;
+  for (const passage of [...scored].sort((a, b) => b.score - a.score || a.i - b.i)) {
+    if (passage.score <= 0) break;
+    for (const j of [passage.i, passage.i + 1]) {
+      const p = scored[j];
+      if (!p || keep.has(j) || used + p.text.length > max) continue;
+      keep.add(j);
+      used += p.text.length;
+    }
+    if (used >= max * 0.9) break;
+  }
+  const order = [...keep].sort((a, b) => a - b);
+  let out = order[0] === 0 ? "" : "…";
+  order.forEach((j, k) => {
+    out += (k > 0 && order[k - 1] !== j - 1 ? " … " : "") + scored[j]!.text.trim() + (k < order.length - 1 && order[k + 1] === j + 1 ? " " : "");
+  });
+  return `${out.trim()}${order.at(-1) === scored.length - 1 ? "" : "…"}`;
 }
 
-export function memoryChatPrompt(question: string, memories: readonly MemoryChatContext[]): MemoryChatPrompt {
-  const notes = memories.map((memory) => `[${memory.n}] ${memory.title} (${memory.path})\n${memory.text}`).join("\n\n");
-  return { system: SYSTEM, prompt: `NOTES\n\n${notes}\n\nQUESTION\n${question}` };
+export function memoryChatPrompt(question: string, memories: readonly MemoryChatContext[], today?: string): MemoryChatPrompt {
+  const notes = memories.map((memory) => {
+    const head = `[${memory.n}] ${memory.title} (${memory.path})${memory.when ? ` captured ${memory.when}` : ""}`;
+    const filed = memory.filed?.length ? `\nFiled into: ${memory.filed.join(", ")}` : "";
+    return `${head}${filed}\n${memory.text}`;
+  }).join("\n\n");
+  return { system: SYSTEM, prompt: `${today ? `TODAY\n${today}\n\n` : ""}NOTES\n\n${notes}\n\nQUESTION\n${question}` };
 }
 
 /**
@@ -133,6 +202,34 @@ export function checkMemoryChatAnswer(output: string, memories: readonly MemoryC
     const memory = byNumber.get(n);
     return Boolean(memory && (quotes.get(n) ?? []).some((quote) => quoteFound(quote, memory.text)));
   });
-  if (verified.length !== cited.length) return { checked: false, reason: "citation_not_found", text, cited: verified };
-  return { checked: true, reason: null, text, cited: verified.sort((a, b) => a - b) };
+  if (verified.length === cited.length) return { checked: true, reason: null, text, cited: verified.sort((a, b) => a - b) };
+  // E12-S1b round 2: a long answer cites many notes, and one missing or loose quote used to hide all
+  // of it. Now only the claims that rest on unchecked citations go: a claim is the text up to its
+  // citation marks, kept when one of its marks is checked (its unchecked marks removed). The rest is
+  // shown only when at least half the claims survive; otherwise nothing is shown.
+  const ok = new Set(verified);
+  let claims = 0;
+  let kept = 0;
+  const out = text.split("\n").map((line) => {
+    const parts = line.split(/((?:\s*\[\d+\])+)/);
+    let result = "";
+    for (let i = 0; i < parts.length; i += 2) {
+      const claim = parts[i] ?? "";
+      const marks = parts[i + 1];
+      if (marks === undefined) {
+        result += claim;
+        continue;
+      }
+      claims++;
+      const numbers = [...marks.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]));
+      if (!numbers.some((n) => ok.has(n))) continue;
+      kept++;
+      result += claim + marks.replace(/\s*\[(\d+)\]/g, (mark, n: string) => (ok.has(Number(n)) ? mark : ""));
+    }
+    // A line that cited something and lost every claim goes, with what was left of it.
+    return /\[\d+\]/.test(line) && !/\[\d+\]/.test(result) ? null : result.replace(/^([-*]\s*)[,;:]\s*/, "$1").replace(/^[,;:]\s*/, "");
+  }).filter((line): line is string => line !== null);
+  const trimmed = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (verified.length === 0 || kept === 0 || kept * 2 < claims || !trimmed) return { checked: false, reason: "citation_not_found", text, cited: verified };
+  return { checked: true, reason: null, text: trimmed, cited: verified.sort((a, b) => a - b) };
 }
