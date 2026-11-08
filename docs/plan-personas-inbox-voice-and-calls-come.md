@@ -32,9 +32,9 @@ Status: active
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
-Waiting on: none
+Waiting on: Jordi, E14-A1 (approve the plan at http://vps3.taild81fbb.ts.net:8921/e14-plan/)
 Approved work: none
-Next action: P1 dispatched
+Next action: Jordi answers E14-A1; then the six build steps become rows
 Source revision: uncommitted scaffold
 Verified at: 2026-11-08
 
@@ -43,6 +43,10 @@ Verified at: 2026-11-08
 - No build before the plan is approved.
 - Zenod stays pure memory: no goals, no Kanban, no intent extraction.
 - WhatsApp replies unchanged (root L-6); Epic Team machinery only as far as Jordi asked in his own words (voice note Log/2026-11-08.md#^e-7821a0), weighed against root L-7 in the plan.
+
+## Waiting on
+
+- [ask E14-A1: approve @Jordi since 2026-11-08 row P1] Is this how personas, an inbox and calling your memory should come to Zenod? Open http://vps3.taild81fbb.ts.net:8921/e14-plan/ — 13 slides: personas that wake nightly on your memory, mostly reading, writing only into their own folder and your inbox, capped at $1 of your $3 monthly allowance; a web inbox of their questions and findings; a voice-note button that goes into the filing Zenod already has; a call button, a "library hotline" that talks to Zenod's answer engine (about 2 to 20 cents a minute, capped); we recommend building it in Zenod and copying Epic Team's screens and code, not merging the two; voice-note ingestion and goals stay separate; Zenod does not rest on EpicSpine; six build steps, about three weeks — context: your voice note of 8 Nov 15:51 asked for a plan at one link before any build — impact: yes turns the six steps into rows and starts the first — risk: low, each step ships alone; the call costs money per minute, capped — recommend: approve — why Jordi: it changes what Zenod is — unblocks: EPIC-14 build — details: [plan evidence](http://vps3.taild81fbb.ts.net:8921/e14-p1/)
 
 ## Issue Ledger
 
