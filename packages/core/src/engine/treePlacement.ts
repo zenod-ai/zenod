@@ -53,6 +53,10 @@ export class TrackedWrites {
   get paths(): string[] {
     return [...this.originals.keys()];
   }
+  /** The bytes a path held before this tracker first wrote it (null: it did not exist). */
+  original(path: string): string | null | undefined {
+    return this.originals.get(path);
+  }
   async revert(): Promise<void> {
     for (const [path, original] of this.originals) {
       const absolute = join(this.vaultPath, path);

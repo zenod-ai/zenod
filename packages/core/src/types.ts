@@ -68,6 +68,8 @@ export interface TopicFilingResult {
   appliedOperationIds?: string[];
   status: "filed" | "uncertain" | "pending";
   reason?: string;
+  /** Pages the reconciler rejected for this topic before it was filed elsewhere or kept as a provisional leaf (E12-S8). */
+  reroutedFrom?: string[];
 }
 
 export interface StoreResult {

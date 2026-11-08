@@ -49,7 +49,7 @@ import { ContextRefError, EVIDENCE_CONTEXT_REF_PATTERN } from "../types.js";
 import { loadBrainConfig } from "../vault/config.js";
 import { checkEvidenceImmutability } from "../vault/immutability.js";
 import { lintVault } from "../vault/lint.js";
-import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks } from "./meaningNotes.js";
+import { appendAliasEvidence, boundExistingSummary, classifyCandidates, composeFocusedPage, relevantLinks, rerouteHint } from "./meaningNotes.js";
 import { prepareReconciliation, applyReconciliation, newPageAdditions, reconciliationIdeaId } from "./reconciliation.js";
 import { branchContext } from "./meaningNotes.js";
 import { scanVault } from "../vault/pages.js";
@@ -63,7 +63,7 @@ import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
 import { appendEvidence, getEvidenceEntry, searchEvidenceEntries, todayString } from "./evidence.js";
-import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, type PlacementPlan } from "./treePlacement.js";
+import { appendOpsRollup, isAgentOpsReport, placeCapture, appendFiledLines, filedTarget, planFromChanges, TrackedWrites, writeProvisionalLeaf, type PlacementPlan } from "./treePlacement.js";
 import { assertSweepChangesSafe, lintErrorKey, runTreeSweep } from "./treeSweep.js";
 import { buildTreeIndex, readTree } from "../vault/tree.js";
 import { memoryTreeOutline } from "../vault/treeOutline.js";
@@ -1782,8 +1782,12 @@ export function createEngine(options: EngineOptions): BrainEngine {
       if (!filingPlan) return;
       await assertFilingTarget(vaultPath, path);
       if (!receipt) await checkpoint();
-      if (before === after) delete receipt!.files[path];
-      else receipt!.files[path] = { beforeHash: publicationContentHash(before), after, afterHash: publicationContentHash(after) };
+      // A page written twice in one filing (a re-routed memory joining another
+      // topic's page) keeps the hash of its content before this filing.
+      const beforeHash = receipt!.files[path]?.beforeHash ?? publicationContentHash(before);
+      const afterHash = publicationContentHash(after);
+      if (afterHash === beforeHash) delete receipt!.files[path];
+      else receipt!.files[path] = { beforeHash, after, afterHash };
       await checkpoint();
     };
     await checkpoint();
@@ -1791,11 +1795,14 @@ export function createEngine(options: EngineOptions): BrainEngine {
     const touched: string[] = [];
     const citation = `[[${logPath.slice(4, -3)}#^${evidenceRef.split("#^")[1]}]]`;
     const template = await readFile(join(vaultPath, "_templates/Area.md"), "utf8").catch(() => DEFAULT_TEMPLATE);
-    for (const [path, group] of groups) {
+    type PageGroup = { page: Classification["pages"][number]; outcomes: Outcome[]; facts: FactProposal[] };
+    const fileGroup = async (path: string, group: PageGroup): Promise<void> => {
       if (!MEANING_FOLDERS[path.split("/")[0] ?? ""] || isAbsolute(path) || path.split("/").includes("..") || path.includes("\\")) {
         for (const outcome of group.outcomes) { outcome.status = "pending"; outcome.reason = "invalid_meaning_path"; }
-        continue;
+        return;
       }
+      const priorFile = receipt?.files[path];
+      const restoreFile = () => { if (!receipt) return; if (priorFile) receipt.files[path] = priorFile; else delete receipt.files[path]; };
       const absolute = join(vaultPath, path);
       const currentContent = await readFile(absolute, "utf8").catch(() => null);
       let lastWrittenContent: string | null = null;
@@ -1877,9 +1884,9 @@ export function createEngine(options: EngineOptions): BrainEngine {
             if (report.errors.length || checkEvidenceImmutability(await repo.pendingChanges()).length) throw new Error("reconciliation_validation_failed");
             touched.push(path);
           }
-          if (receipt && reconciled.content === currentContent) delete receipt.files[path];
+          if (reconciled.content === currentContent) restoreFile();
           await checkpoint();
-          continue;
+          return;
         }
         let previousErrors: import("../types.js").LintError[] | undefined;
         let valid = false;
@@ -1911,10 +1918,81 @@ export function createEngine(options: EngineOptions): BrainEngine {
           if (currentContent === null) await rm(absolute, { force: true });
           else await writeFile(absolute, currentContent);
         }
-        if (receipt) delete receipt.files[path];
+        restoreFile();
         group.outcomes.forEach((outcome, index) => { Object.assign(outcome, previousOutcomes[index]); outcome.appliedOperationIds = previousOutcomes[index]!.appliedOperationIds ?? []; outcome.uncertainPages = previousOutcomes[index]!.uncertainPages ?? []; });
         for (const outcome of group.outcomes) { outcome.filedPages = outcome.filedPages.filter(page => page !== path); outcome.status = "pending"; outcome.reason = error instanceof Error && /^(reconciliation_|branch_context_)/.test(error.message) ? error.message : "page_filing_failed"; }
       }
+    };
+    for (const [path, group] of groups) await fileGroup(path, group);
+    // E12-S8 (S6 round 5, cause "rejected, then dropped"): a memory never ends only in
+    // the filing receipt. A topic the reconciler rejected for its page is classified
+    // again without that page and filed where it fits. Failing that, a topic the
+    // organiser could not place, or one still pending on its last attempt, becomes a
+    // provisional leaf under the closest tree node (vaults with a Tree.md); the weekly
+    // sweep reviews it and roots still emerge from content (EPIC-9 L-1).
+    const rejectedForPage = /reconciliation_(?:needs_clarification|incompatible_decisions)/;
+    const finalAttempt = !!filingPlan?.prior;
+    const unplaced = outcomes.filter(outcome => outcome.ideaId && !outcome.filedPages.length && outcome.sourceSpans.length
+      && outcome.disposition !== "evidence_only" && outcome.status !== "filed"
+      && !["source_not_assigned", "source_assignment_invalid", "invalid_meaning_path"].includes(outcome.reason ?? "")
+      && !classification.topics?.find(topic => topic.ideaId === outcome.ideaId)?.classificationFailed
+      && (rejectedForPage.test(outcome.reason ?? "") || (outcome.status === "uncertain" && !outcome.uncertainPages?.length)
+        || (finalAttempt && outcome.status === "pending")));
+    for (const outcome of unplaced) {
+      const why = outcome.reason ?? "filing_needs_clarification";
+      const text = outcome.sourceSpans.map(span => content.slice(span.start, span.end)).join("\n\n");
+      const rejectedPages = rejectedForPage.test(why) ? [...outcome.pages] : [];
+      if (rejectedPages.length) {
+        try {
+          const rerouted = await classifyCandidates({ classify: async (bounded: ClassifyInput) => {
+            reportTokenCost("classify", [bounded.content, ...bounded.hints, bounded.pageIndex.map(page => `${page.path} | ${page.title} | ${page.summary}`).join("\n")], undefined, "reroute-rejected");
+            return llm.classify(bounded);
+          } }, vaultPath, snapshot, { content: text, hints: [rerouteHint(outcome.topic, rejectedPages, snapshot)], pageIndex: snapshot.pages, tagVocabulary: config.tags }, rejectedPages);
+          const page = (rerouted.topics ?? [rerouted])
+            .filter(topic => Number.isFinite(topic.confidence) && topic.confidence >= config.confidenceThreshold
+              && (topic.disposition === "integrate_page" || topic.disposition === "append_compact_note"))
+            .flatMap(topic => topic.pages.map(page => ({ ...page, path: normalizeMarkdownNotePath(page.path) })))
+            .find(page => !rejectedPages.includes(page.path));
+          if (page) {
+            const before = structuredClone(outcome);
+            Object.assign(outcome, { pages: [page.path], reroutedFrom: rejectedPages, status: "pending", reason: `rerouted after ${why}`.slice(0, 240) });
+            await fileGroup(page.path, { page, outcomes: [outcome], facts: [] });
+            if (outcome.status === "filed") { await checkpoint(); continue; }
+            Object.assign(outcome, before, { filedPages: before.filedPages });
+          }
+        } catch (error) {
+          console.warn(`[librarian] re-route unavailable for a rejected topic of ${evidenceRef}: ${(error as Error).message}`);
+        }
+      }
+      if (!(await readTree(vaultPath))) continue;
+      const writes = new TrackedWrites(vaultPath);
+      const leaf = await writeProvisionalLeaf(vaultPath, await buildTreeIndex(vaultPath),
+        { content: `${outcome.topic}\n\n${text}`, evidenceRef, reason: why, today: todayString(now()) }, writes).catch(() => null);
+      const after = leaf ? await readFile(join(vaultPath, leaf.path), "utf8").catch(() => null) : null;
+      const before = leaf ? writes.original(leaf.path) ?? null : null;
+      await writes.revert();
+      if (!leaf || after === null) continue;
+      const absolute = join(vaultPath, leaf.path);
+      const priorFile = receipt?.files[leaf.path];
+      try {
+        // Same order as page filing: the receipt holds the approved bytes before the page changes.
+        await prepareFile(leaf.path, before, after);
+        filingPlan?.input.assertActive?.();
+        await mkdir(dirname(absolute), { recursive: true });
+        await writeFile(absolute, after);
+        if ((await lintVault(vaultPath, [leaf.path])).errors.length || checkEvidenceImmutability(await repo!.pendingChanges()).length) throw new Error("provisional_leaf_validation_failed");
+      } catch (error) {
+        if ((await readFile(absolute, "utf8").catch(() => null)) === after) {
+          if (before === null) await rm(absolute, { force: true }); else await writeFile(absolute, before);
+        }
+        if (receipt) { if (priorFile) receipt.files[leaf.path] = priorFile; else delete receipt.files[leaf.path]; }
+        console.warn(`[librarian] provisional leaf unavailable for ${evidenceRef}: ${(error as Error).message}`);
+        continue;
+      }
+      Object.assign(outcome, { ...(outcome.pages.length ? { reroutedFrom: outcome.pages } : {}), pages: [leaf.path], filedPages: [leaf.path],
+        status: "uncertain", reason: `provisional_leaf: ${why}`.slice(0, 240) });
+      if (!touched.includes(leaf.path)) touched.push(leaf.path);
+      await checkpoint();
     }
     const unresolved = outcomes.filter((outcome) => outcome.status !== "filed");
     // Stable per-evidence record preserves assignments and unresolved names without polluting candidate pages.

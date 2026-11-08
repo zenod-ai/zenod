@@ -175,8 +175,8 @@ export interface CandidateDiscovery {
   fallbackAttempted: boolean;
   fallbackFailed: boolean;
 }
-export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultPath: string, snapshot: VaultSnapshot, input: ClassifyInput): Promise<Classification & { discovery: CandidateDiscovery }> {
-  const initial = await candidatePages(vaultPath, snapshot, input.content, input.hints);
+export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultPath: string, snapshot: VaultSnapshot, input: ClassifyInput, exclude: string[] = []): Promise<Classification & { discovery: CandidateDiscovery }> {
+  const initial = await candidatePages(vaultPath, snapshot, input.content, input.hints, exclude);
   const presented = new Set(initial.map(page => page.path));
   let fallbackAttempted = false, fallbackFailed = false, discoveryOmitted = false;
   let contextPartial = initial.length < snapshot.pages.length;
@@ -191,7 +191,7 @@ export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultP
       // Per-topic retrieval prevents the first/widest topic from monopolizing fallback context.
       const groups = await Promise.all(decisions.slice(0, 8).map(async topic => ({
         topic: topic.summary, query: [topic.summary, ...topic.pages.map(page => page.title)].join(" "),
-        pages: await candidatePages(vaultPath, snapshot, [topic.summary, ...topic.pages.map(page => page.title)].join(" "), input.hints),
+        pages: await candidatePages(vaultPath, snapshot, [topic.summary, ...topic.pages.map(page => page.title)].join(" "), input.hints, exclude),
       })));
       const combined = new Map(initial.slice(0, 4).map(page => [page.path, page]));
       for (let rank = 0; rank < CANDIDATE_LIMIT && combined.size < CANDIDATE_LIMIT; rank++) for (const group of groups) {
@@ -217,6 +217,14 @@ export async function classifyCandidates(llm: Pick<BrainLlm, "classify">, vaultP
   const partial = Boolean(snapshot.catalogCoverage?.unreadable.length) || fallbackFailed || discoveryOmitted;
   return { ...safeCandidateClassification(result,snapshot,partial),
     discovery: { partial, contextPartial, totalPages: snapshot.pages.length, presentedPages: presented.size, unreadablePages: snapshot.catalogCoverage?.unreadable.length ?? 0, fallbackAttempted, fallbackFailed } };
+}
+
+/** E12-S8: why a topic is classified again after the reconciler rejected its page. */
+export function rerouteHint(topic: string, rejected: string[], snapshot: VaultSnapshot): string {
+  const titles = rejected.map(path => snapshot.pages.find(page => page.path === path)?.title ?? path.replace(/\.md$/, ""));
+  return `Re-route: the memory "${compact(topic, 160)}" was checked against ${titles.map(title => `"${compact(title, 120)}"`).join(", ")} and does not belong there; those pages are not candidates. `
+    + "Choose an existing page only if it is about the same subject (the same product, project, person or place), never because it shares a word. "
+    + "If no candidate is about that subject and the memory clearly names it, create a new page for it; otherwise use needs_clarification.";
 }
 
 /** Final deterministic safety also applies when an optional or corrective call fails. */
