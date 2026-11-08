@@ -60,7 +60,7 @@ import { getNote, NoteNotFoundError } from "../ops/get.js";
 import { formatMemoryLineage, loadMemoryTree, memoryTreeBriefing, type MemoryTreeIndex } from "../vault/lineage.js";
 import { readNotePassage, readNotePacket, notePassageVersion, uniqueEvidenceRef, type NoteReadOptions, type NotePassage, type NotePassagePacket } from "../ops/passage.js";
 import { searchVault } from "../ops/search.js";
-import { MemoryIndex, MemoryIndexTenantError } from "../vault/memoryIndex.js";
+import { MemoryIndex, MemoryIndexTenantError, type MemoryCloudRequest } from "../vault/memoryIndex.js";
 import { WriteQueue, type QueuePriority } from "../git/queue.js";
 import { assertVaultProviderUrl, type VaultRepository, type VaultRevision, type VaultSourceRef } from "../vault/repository.js";
 import type { ClassifyInput, ComposePageInput, AnswerInput, BrainLlm, ChatToolEvent, Classification, DriveSourceTools, PeerTools, VaultReadTools, VaultTaskTools } from "../llm/types.js";
@@ -3647,6 +3647,19 @@ export function createEngine(options: EngineOptions): BrainEngine {
         throw missing;
       }
       return view;
+    },
+    memoryCloud: async (request: MemoryCloudRequest) => {
+      assertVault(repo);
+      await syncForRead();
+      const index = openMemoryIndex();
+      if (!index) return null;
+      const cloud = await index.cloud(request);
+      if (!cloud) {
+        const missing = new NoteNotFoundError(String(request.center));
+        missing.name = "NoteNotFoundError";
+        throw missing;
+      }
+      return cloud;
     },
     matchPercentsFor: async (query: string, paths: readonly string[]) => {
       assertVault(repo);

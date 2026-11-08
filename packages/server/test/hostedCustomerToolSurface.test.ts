@@ -87,7 +87,7 @@ describe("hosted customer MCP tool surface", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it("gives an OAuth directory connector only the seven memory tools, each with a title, hints and a describing description", async () => {
+  it("gives an OAuth directory connector only the eight memory tools, each with a title, hints and a describing description", async () => {
     const tools = await listTools(await oauthAccessToken());
     expect(tools.map((tool) => tool.name).sort()).toEqual([...HOSTED_CUSTOMER_MCP_TOOLS].sort());
     for (const tool of tools) {
@@ -105,7 +105,7 @@ describe("hosted customer MCP tool surface", () => {
     expect(surface).toMatchSnapshot();
   });
 
-  it("gives a customer's zmt_ token the same seven tools", async () => {
+  it("gives a customer's zmt_ token the same eight tools", async () => {
     const created = await request("/api/account/mcp-tokens", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },

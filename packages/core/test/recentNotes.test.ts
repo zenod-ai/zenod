@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { connectionWeight, MemoryIndex } from "../src/vault/memoryIndex.js";
+import { MemoryIndex } from "../src/vault/memoryIndex.js";
+import { buildWeightedLinks } from "../src/vault/memoryWeights.js";
 import { isVoiceCapture, recentIntent } from "../src/vault/recentIntent.js";
 import { LAST_VOICE_NOTE_VAULT, LATEST_VOICE_NOTE, OLDER_VOICE_NOTE, UNLINKED_VOICE_NOTE } from "./fixtures/lastVoiceNoteVault.js";
 
@@ -49,15 +50,19 @@ describe("recent-note intent", () => {
     expect(isVoiceCapture(null, 'Voice note "a.ogg" ingested through Zenod', "")).toBe(true);
   });
 
-  it("weighs a page by how it is tied to the note", () => {
-    expect(connectionWeight(new Set(["cites", "filed"]), 2)).toBeGreaterThan(connectionWeight(new Set(["cites"]), 2));
-    expect(connectionWeight(new Set(["mentions"]), 1)).toBeLessThan(connectionWeight(new Set(["filed"]), 1));
-    expect(connectionWeight(new Set(["cites", "filed", "mentions"]), 9)).toBeLessThanOrEqual(0.97);
+  it("weighs a page by how it is tied to the note, in the weighted graph (E18-W1)", () => {
+    const note = "Log/2026-11-08.md#^e-000001";
+    const strength = (ties: Parameters<typeof buildWeightedLinks>[0], to: string) =>
+      buildWeightedLinks(ties, { now: NOW, noteTime: () => NOW }).find((link) => link.src === note && link.dst === to)!.strength;
+    const both = strength([{ from: "A.md", to: note, kind: "cites" }, { from: note, to: "A.md", kind: "filed" }], "A.md");
+    expect(both).toBeGreaterThan(strength([{ from: "A.md", to: note, kind: "cites" }], "A.md"));
+    expect(strength([{ from: note, to: "A.md", kind: "filed", weight: 0.6 }], "A.md")).toBe(0.6);
+    expect(both).toBeLessThanOrEqual(1);
   });
 });
 
 describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () => {
-  it("puts the latest voice note first, then the pages it was filed into, with distinct percents", async () => {
+  it("puts the latest voice note first, then the pages it was filed into, at their path strength", async () => {
     const index = await indexOf(LAST_VOICE_NOTE_VAULT);
     const hits = await index.search("what was in my last vn?", 5);
     expect(hits[0]).toMatchObject({ path: LATEST_VOICE_NOTE, relation: "note", matchPercent: 100 });
@@ -73,7 +78,8 @@ describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () =>
     // The page whose lines repeat the most of the note leads; each shows the line the filing wrote.
     expect(filed.map((hit) => hit.title)).toEqual(["Explainer videos", "Branded screenshots", "Brand identity"]);
     expect(filed[1]!.snippet).toContain("polished and uncluttered");
-    expect(new Set(filed.map((hit) => hit.matchPercent)).size).toBe(filed.length);
+    // Each percent is the note's times the path strength from the note in the weighted graph (E18-W1).
+    for (const hit of filed) expect(hit.matchPercent).toBe(Math.round(100 * hit.pathStrength!));
     // Roots that only say "last" are gone; the agent report and the typed note are not voice notes.
     const titles = hits.map((hit) => hit.title);
     for (const root of ["Agent Team", "Hair transplant", "Travel", "EpicSpine"]) expect(titles).not.toContain(root);
@@ -149,7 +155,9 @@ describe("what was in my last vn? (E12-S3c round 2)", { timeout: 30_000 }, () =>
     const index = await indexOf(LAST_VOICE_NOTE_VAULT);
     const hits = await index.search("branded screenshots", 5);
     expect(hits[0]!.title).toBe("Branded screenshots");
-    expect(hits.every((hit) => hit.relation === undefined)).toBe(true);
+    expect(hits.some((hit) => hit.relation === "note" || hit.relation === "filed")).toBe(false);
+    // What the page's strong paths reach may follow it (E18-W1), never anything weaker than 0.8.
+    for (const hit of hits.filter((hit) => hit.relation)) expect(hit.pathStrength).toBeGreaterThanOrEqual(0.8);
     // Only the tree path says "long term": whatever is kept reads weak (E12-S3c round 1).
     for (const hit of await index.search("long term", 5)) expect(hit.matchPercent).toBeLessThanOrEqual(5);
   });

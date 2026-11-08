@@ -29,10 +29,11 @@ describe("connect guide", () => {
     expect(GEMINI_COMMAND).toBe(`gemini mcp add --transport http --scope user zenod ${MCP_SERVER_URL}`)
   })
 
-  it("lists only the seven customer memory tools", () => {
+  it("lists only the eight customer memory tools", () => {
     expect(MEMORY_TOOLS.map((tool) => tool.name)).toEqual([
       "search_memory",
       "get_memory",
+      "memory_cloud",
       "ask_brain",
       "store_memory",
       "ingest_memory",

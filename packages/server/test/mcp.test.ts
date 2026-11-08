@@ -210,6 +210,7 @@ describe("MCP endpoint", () => {
       "get_recent_conversation_transcript",
       "get_task_result",
       "ingest_memory",
+      "memory_cloud",
       "read_llm_timeline",
       "run_task",
       "search_memory",

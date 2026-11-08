@@ -11,6 +11,7 @@ import { pageTreeFields, parseTree, TREE_PATH } from "./tree.js";
 import { extractCitations, extractPageLinks } from "./pages.js";
 import { isVoiceCapture, recentIntent, type RecentIntent } from "./recentIntent.js";
 import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphNote, type MemoryGraphRawEdge, type MemoryGraphView } from "./memoryGraph.js";
+import { buildWeightedLinks, CLOUD_DEFAULT_THRESHOLD, expandCloud, isNote, nodeIdOf, type CloudNode, type NodeTie } from "./memoryWeights.js";
 
 /**
  * Tier-0 memory index (EPIC-9 E9-5a): one SQLite FTS5 file per tenant, derived from the
@@ -22,13 +23,16 @@ import { MemoryGraph, MEMORY_GRAPH_DEFAULT_LIMIT, type MemoryGraphNote, type Mem
 /**
  * 2: the `edges` table (E12-S2 memory graph). 3: Log entries carry who sent them and whether
  * they are voice notes (`meta`), and the edges that tie a note to its topics: page citations
- * and filing receipts (E12-S3c). An older file is rebuilt once on open.
+ * and filing receipts (E12-S3c). 4: weighted memory graph (E18-W1): a filing's confidence on its
+ * `filed` edges, each page's `zid`, and the derived `nodes` and `links` (strength 0..1) tables.
+ * An older file is rebuilt once on open.
  */
-const SCHEMA_VERSION = "3";
+const SCHEMA_VERSION = "4";
 const MAX_HITS = 20;
 /** Column weights for bm25(): title, aliases, lineage, summary, body (E9-4 §6). */
 const BM25_WEIGHTS = "10.0, 10.0, 5.0, 3.0, 1.0";
 const LOG_FILE_RE = /^Log\/(\d{4}-\d{2}-\d{2})\.md$/;
+const LOG_ENTRY_DATE_RE = /^Log\/(\d{4}-\d{2}-\d{2})\.md#/;
 /** Re-check the vault on disk at least this often even when no write marked the index dirty. */
 const STALE_AFTER_MS = 60_000;
 /**
@@ -85,6 +89,51 @@ export interface MemoryIndexOptions {
   /** Alias groups: any member in a query also searches the others. None built in (root L-7). */
   aliases?: readonly (readonly string[])[];
   now?: () => number;
+  /**
+   * Path retrieval in the ranked list (E18-W1): a clear best page brings in the memories its strong
+   * paths reach (multiplied strength at or above `threshold`), at most `joins` of them.
+   */
+  cloud?: { threshold?: number; joins?: number };
+}
+
+export const CLOUD_DEFAULT_JOINS = 4;
+/** The best word matches the ranked list's paths start from, and the least a seed must match (E18-W1). */
+const CLOUD_SEEDS = 3;
+const CLOUD_SEED_FLOOR = 60;
+
+export interface MemoryCloudRequest {
+  /** A question: the cloud grows from its best matches. */
+  query?: string;
+  /** Or one memory (a page path, link target or Log evidence reference). */
+  center?: string;
+  /** 0..1, default 0.8: keep a memory while its path's multiplied strength stays at or above it. */
+  threshold?: number;
+  /** At most this many memories, seeds included (default 12, max 60). */
+  maxNodes?: number;
+}
+
+export interface MemoryCloudNode {
+  /** The node id kept in the Markdown: a page's `zid` (or its derived id), a Log entry's block id. */
+  id: string;
+  path: string;
+  title: string;
+  kind: "page" | "log";
+  /** Multiplied strength from the seed (0..1). */
+  strength: number;
+  hops: number;
+  seed: string;
+  via: string | null;
+  /** The path walked, seed first. */
+  trail: string[];
+}
+
+export interface MemoryCloud {
+  threshold: number;
+  seeds: Array<{ path: string; strength: number }>;
+  nodes: MemoryCloudNode[];
+  /** Links between the cloud's nodes, with their strength and why they exist. */
+  links: Array<{ from: string; to: string; strength: number; reasons: string }>;
+  total: { nodes: number; links: number };
 }
 
 export type MemoryIndexHitKind = "page" | "log" | "root";
@@ -116,7 +165,11 @@ export interface MemoryIndexHit {
   unlinked?: boolean;
   /** For a note: topics its filing planned but never wrote to a page (filing stopped half way). */
   unwritten?: number;
+  /** For a memory reached along the graph (E18-W1): its path's multiplied strength from the best hit (0..1). */
+  pathStrength?: number;
 }
+
+type WeightedLinkIndex = { out: Map<string, Array<{ dst: string; strength: number; reasons: string }>>; total: { nodes: number; links: number } };
 
 export type MemoryIndexRelation = "note" | "filed" | "linked" | "parent" | "child";
 
@@ -224,17 +277,6 @@ export function buildMatchTerms(
   return { match: clauses.size ? [...clauses].join(" OR ") : null, terms: termClauses, generic };
 }
 
-/**
- * How strongly a page is tied to a note (E12-S3c), before how much of the note it holds is added
- * (recentSearch, up to +0.12): cited by the page 0.8, written by its filing 0.78, linked from the
- * note 0.72; each further tie of the same page +0.03, and a deeper (more specific) page +0.01 per
- * level up to three. Never above 0.97: a page is never the note itself.
- */
-export function connectionWeight(kinds: ReadonlySet<string>, depth: number): number {
-  const base = Math.max(kinds.has("cites") ? 0.8 : 0, kinds.has("filed") ? 0.78 : 0, kinds.has("mentions") ? 0.72 : 0);
-  return Math.min(0.97, base + 0.03 * Math.max(0, kinds.size - 1) + 0.01 * Math.min(3, Math.max(0, depth - 1)));
-}
-
 /** Edit distance with adjacent swaps (Damerau, optimal string alignment), for short words. */
 function editDistance(a: string, b: string): number {
   const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
@@ -312,6 +354,7 @@ export class MemoryIndex {
   private version = 0;
   private graphCache: { version: number; graph: MemoryGraph } | null = null;
   private spokenCache: { version: number; words: Map<string, number> } | null = null;
+  private linkCache: { version: number; links: WeightedLinkIndex } | null = null;
   private aliasGroups: readonly (readonly string[])[];
   readonly tenantId: string;
   private readonly now: () => number;
@@ -324,13 +367,16 @@ export class MemoryIndex {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, size INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS edges (file TEXT NOT NULL, src TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS edges_file ON edges (file);
     `);
     const meta = new Map((this.db.prepare("SELECT key, value FROM meta").all() as Array<{ key: string; value: string }>).map((row) => [row.key, row.value]));
     // The docs columns changed with the schema: an older table is dropped, not just emptied.
-    if (meta.get("schema") !== SCHEMA_VERSION) this.db.exec("DROP TABLE IF EXISTS docs;");
+    if (meta.get("schema") !== SCHEMA_VERSION) this.db.exec("DROP TABLE IF EXISTS docs; DROP TABLE IF EXISTS edges; DROP TABLE IF EXISTS zids;");
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS edges (file TEXT NOT NULL, src TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL, weight REAL);
+      CREATE INDEX IF NOT EXISTS edges_file ON edges (file);
+      CREATE TABLE IF NOT EXISTS zids (file TEXT PRIMARY KEY, zid TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE);
+      CREATE TABLE IF NOT EXISTS links (src TEXT NOT NULL, dst TEXT NOT NULL, strength REAL NOT NULL, reasons TEXT NOT NULL, PRIMARY KEY (src, dst)) WITHOUT ROWID;
       CREATE INDEX IF NOT EXISTS edges_src ON edges (src);
       CREATE INDEX IF NOT EXISTS edges_target ON edges (target);
       CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(
@@ -348,7 +394,7 @@ export class MemoryIndex {
     const setMeta = this.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     // A different vault location or schema invalidates every row: start clean.
     if (meta.get("schema") !== SCHEMA_VERSION || meta.get("vault") !== options.vaultPath) {
-      this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges;");
+      this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges; DELETE FROM zids; DELETE FROM nodes; DELETE FROM links;");
     }
     setMeta.run("tenant", this.tenantId);
     setMeta.run("schema", SCHEMA_VERSION);
@@ -447,45 +493,198 @@ export class MemoryIndex {
   }
 
   /**
-   * The top memories follow the graph (E12-S3c round 2): when the best hit is a page that clearly
-   * answers (60 % or more), up to two of the pages under it or linked from it join the list at
-   * the best hit's percent times their tie (0.5 for a page under it, 0.45 for a link, +0.02 per
-   * note filed into it, up to five), so its own topic outranks pages that share only a word.
+   * The ranked list follows the graph's strong paths (E18-W1; E12-S3c round 3). The best word
+   * matches that clearly answer (60 % or more, at most three) are the seeds; the best starts at 1, the
+   * others at their percent against the best. From each seed the walk follows weighted links and
+   * multiplies their strengths; a memory is reached while the product stays at or above the threshold
+   * (0.8). Its percent is the best match's percent times that product, so with a 90 % best match a
+   * page its note was filed into with strength 0.95 reads 86 %. A word match also reached along
+   * a path keeps the higher of the two. At most four memories join; nothing weaker ever does.
    */
   private withGraphNeighbours(hits: MemoryIndexHit[], limit: number): MemoryIndexHit[] {
-    const top = hits[0];
-    if (!top || top.kind === "log" || top.matchPercent < 60 || hits.length === 0) return hits;
+    const joins = Math.max(0, Math.trunc(this.options.cloud?.joins ?? CLOUD_DEFAULT_JOINS));
+    const seeds = hits.slice(0, CLOUD_SEEDS).filter((hit) => hit.matchPercent >= CLOUD_SEED_FLOOR);
+    if (joins === 0 || seeds.length === 0) return hits;
     const graph = this.memoryGraph();
-    if (!graph.has(top.path)) return hits;
+    const links = this.weightedLinks().out;
+    const threshold = this.options.cloud?.threshold ?? CLOUD_DEFAULT_THRESHOLD;
+    // Best path to each memory over all seeds, in percent.
+    const reached = new Map<string, { percent: number; strength: number; via: string }>();
+    const best = seeds[0]!.matchPercent;
+    for (const seed of seeds) {
+      // A seed starts as strong as its match against the best one: the threshold is relative to the best.
+      const cloud = expandCloud([{ path: seed.path, strength: seed.matchPercent / best }], (path) => links.get(path) ?? [], {
+        threshold, maxNodes: 1 + joins + hits.length, skip: (path) => path === TREE_PATH, endsPath: isNote,
+      });
+      for (const node of cloud) {
+        if (node.hops === 0) continue;
+        const percent = Math.max(1, Math.round(best * node.strength));
+        const prior = reached.get(node.path);
+        if (!prior || percent > prior.percent) reached.set(node.path, { percent, strength: node.strength, via: node.via! });
+      }
+    }
+    if (reached.size === 0) return hits;
+    const relationOf = (path: string, via: string): MemoryIndexRelation =>
+      graph.parentOf(path) === via ? "child" : graph.parentOf(via) === path ? "parent" : "linked";
+    // A word match a stronger path reaches reads the path's percent.
+    const raised = hits.map((hit) => {
+      const path = reached.get(hit.path);
+      return path && path.percent > hit.matchPercent && hit.relation === undefined
+        ? { ...hit, matchPercent: path.percent, relation: relationOf(hit.path, path.via), via: path.via, pathStrength: path.strength }
+        : hit;
+    });
     const shown = new Set(hits.map((hit) => hit.path));
-    const cites = this.db.prepare("SELECT count(*) AS n FROM edges WHERE kind = 'cites' AND src = ?");
-    const near = [
-      ...graph.childrenOf(top.path).map((path) => ({ path, relation: "child" as const, base: 0.5 })),
-      ...graph.linksOf(top.path).map((path) => ({ path, relation: "linked" as const, base: 0.45 })),
-    ].filter((item, i, all) => !shown.has(item.path) && item.path !== TREE_PATH && all.findIndex((other) => other.path === item.path) === i)
-      .map((item) => ({ ...item, weight: item.base + 0.02 * Math.min(5, (cites.get(item.path) as { n: number }).n) }))
-      .sort((a, b) => b.weight - a.weight || graph.titleOf(a.path).localeCompare(graph.titleOf(b.path)))
-      .slice(0, 2);
-    if (near.length === 0) return hits;
     const added: MemoryIndexHit[] = [];
-    for (const item of near) {
-      const page = this.db.prepare("SELECT title, summary, body, lineage FROM docs WHERE path = ? AND kind IN ('page', 'root') ORDER BY kind = 'page' DESC LIMIT 1")
-        .get(item.path) as { title: string; summary: string; body: string; lineage: string } | undefined;
-      if (!page) continue;
+    const candidates = [...reached].filter(([path]) => !shown.has(path)).sort((a, b) => b[1].percent - a[1].percent || a[0].localeCompare(b[0]));
+    for (const [path, best] of candidates) {
+      if (added.length >= joins) break;
+      const row = this.db.prepare("SELECT kind, title, summary, body, lineage, filed FROM docs WHERE path = ? AND kind IN ('page', 'root', 'log') ORDER BY kind = 'root' LIMIT 1")
+        .get(path) as { kind: MemoryIndexHitKind; title: string; summary: string; body: string; lineage: string; filed: string } | undefined;
+      if (!row) continue;
       added.push({
-        path: item.path, kind: "page", title: page.title, snippet: snippetOf(page, []), score: 0,
-        matchPercent: Math.max(1, Math.round(top.matchPercent * item.weight)), treePath: page.lineage, relation: item.relation, via: top.path,
+        path, kind: row.kind === "log" ? "log" : "page", title: row.title,
+        snippet: snippetOf(row.kind === "log" ? { summary: "", body: spokenWords(row.body) } : row, []), score: 0,
+        matchPercent: best.percent, treePath: row.lineage,
+        ...(row.kind === "log" && row.filed ? { filedOn: row.filed } : {}),
+        relation: relationOf(path, best.via), via: best.via, pathStrength: best.strength,
       });
     }
-    return [...hits, ...added].map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
+    return [...raised, ...added].map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
+  }
+
+  /**
+   * The weighted cloud around a question's best matches or one memory (E18-W1): every memory whose
+   * best path keeps a multiplied strength at or above the threshold, strongest first, with the links
+   * between them. Null when `center` is not a memory; empty when the question matches nothing.
+   */
+  async cloud(request: MemoryCloudRequest): Promise<MemoryCloud | null> {
+    await this.fresh();
+    const threshold = Math.max(0, Math.min(1, request.threshold ?? CLOUD_DEFAULT_THRESHOLD));
+    let seeds: Array<{ path: string; strength: number }> = [];
+    if (request.center?.trim()) {
+      const center = request.center.trim();
+      const note = center.includes("#^") && this.db.prepare("SELECT 1 FROM docs WHERE path = ? AND kind = 'log'").get(center) ? center : null;
+      const path = note ?? this.memoryGraph().resolve(center);
+      if (!path || path === TREE_PATH) return null;
+      seeds = [{ path, strength: 1 }];
+    } else if (request.query?.trim()) {
+      // The word matches seed the cloud; a seed is as strong as its match against the best one.
+      const hits = (await this.search(request.query, MAX_HITS)).filter((hit) => !hit.relation || hit.relation === "note");
+      const best = hits[0]?.matchPercent ?? 0;
+      seeds = hits.map((hit) => ({ path: hit.path, strength: Math.round((hit.matchPercent / Math.max(1, best)) * 1000) / 1000 }))
+        .filter((seed) => seed.strength >= threshold).slice(0, 5);
+    }
+    const links = this.weightedLinks();
+    const nodes = expandCloud(seeds, (path) => links.out.get(path) ?? [], {
+      threshold, ...(request.maxNodes ? { maxNodes: request.maxNodes } : {}), skip: (path) => path === TREE_PATH, endsPath: isNote,
+    });
+    const rows = new Map<string, { kind: MemoryIndexHitKind; title: string }>();
+    const ids = new Map<string, string>();
+    if (nodes.length) {
+      const paths = nodes.map((node) => node.path);
+      const marks = paths.map(() => "?").join(", ");
+      for (const row of this.db.prepare(`SELECT path, kind, title FROM docs WHERE path IN (${marks}) ORDER BY kind = 'root'`).all(...paths) as Array<{ path: string; kind: MemoryIndexHitKind; title: string }>) {
+        if (!rows.has(row.path)) rows.set(row.path, row);
+      }
+      for (const row of this.db.prepare(`SELECT path, id FROM nodes WHERE path IN (${marks})`).all(...paths) as Array<{ path: string; id: string }>) ids.set(row.path, row.id);
+    }
+    const inCloud = new Set(nodes.map((node) => node.path));
+    return {
+      threshold,
+      seeds: seeds.filter((seed) => inCloud.has(seed.path)),
+      nodes: nodes.map((node: CloudNode): MemoryCloudNode => ({
+        id: ids.get(node.path) ?? nodeIdOf(node.path), path: node.path, title: rows.get(node.path)?.title ?? node.path,
+        kind: rows.get(node.path)?.kind === "log" ? "log" : "page", strength: node.strength, hops: node.hops, seed: node.seed, via: node.via, trail: node.trail,
+      })),
+      links: nodes.flatMap((node) => (links.out.get(node.path) ?? []).filter((link) => inCloud.has(link.dst))
+        .map((link) => ({ from: node.path, to: link.dst, strength: link.strength, reasons: link.reasons }))),
+      total: links.total,
+    };
+  }
+
+  /** Weighted links by source path, strongest first; cached until the next sync changes something. */
+  private weightedLinks(): WeightedLinkIndex {
+    if (this.linkCache?.version === this.version) return this.linkCache.links;
+    const out: WeightedLinkIndex["out"] = new Map();
+    const rows = this.db.prepare(`
+      SELECT s.path AS src, d.path AS dst, l.strength, l.reasons FROM links l
+      JOIN nodes s ON s.id = l.src JOIN nodes d ON d.id = l.dst ORDER BY s.path, l.strength DESC, d.path
+    `).all() as Array<{ src: string; dst: string; strength: number; reasons: string }>;
+    for (const row of rows) {
+      if (!out.has(row.src)) out.set(row.src, []);
+      out.get(row.src)!.push({ dst: row.dst, strength: row.strength, reasons: row.reasons });
+    }
+    const nodes = (this.db.prepare("SELECT count(*) AS n FROM nodes").get() as { n: number }).n;
+    const links = { out, total: { nodes, links: rows.length } };
+    this.linkCache = { version: this.version, links };
+    return links;
+  }
+
+  /**
+   * Derive `nodes` and `links` from the stored edges (E18-W1): ids from the Markdown, link targets
+   * resolved like the graph's, strengths by memoryWeights.ts. Runs inside the sync's transaction, so
+   * a search never sees a filing's rows without its links.
+   */
+  private rebuildLinks(): void {
+    const pages = this.db.prepare("SELECT path, title FROM docs WHERE kind = 'page'").all() as Array<{ path: string; title: string }>;
+    const notes = new Set((this.db.prepare("SELECT path FROM docs WHERE kind = 'log'").all() as Array<{ path: string }>).map((row) => row.path));
+    const zids = new Map((this.db.prepare("SELECT file, zid FROM zids").all() as Array<{ file: string; zid: string }>).map((row) => [row.file, row.zid]));
+    const resolver = MemoryGraph.build(pages.map((page) => ({ path: page.path, title: page.title, summary: "", treePath: "" })), [], { hasTree: false });
+    const pageOf = (target: string) => {
+      const path = resolver.resolve(target);
+      return path && path !== TREE_PATH ? path : null;
+    };
+    const ties: NodeTie[] = [];
+    const edges = this.db.prepare("SELECT src, kind, target, weight FROM edges ORDER BY rowid").all() as Array<{ src: string; kind: NodeTie["kind"]; target: string; weight: number | null }>;
+    for (const edge of edges) {
+      if (edge.src === TREE_PATH) continue; // Tree.md ties every root to one hub: no meaning as a link
+      if (edge.kind === "cites") {
+        if (resolver.has(edge.src) && notes.has(edge.target)) ties.push({ from: edge.src, to: edge.target, kind: "cites" });
+        continue;
+      }
+      const to = pageOf(edge.target);
+      if (!to || to === edge.src) continue;
+      if (edge.kind === "link" || edge.kind === "tree") {
+        if (resolver.has(edge.src)) ties.push({ from: edge.src, to, kind: edge.kind });
+      } else if (notes.has(edge.src)) {
+        ties.push({ from: edge.src, to, kind: edge.kind, weight: edge.weight });
+      }
+    }
+    const noteTime = (note: string) => {
+      const date = LOG_ENTRY_DATE_RE.exec(note)?.[1];
+      return date ? Date.parse(`${date}T12:00:00Z`) : null;
+    };
+    const links = buildWeightedLinks(ties, { now: this.now(), noteTime });
+    const ids = new Map<string, string>();
+    const used = new Set<string>();
+    for (const path of [...pages.map((row) => row.path), ...notes].sort()) {
+      if (ids.has(path)) continue;
+      const own = nodeIdOf(path, zids.get(path));
+      let id = own;
+      // Two memories that claim one id (a copied page, a rare block id clash) stay apart.
+      for (let n = 2; used.has(id); n++) id = `${own}-${n}`;
+      used.add(id);
+      ids.set(path, id);
+    }
+    this.db.exec("DELETE FROM nodes; DELETE FROM links;");
+    const insertNode = this.db.prepare("INSERT INTO nodes (id, path) VALUES (?, ?)");
+    for (const [path, id] of ids) insertNode.run(id, path);
+    const insertLink = this.db.prepare("INSERT INTO links (src, dst, strength, reasons) VALUES (?, ?, ?, ?)");
+    for (const link of links) {
+      const src = ids.get(link.src);
+      const dst = ids.get(link.dst);
+      if (src && dst) insertLink.run(src, dst, link.strength, link.reasons);
+    }
   }
 
   /**
    * A recent-note question (recentIntent.ts): the person's latest notes (voice notes when it
    * asks for one), newest first, then the pages the latest one was filed into or links to and
    * their tree parents. A note's percent is its fit (1 without a topic, else how much of the
-   * topic it holds) halved per newer note before it; a page's is the note's times how strongly
-   * the graph ties them (connectionWeight). Empty when no note fits, so the word search answers.
+   * topic it holds) halved per newer note before it; a page's is the note's times the strength of
+   * the path from the note to it in the weighted graph (E18-W1): the note → page link, times the
+   * page → parent link for a parent. Equal strengths keep the page that holds more of the note
+   * first. Empty when no note fits, so the word search answers.
    */
   private recentSearch(intent: RecentIntent, limit: number): MemoryIndexHit[] {
     const rows = this.db.prepare("SELECT rowid, path, title, file, meta, summary, body, lineage, filed FROM docs WHERE kind = 'log'").all() as Array<{
@@ -527,6 +726,7 @@ export class MemoryIndex {
     const hits: MemoryIndexHit[] = [];
     // The latest note halves each older one; in a period every note counts, so they fall gently.
     const decay = intent.window.kind === "range" ? 0.95 : 0.5;
+    const held = new Map<string, number>();
     pool.slice(0, limit).forEach((note, k) => {
       const notePercent = percentOf((fit.get(note.rowid) ?? 0) * decay ** k);
       const links = this.connectionsOf(note.path);
@@ -551,18 +751,19 @@ export class MemoryIndex {
         if (!page) continue;
         // How much of the note this page holds: the share of the note's words in the lines that cite it.
         const lines = citingLines(page.body, note.path);
-        const held = said.size ? [...contentWords(lines.join(" "))].filter((word) => said.has(word)).length / said.size : 0;
-        const weight = link.relation === "parent" ? link.weight : Math.min(0.97, link.weight + Math.min(0.12, 0.4 * held));
+        held.set(link.path, said.size ? [...contentWords(lines.join(" "))].filter((word) => said.has(word)).length / said.size : 0);
         hits.push({
           path: link.path, kind: "page", title: page.title,
           snippet: citingSnippet(lines) ?? snippetOf(page, words),
-          score: 0, matchPercent: percentOf((notePercent / 100) * weight), treePath: page.lineage,
-          relation: link.relation, via: note.path,
+          score: 0, matchPercent: percentOf((notePercent / 100) * link.weight), treePath: page.lineage,
+          relation: link.relation, via: note.path, pathStrength: link.weight,
         });
       }
     });
-    // Highest first; a tie keeps the order above (stronger tie, deeper page, then title).
-    return hits.map((hit, i) => ({ hit, i })).sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || a.i - b.i).map(({ hit }) => hit).slice(0, limit);
+    // Highest first; equal strengths: the page holding more of the note, then the order above.
+    return hits.map((hit, i) => ({ hit, i }))
+      .sort((a, b) => b.hit.matchPercent - a.hit.matchPercent || (held.get(b.hit.path) ?? 0) - (held.get(a.hit.path) ?? 0) || a.i - b.i)
+      .map(({ hit }) => hit).slice(0, limit);
   }
 
   /**
@@ -638,46 +839,34 @@ export class MemoryIndex {
   }
 
   /**
-   * The pages a Log entry is tied to in the graph, strongest first: pages that cite it, pages its
-   * filing receipt wrote, pages it links to, then those pages' tree parents. `unwritten` counts
-   * the pages its filing planned but no page shows (filing stopped half way, S6/S8).
+   * The pages a Log entry is tied to in the weighted graph (E18-W1), strongest first: pages that
+   * cite it, that its filing wrote or that it links to, each with the link's strength, then those
+   * pages' tree parents with the path's (note → page × page → parent). `unwritten` counts the pages
+   * its filing planned but no page shows (filing stopped half way, S6/S8).
    */
   private connectionsOf(notePath: string): { pages: Array<{ path: string; relation: MemoryIndexRelation; weight: number }>; unwritten: number } {
     const graph = this.memoryGraph();
-    const signals = new Map<string, Set<string>>();
-    const add = (ref: string, kind: string) => {
-      const path = graph.has(ref) ? ref : graph.resolve(ref);
-      if (!path || path === TREE_PATH) return null;
-      if (!signals.has(path)) signals.set(path, new Set());
-      signals.get(path)!.add(kind);
-      return path;
-    };
-    for (const edge of this.db.prepare("SELECT src FROM edges WHERE kind = 'cites' AND target = ?").all(notePath) as Array<{ src: string }>) add(edge.src, "cites");
-    const planned: string[] = [];
-    for (const edge of this.db.prepare("SELECT target, kind FROM edges WHERE src = ? AND kind IN ('filed', 'mentions', 'planned')").all(notePath) as Array<{ target: string; kind: string }>) {
-      if (edge.kind === "planned") planned.push(edge.target);
-      else add(edge.target, edge.kind);
-    }
-    const unwritten = planned.filter((target) => {
-      const path = graph.has(target) ? target : graph.resolve(target);
-      return !path || !signals.has(path);
+    const links = this.weightedLinks().out;
+    const pages = (links.get(notePath) ?? [])
+      .filter((link) => link.dst !== TREE_PATH && /\b(?:cites|filed|mentions)\b/.test(link.reasons) && graph.has(link.dst))
+      .map((link) => ({ path: link.dst, relation: (/\b(?:cites|filed)\b/.test(link.reasons) ? "filed" : "linked") as MemoryIndexRelation, weight: link.strength }));
+    const tied = new Set(pages.map((page) => page.path));
+    const unwritten = (this.db.prepare("SELECT target FROM edges WHERE src = ? AND kind = 'planned'").all(notePath) as Array<{ target: string }>).filter((edge) => {
+      const path = graph.has(edge.target) ? edge.target : graph.resolve(edge.target);
+      return !path || !tied.has(path);
     }).length;
-    const pages = [...signals].map(([path, kinds]) => ({
-      path,
-      relation: (kinds.has("cites") || kinds.has("filed") ? "filed" : "linked") as MemoryIndexRelation,
-      weight: connectionWeight(kinds, graph.depthOf(path)),
-    }));
-    // Each parent once, stronger when several of the note's pages hang off it.
+    // Each parent once, at its strongest path from the note.
     const parents = new Map<string, number>();
     for (const page of pages) {
       const parent = graph.parentOf(page.path);
-      if (parent && parent !== TREE_PATH && !signals.has(parent)) parents.set(parent, (parents.get(parent) ?? 0) + 1);
+      if (!parent || parent === TREE_PATH || tied.has(parent)) continue;
+      const step = (links.get(page.path) ?? []).find((link) => link.dst === parent)?.strength ?? 0;
+      parents.set(parent, Math.max(parents.get(parent) ?? 0, Math.round(page.weight * step * 1000) / 1000));
     }
     const byStrength = (a: { path: string; weight: number }, b: { path: string; weight: number }) =>
       b.weight - a.weight || graph.depthOf(b.path) - graph.depthOf(a.path) || graph.titleOf(a.path).localeCompare(graph.titleOf(b.path)) || a.path.localeCompare(b.path);
-    // A parent is a step further from the note: 0.6, +0.05 per further page of the note under it.
-    const tied = [...parents].map(([path, children]) => ({ path, relation: "parent" as const, weight: Math.min(0.75, 0.6 + 0.05 * (children - 1)) }));
-    return { pages: [...pages.sort(byStrength), ...tied.sort(byStrength)], unwritten };
+    const up = [...parents].filter(([, weight]) => weight > 0).map(([path, weight]) => ({ path, relation: "parent" as const, weight }));
+    return { pages: [...pages.sort(byStrength), ...up.sort(byStrength)], unwritten };
   }
 
   /**
@@ -829,8 +1018,10 @@ export class MemoryIndex {
     const upsertFile = this.db.prepare("INSERT INTO files (path, mtime_ms, size) VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size");
     const deleteRows = this.db.prepare("DELETE FROM docs WHERE file = ?");
     const deleteFile = this.db.prepare("DELETE FROM files WHERE path = ?");
-    const insertEdge = this.db.prepare("INSERT INTO edges (file, src, kind, target) VALUES (?, ?, ?, ?)");
+    const insertEdge = this.db.prepare("INSERT INTO edges (file, src, kind, target, weight) VALUES (?, ?, ?, ?, ?)");
     const deleteEdges = this.db.prepare("DELETE FROM edges WHERE file = ?");
+    const upsertZid = this.db.prepare("INSERT INTO zids (file, zid) VALUES (?, ?) ON CONFLICT(file) DO UPDATE SET zid = excluded.zid");
+    const deleteZid = this.db.prepare("DELETE FROM zids WHERE file = ?");
     const resolved = await Promise.all(parsed.map(async (file) => ({
       ...file,
       rows: await Promise.all(file.rows.map(async (row) => ({ ...row, ...(await lineage(row)) }))),
@@ -839,17 +1030,21 @@ export class MemoryIndex {
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      if (full) this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges;");
-      for (const path of removed) { deleteRows.run(path); deleteEdges.run(path); deleteFile.run(path); }
+      if (full) this.db.exec("DELETE FROM docs; DELETE FROM files; DELETE FROM edges; DELETE FROM zids;");
+      for (const path of removed) { deleteRows.run(path); deleteEdges.run(path); deleteZid.run(path); deleteFile.run(path); }
       for (const file of resolved) {
         deleteRows.run(file.path);
         deleteEdges.run(file.path);
+        deleteZid.run(file.path);
         for (const row of file.rows) insert.run(row.title, row.aliases, row.lineage, row.summary, row.body, row.kind, row.path, row.file, row.filed, row.meta);
-        for (const edge of file.edges) insertEdge.run(file.path, edge.from, edge.kind, edge.target);
+        for (const edge of file.edges) insertEdge.run(file.path, edge.from, edge.kind, edge.target, edge.weight ?? null);
+        if (file.zid) upsertZid.run(file.path, file.zid);
         upsertFile.run(file.path, file.mtimeMs, file.size);
       }
       const update = this.db.prepare("UPDATE docs SET lineage = ?, filed = ? WHERE rowid = ?");
       for (const row of stale) update.run(row.lineage, row.filed, row.rowid);
+      // Every filing changes the vault: the weighted links are derived again in the same commit (E18-W1).
+      this.rebuildLinks();
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -906,7 +1101,7 @@ async function lineageResolver(vaultPath: string): Promise<LineageResolver> {
  * entry to its topics (E12-S3c): `cites` page → entry (the page quotes it), `filed` / `planned`
  * entry → page (its filing receipt wrote, or only planned, that page), `mentions` entry → page.
  */
-type StoredEdge = { from: string; target: string; kind: MemoryGraphRawEdge["kind"] | "cites" | "filed" | "planned" | "mentions" };
+type StoredEdge = { from: string; target: string; kind: MemoryGraphRawEdge["kind"] | "cites" | "filed" | "planned" | "mentions"; weight?: number | null };
 
 /** The note → page edges of a filing receipt (`Inbox/filing-<date>-e-xxxxxx.md`); none when it does not parse. */
 function receiptEdges(raw: string): StoredEdge[] {
@@ -915,15 +1110,22 @@ function receiptEdges(raw: string): StoredEdge[] {
   try {
     const value = JSON.parse(body) as {
       evidenceRef?: unknown;
-      outcomes?: Array<{ filedPages?: unknown; uncertainPages?: unknown; pages?: unknown }>;
+      outcomes?: Array<{ filedPages?: unknown; uncertainPages?: unknown; pages?: unknown; confidence?: unknown }>;
       classification?: { topics?: Array<{ pages?: Array<{ path?: unknown } | string> }> };
     };
     if (typeof value.evidenceRef !== "string") return [];
     const strings = (list: unknown) => (Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
-    const filed = new Set<string>();
+    // A page's tie is the filing's own confidence (E18-W1): the best outcome that wrote it, an uncertain one at most 0.6.
+    const filed = new Map<string, number | null>();
     const planned = new Set<string>();
+    const better = (page: string, value: number | null) => {
+      const prior = filed.get(page);
+      filed.set(page, prior === undefined ? value : value === null ? prior : prior === null ? value : Math.max(prior, value));
+    };
     for (const outcome of value.outcomes ?? []) {
-      for (const page of [...strings(outcome.filedPages), ...strings(outcome.uncertainPages)]) filed.add(page);
+      const confidence = typeof outcome.confidence === "number" && outcome.confidence > 0 && outcome.confidence <= 1 ? outcome.confidence : null;
+      for (const page of strings(outcome.filedPages)) better(page, confidence);
+      for (const page of strings(outcome.uncertainPages)) better(page, Math.min(0.6, confidence ?? 0.6));
       for (const page of strings(outcome.pages)) planned.add(page);
     }
     for (const topic of value.classification?.topics ?? []) {
@@ -934,7 +1136,7 @@ function receiptEdges(raw: string): StoredEdge[] {
     }
     const from = value.evidenceRef;
     return [
-      ...[...filed].map((target) => ({ from, target, kind: "filed" as const })),
+      ...[...filed].map(([target, weight]) => ({ from, target, kind: "filed" as const, weight })),
       ...[...planned].filter((page) => !filed.has(page)).map((target) => ({ from, target, kind: "planned" as const })),
     ];
   } catch {
@@ -943,7 +1145,7 @@ function receiptEdges(raw: string): StoredEdge[] {
 }
 
 /** A file's index rows and its graph edges (links and tree parent, targets as written). */
-async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft[]; edges: StoredEdge[] }> {
+async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft[]; edges: StoredEdge[]; zid?: string }> {
   const raw = await readFile(join(vaultPath, path), "utf8").catch(() => null);
   if (raw === null) return { rows: [], edges: [] };
   if (isFilingReceiptPath(path)) return { rows: [], edges: receiptEdges(raw) };
@@ -981,7 +1183,7 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
     ...extractPageLinks(body).map((target) => ({ from: path, target, kind: "link" as const })),
     ...[...new Set(extractCitations(body).map((cite) => `Log/${cite.date}.md#^${cite.anchor}`))].map((target) => ({ from: path, target, kind: "cites" as const })),
   ];
-  return { edges, rows: [{
+  return { edges, ...(typeof meta.zid === "string" && meta.zid.trim() ? { zid: meta.zid.trim() } : {}), rows: [{
     title,
     // Obsidian's own `aliases:` (a list or one string) and tags: the page's metadata, not steering.
     aliases: [...(typeof meta.aliases === "string" ? [meta.aliases] : strings(meta.aliases)), ...strings(meta.tags)].join(" · "),
