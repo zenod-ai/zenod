@@ -19,6 +19,8 @@ import {
 import { litHash } from "@/lib/memory-graph"
 import { formatLength, voiceNoteStatus } from "@/lib/voice-note"
 import { VoiceNoteButton } from "@/components/voice-note-button"
+import { CallButton, CallPanel, useMemoryCall } from "@/components/memory-call"
+import type { CallApi, CallMedia } from "@/lib/memory-call"
 
 // EPIC-12 E12-S1: the hosted app opens on this chat. It answers from your memory and shows
 // the memories it used with their match percentages and links. EPIC-16 E16-B1: one Send button;
@@ -422,7 +424,8 @@ function ReplyTurn({
   )
 }
 
-export function MemoryChat() {
+export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?: CallMedia } } = {}) {
+  const call = useMemoryCall(callDeps)
   const [turns, setTurns] = React.useState<Turn[]>([])
   const [draft, setDraft] = React.useState("")
   const [sending, setSending] = React.useState(false)
@@ -622,6 +625,7 @@ export function MemoryChat() {
             )}
             <div ref={endRef} />
           </div>
+          <CallPanel call={call} />
           <form
             className="zp-compose"
             onSubmit={(event) => {
@@ -652,6 +656,7 @@ export function MemoryChat() {
               }
               onNotice={(text) => push({ kind: "error", text })}
             />
+            <CallButton call={call} onNotice={(text) => push({ kind: "error", text })} />
             <button
               type="submit"
               className="zp-send"

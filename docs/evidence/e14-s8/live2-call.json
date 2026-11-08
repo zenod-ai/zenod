@@ -1,0 +1,211 @@
+{
+ "model": "gpt-realtime-2.1-mini",
+ "started": "2026-11-08T21:59:19Z",
+ "usage": [
+  {
+   "id": "resp_Ei5CzhfqWuu7ufi6Hsfxm",
+   "usage": {
+    "total_tokens": 589,
+    "input_tokens": 460,
+    "output_tokens": 129,
+    "input_token_details": {
+     "text_tokens": 460,
+     "audio_tokens": 0,
+     "image_tokens": 0,
+     "cached_tokens": 0,
+     "cached_tokens_details": {
+      "text_tokens": 0,
+      "audio_tokens": 0,
+      "image_tokens": 0
+     }
+    },
+    "output_token_details": {
+     "text_tokens": 60,
+     "audio_tokens": 69,
+     "reasoning_tokens": 29
+    }
+   }
+  },
+  {
+   "id": "resp_Ei5D0DssPF0FYsTyxuzBQ",
+   "usage": {
+    "total_tokens": 914,
+    "input_tokens": 855,
+    "output_tokens": 59,
+    "input_token_details": {
+     "text_tokens": 855,
+     "audio_tokens": 0,
+     "image_tokens": 0,
+     "cached_tokens": 0,
+     "cached_tokens_details": {
+      "text_tokens": 0,
+      "audio_tokens": 0,
+      "image_tokens": 0
+     }
+    },
+    "output_token_details": {
+     "text_tokens": 43,
+     "audio_tokens": 16
+    }
+   }
+  },
+  {
+   "id": "resp_Ei5D1qmz7zKDCNJExjTfz",
+   "usage": {
+    "total_tokens": 1024,
+    "input_tokens": 930,
+    "output_tokens": 94,
+    "input_token_details": {
+     "text_tokens": 930,
+     "audio_tokens": 0,
+     "image_tokens": 0,
+     "cached_tokens": 832,
+     "cached_tokens_details": {
+      "text_tokens": 832,
+      "audio_tokens": 0,
+      "image_tokens": 0
+     }
+    },
+    "output_token_details": {
+     "text_tokens": 26,
+     "audio_tokens": 68
+    }
+   }
+  },
+  {
+   "id": "resp_Ei5D2O3P6491LZoLCi413",
+   "usage": {
+    "total_tokens": 1282,
+    "input_tokens": 969,
+    "output_tokens": 313,
+    "input_token_details": {
+     "text_tokens": 969,
+     "audio_tokens": 0,
+     "image_tokens": 0,
+     "cached_tokens": 896,
+     "cached_tokens_details": {
+      "text_tokens": 896,
+      "audio_tokens": 0,
+      "image_tokens": 0
+     }
+    },
+    "output_token_details": {
+     "text_tokens": 245,
+     "audio_tokens": 68,
+     "reasoning_tokens": 183
+    }
+   }
+  },
+  {
+   "id": "resp_Ei5D3E8VRiFpzGouPDJnx",
+   "usage": {
+    "total_tokens": 1238,
+    "input_tokens": 1089,
+    "output_tokens": 149,
+    "input_token_details": {
+     "text_tokens": 1089,
+     "audio_tokens": 0,
+     "image_tokens": 0,
+     "cached_tokens": 896,
+     "cached_tokens_details": {
+      "text_tokens": 896,
+      "audio_tokens": 0,
+      "image_tokens": 0
+     }
+    },
+    "output_token_details": {
+     "text_tokens": 39,
+     "audio_tokens": 110
+    }
+   }
+  },
+  {
+   "id": "resp_Ei5D5yA6MbIR2VzYbuFjv",
+   "usage": {
+    "total_tokens": 1215,
+    "input_tokens": 1129,
+    "output_tokens": 86,
+    "input_token_details": {
+     "text_tokens": 1129,
+     "audio_tokens": 0,
+     "image_tokens": 0,
+     "cached_tokens": 0,
+     "cached_tokens_details": {
+      "text_tokens": 0,
+      "audio_tokens": 0,
+      "image_tokens": 0
+     }
+    },
+    "output_token_details": {
+     "text_tokens": 49,
+     "audio_tokens": 37,
+     "reasoning_tokens": 14
+    }
+   }
+  }
+ ],
+ "lines": [
+  {
+   "who": "zenod",
+   "text": "Hi, this is your Zenod library line. What would you like to know?"
+  },
+  {
+   "who": "you",
+   "text": "What did the plumber fix at the house?"
+  },
+  {
+   "who": "zenod",
+   "text": "Let me check."
+  },
+  {
+   "who": "zenod",
+   "text": "Ana the plumber fixed the boiler on October 6th."
+  },
+  {
+   "who": "you",
+   "text": "Can you take the cabin decision out of boat repair and make it its own topic?"
+  },
+  {
+   "who": "zenod",
+   "text": "Sure, I\u2019m sending this request to the memory desk."
+  },
+  {
+   "who": "zenod",
+   "text": "Sure, the memory desk has it. You'll see it in your inbox, and you can undo it if needed."
+  },
+  {
+   "who": "you",
+   "text": "That's all, thanks. Bye."
+  },
+  {
+   "who": "zenod",
+   "text": "Bye, talk soon."
+  }
+ ],
+ "tools": [
+  {
+   "name": "ask_memory",
+   "arguments": {
+    "question": "What did the plumber fix at the house?"
+   }
+  },
+  {
+   "name": "desk_job",
+   "arguments": {
+    "job": "Take the cabin decision out of boat repair and make it its own topic."
+   }
+  },
+  {
+   "name": "hang_up",
+   "arguments": {}
+  }
+ ],
+ "errors": [],
+ "mint": {
+  "status": 200,
+  "expires_in_s": 60
+ },
+ "seconds": 6.1,
+ "ended": "2026-11-08T21:59:27Z",
+ "status": "completed"
+}

@@ -53,8 +53,9 @@ function priceFor(model: string): { input: number; output: number } | null {
 
 /** Cost of one call in USD, accounting for the cache read/write rate split. */
 export function estimateCostUsd(report: LlmUsageReport): number {
-  // Audio transcription is priced per minute by the caller, not per token.
-  if (report.operation === "transcribe") return report.estimatedCostUsd ?? 0;
+  // Audio transcription is priced per minute by the caller, not per token; a call (EPIC-14 S8) is
+  // priced from the Realtime API's audio and text tokens by memoryCall.ts.
+  if (report.operation === "transcribe" || report.operation === "call") return report.estimatedCostUsd ?? 0;
   const rate = priceFor(report.model);
   if (!rate) return 0;
   const usd =
@@ -202,7 +203,7 @@ export class UsageStore {
     const page = this.db.prepare(
       `SELECT id, operation, provider, model AS key, input_tokens, output_tokens,
               cached_input_tokens, cache_creation_input_tokens, cost_usd
-       FROM llm_usage WHERE id > ? AND operation != 'transcribe' ORDER BY id LIMIT 2000`,
+       FROM llm_usage WHERE id > ? AND operation NOT IN ('transcribe', 'call') ORDER BY id LIMIT 2000`,
     );
     let lastId = 0;
     for (;;) {

@@ -79,6 +79,8 @@ import {
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
 import { registerPersonaRoutes } from "./personaRoutes.js";
+import { registerMemoryCallRoutes } from "./memoryCallRoutes.js";
+import { CALL_BASE_ENV, callKey, callMeterFor, callsFor, openAiMinter, OPENAI_BASE_URL, platformMeter } from "./memoryCall.js";
 import { inboxFor } from "./inboxStore.js";
 import { DeskLimitError, startDeskJob } from "./memoryDesk.js";
 import {
@@ -1707,6 +1709,48 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     const runtime = host.runtimeForAccount?.(account) ?? null;
     if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
     return { runtime };
+  });
+
+  // EPIC-14 S8: the call button, a library hotline over OpenAI Realtime that asks the answer engine
+  // and passes spoken jobs to the memory desk, for the signed-in customer's own tenant only
+  // (memoryCallRoutes.ts). Zenod's own key (OPENAI_REALTIME_KEY) is read per request; while it is
+  // absent the button says calls are not switched on yet.
+  registerMemoryCallRoutes(app, async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return { response: c.json({ error: "unauthorized" }, 401) };
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return { response: c.json({ error: "no_account" }, 404) };
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return { response: c.json({ error: "tenant unavailable" }, 409) };
+    const tenantId = account.tenant_id;
+    return {
+      store: callsFor(runtime),
+      platform: platformMeter(callMeterFor(host.dataDir), tenantId),
+      tenantId,
+      tenant: {
+        allowanceBlock: () => runtime.aiAllowanceBlock(),
+        answer: async (question) => {
+          const found = await answerFromMemory(await runtime.getEngine(), question);
+          const sources = [...found.memories.filter((m) => m.cited).map((m) => m.title), ...found.alsoCited.map((m) => m.title)];
+          return { answered: found.answered, answer: found.answer, sources };
+        },
+        deskJob: (job) => {
+          try {
+            const item = startDeskJob(inboxFor(runtime), runtime.taskJobQueue, job);
+            return { id: item.id, title: item.title };
+          } catch (error) {
+            if (error instanceof DeskLimitError) throw error;
+            console.warn(`[memory-desk] call job not started for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+            throw new Error("The memory desk could not take that just now.");
+          }
+        },
+        keep: (content) => runtime.taskJobQueue.enqueue("store", { content, source: "web" }, memoryKeepIdempotencyKey(tenantId, content)),
+        record: (report) => runtime.usageStore.record(report),
+      },
+    };
+  }, {
+    key: () => callKey(env),
+    minter: (key) => openAiMinter(key, env[CALL_BASE_ENV]?.trim() || OPENAI_BASE_URL),
   });
 
   if (capabilities.managedAiApplication) {

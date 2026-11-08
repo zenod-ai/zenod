@@ -72,6 +72,7 @@ import { buildNotifierTools } from "./notifierTools.js";
 import { IngestStore } from "./ingestStore.js";
 import { UsageStore, estimateCostUsd } from "./usageStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
+import { closeCallsFor } from "./memoryCall.js";
 import { duePersonas, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
@@ -2662,6 +2663,7 @@ export class Runtime {
     close(() => this.journeyStore.close());
     close(() => this.usageStore.close());
     close(() => closePersonasFor(this));
+    close(() => closeCallsFor(this));
     close(() => this.notificationStore.close());
     close(() => this.credentialVault.close());
     if (failures.length > 0) throw new AggregateError(failures, "Runtime shutdown failed");

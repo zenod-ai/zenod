@@ -426,6 +426,29 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
 .zp-voicemsg { flex-basis: 100%; margin: 0; font-size: 0.85rem; color: var(--zp-muted); }
 .zp-voice { font-variant-numeric: tabular-nums; }
 .zp-voice + .zp-keepnote { align-self: flex-end; }
+/* EPIC-14 S8: the call button and the call screen (the library hotline). */
+.zp-callbtn[aria-disabled="true"] { color: var(--zp-faint); }
+.zp-callbtn[aria-disabled="true"]:hover { border-color: var(--zp-line); }
+.zp-call { margin: 0 0 0.75rem; padding: 0.9rem 1rem; background: var(--zp-bg); border: 1px solid var(--zp-line); display: flex; flex-direction: column; gap: 0.6rem; }
+.zp-callhead { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.zp-callmark { width: 2.5rem; height: 2.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--zp-accent); color: var(--zp-accent-ink); font: 500 1.15rem var(--zp-serif); flex: none; }
+.zp-callmark-live { box-shadow: 0 0 0 0 var(--zp-accent-soft); animation: zp-ring 1.6s ease-out infinite; }
+@keyframes zp-ring { 0% { box-shadow: 0 0 0 0 var(--zp-accent-soft); } 100% { box-shadow: 0 0 0 0.6rem transparent; } }
+.zp-callwho { display: flex; flex-direction: column; min-width: 0; }
+.zp-callwho strong { font: 600 0.95rem var(--zp-sans); color: var(--zp-ink); }
+.zp-calltime { font-size: 0.85rem; color: var(--zp-muted); font-variant-numeric: tabular-nums; }
+.zp-callctl { margin-left: auto; display: flex; gap: 0.5rem; }
+.zp-calllines { max-height: 16rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.35rem; }
+.zp-callline { margin: 0; font-size: 0.92rem; line-height: 1.45; color: var(--zp-ink); }
+.zp-callline b { font-weight: 600; }
+.zp-callline-zenod { color: var(--zp-accent); }
+.zp-callline-tool { color: var(--zp-muted); font-size: 0.85rem; }
+.zp-callline-now { opacity: 0.7; }
+.zp-callend { display: flex; flex-direction: column; gap: 0.5rem; }
+.zp-callend .zp-callctl { margin-left: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .zp-callmark-live { animation: none; }
+}
 @media (max-width: 640px) {
   .zp-compose .zp-mic { margin-left: auto; }
   .zp-recording { flex-wrap: nowrap; gap: 0.45rem; }
