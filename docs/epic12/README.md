@@ -12,3 +12,5 @@ Round 2 (after E12-A1) leads with Jordi's positioning and the live product: `sho
 Round 3 (after E12-A2, "this is the product deck"): three looping scenes in CSS and a small script (WhatsApp replies in production wording, a memory joining the graph, retrieval lighting up with strengths), plus ownership and pricing slides; `shots/history.webp` is the live commit-history screen from `apps/site`.
 
 To update (E12-5, S5): edit `template.html`, rebuild into the served directory and into `vision-deck.html`, re-shoot, commit.
+
+Round 4 (after E12-A4, "pricing at the end", "promote this design style"): the pricing slide moved to slide 14, just before the closing ask; nothing else changed. The style is written down as a reusable spec, [DESIGN-LANGUAGE.md](DESIGN-LANGUAGE.md), with a copyable starter in [design-kit/](design-kit/) and its images in `design-language/` (`specimen.html` is the source of the palette and type images).

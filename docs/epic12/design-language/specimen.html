@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paper deck: palette and type</title>
+<!-- Source of palette.png and type.png in this folder (node ../shoot.mjs-style capture, see DESIGN-LANGUAGE.md). -->
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../design-kit/paper.css">
+<style>
+.sw { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1rem; margin-top: 1.5rem; font: 400 0.9rem/1.4 var(--sans); color: var(--muted); }
+.sw div { border-top: 1px solid var(--ink); padding-top: 0.6rem; }
+.sw i { display: block; height: 5.5rem; border-radius: 4px; margin-bottom: 0.6rem; border: 1px solid var(--line); }
+.sw b { display: block; font: 500 1.05rem var(--serif); color: var(--ink); }
+.ty { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 0.4rem 2rem; align-items: baseline; margin-top: 1.5rem; }
+.ty .l { font: 400 0.9rem var(--sans); color: var(--faint); }
+.slide { min-height: 0; padding: 3rem 4rem; border: 0; }
+</style>
+</head>
+<body>
+<section class="slide" id="palette"><div class="in">
+  <p class="no">Palette</p>
+  <h2>One paper, one ink, one green.</h2>
+  <div class="sw">
+    <div><i style="background:var(--bg)"></i><b>Paper</b>--bg #f6f2e9</div>
+    <div><i style="background:var(--stage)"></i><b>Stage</b>--stage #e9e3d5</div>
+    <div><i style="background:var(--ink)"></i><b>Ink</b>--ink #18211c</div>
+    <div><i style="background:var(--muted)"></i><b>Muted</b>--muted #4a554e</div>
+    <div><i style="background:var(--accent)"></i><b>Accent</b>--accent #1f4d3a</div>
+    <div><i style="background:var(--accent-soft)"></i><b>Accent soft</b>--accent-soft #cfe0d4</div>
+    <div><i style="background:var(--stage-2)"></i><b>Stage 2</b>--stage-2 #ded6c4</div>
+    <div><i style="background:var(--line)"></i><b>Line</b>--line #c9c1ae</div>
+    <div><i style="background:var(--faint)"></i><b>Faint</b>--faint #8d948c</div>
+    <div><i style="background:var(--warn)"></i><b>Live tag</b>--warn #8a4b1c</div>
+    <div><i style="background:var(--accent-ink)"></i><b>On accent</b>--accent-ink #f6f2e9</div>
+    <div><i style="background:var(--accent);opacity:1;box-shadow:inset 0 0 0 1.5rem var(--bg)"></i><b>Rule of one</b>accent on one thing per slide</div>
+  </div>
+</div></section>
+<section class="slide" id="type"><div class="in">
+  <p class="no">Type</p>
+  <div class="ty">
+    <span class="l">h1 Newsreader 400<br>2.8–5.6 rem / 1.02</span><h1 style="margin:0;font-size:4.2rem">The claim in a line.</h1>
+    <span class="l">h2 Newsreader 400<br>2–3.3 rem / 1.08</span><h2 style="margin:0">One idea per slide, said as a sentence.</h2>
+    <span class="l">lede Newsreader 400<br>1.2–1.45 rem, muted</span><p class="lede" style="margin:0;max-width:none">One sentence of why it matters to the reader.</p>
+    <span class="l">label Newsreader 500<br>1.1–1.6 rem</span><b style="font:500 1.35rem var(--serif)">Collect &nbsp; Sort &nbsp; Reach &nbsp; Build</b>
+    <span class="l">body Instrument Sans 400<br>0.95–1 rem / 1.5, muted</span><p class="small" style="margin:0">Facts, captions, tables and UI text are sans. Plain words, no jargon, no ids.</p>
+    <span class="l">number Instrument Sans<br>0.95 rem, faint</span><p class="no" style="margin:0">4 &nbsp; Coming: retrieval that shows its strength <span class="tag soon">Coming</span> <span class="tag today">Live</span></p>
+  </div>
+</div></section>
+</body>
+</html>

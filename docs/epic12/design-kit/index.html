@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper deck starter</title>
+<!-- Paper deck starter kit (Zenod EPIC-12 P1). Copy this folder, replace the words, keep the patterns.
+     Spec: ../DESIGN-LANGUAGE.md. Arrow keys move one slide. ?still shows every scene's final frame. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="paper.css">
+</head>
+<body>
+
+<!-- 1. Cover: the claim in one line, a lede, a meta line, the signature figure on a stage -->
+<section class="slide" id="cover">
+  <div class="in split">
+    <div>
+      <p class="no">Your product, the deck &nbsp;·&nbsp; 8 November 2026</p>
+      <h1>Say what it is in one line.</h1>
+      <p class="lede">One sentence on what it does for the reader, in their words.</p>
+      <p class="small">Who this deck is for and what it asks of them. Frames marked Live are the real product. Frames marked Coming are not built yet.</p>
+    </div>
+    <div class="shot">
+      <svg class="g" viewBox="0 0 600 360" role="img" aria-label="Demo graph: three topics with their pages">
+        <line x1="150" y1="110" x2="80" y2="210"/><line x1="150" y1="110" x2="230" y2="220"/>
+        <line x1="380" y1="90" x2="330" y2="200"/><line x1="380" y1="90" x2="470" y2="180"/>
+        <line x1="300" y1="300" x2="230" y2="220"/><line class="link" x1="330" y1="200" x2="230" y2="220"/>
+        <g class="topic"><circle cx="150" cy="110" r="11"/><text x="168" y="104">Work</text></g>
+        <g class="topic"><circle cx="380" cy="90" r="11"/><text x="398" y="84">Home</text></g>
+        <g><circle cx="80" cy="210" r="7"/><text x="62" y="240">Plan</text></g>
+        <g class="on"><circle class="halo" cx="230" cy="220" r="20"/><circle cx="230" cy="220" r="8"/><text x="246" y="246">The focus</text></g>
+        <g><circle cx="330" cy="200" r="7"/><text x="344" y="190">Flat</text></g>
+        <g><circle cx="470" cy="180" r="7"/><text x="484" y="185">Garden</text></g>
+        <g><circle cx="300" cy="300" r="5" style="fill:var(--faint);stroke:var(--faint)"/><text x="312" y="305" style="font-size:14px;fill:var(--muted)">Note, today</text></g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 2. The spine: four ideas under one ink rule -->
+<section class="slide" id="spine">
+  <div class="in">
+    <p class="no">1 &nbsp; The idea, in four verbs</p>
+    <h2>Four verbs carry the whole story.</h2>
+    <ol class="cols4">
+      <li><span class="k">1</span><b>Collect</b>What comes in, and from where. <span class="tag today">Live</span></li>
+      <li><span class="k">2</span><b>Sort</b>What the product does with it by itself. <span class="tag today">Live</span></li>
+      <li><span class="k">3</span><b>Reach</b>How the reader gets it back. <span class="tag today">Live</span></li>
+      <li><span class="k">4</span><b>Build</b>What they make with it next. <span class="tag soon">Coming</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 3. Split with a chat scene: facts on the left, a messaging scene on the right -->
+<section class="slide" id="chat">
+  <div class="in split">
+    <div>
+      <p class="no">2 &nbsp; Live today <span class="tag today">Live</span></p>
+      <h2>Send one message. The product takes it from there.</h2>
+      <p class="lede">The real replies, word for word, replayed as an animation.</p>
+      <ul class="facts">
+        <li><b>Ways in:</b> the channels it really supports.</li>
+        <li><b>Kept:</b> what is stored, and where.</li>
+      </ul>
+    </div>
+    <figure class="shot scene" data-len="9000">
+      <div class="phone" role="img" aria-label="Animation: a message is sent, the product replies that it got it, then confirms it was saved">
+        <div class="phone-top"><b>Your product</b><small>Business account</small></div>
+        <div class="chat">
+          <div class="b me st" data-at="300">Remember: order the cedar boards before Friday.</div>
+          <div class="typing st" data-at="1300" data-off="2600"><i></i><i></i><i></i></div>
+          <div class="b them st" data-at="2600">Got it. Filing it now.</div>
+          <div class="typing st" data-at="3600" data-off="5000"><i></i><i></i><i></i></div>
+          <div class="b them st" data-at="5000">Saved ✓
+Filed on: Garden shed, Home</div>
+        </div>
+      </div>
+      <figcaption>Live. Production wording with demo content.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 4. A node joins the graph: the panel explains, the lines draw themselves -->
+<section class="slide" id="grow">
+  <div class="in">
+    <p class="no">3 &nbsp; Coming: a new item finds its place <span class="tag soon">Coming</span></p>
+    <h2>The new note lands, and draws its links.</h2>
+    <div class="shot scene" data-len="8000">
+      <div class="screen" style="display:grid;grid-template-columns:minmax(0,1fr) 15rem;gap:1rem;padding:1rem">
+        <svg class="g" viewBox="0 0 600 360" role="img" aria-label="Demo graph: a new note appears and links to Garden and Home">
+          <line class="new" style="--len:121" data-at="900" x1="520" y1="290" x2="470" y2="180"/>
+          <line class="new link" style="--len:244" data-at="1700" x1="520" y1="290" x2="380" y2="90"/>
+          <line x1="150" y1="110" x2="80" y2="210"/><line x1="150" y1="110" x2="230" y2="220"/>
+          <line x1="380" y1="90" x2="330" y2="200"/><line x1="380" y1="90" x2="470" y2="180"/>
+          <g class="topic"><circle cx="150" cy="110" r="11"/><text x="168" y="104">Work</text></g>
+          <g class="topic"><circle cx="380" cy="90" r="11"/><text x="398" y="84">Home</text></g>
+          <g><circle cx="80" cy="210" r="7"/><text x="62" y="240">Plan</text></g>
+          <g><circle cx="230" cy="220" r="7"/><text x="246" y="226">Flat</text></g>
+          <g><circle cx="330" cy="200" r="7"/><text x="344" y="190">Visa</text></g>
+          <g><circle cx="470" cy="180" r="7"/><text x="484" y="185">Garden</text></g>
+          <g class="new" data-at="500"><circle class="ring" cx="520" cy="290" r="20"/><circle cx="520" cy="290" r="8"/><text x="420" y="330">Note, today</text></g>
+        </svg>
+        <div class="panel small">
+          <h3 class="st" data-at="600">Note, today</h3>
+          <p class="st" data-at="900">Order the cedar boards before Friday.</p>
+          <p class="st" data-at="1500">Filed under: Garden</p>
+          <p class="st" data-at="2300">Links to: Home</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Retrieval lights up: typed query, nodes fill in rank order, bars fill, percentages count -->
+<section class="slide" id="lit">
+  <div class="in split rev scene" data-len="9500">
+    <div class="shot">
+      <div class="screen" style="padding:1rem">
+        <div class="query"><span data-type="flat and the landlord">flat and the landlord</span><span class="caret"></span><span class="t" data-at="1500">3 found in 0.2 s</span></div>
+        <svg class="g" viewBox="0 0 600 360" role="img" aria-label="Demo graph: three notes light up with their match strength">
+          <line x1="150" y1="110" x2="80" y2="210"/><line x1="150" y1="110" x2="230" y2="220"/>
+          <line x1="380" y1="90" x2="330" y2="200"/><line x1="380" y1="90" x2="470" y2="180"/>
+          <g class="topic"><circle cx="150" cy="110" r="11"/><text x="168" y="104">Work</text></g>
+          <g class="topic"><circle cx="380" cy="90" r="11"/><text x="398" y="84">Home</text></g>
+          <g><circle cx="80" cy="210" r="7"/><text x="62" y="240">Plan</text></g>
+          <g class="on" data-at="1800"><circle class="halo" cx="230" cy="220" r="20"/><circle cx="230" cy="220" r="8"/><text x="246" y="226">Flat</text><text class="pct" x="246" y="250" data-p="92">92%</text></g>
+          <g class="on" data-at="2300"><circle class="halo" cx="330" cy="200" r="20"/><circle cx="330" cy="200" r="8"/><text x="344" y="206">Visa</text><text class="pct" x="344" y="230" data-p="74">74%</text></g>
+          <g class="on" data-at="2800"><circle class="halo" cx="470" cy="180" r="20"/><circle cx="470" cy="180" r="8"/><text x="484" y="185">Garden</text><text class="pct" x="484" y="210" data-p="48">48%</text></g>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <p class="no">4 &nbsp; Coming: retrieval that shows its strength <span class="tag soon">Coming</span></p>
+      <h2>Ask, and see how strongly each item answers.</h2>
+      <ol class="results">
+        <li data-at="1900"><span class="rank">1</span><span><a href="#lit">Flat</a><small>Home / Flat</small></span><span class="bar"><span style="--w:92%"></span></span><span class="p" data-p="92">92%</span></li>
+        <li data-at="2400"><span class="rank">2</span><span><a href="#lit">Visa</a><small>Home / Visa</small></span><span class="bar"><span style="--w:74%"></span></span><span class="p" data-p="74">74%</span></li>
+        <li data-at="2900"><span class="rank">3</span><span><a href="#lit">Garden</a><small>Home / Garden</small></span><span class="bar"><span style="--w:48%"></span></span><span class="p" data-p="48">48%</span></li>
+      </ol>
+      <p class="small" style="margin-top:1rem">Say what the number means, and what it does not.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Today against next: a ruled table -->
+<section class="slide" id="table">
+  <div class="in">
+    <p class="no">5 &nbsp; What changes</p>
+    <h2>What works today, and what comes next.</h2>
+    <table>
+      <thead><tr><th>Piece</th><th>Live today</th><th>Next</th></tr></thead>
+      <tbody>
+        <tr><td>Asking</td><td>Through a connected tool.</td><td>In the app, with links.</td></tr>
+        <tr><td>Seeing</td><td>A list of topics.</td><td>A graph you can walk.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 7. Prices or options, near the end: three cards at most, the chosen one gets the accent -->
+<section class="slide" id="price">
+  <div class="in">
+    <p class="no">6 &nbsp; Pricing <span class="tag today">Live</span></p>
+    <h2>Free to run yourself. A small fee hosted.</h2>
+    <div class="cards">
+      <article><h3>Self-hosted</h3><p class="amt">Free</p><p>What you need to run it.</p></article>
+      <article class="pick"><h3>Hosted</h3><p class="amt">€9 <small>per month</small></p><p>What is included.</p></article>
+      <article><h3>Tester</h3><p class="amt">€0 <small>by invite</small></p><p>Who it is for.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- 8. Close: the one accent band, one action -->
+<section class="slide close" id="next">
+  <div class="in">
+    <p class="no">7 &nbsp; What we propose next</p>
+    <h2>Say yes, and step one starts.</h2>
+    <p class="lede">The single next step, and why it comes first.</p>
+    <div class="box"><b>How you will check it</b>What the reader opens, and what they see.</div>
+  </div>
+</section>
+
+<p class="foot">Where every figure comes from, and which frames use demo data.</p>
+<script src="scenes.js"></script>
+</body>
+</html>
