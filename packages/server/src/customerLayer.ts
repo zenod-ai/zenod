@@ -52,6 +52,16 @@ import { hashToken, type TenantTokenRecord } from "@zenod/mcp-chassis";
 import type { SharedGithubApp } from "./sharedGithubApp.js";
 import { RECENT_SAVES_DEFAULT_LIMIT, recentSaves } from "./recentSaves.js";
 import { rankMemories, RANKED_MEMORY_DEFAULT_LIMIT } from "./rankedMemory.js";
+import { isLlmAllowanceExceededError } from "zenod";
+import { projectRecentSave } from "./recentSaves.js";
+import {
+  answerFromMemory,
+  isMemoryKeepJobKey,
+  MEMORY_CHAT_MAX_QUESTION_CHARS,
+  memoryKeepContent,
+  memoryKeepIdempotencyKey,
+  parseMemoryKeep,
+} from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import {
   checkoutEnabledForOwner,
@@ -1365,6 +1375,105 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
       if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ query, tier: "scan", ms: null, results: [] });
       console.warn(`[memory-search] console search unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: "memory search unavailable" }, 503);
+    }
+  });
+
+  // EPIC-12 E12-S1: the web app's chat with your memory. Asking answers from the signed-in
+  // customer's own vault (read-only ask + ranked top memories) and saves nothing; only Keep files
+  // something, through the tenant's durable store queue. The AI allowance (EPIC-7 T3) is checked
+  // before any model call, and every call is metered on the tenant's own ledger by its engine.
+  const memoryChatsInFlight = new Map<string, number>();
+  const MEMORY_CHATS_PER_TENANT = 2;
+  const allowanceResponse = (c: Context, block: { message: string; resetsAt: string | null }) =>
+    c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
+  app.post("/api/console/memory-chat", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const body = await c.req.json<{ question?: unknown }>().catch(() => ({}) as { question?: unknown });
+    const question = typeof body.question === "string" ? body.question.trim() : "";
+    if (!question) return c.json({ error: "question is required" }, 400);
+    if (question.length > MEMORY_CHAT_MAX_QUESTION_CHARS) return c.json({ error: "question is too long" }, 400);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const block = runtime.aiAllowanceBlock();
+    if (block) return allowanceResponse(c, block);
+    const tenantId = account.tenant_id;
+    const inFlight = memoryChatsInFlight.get(tenantId) ?? 0;
+    if (inFlight >= MEMORY_CHATS_PER_TENANT) return c.json({ error: "busy", message: "Zenod is still answering your last question." }, 429);
+    memoryChatsInFlight.set(tenantId, inFlight + 1);
+    try {
+      return c.json(await answerFromMemory(await runtime.getEngine(), question));
+    } catch (error) {
+      if (isLlmAllowanceExceededError(error)) return allowanceResponse(c, { message: error.message, resetsAt: error.resetsAt ?? null });
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);
+      console.warn(`[memory-chat] answer unavailable for ${tenantId}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "memory chat unavailable" }, 503);
+    } finally {
+      const left = (memoryChatsInFlight.get(tenantId) ?? 1) - 1;
+      if (left > 0) memoryChatsInFlight.set(tenantId, left);
+      else memoryChatsInFlight.delete(tenantId);
+    }
+  });
+
+  app.post("/api/console/memory-keep", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const input = parseMemoryKeep(await c.req.json().catch(() => null));
+    if (!input) return c.json({ error: "nothing to keep" }, 400);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const block = runtime.aiAllowanceBlock();
+    if (block) return allowanceResponse(c, block);
+    const content = memoryKeepContent(input);
+    try {
+      const job = runtime.taskJobQueue.enqueue(
+        "store",
+        { content, source: "web" },
+        memoryKeepIdempotencyKey(account.tenant_id, content),
+      );
+      return c.json(projectRecentSave(job, null), 202);
+    } catch (error) {
+      console.warn(`[memory-keep] keep unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "keep unavailable" }, 503);
+    }
+  });
+
+  app.get("/api/console/memory-keep/:id", (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    const job = runtime.taskJobQueue.get(c.req.param("id"));
+    if (!job || job.kind !== "store" || !isMemoryKeepJobKey(account.tenant_id, job.idempotencyKey)) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    return c.json(projectRecentSave(job, null));
+  });
+
+  // E12-S1: open one memory of the signed-in customer's own vault in the app (a chat link's target).
+  app.get("/api/console/memory-note", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const path = (c.req.query("path") ?? "").split("#")[0]!.trim();
+    if (!path || path.startsWith("/") || path.split("/").includes("..") || !/\.md$/i.test(path)) {
+      return c.json({ error: "a vault .md path is required" }, 400);
+    }
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      const note = await (await runtime.getEngine()).get(path);
+      return c.json({ path: note.path, body: note.body, url: note.url, provider: note.provider });
+    } catch (error) {
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ error: "vault_not_ready" }, 409);
+      return c.json({ error: "not_found" }, 404);
     }
   });
 

@@ -54,6 +54,7 @@ function consumeGithubReturn(): boolean {
 }
 
 function initialTabFromHash():
+  | "chat"
   | "channels"
   | "vault"
   | "account"
@@ -65,6 +66,7 @@ function initialTabFromHash():
   ) {
     return "channels"
   }
+  if (window.location.hash === "#chat") return "chat"
   if (window.location.hash === "#vault") return "vault"
   if (window.location.hash === "#account") return "account"
   // A memory's in-app link (E12-S3a): #memory?path=<vault path>

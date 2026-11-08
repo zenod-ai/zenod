@@ -13,7 +13,7 @@ import {
 export type RecentSave = {
   id: string
   savedAt: string
-  channel: "whatsapp" | "telegram" | "connector"
+  channel: "whatsapp" | "telegram" | "app" | "connector"
   kind: "voice" | "text" | "image" | "document" | "link"
   channelLabel: string
   snippet: string

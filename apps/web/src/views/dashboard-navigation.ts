@@ -20,6 +20,7 @@ export function dashboardSectionForTab(
   const available = new Set(
     editionProfile(edition).sections.map(({ id }) => id)
   )
+  if (tab === "chat" && available.has("chat")) return "chat"
   if (tab === "overview" && available.has("overview")) return "overview"
   if (tab === "memory" && available.has("memory")) return "memory"
   if (tab === "connect" && available.has("connect")) return "connect"
@@ -39,7 +40,8 @@ export function dashboardSectionForTab(
     return "settings"
   }
   if (tab === "account" && available.has("account")) return "account"
-  return "overview"
+  // E12-S1: the hosted app opens on its chat.
+  return available.has("chat") ? "chat" : "overview"
 }
 
 export function dashboardSectionsForEdition(edition: ZenodEdition) {

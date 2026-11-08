@@ -486,7 +486,9 @@ const HOSTED_CUSTOMER_SETTING_KEYS = new Set<string>([
 // Must stay aligned with the Hosted edition profile in the customer portal.
 // These are product sections, not the chassis settings-panel capabilities.
 const HOSTED_CUSTOMER_PANELS = Object.freeze([
+  "chat",
   "overview",
+  "memory",
   "connect",
   "subscribers",
   "channels",

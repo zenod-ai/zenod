@@ -10,6 +10,7 @@ import {
   KeyRoundIcon,
   LogOutIcon,
   MessageCircleIcon,
+  MessagesSquareIcon,
   PlugZapIcon,
   Settings2Icon,
   UserRoundIcon,
@@ -44,6 +45,9 @@ import { CostsTab } from "@/views/settings/CostsTab"
 import { KeysTab } from "@/views/settings/KeysTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
+import { MemoryChat } from "@/components/memory-chat"
+import { MemoryNoteViewer } from "@/components/memory-note-viewer"
+import { memoryPathFromHash } from "@/lib/memory-chat"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
 import { HeraldLoopPanels } from "@/components/herald-loop-panels"
 import { GoogleDriveConnect } from "@/components/google-drive-connect"
@@ -59,6 +63,7 @@ import {
 import type { ZenodEdition } from "@/views/zenod-edition"
 
 const SECTION_ICONS = {
+  chat: MessagesSquareIcon,
   overview: GaugeIcon,
   memory: NetworkIcon,
   connect: PlugZapIcon,
@@ -146,6 +151,30 @@ export function Settings({
   const [section, setSection] = React.useState<DashboardSection>(() =>
     dashboardSectionForTab(initialTab, edition)
   )
+  // E12-S1: a memory link from the chat (`#memory?path=…`) opens that memory in the Memory tab.
+  const [memoryPath, setMemoryPath] = React.useState<string | null>(() =>
+    edition === "hosted" ? memoryPathFromHash(window.location.hash) : null
+  )
+  React.useEffect(() => {
+    if (edition !== "hosted") return
+    const onHash = () => {
+      const path = memoryPathFromHash(window.location.hash)
+      if (path) {
+        setMemoryPath(path)
+        setSection("memory")
+        window.scrollTo?.({ top: 0 })
+      } else if (window.location.hash === "#chat") {
+        setSection("chat")
+      }
+    }
+    window.addEventListener("hashchange", onHash)
+    return () => window.removeEventListener("hashchange", onHash)
+  }, [edition])
+  const closeMemory = React.useCallback(() => {
+    setMemoryPath(null)
+    setSection("chat")
+    window.history.replaceState(null, "", window.location.pathname + window.location.search)
+  }, [])
   const subscribersAvailability = useSubscribersAvailability()
   const isRing = overview?.unit?.name === "ring"
   const isHerald = overview?.unit?.name === "herald"
@@ -333,6 +362,9 @@ export function Settings({
                 )
               })}
           </TabsList>
+          <TabsContent value="chat" className="mt-4">
+            {edition === "hosted" ? <MemoryChat /> : null}
+          </TabsContent>
           <TabsContent value="overview" className="mt-4">
             <ZenodOverview
               edition={edition}
@@ -340,7 +372,10 @@ export function Settings({
               onNavigate={setSection}
             />
           </TabsContent>
-          <TabsContent value="memory" className="mt-4">
+          <TabsContent value="memory" className="mt-4 flex flex-col gap-6">
+            {memoryPath ? (
+              <MemoryNoteViewer key={memoryPath} path={memoryPath} onClose={closeMemory} />
+            ) : null}
             <MemoryTreePanel />
           </TabsContent>
           <TabsContent value="connect" className="mt-4">
