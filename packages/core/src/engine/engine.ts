@@ -4,7 +4,8 @@ import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendRoute } from "../llm/sendRoute.js";
-import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
+import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_WHOLE_CONTEXT_CHARS, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
+import { captureOrigin, isPersonSource } from "../vault/captureOrigin.js";
 import { recentIntent } from "../vault/recentIntent.js";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
@@ -2897,7 +2898,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         all.push({ n: next++, path, title: "Your note" });
       }
     }
-    const context: MemoryChatContext[] = [];
+    const read: Array<{ memory: (typeof all)[number]; i: number; body: string; when?: string; filed?: string[]; kind?: MemoryChatContext["kind"] }> = [];
     const links = new Map<number, { url: string; provider: Note["provider"] }>();
     for (const [i, memory] of all.entries()) {
       const [file, anchor] = memory.path.split("#^") as [string, string | undefined];
@@ -2907,6 +2908,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         let body = note.body;
         let when: string | undefined;
         let filed: string[] | undefined;
+        let kind: MemoryChatContext["kind"] = file.startsWith("Log/") ? undefined : "page";
         if (anchor) {
           const start = body.search(new RegExp(`^## .*?\\s+\\^${anchor.replace(/[^\w-]/g, "")}\\s*$`, "m"));
           if (start >= 0) {
@@ -2919,17 +2921,26 @@ export function createEngine(options: EngineOptions): BrainEngine {
             const at = captured && !Number.isNaN(Date.parse(captured)) ? new Date(captured).toISOString().slice(0, 16).replace("T", " ") : day ? `${day}${clock ? ` ${clock}` : ""}` : null;
             if (at) when = `${at} UTC${type ? `, ${type}` : ""}`;
             filed = [...body.matchAll(/^- filed: \[\[([^\]|#]+)/gm)].map((m) => m[1]!.split("/").pop()!).filter((title, k, list) => list.indexOf(title) === k);
+            // E12-S16: the model is told what each note is: what the person said or sent, or an agent's note.
+            const source = /^- source: (\S+)/m.exec(body)?.[1] ?? null;
+            kind = /voice|audio/.test(type ?? "") ? "voice" : isPersonSource(source) ? "own" : captureOrigin(source, body) === "agent" ? "agent" : "note";
             // The heading is the start of the note: the excerpt does not need it twice.
             body = body.replace(/^## [^\n]*\n/, "");
           }
         }
-        const budget = timed?.window.kind === "range" ? ANSWER_PERIOD_CHARS : i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : i < 10 ? MEMORY_CHAT_CONTEXT_CHARS : ANSWER_TAIL_CHARS;
-        const title = memory.title === "Your note" && when ? `Your ${/voice/.test(when) ? "voice note" : "note"}` : memory.title;
-        context.push({ n: memory.n, path: memory.path, title, text: memoryChatExcerpt(body, `${question} ${memory.snippet ?? ""}`, budget), ...(when ? { when } : {}), ...(filed?.length ? { filed } : {}) });
+        read.push({ memory, i, body, ...(when ? { when } : {}), ...(filed?.length ? { filed } : {}), ...(kind ? { kind } : {}) });
       } catch {
         // A memory that cannot be read now is left out; the rest still answer.
       }
     }
+    // E12-S16: the notes with a passage that holds the question are read whole, so a decision late in
+    // a long voice note is not cut. Not for time questions: those read every note captured then.
+    const whole = new Set(timed ? [] : memoryChatFocus(question, read.map(({ memory, body, kind }) => ({ n: memory.n, title: memory.title, text: memoryChatExcerpt(body, "", Number.MAX_SAFE_INTEGER), own: kind === "voice" || kind === "own" }))));
+    const context: MemoryChatContext[] = read.map(({ memory, i, body, when, filed, kind }) => {
+      const budget = whole.has(memory.n) ? MEMORY_CHAT_WHOLE_CONTEXT_CHARS : timed?.window.kind === "range" ? ANSWER_PERIOD_CHARS : i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : i < 10 ? MEMORY_CHAT_CONTEXT_CHARS : ANSWER_TAIL_CHARS;
+      const title = memory.title === "Your note" && when ? `Your ${/voice/.test(when) ? "voice note" : "note"}` : memory.title;
+      return { n: memory.n, path: memory.path, title, text: memoryChatExcerpt(body, `${question} ${memory.snippet ?? ""}`, budget), ...(when ? { when } : {}), ...(filed?.length ? { filed } : {}), ...(kind ? { kind } : {}) };
+    });
     const shown = context.map(({ n, path, title }) => ({ n, path, title, url: links.get(n)?.url ?? "", provider: links.get(n)?.provider ?? "github" }));
     if (context.length === 0) return { checked: false, reason: "no_answer", text: "", cited: [], context: shown };
     const day = today.toISOString().slice(0, 10);

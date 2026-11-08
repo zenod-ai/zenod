@@ -146,7 +146,7 @@ describe("engine.answerFromMemories reads more than the ranked list (E12-S1b rou
     expect(check).toMatchObject({ checked: true, cited: [2] });
     expect(check!.context!.map((memory) => memory.path)).toEqual(["Notes/Car.md", "Log/2026-11-05.md#^e-aaaaa1"]);
     expect(prompts[0]).toContain("TODAY\n2026-11-08 (Sunday)");
-    expect(prompts[0]).toContain("[2] Your voice note (Log/2026-11-05.md#^e-aaaaa1) captured 2026-11-05 09:00 UTC, voice note");
+    expect(prompts[0]).toContain("[2] your voice note (Log/2026-11-05.md#^e-aaaaa1) captured 2026-11-05 09:00 UTC, voice note");
     expect(prompts[0]).toContain("Filed into: Observatory");
     expect(prompts[0]).not.toContain("Raw artifact");
   });

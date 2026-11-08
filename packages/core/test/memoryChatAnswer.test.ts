@@ -8,6 +8,7 @@ import { VaultRepo } from "../src/git/vaultRepo.js";
 import {
   checkMemoryChatAnswer,
   memoryChatExcerpt,
+  memoryChatFocus,
   memoryChatPrompt,
   memoryChatStreamFilter,
   quoteFound,
@@ -99,6 +100,69 @@ describe("memory chat answer protocol (E12-S1b)", () => {
     expect(excerpt.length).toBeLessThan(1_900);
     expect(excerpt).toContain("serviced by Rosa for 500 euros");
     expect(memoryChatExcerpt("---\ntitle: x\n---\nShort body.")).toBe("Short body.");
+  });
+});
+
+describe("answers stay on the asked note (E12-S16)", () => {
+  const notes: MemoryChatContext[] = [
+    { n: 1, path: "Notes/NYC.md", title: "NYC Real Estate", text: "Lofts in Hell's Kitchen sell for about 400,000 dollars.", kind: "page" },
+    { n: 2, path: "Log/2026-11-08.md#^e-aaaaaa", title: "Voice note \"AC8C.ogg\" ingested", text: "For Airbnb I want the price of one night, one week and one month.", kind: "voice", when: "2026-11-08 15:37 UTC, voice note" },
+    { n: 3, path: "Log/2026-08-02.md#^e-bbbbbb", title: "Jordi wants the São Paulo option", text: "São Paulo: a budget of 300,000 euros near Paulista.", kind: "note" },
+  ];
+
+  it("drops a claim that rests only on a note outside the ABOUT line", () => {
+    const output = [
+      "ABOUT [2]",
+      "You wanted Airbnb prices:",
+      "- One night, one week and one month [2].",
+      "- Hell's Kitchen lofts sell for about 400,000 dollars [1].",
+      "- In São Paulo, 300,000 euros near Paulista [3][2].",
+      "SOURCES",
+      '[1] "Lofts in Hell\'s Kitchen sell for about 400,000 dollars"',
+      '[2] "the price of one night, one week and one month"',
+      '[3] "a budget of 300,000 euros near Paulista"',
+    ].join("\n");
+    expect(checkMemoryChatAnswer(output, notes)).toEqual({
+      checked: true, reason: null, cited: [2],
+      text: "You wanted Airbnb prices:\n- One night, one week and one month [2].\n- In São Paulo, 300,000 euros near Paulista [2].",
+    });
+  });
+
+  it("keeps the answer when the ABOUT line names no note the answer rests on, and reads NO_ANSWER after it", () => {
+    const output = 'ABOUT [3]\nLofts sell for about 400,000 dollars [1].\nSOURCES\n[1] "Lofts in Hell\'s Kitchen sell for about 400,000 dollars"';
+    expect(checkMemoryChatAnswer(output, notes)).toMatchObject({ checked: true, text: "Lofts sell for about 400,000 dollars [1].", cited: [1] });
+    expect(checkMemoryChatAnswer("ABOUT\nNO_ANSWER", notes)).toMatchObject({ checked: false, reason: "no_answer" });
+    expect(checkMemoryChatAnswer("ABOUT [2]", notes)).toMatchObject({ checked: false, reason: "no_answer" });
+  });
+
+  it("never streams the ABOUT line", () => {
+    expect(streamed(["AB", "OUT [2", "]\n", "One night [2].\nSOURCES\n[2] \"x\""]).shown.trim()).toBe("One night [2].");
+    expect(streamed(["ABOUT [2][3]\n\n", "- One week [2]."]).shown).toBe("- One week [2].");
+    expect(streamed(["ABOUT [2]\nNO_", "ANSWER"]).shown).toBe("");
+    // Prose that starts like ABOUT is shown once it is clearly not the line.
+    expect(streamed(["Ab", "out a week [2]."]).shown).toBe("About a week [2].");
+  });
+
+  it("tells the model what each note is, and asks for the ABOUT line", () => {
+    const { system, prompt } = memoryChatPrompt("What Airbnb prices did I want to know?", notes);
+    expect(system).toContain("ABOUT");
+    expect(system).toContain("Never mix their points in");
+    expect(prompt).toContain("[1] topic page: NYC Real Estate (Notes/NYC.md)");
+    expect(prompt).toContain("[2] your voice note (Log/2026-11-08.md#^e-aaaaaa) captured 2026-11-08 15:37 UTC, voice note");
+    expect(prompt).toContain("[3] note: Jordi wants the São Paulo option (Log/2026-08-02.md#^e-bbbbbb)");
+  });
+
+  it("reads whole the note with one passage that holds the question, the person's own first", () => {
+    const filler = "Other things came up that day, none of them about this. ".repeat(40);
+    const candidates = [
+      { n: 1, title: "Housing", text: `Airbnb listings are many. ${filler} Prices of flats went up.`, own: false },
+      { n: 2, title: "Voice note", text: `${filler} For Airbnb I want to know the prices for one night and one month.`, own: true },
+      { n: 3, title: "Car", text: "Tyre pressure: 2.4 bar front.", own: false },
+    ];
+    expect(memoryChatFocus("What Airbnb prices did I want to know?", candidates)).toEqual([2]);
+    // Questions over many notes, or that no passage holds, read nothing whole.
+    expect(memoryChatFocus("What were my top topics?", candidates)).toEqual([]);
+    expect(memoryChatFocus("What did I say about the boiler?", candidates)).toEqual([]);
   });
 });
 

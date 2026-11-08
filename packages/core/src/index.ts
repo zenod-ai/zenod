@@ -259,4 +259,4 @@ export {
   type DeskAgentOutcome, type DeskChange, type DeskChangeView, type DeskEdit, type DeskJobInput, type DeskJobResult, type DeskPlan, type DeskReadTools, type DeskUndoResult,
 } from "./engine/memoryDesk.js";
 export { guardSendRoute, isQuestionClause, looksLikeDeskJob, parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendAction, type SendRoute } from "./llm/sendRoute.js";
-export { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatPrompt, memoryChatStreamFilter, quoteFound, MEMORY_CHAT_NO_ANSWER, type MemoryChatCheck, type MemoryChatContext, type MemoryChatUnchecked } from "./llm/memoryChatAnswer.js";
+export { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, quoteFound, MEMORY_CHAT_NO_ANSWER, type MemoryChatCheck, type MemoryChatContext, type MemoryChatUnchecked } from "./llm/memoryChatAnswer.js";

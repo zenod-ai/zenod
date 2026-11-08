@@ -12,6 +12,8 @@ export interface MemoryChatContext {
   when?: string;
   /** The topic pages a Log entry was filed into, by title. */
   filed?: readonly string[];
+  /** What the note is (E12-S16): the person's own note, an agent's note, or a topic page Zenod wrote. */
+  kind?: "voice" | "own" | "note" | "agent" | "page";
 }
 
 export interface MemoryChatPrompt {
@@ -41,12 +43,18 @@ export const MEMORY_CHAT_CONTEXT_CHARS = 1_800;
  * characters and the answer is often past the first window, so the top memories are read deeper.
  */
 export const MEMORY_CHAT_TOP_CONTEXT_CHARS = 4_500;
+/** Characters for the notes that match the question best (E12-S16): read whole, so the decision is not cut. */
+export const MEMORY_CHAT_WHOLE_CONTEXT_CHARS = 9_000;
+const ABOUT_HEADING = "ABOUT";
 
 const SYSTEM = [
   "You answer a person's question from their own memory notes, which are given to you numbered [1], [2], ...",
   "Many notes are their voice notes, transcribed: what they said, in their words.",
   "Rules:",
   "- Use only what the notes say. Never add facts from general knowledge, never guess.",
+  `- First decide which note is about exactly what is asked: the same subject, and the same request, decision, event, place or project when the question names one. Write it on the first line: ${ABOUT_HEADING} and its number, like ${ABOUT_HEADING} [3]. Add a second number only for a note about the very same thing (the same request said twice), never for a related one. For a question about a time or over many notes, list every note you answer from.`,
+  "- When the question asks what the person said, asked, wanted, felt or decided, the note it is about is one of their own notes (\"your voice note\", \"your note\") whenever one of them speaks of it. Topic pages are summaries Zenod wrote, and agent notes are reports: neither is what the person said.",
+  `- Answer only from the notes on the ${ABOUT_HEADING} line. The other notes are nearby: a related subject, another project, place or time. Never mix their points in, even when they look related.`,
   "- Answer completely: give every main point the notes hold on the question, with its specifics (names, numbers, places, dates), not a vague summary.",
   "- Plain words, in the language of the question. Speak to the person as \"you\". Lead with the direct answer. When there are several points, use a short list, one point per line starting with \"- \". At most about 8 lines.",
   "- Questions about a time (\"today\", \"yesterday\", \"last week\", a date, \"my last voice note\") are about the notes captured then: use each note's capture date and TODAY below, and name the dates you answer from.",
@@ -120,13 +128,88 @@ export function memoryChatExcerpt(body: string, focus = "", max = MEMORY_CHAT_CO
   return `${out.trim()}${order.at(-1) === scored.length - 1 ? "" : "…"}`;
 }
 
+const KIND_LABEL = { voice: "your voice note", own: "your note", note: "note", agent: "agent note", page: "topic page" } as const;
+/** The heading of a captured file ("Voice note "AC8C….ogg" ingeste…"): no words of the note, so the kind says it. */
+const CAPTURE_TITLE = /^(?:voice note|audio|screenshot\/image|image|document|pdf|file) "[^"]*"/i;
+
 export function memoryChatPrompt(question: string, memories: readonly MemoryChatContext[], today?: string): MemoryChatPrompt {
   const notes = memories.map((memory) => {
-    const head = `[${memory.n}] ${memory.title} (${memory.path})${memory.when ? ` captured ${memory.when}` : ""}`;
+    const label = memory.kind ? KIND_LABEL[memory.kind] : null;
+    const title = label && (CAPTURE_TITLE.test(memory.title) || /^your (?:voice )?note$/i.test(memory.title)) ? label : label ? `${label}: ${memory.title}` : memory.title;
+    const head = `[${memory.n}] ${title} (${memory.path})${memory.when ? ` captured ${memory.when}` : ""}`;
     const filed = memory.filed?.length ? `\nFiled into: ${memory.filed.join(", ")}` : "";
     return `${head}${filed}\n${memory.text}`;
   }).join("\n\n");
   return { system: SYSTEM, prompt: `${today ? `TODAY\n${today}\n\n` : ""}NOTES\n\n${notes}\n\nQUESTION\n${question}` };
+}
+
+/** One note the whole-read pick looks at: its full text (not the excerpt) and whether the person wrote or said it. */
+export interface MemoryChatFocusCandidate {
+  n: number;
+  title: string;
+  text: string;
+  own: boolean;
+}
+
+/** Questions over many notes have no single focus: they are answered from all of them. */
+const MANY_NOTES = /\b(?:top|topics?|themes?|everything|all (?:the|my)|most|often|summar(?:y|ise|ize)|overview|list)\b/i;
+const FIRST_PERSON = /\b(?:i|i'm|i've|i'd|my|me|mine|we|we're|our|us)\b/i;
+const FOCUS_EXTRA_STOP = new Set(["going", "mean", "means", "make", "made", "need", "also", "some", "more", "much", "very", "thing", "things", "about", "kind", "time", "work", "works", "team"]);
+
+/**
+ * The notes read whole (E12-S16), picked by the host without a model call: the notes with one
+ * passage holding most of the question's telling words (weighted by how few of the read notes hold
+ * each, pairs of them side by side counting extra), the person's own notes first when they ask about
+ * what they said, then rank. At most two, none when no passage holds half the question or the
+ * question spans many notes. Word matching is right about two times in three, so this only decides
+ * what is read deeper; the model says which notes the question is about (the ABOUT line).
+ */
+export function memoryChatFocus(question: string, candidates: readonly MemoryChatFocusCandidate[]): number[] {
+  if (candidates.length < 2 || MANY_NOTES.test(question)) return [];
+  const wanted = [...focusWords(question)].filter((word) => !FOCUS_EXTRA_STOP.has(word));
+  if (wanted.length === 0) return [];
+  const match = (word: string, have: ReadonlySet<string>) => have.has(word) || (word.length >= 5 && [...have].some((w) => w.startsWith(word.slice(0, 5))));
+  // Pairs of telling words next to each other in the question ("house decision", "demo videos").
+  const tokens = flatWords(question).filter((word) => wanted.includes(word));
+  const pairs = tokens.slice(1).map((word, k) => `${tokens[k]!.slice(0, 5)} ${word.slice(0, 5)}`);
+  const notes = candidates.map((candidate) => {
+    const windows = focusWindows(`${candidate.title}. ${candidate.text}`);
+    return windows.map((window) => ({ have: focusWords(window), stems: ` ${flatWords(window).map((w) => w.slice(0, 5)).join(" ")} ` }));
+  });
+  const weight = new Map(wanted.map((word) => {
+    const df = notes.filter((windows) => windows.some((window) => match(word, window.have))).length;
+    return [word, df === 0 ? 0 : Math.log(1 + candidates.length / df)];
+  }));
+  const total = [...weight.values()].reduce((sum, w) => sum + w, 0);
+  if (total === 0) return [];
+  const personal = FIRST_PERSON.test(question);
+  const scored = candidates.map((candidate, i) => {
+    let coverage = 0;
+    for (const window of notes[i]!) {
+      const held = wanted.reduce((sum, word) => sum + (match(word, window.have) ? weight.get(word)! : 0), 0) / total;
+      const together = pairs.filter((pair) => window.stems.includes(` ${pair} `)).length;
+      coverage = Math.max(coverage, held + 0.25 * together);
+    }
+    return { n: candidate.n, coverage, score: coverage * (personal && candidate.own ? 1.2 : 1) + 0.05 * (1 - i / candidates.length) };
+  }).sort((a, b) => b.score - a.score);
+  const best = scored[0]!;
+  if (best.coverage < 0.5) return [];
+  return scored.filter((s, k) => k === 0 || (k < 2 && s.coverage >= 0.5 && s.score >= best.score * 0.95)).map((s) => s.n);
+}
+
+const flatWords = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").match(/[\p{L}\p{N}]+/gu) ?? [];
+
+/** Overlapping windows of about 600 characters, cut at sentence ends: where one passage says it. */
+function focusWindows(text: string): string[] {
+  const sentences = text.match(/[^.!?\n]+(?:[.!?]+|\n+|$)/g) ?? [text];
+  const windows: string[] = [];
+  for (let start = 0; start < sentences.length; start++) {
+    let window = "";
+    for (let end = start; end < sentences.length && window.length < 600; end++) window += sentences[end];
+    windows.push(window);
+    if (window.length < 600) break;
+  }
+  return windows.length ? windows : [text];
 }
 
 /**
@@ -136,19 +219,33 @@ export function memoryChatPrompt(question: string, memories: readonly MemoryChat
 export function memoryChatStreamFilter(emit: (text: string) => void): { push(delta: string): void; end(): string } {
   let full = "";
   let shown = 0;
-  const visibleEnd = (final: boolean): number => {
-    const lead = full.trimStart();
-    if (lead.startsWith(MEMORY_CHAT_NO_ANSWER) || (!final && MEMORY_CHAT_NO_ANSWER.startsWith(lead))) return 0;
+  /** Where the prose starts: after the ABOUT line (E12-S16), once it is complete; null while it is still arriving. */
+  const proseStart = (final: boolean): number | null => {
+    const lead = full.length - full.trimStart().length;
+    const rest = full.slice(lead).replace(/^[ \t*#]*/, "");
+    if (rest.startsWith(ABOUT_HEADING)) {
+      const lineEnd = full.indexOf("\n", lead);
+      if (lineEnd < 0) return final ? full.length : null;
+      return lineEnd + 1 + (full.slice(lineEnd + 1).length - full.slice(lineEnd + 1).trimStart().length);
+    }
+    return !final && rest.length < ABOUT_HEADING.length && ABOUT_HEADING.startsWith(rest) ? null : 0;
+  };
+  const visibleEnd = (final: boolean, start: number): number => {
+    const lead = full.slice(start).trimStart();
+    if (lead.startsWith(MEMORY_CHAT_NO_ANSWER) || (!final && MEMORY_CHAT_NO_ANSWER.startsWith(lead))) return start;
     const heading = full.search(new RegExp(`(^|\\n)[ \\t*#]*${SOURCES_HEADING}\\b`));
-    if (heading >= 0) return heading;
+    if (heading >= start) return heading;
     // A SOURCES line may be arriving: hold back the last partial line if it could start one.
     if (final) return full.length;
     const lastBreak = full.lastIndexOf("\n");
     const tail = full.slice(lastBreak + 1).replace(/^[ \t*#]*/, "");
-    return tail && SOURCES_HEADING.startsWith(tail.slice(0, SOURCES_HEADING.length)) ? lastBreak + 1 : full.length;
+    return tail && SOURCES_HEADING.startsWith(tail.slice(0, SOURCES_HEADING.length)) ? Math.max(start, lastBreak + 1) : full.length;
   };
   const flush = (final: boolean) => {
-    const end = visibleEnd(final);
+    const start = proseStart(final);
+    if (start === null) return;
+    shown = Math.max(shown, start);
+    const end = visibleEnd(final, start);
     if (end > shown) {
       emit(full.slice(shown, end));
       shown = end;
@@ -180,10 +277,42 @@ export function quoteFound(quote: string, memoryText: string): boolean {
   return content.filter((word) => have.has(word)).length / content.length >= 0.9;
 }
 
+/**
+ * Keep the claims with at least one allowed citation mark, without their other marks. A claim is the
+ * text up to its citation marks. A line that cited something and lost every claim goes.
+ */
+function keepClaims(text: string, allowed: ReadonlySet<number>): { text: string; claims: number; kept: number } {
+  let claims = 0;
+  let kept = 0;
+  const out = text.split("\n").map((line) => {
+    const parts = line.split(/((?:\s*\[\d+\])+)/);
+    let result = "";
+    for (let i = 0; i < parts.length; i += 2) {
+      const claim = parts[i] ?? "";
+      const marks = parts[i + 1];
+      if (marks === undefined) {
+        result += claim;
+        continue;
+      }
+      claims++;
+      const numbers = [...marks.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]));
+      if (!numbers.some((n) => allowed.has(n))) continue;
+      kept++;
+      result += claim + (/^\s*/.exec(marks)?.[0] ?? "") + numbers.filter((n) => allowed.has(n)).map((n) => `[${n}]`).join("");
+    }
+    return /\[\d+\]/.test(line) && !/\[\d+\]/.test(result) ? null : result.replace(/^([-*]\s*)[,;:]\s*/, "$1").replace(/^[,;:]\s*/, "");
+  }).filter((line): line is string => line !== null);
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), claims, kept };
+}
+
 /** Split the model output into prose and quotes, and check every citation against its memory. */
 export function checkMemoryChatAnswer(output: string, memories: readonly MemoryChatContext[]): MemoryChatCheck {
-  const raw = output.trim();
-  if (!raw) return { checked: false, reason: "empty", text: "", cited: [] };
+  let raw = output.trim();
+  // E12-S16: the ABOUT line names the notes the question is about; the answer may only rest on them.
+  const about = new RegExp(`^[ \\t*#]*${ABOUT_HEADING}\\b([^\\n]*)(?:\\n|$)`).exec(raw);
+  const focus = new Set([...(about?.[1] ?? "").matchAll(/\[?(\d+)\]?/g)].map((match) => Number(match[1])));
+  if (about) raw = raw.slice(about[0].length).trim();
+  if (!raw) return { checked: false, reason: about ? "no_answer" : "empty", text: "", cited: [] };
   if (raw.startsWith(MEMORY_CHAT_NO_ANSWER)) return { checked: false, reason: "no_answer", text: "", cited: [] };
   const heading = raw.search(new RegExp(`(^|\\n)[ \\t*#]*${SOURCES_HEADING}\\b`));
   const text = (heading >= 0 ? raw.slice(0, heading) : raw).trim();
@@ -202,34 +331,19 @@ export function checkMemoryChatAnswer(output: string, memories: readonly MemoryC
     const memory = byNumber.get(n);
     return Boolean(memory && (quotes.get(n) ?? []).some((quote) => quoteFound(quote, memory.text)));
   });
-  if (verified.length === cited.length) return { checked: true, reason: null, text, cited: verified.sort((a, b) => a - b) };
-  // E12-S1b round 2: a long answer cites many notes, and one missing or loose quote used to hide all
-  // of it. Now only the claims that rest on unchecked citations go: a claim is the text up to its
-  // citation marks, kept when one of its marks is checked (its unchecked marks removed). The rest is
-  // shown only when at least half the claims survive; otherwise nothing is shown.
-  const ok = new Set(verified);
-  let claims = 0;
-  let kept = 0;
-  const out = text.split("\n").map((line) => {
-    const parts = line.split(/((?:\s*\[\d+\])+)/);
-    let result = "";
-    for (let i = 0; i < parts.length; i += 2) {
-      const claim = parts[i] ?? "";
-      const marks = parts[i + 1];
-      if (marks === undefined) {
-        result += claim;
-        continue;
-      }
-      claims++;
-      const numbers = [...marks.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]));
-      if (!numbers.some((n) => ok.has(n))) continue;
-      kept++;
-      result += claim + marks.replace(/\s*\[(\d+)\]/g, (mark, n: string) => (ok.has(Number(n)) ? mark : ""));
-    }
-    // A line that cited something and lost every claim goes, with what was left of it.
-    return /\[\d+\]/.test(line) && !/\[\d+\]/.test(result) ? null : result.replace(/^([-*]\s*)[,;:]\s*/, "$1").replace(/^[,;:]\s*/, "");
-  }).filter((line): line is string => line !== null);
-  const trimmed = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  if (verified.length === 0 || kept === 0 || kept * 2 < claims || !trimmed) return { checked: false, reason: "citation_not_found", text, cited: verified };
-  return { checked: true, reason: null, text: trimmed, cited: verified.sort((a, b) => a - b) };
+  let checkedText = text;
+  if (verified.length !== cited.length) {
+    // E12-S1b round 2: a long answer cites many notes, and one missing or loose quote used to hide all
+    // of it. Now only the claims that rest on unchecked citations go. The rest is shown only when at
+    // least half the claims survive; otherwise nothing is shown.
+    const kept = keepClaims(text, new Set(verified));
+    if (verified.length === 0 || kept.kept === 0 || kept.kept * 2 < kept.claims || !kept.text) return { checked: false, reason: "citation_not_found", text, cited: verified };
+    checkedText = kept.text;
+  }
+  // E12-S16: a claim that rests only on a note outside the ABOUT line is a neighbouring note mixed in,
+  // and goes. When nothing would be left, the model's ABOUT line is what was wrong: the answer stays.
+  const onFocus = focus.size ? keepClaims(checkedText, new Set(verified.filter((n) => focus.has(n)))) : null;
+  if (onFocus && onFocus.kept > 0 && onFocus.text) checkedText = onFocus.text;
+  const marked = new Set([...checkedText.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1])));
+  return { checked: true, reason: null, text: checkedText, cited: verified.filter((n) => marked.size === 0 || marked.has(n)).sort((a, b) => a - b) };
 }
