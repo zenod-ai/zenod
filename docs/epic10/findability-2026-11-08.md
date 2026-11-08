@@ -33,3 +33,7 @@ Zenod listing: `dev.zenod/memory`, "Memory you own: capture on WhatsApp, filed i
 - "memory" on the first results page of the Anthropic directory and Smithery: **not yet**. Anthropic is not submitted (R5). Smithery is closed to self-listing and its search returns nothing.
 - "whatsapp memory" top 3 in every directory with full-text search: **not yet**. The term returns nothing on mcp.so and Gemini (good: once listed, Zenod has no competition there). Glama and MCP Market return results, but Zenod is filtered out on Glama (Unhealthy) and absent on MCP Market.
 - Re-run when the R4 listings and R5 are live, or monthly (next 2026-12-08).
+
+## Wording update 2026-11-08 (E10-A6)
+
+At 05:31 UTC the listings moved to the approved wording, title "Zenod — the AI librarian of your memory" ([evidence](../evidence/epic10-r10-wording-2026-11-08.md)): Official MCP Registry 0.2.0 (description shortened to its 100-character limit), Gemini repo v0.2.0, mcp.so issue 6906 and awesome-mcp-servers PR 18864 updated. Glama still showed the 0.1.0 text at 05:33 (it copies by itself). MCP Market free queue still answers 403 to our browsers. The table above is the baseline under the old wording; the 2026-12-08 re-run measures the new one.
