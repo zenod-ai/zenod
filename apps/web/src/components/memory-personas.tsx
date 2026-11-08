@@ -5,18 +5,21 @@ import { readInboxCount, setInboxCount } from "@/lib/inbox"
 import {
   readPersonas,
   runPersonaNow,
+  setPersonaCadence,
   setPersonaEnabled,
   type Persona,
+  type PersonaCadence,
   type PersonaList,
   type PersonaRun,
 } from "@/lib/personas"
 import "@/components/memory-inbox.css"
 import "@/components/memory-personas.css"
 
-// EPIC-14 S4: the personas. Helpers that wake on your memory on a schedule, mostly read, write only
-// into their own folder and leave findings and questions in the inbox. Here you switch one on or
-// off, see its last run (time, steps, cost) and Run now instead of waiting for the night. Paper
-// language (docs/epic12/DESIGN-LANGUAGE.md).
+// EPIC-14 S4: the persona catalog. Helpers that wake on your memory on a schedule, mostly read,
+// write only into their own folder and leave findings and questions in the inbox. Each has its own
+// switch, a cadence you can change and the skills it comes with; one that is off never runs. Once
+// on, you see its last run (time, steps, cost) and can Run now instead of waiting for the night.
+// Paper language (docs/epic12/DESIGN-LANGUAGE.md).
 
 type State =
   | { kind: "loading" }
@@ -66,6 +69,71 @@ function LastRun({ run }: { run: PersonaRun | null }) {
   )
 }
 
+const CADENCE_KIND: Record<PersonaCadence["every"], string> = {
+  night: "Daily",
+  week: "Weekly",
+  days: "Every few days",
+}
+
+function Cadence({
+  persona,
+  disabled,
+  onChange,
+}: {
+  persona: Persona
+  disabled: boolean
+  onChange: (cadence: PersonaCadence) => void
+}) {
+  const { cadence } = persona
+  const [days, setDays] = React.useState(
+    cadence.every === "days" ? cadence.days : 3
+  )
+  return (
+    <div className="zr-cadence">
+      <label>
+        <span>How often</span>
+        <select
+          value={cadence.every}
+          disabled={disabled}
+          aria-label={`How often ${persona.name} runs`}
+          onChange={(event) => {
+            const every = event.target.value as PersonaCadence["every"]
+            onChange(every === "days" ? { every, days } : { every })
+          }}
+        >
+          {(Object.keys(CADENCE_KIND) as Array<PersonaCadence["every"]>).map(
+            (every) => (
+              <option key={every} value={every}>
+                {CADENCE_KIND[every]}
+              </option>
+            )
+          )}
+        </select>
+      </label>
+      {cadence.every === "days" ? (
+        <label>
+          <span>every</span>
+          <input
+            type="number"
+            min={2}
+            max={30}
+            value={days}
+            disabled={disabled}
+            aria-label={`Days between ${persona.name} runs`}
+            onChange={(event) => setDays(Number(event.target.value))}
+            onBlur={() => {
+              if (days >= 2 && days <= 30 && days !== cadence.days)
+                onChange({ every: "days", days })
+            }}
+          />
+          <span>days</span>
+        </label>
+      ) : null}
+      <span className="zr-when">{persona.schedule}</span>
+    </div>
+  )
+}
+
 function PersonaCard({
   persona,
   onList,
@@ -73,20 +141,27 @@ function PersonaCard({
   persona: Persona
   onList: (list: PersonaList) => void
 }) {
-  const [busy, setBusy] = React.useState<"toggle" | "run" | null>(null)
+  const [busy, setBusy] = React.useState<"toggle" | "run" | "cadence" | null>(
+    null
+  )
   const [error, setError] = React.useState<string | null>(null)
 
-  async function toggle() {
-    setBusy("toggle")
+  async function change(
+    kind: "toggle" | "cadence",
+    call: () => Promise<PersonaList>
+  ) {
+    setBusy(kind)
     setError(null)
     try {
-      onList(await setPersonaEnabled(persona.id, !persona.enabled))
+      onList(await call())
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
       setBusy(null)
     }
   }
+  const toggle = () =>
+    change("toggle", () => setPersonaEnabled(persona.id, !persona.enabled))
 
   async function runNow() {
     setBusy("run")
@@ -104,45 +179,66 @@ function PersonaCard({
   }
 
   return (
-    <li className={`zi-item zr-item${persona.enabled ? "" : " zi-quiet"}`}>
-      <p className="zi-top">
-        <span className="zi-kind">{persona.schedule}</span>
-        <span>{persona.enabled ? "On" : "Off"}</span>
-      </p>
-      <h3 className="zi-what">{persona.name}</h3>
-      <p className="zi-body">{persona.brief}</p>
-      <ul className="zr-perms" aria-label="What it may do">
-        {persona.permissions.map((permission) => (
-          <li key={permission}>{permission}</li>
-        ))}
-      </ul>
-      <LastRun run={persona.lastRun} />
-      <p className="zp-hint">
-        This month {usd(persona.budget.personaUsd)} of{" "}
-        {usd(persona.budget.personaCapUsd)} · at most{" "}
-        {persona.limits.maxSteps} steps a run
-        {persona.nextWakeAt ? <> · next {when(persona.nextWakeAt)}</> : null}
-      </p>
-      <div className="zi-row">
+    <li
+      className={`zi-item zr-item${persona.enabled ? " zr-on" : " zi-quiet"}`}
+    >
+      <div className="zr-head">
+        <h3 className="zi-what">{persona.name}</h3>
         <button
           type="button"
-          className="zp-send"
-          disabled={busy !== null}
-          onClick={runNow}
-        >
-          {busy === "run" ? "Running…" : "Run now"}
-        </button>
-        <button
-          type="button"
-          className="zp-keep"
+          className="zr-switch"
           role="switch"
           aria-checked={persona.enabled}
+          aria-label={`${persona.name} ${persona.enabled ? "on" : "off"}`}
           disabled={busy !== null}
           onClick={toggle}
         >
-          {persona.enabled ? "Switch off" : "Switch on"}
+          <i aria-hidden="true" />
+          {persona.enabled ? "On" : "Off"}
         </button>
       </div>
+      <p className="zr-purpose">{persona.purpose}</p>
+      <p className="zi-body">{persona.brief}</p>
+      <Cadence
+        persona={persona}
+        disabled={busy !== null}
+        onChange={(cadence) =>
+          change("cadence", () => setPersonaCadence(persona.id, cadence))
+        }
+      />
+      <div className="zr-skills">
+        <span>Skills</span>
+        <ul aria-label={`${persona.name}'s skills`}>
+          {persona.skills.map((skill) => (
+            <li key={skill.id}>{skill.label}</li>
+          ))}
+        </ul>
+      </div>
+      {persona.enabled ? (
+        <>
+          <LastRun run={persona.lastRun} />
+          <p className="zp-hint">
+            This month {usd(persona.budget.personaUsd)} of{" "}
+            {usd(persona.budget.personaCapUsd)} · at most{" "}
+            {persona.limits.maxSteps} steps a run
+            {persona.nextWakeAt ? (
+              <> · next {when(persona.nextWakeAt)}</>
+            ) : null}
+          </p>
+          <div className="zi-row">
+            <button
+              type="button"
+              className="zp-send"
+              disabled={busy !== null}
+              onClick={runNow}
+            >
+              {busy === "run" ? "Running…" : "Run now"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <p className="zp-hint">Off: it never runs until you switch it on.</p>
+      )}
       {error ? (
         <p className="zi-warn" role="alert">
           {error}
@@ -179,8 +275,10 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
       <div className="zp-head">
         <h2 id="memory-personas-heading">Helpers that read your memory.</h2>
         <p className="zp-lede">
-          They wake on a schedule, mostly read, write only into their own
-          folder and leave what they find in your inbox.
+          Switch on the ones you want. Each wakes on its own schedule inside
+          your Zenod account, uses only the skills listed, writes only into
+          its own folder and leaves what it finds in your inbox. None of them
+          ever messages anyone.
         </p>
       </div>
       <div className="zp-stage">
@@ -203,9 +301,10 @@ export function MemoryPersonas({ active = true }: { active?: boolean }) {
                 ))}
               </ul>
               <p className="zp-hint zi-foot">
-                All personas together spend at most{" "}
-                {usd(state.list.budget.capUsd)} a month of your AI allowance.
-                This month: {usd(state.list.budget.spentUsd)}.
+                {state.list.personas.filter((p) => p.enabled).length} of{" "}
+                {state.list.personas.length} on. All personas together spend
+                at most {usd(state.list.budget.capUsd)} a month of your AI
+                allowance. This month: {usd(state.list.budget.spentUsd)}.
               </p>
             </>
           )}

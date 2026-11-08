@@ -1,11 +1,11 @@
 import type { Context, Hono } from "hono";
 import { personaById, BUILT_IN_PERSONAS } from "./personaCatalog.js";
-import { PERSONA_TOTAL_MONTH_USD, personaView, type PersonaDefinition } from "./personaRunner.js";
+import { parsePersonaSchedule, PERSONA_MAX_EVERY_DAYS, PERSONA_MIN_EVERY_DAYS, PERSONA_SKILLS, PERSONA_TOTAL_MONTH_USD, personaEnabled, personaView, type PersonaDefinition } from "./personaRunner.js";
 import { personasFor, type PersonaRun } from "./personaStore.js";
 
 /**
- * The personas' settings routes (EPIC-14 S4): list them with their last runs and spend, switch one
- * on or off, and Run now. The tenant comes from the signed-in session only (`resolve`, as for the
+ * The personas' settings routes (EPIC-14 S4): the catalog with each persona's skills, last runs and
+ * spend; switch one on or off and set its cadence; and Run now (only while it is on). The tenant comes from the signed-in session only (`resolve`, as for the
  * inbox), so a persona's runs are read and started in that account's own runtime.
  */
 
@@ -22,6 +22,7 @@ function list(runtime: PersonaRuntime, now = new Date()) {
   return {
     personas,
     budget: { spentUsd: personas[0]?.budget.totalUsd ?? 0, capUsd: PERSONA_TOTAL_MONTH_USD },
+    skills: Object.entries(PERSONA_SKILLS).map(([id, label]) => ({ id, label })),
   };
 }
 
@@ -32,15 +33,22 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     return c.json(list(found.runtime));
   });
 
-  // Switch a persona on or off.
+  // Switch a persona on or off, and/or set its cadence (null: back to its default).
   app.post("/api/console/personas/:id", async (c) => {
     const found = await resolve(c);
     if ("response" in found) return found.response;
     const persona = personaById(c.req.param("id"));
     if (!persona) return c.json({ error: "not_found", message: "no such persona" }, 404);
-    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({}) as { enabled?: unknown });
-    if (typeof body.enabled !== "boolean") return c.json({ error: "invalid", message: "enabled must be true or false" }, 400);
-    personasFor(found.runtime).setEnabled(persona.id, body.enabled);
+    const body = await c.req.json<{ enabled?: unknown; cadence?: unknown }>().catch(() => ({}) as { enabled?: unknown; cadence?: unknown });
+    if (body.enabled === undefined && body.cadence === undefined) return c.json({ error: "invalid", message: "send enabled or cadence" }, 400);
+    if (body.enabled !== undefined && typeof body.enabled !== "boolean") return c.json({ error: "invalid", message: "enabled must be true or false" }, 400);
+    const cadence = body.cadence === undefined || body.cadence === null ? null : parsePersonaSchedule(body.cadence);
+    if (body.cadence !== undefined && body.cadence !== null && !cadence) {
+      return c.json({ error: "invalid", message: `cadence is daily, weekly or every ${PERSONA_MIN_EVERY_DAYS} to ${PERSONA_MAX_EVERY_DAYS} days` }, 400);
+    }
+    const store = personasFor(found.runtime);
+    if (body.cadence !== undefined) store.setCadence(persona.id, cadence, persona.defaultEnabled);
+    if (typeof body.enabled === "boolean") store.setEnabled(persona.id, body.enabled);
     return c.json(list(found.runtime));
   });
 
@@ -50,6 +58,10 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     if ("response" in found) return found.response;
     const persona = personaById(c.req.param("id"));
     if (!persona) return c.json({ error: "not_found", message: "no such persona" }, 404);
+    // A persona runs only while it is switched on.
+    if (!personaEnabled(personasFor(found.runtime), persona)) {
+      return c.json({ error: "conflict", message: `Switch ${persona.name} on first` }, 409);
+    }
     if (personasFor(found.runtime).runs(persona.id, 1)[0]?.status === "running") {
       return c.json({ error: "conflict", message: `${persona.name} is already running` }, 409);
     }

@@ -7,4 +7,21 @@
 .zr-s-done { color: var(--zp-accent); }
 .zr-s-capped, .zr-s-failed { color: var(--zp-warn); }
 .zr-s-skipped, .zr-s-running { color: var(--zp-muted); }
-.zr-item .zp-keep { background: transparent; color: var(--zp-ink); border: 1px solid var(--zp-line); }
+.zr-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.zr-purpose { margin: 0; font-size: 1rem; color: var(--zp-ink); max-width: 64ch; }
+.zr-switch { display: inline-flex; align-items: center; gap: 0.45rem; flex: none; background: transparent; border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.2rem 0.75rem 0.2rem 0.3rem; font: 500 0.86rem var(--zp-sans); color: var(--zp-muted); cursor: pointer; }
+.zr-switch i { width: 1.9rem; height: 1.05rem; border-radius: 999px; background: var(--zp-line); position: relative; transition: background 160ms ease; }
+.zr-switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: calc(1.05rem - 4px); height: calc(1.05rem - 4px); border-radius: 50%; background: var(--zp-bg); transition: transform 160ms ease; }
+.zr-switch[aria-checked="true"] { border-color: var(--zp-accent); color: var(--zp-accent); }
+.zr-switch[aria-checked="true"] i { background: var(--zp-accent); }
+.zr-switch[aria-checked="true"] i::after { transform: translateX(0.85rem); }
+.zr-switch:disabled { opacity: 0.6; cursor: default; }
+.zr-cadence { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; font-size: 0.88rem; color: var(--zp-muted); }
+.zr-cadence label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.zr-cadence select, .zr-cadence input { font: 400 0.9rem var(--zp-sans); color: var(--zp-ink); background: transparent; border: 1px solid var(--zp-line); border-radius: 6px; padding: 0.15rem 0.4rem; }
+.zr-cadence input { width: 3.4rem; }
+.zr-when { color: var(--zp-faint); }
+.zr-skills { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; font-size: 0.86rem; color: var(--zp-muted); }
+.zr-skills ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.zr-skills li { border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.05rem 0.55rem; color: var(--zp-ink); }
+.zr-on .zr-skills li { border-color: color-mix(in srgb, var(--zp-accent) 40%, var(--zp-line)); }
