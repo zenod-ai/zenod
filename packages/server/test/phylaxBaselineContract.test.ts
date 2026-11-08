@@ -142,11 +142,20 @@ describe("ZPF-1 frozen Zenod/Phylax baseline", () => {
         CHASSIS_VAULT_MASTER_KEY: "11".repeat(32),
       },
       appOptionsForTenant(_tenantId, runtime) {
+        // A WhatsApp text runs the WhatsApp brain (EPIC-20 A1): decide, then answer through the
+        // read-only ask (the cloud chat's path when there is no streaming chat model).
         runtime.getEngine = async () => ({
           async chat(message: string) {
             return { text: `Real Zenod reply: ${message}`, sources: [] };
           },
-        }) as Awaited<ReturnType<typeof runtime.getEngine>>;
+          async routeSend(message: string) {
+            return { action: "answer" as const, keep: null, question: message, by: "model" as const };
+          },
+          async search() { return []; },
+          async ask(question: string) {
+            return { text: `Real Zenod reply: ${question}`, sources: [] };
+          },
+        }) as unknown as Awaited<ReturnType<typeof runtime.getEngine>>;
         return {};
       },
     });

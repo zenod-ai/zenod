@@ -49,8 +49,15 @@ export interface TaskJobDeskHooks {
   afterCapture?(job: TaskJob): void;
 }
 
+/**
+ * EPIC-20 A1: a typed WhatsApp message gets the cloud chat's brain (decide, checked answer, desk
+ * job to the inbox) instead of the old engine.chat loop. Set by the tenant runtime.
+ */
+export type TaskJobChannelBrain = (job: TaskJob, engine: BrainEngine) => Promise<Reply>;
+
 export class TaskJobQueue {
   private deskHooks: TaskJobDeskHooks | null = null;
+  private channelBrain: TaskJobChannelBrain | null = null;
   private activeChatDrain: Promise<void> | null = null;
   private activeDurableDrain: Promise<void> | null = null;
   private leaseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,6 +84,10 @@ export class TaskJobQueue {
 
   setDeskHooks(hooks: TaskJobDeskHooks | null): void {
     this.deskHooks = hooks;
+  }
+
+  setChannelBrain(brain: TaskJobChannelBrain | null): void {
+    this.channelBrain = brain;
   }
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
@@ -224,6 +235,9 @@ export class TaskJobQueue {
         if (!this.deskHooks) throw new Error("the memory desk is not available here");
         const engine = await this.getEngine();
         completed = this.store.updateClaimed(job, { status: "done", result: await this.deskHooks.run(job, engine, () => this.store.assertClaim(job)) });
+      } else if (job.kind === "chat" && job.input.source === "whatsapp" && this.channelBrain) {
+        const engine = await this.getEngine();
+        completed = this.store.updateClaimed(job, { status: "done", result: await this.channelBrain(job, engine) });
       } else if (job.kind === "chat") {
         const engine = await this.getEngine();
         const result = await engine.chat(

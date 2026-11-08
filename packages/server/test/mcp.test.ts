@@ -1125,11 +1125,13 @@ describe("MCP endpoint", () => {
     const client = await connect();
     const chatSpy = vi.spyOn(fakeEngine, "chat");
     chatSpy.mockClear();
+    // The durable idempotent chat itself; a WhatsApp chat now runs the WhatsApp brain (EPIC-20 A1,
+    // test/channelBrain.test.ts), so this pins the engine.chat path on another channel surface.
     const args = {
       message: "create the approved record",
-      surface: "whatsapp",
-      conversationKey: "whatsapp:34611111111",
-      idempotencyKey: "tenant-alpha:whatsapp:wamid.chat-1",
+      surface: "web",
+      conversationKey: "web:34611111111",
+      idempotencyKey: "tenant-alpha:web:chat-1",
     };
     const first = await client.callTool({ name: "chat_with_zenod", arguments: args });
     const replay = await client.callTool({
@@ -1151,8 +1153,8 @@ describe("MCP endpoint", () => {
     expect(chatSpy).toHaveBeenCalledTimes(1);
     expect(chatSpy).toHaveBeenCalledWith(
       "create the approved record",
-      "whatsapp",
-      expect.objectContaining({ conversationKey: "whatsapp:34611111111" }),
+      "web",
+      expect.objectContaining({ conversationKey: "web:34611111111" }),
     );
     chatSpy.mockRestore();
     await client.close();
