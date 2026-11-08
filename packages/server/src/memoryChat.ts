@@ -16,6 +16,8 @@ import { memoryAppPath, rankMemories, type RankedMemory } from "./rankedMemory.j
 export const MEMORY_CHAT_MAX_QUESTION_CHARS = 2_000;
 export const MEMORY_KEEP_MAX_CHARS = 8_000;
 const MEMORY_CHAT_TOP = 5;
+/** Ranked pool the cited memories are looked up in, so a cited memory shows its own percentage (E12-S3c). */
+const MEMORY_CHAT_POOL = 20;
 
 export interface MemoryChatMemory extends RankedMemory {
   /** The answer cites this memory. */
@@ -60,12 +62,15 @@ export async function answerFromMemory(engine: BrainEngine, question: string): P
   const started = performance.now();
   // Retrieval is deterministic (no LLM); the answer is a read-only ask over the same vault.
   const [ranked, answer] = await Promise.all([
-    rankMemories(engine, question, MEMORY_CHAT_TOP),
+    rankMemories(engine, question, MEMORY_CHAT_POOL),
     askOnce(engine, question),
   ]);
   const nonAnswer = askNonAnswer(answer.text);
   const cited = new Set(answer.sources.map((source) => basePath(source.path)));
-  const memories = ranked.results.map((memory) => ({ ...memory, cited: cited.has(basePath(memory.path)) }));
+  // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage.
+  const memories = ranked.results
+    .map((memory) => ({ ...memory, cited: cited.has(basePath(memory.path)) }))
+    .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited);
   const shown = new Set(memories.map((memory) => basePath(memory.path)));
   const alsoCited: MemoryChatSource[] = [];
   for (const source of answer.sources as SourceRef[]) {
