@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| A1 | Ticket worker | run_b72ff779 | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | active | none | `wt/e20-a1` | main | none | 2026-11-08 | dispatch |
+| A1 | Ticket worker | run_b72ff779-04e1-4467-8292-655206a85cac — claimed 2026-11-08T18:55Z, lease until 2026-11-08T20:55Z | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | active | none | `wt/e20-a1` | main | none | 2026-11-08 | dispatch |
 
 ## Decisions
 
