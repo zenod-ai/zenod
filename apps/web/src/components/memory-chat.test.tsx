@@ -7,6 +7,8 @@ import { MemoryChat } from "@/components/memory-chat"
 import { memoryPathFromHash, plainWikilinks, presentAnswer } from "@/lib/memory-chat"
 
 // EPIC-12 E12-S1: the hosted app's chat with your memory. Asking saves nothing; only Keep does.
+// E12-S1b: the app asks on the streaming route; the mock answers it the way the server does
+// (memories, then text deltas, then the checked answer) from the handler's answer body.
 
 const ANSWER = {
   question: "Who fixes the boiler?",
@@ -34,7 +36,20 @@ function mockFetch(handler: (url: string, init?: RequestInit) => unknown) {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
-      const result = handler(url, init) as { status?: number; body: unknown }
+      const streamed = url === "/api/console/memory-chat/stream"
+      const result = handler(streamed ? "/api/console/memory-chat" : url, init) as { status?: number; body: unknown }
+      if (streamed && (result.status ?? 200) === 200) {
+        const answer = result.body as typeof ANSWER
+        const lines = [
+          { type: "memories", memories: answer.memories.map((memory) => ({ ...memory, cited: false })) },
+          ...(answer.answered ? [{ type: "text", text: answer.answer.slice(0, 5) }, { type: "text", text: answer.answer.slice(5) }] : []),
+          { type: "answer", answer },
+        ]
+        return new Response(lines.map((line) => JSON.stringify(line)).join("\n") + "\n", {
+          status: 200,
+          headers: { "content-type": "application/x-ndjson" },
+        })
+      }
       return new Response(JSON.stringify(result.body), { status: result.status ?? 200 })
     })
   )
@@ -62,7 +77,7 @@ describe("MemoryChat (E12-S1)", () => {
     expect(screen.getAllByRole("link", { name: "GitHub" })[0].getAttribute("href")).toBe("https://github.com/o/vault/blob/main/Home/Plumber.md")
     expect(used.textContent).toContain("cited")
 
-    expect(calls.map((call) => call.url)).toEqual(["/api/console/memory-chat"])
+    expect(calls.map((call) => call.url)).toEqual(["/api/console/memory-chat/stream"])
     expect(calls[0]!.body).toEqual({ question: "Who fixes the boiler?" })
     expect(screen.getByText(/Asking saves nothing/)).toBeTruthy()
   })
@@ -132,6 +147,78 @@ describe("MemoryChat (E12-S1)", () => {
   })
 })
 
+describe("MemoryChat streaming (E12-S1b)", () => {
+  function streamFetch() {
+    let push: (line: unknown) => void = () => {}
+    let close: () => void = () => {}
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder()
+        push = (line) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`))
+        close = () => controller.close()
+      },
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200, headers: { "content-type": "application/x-ndjson" } }))
+    )
+    return { push: (line: unknown) => push(line), close: () => close() }
+  }
+
+  it("shows the memories at once, the answer as it is written, then the checked answer with linked citations", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Who fixes the boiler?" } })
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+
+    live.push({ type: "memories", memories: ANSWER.memories.map((memory) => ({ ...memory, cited: false })) })
+    expect((await screen.findByLabelText("Memories used")).textContent).toContain("92%")
+    expect(screen.queryByTestId("memory-answer")).toBeNull()
+
+    live.push({ type: "text", text: "Ana fixes it [1]." })
+    const draft = await screen.findByTestId("memory-draft")
+    expect(draft.textContent).toContain("Ana fixes it")
+    expect(draft.textContent).toContain("Checking against your memories")
+    expect(screen.queryAllByRole("button", { name: "Keep" }).filter((button) => button.closest(".zp-turn"))).toHaveLength(0)
+
+    live.push({ type: "answer", answer: { ...ANSWER, answer: "Ana fixes it [1].", checkedBy: "quoted" } })
+    live.close()
+    const answer = await screen.findByTestId("memory-answer")
+    expect(answer.textContent).toContain("Checked against your memories")
+    expect(screen.getByRole("link", { name: "1" }).getAttribute("href")).toBe("/#memory?path=Home%2FPlumber.md")
+    expect(screen.queryByTestId("memory-draft")).toBeNull()
+    expect(screen.getAllByRole("button", { name: "Keep" }).some((button) => button.closest(".zp-turn"))).toBe(true)
+  })
+
+  it("replaces an unchecked draft with the plain no-confident-answer note and offers no Keep", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Who fixes the boiler?" } })
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+    live.push({ type: "memories", memories: ANSWER.memories })
+    live.push({ type: "text", text: "Maybe Bob [2]." })
+    await screen.findByTestId("memory-draft")
+    const note = "No confident answer: Zenod could not check its answer against your memories, so it is not shown. The closest memories are below."
+    live.push({ type: "answer", answer: { ...ANSWER, answered: false, answer: note, checkedBy: "quoted" } })
+    live.close()
+    const answer = await screen.findByTestId("memory-answer")
+    expect(answer.textContent).toContain("No confident answer")
+    expect(answer.textContent).not.toContain("Maybe Bob")
+    expect(screen.queryAllByRole("button", { name: "Keep" }).filter((button) => button.closest(".zp-turn"))).toHaveLength(0)
+  })
+
+  it("shows a cap hit mid-answer as the allowance reason", async () => {
+    const live = streamFetch()
+    render(<MemoryChat />)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "anything" } })
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+    live.push({ type: "memories", memories: [] })
+    live.push({ type: "error", status: 429, code: "ai_allowance_exhausted", message: "You have used this month's AI allowance." })
+    live.close()
+    expect((await screen.findByRole("alert")).textContent).toContain("You have used this month's AI allowance.")
+  })
+})
+
 describe("memory chat helpers (E12-S1)", () => {
   it("reads a memory link's path and renders wikilinks as words", () => {
     expect(memoryPathFromHash("#memory?path=Home%2FPlumber.md")).toBe("Home/Plumber.md")
@@ -140,6 +227,8 @@ describe("memory chat helpers (E12-S1)", () => {
     expect(plainWikilinks("see [[Home/Plumber]] and [[A/B.md#x|that]]")).toBe("see Plumber and that")
     expect(presentAnswer("Source summary:\nQuotes were 4,000 euros.\n[Log/2026-10-31.md#^e-c64e3b](https://github.com/o/v/blob/x/Log/2026-10-31.md)"))
       .toBe("Quotes were 4,000 euros.\n[2026-10-31](https://github.com/o/v/blob/x/Log/2026-10-31.md)")
+    // E12-S1b: a numbered citation links to its memory in the app; an unknown number stays as written.
+    expect(presentAnswer("Ana [1][3].", [{ rank: 1, appPath: "/#memory?path=a" }])).toBe("Ana [1](/#memory?path=a)[3].")
     // Labels that carry meaning stay.
     expect(presentAnswer("Raw source report (not independently verified current state):\nAna.")).toContain("Raw source report")
   })

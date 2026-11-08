@@ -18,6 +18,8 @@ export const MEMORY_KEEP_MAX_CHARS = 8_000;
 const MEMORY_CHAT_TOP = 5;
 /** Ranked pool the cited memories are looked up in, so a cited memory shows its own percentage (E12-S3c). */
 const MEMORY_CHAT_POOL = 20;
+/** Memories the fast answer reads (E12-S1b): the five shown plus three more it may cite. */
+const MEMORY_CHAT_CONTEXT = 8;
 
 export interface MemoryChatMemory extends RankedMemory {
   /** The answer cites this memory. */
@@ -25,6 +27,8 @@ export interface MemoryChatMemory extends RankedMemory {
 }
 
 export interface MemoryChatSource {
+  /** The memory's number in the answer's citations (E12-S1b), when it has one. */
+  rank?: number;
   path: string;
   title: string;
   url: string;
@@ -41,6 +45,18 @@ export interface MemoryChatAnswer {
   /** Sources the answer cites that are not among the top memories. */
   alsoCited: MemoryChatSource[];
   ms: number;
+  /**
+   * How the answer was made and checked (E12-S1b): "quoted" when every citation's quote was found in
+   * the memory it names, "ask" when the read-only ask loop answered (no streaming chat model).
+   */
+  checkedBy?: "quoted" | "ask";
+}
+
+export interface MemoryChatStreamHandlers {
+  /** The top memories, as soon as ranked retrieval has them (before any model call). */
+  onMemories?(memories: MemoryChatMemory[]): void;
+  /** Answer prose as the model writes it; replaced by the final answer once checked. */
+  onText?(delta: string): void;
 }
 
 const basePath = (path: string) => path.split("#")[0]!;
@@ -50,6 +66,8 @@ const titleOf = (path: string) => basePath(path).split("/").pop()!.replace(/\.md
 const NON_ANSWER_TEXT = {
   retry: "Zenod could not put a checked answer together this time. The memories below match your question: open them, or ask again.",
   unverified: "Zenod found no note that answers this directly. The closest memories are below.",
+  unchecked: "No confident answer: Zenod could not check its answer against your memories, so it is not shown. The closest memories are below.",
+  none: "No memory matches this question yet.",
 } as const;
 
 /** One read-only ask; a protocol slip by the model is asked once more before giving up. */
@@ -58,17 +76,63 @@ async function askOnce(engine: BrainEngine, question: string): Promise<Answer> {
   return askNonAnswer(first.text) === "retry" ? engine.ask(question) : first;
 }
 
-export async function answerFromMemory(engine: BrainEngine, question: string): Promise<MemoryChatAnswer> {
+/**
+ * The chat answer, fast path (E12-S1b): the ranked memories go out at once, then one streamed model
+ * call answers from them, citing them by number, and each citation is checked against its memory.
+ * An answer that does not pass the check is not shown: the user sees "no confident answer" and the
+ * memories. Engines without a streaming chat model fall back to the read-only ask loop (S1).
+ */
+export async function streamAnswerFromMemory(
+  engine: BrainEngine,
+  question: string,
+  handlers: MemoryChatStreamHandlers = {},
+): Promise<MemoryChatAnswer> {
   const started = performance.now();
-  // Retrieval is deterministic (no LLM); the answer is a read-only ask over the same vault.
-  const [ranked, answer] = await Promise.all([
-    rankMemories(engine, question, MEMORY_CHAT_POOL),
-    askOnce(engine, question),
-  ]);
+  const ranked = await rankMemories(engine, question, MEMORY_CHAT_POOL);
+  // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage (E12-S3c).
+  const shownMemories = (cited: ReadonlySet<string>) =>
+    ranked.results
+      .map((memory) => ({ ...memory, cited: cited.has(memory.path) }))
+      .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited);
+  handlers.onMemories?.(shownMemories(new Set()));
+  if (!engine.answerFromMemories) return askAnswer(engine, question, started, ranked.results);
+  if (ranked.results.length === 0) {
+    return { question, answered: false, answer: NON_ANSWER_TEXT.none, memories: [], alsoCited: [], ms: Math.round(performance.now() - started), checkedBy: "quoted" };
+  }
+  const check = await engine.answerFromMemories(
+    question,
+    ranked.results.slice(0, MEMORY_CHAT_CONTEXT).map((memory) => ({ n: memory.rank, path: memory.path, title: memory.title, snippet: memory.snippet })),
+    handlers.onText,
+  );
+  if (!check) return askAnswer(engine, question, started, ranked.results);
+  const citedPaths = new Set(ranked.results.filter((memory) => check.cited.includes(memory.rank)).map((memory) => memory.path));
+  const memories = shownMemories(check.checked ? citedPaths : new Set());
+  return {
+    question,
+    answered: check.checked,
+    answer: check.checked ? check.text : check.reason === "no_answer" ? NON_ANSWER_TEXT.unverified : NON_ANSWER_TEXT.unchecked,
+    memories,
+    alsoCited: [],
+    ms: Math.round(performance.now() - started),
+    checkedBy: "quoted",
+  };
+}
+
+export function answerFromMemory(engine: BrainEngine, question: string): Promise<MemoryChatAnswer> {
+  return streamAnswerFromMemory(engine, question);
+}
+
+/** S1's answer: the read-only ask loop next to the ranked memories (engines without a chat model). */
+async function askAnswer(engine: BrainEngine, question: string, started: number, ranked: RankedMemory[]): Promise<MemoryChatAnswer> {
+  const answer = await askOnce(engine, question);
+  return { ...fromAsk(question, answer, ranked, started), checkedBy: "ask" };
+}
+
+function fromAsk(question: string, answer: Answer, ranked: RankedMemory[], started: number): MemoryChatAnswer {
   const nonAnswer = askNonAnswer(answer.text);
   const cited = new Set(answer.sources.map((source) => basePath(source.path)));
   // The top 5, plus any memory the answer cites that ranked lower, each with its own percentage.
-  const memories = ranked.results
+  const memories = ranked
     .map((memory) => ({ ...memory, cited: cited.has(basePath(memory.path)) }))
     .filter((memory) => memory.rank <= MEMORY_CHAT_TOP || memory.cited);
   const shown = new Set(memories.map((memory) => basePath(memory.path)));

@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 import {
-  askMemory,
+  askMemoryStream,
   keepAnswer,
   keepNote,
   keepStatus,
@@ -11,12 +11,15 @@ import {
   presentAnswer,
   vaultLabel,
   type MemoryChatAnswer,
+  type MemoryChatMemory,
   type MemoryKeepReceipt,
 } from "@/lib/memory-chat"
 
 // EPIC-12 E12-S1: the hosted app opens on this chat. It answers from your memory, shows
 // the memories it used with their match percentages and links, and saves nothing unless
 // you tap Keep. Styled in the product deck's paper language (docs/epic12/DESIGN-LANGUAGE.md).
+// E12-S1b: the memories show as soon as they are found and the answer streams in, marked as a
+// draft until Zenod has checked each citation against the memory it names.
 
 type KeepState =
   | { state: "idle" }
@@ -27,6 +30,13 @@ type KeepState =
 type Turn =
   | { id: number; kind: "question"; text: string }
   | { id: number; kind: "answer"; result: MemoryChatAnswer; keep: KeepState }
+  | {
+      id: number
+      kind: "pending"
+      question: string
+      memories: MemoryChatMemory[] | null
+      text: string
+    }
   | { id: number; kind: "kept-note"; text: string; keep: KeepState }
   | { id: number; kind: "error"; text: string }
 
@@ -98,6 +108,106 @@ function KeepLine({ keep }: { keep: KeepState }) {
   )
 }
 
+function MemoryList({
+  memories,
+  alsoCited = [],
+}: {
+  memories: MemoryChatMemory[]
+  alsoCited?: MemoryChatAnswer["alsoCited"]
+}) {
+  return (
+    <div className="zp-used" aria-label="Memories used">
+      <p className="zp-usedhead">
+        {memories.length > 0
+          ? memories.length > 5
+            ? "Memories for this question"
+            : `Top ${memories.length} memories for this question`
+          : "Memories cited"}
+      </p>
+      <ol>
+        {memories.map((memory) => (
+          <li key={memory.path} className={memory.cited ? "zp-cited" : undefined}>
+            <a className="zp-title" href={memory.appPath}>
+              {memory.title}
+            </a>
+            <span className="zp-bar" aria-hidden="true">
+              <i style={{ width: `${memory.matchPercent}%` }} />
+            </span>
+            <span className="zp-pct">{memory.matchPercent}%</span>
+            <span className="zp-meta">
+              {memory.cited ? <b>cited</b> : null}
+              {memory.treePath ? <span>{memory.treePath}</span> : null}
+              {memory.url ? (
+                <a href={memory.url} target="_blank" rel="noreferrer">
+                  {vaultLabel(memory.provider)}
+                </a>
+              ) : null}
+            </span>
+          </li>
+        ))}
+        {alsoCited.map((source) => (
+          <li key={source.path} className="zp-cited">
+            <a className="zp-title" href={source.appPath}>
+              {source.title}
+            </a>
+            <span className="zp-bar" aria-hidden="true" />
+            <span className="zp-pct">{source.rank ? `[${source.rank}]` : "·"}</span>
+            <span className="zp-meta">
+              <b>cited</b>
+              {source.url ? (
+                <a href={source.url} target="_blank" rel="noreferrer">
+                  Vault
+                </a>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+const answerLinks = {
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) =>
+    href?.startsWith("/#") ? (
+      <a href={href} className="zp-cite">
+        {children}
+      </a>
+    ) : (
+      <a href={href} target="_blank" rel="noreferrer" className="zp-src">
+        {children}
+      </a>
+    ),
+}
+
+function PendingTurn({
+  memories,
+  text,
+}: {
+  memories: MemoryChatMemory[] | null
+  text: string
+}) {
+  return (
+    <div className="zp-turn">
+      {text ? (
+        <div className="zp-msg zp-z zp-draft" data-testid="memory-draft">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerLinks}>
+            {presentAnswer(text, memories ?? [])}
+          </ReactMarkdown>
+          <span className="zp-checking">Checking against your memories…</span>
+        </div>
+      ) : (
+        <div className="zp-msg zp-z zp-typing" aria-label="Zenod is answering">
+          <i />
+          <i />
+          <i />
+        </div>
+      )}
+      {memories && memories.length > 0 ? <MemoryList memories={memories} /> : null}
+    </div>
+  )
+}
+
 function AnswerTurn({
   result,
   keep,
@@ -113,76 +223,15 @@ function AnswerTurn({
         className={result.answered ? "zp-msg zp-z" : "zp-msg zp-z zp-none"}
         data-testid="memory-answer"
       >
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            a: ({ href, children }) => (
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                className="zp-src"
-              >
-                {children}
-              </a>
-            ),
-          }}
-        >
-          {presentAnswer(result.answer)}
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerLinks}>
+          {presentAnswer(result.answer, [...result.memories, ...result.alsoCited])}
         </ReactMarkdown>
+        {result.answered && result.checkedBy === "quoted" ? (
+          <span className="zp-checked">Checked against your memories</span>
+        ) : null}
       </div>
       {result.memories.length > 0 || result.alsoCited.length > 0 ? (
-        <div className="zp-used" aria-label="Memories used">
-          <p className="zp-usedhead">
-            {result.memories.length > 0
-              ? result.memories.length > 5
-                ? "Memories for this question"
-                : `Top ${result.memories.length} memories for this question`
-              : "Memories cited"}
-          </p>
-          <ol>
-            {result.memories.map((memory) => (
-              <li
-                key={memory.path}
-                className={memory.cited ? "zp-cited" : undefined}
-              >
-                <a className="zp-title" href={memory.appPath}>
-                  {memory.title}
-                </a>
-                <span className="zp-bar" aria-hidden="true">
-                  <i style={{ width: `${memory.matchPercent}%` }} />
-                </span>
-                <span className="zp-pct">{memory.matchPercent}%</span>
-                <span className="zp-meta">
-                  {memory.cited ? <b>cited</b> : null}
-                  {memory.treePath ? <span>{memory.treePath}</span> : null}
-                  {memory.url ? (
-                    <a href={memory.url} target="_blank" rel="noreferrer">
-                      {vaultLabel(memory.provider)}
-                    </a>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-            {result.alsoCited.map((source) => (
-              <li key={source.path} className="zp-cited">
-                <a className="zp-title" href={source.appPath}>
-                  {source.title}
-                </a>
-                <span className="zp-bar" aria-hidden="true" />
-                <span className="zp-pct">·</span>
-                <span className="zp-meta">
-                  <b>cited</b>
-                  {source.url ? (
-                    <a href={source.url} target="_blank" rel="noreferrer">
-                      Vault
-                    </a>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
+        <MemoryList memories={result.memories} alsoCited={result.alsoCited} />
       ) : (
         <p className="zp-hint">No memory matched this question.</p>
       )}
@@ -243,17 +292,26 @@ export function MemoryChat() {
     setDraft("")
     setAsking(true)
     push({ kind: "question", text: question })
+    const pendingId = push({ kind: "pending", question, memories: null, text: "" })
+    const updatePending = (change: (turn: Extract<Turn, { kind: "pending" }>) => Turn) =>
+      setTurns((all) =>
+        all.map((turn) => (turn.id === pendingId && turn.kind === "pending" ? change(turn) : turn))
+      )
     try {
-      const result = await askMemory(question)
-      push({ kind: "answer", result, keep: { state: "idle" } })
+      const result = await askMemoryStream(question, {
+        onMemories: (memories) => updatePending((turn) => ({ ...turn, memories })),
+        onText: (text) => updatePending((turn) => ({ ...turn, text: turn.text + text })),
+      })
+      updatePending((turn) => ({ id: turn.id, kind: "answer", result, keep: { state: "idle" } }))
     } catch (error) {
-      push({
+      updatePending((turn) => ({
+        id: turn.id,
         kind: "error",
         text:
           error instanceof MemoryChatError || error instanceof Error
             ? error.message
             : "Something went wrong. Try again.",
-      })
+      }))
     } finally {
       setAsking(false)
     }
@@ -320,6 +378,8 @@ export function MemoryChat() {
                     <KeepLine keep={turn.keep} />
                   </div>
                 </div>
+              ) : turn.kind === "pending" ? (
+                <PendingTurn key={turn.id} memories={turn.memories} text={turn.text} />
               ) : turn.kind === "error" ? (
                 <p key={turn.id} className="zp-msg zp-z zp-warn" role="alert">
                   {turn.text}
@@ -333,16 +393,6 @@ export function MemoryChat() {
                 />
               )
             )}
-            {asking ? (
-              <div
-                className="zp-msg zp-z zp-typing"
-                aria-label="Zenod is answering"
-              >
-                <i />
-                <i />
-                <i />
-              </div>
-            ) : null}
             <div ref={endRef} />
           </div>
           <form

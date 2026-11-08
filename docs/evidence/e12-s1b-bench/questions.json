@@ -1,0 +1,203 @@
+[
+  {
+    "q": "Where is the spare house key?",
+    "expect": [
+      [
+        "frog"
+      ],
+      [
+        "rosemary"
+      ]
+    ]
+  },
+  {
+    "q": "How do I reset the wifi router when it drops?",
+    "expect": [
+      [
+        "thirty",
+        "30"
+      ],
+      [
+        "WPS"
+      ]
+    ]
+  },
+  {
+    "q": "What tyre pressure does the car need?",
+    "expect": [
+      [
+        "2.4"
+      ],
+      [
+        "2.6"
+      ]
+    ]
+  },
+  {
+    "q": "What did the Porto yards quote for the boat repair?",
+    "expect": [
+      [
+        "4,000",
+        "4000",
+        "4 000"
+      ]
+    ]
+  },
+  {
+    "q": "Which antifouling did we choose for the hull, and who applied it?",
+    "expect": [
+      [
+        "copper"
+      ],
+      [
+        "Douro"
+      ]
+    ]
+  },
+  {
+    "q": "What are the three cabin options and what do they cost?",
+    "expect": [
+      [
+        "Oakmere"
+      ],
+      [
+        "185"
+      ],
+      [
+        "Westcombe"
+      ]
+    ]
+  },
+  {
+    "q": "Which cabin am I leaning towards, and why?",
+    "expect": [
+      [
+        "Westcombe"
+      ],
+      [
+        "rent"
+      ]
+    ]
+  },
+  {
+    "q": "Which travel insurance do we have and when does it renew?",
+    "expect": [
+      [
+        "Alba"
+      ],
+      [
+        "3 April",
+        "April 3"
+      ]
+    ]
+  },
+  {
+    "q": "How much will Tide Cart cost per month?",
+    "expect": [
+      [
+        "7 euros",
+        "\u20ac7",
+        "7 \u20ac",
+        "seven euros",
+        "7/month",
+        "7 per month",
+        "7 a month"
+      ]
+    ]
+  },
+  {
+    "q": "Where does Moss Lantern launch first?",
+    "expect": [
+      [
+        "Reddit"
+      ]
+    ]
+  },
+  {
+    "q": "When is Mara Holloway's birthday?",
+    "expect": [
+      [
+        "23 August"
+      ]
+    ]
+  },
+  {
+    "q": "What would be a good present for Hugo Larkspur?",
+    "expect": [
+      [
+        "records"
+      ]
+    ]
+  },
+  {
+    "q": "Where does Otto Kestrel live?",
+    "expect": [
+      [
+        "Galway"
+      ]
+    ]
+  },
+  {
+    "q": "Which hotel did I stay at in Seville in 2022?",
+    "expect": [
+      [
+        "Casa Alecrim"
+      ]
+    ]
+  },
+  {
+    "q": "What was the best part of the Basel trip in 2024?",
+    "expect": [
+      [
+        "museum"
+      ]
+    ]
+  },
+  {
+    "q": "Who did the boiler service in 2024 and what did it cost?",
+    "expect": [
+      [
+        "Rosa"
+      ],
+      [
+        "500"
+      ]
+    ]
+  },
+  {
+    "q": "What did I think of the book Winter Orchard?",
+    "expect": [
+      [
+        "4",
+        "lands"
+      ]
+    ]
+  },
+  {
+    "q": "How long does my miso aubergine take to make?",
+    "expect": [
+      [
+        "90"
+      ]
+    ]
+  },
+  {
+    "q": "Who is my gym membership with in 2020 and how much is it?",
+    "expect": [
+      [
+        "Vela Telecom"
+      ],
+      [
+        "505"
+      ]
+    ]
+  },
+  {
+    "q": "What did we decide at the Juniper API sync on 2026-04-22?",
+    "expect": [
+      [
+        "designer"
+      ]
+    ]
+  }
+]

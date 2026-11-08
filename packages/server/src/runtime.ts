@@ -699,6 +699,7 @@ export class Runtime {
       provider: this.settings.provider(),
       apiKey: this.settings.activeApiKey()!,
       ...(this.settings.get("model_ask") ? { askModel: this.settings.get("model_ask")! } : {}),
+      ...(this.settings.get("model_chat") ? { chatModel: this.settings.get("model_chat")! } : {}),
       ...(askReasoningEffort ? { askReasoningEffort } : {}),
       ...(organizerReasoningEffort ? { organizerReasoningEffort } : {}),
       ...(organizerProviderOrder ? { organizerProviderOrder } : {}),

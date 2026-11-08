@@ -11,7 +11,7 @@ import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { aiAllowanceExhaustedMessage } from "../src/customerMetering.js";
 import { issueCustomerSession } from "../src/customerSession.js";
-import { answerFromMemory, memoryKeepContent, parseMemoryKeep } from "../src/memoryChat.js";
+import { answerFromMemory, memoryKeepContent, parseMemoryKeep, streamAnswerFromMemory } from "../src/memoryChat.js";
 import { Runtime } from "../src/runtime.js";
 
 // EPIC-12 E12-S1: the web app's chat with your memory. Asking answers from your own vault and
@@ -25,8 +25,10 @@ interface FakeEngine extends BrainEngine {
   storeCalls: unknown[];
 }
 
-function fakeEngine(label: string, options: { ask?: (question: string) => Promise<Answer> } = {}): FakeEngine {
-  const hits = [1, 2, 3, 4, 5, 6].map((n) => hit(`Notes/${label} ${n}.md`, 10 - n, n === 1 ? { matchPercent: 100 } : {}));
+type FastAnswer = NonNullable<BrainEngine["answerFromMemories"]>;
+
+function fakeEngine(label: string, options: { ask?: (question: string) => Promise<Answer>; fast?: FastAnswer } = {}): FakeEngine {
+  const hits = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => hit(`Notes/${label} ${n}.md`, 10 - n, n === 1 ? { matchPercent: 100 } : {}));
   const engine = {
     askCalls: [] as string[],
     storeCalls: [] as unknown[],
@@ -43,6 +45,7 @@ function fakeEngine(label: string, options: { ask?: (question: string) => Promis
         ],
       } satisfies Answer;
     },
+    ...(options.fast ? { answerFromMemories: options.fast } : {}),
     store: async (input: unknown) => { engine.storeCalls.push(input); throw new Error("store must not be called synchronously"); },
     get: async (path: string) => {
       if (!path.startsWith(`Notes/${label}`)) throw new Error("ENOENT");
@@ -101,6 +104,52 @@ describe("answerFromMemory (E12-S1)", () => {
     const none = await answerFromMemory(unverified, "boiler");
     expect(none).toMatchObject({ answered: false, answer: expect.stringContaining("found no note that answers this directly") });
     expect(unverified.askCalls).toHaveLength(1);
+  });
+
+  it("fast path (E12-S1b): memories first, the prose streamed, then the checked answer marking only cited memories", async () => {
+    const events: string[] = [];
+    const seen: Array<{ n: number; path: string }> = [];
+    const engine = fakeEngine("alpha", {
+      fast: async (_question, memories, onText) => {
+        seen.push(...memories);
+        events.push("model");
+        onText?.("Alpha is in note two [2]");
+        onText?.(" and seven [7].");
+        return { checked: true, reason: null, text: "Alpha is in note two [2] and seven [7].", cited: [2, 7] };
+      },
+    });
+    const result = await streamAnswerFromMemory(engine, "alpha", {
+      onMemories: (memories) => events.push(`memories:${memories.length}:${memories.filter((memory) => memory.cited).length}`),
+      onText: (text) => events.push(`text:${text}`),
+    });
+    expect(events).toEqual(["memories:5:0", "model", "text:Alpha is in note two [2]", "text: and seven [7]."]);
+    expect(seen.map((memory) => memory.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]); // the five shown plus three more
+    expect(result).toMatchObject({ answered: true, answer: "Alpha is in note two [2] and seven [7].", checkedBy: "quoted" });
+    expect(result.memories.map((memory) => memory.cited)).toEqual([false, true, false, false, false]);
+    expect(result.alsoCited).toEqual([{ rank: 7, path: "Notes/alpha 7.md", title: "alpha 7", url: "https://github.com/o/r/blob/main/Notes/alpha%207.md", appPath: "/#memory?path=Notes%2Falpha%207.md" }]);
+    expect(engine.askCalls).toHaveLength(0);
+    expect(engine.storeCalls).toHaveLength(0);
+  });
+
+  it("fast path: an answer that fails the check is never shown, nor one the notes do not support", async () => {
+    const unchecked = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "citation_not_found", text: "Made up [1].", cited: [] }) });
+    const failed = await answerFromMemory(unchecked, "alpha");
+    expect(failed).toMatchObject({ answered: false, answer: expect.stringContaining("No confident answer"), alsoCited: [] });
+    expect(failed.answer).not.toContain("Made up");
+    expect(failed.memories).toHaveLength(5);
+    expect(failed.memories.every((memory) => !memory.cited)).toBe(true);
+
+    const none = fakeEngine("alpha", { fast: async () => ({ checked: false, reason: "no_answer", text: "", cited: [] }) });
+    expect(await answerFromMemory(none, "alpha")).toMatchObject({ answered: false, answer: expect.stringContaining("found no note that answers this directly") });
+    expect(none.askCalls).toHaveLength(0);
+  });
+
+  it("fast path: no memory found means no model call", async () => {
+    const fast = vi.fn();
+    const engine = fakeEngine("alpha", { fast });
+    engine.searchTimed = async () => ({ hits: [], tier: "index" as const, ms: 1 });
+    expect(await answerFromMemory(engine, "nothing")).toMatchObject({ answered: false, memories: [], answer: "No memory matches this question yet." });
+    expect(fast).not.toHaveBeenCalled();
   });
 
   it("files an answer with its question and a note as typed", () => {
@@ -194,6 +243,65 @@ describe("console memory chat routes (E12-S1)", () => {
       for (const tenant of ["tenant-a", "tenant-b"]) {
         expect(t.engines.get(tenant)!.storeCalls).toHaveLength(0);
         expect(t.runtimes.get(tenant)!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+      }
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("streams the chat as NDJSON: memories, text, then the answer, for the signed-in customer only (E12-S1b)", async () => {
+    const t = await setup();
+    try {
+      expect((await t.call("POST", "/api/console/memory-chat/stream", undefined, { question: "notes" })).status).toBe(401);
+      expect((await t.call("POST", "/api/console/memory-chat/stream", t.ada, { question: " " })).status).toBe(400);
+      expect((await t.call("POST", "/api/console/memory-chat/stream", t.eve, { question: "notes" })).status).toBe(404);
+      const engine = t.engines.get("tenant-a")!;
+      engine.answerFromMemories = async (_q, _memories, onText) => {
+        onText?.("From alpha one [1].");
+        return { checked: true, reason: null, text: "From alpha one [1].", cited: [1] };
+      };
+      const response = await t.call("POST", "/api/console/memory-chat/stream", t.ada, { question: "notes" });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("application/x-ndjson");
+      const lines = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+      expect(lines.map((line) => line.type)).toEqual(["memories", "text", "answer"]);
+      expect(lines[0].memories).toHaveLength(5);
+      expect(lines[1].text).toBe("From alpha one [1].");
+      expect(lines[2].answer).toMatchObject({ answered: true, checkedBy: "quoted" });
+      expect(lines[2].answer.memories[0]).toMatchObject({ path: "Notes/alpha 1.md", cited: true });
+      expect(JSON.stringify(lines)).not.toContain("beta");
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("stream: the allowance stops before any model call, and a cap hit mid-answer ends the stream with its reason", async () => {
+    const t = await setup({ allowance: 1 });
+    try {
+      t.runtimes.get("tenant-a")!.usageStore.record({
+        operation: "answer", provider: "openrouter", model: "m", inputTokens: 1, outputTokens: 1,
+        cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 1.5,
+      });
+      const fast = vi.fn();
+      t.engines.get("tenant-a")!.answerFromMemories = fast;
+      const blocked = await t.call("POST", "/api/console/memory-chat/stream", t.ada, { question: "notes" });
+      expect(blocked.status).toBe(429);
+      expect(await blocked.json()).toMatchObject({ code: "ai_allowance_exhausted" });
+      expect(fast).not.toHaveBeenCalled();
+
+      const resetsAt = "2026-12-01T00:00:00.000Z";
+      t.engines.get("tenant-b")!.answerFromMemories = async () => { throw new LlmAllowanceExceededError(aiAllowanceExhaustedMessage(resetsAt), resetsAt); };
+      const midway = await t.call("POST", "/api/console/memory-chat/stream", t.bob, { question: "notes" });
+      const lines = (await midway.text()).trim().split("\n").map((line) => JSON.parse(line));
+      expect(lines.map((line) => line.type)).toEqual(["memories", "error"]);
+      expect(lines[1]).toMatchObject({ status: 429, code: "ai_allowance_exhausted", resetsAt });
+      // The slot is released after a failed stream: the next question is answered.
+      t.engines.get("tenant-b")!.answerFromMemories = async () => ({ checked: false, reason: "no_answer", text: "", cited: [] });
+      for (let i = 0; i < 3; i++) {
+        const next = await t.call("POST", "/api/console/memory-chat/stream", t.bob, { question: "notes" });
+        expect(next.status).toBe(200);
+        expect(await next.text()).toContain('"type":"answer"');
       }
     } finally {
       await t.close();
