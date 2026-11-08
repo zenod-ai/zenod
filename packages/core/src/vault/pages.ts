@@ -55,6 +55,8 @@ export interface PageIndexEntry {
   aliases?: string[];
   /** Discovery hints only; read_facts validates their source-backed records. */
   factKeys?: string[];
+  /** Where the page hangs in the memory tree (`Working › Branch`), set for the organiser's candidates (E12-S8). */
+  place?: string;
 }
 
 export interface VaultSnapshot {

@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import { simpleGit } from "simple-git";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "../src/engine/engine.js";
+import { classifyCandidates } from "../src/engine/meaningNotes.js";
+import { scanVault } from "../src/vault/pages.js";
 import { parseFiledLines } from "../src/engine/treePlacement.js";
 import type { ReconciliationInput, ReconciliationOperation } from "../src/engine/reconciliation.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
@@ -130,5 +132,34 @@ describe("E12-S8 a rejected memory is never dropped", { timeout: 120_000 }, () =
     const head = await simpleGit(repo.path).revparse(["HEAD"]);
     await engine.enrichEvidence!({ ...input, evidenceRef: captured.evidenceRef });
     expect(await simpleGit(repo.path).revparse(["HEAD"])).toBe(head);
+  });
+});
+
+describe("E12-S8 the organiser sees the tree", { timeout: 60_000 }, () => {
+  let dir: string;
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "zenod-e12s8-tree-")); });
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it("gives each candidate its place, the top-level branches, and the branch head of a strong candidate", async () => {
+    const repo = await vaultRepo(dir);
+    const seen: ClassifyInput[] = [];
+    const llm = { classify: async (input: ClassifyInput): Promise<Classification> => { seen.push(input); return { confidence: 0.9, summary: "x", tags: [], pages: [] }; } };
+    await classifyCandidates(llm, repo.path, await scanVault(repo.path), { content: "Moss Lantern naming: the candidate names", hints: [], pageIndex: [], tagVocabulary: [] });
+    const input = seen[0]!;
+    const naming = input.pageIndex.find(page => page.path === "Projects/Moss Lantern naming.md")!;
+    expect(naming.place).toBe("Working › Launching Moss Lantern");
+    expect(input.pageIndex.find(page => page.path === "Projects/Launching Moss Lantern.md")?.place).toBe("Working (top-level branch)");
+    expect(input.hints.find(hint => hint.startsWith("Memory tree, top level"))).toContain("Launching Tide Cart [working]");
+    expect(input.pageIndex.length).toBeLessThanOrEqual(24);
+  });
+
+  it("leaves a vault without a tree as before", async () => {
+    const repo = await vaultRepo(dir);
+    await rm(join(repo.path, "Tree.md"));
+    const seen: ClassifyInput[] = [];
+    const llm = { classify: async (input: ClassifyInput): Promise<Classification> => { seen.push(input); return { confidence: 0.9, summary: "x", tags: [], pages: [] }; } };
+    await classifyCandidates(llm, repo.path, await scanVault(repo.path), { content: "Moss Lantern naming", hints: [], pageIndex: [], tagVocabulary: [] });
+    expect(seen[0]!.pageIndex.every(page => page.place === undefined)).toBe(true);
+    expect(seen[0]!.hints.some(hint => hint.startsWith("Memory tree"))).toBe(false);
   });
 });
