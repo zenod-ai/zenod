@@ -272,3 +272,73 @@
 .zp-checked::before { content: "✓ "; }
 .zp-cite { font-size: 0.78em; font-variant-numeric: tabular-nums; text-decoration: none; color: var(--zp-accent); vertical-align: super; line-height: 0; }
 .zp-cite:hover { text-decoration: underline; }
+/* EPIC-12 E12-S2: the memory graph, after the product deck's graph (DESIGN-LANGUAGE.md):
+   ink tree lines, dashed links, dark topic dots, one accent on the opened memory. */
+.zp-graphhead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem 2rem; margin-bottom: 1rem; }
+.zp-graphhead .zp-lede { margin-bottom: 0; }
+.zp-gsearch { position: relative; width: min(100%, 22rem); }
+.zp-gsearch input { flex: 1; border: 0; outline: none; background: transparent; font: 400 1rem / 1.4 var(--zp-sans); color: var(--zp-ink); padding: 0.3rem 0.4rem 0.3rem 0; min-width: 0; }
+.zp-gsearch input::placeholder { color: var(--zp-muted); }
+.zp-gresults { position: absolute; z-index: 5; top: calc(100% + 0.35rem); left: 0; right: 0; list-style: none; margin: 0; padding: 0.35rem 0.9rem; background: var(--zp-bg); border: 1px solid var(--zp-line); border-radius: 6px; max-height: 22rem; overflow-y: auto; }
+.zp-gresults li { border-bottom: 1px solid var(--zp-line); }
+.zp-gresults li:last-child { border-bottom: 0; }
+.zp .zp-gresults button { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 3.5rem 2.6rem; grid-template-areas: "title bar pct" "meta meta meta"; column-gap: 0.6rem; align-items: center; padding: 0.5rem 0; }
+.zp-gresults button:hover .zp-title, .zp-gresults button:focus-visible .zp-title { text-decoration: underline; color: var(--zp-accent); }
+.zp-gresults .zp-bar i { background: var(--zp-accent); }
+.zp-graphgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(15rem, 20rem); gap: 1.25rem; align-items: start; }
+.zp-graphscreen { min-height: 0; gap: 0.4rem; }
+.zp-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.86rem; color: var(--zp-muted); }
+.zp .zp-crumb { all: unset; cursor: pointer; color: var(--zp-accent); }
+.zp .zp-crumb:disabled { cursor: default; color: var(--zp-ink); }
+.zp-crumbstep::before { content: "›"; margin-right: 0.35rem; color: var(--zp-faint); }
+.zp-crumbhere { color: var(--zp-ink); font-weight: 500; }
+svg.zp-g { width: 100%; height: auto; display: block; overflow: visible; transition: opacity 200ms ease; }
+svg.zp-g.zp-gbusy { opacity: 0.6; }
+.zp-gedge { stroke: var(--zp-ink); stroke-width: 1.2; opacity: 0.45; }
+.zp-gtree { stroke-dasharray: 1; stroke-dashoffset: 1; animation: zp-gdraw 900ms ease 350ms forwards; }
+.zp-glink { stroke: var(--zp-muted); stroke-dasharray: 4 5; opacity: 0; animation: zp-gshow 600ms ease 450ms forwards; }
+.zp-gfocus { opacity: 0.75; }
+.zp-glink.zp-gfocus { animation-name: zp-gshowfocus; }
+.zp-gnode { cursor: pointer; transition: transform 600ms cubic-bezier(.2,.7,.2,1); animation: zp-gnodein 600ms ease both; outline: none; }
+.zp-gnode .zp-ghit { fill: transparent; stroke: none; }
+.zp-gnode .zp-gdot { fill: var(--zp-bg); stroke: var(--zp-ink); stroke-width: 1.4; transition: fill 400ms ease, stroke 400ms ease; }
+.zp-gtopic .zp-gdot { fill: var(--zp-ink); }
+.zp-gnode text { font: 400 16px var(--zp-sans); fill: var(--zp-ink); paint-order: stroke; stroke: var(--zp-bg); stroke-width: 4px; stroke-linejoin: round; }
+.zp-gtopic text { font: 500 19px var(--zp-serif); }
+.zp-gmore { font: 500 13px var(--zp-sans); fill: var(--zp-faint); }
+.zp-gnode:hover .zp-gdot, .zp-gnode:focus-visible .zp-gdot { stroke: var(--zp-accent); stroke-width: 2.4; }
+.zp-gnode:hover text, .zp-gnode:focus-visible text { fill: var(--zp-accent); }
+.zp-gcenter { cursor: default; }
+.zp-gcenter .zp-gdot { fill: var(--zp-accent); stroke: var(--zp-accent); }
+.zp-gcenter .zp-ghalo { fill: var(--zp-accent-soft); stroke: none; transform-box: fill-box; transform-origin: center; animation: zp-ghalo 600ms ease-out both; }
+.zp-gcenter text { font: 500 23px var(--zp-serif); }
+.zp-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1.1rem; font-size: 0.82rem; color: var(--zp-muted); border-top: 1px solid var(--zp-line); padding-top: 0.5rem; }
+.zp-legend i { display: inline-block; width: 1.6rem; height: 0; vertical-align: middle; margin-right: 0.3rem; border-top: 1.4px solid var(--zp-ink); }
+.zp-legend i.zp-llink { border-top: 1.4px dashed var(--zp-muted); }
+.zp-gpanel { background: var(--zp-bg); border-radius: 6px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.75rem; max-height: min(80svh, 46rem); overflow-y: auto; }
+.zp-gpanel h3 { font: 400 1.6rem / 1.15 var(--zp-serif); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.zp-gsummary { font: 400 1rem / 1.5 var(--zp-serif); color: var(--zp-muted); margin: 0; }
+.zp-glist h4 { font: 500 1rem var(--zp-serif); margin: 0 0 0.2rem; border-bottom: 1px solid var(--zp-ink); padding-bottom: 0.25rem; }
+.zp-glist ul { list-style: none; margin: 0; padding: 0; }
+.zp-glist li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; padding: 0.32rem 0; border-bottom: 1px solid var(--zp-line); font-size: 0.92rem; }
+.zp .zp-glist button { all: unset; cursor: pointer; color: var(--zp-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zp .zp-glist button:hover, .zp .zp-glist button:focus-visible { text-decoration: underline; }
+.zp-gcount { color: var(--zp-faint); font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+.zp-gnote { font-size: 0.98rem; max-width: none; max-height: 16rem; overflow-y: auto; padding-right: 0.3rem; }
+@keyframes zp-gdraw { to { stroke-dashoffset: 0; } }
+@keyframes zp-gshow { from { opacity: 0; } to { opacity: 0.6; } }
+@keyframes zp-gshowfocus { from { opacity: 0; } to { opacity: 0.85; } }
+@keyframes zp-ghalo { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes zp-gnodein { from { opacity: 0; } to { opacity: 1; } }
+svg.zp-gcompact .zp-gnode text { font-size: 21px; }
+svg.zp-gcompact .zp-gtopic text { font-size: 22px; }
+svg.zp-gcompact .zp-gcenter text { font-size: 25px; }
+@media (max-width: 900px) {
+  .zp-graphgrid { grid-template-columns: minmax(0, 1fr); }
+  .zp-gsearch { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zp-gnode, .zp-gtree, .zp-glink, .zp-gcenter .zp-ghalo { animation: none; transition: none; }
+  .zp-gtree { stroke-dashoffset: 0; }
+  .zp-glink { opacity: 0.6; }
+}

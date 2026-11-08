@@ -1,6 +1,7 @@
 import type { MemoryTreeIndex } from "./vault/lineage.js";
 import type { MemoryTreeOutline } from "./vault/treeOutline.js";
 import type { MemoryIndexStats } from "./vault/memoryIndex.js";
+import type { MemoryGraphView } from "./vault/memoryGraph.js";
 /**
  * Core engine contract — see docs/M0-SPEC.md. The MCP endpoint, the CLI, and
  * (later) the WhatsApp gateway are all thin adapters over `BrainEngine`.
@@ -553,6 +554,12 @@ export interface BrainEngine {
   searchTimed?(query: string): Promise<{ hits: Hit[]; tier: "index" | "scan"; ms: number; index?: { rows: number; bytes: number } }>;
   /** Rebuild the tier-0 memory index from the vault (`zenod index rebuild`); null when this engine has none. */
   rebuildMemoryIndex?(): Promise<MemoryIndexStats | null>;
+  /**
+   * The memory graph (E12-S2): one memory's neighbourhood (`center`: a path or link target), or
+   * the overview without one. Null when this engine has no tier-0 index; a view with `center`
+   * unresolved throws an error named NoteNotFoundError.
+   */
+  memoryGraph?(request?: { center?: string | null; limit?: number }): Promise<MemoryGraphView | null>;
   /** Deterministic retrieval of immutable memory entries by structural metadata. */
   searchEntries(query?: MemoryEntryQuery): Promise<MemoryEntry[]>;
   /** Internal tenant/vault boundary for entry pagination; never a client parameter. */

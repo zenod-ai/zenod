@@ -26,6 +26,7 @@ describe("Zenod dashboard navigation", () => {
   it("uses one capability-driven profile for both approved editions", () => {
     expect(dashboardSectionsForEdition("hosted").map(({ id }) => id)).toEqual([
       "chat",
+      "graph",
       "overview",
       "memory",
       "connect",

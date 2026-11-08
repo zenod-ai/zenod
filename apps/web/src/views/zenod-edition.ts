@@ -12,6 +12,7 @@ export type ZenodCapability =
 
 export type ZenodPortalSection =
   | "chat"
+  | "graph"
   | "overview"
   | "memory"
   | "connect"
@@ -32,6 +33,8 @@ export type ZenodEditionProfile = {
 // E12-S1: hosted users land on the chat with their memory; the rest sits behind its tabs.
 const HOSTED_SECTIONS = Object.freeze([
   { id: "chat", label: "Chat" },
+  // E12-S2: your memory as a graph, next to the chat.
+  { id: "graph", label: "Graph" },
   { id: "overview", label: "Overview" },
   { id: "memory", label: "Memory" },
   { id: "connect", label: "Connect / MCP" },
