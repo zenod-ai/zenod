@@ -111,3 +111,22 @@ describe("MemoryInbox", () => {
     await waitFor(() => expect(result.current).toBe(3))
   })
 })
+
+describe("Ask the desk in the inbox (EPIC-14 S3)", () => {
+  it("is there even when the inbox is empty, and the job shows at once as Working", async () => {
+    const started: InboxItem[] = []
+    const job = { ...WORKING, id: "j7", title: "Untangle Idealista and Poly-Maker", step: "Waiting for its turn" }
+    const calls = mockFetch((url) => {
+      if (url !== "/api/console/memory-desk/jobs") return { items: started, needsYou: started.length }
+      started.push(job)
+      return { item: job, needsYou: 1 }
+    })
+    render(<MemoryInbox />)
+    await waitFor(() => expect(screen.getByText("Nothing needs you.")).toBeTruthy())
+    fireEvent.change(screen.getByRole("textbox", { name: "A job for the memory desk" }), { target: { value: "Untangle Idealista and Poly-Maker" } })
+    fireEvent.click(screen.getByRole("button", { name: "Start the job" }))
+    await waitFor(() => expect(screen.getByText("Untangle Idealista and Poly-Maker")).toBeTruthy())
+    expect(screen.getByText(/Waiting for its turn/)).toBeTruthy()
+    expect(calls.find((call) => call.url === "/api/console/memory-desk/jobs")).toMatchObject({ method: "POST", body: { request: "Untangle Idealista and Poly-Maker" } })
+  })
+})

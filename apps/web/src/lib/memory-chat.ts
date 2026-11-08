@@ -61,25 +61,34 @@ export type MemoryKeepReceipt = {
 
 /** What Zenod decided to do with a sent message (E16-B1). */
 export type MemorySendRoute = {
-  action: "keep" | "answer" | "both"
+  /** job: passed to the memory desk (EPIC-14 S3). unsure: Zenod asks "keep it, or do it as a job?". */
+  action: "keep" | "answer" | "both" | "job" | "unsure"
   /** The part kept as a new memory, in the person's words. */
   keep: string | null
   /** The part answered from memory. */
   question: string | null
+  /** The job on the memory, in the person's words (job and unsure). */
+  job?: string | null
   by: "model" | "rules"
 }
+
+/** A memory desk job that was started: it shows in the inbox at once as Working. */
+export type MemoryDeskJob = { id: string; title: string; status: string; step: string | null }
 
 export type MemorySendHandlers = MemoryChatStreamHandlers & {
   /** The decision, before anything is kept or answered. */
   onRoute?: (route: MemorySendRoute) => void
   /** The keep's receipt (or why it could not be kept), as soon as it is queued. */
   onKept?: (kept: MemoryKeepReceipt | { error: string }) => void
+  /** The desk job a job message started (or why it could not start). */
+  onDesk?: (desk: MemoryDeskJob | { error: string }) => void
 }
 
 export type MemorySendResult = {
   route: MemorySendRoute
   kept: MemoryKeepReceipt | { error: string } | null
   answer: MemoryChatAnswer | null
+  desk?: MemoryDeskJob | { error: string } | null
 }
 
 export type MemoryNote = {
@@ -107,6 +116,7 @@ const FRIENDLY: Record<string, string> = {
   "tenant unavailable": "Your workspace is starting. Try again in a moment.",
   "memory chat unavailable": "Zenod could not answer just now. Try again in a moment.",
   "keep unavailable": "Zenod could not keep that just now. Try again in a moment.",
+  desk_unavailable: "The memory desk is not available here.",
   not_found: "That memory is not in your vault.",
 }
 
@@ -135,6 +145,7 @@ const json = (body: unknown): RequestInit => ({
 type StreamEvent =
   | { type: "route"; route: MemorySendRoute }
   | { type: "kept"; receipt?: MemoryKeepReceipt; error?: string; message?: string }
+  | { type: "desk"; item?: MemoryDeskJob; error?: string; message?: string }
   | { type: "memories"; memories: MemoryChatMemory[] }
   | { type: "text"; text: string }
   | { type: "answer"; answer: MemoryChatAnswer }
@@ -168,6 +179,7 @@ export async function sendToMemory(
   let route: MemorySendRoute | null = null
   let kept: MemorySendResult["kept"] = null
   let answer: MemoryChatAnswer | null = null
+  let desk: MemorySendResult["desk"] = null
   const handle = (line: string) => {
     if (!line.trim()) return
     const event = JSON.parse(line) as StreamEvent
@@ -177,6 +189,9 @@ export async function sendToMemory(
     } else if (event.type === "kept") {
       kept = event.receipt ?? { error: event.message ?? FRIENDLY["keep unavailable"]! }
       handlers.onKept?.(kept)
+    } else if (event.type === "desk") {
+      desk = event.item ?? { error: event.message ?? "The memory desk could not take that just now." }
+      handlers.onDesk?.(desk)
     } else if (event.type === "memories") handlers.onMemories?.(event.memories)
     else if (event.type === "text") handlers.onText?.(event.text)
     else if (event.type === "answer") answer = event.answer
@@ -195,7 +210,21 @@ export async function sendToMemory(
   }
   handle(buffer)
   if (!route) throw new MemoryChatError(503, FRIENDLY["memory chat unavailable"]!)
-  return { route, kept, answer }
+  return { route, kept, answer, desk }
+}
+
+/**
+ * "Ask the desk" (EPIC-14 S3): start a job on the memory from a short description. It shows in the
+ * inbox at once as Working and reports there.
+ */
+export async function askMemoryDesk(description: string): Promise<MemoryDeskJob> {
+  const data = await request<{ item: MemoryDeskJob }>("/api/console/memory-desk/jobs", json({ request: description }))
+  return data.item
+}
+
+/** Keep a message as a new memory (the "Keep it" choice when Zenod was unsure it was a job). */
+export async function keepInMemory(content: string): Promise<MemoryKeepReceipt> {
+  return request<MemoryKeepReceipt>("/api/console/memory-keep", json({ kind: "note", content }))
 }
 
 export function keepStatus(id: string): Promise<MemoryKeepReceipt> {

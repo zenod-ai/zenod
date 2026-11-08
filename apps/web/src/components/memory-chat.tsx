@@ -3,6 +3,8 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
 import {
+  askMemoryDesk,
+  keepInMemory,
   keepStatus,
   MemoryChatError,
   presentAnswer,
@@ -10,6 +12,7 @@ import {
   vaultLabel,
   type MemoryChatAnswer,
   type MemoryChatMemory,
+  type MemoryDeskJob,
   type MemoryKeepReceipt,
   type MemorySendRoute,
 } from "@/lib/memory-chat"
@@ -24,11 +27,20 @@ import { VoiceNoteButton } from "@/components/voice-note-button"
 // E12-S1b: the memories show as soon as they are found and the answer streams in, marked as a
 // draft until Zenod has checked each citation against the memory it names.
 // E12-S13: "Show in graph" opens the Graph tab with the answer's memories lit up.
+// EPIC-14 S3: a job on the memory ("untangle Idealista and Poly-Maker") goes to the memory desk and
+// shows in the inbox at once; when Zenod is unsure it asks "keep it, or do it as a job?". "Ask the
+// desk" beside Send starts a job from what is written, without the decision.
 
 type KeepState =
   | { state: "idle" }
   | { state: "keeping" }
   | { state: "kept"; receipt: MemoryKeepReceipt }
+  | { state: "error"; message: string }
+
+type DeskState =
+  | { state: "asking" }
+  | { state: "starting" }
+  | { state: "started"; job: MemoryDeskJob }
   | { state: "error"; message: string }
 
 type Turn =
@@ -47,6 +59,7 @@ type Turn =
       route: MemorySendRoute
       keep: KeepState | null
       result: MemoryChatAnswer | null
+      desk?: DeskState | null
     }
   | { id: number; kind: "voice-note"; seconds: number; keep: KeepState }
   | { id: number; kind: "error"; text: string }
@@ -327,24 +340,78 @@ function AnswerTurn({ result }: { result: MemoryChatAnswer }) {
   )
 }
 
+/** The memory desk's part of a reply (EPIC-14 S3): the job it started, or the question when unsure. */
+function DeskLine({
+  desk,
+  onChoose,
+}: {
+  desk: DeskState
+  onChoose: (choice: "keep" | "job") => void
+}) {
+  if (desk.state === "asking")
+    return (
+      <div className="zp-msg zp-z" data-testid="memory-desk">
+        <p>Keep this as a memory, or should the memory desk do it as a job on your memory?</p>
+        <div className="zp-row">
+          <button type="button" className="zp-deskbtn" onClick={() => onChoose("keep")}>
+            Keep it
+          </button>
+          <button type="button" className="zp-send" onClick={() => onChoose("job")}>
+            Do it as a job
+          </button>
+        </div>
+      </div>
+    )
+  if (desk.state === "starting")
+    return <p className="zp-keepnote" data-testid="memory-desk">Passing it to the memory desk…</p>
+  if (desk.state === "error")
+    return <p className="zp-keepnote zp-warn" data-testid="memory-desk">{desk.message}</p>
+  return (
+    <div className="zp-msg zp-z" data-testid="memory-desk">
+      <p>
+        That is a job on your memory, so I passed it to the memory desk. You
+        will see it in your inbox.
+      </p>
+      <p className="zp-keepnote">
+        <b>Working</b> · {desk.job.title} · <a href="#inbox">Open the inbox</a>
+      </p>
+    </div>
+  )
+}
+
 /** One reply (E16-B1): what was kept, then the answer, then what Zenod did in one line. */
 function ReplyTurn({
   route,
   keep,
   result,
+  desk,
+  onDeskChoice,
 }: {
   route: MemorySendRoute
   keep: KeepState | null
   result: MemoryChatAnswer | null
+  desk?: DeskState | null
+  onDeskChoice: (choice: "keep" | "job") => void
 }) {
   const did =
-    route.action === "keep"
-      ? "Kept as a new memory"
-      : route.action === "both"
-        ? "Kept the new part and answered the question"
-        : "Answered from your memory · nothing saved"
+    route.action === "job"
+      ? desk?.state === "error"
+        ? "Not passed to the memory desk"
+        : "Passed to the memory desk · nothing saved"
+      : route.action === "unsure"
+        ? desk?.state === "asking"
+          ? "Waiting for you: keep it, or do it as a job"
+          : desk
+            ? "Passed to the memory desk · nothing saved"
+            : "Kept as a new memory"
+        : route.action === "keep"
+          ? "Kept as a new memory"
+          : route.action === "both"
+            ? "Kept the new part and answered the question"
+            : "Answered from your memory · nothing saved"
   return (
     <div className="zp-turn">
+      {desk ? <DeskLine desk={desk} onChoose={onDeskChoice} /> : null}
       {keep ? <KeepLine keep={keep} route={route} /> : null}
       {result ? <AnswerTurn result={result} /> : null}
       <div className="zp-actions">
@@ -385,6 +452,63 @@ export function MemoryChat() {
     return id
   }
 
+  const updateDesk = (id: number, desk: DeskState | null, keep?: KeepState) =>
+    setTurns((all) =>
+      all.map((turn) =>
+        turn.id === id && turn.kind === "reply"
+          ? { ...turn, desk, ...(keep ? { keep } : {}) }
+          : turn
+      )
+    )
+
+  const failureText = (error: unknown) =>
+    error instanceof Error ? error.message : "Something went wrong. Try again."
+
+  async function startJob(id: number, description: string) {
+    updateDesk(id, { state: "starting" })
+    try {
+      updateDesk(id, { state: "started", job: await askMemoryDesk(description) })
+    } catch (error) {
+      updateDesk(id, { state: "error", message: failureText(error) })
+    }
+  }
+
+  // Zenod was unsure: the person chose to keep the message, or to have the desk do it.
+  async function chooseDesk(id: number, route: MemorySendRoute, choice: "keep" | "job") {
+    const text = route.job ?? ""
+    if (choice === "job") return startJob(id, text)
+    updateDesk(id, null, { state: "keeping" })
+    try {
+      const receipt = await keepInMemory(text)
+      updateDesk(id, null, { state: "kept", receipt })
+      pollKeep(id, receipt)
+    } catch (error) {
+      updateDesk(id, null, { state: "error", message: failureText(error) })
+    }
+  }
+
+  // "Ask the desk": start a job from what is written, without Zenod deciding.
+  const [deskHint, setDeskHint] = React.useState(false)
+  async function askDesk() {
+    const description = draft.trim()
+    if (!description) {
+      setDeskHint(true)
+      return
+    }
+    if (sending) return
+    setDeskHint(false)
+    setDraft("")
+    push({ kind: "message", text: description })
+    const id = push({
+      kind: "reply",
+      route: { action: "job", keep: null, question: null, job: description, by: "rules" },
+      keep: null,
+      result: null,
+      desk: { state: "starting" },
+    })
+    await startJob(id, description)
+  }
+
   async function send() {
     const message = draft.trim()
     if (!message || sending) return
@@ -420,6 +544,14 @@ export function MemoryChat() {
             ? { state: "error", message: sent.kept.error }
             : { state: "kept", receipt: sent.kept },
         result: sent.answer,
+        desk:
+          sent.route.action === "job"
+            ? sent.desk && !("error" in sent.desk)
+              ? { state: "started", job: sent.desk }
+              : { state: "error", message: sent.desk?.error ?? "The memory desk could not take that just now. Try again in a moment." }
+            : sent.route.action === "unsure"
+              ? { state: "asking" }
+              : null,
       }))
       if (sent.kept && !("error" in sent.kept)) pollKeep(pendingId, sent.kept)
     } catch (error) {
@@ -478,7 +610,14 @@ export function MemoryChat() {
                   {turn.text}
                 </p>
               ) : (
-                <ReplyTurn key={turn.id} route={turn.route} keep={turn.keep} result={turn.result} />
+                <ReplyTurn
+                  key={turn.id}
+                  route={turn.route}
+                  keep={turn.keep}
+                  result={turn.result}
+                  desk={turn.desk ?? null}
+                  onDeskChoice={(choice) => void chooseDesk(turn.id, turn.route, choice)}
+                />
               )
             )}
             <div ref={endRef} />
@@ -492,11 +631,14 @@ export function MemoryChat() {
           >
             <textarea
               aria-label="Message your memory"
-              placeholder="Tell Zenod something, or ask your memory"
+              placeholder="Tell Zenod something, ask your memory, or give the desk a job"
               value={draft}
               rows={1}
               maxLength={2000}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                setDraft(event.target.value)
+                setDeskHint(false)
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
@@ -517,10 +659,26 @@ export function MemoryChat() {
             >
               Send
             </button>
+            <button
+              type="button"
+              className="zp-deskbtn"
+              disabled={sending}
+              onClick={() => void askDesk()}
+              title="Start a job on your memory: re-file, split, join, move or relink topics"
+            >
+              Ask the desk
+            </button>
           </form>
+          {deskHint ? (
+            <p className="zp-hint" role="status" data-testid="memory-desk-hint">
+              Write what the desk should do, like “Untangle Idealista and
+              Poly-Maker”, then press Ask the desk.
+            </p>
+          ) : null}
           <p className="zp-hint">
-            Zenod decides: what you tell it is kept, what you ask is answered. A
-            question is never saved.
+            Zenod decides: what you tell it is kept, what you ask is answered,
+            and a job on your memory goes to the memory desk. A question is
+            never saved.
           </p>
         </div>
       </div>

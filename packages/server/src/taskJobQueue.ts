@@ -19,6 +19,7 @@ import {
   type TaskJob,
   type TaskJobInput,
   type TaskJobKind,
+  type TaskJobResult,
   type TaskJobStore,
   type TreeSweepJobResult,
 } from "./taskJobStore.js";
@@ -38,7 +39,18 @@ const VAULT_RECOVERY_COOLDOWN_MS = 5 * 60_000;
  * extraction cannot make an unrelated user message appear unanswered. A
  * restart marks in-flight jobs interrupted (see TaskJobStore).
  */
+/**
+ * The memory desk's part of the queue (EPIC-14 S3), set by the tenant runtime: run a desk job,
+ * report one that failed, and look at a capture from a chat channel ("run it?" in the inbox).
+ */
+export interface TaskJobDeskHooks {
+  run(job: TaskJob, engine: BrainEngine, assertActive: () => void): Promise<TaskJobResult>;
+  failed(job: TaskJob, error: string): void;
+  afterCapture?(job: TaskJob): void;
+}
+
 export class TaskJobQueue {
+  private deskHooks: TaskJobDeskHooks | null = null;
   private activeChatDrain: Promise<void> | null = null;
   private activeDurableDrain: Promise<void> | null = null;
   private leaseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,6 +74,10 @@ export class TaskJobQueue {
     /** agent_team E42-S22: told (best effort, never awaited) when a capture is durably stored; see subscribers.ts. */
     private readonly onEntryStored?: EntryStoredListener,
   ) {}
+
+  setDeskHooks(hooks: TaskJobDeskHooks | null): void {
+    this.deskHooks = hooks;
+  }
 
   /** Enqueue a job and start draining; returns immediately with the queued job. */
   enqueue(kind: TaskJobKind, input: TaskJobInput, idempotencyKey?: string): TaskJob {
@@ -165,7 +181,7 @@ export class TaskJobQueue {
   private requestDurableDrain(): void {
     if (this.activeDurableDrain) return;
     // The weekly tree sweep shares this serial lane, so it never runs alongside a live filing.
-    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory", "tree_sweep"]);
+    const active = this.drain(["task", "work", "store", "media_ingest", "enrich_memory", "tree_sweep", "desk_job"]);
     this.activeDurableDrain = active;
     void active
       .catch((error) => console.error("[task-job] durable lane failed:", error))
@@ -204,6 +220,10 @@ export class TaskJobQueue {
         completed = this.store.updateClaimed(job, { status: "done", result: await this.runTreeSweep(job) });
       } else if (allowanceBlock) {
         completed = await this.completeOverAllowance(job, allowanceBlock);
+      } else if (job.kind === "desk_job") {
+        if (!this.deskHooks) throw new Error("the memory desk is not available here");
+        const engine = await this.getEngine();
+        completed = this.store.updateClaimed(job, { status: "done", result: await this.deskHooks.run(job, engine, () => this.store.assertClaim(job)) });
       } else if (job.kind === "chat") {
         const engine = await this.getEngine();
         const result = await engine.chat(
@@ -234,6 +254,9 @@ export class TaskJobQueue {
         assertDurableStoreReceipt(result);
         completed = this.store.updateClaimed(job, { status: "done", result });
         if (completed) this.entryStored(result.evidenceRef, job.input.contentType, job.input.source, job.input.capturedAt);
+        if (completed && (job.input.source === "whatsapp" || job.input.source === "telegram")) {
+          try { this.deskHooks?.afterCapture?.(job); } catch { console.warn("[memory-desk] could not look at a chat capture"); }
+        }
       } else if (job.kind === "media_ingest") {
         const rejection = this.admit(job.kind, job.input);
         if (rejection) throw new Error(rejection.message);
@@ -301,6 +324,9 @@ export class TaskJobQueue {
         }
       }
       console.error(`[task-job] ${job.id} failed (${job.kind}):`, err);
+      if (job.kind === "desk_job") {
+        try { this.deskHooks?.failed(job, (err as Error).message ?? String(err)); } catch { /* the inbox is best effort */ }
+      }
       if (err instanceof Error && err.message === "filing_recovery_pending") this.requestVaultRecovery();
       if (job.kind === "enrich_memory" && err instanceof VaultPublicationError && err.failure.retryable
         && this.store.resumePublicationFailure(job, err.message)) return;

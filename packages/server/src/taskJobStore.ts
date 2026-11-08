@@ -16,7 +16,7 @@ import { openZenodSqlite } from "./sqlite.js";
  * marks in-flight jobs "interrupted" (not stuck "running") so they're visible.
  */
 
-export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory" | "tree_sweep";
+export type TaskJobKind = "chat" | "task" | "work" | "store" | "media_ingest" | "enrich_memory" | "tree_sweep" | "desk_job";
 
 export type TaskJobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
@@ -84,6 +84,12 @@ export interface TaskJobInput {
   mediaHints?: string[];
   /** enrich_memory: exact already-committed immutable evidence entry. */
   evidenceRef?: string;
+  /** desk_job (EPIC-14 S3): the person's request, in their words. */
+  deskRequest?: string;
+  /** desk_job: a plan the person said yes to (a big job's plan card); applied as is. */
+  deskPlan?: import("zenod").DeskPlan;
+  /** desk_job: the inbox item this job reports to, when it is not the job's own (a yes on a plan card). */
+  deskItemKey?: string;
 }
 
 export interface MediaIngestReceipt {
@@ -128,7 +134,7 @@ export interface MediaIngestReceipt {
   nextAdapterIssues?: string[];
 }
 
-export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt | TreeSweepJobResult;
+export type TaskJobResult = Reply | TaskingReply | WorkResult | StoreResult | MediaIngestReceipt | TreeSweepJobResult | import("./memoryDesk.js").DeskJobReceipt;
 
 /**
  * Weekly tree sweep receipt (EPIC-9 E9-2d). Counts and the vault revision only:

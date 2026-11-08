@@ -3,7 +3,7 @@
 // the prompt, the parse, the rules and the guard are plain functions the engine, server and tests share.
 // The guard is the promise the button makes: a question is never kept as a memory.
 
-export type SendAction = "keep" | "answer" | "both";
+export type SendAction = "keep" | "answer" | "both" | "job" | "unsure";
 
 export interface SendRoute {
   action: SendAction;
@@ -11,6 +11,13 @@ export interface SendRoute {
   keep: string | null;
   /** The question to answer from memory; null when nothing is asked. */
   question: string | null;
+  /**
+   * EPIC-14 S3, the memory desk: a job on the memory itself (split, join, move, rename, relink,
+   * "this is filed wrong"), in the person's words. Set for "job" (the model and the rules agree:
+   * the desk runs it) and "unsure" (only one of them thinks so: the app asks "keep this, or do it as
+   * a job?" and never runs a job on a guess). Nothing is kept or answered then.
+   */
+  job?: string | null;
   /** "model" when the chat model decided, "rules" when the plain rules did (no model, or it slipped). */
   by: "model" | "rules";
 }
@@ -28,7 +35,32 @@ const SYSTEM = [
   "- A question is never keep. \"Remind me to ...\" and \"don't forget ...\" are keep. Greetings and thanks are neither.",
   "- A message can carry both, like \"Remember Ana's birthday is May 3, and what did I say about the shed?\" -> {\"keep\": \"Ana's birthday is May 3\", \"ask\": \"what did I say about the shed?\"}",
   "- Answer in the message's own language; never add facts.",
+  "- job: only when the person asks the app to reorganise their memory itself: split, untangle, join, merge, move or re-file topics, pages or notes, rename or relink them, clean up the tree, or says something is filed wrong. Copy the request in their words; then keep and ask are \"\". Use \"\" for anything else: moving furniture or renaming a company is news to keep, not a job.",
+  "Reply shape when it is a job: {\"keep\": \"\", \"ask\": \"\", \"job\": \"...\"}",
 ].join("\n");
+
+const JOB_VERB = /^(?:(?:can you|could you|please|pls|zenod,?)\s+)*(?:split|untangle|separate|disentangle|merge|join|combine|move|re-?file|refile|put|rename|re-?link|relink|link|unlink|reorgani[sz]e|tidy(?: up)?|clean(?: up)?|sort(?: out)?|fix|group|nest|separa|separar|junta|juntar|une|unir|mueve|mover|renombra|renombrar|ordena|ordenar|reorganiza|limpia)(?![\p{L}\p{N}])/iu;
+const JOB_OBJECT = /(?<![\p{L}\p{N}])(?:topics?|pages?|notes?|memor(?:y|ies)|tree|filing|filed|folders?|categor(?:y|ies)|branch(?:es)?|temas?|p[aá]ginas?|notas?|memoria|[aá]rbol)(?![\p{L}\p{N}])/iu;
+const JOB_COMPLAINT = /(?<![\p{L}\p{N}])(?:are|is|got|get|have been|están|esta|está)\s+(?:all\s+)?(?:tangled|mixed(?: up)?|knotted|filed wrong|in the wrong (?:place|topic)|liados|mezclados|enredados)(?![\p{L}\p{N}])/iu;
+
+/** The plain rules' reading of a desk job: a request to reorganise the memory, never a bare chore. */
+export function looksLikeDeskJob(message: string): boolean {
+  const text = message.trim();
+  if (!text || text.length > 600) return false;
+  if (JOB_COMPLAINT.test(text)) return true;
+  return text.split(/(?<=[.!?])\s+|\n+/).some((sentence) => {
+    const clause = sentence.trim().replace(/^[¿¡"'“(]+/, "");
+    return JOB_VERB.test(clause) && JOB_OBJECT.test(clause);
+  });
+}
+
+/** The desk's outcome when the model and the rules disagree or only the rules decide: ask, never guess. */
+function deskRoute(message: string, modelJob: string | null, by: SendRoute["by"]): SendRoute | null {
+  const rules = looksLikeDeskJob(message);
+  if (!modelJob && !rules) return null;
+  const job = message.trim();
+  return { action: modelJob && rules ? "job" : "unsure", keep: null, question: null, job, by };
+}
 
 export function sendRoutePrompt(message: string): SendRoutePrompt {
   return { system: SYSTEM, prompt: `MESSAGE\n${message}` };
@@ -76,6 +108,8 @@ const stripLead = (text: string) => text.replace(KEEP_LEAD, "").trim();
 /** The plain rules: each sentence is a question to answer or information to keep. */
 export function ruleSendRoute(message: string): SendRoute {
   const text = message.trim();
+  const desk = deskRoute(text, null, "rules");
+  if (desk) return desk;
   if (!text || SMALL_TALK.test(text)) return finish(null, text || null, "rules");
   const keep: string[] = [];
   const ask: string[] = [];
@@ -115,21 +149,25 @@ function finish(keep: string | null, question: string | null, by: SendRoute["by"
 export function parseSendRoute(output: string, message: string): SendRoute | null {
   const match = output.match(/\{[\s\S]*\}/);
   if (!match) return null;
-  let value: { keep?: unknown; ask?: unknown };
+  let value: { keep?: unknown; ask?: unknown; job?: unknown };
   try {
-    value = JSON.parse(match[0]) as { keep?: unknown; ask?: unknown };
+    value = JSON.parse(match[0]) as { keep?: unknown; ask?: unknown; job?: unknown };
   } catch {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
   const keep = typeof value.keep === "string" ? value.keep.trim() : "";
   const ask = typeof value.ask === "string" ? value.ask.trim() : "";
+  const job = typeof value.job === "string" ? value.job.trim() : "";
+  const desk = deskRoute(message, job || null, "model");
+  if (desk) return desk;
   return guardSendRoute(finish(keep || null, ask || null, "model"), message);
 }
 
 /** The promise of the one Send button: nothing that is only asked is ever kept. */
 export function guardSendRoute(route: SendRoute, message: string): SendRoute {
   const text = message.trim();
+  if (route.action === "job" || route.action === "unsure") return route;
   const rules = ruleSendRoute(text);
   let keep = route.keep;
   let question = route.question;

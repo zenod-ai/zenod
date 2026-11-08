@@ -38,7 +38,10 @@ import {
   isKnownTool,
   toolKind,
   LlmAllowanceExceededError,
+  looksLikeDeskJob,
 } from "zenod";
+import { InboxError, inboxFor, type InboxDeskHooks } from "./inboxStore.js";
+import { answerDeskQuestion, DeskLimitError, deskJobFailed, offerDeskJobFromChat, runDeskJob, settleDeskItems, undoDeskItem } from "./memoryDesk.js";
 import { aiAllowanceExhaustedMessage, nextUtcMonthlyReset } from "./customerMetering.js";
 import {
   GithubApiError,
@@ -352,6 +355,20 @@ export class Runtime {
     return inspectGithubAppInstallation(this.settings, installationId);
   }
 
+  /** The memory desk's part of this tenant's inbox (EPIC-14 S3): Undo, its own answers, settling. */
+  readonly inboxDeskHooks: InboxDeskHooks = {
+    undo: async (item) => undoDeskItem(item, await this.getEngine(), this.taskJobQueue),
+    answer: (item, optionId) => {
+      try {
+        return answerDeskQuestion(item, optionId, inboxFor(this), this.taskJobQueue);
+      } catch (error) {
+        if (error instanceof DeskLimitError) throw new InboxError("conflict", error.message);
+        throw error;
+      }
+    },
+    refresh: (store) => settleDeskItems(store, this.taskJobQueue),
+  };
+
   constructor(
     readonly dataDir: string,
     readonly agent: AgentDefinition = ZENOD_AGENT,
@@ -456,6 +473,15 @@ export class Runtime {
       severity: "info",
       dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
     }), () => this.aiAllowanceBlock(), this.subscriberDispatcher?.onEntryStored);
+    // EPIC-14 S3: the memory desk runs on this queue and reports in this tenant's inbox.
+    this.taskJobQueue.setDeskHooks({
+      run: (job, engine, assertActive) => runDeskJob(job, engine, inboxFor(this), assertActive),
+      failed: (job, error) => deskJobFailed(inboxFor(this), job, error),
+      afterCapture: (job) => {
+        if (job.input.contentType && job.input.contentType !== "text") return;
+        offerDeskJobFromChat(inboxFor(this), job.id, job.input.content ?? "", looksLikeDeskJob);
+      },
+    });
     this.executionStore = new ExecutionStore(join(dataDir, "execution.sqlite"));
     // S-1 (a): each run's full events.jsonl lands here on the persistent /data volume,
     // keyed by execution id, so the transcript link outlives the runner workdir + deploys.
