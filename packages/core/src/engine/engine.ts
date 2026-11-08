@@ -2321,8 +2321,22 @@ export function createEngine(options: EngineOptions): BrainEngine {
       let published = await publishedRevision();
       let recoveredPaths: string[] = [];
       let prior = await loadReceipt();
-      const changes = await repo.pendingChanges();
+      let changes = await repo.pendingChanges();
       const localPublished = repo.isCurrentHeadPublished ? await repo.isCurrentHeadPublished() : true;
+      // EPIC-20 A1: another writer published while this plan sat uncommitted, so its validated base is
+      // gone and it can never publish (a non-retryable conflict that blocked every later save). The
+      // evidence itself is already published: keep the stale plan beside the repo and file the evidence
+      // again on the current memory, exactly like a fresh enrichment.
+      if (prior && changes.length && localPublished
+        && (prior.baseRevision.provider !== published.provider || prior.baseRevision.id !== published.id)) {
+        const aside = join(vaultPath, ".git", "zenod-stale-filings");
+        await mkdir(aside, { recursive: true });
+        await writeFile(join(aside, `${receiptPath.split("/").pop()!.replace(/\.md$/, "")}-${now().getTime()}.md`), renderFilingReceipt(prior));
+        console.warn(`[vault-recovery] stale filing plan set aside, filing again: ${JSON.stringify({ evidenceRef: input.evidenceRef, phase: prior.phase, base: prior.baseRevision.id, published: published.id })}`);
+        await repo.discardChanges();
+        changes = await repo.pendingChanges();
+        prior = await loadReceipt();
+      }
       if (changes.length || !localPublished) {
         if (!prior) throw new Error("filing_unrecognized_local_changes");
         if (prior.phase === "prepared") {
