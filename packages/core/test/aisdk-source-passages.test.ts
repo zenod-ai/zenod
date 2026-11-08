@@ -42,7 +42,8 @@ describe("addressed classifier prompt boundary", () => {
     expect(system).toContain("Destination relevance is positive support, not keyword overlap");
     expect(system).toContain("A genuine negative constraint about the subject itself remains durable knowledge");
     expect(system).toContain("Repeated existing knowledge still needs a new source citation");
-    expect(system).toContain("A clearly new project may propose a valid new path");
+    expect(system).toContain("no candidate page is about that subject, create a new page for it");
+    expect(system).toContain("A page fits only when the proposition is about that page's own subject");
     expect(prompt.match(/Caption release Friday/g)).toHaveLength(1);
     expect(vi.mocked(generateObject)).toHaveBeenCalledTimes(1);
   });

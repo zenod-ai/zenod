@@ -53,6 +53,10 @@ export class TrackedWrites {
   get paths(): string[] {
     return [...this.originals.keys()];
   }
+  /** The bytes a path held before this tracker first wrote it (null: it did not exist). */
+  original(path: string): string | null | undefined {
+    return this.originals.get(path);
+  }
   async revert(): Promise<void> {
     for (const [path, original] of this.originals) {
       const absolute = join(this.vaultPath, path);
@@ -217,8 +221,9 @@ export async function writeProvisionalLeaf(
   index: TreeIndex,
   input: { content: string; evidenceRef: string; reason: string; today: string },
   writes: TrackedWrites = new TrackedWrites(vaultPath),
+  options: { rootsOnly?: boolean } = {},
 ): Promise<{ path: string; parent: string } | null> {
-  const choice = await chooseTreeNode(vaultPath, index, input.content);
+  const choice = await chooseTreeNode(vaultPath, index, input.content, options.rootsOnly ? { rootsOnly: true } : {});
   if (!choice) return null;
   const { date, anchor } = splitEvidenceRef(input.evidenceRef);
   const citation = `[[${date}#^${anchor}]]`;

@@ -13,6 +13,7 @@ import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
 import { discoverTree } from "./engine/treeDiscover.js";
 import { rediscoverTree, refileAgentLeaves } from "./engine/treeSweep.js";
+import { moveReportLines, planReportLines } from "./engine/reportLines.js";
 import { TrackedWrites } from "./engine/treePlacement.js";
 import { ensureSchemaV1 } from "./vault/migrate.js";
 import { cleanSlateVault, type CleanSlateResult } from "./vault/cleanSlate.js";
@@ -42,6 +43,7 @@ function usage(): string {
     "  tree lineage <path>       print a page's path root → leaf",
     "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print an empty Tree.md (no roots), or write it into <dir>; `tree discover --apply` finds the roots",
     "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
+    "  tree report-lines [--apply] [--today YYYY-MM-DD] [--json]  list agent-report lines on your pages (dry run); --apply moves them to Archive/Agent reports/ with their page and line (no commit)",
     "  index rebuild             rebuild the tier-0 memory index (SQLite FTS5 beside the vault) from scratch; idempotent",
     "  index search <query>      query the tier-0 index (refreshes changed files first), with tree paths and timing",
     "  index stats               rows, files and size of the tier-0 index",
@@ -272,6 +274,19 @@ async function main(): Promise<number> {
         }
         for (const subject of applied?.subjects ?? []) console.log(`subject    ${subject.display}  ·  ${subject.created ? "new page" : `${subject.added} new capture(s) on`} ${subject.path}`);
         console.log(`${plan.stats.pages} tree pages · ${plan.stats.topics} topics · ${plan.fresh ? "fresh (current roots ignored)" : "continuing"}${changed ? ` · ${changed.length} file(s) written · ${refiled.length} agent-report leaf(s) moved to the ops rollup` : " · dry run"}`);
+        return 0;
+      }
+      if (sub === "report-lines") {
+        const flag = (name: string) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
+        const plan = await planReportLines(vaultPath());
+        const written = rest.includes("--apply")
+          ? await moveReportLines(vaultPath(), plan, flag("--today") ?? new Date().toISOString().slice(0, 10)) : null;
+        if (rest.includes("--json")) {
+          console.log(JSON.stringify({ ...plan, written }, null, 2));
+          return 0;
+        }
+        for (const line of plan.lines) console.log(`${line.page}:${line.line}  ${line.text.slice(0, 160)}`);
+        console.log(`${plan.lines.length} report line(s) on ${new Set(plan.lines.map(line => line.page)).size} page(s) · ${plan.citedLines} cited line(s) on ${plan.pagesScanned} page(s) checked${written ? ` · ${written.length} file(s) written` : " · dry run"}`);
         return 0;
       }
       if (sub === "seed") {
