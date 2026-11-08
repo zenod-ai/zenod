@@ -49,12 +49,28 @@ AUTH_DIR = os.environ.get("HEALTH_AUTH_DIR", "/srv/auth")
 RENEW_AFTER = 24 * 3600   # sliding session: re-issue a cookie once it is a day old
 MIN_PW, MAX_PW = 12, 200
 SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1   # 16 MB per hash: fits the app's 64 MB limit
+ICON_DIR = os.environ.get("HEALTH_ICON_DIR", "/srv/icons")
+ICONS = {
+    "/favicon.ico": "image/x-icon",
+    "/favicon.svg": "image/svg+xml",
+    "/favicon-16x16.png": "image/png",
+    "/favicon-32x32.png": "image/png",
+    "/apple-touch-icon.png": "image/png",
+    "/icon-192.png": "image/png",
+    "/icon-512.png": "image/png",
+}
+ICON_LINKS = (
+    '<link rel="icon" href="/favicon.ico" sizes="48x48">\n'
+    '<link rel="icon" type="image/svg+xml" href="/favicon.svg">\n'
+    '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">'
+)
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Zenod health: sign in</title>
+{icons}
 <style>
 body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#12151b;color:#e6e9ef;font:16px system-ui,sans-serif}}
 form{{background:#1b1f27;border:1px solid #2c323d;border-radius:12px;padding:28px;width:min(340px,86vw);display:grid;gap:14px}}
@@ -235,7 +251,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
 
     def _page(self, status, form):
-        self._send(status, PAGE.format(form=form).encode(), [("Content-Type", "text/html; charset=utf-8")])
+        self._send(status, PAGE.format(form=form, icons=ICON_LINKS).encode(), [("Content-Type", "text/html; charset=utf-8")])
 
     def _login_page(self, status, error="", nxt="/"):
         err = f'<div class="err">{html.escape(error)}</div>' if error else ""
@@ -278,10 +294,20 @@ class Handler(SimpleHTTPRequestHandler):
             return True
         return False
 
+    def _icon(self, path):
+        try:
+            with open(os.path.join(ICON_DIR, path.lstrip("/")), "rb") as f:
+                body = f.read()
+        except OSError:
+            return self._send(HTTPStatus.NOT_FOUND)
+        self._send(HTTPStatus.OK, body, [("Content-Type", ICONS[path])])
+
     def do_GET(self):
         if self._plain_http():
             return
         parts = urlsplit(self.path)
+        if parts.path in ICONS:
+            return self._icon(parts.path)
         if parts.path == "/logout":
             return self._redirect("/login", [self._cookie_header("", 0)])
         if parts.path == "/login":
@@ -316,7 +342,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self._password_page(HTTPStatus.BAD_REQUEST, f"Use at least {MIN_PW} characters.")
         write_hash(hash_password(pw), self.auth_dir)
         self._renew = False
-        body = PAGE.format(form=PW_DONE).encode()
+        body = PAGE.format(form=PW_DONE, icons=ICON_LINKS).encode()
         self._send(HTTPStatus.OK, body, [("Content-Type", "text/html; charset=utf-8"),
                                          self._cookie_header(make_token(self._secret()), SESSION_SECONDS)])
 

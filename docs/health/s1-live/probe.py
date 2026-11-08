@@ -493,6 +493,7 @@ def page(doc: dict, link: dict | None = None) -> str:
     trs = f"<h2>Recent changes</h2><ul class=\"tr\">{trs}</ul>" if trs else ""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod health · live</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <style>{CSS}{timeline.CSS if timeline else ''}{smoke_view.CSS}</style></head><body><main>
 {signin}
 <div id="stale">This page is stale: the last probe is more than 15 minutes old.</div>

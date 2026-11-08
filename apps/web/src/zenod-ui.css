@@ -1,0 +1,107 @@
+/* E17-D1: the whole cloud app in the Zenod paper language (docs/epic12/DESIGN-LANGUAGE.md,
+   zenod.dev's paper.css). Looks only: these rules restyle the shared UI parts by their
+   data-slot, so every screen (settings, channels, vault, usage, account, sign-in) matches
+   the chat and the graph. Unlayered on purpose, so they win over the parts' utility classes.
+   The chat and graph keep their own .zp rules. */
+
+/* Type: a book serif for headings and card titles, a plain sans for everything else. */
+body { font-family: var(--font-sans); }
+h1, h2, [data-slot="card-title"], [data-slot="dialog-title"], [data-slot="alert-dialog-title"], [data-slot="empty-title"] {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+h1 { line-height: 1.1; }
+h1.text-xl { font-size: 1.6rem; }
+h2 { line-height: 1.15; }
+h2.text-lg { font-size: 1.45rem; }
+h2.text-2xl, h2.text-xl { font-size: clamp(1.7rem, 3vw, 2.2rem); }
+[data-slot="card-title"] { font-size: 1.2rem; line-height: 1.25; font-weight: 500; }
+h3 { font-family: var(--font-heading); font-weight: 500; letter-spacing: -0.005em; }
+.font-mono, code, pre, kbd { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+a:not([data-slot]) { text-underline-offset: 2px; }
+
+/* Cards: flat paper with one hairline, no shadow, 6 px corners. */
+[data-slot="card"] {
+  border-radius: 6px;
+  box-shadow: none;
+  border: 1px solid var(--border);
+  --tw-ring-shadow: 0 0 #0000;
+}
+[data-slot="card-header"] { border-top-left-radius: 6px; border-top-right-radius: 6px; }
+[data-slot="card-footer"] { background: transparent; border-top-color: var(--border); }
+[data-slot="card-description"] { color: var(--muted-foreground); }
+
+/* Buttons: pills, like zenod.dev. Filled green for the one action, ink outline for the rest. */
+[data-slot="button"] { border-radius: 999px; font-weight: 500; }
+[data-slot="button"]:not([data-size^="icon"]) { padding-inline: 0.95rem; }
+[data-slot="button"][data-size="sm"]:not([data-size^="icon"]), [data-slot="button"][data-size="xs"] { padding-inline: 0.75rem; }
+[data-slot="button"][data-variant="default"]:not(:disabled):hover { background: var(--foreground); color: var(--background); }
+[data-slot="button"][data-variant="outline"] { background: transparent; border-color: var(--input); }
+[data-slot="button"][data-variant="outline"]:not(:disabled):hover { border-color: var(--foreground); background: transparent; }
+[data-slot="button"][data-variant="secondary"] { background: var(--secondary); }
+[data-slot="button"][data-variant="link"] { color: var(--zn-link); padding-inline: 0; }
+[data-slot="button"]:not(:focus-visible) { box-shadow: none; }
+
+/* Fields: paper inside, warm hairline, green focus. */
+[data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="input-group"] {
+  border-radius: 6px;
+  background: transparent;
+  border-color: var(--input);
+  box-shadow: none;
+}
+[data-slot="input"]:focus-visible, [data-slot="textarea"]:focus-visible, [data-slot="select-trigger"]:focus-visible {
+  border-color: var(--ring);
+}
+[data-slot="input-group"]:focus-within { border-color: var(--ring); }
+[data-slot="select-content"], [data-slot="dialog-content"], [data-slot="alert-dialog-content"] {
+  border-radius: 6px;
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+
+/* Tags: small sans pills with a hairline. */
+[data-slot="badge"] { border-radius: 999px; font-weight: 500; letter-spacing: 0; }
+[data-slot="badge"][data-variant="secondary"] { background: transparent; border-color: var(--zn-link); color: var(--zn-link); }
+[data-slot="badge"][data-variant="outline"] { border-color: var(--input); color: var(--muted-foreground); }
+
+/* Alerts: a hairline box, warm, no tint. */
+[data-slot="alert"] { border-radius: 6px; background: transparent; border-color: var(--border); }
+
+/* The section switcher: a row of words over one hairline, the open one underlined in green,
+   like the landing's navigation. */
+[data-slot="tabs-list"][data-variant="default"] {
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+  gap: 0.15rem;
+  height: auto;
+  width: 100%;
+}
+[data-slot="tabs-list"] [data-slot="tabs-trigger"] {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0.55rem 0.7rem 0.6rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 500;
+}
+[data-slot="tabs-list"] [data-slot="tabs-trigger"]:hover { color: var(--foreground); }
+[data-slot="tabs-list"] [data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--foreground);
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--zn-link);
+}
+[data-slot="tabs-list"] [data-slot="tabs-trigger"]:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+
+/* Separators and table rules use the warm hairline. */
+[data-slot="separator"] { background: var(--border); }
+table thead { border-bottom: 1px solid var(--foreground); }
+
+/* The sign-in pages sit on the paper like the landing. */
+[data-slot="field-label"], [data-slot="label"] { font-weight: 500; }
+[data-slot="badge"] { font-family: var(--font-sans); font-size: 0.72rem; }

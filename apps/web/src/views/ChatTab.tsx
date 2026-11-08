@@ -162,12 +162,12 @@ function AssistantMarkdown({ text }: { text: string }) {
           void node
           return className?.split(" ").includes("obsidian-link") ? (
             <a
-              className="inline-flex max-w-full items-baseline gap-1 align-baseline font-semibold text-sky-300 underline decoration-sky-300/60 underline-offset-3 transition-colors hover:text-sky-200 hover:decoration-sky-200"
+              className="inline-flex max-w-full items-baseline gap-1 align-baseline font-semibold text-[var(--zn-link)] underline decoration-[var(--zn-link)]/60 underline-offset-3 transition-colors hover:text-foreground hover:decoration-foreground"
               target="_blank"
               rel="noreferrer"
               {...props}
             >
-              <FileTextIcon className="relative top-0.5 size-3 shrink-0 text-sky-300/80" />
+              <FileTextIcon className="relative top-0.5 size-3 shrink-0 text-[var(--zn-link)]/80" />
               <span className="min-w-0 truncate">{children}</span>
             </a>
           ) : (
@@ -552,7 +552,7 @@ export function ChatTab({ vaultless = false, product = "default" }: { vaultless?
                         key={s}
                         className="flex items-center gap-2 text-xs text-muted-foreground"
                       >
-                        <CheckIcon className="size-3.5 text-emerald-500" />
+                        <CheckIcon className="size-3.5 text-[var(--zn-link)]" />
                         {step}
                       </div>
                     ))}

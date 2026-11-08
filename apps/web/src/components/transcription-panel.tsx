@@ -48,7 +48,7 @@ function StatusBadge({ job }: { job: IngestJob }) {
   if (job.status === "done") {
     return (
       <Badge variant="secondary">
-        <CheckCircle2Icon className="text-emerald-500" />
+        <CheckCircle2Icon className="text-[var(--zn-link)]" />
         Done
       </Badge>
     )

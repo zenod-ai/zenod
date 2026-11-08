@@ -241,7 +241,7 @@ function SubscriberRow({
             <span>
               {when(last.at)}
               {last.test ? " · test" : ""} ·{" "}
-              <span className={last.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}>
+              <span className={last.ok ? "text-[var(--zn-link)]" : "text-destructive"}>
                 {result(last)}
               </span>
               {last.duration_ms !== null ? ` · ${seconds(last.duration_ms)}` : ""}
@@ -290,7 +290,7 @@ function SubscriberRow({
       {notice ? (
         <p
           role="status"
-          className={`text-sm ${notice.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}`}
+          className={`text-sm ${notice.ok ? "text-[var(--zn-link)]" : "text-destructive"}`}
         >
           {notice.text}
         </p>
@@ -442,7 +442,7 @@ function AddWebhook({ onCreated }: { onCreated: (sub: Subscriber) => void }) {
             {test ? (
               <p
                 role="status"
-                className={`text-sm ${test.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}`}
+                className={`text-sm ${test.ok ? "text-[var(--zn-link)]" : "text-destructive"}`}
               >
                 {test.ok
                   ? `Test event sent: ${created.subscription.url} answered ${result(test)} in ${seconds(test.duration_ms)}.`

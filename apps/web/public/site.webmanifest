@@ -1,0 +1,13 @@
+{
+  "name": "Zenod",
+  "short_name": "Zenod",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f2e9",
+  "theme_color": "#f6f2e9"
+}

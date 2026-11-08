@@ -115,7 +115,7 @@ function GroqTranscriptionCard() {
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {active ? (
               <>
-                <ZapIcon className="size-3.5 text-emerald-500" />
+                <ZapIcon className="size-3.5 text-[var(--zn-link)]" />
                 Groq transcription is active — the local model is only used as
                 fallback. Clear the field and save to go local-only.
               </>
@@ -431,7 +431,7 @@ function TranscriptionModelCard() {
                 <span>Model download failed: {status.error}</span>
               ) : status.ready ? (
                 <>
-                  <CheckIcon className="size-3.5 text-emerald-500" />
+                  <CheckIcon className="size-3.5 text-[var(--zn-link)]" />
                   Model “{status.model}” is ready on the server.
                 </>
               ) : status.downloading ? (

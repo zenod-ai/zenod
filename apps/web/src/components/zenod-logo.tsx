@@ -1,23 +1,18 @@
+// E17-D1: the Zenod Z, the same mark as the favicon and zenod.dev (Newsreader Z, ink on paper).
 export function ZenodLogo() {
   return (
-          <svg
-            viewBox="0 0 64 64"
-            role="img"
-            aria-label="Zenod"
-            className="size-10 shrink-0 border border-border"
-          >
-            <rect width="64" height="64" fill="#f3eee2" />
-            <text
-              x="32"
-              y="47"
-              fontFamily="Bodoni 72, Didot, Georgia, serif"
-              fontSize="46"
-              fontWeight="700"
-              textAnchor="middle"
-              fill="#2c241a"
-            >
-              Z
-            </text>
-          </svg>
+    <svg
+      viewBox="0 0 1024 1024"
+      role="img"
+      aria-label="Zenod"
+      className="size-10 shrink-0 rounded-[6px] border border-border"
+    >
+      <rect width="1024" height="1024" fill="#f6f2e9" />
+      <path
+        transform="matrix(0.4342 0 0 -0.4342 228.26 806.82)"
+        fill="#18211c"
+        d="M1178 1352V1301L354 80L295 116H1019L1169 383L1231 375L1164 -58H1125L1016 0H101V51L919 1273L987 1236H304L137 952L76 962L141 1416H180L300 1352Z"
+      />
+    </svg>
   )
 }
