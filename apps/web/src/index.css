@@ -169,11 +169,29 @@
   --zp-accent: #1f4d3a;
   --zp-accent-soft: #cfe0d4;
   --zp-accent-ink: #f6f2e9;
+  --zp-fill: #1f4d3a;
   --zp-warn: #8a4b1c;
   --zp-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --zp-sans: "Instrument Sans", system-ui, sans-serif;
   color: var(--zp-ink);
   font-family: var(--zp-sans);
+}
+/* Dark variant of the paper language: warm near-black ground, lifted card surface, warm
+   off-white ink, the deep green lightened for AA text contrast (E12-S11). */
+.dark .zp {
+  --zp-bg: #15130f;
+  --zp-stage: #23201a;
+  --zp-stage-2: #36312a;
+  --zp-ink: #ece6d8;
+  --zp-muted: #b9b1a1;
+  --zp-faint: #948d7d;
+  --zp-line: #3d382f;
+  --zp-accent: #86c9a5;
+  --zp-accent-soft: #223a2e;
+  --zp-accent-ink: #f4efe3;
+  --zp-fill: #2d6a4e;
+  --zp-warn: #e3a56f;
+  color-scheme: dark;
 }
 .zp a { color: var(--zp-accent); text-underline-offset: 2px; }
 .zp-head h2, .zp-notehead h2 {
@@ -191,7 +209,7 @@
 .zp-msg { max-width: 82%; padding: 0.7rem 0.95rem; border-radius: 12px; line-height: 1.5; font-size: 0.98rem; animation: zp-in 450ms ease both; }
 .zp-msg p { margin: 0 0 0.5rem; } .zp-msg p:last-child { margin-bottom: 0; }
 .zp-msg ul, .zp-msg ol { margin: 0.2rem 0 0.5rem 1.2rem; list-style: disc; }
-.zp-me { align-self: flex-end; background: var(--zp-accent); color: var(--zp-accent-ink); border-bottom-right-radius: 3px; white-space: pre-wrap; }
+.zp-me { align-self: flex-end; background: var(--zp-fill); color: var(--zp-accent-ink); border-bottom-right-radius: 3px; white-space: pre-wrap; }
 .zp-z { align-self: flex-start; background: var(--zp-stage); border-bottom-left-radius: 3px; }
 .zp-warn { color: var(--zp-warn); }
 .zp-used { align-self: stretch; border-top: 1px solid var(--zp-ink); padding-top: 0.45rem; max-width: 46rem; animation: zp-in 450ms ease 120ms both; }
@@ -213,7 +231,7 @@
 .zp button { font: 500 0.92rem var(--zp-sans); border-radius: 999px; padding: 0.38rem 1rem; cursor: pointer; transition: opacity 150ms ease; }
 .zp button:disabled { opacity: 0.45; cursor: default; }
 .zp-keep { background: transparent; color: var(--zp-accent); border: 1px solid var(--zp-accent); }
-.zp-send { background: var(--zp-accent); color: var(--zp-accent-ink); border: 1px solid var(--zp-accent); }
+.zp-send { background: var(--zp-fill); color: var(--zp-accent-ink); border: 1px solid var(--zp-fill); }
 .zp-compose { display: flex; gap: 0.5rem; align-items: center; border: 1px solid var(--zp-line); border-radius: 999px; padding: 0.4rem 0.45rem 0.4rem 1.1rem; background: var(--zp-bg); }
 .zp-compose:focus-within { border-color: var(--zp-accent); }
 .zp-compose textarea { flex: 1; resize: none; border: 0; outline: none; background: transparent; font: 400 1rem / 1.4 var(--zp-sans); color: var(--zp-ink); padding: 0.3rem 0; max-height: 8rem; }
