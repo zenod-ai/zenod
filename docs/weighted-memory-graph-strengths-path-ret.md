@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| W1 | Ticket worker | run_0bb3512b-9c41-4f3c-8125-8675523389ff — claimed 2026-11-08T16:17Z, lease until 2026-11-08T18:17Z | Audit what exists, then weighted edges in a fast DB with node ids, and path retrieval with a multiplied-strength threshold, measured on real questions (E18-1, E18-2) | active | none | `wt/e18-w1` | main | none | 2026-11-08 | dispatch |
+| W1 | Ticket worker | run_0bb3512b | Audit what exists, then weighted edges in a fast DB with node ids, and path retrieval with a multiplied-strength threshold, measured on real questions (E18-1, E18-2) | active | none | `wt/e18-w1` | main | none | 2026-11-08 | dispatch |
 | W2 | Ticket worker | unassigned | The constellation idea on zenod.dev (E18-3) | draft | W1 | - | main | - | 2026-11-08 | after W1 |
 
 ## Decisions
