@@ -25,10 +25,16 @@ Goal sentence: One Send button in the cloud chat, and Zenod decides whether to k
 - [ ] E16-1 The cloud chat has one Send button, no Ask and no Keep; Zenod decides from the content whether to store a new memory, answer from memory, or both, and says which it did.
 - [ ] E16-2 Measured on real-style messages: the decision is right at least 9 times in 10, and nothing is stored that the user only asked.
 
+## Outcome
+
+Verdict: accomplished
+Outcome: One Send button in the cloud chat, and Zenod decides whether to keep or answer. (closed on the console's review list)
+Closed: 2026-11-08 by Jordi (closed on the console's review list)
+
 ## Current State
 
 Owner: Delivery Manager (Zenod launch)
-Status: active
+Status: done (closed by Jordi 2026-11-08)
 Last attempted: scaffolded with spine_new.py on 2026-11-08
 Result: created, not started
 Evidence: EPIC-0-FOUNDATION-SPINE.md
@@ -48,7 +54,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| B1 | Ticket worker | run_68834ea4-ac9e-41b7-96a6-2ba7aa12a7e9 | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | review | none | [#1518](https://github.com/zenod-ai/zenod/pull/1518) merged `db093a5`, live | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e16-b1/), [card](cards/E16-B1.md): 80/80 decisions right, 0 questions kept; ✗ signed-in send waits on E7-A15 | 2026-11-08 | followups: none; confirm: yes — Jordi judges whether one Send feels right and whether its keep or answer choices match what he meant |
+| B1 | Ticket worker | run_68834ea4-ac9e-41b7-96a6-2ba7aa12a7e9 | One Send: remove Ask and Keep, the agent decides store vs retrieve (E16-1, E16-2) | done (approved by Jordi 2026-11-08) | none | [#1518](https://github.com/zenod-ai/zenod/pull/1518) merged `db093a5`, live | main | [evidence](http://vps3.taild81fbb.ts.net:8921/e16-b1/), [card](cards/E16-B1.md): 80/80 decisions right, 0 questions kept; ✗ signed-in send waits on E7-A15 | 2026-11-08 | followups: none; confirm: yes — Jordi judges whether one Send feels right and whether its keep or answer choices match what he meant |
 
 ## Decisions
 
