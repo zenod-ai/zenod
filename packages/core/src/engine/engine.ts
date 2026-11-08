@@ -1989,7 +1989,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
         console.warn(`[librarian] provisional leaf unavailable for ${evidenceRef}: ${(error as Error).message}`);
         continue;
       }
-      Object.assign(outcome, { ...(outcome.pages.length ? { reroutedFrom: outcome.pages } : {}), pages: [leaf.path], filedPages: [leaf.path],
+      Object.assign(outcome, { ...(rejectedPages.length ? { reroutedFrom: rejectedPages } : {}), pages: [leaf.path], filedPages: [leaf.path],
         status: "uncertain", reason: `provisional_leaf: ${why}`.slice(0, 240) });
       if (!touched.includes(leaf.path)) touched.push(leaf.path);
       await checkpoint();
