@@ -50,7 +50,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| V1 | Ticket worker | run_7966dd8b | One ingest door for forwarded voice notes (audio, optional transcript used as is, source tag) over MCP, plus the cloud chat button sending its transcript once (E21-1, E21-3; with EPIC-14 S1 round 2) | active | none | `wt/e21-v1` | main | none | 2026-11-08 | dispatch |
+| V1 | Ticket worker | run_7966dd8b-8633-4403-af3c-43ca19284c7e — claimed 2026-11-08T19:46Z, lease until 2026-11-08T21:46Z | One ingest door for forwarded voice notes (audio, optional transcript used as is, source tag) over MCP, plus the cloud chat button sending its transcript once (E21-1, E21-3; with EPIC-14 S1 round 2) | active | none | `wt/e21-v1` | main | none | 2026-11-08 | dispatch |
 | V2 | Ticket worker | unassigned | EpicTeam Chat forwards voice notes to Zenod (agent_team side, proposed to agent_team), one real note proven (E21-2) | draft | V1 | - | main | - | 2026-11-08 | after V1 |
 
 ## Decisions
