@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | V1 | Ticket worker | run_7966dd8b-8633-4403-af3c-43ca19284c7e | One ingest door for forwarded voice notes (audio, optional transcript used as is, source tag) over MCP, plus the cloud chat button sending its transcript once (E21-1, E21-3; with EPIC-14 S1 round 2) | review | none | [#1534](https://github.com/zenod-ai/zenod/pull/1534) `5e0b7dd`, live on cloud.zenod.dev | main | [evidence](evidence/e21-v1-2026-11-08.md) · [card](cards/E21-V1.md) · [contract](voice-note-forwarding.md): 0 transcription calls with a transcript, 1 without, repeats kept once | 2026-11-08 | followups: start V2 EpicTeam Chat forwarding — spec in the evidence, DM sends it to agent_team; confirm: yes — Jordi judges if this door is how apps feed Zenod |
-| V2 | Ticket worker | unassigned | EpicTeam Chat forwards voice notes to Zenod (agent_team side, proposed to agent_team), one real note proven (E21-2) | draft | V1 | - | main | - | 2026-11-08 | after V1 |
+| V2 | Ticket worker | agent_team (spec sent 2026-11-08 to thread 4882a2f3) | EpicTeam Chat forwards voice notes to Zenod (agent_team side, proposed to agent_team), one real note proven (E21-2) | blocked | V1 done; agent_team builds EpicTeam Chat forwarding | - | main | - | 2026-11-08 | waits on agent_team: add voice_notes.write and call ingest_voice_note after each chat note; then prove one real note lands once (E21-2) |
 
 ## Decisions
 
