@@ -10,18 +10,23 @@
 // (MCP store_memory, then get_memory and search_memory find it).
 //
 // Models are a free deterministic stand-in (organiser.mjs) by default, so it runs on every change at no cost.
+// --model live (E15-Q3) uses real DeepSeek calls through production's client instead, cached and capped (live.mjs).
 //
 // usage:
 //   node scripts/memory-eval/run.mjs --checkout <built checkout> --dataset demo [--out result.json] [--append history.jsonl]
 //        [--label <change name>] [--sha <sha>] [--floor scripts/memory-eval/floor.json]
 //   node scripts/memory-eval/run.mjs --checkout <dir> --dataset private --vault <vault dir> --questions <jsonl> [...]
 //        a person's own set: a throwaway copy of their vault, never pushed; only counts leave the machine.
+//   live tier: add --model live [--slice <question id prefix>] [--skip agent] [--live-dir <cache and ledger dir>]
+//        [--live-run-cap 0.25] [--live-month-cap 3] [--live-model deepseek-flash] [--live-reasoning none]
+//        with DEEPSEEK_API_KEY in the environment (never on the command line).
 import { execFileSync } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { deepseekLive, LiveCapError, LiveModel } from "./live.mjs";
 import { StandInModel } from "./organiser.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -129,8 +134,11 @@ async function openVault(mods, vaultSrc, model) {
   execFileSync("git", ["config", "core.hooksPath", "/dev/null"], { cwd: join(dir, "vault"), stdio: "ignore" });
   const engine = core.createEngine({ repo, llm: model, state: new core.SqliteStateStore(":memory:"), memoryIndex: { path: join(dir, "index.sqlite"), tenantId: "eval" } });
   if (engine.rebuildMemoryIndex) await engine.rebuildMemoryIndex();
-  return { dir, engine, vault: join(dir, "vault") };
+  return { dir, engine, vault: join(dir, "vault"), model };
 }
+
+/** True when the live caps refused a model call since `before`: the item was not really run. */
+const refusedSince = (model, before) => (model?.calls?.refused ?? 0) > before;
 
 const withLimit = (promise, ms, what) => Promise.race([promise, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: no result within ${ms / 1000} s`)), ms).unref())]);
 
@@ -140,6 +148,8 @@ const withLimit = (promise, ms, what) => Promise.race([promise, new Promise((_, 
 async function askOne(mods, engine, model, question) {
   const started = performance.now();
   model.lastAnswerPrompt = null;
+  model.lastAnswerText = null;
+  model.takeReplayedMs?.();
   let shown = [];
   let mode = "chat";
   if (mods.chat?.streamAnswerFromMemory && engine.answerFromMemories) {
@@ -151,33 +161,41 @@ async function askOne(mods, engine, model, question) {
     mode = "search";
     shown = (await withLimit(engine.search(question), QUESTION_LIMIT_MS, "question")).slice(0, 5);
   }
-  const ms = Math.round(performance.now() - started);
+  const ms = Math.round(performance.now() - started) + (model.takeReplayedMs?.() ?? 0);
   const top5 = shown.slice(0, 5).map((m) => noMd(m.path));
   // What the answer step read, without the question itself (its words would count as found facts).
   const context = model.lastAnswerPrompt == null ? null : model.lastAnswerPrompt.split(question).join(" ");
-  return { ms, top5, context, tokens: model.lastAnswerPrompt == null ? null : model.lastAnswerTokens, mode };
+  return { ms, top5, context, tokens: model.lastAnswerPrompt == null ? null : model.lastAnswerTokens, mode, answer: model.lastAnswerText ?? null };
 }
 
 function scoreQuestion(item, got, wanted) {
   const rank = got.top5.findIndex((p) => wanted.has(p) || (p.includes("#^") && [...wanted].some((w) => anchorOf(w) && anchorOf(w) === anchorOf(p)))) + 1;
   const groups = item.expect ?? [];
   const need = item.minGroups ?? groups.length;
+  const covers = (text) => groups.filter((g) => g.some((w) => text.includes(String(w).toLowerCase()))).length >= need;
   let facts = null;
   let tokens = null;
   if (got.context != null) {
-    const text = got.context.toLowerCase();
-    facts = groups.filter((g) => g.some((w) => text.includes(String(w).toLowerCase()))).length >= need;
+    facts = covers(got.context.toLowerCase());
     tokens = got.tokens;
   }
-  return { id: item.id, rank: rank || null, hit: rank > 0, facts, tokens, ms: got.ms, mode: got.mode, error: got.error ?? null };
+  // Live tier: the model's own answer must carry the same facts (the stand-in never answers).
+  const answered = got.answer == null ? null : covers(got.answer.toLowerCase());
+  return { id: item.id, rank: rank || null, hit: rank > 0, facts, answered, tokens, ms: got.ms, mode: got.mode, error: got.error ?? null };
 }
 
 async function questionSuite(mods, ctx, model, set, wantedFor) {
   const rows = [];
   for (const item of set) {
     let got;
+    const refused0 = model.calls?.refused ?? 0;
     try { got = await askOne(mods, ctx.engine, model, item.question); }
-    catch (e) { got = { ms: null, top5: [], context: null, mode: "error", error: e instanceof Error ? e.message : String(e) }; }
+    catch (e) {
+      // A call the live caps refused was not run: it is left out of the numbers and counted apart.
+      if (e instanceof LiveCapError) { rows.push({ id: item.id, skipped: e.message }); continue; }
+      got = { ms: null, top5: [], context: null, mode: "error", error: e instanceof Error ? e.message : String(e) };
+    }
+    if (refusedSince(model, refused0)) { rows.push({ id: item.id, skipped: "live cap reached" }); continue; }
     rows.push(scoreQuestion(item, got, wantedFor(item)));
   }
   return rows;
@@ -219,6 +237,8 @@ async function filingSuite(mods, ctx, notes) {
     let result = null;
     let error = null;
     const input = { content: note.text, source: "whatsapp", contentType: "voice_note" };
+    ctx.model?.takeReplayedMs?.();
+    const refused0 = ctx.model?.calls?.refused ?? 0;
     try {
       result = await withLimit((async () => {
         if (engine.captureEvidence && engine.enrichEvidence) {
@@ -231,7 +251,8 @@ async function filingSuite(mods, ctx, notes) {
         return engine.store(input);
       })(), FILING_LIMIT_MS, "filing");
     } catch (e) { error = e instanceof Error ? e.message : String(e); }
-    const ms = Math.round(performance.now() - started);
+    const ms = Math.round(performance.now() - started) + (ctx.model?.takeReplayedMs?.() ?? 0);
+    if (refusedSince(ctx.model, refused0)) { rows.push({ id: note.id, skipped: "live cap reached" }); continue; }
     const ref = result?.evidenceRef ?? null;
     const anchor = anchorOf(ref);
     const logRaw = ref ? readPage(vault, ref.split("#^")[0]) ?? "" : "";
@@ -291,6 +312,8 @@ async function judgedFilingSuite(ctx, judgedFile) {
     const content = entry?.content?.trim();
     if (!content) { rows.push({ id, ok: false, ms: null, error: "note text not readable", memories: [{ fail: true }] }); continue; }
     const input = { content, source: "whatsapp", contentType: "voice_note" };
+    ctx.model?.takeReplayedMs?.();
+    const refused0 = ctx.model?.calls?.refused ?? 0;
     const started = performance.now();
     let result = null; let error = null;
     try {
@@ -301,7 +324,8 @@ async function judgedFilingSuite(ctx, judgedFile) {
         return { ...enriched, evidenceRef: enriched.evidenceRef ?? captured.evidenceRef };
       })(), FILING_LIMIT_MS, "filing");
     } catch (e) { error = e instanceof Error ? e.message : String(e); }
-    const ms = Math.round(performance.now() - started);
+    const ms = Math.round(performance.now() - started) + (ctx.model?.takeReplayedMs?.() ?? 0);
+    if (refusedSince(ctx.model, refused0)) { rows.push({ id, skipped: "live cap reached" }); continue; }
     const anchor = anchorOf(result?.evidenceRef);
     const logRaw = result?.evidenceRef ? readPage(vault, result.evidenceRef.split("#^")[0]) ?? "" : "";
     const stored = Boolean(anchor && logRaw.includes(anchor));
@@ -363,10 +387,12 @@ function headline({ filing = [], questions = [], agent = { rows: [] }, graph = n
   const mrr = retrievalRows.length ? retrievalRows.reduce((s, r) => s + (r.rank ? 1 / r.rank : 0), 0) / retrievalRows.length : null;
   // Error rate: every memory filed, question asked and agent store-and-find pair is one operation.
   const memOps = filing.flatMap((r) => r.memories.map((m) => ({ fail: Boolean(r.error) || r.ms > FILING_LIMIT_MS || !(m.stored && m.written && m.placed && m.linked) })));
-  const qOps = questions.map((q) => ({ fail: Boolean(q.error) || (q.ms ?? 0) > QUESTION_LIMIT_MS || q.facts === false }));
+  // Live tier: a question also fails when the model's answer leaves out the facts it needed.
+  const qOps = questions.map((q) => ({ fail: Boolean(q.error) || (q.ms ?? 0) > QUESTION_LIMIT_MS || q.facts === false || q.answered === false }));
   const aOps = agentRows.map((r) => ({ fail: Boolean(r.error) || !r.stored || !r.got || !r.found }));
   const ops = [...memOps, ...qOps, ...aOps];
   const factsRows = questions.filter((q) => q.facts !== null);
+  const answerRows = questions.filter((q) => q.answered != null);
   return {
     ingestionSuccess: pct(ingestOk, ingestN), ingestion: { ok: ingestOk, of: ingestN,
       notes: { ok: filing.filter((r) => r.ok).length, of: filing.length }, agentStores: { ok: agentRows.filter((r) => r.stored && r.got).length, of: agentRows.length },
@@ -375,7 +401,8 @@ function headline({ filing = [], questions = [], agent = { rows: [] }, graph = n
       medianMs: median(filing.map((r) => r.ms)) },
     retrievalEfficiency: pct(hits, retrievalRows.length), retrieval: { top5: hits, of: retrievalRows.length, mrr: mrr == null ? null : Math.round(mrr * 100) / 100,
       medianMs: median(retrievalRows.map((r) => r.ms)), tokensPerQuestion: median(questions.map((q) => q.tokens)),
-      factsReachAnswer: factsRows.length ? { ok: factsRows.filter((q) => q.facts).length, of: factsRows.length } : null },
+      factsReachAnswer: factsRows.length ? { ok: factsRows.filter((q) => q.facts).length, of: factsRows.length } : null,
+      answersRight: answerRows.length ? { ok: answerRows.filter((q) => q.answered).length, of: answerRows.length } : null },
     errorRate: pct(ops.filter((o) => o.fail).length, ops.length), errors: { failed: ops.filter((o) => o.fail).length, of: ops.length,
       filing: memOps.filter((o) => o.fail).length, questions: qOps.filter((o) => o.fail).length, agent: aOps.filter((o) => o.fail).length },
     graph: graph ? { ok: graph.rows.filter((r) => r.ok).length, of: graph.rows.length, weighted: graph.weighted } : null,
@@ -388,7 +415,30 @@ async function main() {
   const checkout = resolve(opt("checkout", SUITE_REPO));
   const dataset = opt("dataset", "demo");
   const mods = await loadCheckout(checkout);
-  const model = new StandInModel();
+  const live = opt("model", "stand-in") === "live";
+  const skip = new Set(String(opt("skip", "")).split(",").filter(Boolean));
+  const slice = opt("slice");
+  let model;
+  const liveDir = resolve(opt("live-dir", join(process.env.HOME ?? tmpdir(), "zenod-eval", "live")));
+  const caps = { runCapUsd: Number(opt("live-run-cap", "0.25")), monthCapUsd: Number(opt("live-month-cap", "3")), runId: opt("label") ?? new Date().toISOString() };
+  if (live && flag("live-stub")) {
+    // Proof without a key: the stand-in behind the live tier's cache and caps, charging a fixed fake price per call.
+    const usd = Number(opt("live-stub-usd", "0.001"));
+    model = new LiveModel({ model: "stub", dir: liveDir, ...caps, make: (onUsage) => {
+      const inner = new StandInModel();
+      return new Proxy(inner, { get: (t, p) => (typeof t[p] === "function" ? async (...a) => { const out = await t[p](...a); onUsage({ providerCostUsd: usd }); return out; } : t[p]) });
+    } });
+  } else if (live) {
+    const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+    if (!apiKey) throw new Error("--model live needs DEEPSEEK_API_KEY in the environment");
+    if (!mods.core.createBrainLlm) throw new Error("this checkout has no createBrainLlm");
+    model = deepseekLive(mods.core, {
+      apiKey, model: opt("live-model", "deepseek-flash"), baseUrl: process.env.ZENOD_EVAL_DEEPSEEK_BASE_URL || undefined,
+      reasoning: opt("live-reasoning", "none") === "default" ? undefined : opt("live-reasoning", "none"),
+      dir: liveDir, ...caps,
+    });
+  } else model = new StandInModel();
+  const pick = (rows) => (slice ? rows.filter((r) => String(r.id).startsWith(slice)) : rows);
   const t0 = Date.now();
   const suites = {};
   let vaultLabel;
@@ -402,7 +452,7 @@ async function main() {
     rmSync(gen, { recursive: true, force: true });
     const citing = citingIndex(ctx.vault);
     const wanted = (item) => { const w = new Set(); for (const r of item.refs ?? []) { w.add(noMd(r)); for (const p of citing.get(anchorOf(r)) ?? []) w.add(p); } return w; };
-    suites.questions = await questionSuite(mods, ctx, model, readSet(join(demo, "questions.jsonl")), wanted);
+    suites.questions = await questionSuite(mods, ctx, model, pick(readSet(join(demo, "questions.jsonl"))), wanted);
     try { suites.graph = await graphSuite(ctx, JSON.parse(readFileSync(join(demo, "graph.json"), "utf8"))); } catch (e) { suites.graph = { weighted: false, rows: [], error: String(e) }; }
     suites.filing = await filingSuite(mods, ctx, readSet(join(demo, "notes.jsonl")));
     if (ctx.engine.rebuildMemoryIndex) await ctx.engine.rebuildMemoryIndex();
@@ -413,7 +463,7 @@ async function main() {
       return w;
     };
     suites.recall = await questionSuite(mods, ctx, model, readSet(join(demo, "recall-questions.jsonl")), recallWanted);
-    suites.agent = await agentSuite(mods, ctx, readSet(join(demo, "agent.jsonl")));
+    if (!skip.has("agent")) suites.agent = await agentSuite(mods, ctx, readSet(join(demo, "agent.jsonl")));
   } else if (dataset === "private") {
     const vaultSrc = opt("vault");
     const setFile = opt("questions");
@@ -423,25 +473,29 @@ async function main() {
     ctx = await openVault(mods, vaultSrc, model);
     const citing = citingIndex(ctx.vault);
     const wanted = (item) => { const w = new Set(); for (const r of item.refs ?? []) { w.add(noMd(r)); for (const p of citing.get(anchorOf(r)) ?? []) w.add(p); } return w; };
-    suites.questions = await questionSuite(mods, ctx, model, readSet(setFile), wanted);
+    suites.questions = await questionSuite(mods, ctx, model, pick(readSet(setFile)), wanted);
     const judged = opt("judged");
     if (judged && judged.split(",").some((file) => existsSync(file)) && ctx.engine.captureEvidence) suites.filing = await judgedFilingSuite(ctx, judged);
-    suites.agent = await agentSuite(mods, ctx, readSet(join(HERE, "demo", "agent.jsonl")));
+    if (!skip.has("agent")) suites.agent = await agentSuite(mods, ctx, readSet(join(HERE, "demo", "agent.jsonl")));
   } else throw new Error(`unknown dataset ${dataset}`);
 
-  const allQuestions = [...(suites.questions ?? []), ...(suites.recall ?? [])];
-  const summary = headline({ filing: suites.filing ?? [], questions: allQuestions, agent: suites.agent, graph: suites.graph });
+  const ran = (rows) => (rows ?? []).filter((r) => !r.skipped);
+  const skipped = [...(suites.questions ?? []), ...(suites.recall ?? []), ...(suites.filing ?? [])].filter((r) => r.skipped).length;
+  const allQuestions = [...ran(suites.questions), ...ran(suites.recall)];
+  const summary = headline({ filing: ran(suites.filing), questions: allQuestions, agent: suites.agent ?? { rows: [] }, graph: suites.graph });
   let sha = opt("sha");
   try { sha ??= git(checkout, "rev-parse", "--short=7", "HEAD"); } catch { sha ??= "unknown"; }
   const record = {
-    at: new Date().toISOString(), dataset, vault: vaultLabel, sha, label: opt("label") ?? sha, model: "stand-in",
-    seconds: Math.round((Date.now() - t0) / 1000), modelCalls: model.calls, ...summary,
+    at: new Date().toISOString(), dataset, vault: vaultLabel, sha, label: opt("label") ?? sha, model: live ? model.model : "stand-in",
+    ...(slice || skip.size ? { slice: { questions: slice ?? "all", skip: [...skip] } } : {}),
+    seconds: Math.round((Date.now() - t0) / 1000), modelCalls: model.calls, ...(live ? { live: { ...model.summary(), notRun: skipped } } : {}), ...summary,
   };
   const out = opt("out");
   if (out) writeFileSync(out, JSON.stringify({ record, suites }, null, 2));
   const append = opt("append");
   if (append) appendFileSync(append, `${JSON.stringify(record)}\n`);
   rmSync(ctx.dir, { recursive: true, force: true });
+  if (live) console.log(`live ${record.live.model}: ${record.live.calls.live} calls, ${record.live.calls.cached} from cache, ${record.live.calls.refused} refused by the caps, $${record.live.spentUsd} this run, $${record.live.monthSpentUsd} this month${record.retrieval.answersRight ? ` · answers right ${record.retrieval.answersRight.ok}/${record.retrieval.answersRight.of}` : ""}`);
   console.log(`ingestion ${record.ingestionSuccess}% (${record.ingestion.ok}/${record.ingestion.of}) · retrieval ${record.retrievalEfficiency}% top-5 (${record.retrieval.top5}/${record.retrieval.of}, MRR ${record.retrieval.mrr}, ${record.retrieval.medianMs} ms, ${record.retrieval.tokensPerQuestion ?? "–"} tokens) · errors ${record.errorRate}% (${record.errors.failed}/${record.errors.of})${record.graph ? ` · graph ${record.graph.ok}/${record.graph.of}` : ""}`);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Memory test suite (${dataset}, ${sha})\n\n| Ingestion success | Retrieval efficiency (top 5) | Error rate |\n|---|---|---|\n| ${record.ingestionSuccess}% (${record.ingestion.ok}/${record.ingestion.of}) | ${record.retrievalEfficiency}% (${record.retrieval.top5}/${record.retrieval.of}) | ${record.errorRate}% (${record.errors.failed}/${record.errors.of}) |\n\n`);

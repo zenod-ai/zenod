@@ -39,6 +39,18 @@ Every run uses a free, deterministic stand-in for the AI models ([`organiser.mjs
 
 Live-model checks made today are listed on the dashboard as recorded results, without being rerun. Examples: S6/S8 landing quality, E12-S1b round 2 blind-graded answers and E15-Q1.
 
+## The live tier: the real model on a fixed slice (E15-Q3)
+
+The stand-in shows what Zenod's code does; the live tier shows how a real model files and answers. [`live.mjs`](../scripts/memory-eval/live.mjs) puts DeepSeek V4.1 Flash, built with the same client production uses for its background route (`createBrainLlm`, provider `deepseek`), in the stand-in's place.
+
+- **Slice.** Jordi's 20 judged questions (`rq01`–`rq20`) and the 8 notes behind the placements he judged, on a throwaway copy of his vault. The agent store-and-find suite stays on the stand-in. The stand-in runs the same slice on the same code right after, so the dashboard shows both side by side.
+- **Answers.** On top of the three numbers, each question checks that the model's own answer carries the expected facts. In the live tier, an answer that leaves them out counts as a failed operation in the error rate.
+- **Cache.** Every model call is stored under a hash of what was sent, with run-specific parts (new Log anchors, dates, clock times, weekdays, temp paths) replaced by placeholders and swapped back on replay. A rerun on unchanged input makes no model call and costs nothing; replayed calls report the first run's model time.
+- **Caps.** No call starts once this run's spend plus 1 cent per call in flight could pass the run cap (default $0.25), or the month's spend in the ledger `~/zenod-eval/live/spend.jsonl` could pass the month cap (default $3). An item whose call was refused counts as not run, never as passed or failed.
+- **Key.** `zenod-tests/DEEPSEEK_API_KEY`, a test key separate from production's, put in the run's environment by `secret run` in memory only. Without it the step is skipped. Production's own key is per-app and never used for tests.
+- **When.** In the nightly job, after the offline runs: once per production roll or day, outside DeepSeek's peak hours (01–04 and 06–10 UTC on weekdays, double price).
+- **By hand, with no key:** `--model live --live-stub` runs the stand-in behind the same cache and caps at a fixed fake price, to prove the wiring.
+
 ## When it runs
 
 - **Every pull request and push, in CI**: the demo suite, after the build. The run fails if the numbers drop below [`floor.json`](../scripts/memory-eval/floor.json). The three numbers appear in the job summary.

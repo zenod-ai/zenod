@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # E15-Q2: the memory test suite on VPS3, after every production roll and once a night.
-# Runs the demo suite and the person's real-note suite on the code production runs, appends one dated
+# Runs the demo suite and the person's real-note suite on the code production runs (plus the live-model
+# slice, E15-Q3, when the test key exists), appends one dated
 # record each to the private history, and redraws the dashboard (served at :8921/memory-tests/).
 # The vault is a read-only clone; each run works on a throwaway copy and never pushes.
 #
@@ -12,6 +13,7 @@ VAULT_CLONE=${ZENOD_VAULT_CLONE:-/var/lib/vps3-scratch/t3agent/github/obsidian-b
 EVAL=${ZENOD_EVAL:-$HOME/zenod-eval}
 DEPS=${ZENOD_DEPS:-$EVAL/deps}
 PAGE=${ZENOD_PAGE:-$HOME/zenod-evidence-pages/memory-tests/index.html}
+SECRET=${SECRET_BIN:-/var/lib/vps3-scratch/t3agent/github/infra-vps/scripts/secret}
 umask 077
 mkdir -p "$EVAL/history" "$EVAL/builds" "$EVAL/vaults" "$EVAL/runs"
 
@@ -45,7 +47,29 @@ nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset demo --sha "$sha"
 nice -n 10 node "$suite/run.mjs" --checkout "$build" --dataset private --vault "$EVAL/vaults/$rev" --vault-rev "$rev" \
   --questions "$EVAL/real-questions.jsonl" --judged "$HOME/zenod-feedback/landing-feedback.jsonl,$EVAL/vaults/$rev/.brain/tree-corrections.jsonl" \
   --sha "$sha" --label "$label" --out "$EVAL/runs/private-$sha.json" --append "$EVAL/history/private.jsonl" 2>&1 | grep '^ingestion' || true
-node "$suite/dashboard.mjs" --demo "$EVAL/history/demo.jsonl" --private "$EVAL/history/private.jsonl" \
+
+# E15-Q3 live tier: the fixed slice of the real set (the 20 rq questions and the 8 judged notes) with real
+# DeepSeek calls, next to the free stand-in on the same slice. The key is zenod-tests/DEEPSEEK_API_KEY, put in
+# the run's environment by `secret run` (memory only, never argv, disk or log); without it the step is skipped.
+# Off DeepSeek's peak hours (double price), once per production roll or day; cached calls cost nothing; hard
+# caps per run and per month in live.mjs.
+live_stamp="$EVAL/history/.last-live"
+hour=$(date -u +%H); dow=$(date -u +%u)
+peak=0; if [ "$dow" -le 5 ] && { [ "$hour" -ge 1 -a "$hour" -lt 4 ] || [ "$hour" -ge 6 -a "$hour" -lt 10 ]; }; then peak=1; fi
+if [ "${1:-}" = "--force" ] || ! { [ -f "$live_stamp" ] && [ "$(cut -d' ' -f1 "$live_stamp")" = "$sha" ] && [ $(( $(date +%s) - $(cut -d' ' -f2 "$live_stamp") )) -lt 86400 ]; }; then
+  if [ "$peak" = 1 ]; then echo "live: DeepSeek peak hours, next tick"; else
+    slice=(--checkout "$build" --dataset private --vault "$EVAL/vaults/$rev" --vault-rev "$rev" --questions "$EVAL/real-questions.jsonl"
+      --judged "$HOME/zenod-feedback/landing-feedback.jsonl" --slice rq --skip agent --sha "$sha" --label "$label" --append "$EVAL/history/live.jsonl")
+    if nice -n 10 "$SECRET" run DEEPSEEK_API_KEY --from zenod-tests -- node "$suite/run.mjs" "${slice[@]}" --model live \
+         --live-dir "$EVAL/live" --live-run-cap "${ZENOD_LIVE_RUN_CAP:-0.25}" --live-month-cap "${ZENOD_LIVE_MONTH_CAP:-3}" \
+         --out "$EVAL/runs/live-$sha.json" 2>&1 | grep -E '^(live|ingestion)'; then
+      nice -n 10 node "$suite/run.mjs" "${slice[@]}" --out "$EVAL/runs/live-standin-$sha.json" 2>&1 | grep '^ingestion' || true
+      echo "$sha $(date +%s)" > "$live_stamp"
+    else echo "live: skipped (no test key yet, or the run failed)"; fi
+  fi
+fi
+
+node "$suite/dashboard.mjs" --demo "$EVAL/history/demo.jsonl" --private "$EVAL/history/private.jsonl" --live "$EVAL/history/live.jsonl" \
   --changes "$suite/changes.json" --recorded "$suite/recorded.json" --out "$PAGE"
 chmod -R a+rX "$(dirname "$PAGE")"
 echo "$sha $(date +%s)" > "$stamp"

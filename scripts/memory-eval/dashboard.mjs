@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // E15-Q2: the memory test dashboard. Three numbers as a trend, one point per change, bottom line first.
 //
-// usage: node dashboard.mjs --demo demo.jsonl [--private private.jsonl] [--changes changes.json]
+// usage: node dashboard.mjs --demo demo.jsonl [--private private.jsonl] [--live live.jsonl] [--changes changes.json]
 //          [--recorded recorded.json] --out <dir>/index.html
 // Each history line is one run.mjs record. A record belongs to the change in changes.json with the same
 // commit (and, for the private set, the same vault revision); later runs (nightly, after a deploy) follow in time order.
@@ -17,6 +17,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 
 const demo = lines(opt("demo"));
 const priv = lines(opt("private"));
+// E15-Q3: live-model runs on the fixed slice, each followed by the stand-in on the same slice and code.
+const liveRuns = lines(opt("live"));
 const changes = JSON.parse(readFileSync(opt("changes", join(HERE, "changes.json")), "utf8"));
 const recorded = existsSync(opt("recorded", join(HERE, "recorded.json"))) ? JSON.parse(readFileSync(opt("recorded", join(HERE, "recorded.json")), "utf8")) : [];
 const out = opt("out");
@@ -127,6 +129,25 @@ const rows = steps.map((s, i) => {
 
 const rec = recorded.map((r) => `<tr><td>${esc(r.change)}</td><td>${esc(r.suite)}</td><td>${esc(r.value)}</td><td>${r.source.endsWith(".md") ? `<a href="https://github.com/zenod-ai/zenod/blob/main/docs/evidence/${esc(r.source)}">${esc(r.source)}</a>` : esc(r.source)}</td></tr>`).join("");
 
+// ---------- live model checks (E15-Q3), shown first ----------
+const liveRec = [...liveRuns].reverse().find((r) => r.model !== "stand-in") ?? null;
+const pairRec = liveRec ? [...liveRuns].reverse().find((r) => r.model === "stand-in" && r.sha === liveRec.sha && vaultRev(r) === vaultRev(liveRec)) ?? null : null;
+const usd = (v) => `$${Number(v ?? 0).toFixed(v >= 0.01 ? 2 : 4)}`;
+let liveHtml;
+if (!liveRec) {
+  liveHtml = `<div class="bl"><p><b>Live AI model checks: built, waiting for the test key.</b> As soon as the test DeepSeek key is in, the next run files your 8 judged notes and answers your 20 questions with the real model, and the result shows here next to the stand-in. Each run is capped at ${usd(0.25)} and the month at ${usd(3)}; a rerun on unchanged input costs nothing.</p></div>`;
+} else {
+  const L = liveRec, S = pairRec;
+  const ans = L.retrieval.answersRight;
+  const cmp = (m) => S ? verdict(m, S[m.key], L[m.key]) : "–";
+  const line = (m) => `<tr><td><b>${m.name}</b></td><td>${S ? fmt(S[m.key]) : "–"}</td><td>${fmt(L[m.key])}</td><td><span class="${cmp(m).split(" ")[0]}">${esc(cmp(m).replace(/^better/, "live better").replace(/^worse/, "live worse"))}</span></td><td class="muted">${esc(m.detail(L))}</td></tr>`;
+  const headlineParts = METRICS.map((m) => `${m.name.toLowerCase()} ${fmt(L[m.key])}${S ? ` (stand-in ${fmt(S[m.key])})` : ""}`);
+  liveHtml = `<div class="bl"><p><b>Live AI model on your notes (${esc(L.model)}, ${esc(L.at.slice(0, 16).replace("T", " "))} UTC, code ${esc(L.sha)}): ${ans ? `${ans.ok} of ${ans.of} answers carried the right facts; ` : ""}${esc(headlineParts.join(", "))}. This run cost ${usd(L.live.spentUsd)}, ${L.live.calls.cached} of ${L.live.calls.cached + L.live.calls.live} model calls came from the cache.</b></p></div>
+<table><tr><th>Number</th><th>Stand-in, same slice</th><th>Live model</th><th>Live vs stand-in</th><th>Live, in counts</th></tr>${METRICS.map(line).join("")}
+<tr><td><b>Answers with the right facts</b></td><td class="muted">the stand-in never answers</td><td>${ans ? `${ans.ok} of ${ans.of}` : "–"}</td><td></td><td class="muted">the model's own answer contains the expected facts of the question</td></tr></table>
+<p class="muted">Slice: your 20 judged questions and the 8 notes behind the placements you judged, on a throwaway copy of your vault. Spend: ${usd(L.live.spentUsd)} this run (cap ${usd(L.live.runCapUsd)}), ${usd(L.live.monthSpentUsd)} this month (cap ${usd(L.live.monthCapUsd)})${L.live.notRun ? `; ${L.live.notRun} items not run because a cap was reached` : ""}. Filing runs on the model production uses for filing; answers on the same model, where production chat uses another.</p>`;
+}
+
 const newest = last("demo", "ingestionSuccess")?.demo ?? last("real", "ingestionSuccess")?.real;
 const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Zenod memory tests</title>
 <style>
@@ -142,6 +163,9 @@ a{color:#1f5b3f}
 </style>
 <h1>Zenod memory tests</h1>
 <p class="muted">Updated ${esc(new Date().toISOString().slice(0, 16).replace("T", " "))} UTC${newest ? ` · newest run on ${esc(newest.sha)}` : ""} · every change runs the same suite</p>
+<h2>Live AI model checks</h2>
+${liveHtml}
+<h2>Every change, with the free stand-in model</h2>
 <div class="bl"><p><b>Bottom line over today's changes</b></p><ul>${bottom}</ul>
 <p class="muted">Biggest moves: ${movers.length ? esc(movers.join(" · ")) : "none over 1 point"}.</p></div>
 <h2>What the three numbers mean</h2>
