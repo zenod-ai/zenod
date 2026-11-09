@@ -33,11 +33,15 @@ Status: ready
 Last attempted: 2026-11-09 L1 mockup live at http://vps3.taild81fbb.ts.net:8921/e22-l1/
 Result: created, not started
 Evidence: [E22-L1 mockup evidence](evidence/e22-l1-2026-11-09.md)
-Waiting on: none
+Waiting on: E22-A1 (Jordi, mockup)
 Approved work: none
-Next action: post the E22-A1 approve ask for the mockup; on yes, L2 builds it in the live app
+Next action: Jordi answers E22-A1 on the mockup; on yes, L2 builds it in the live app
 Source revision: uncommitted scaffold
 Verified at: 2026-11-09
+
+## Waiting on
+
+- [ask E22-A1: approve @Jordi since 2026-11-09 row L2] Build the app as the librarian of your memory, as in this mockup? Open http://vps3.taild81fbb.ts.net:8921/e22-l1/ and click through it (about 3 minutes) — context: as you asked, Zenod is the librarian and the library is yours; one box "Talk to your librarian", Zenod picks Keep, Look up, Talk it over or Job on the memory and labels each reply Kept, Looked up, Talking or Job sent, tap the label to switch; Talk it over also starts from Personas; "who are you?" is answered directly; the examples are made up, not your notes — impact: a yes starts the build in the live app, mostly reusing today's chat decision, answers, personas and memory desk — risk: low; the app changes how it presents and routes what it already does; rollback is reverting the change — recommend: yes, then give any wording feedback in the reply — why Jordi: it changes how the product presents itself — unblocks: L2 — details: [mockup evidence](evidence/e22-l1-2026-11-09.md)
 
 ## Non-Goals
 
