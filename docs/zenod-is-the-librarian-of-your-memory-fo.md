@@ -33,7 +33,7 @@ Status: ready
 Last attempted: 2026-11-09 L1 mockup live at http://vps3.taild81fbb.ts.net:8921/e22-l1/
 Result: created, not started
 Evidence: [E22-L1 mockup evidence](evidence/e22-l1-2026-11-09.md)
-Waiting on: E22-A1 (Jordi, mockup)
+Waiting on: nobody
 Approved work: none
 Next action: Jordi answers E22-A1 on the mockup; on yes, L2 builds it in the live app
 Source revision: uncommitted scaffold
@@ -41,7 +41,7 @@ Verified at: 2026-11-09
 
 ## Waiting on
 
-- [ask E22-A1: approve @Jordi since 2026-11-09 row L2] Build the app as the librarian of your memory, as in this mockup? Open http://vps3.taild81fbb.ts.net:8921/e22-l1/ and click through it (about 3 minutes) — context: as you asked, Zenod is the librarian and the library is yours; one box "Talk to your librarian", Zenod picks Keep, Look up, Talk it over or Job on the memory and labels each reply Kept, Looked up, Talking or Job sent, tap the label to switch; Talk it over also starts from Personas; "who are you?" is answered directly; the examples are made up, not your notes — impact: a yes starts the build in the live app, mostly reusing today's chat decision, answers, personas and memory desk — risk: low; the app changes how it presents and routes what it already does; rollback is reverting the change — recommend: yes, then give any wording feedback in the reply — why Jordi: it changes how the product presents itself — unblocks: L2 — details: [mockup evidence](evidence/e22-l1-2026-11-09.md)
+- [feedback E22-A1 2026-11-09 @Jordi] Build the app as the librarian of your memory, as in this mockup? Open http://vps3.taild81fbb.ts.net:8921/e22-l1/ and click through it (about 3 minutes) — context: as you asked, Zenod is the librarian and the library is yours; one box "Talk to your librarian", Zenod picks Keep, Look up, Talk it over or Job on the memory and labels each reply Kept, Looked up, Talking or Job sent, tap the label to switch; Talk it over also starts from Personas; "who are you?" is answered directly; the examples are made up, not your notes — impact: a yes starts the build in the live app, mostly reusing today's chat decision, answers, personas and memory desk — risk: low; the app changes how it presents and routes what it already does; rollback is reverting the change — recommend: yes, then give any wording feedback in the reply — why Jordi: it changes how the product presents itself — unblocks: L2 — details: [mockup evidence](evidence/e22-l1-2026-11-09.md) — feedback: I like this direction a lot, but also I think you're losing a lot of functionality, so I agree with, and I think the name and the headline should be slightly different sizes or colors or something so that the tagline, it has less protagonism than the name itself. I like that the bars and settings are kind of more clear, but I think we're losing a lot of tabs. I'm kind of not unhappy about that, but like we don't need 10 million tabs, but inside of memory, we're missing a lot, I think, no? Like seeing the charts, the graphs, and also the settings, let's do another iteration before I approve. But good direction, it's getting cleaner. (voice note vn_723dd97e, audio https://team.alpha9.io/api/voice/notes/vn_723dd97e/audio)
 
 ## Non-Goals
 
@@ -55,7 +55,7 @@ Steps: each is independently testable and closes only with evidence.
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
 | L1 | Ticket worker | run_176c4648-e252-4429-9dcf-dd90f47fb9e5 | E22-1: mockup of the librarian app with four modes, one box, mode labels and tap to switch, at one URL | done (fed E22-A1) | none | main-direct (docs only) | 875a7820 | http://vps3.taild81fbb.ts.net:8921/e22-l1/ | 2026-11-09 | mockup live; E22-A1 approve ask drafted for the Delivery manager; L2 waits on his answer |
-| L2 | Ticket worker | unassigned | E22-2, E22-3: build it in the live app after the mockup is approved | draft | L1 | none | main | none | 2026-11-09 | waits on E22-A1; scope in the L1 evidence page (about a week) |
+| L2 | Ticket worker | unassigned | E22-2, E22-3: build it in the live app after the mockup is approved | active (feedback E22-A1 by Jordi 2026-11-09, round 2: I like this direction a lot, but also I think you're losing a lot of functionality, so I agree with, and I think the name and the headline should be slightly different sizes or colors or something so that the tagline, it has less protagonism than the name itself. I like that the bars and settings a…) | L1 | none | main | none | 2026-11-09 | waits on E22-A1; scope in the L1 evidence page (about a week) |
 
 ## Decisions
 
