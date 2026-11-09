@@ -23,16 +23,7 @@ import { toast } from "sonner"
 
 import { api, errorMessage, type SettingsValues } from "@/lib/api"
 import { PeerAgents } from "@/components/peer-agents"
-import { HostedFreePlanBanner } from "@/components/free-plan-notice"
-import { UsageByFeaturePanel } from "@/components/usage-by-feature"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -49,26 +40,15 @@ import { CostsTab } from "@/views/settings/CostsTab"
 import { KeysTab } from "@/views/settings/KeysTab"
 import { VaultTab } from "@/views/settings/VaultTab"
 import { ChatTab } from "@/views/ChatTab"
-import { MemoryChat } from "@/components/memory-chat"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { MemoryGraph } from "@/components/memory-graph"
-import { MemoryInbox } from "@/components/memory-inbox"
-import { MemoryPersonas } from "@/components/memory-personas"
-import { useInboxCount } from "@/lib/inbox"
-import { MemoryNoteViewer } from "@/components/memory-note-viewer"
-import { memoryPathFromHash } from "@/lib/memory-chat"
 import { PhylaxTenantSettings } from "@/components/phylax-tenant-settings"
 import { HeraldLoopPanels } from "@/components/herald-loop-panels"
 import { GoogleDriveConnect } from "@/components/google-drive-connect"
 import { TelegramConnect } from "@/components/telegram-connect"
 import { SubscribersPanel } from "@/components/subscribers-panel"
 import { useSubscribersAvailability } from "@/lib/subscribers"
-import {
-  HostedChannelsPanel,
-  HostedUsagePanel,
-  MemoryTreePanel,
-  ZenodOverview,
-} from "@/views/ZenodPortalPanels"
+import { ZenodOverview } from "@/views/ZenodPortalPanels"
+import { HostedApp } from "@/views/HostedApp"
 import type { ZenodEdition } from "@/views/zenod-edition"
 
 const SECTION_ICONS = {
@@ -115,35 +95,6 @@ function SettingsPanel({
   )
 }
 
-function HostedAccountLink() {
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">Account</h2>
-        <p className="text-sm text-muted-foreground">
-          Sign-in identities, subscription state, vault access, and billing
-          management.
-        </p>
-      </div>
-      <Card>
-        <CardHeader>
-          <UserRoundIcon className="size-5 text-muted-foreground" />
-          <CardTitle>Zenod Hosted account</CardTitle>
-          <CardDescription>
-            The existing account surface remains the source of truth for your
-            subscription and billing access.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <a href="/account">Open account and billing</a>
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
 export function Settings({
   initialSettings,
   initialTab,
@@ -163,40 +114,7 @@ export function Settings({
   const [section, setSection] = React.useState<DashboardSection>(() =>
     dashboardSectionForTab(initialTab, edition)
   )
-  // E12-S1: a memory link from the chat (`#memory?path=…`) opens that memory in the Memory tab.
-  const [memoryPath, setMemoryPath] = React.useState<string | null>(() =>
-    edition === "hosted" ? memoryPathFromHash(window.location.hash) : null
-  )
-  React.useEffect(() => {
-    if (edition !== "hosted") return
-    const onHash = () => {
-      const path = memoryPathFromHash(window.location.hash)
-      if (path) {
-        setMemoryPath(path)
-        setSection("memory")
-        window.scrollTo?.({ top: 0 })
-      } else if (window.location.hash === "#chat") {
-        setSection("chat")
-      } else if (window.location.hash.startsWith("#graph")) {
-        setSection("graph")
-        // E12-S13: "Show in graph" from deep in the chat lands at the top of the graph.
-        if (window.location.hash.includes("m=")) window.scrollTo?.({ top: 0 })
-      } else if (window.location.hash === "#inbox") {
-        setSection("inbox")
-      } else if (window.location.hash === "#personas") {
-        setSection("personas")
-      }
-    }
-    window.addEventListener("hashchange", onHash)
-    return () => window.removeEventListener("hashchange", onHash)
-  }, [edition])
-  const closeMemory = React.useCallback(() => {
-    setMemoryPath(null)
-    setSection("chat")
-    window.history.replaceState(null, "", window.location.pathname + window.location.search)
-  }, [])
   const subscribersAvailability = useSubscribersAvailability()
-  const inboxCount = useInboxCount(edition === "hosted")
   const isRing = overview?.unit?.name === "ring"
   const isHerald = overview?.unit?.name === "herald"
   const isCouncilUnit = isRing || isHerald
@@ -244,6 +162,18 @@ export function Settings({
     }
   }
 
+  // EPIC-22 E22-2: the hosted app is the librarian of your memory, with its own header and five tabs.
+  if (edition === "hosted" && !isPhylax && !isCouncilUnit) {
+    return (
+      <HostedApp
+        overview={overview}
+        initialTab={initialTab}
+        loggingOut={loggingOut}
+        onLogout={handleLogout}
+      />
+    )
+  }
+
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -269,7 +199,7 @@ export function Settings({
               {overview
                 ? isRing || isHerald || isPhylax
                   ? `${overview.tenant.name ?? overview.tenant.id} · ${overview.usage?.units ?? 0} usage units`
-                  : edition === "hosted" ? "Your hosted workspace" : "Your self-hosted workspace"
+                  : "Your self-hosted workspace"
                 : isRing
                   ? "Your council — one chat, wired to all your agents"
                   : isHerald
@@ -307,10 +237,6 @@ export function Settings({
           </Button>
         </div>
       </header>
-
-      {edition === "hosted" && !isPhylax && !isCouncilUnit ? (
-        <HostedFreePlanBanner />
-      ) : null}
 
       {isPhylax ? (
         <main>
@@ -377,14 +303,6 @@ export function Settings({
                   <TabsTrigger key={id} value={id}>
                     <Icon />
                     {label}
-                    {id === "inbox" && inboxCount > 0 ? (
-                      <span
-                        className="ml-0.5 rounded-full bg-[#1f4d3a] px-1.5 text-[11px] leading-[18px] font-semibold text-[#f6f2e9] tabular-nums dark:bg-[#2d6a4e]"
-                        aria-label={`${inboxCount} need you`}
-                      >
-                        {inboxCount}
-                      </span>
-                    ) : null}
                     {id === "subscribers" ? (
                       <span className="text-[10px] font-normal text-muted-foreground">new</span>
                     ) : null}
@@ -392,34 +310,12 @@ export function Settings({
                 )
               })}
           </TabsList>
-          <TabsContent value="chat" className="mt-4">
-            {edition === "hosted" ? <MemoryChat /> : null}
-          </TabsContent>
-          <TabsContent value="graph" className="mt-4">
-            {edition === "hosted" ? <MemoryGraph /> : null}
-          </TabsContent>
-          <TabsContent value="inbox" className="mt-4">
-            {edition === "hosted" ? (
-              <MemoryInbox active={section === "inbox"} />
-            ) : null}
-          </TabsContent>
-          <TabsContent value="personas" className="mt-4">
-            {edition === "hosted" ? (
-              <MemoryPersonas active={section === "personas"} />
-            ) : null}
-          </TabsContent>
           <TabsContent value="overview" className="mt-4">
             <ZenodOverview
               edition={edition}
               overview={overview}
               onNavigate={setSection}
             />
-          </TabsContent>
-          <TabsContent value="memory" className="mt-4 flex flex-col gap-6">
-            {memoryPath ? (
-              <MemoryNoteViewer key={memoryPath} path={memoryPath} onClose={closeMemory} />
-            ) : null}
-            <MemoryTreePanel />
           </TabsContent>
           <TabsContent value="connect" className="mt-4">
             <DashboardOverview overview={overview} showSupportCards={false} hosted={edition === "hosted"} />
@@ -428,11 +324,7 @@ export function Settings({
             {subscribersAvailability === "on" ? <SubscribersPanel /> : null}
           </TabsContent>
           <TabsContent value="channels" className="mt-4">
-            {edition === "hosted" ? (
-              <HostedChannelsPanel />
-            ) : (
-              <TelegramConnect presentation="zenod-self-hosted" />
-            )}
+            <TelegramConnect presentation="zenod-self-hosted" />
           </TabsContent>
           <TabsContent value="vault" className="mt-4">
             <div className="flex flex-col gap-6">
@@ -444,20 +336,10 @@ export function Settings({
             </div>
           </TabsContent>
           <TabsContent value="usage" className="mt-4">
-            {edition === "hosted" ? (
-              <div className="flex flex-col gap-6">
-                <HostedUsagePanel />
-                <UsageByFeaturePanel />
-              </div>
-            ) : (
-              <CostsTab />
-            )}
+            <CostsTab />
           </TabsContent>
           <TabsContent value="settings" className="mt-4">
             <SettingsPanel settings={settings} onSaved={setSettings} />
-          </TabsContent>
-          <TabsContent value="account" className="mt-4">
-            <HostedAccountLink />
           </TabsContent>
         </Tabs>
       )}

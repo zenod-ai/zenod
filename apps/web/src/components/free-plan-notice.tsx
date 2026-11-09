@@ -40,8 +40,7 @@ export function FreePlanNotice({
   )
 }
 
-/** The hosted workspace's welcome line: shown only while the subscription is free. */
-export function HostedFreePlanBanner() {
+function useFreePlanAccount(): FreePlanAccount | null {
   const [account, setAccount] = React.useState<FreePlanAccount | null>(null)
   React.useEffect(() => {
     let live = true
@@ -57,6 +56,25 @@ export function HostedFreePlanBanner() {
       live = false
     }
   }, [])
+  return account
+}
+
+/** The hosted workspace's welcome line: shown only while the subscription is free. */
+export function HostedFreePlanBanner() {
+  const account = useFreePlanAccount()
   if (!account || !isFreePlan(account)) return null
   return <FreePlanNotice freeUntil={account.free_until ?? null} />
+}
+
+/** EPIC-22: the plan line next to the name, "Free pass · 18 days left"; nothing when not free. */
+export function HostedPlanLine({ now = Date.now() }: { now?: number } = {}) {
+  const account = useFreePlanAccount()
+  if (!account || !isFreePlan(account)) return null
+  const until = account.free_until ? Date.parse(account.free_until) : NaN
+  const days = Number.isNaN(until) ? null : Math.max(0, Math.ceil((until - now) / 86_400_000))
+  return (
+    <span className="zl-plan" data-testid="plan-line">
+      Free pass{days === null ? "" : ` · ${days} ${days === 1 ? "day" : "days"} left`}
+    </span>
+  )
 }

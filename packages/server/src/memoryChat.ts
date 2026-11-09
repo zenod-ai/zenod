@@ -58,14 +58,15 @@ function shownInApp(memory: MemoryChatMemory): boolean {
  * Zenod itself, with no memories. Keep it true: every line names something a user can do now.
  */
 export const ABOUT_ZENOD = [
-  "I'm Zenod, your memory.",
+  "I'm Zenod, the librarian of your memory. The library is yours: your notes, voice notes and files. I look after it.",
   "",
-  "- **Tell me things**: type or record a voice note here and press Send, or send it on WhatsApp. I keep every word in your Log and file it on the right page of your memory tree.",
-  "- **Ask me things**: ask a question here and I answer from your own notes, with the memories I used, each with how well it matched.",
-  "- **Browse**: the Memory tab shows your memory tree and every page in it.",
-  "- **Use me from other AI apps**: connect Claude, ChatGPT, Cursor and others to your memory at [zenod.dev/connect](https://zenod.dev/connect).",
+  "- **Keep**: tell me something here, record a voice note, or send it on WhatsApp. I keep every word and file it on the right page of your memory tree, and say where it went.",
+  "- **Look up**: ask me something and I answer from your own notes, with the memories I used, each with how well it matched.",
+  "- **Talk it over**: want to think out loud? We talk it through, with me or one of your personas, using what your memory holds.",
+  "- **Job on the memory**: something filed in the wrong place or tangled? I make it a job for the memory desk, and it reports in your Inbox.",
+  "- **Browse**: the Memory tab shows your memory at a glance, its tree and its graph. Connect Claude, ChatGPT, Cursor and others at [zenod.dev/connect](https://zenod.dev/connect).",
   "",
-  "I only answer from what you have told me, and nothing is saved by asking.",
+  "You never pick. I pick, I say which, and you can tap the label to change it. I only answer from what you have told me, and nothing is saved by asking.",
 ].join("\n");
 
 const ABOUT_ZENOD_QUESTIONS: readonly RegExp[] = [

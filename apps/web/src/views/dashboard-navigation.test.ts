@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   DASHBOARD_SECTIONS,
   PUBLIC_LANDING_URL,
+  dashboardPlaceForHash,
+  dashboardPlaceForTab,
   dashboardSectionsForEdition,
   dashboardSectionForTab,
   mcpClientSnippets,
@@ -24,24 +26,18 @@ describe("Zenod dashboard navigation", () => {
   })
 
   it("uses one capability-driven profile for both approved editions", () => {
+    // EPIC-22: the librarian of your memory has five tabs.
     expect(dashboardSectionsForEdition("hosted").map(({ id }) => id)).toEqual([
       "chat",
-      "graph",
       "inbox",
       "personas",
-      "overview",
       "memory",
-      "connect",
-      "subscribers",
-      "channels",
-      "vault",
-      "usage",
-      "account",
+      "settings",
     ])
     expect(
       dashboardSectionsForEdition("self-hosted").map(({ id }) => id)
     ).toEqual(["overview", "connect", "subscribers", "channels", "vault", "usage", "settings"])
-    expect(dashboardSectionForTab("subscribers", "hosted")).toBe("subscribers")
+    expect(dashboardSectionForTab("subscribers", "hosted")).toBe("settings")
     expect(dashboardSectionForTab("inbox", "hosted")).toBe("inbox")
     expect(dashboardSectionForTab("inbox", "self-hosted")).toBe("overview")
     expect(dashboardSectionForTab("personas", "hosted")).toBe("personas")
@@ -71,9 +67,9 @@ describe("Zenod dashboard navigation", () => {
   })
 
   it("cannot deep-link into a section unavailable in the active edition", () => {
-    expect(dashboardSectionForTab("settings", "hosted")).toBe("chat")
+    expect(dashboardSectionForTab("keys", "hosted")).toBe("chat")
     expect(dashboardSectionForTab("account", "self-hosted")).toBe("overview")
-    expect(dashboardSectionForTab("account", "hosted")).toBe("account")
+    expect(dashboardSectionForTab("account", "hosted")).toBe("settings")
     expect(dashboardSectionForTab("memory", "hosted")).toBe("memory")
     expect(dashboardSectionForTab("memory", "self-hosted")).toBe("overview")
   })
@@ -81,9 +77,42 @@ describe("Zenod dashboard navigation", () => {
   it("opens the hosted app on its chat and keeps self-hosted on the overview (E12-S1)", () => {
     expect(dashboardSectionForTab(undefined, "hosted")).toBe("chat")
     expect(dashboardSectionForTab("chat", "hosted")).toBe("chat")
-    expect(dashboardSectionForTab("overview", "hosted")).toBe("overview")
+    expect(dashboardSectionForTab("overview", "hosted")).toBe("memory")
     expect(dashboardSectionForTab(undefined, "self-hosted")).toBe("overview")
     expect(dashboardSectionForTab("chat", "self-hosted")).toBe("overview")
+  })
+
+  it("keeps every old hosted tab and #anchor working in its new home (EPIC-22)", () => {
+    const moved: Record<string, object> = {
+      graph: { section: "memory", memory: "graph" },
+      memory: { section: "memory", memory: "tree" },
+      overview: { section: "memory", memory: "glance" },
+      connect: { section: "settings", settings: "connect" },
+      connections: { section: "settings", settings: "connect" },
+      subscribers: { section: "settings", settings: "channels" },
+      channels: { section: "settings", settings: "channels" },
+      vault: { section: "settings", settings: "vault" },
+      usage: { section: "settings", settings: "usage" },
+      costs: { section: "settings", settings: "usage" },
+      account: { section: "settings", settings: "account" },
+      inbox: { section: "inbox" },
+      personas: { section: "personas" },
+      chat: { section: "chat" },
+    }
+    for (const [tab, place] of Object.entries(moved)) {
+      expect(dashboardPlaceForTab(tab, "hosted"), tab).toEqual(place)
+    }
+    expect(dashboardPlaceForHash("#graph?path=People%2FAna.md")).toEqual({ section: "memory", memory: "graph" })
+    expect(dashboardPlaceForHash("#memory?path=Log%2F2026-11-01.md")).toEqual({ section: "memory", memory: "tree" })
+    expect(dashboardPlaceForHash("#chat?talk=weekly-recap")).toEqual({ section: "chat" })
+    expect(dashboardPlaceForHash("#vault")).toEqual({ section: "settings", settings: "vault" })
+    expect(dashboardPlaceForHash("#account")).toEqual({ section: "settings", settings: "account" })
+    expect(dashboardPlaceForHash("#phylax-channels")).toEqual({ section: "settings", settings: "channels" })
+    expect(dashboardPlaceForHash("#memory/check")).toEqual({ section: "memory", memory: "check" })
+    expect(dashboardPlaceForHash("#settings/usage")).toEqual({ section: "settings", settings: "usage" })
+    expect(dashboardPlaceForHash("#settings/graph")).toEqual({ section: "settings", settings: "connect" })
+    expect(dashboardPlaceForHash("")).toBeNull()
+    expect(dashboardPlaceForHash("#nothing")).toBeNull()
   })
 
   it("links back to the canonical public landing", () => {

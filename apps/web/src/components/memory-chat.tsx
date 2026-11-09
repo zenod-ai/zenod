@@ -6,15 +6,20 @@ import {
   askMemoryDesk,
   keepInMemory,
   keepStatus,
+  lookUpInMemory,
   MemoryChatError,
   presentAnswer,
   sendToMemory,
+  talkFromHash,
+  talkWithMemory,
   vaultLabel,
   type MemoryChatAnswer,
   type MemoryChatMemory,
   type MemoryDeskJob,
   type MemoryKeepReceipt,
   type MemorySendRoute,
+  type MemoryTalkReply,
+  type MemoryTalkTurn,
 } from "@/lib/memory-chat"
 import { litHash } from "@/lib/memory-graph"
 import { formatLength, voiceNoteStatus } from "@/lib/voice-note"
@@ -32,6 +37,10 @@ import type { CallApi, CallMedia } from "@/lib/memory-call"
 // EPIC-14 S3: a job on the memory ("untangle Idealista and Poly-Maker") goes to the memory desk and
 // shows in the inbox at once; when Zenod is unsure it asks "keep it, or do it as a job?". "Ask the
 // desk" beside Send starts a job from what is written, without the decision.
+// EPIC-22 E22-2: Zenod is the librarian of your memory. One box; Zenod picks Keep, Look up, Talk it
+// over or Job on the memory, labels each reply Kept, Looked up, Talking or Job sent, and a tap on the
+// label redoes the same message another way ("Make it a job" replaces "Ask the desk"). Talk it over
+// is a read-only talk with a persona; it also starts from a persona or inbox card (#chat?talk=…).
 
 type KeepState =
   | { state: "idle" }
@@ -50,6 +59,7 @@ type Turn =
   | {
       id: number
       kind: "pending"
+      message: string
       route: MemorySendRoute | null
       keep: KeepState | null
       memories: MemoryChatMemory[] | null
@@ -58,11 +68,14 @@ type Turn =
   | {
       id: number
       kind: "reply"
+      message: string
       route: MemorySendRoute
       keep: KeepState | null
       result: MemoryChatAnswer | null
       desk?: DeskState | null
+      talk?: MemoryTalkReply | null
     }
+  | { id: number; kind: "note"; text: string }
   | { id: number; kind: "voice-note"; seconds: number; keep: KeepState }
   | { id: number; kind: "error"; text: string }
 
@@ -178,7 +191,9 @@ function MemoryList({
   alsoCited = [],
   noteLinks,
   question,
+  heading,
 }: {
+  heading?: string
   memories: MemoryChatMemory[]
   alsoCited?: MemoryChatAnswer["alsoCited"]
   noteLinks?: MemoryChatAnswer["noteLinks"]
@@ -188,7 +203,9 @@ function MemoryList({
   return (
     <div className="zp-used" aria-label="Memories used">
       <p className="zp-usedhead">
-        {memories.length > 0
+        {heading
+          ? heading
+          : memories.length > 0
           ? memories.length > 5
             ? "Memories for this question"
             : `Top ${memories.length} memories for this question`
@@ -290,11 +307,19 @@ function PendingTurn({
   memories: MemoryChatMemory[] | null
   text: string
 }) {
+  const talking = route?.action === "talk"
   const asking = route?.question != null
   return (
     <div className="zp-turn">
       {route && keep ? <KeepLine keep={keep} route={route} /> : null}
-      {!route || (asking && !text) ? (
+      {talking && text ? (
+        <div className="zp-msg zp-z zp-draft" data-testid="memory-talk-draft">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerLinks}>
+            {presentAnswer(text, memories ?? [])}
+          </ReactMarkdown>
+        </div>
+      ) : null}
+      {!route || (asking && !text) || (talking && !text) ? (
         <div className="zp-msg zp-z zp-typing" aria-label="Zenod is working">
           <i />
           <i />
@@ -381,56 +406,182 @@ function DeskLine({
   )
 }
 
-/** One reply (E16-B1): what was kept, then the answer, then what Zenod did in one line. */
+export type ChatMode = "keep" | "lookup" | "talk" | "job"
+
+/** The four modes (EPIC-22): the label on a reply, and how the switch menu offers each. */
+export const CHAT_MODES: Record<ChatMode, { label: string; verb: string; hint: string }> = {
+  keep: { label: "Kept", verb: "Keep it", hint: "Save it as a new memory" },
+  lookup: { label: "Looked up", verb: "Look it up", hint: "Answer it from your memory" },
+  talk: { label: "Talking", verb: "Talk it over", hint: "Think it through with a persona, nothing is changed" },
+  job: { label: "Job sent", verb: "Make it a job", hint: "The memory desk re-files, splits or joins" },
+}
+const MODE_ORDER: ChatMode[] = ["keep", "lookup", "talk", "job"]
+
+/** What a reply did, as mode labels: empty while Zenod waits on "keep it, or a job?", and for "who are you?". */
+export function replyModes(route: MemorySendRoute, result: MemoryChatAnswer | null, desk?: DeskState | null, keep?: KeepState | null): ChatMode[] {
+  if (route.action === "talk") return ["talk"]
+  if (route.action === "job") return ["job"]
+  if (route.action === "unsure") return desk?.state === "asking" ? [] : desk ? ["job"] : keep ? ["keep"] : []
+  if (route.action === "keep") return ["keep"]
+  if (route.action === "both") return ["keep", "lookup"]
+  return result?.about === "zenod" ? [] : ["lookup"]
+}
+
+/** The label on a reply; a tap opens "Do it another way" and redoes the message in the mode picked. */
+function ModeChip({ modes, onSwitch }: { modes: ChatMode[]; onSwitch: (mode: ChatMode) => void }) {
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLSpanElement>(null)
+  React.useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("mousedown", close)
+    document.addEventListener("keydown", escape)
+    return () => {
+      document.removeEventListener("mousedown", close)
+      document.removeEventListener("keydown", escape)
+    }
+  }, [open])
+  return (
+    <span className="zp-modewrap" ref={ref}>
+      <button
+        type="button"
+        className={`zp-chip zp-chip-${modes[modes.length - 1]}`}
+        data-testid="memory-mode"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((was) => !was)}
+      >
+        {modes.map((mode) => CHAT_MODES[mode].label).join(" · ")}
+        <span aria-hidden="true"> ▾</span>
+      </button>
+      {open ? (
+        <span className="zp-modemenu" role="menu" aria-label="Do it another way">
+          <span className="zp-modemenu-k">Do it another way</span>
+          {MODE_ORDER.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="menuitem"
+              aria-current={modes.length === 1 && modes[0] === mode ? "true" : undefined}
+              onClick={() => {
+                setOpen(false)
+                onSwitch(mode)
+              }}
+            >
+              <b>{CHAT_MODES[mode].verb}</b>
+              <span>{CHAT_MODES[mode].hint}</span>
+            </button>
+          ))}
+          {modes.includes("keep") ? (
+            <span className="zp-modemenu-note">What was kept stays kept.</span>
+          ) : null}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/** A Talk it over reply (EPIC-22): the persona's words, then the memories it read. */
+function TalkTurn({ talk }: { talk: MemoryTalkReply }) {
+  return (
+    <>
+      <div className={talk.talked ? "zp-msg zp-z" : "zp-msg zp-z zp-none"} data-testid="memory-talk">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={answerLinks}>
+          {presentAnswer(talk.text, talk.memories)}
+        </ReactMarkdown>
+      </div>
+      {talk.memories.length > 0 ? (
+        <MemoryList memories={talk.memories} heading="Memories it read" />
+      ) : null}
+    </>
+  )
+}
+
+/** One reply: its mode label, what was kept, the answer or the talk, then what Zenod did in one line. */
 function ReplyTurn({
   route,
   keep,
   result,
   desk,
+  talk,
   onDeskChoice,
+  onSwitch,
 }: {
   route: MemorySendRoute
   keep: KeepState | null
   result: MemoryChatAnswer | null
   desk?: DeskState | null
+  talk?: MemoryTalkReply | null
   onDeskChoice: (choice: "keep" | "job") => void
+  onSwitch: (mode: ChatMode) => void
 }) {
+  const modes = replyModes(route, result, desk, keep)
   const did =
-    route.action === "job"
-      ? desk?.state === "error"
-        ? "Not passed to the memory desk"
-        : "Passed to the memory desk · nothing saved"
-      : route.action === "unsure"
-        ? desk?.state === "asking"
-          ? "Waiting for you: keep it, or do it as a job"
-          : desk
-            ? "Passed to the memory desk · nothing saved"
-            : "Kept as a new memory"
-        : route.action === "keep"
-          ? "Kept as a new memory"
-          : route.action === "both"
-            ? "Kept the new part and answered the question"
-            : result?.about === "zenod"
-              ? "About Zenod · nothing saved"
-              : "Answered from your memory · nothing saved"
+    route.action === "talk"
+      ? "Read your memory · nothing saved or changed"
+      : route.action === "job"
+        ? desk?.state === "error"
+          ? "Not passed to the memory desk"
+          : "Passed to the memory desk · nothing saved"
+        : route.action === "unsure"
+          ? desk?.state === "asking"
+            ? "Waiting for you: keep it, or do it as a job"
+            : desk
+              ? "Passed to the memory desk · nothing saved"
+              : "Kept as a new memory"
+          : route.action === "keep"
+            ? "Kept as a new memory"
+            : route.action === "both"
+              ? "Kept the new part and answered the question"
+              : result?.about === "zenod"
+                ? "About Zenod · nothing saved"
+                : "Answered from your memory · nothing saved"
   return (
     <div className="zp-turn">
+      <div className="zp-modehead">
+        {modes.length > 0 ? (
+          <ModeChip modes={modes} onSwitch={onSwitch} />
+        ) : result?.about === "zenod" ? (
+          <span className="zp-direct" data-testid="memory-mode">Answered directly</span>
+        ) : null}
+        {route.action === "talk" && talk ? (
+          <span className="zp-who">with {talk.persona.name}</span>
+        ) : null}
+      </div>
       {desk ? <DeskLine desk={desk} onChoose={onDeskChoice} /> : null}
       {keep ? <KeepLine keep={keep} route={route} /> : null}
       {result ? <AnswerTurn result={result} /> : null}
+      {talk ? <TalkTurn talk={talk} /> : null}
       <div className="zp-actions">
         <span className="zp-did" data-testid="memory-did">{did}</span>
         {result ? <span className="zp-time">{(result.ms / 1000).toFixed(1)} s</span> : null}
+        {talk ? <span className="zp-time">{(talk.ms / 1000).toFixed(1)} s</span> : null}
       </div>
     </div>
   )
 }
+
+type Talking = { persona: string | null; name: string; history: MemoryTalkTurn[] }
+
+const failureText = (error: unknown) =>
+  error instanceof MemoryChatError || error instanceof Error
+    ? error.message
+    : "Something went wrong. Try again."
 
 export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?: CallMedia } } = {}) {
   const call = useMemoryCall(callDeps)
   const [turns, setTurns] = React.useState<Turn[]>([])
   const [draft, setDraft] = React.useState("")
   const [sending, setSending] = React.useState(false)
+  // EPIC-22: a talk in progress; the box replies to the persona until the talk ends.
+  const [talking, setTalking] = React.useState<Talking | null>(null)
+  const talkingRef = React.useRef<Talking | null>(null)
+  talkingRef.current = talking
   const nextId = React.useRef(1)
   const endRef = React.useRef<HTMLDivElement>(null)
 
@@ -457,6 +608,14 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
     return id
   }
 
+  const replace = (id: number, turn: NewTurn) =>
+    setTurns((all) => all.map((old) => (old.id === id ? ({ ...turn, id } as Turn) : old)))
+
+  const updatePendingOf = (id: number) => (change: (turn: Extract<Turn, { kind: "pending" }>) => Turn) =>
+    setTurns((all) =>
+      all.map((turn) => (turn.id === id && turn.kind === "pending" ? change(turn) : turn))
+    )
+
   const updateDesk = (id: number, desk: DeskState | null, keep?: KeepState) =>
     setTurns((all) =>
       all.map((turn) =>
@@ -465,9 +624,6 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
           : turn
       )
     )
-
-  const failureText = (error: unknown) =>
-    error instanceof Error ? error.message : "Something went wrong. Try again."
 
   async function startJob(id: number, description: string) {
     updateDesk(id, { state: "starting" })
@@ -492,26 +648,85 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
     }
   }
 
-  // "Ask the desk": start a job from what is written, without Zenod deciding.
-  const [deskHint, setDeskHint] = React.useState(false)
-  async function askDesk() {
-    const description = draft.trim()
-    if (!description) {
-      setDeskHint(true)
-      return
+  /** One talk turn into turn `id`: the persona's reply streams in, then joins the talk's history. */
+  async function talkTurn(id: number, message: string, talk: Talking, opener = false) {
+    const update = updatePendingOf(id)
+    const route: MemorySendRoute = { action: "talk", keep: null, question: null, talk: message, by: "rules" }
+    update((turn) => ({ ...turn, route }))
+    try {
+      const reply = await talkWithMemory(
+        { message, persona: talk.persona, history: talk.history, opener },
+        {
+          onMemories: (memories) => update((turn) => ({ ...turn, memories })),
+          onText: (text) => update((turn) => ({ ...turn, text: turn.text + text })),
+        }
+      )
+      replace(id, { kind: "reply", message, route, keep: null, result: null, desk: null, talk: reply })
+      const history: MemoryTalkTurn[] = [
+        ...talk.history,
+        ...(message ? [{ role: "person" as const, text: message }] : []),
+        ...(reply.talked ? [{ role: "persona" as const, text: reply.text }] : []),
+      ]
+      setTalking({ persona: reply.persona.id === "zenod" ? null : reply.persona.id, name: reply.persona.name, history })
+    } catch (error) {
+      replace(id, { kind: "error", text: failureText(error) })
     }
+  }
+
+  // A talk started from a persona or inbox card (`#chat?talk=…`): the persona speaks first.
+  const startTalk = React.useCallback((persona: string, about: string) => {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search + "#chat")
+    const talk: Talking = { persona, name: persona, history: [] }
+    setTalking(talk)
+    push({ kind: "note", text: about ? `You started a talk about “${about}”` : "You started a talk from Personas" })
+    const id = push({ kind: "pending", message: about, route: null, keep: null, memories: null, text: "" })
+    void talkTurn(id, about, talk, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  React.useEffect(() => {
+    const check = () => {
+      const start = talkFromHash(window.location.hash)
+      if (start) startTalk(start.persona, start.about)
+    }
+    check()
+    window.addEventListener("hashchange", check)
+    return () => window.removeEventListener("hashchange", check)
+  }, [startTalk])
+
+  /** The label menu: redo the same message in another mode, in place of its reply. */
+  async function redo(id: number, message: string, mode: ChatMode) {
     if (sending) return
-    setDeskHint(false)
-    setDraft("")
-    push({ kind: "message", text: description })
-    const id = push({
-      kind: "reply",
-      route: { action: "job", keep: null, question: null, job: description, by: "rules" },
-      keep: null,
-      result: null,
-      desk: { state: "starting" },
-    })
-    await startJob(id, description)
+    if (mode !== "talk" && talkingRef.current) setTalking(null)
+    replace(id, { kind: "pending", message, route: null, keep: null, memories: null, text: "" })
+    const update = updatePendingOf(id)
+    try {
+      if (mode === "talk") {
+        const talk = talkingRef.current ?? { persona: null, name: "Zenod", history: [] }
+        return await talkTurn(id, message, talk)
+      }
+      if (mode === "keep") {
+        const route: MemorySendRoute = { action: "keep", keep: message, question: null, by: "rules" }
+        update((turn) => ({ ...turn, route, keep: { state: "keeping" } }))
+        const receipt = await keepInMemory(message)
+        replace(id, { kind: "reply", message, route, keep: { state: "kept", receipt }, result: null, desk: null })
+        pollKeep(id, receipt)
+        return
+      }
+      if (mode === "job") {
+        const route: MemorySendRoute = { action: "job", keep: null, question: null, job: message, by: "rules" }
+        replace(id, { kind: "reply", message, route, keep: null, result: null, desk: { state: "starting" } })
+        return await startJob(id, message)
+      }
+      const route: MemorySendRoute = { action: "answer", keep: null, question: message, by: "rules" }
+      update((turn) => ({ ...turn, route }))
+      const result = await lookUpInMemory(message, {
+        onMemories: (memories) => update((turn) => ({ ...turn, memories })),
+        onText: (text) => update((turn) => ({ ...turn, text: turn.text + text })),
+      })
+      replace(id, { kind: "reply", message, route, keep: null, result, desk: null })
+    } catch (error) {
+      replace(id, { kind: "error", text: failureText(error) })
+    }
   }
 
   async function send() {
@@ -520,12 +735,11 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
     setDraft("")
     setSending(true)
     push({ kind: "message", text: message })
-    const pendingId = push({ kind: "pending", route: null, keep: null, memories: null, text: "" })
-    const updatePending = (change: (turn: Extract<Turn, { kind: "pending" }>) => Turn) =>
-      setTurns((all) =>
-        all.map((turn) => (turn.id === pendingId && turn.kind === "pending" ? change(turn) : turn))
-      )
+    const pendingId = push({ kind: "pending", message, route: null, keep: null, memories: null, text: "" })
     try {
+      // In a talk, the box replies to the persona.
+      if (talkingRef.current) return await talkTurn(pendingId, message, talkingRef.current)
+      const updatePending = updatePendingOf(pendingId)
       const sent = await sendToMemory(message, {
         onRoute: (route) =>
           updatePending((turn) => ({ ...turn, route, keep: route.keep ? { state: "keeping" } : null })),
@@ -537,9 +751,9 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
         onMemories: (memories) => updatePending((turn) => ({ ...turn, memories })),
         onText: (text) => updatePending((turn) => ({ ...turn, text: turn.text + text })),
       })
-      updatePending((turn) => ({
-        id: turn.id,
+      replace(pendingId, {
         kind: "reply",
+        message,
         route: sent.route,
         keep: !sent.kept
           ? sent.route.keep
@@ -549,6 +763,7 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
             ? { state: "error", message: sent.kept.error }
             : { state: "kept", receipt: sent.kept },
         result: sent.answer,
+        talk: sent.talk ?? null,
         desk:
           sent.route.action === "job"
             ? sent.desk && !("error" in sent.desk)
@@ -557,37 +772,36 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
             : sent.route.action === "unsure"
               ? { state: "asking" }
               : null,
-      }))
+      })
       if (sent.kept && !("error" in sent.kept)) pollKeep(pendingId, sent.kept)
+      // Zenod picked Talk it over: the talk goes on with the librarian until it ends.
+      if (sent.talk?.talked) {
+        setTalking({
+          persona: null,
+          name: sent.talk.persona.name,
+          history: [
+            { role: "person", text: message },
+            { role: "persona", text: sent.talk.text },
+          ],
+        })
+      }
     } catch (error) {
-      updatePending((turn) => ({
-        id: turn.id,
-        kind: "error",
-        text:
-          error instanceof MemoryChatError || error instanceof Error
-            ? error.message
-            : "Something went wrong. Try again.",
-      }))
+      replace(pendingId, { kind: "error", text: failureText(error) })
     } finally {
       setSending(false)
     }
   }
 
   return (
-    <section className="zp" aria-labelledby="memory-chat-heading">
-      <div className="zp-head">
-        <h2 id="memory-chat-heading">Talk to your memory.</h2>
-        <p className="zp-lede">
-          Tell Zenod something and it keeps it. Ask it something and it answers
-          from your own notes, with the memories it used.
-        </p>
-      </div>
+    <section className="zp zp-librarian" aria-label="Talk to your librarian">
       <div className="zp-stage">
         <div className="zp-screen">
           <div className="zp-log" aria-live="polite">
             {turns.length === 0 ? (
               <p className="zp-empty">
-                Try “The plumber is Ana, 612 445 019” or “Who is our plumber?”
+                Tell me something and I keep it. Ask and I look it up. Want to
+                think out loud? We talk it over. Something filed wrong? I make it
+                a job. Try “who are you?”
               </p>
             ) : null}
             {turns.map((turn) =>
@@ -595,10 +809,17 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
                 <div key={turn.id} className="zp-msg zp-me">
                   {turn.text}
                 </div>
+              ) : turn.kind === "note" ? (
+                <p key={turn.id} className="zp-talknote">
+                  {turn.text}
+                </p>
               ) : turn.kind === "voice-note" ? (
                 <div key={turn.id} className="zp-turn">
                   <div className="zp-msg zp-me zp-voice">
                     Voice note · {formatLength(turn.seconds)}
+                  </div>
+                  <div className="zp-modehead">
+                    <span className="zp-chip zp-chip-keep zp-chip-still">Kept</span>
                   </div>
                   <KeepLine keep={turn.keep} retry="Record it again." />
                 </div>
@@ -621,13 +842,23 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
                   keep={turn.keep}
                   result={turn.result}
                   desk={turn.desk ?? null}
+                  talk={turn.talk ?? null}
                   onDeskChoice={(choice) => void chooseDesk(turn.id, turn.route, choice)}
+                  onSwitch={(mode) => void redo(turn.id, turn.message, mode)}
                 />
               )
             )}
             <div ref={endRef} />
           </div>
           <CallPanel call={call} />
+          {talking ? (
+            <p className="zp-talkbar" data-testid="memory-talkbar">
+              Talking with <b>{talking.name}</b> · it reads your memory, nothing is changed{" "}
+              <button type="button" className="zp-link" onClick={() => setTalking(null)}>
+                End the talk
+              </button>
+            </p>
+          ) : null}
           <form
             className="zp-compose"
             onSubmit={(event) => {
@@ -635,28 +866,25 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
               void send()
             }}
           >
+            <VoiceNoteButton
+              onSent={(receipt, seconds) =>
+                pollVoice(push({ kind: "voice-note", seconds, keep: { state: "keeping" } }), receipt)
+              }
+              onNotice={(text) => push({ kind: "error", text })}
+            />
             <textarea
-              aria-label="Message your memory"
-              placeholder="Tell Zenod something, ask your memory, or give the desk a job"
+              aria-label="Talk to your librarian"
+              placeholder={talking ? `Reply to ${talking.name}…` : "Talk to your librarian"}
               value={draft}
               rows={1}
               maxLength={2000}
-              onChange={(event) => {
-                setDraft(event.target.value)
-                setDeskHint(false)
-              }}
+              onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault()
                   void send()
                 }
               }}
-            />
-            <VoiceNoteButton
-              onSent={(receipt, seconds) =>
-                pollVoice(push({ kind: "voice-note", seconds, keep: { state: "keeping" } }), receipt)
-              }
-              onNotice={(text) => push({ kind: "error", text })}
             />
             <CallButton call={call} onNotice={(text) => push({ kind: "error", text })} />
             <button
@@ -666,26 +894,9 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
             >
               Send
             </button>
-            <button
-              type="button"
-              className="zp-deskbtn"
-              disabled={sending}
-              onClick={() => void askDesk()}
-              title="Start a job on your memory: re-file, split, join, move or relink topics"
-            >
-              Ask the desk
-            </button>
           </form>
-          {deskHint ? (
-            <p className="zp-hint" role="status" data-testid="memory-desk-hint">
-              Write what the desk should do, like “Untangle Idealista and
-              Poly-Maker”, then press Ask the desk.
-            </p>
-          ) : null}
           <p className="zp-hint">
-            Zenod decides: what you tell it is kept, what you ask is answered,
-            and a job on your memory goes to the memory desk. A question is
-            never saved.
+            Zenod picks the mode and says which. Tap the label to change it.
           </p>
         </div>
       </div>

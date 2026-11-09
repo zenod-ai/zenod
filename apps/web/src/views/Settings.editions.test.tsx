@@ -77,7 +77,7 @@ describe("Zenod edition portal", () => {
       screen.getByText(/--bearer-token-env-var ZENOD_MCP_TOKEN/)
     ).not.toBeNull()
   })
-  it("renders only the approved Hosted sections", async () => {
+  it("renders the five Hosted tabs, with Account under Settings (EPIC-22)", async () => {
     mocks.api.mockResolvedValue(overview())
 
     render(
@@ -90,18 +90,28 @@ describe("Zenod edition portal", () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Overview" })).not.toBeNull()
+      expect(screen.getByRole("tab", { name: "Chat" })).not.toBeNull()
     })
-    expect(screen.getByRole("tab", { name: "Memory" })).not.toBeNull()
-    expect(screen.getByRole("tab", { name: "Connect / MCP" })).not.toBeNull()
-    expect(screen.getByRole("tab", { name: "Channels" })).not.toBeNull()
-    expect(screen.getByRole("tab", { name: "Vault & sources" })).not.toBeNull()
-    expect(screen.getByRole("tab", { name: "Usage" })).not.toBeNull()
-    expect(screen.getByRole("tab", { name: "Account" })).not.toBeNull()
-    expect(screen.queryByRole("tab", { name: "Settings" })).toBeNull()
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
+      "Chat",
+      "Inbox",
+      "Personas",
+      "Memory",
+      "Settings",
+    ])
+    expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
+    for (const view of ["Connect AI apps", "WhatsApp & Telegram", "Vault & sources", "Usage & plan", "Account"]) {
+      expect(screen.getByRole("button", { name: view })).not.toBeNull()
+    }
+    expect(screen.getByRole("button", { name: "Account" }).getAttribute("aria-current")).toBe("true")
+    expect(screen.queryByRole("tab", { name: "Overview" })).toBeNull()
+    expect(screen.queryByRole("tab", { name: "Connect / MCP" })).toBeNull()
     expect(
       screen.getByRole("link", { name: "Open account and billing" })
     ).not.toBeNull()
+    expect(screen.getByRole("button", { name: "Log out" })).not.toBeNull()
+    expect(screen.getByRole("heading", { name: "Zenod" })).not.toBeNull()
+    expect(screen.getByText("the librarian of your memory")).not.toBeNull()
   })
 
   it("renders self-hosted Settings but no customer Account section", async () => {

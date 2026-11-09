@@ -112,7 +112,11 @@ export function RecentSavesPanel() {
   return <RecentSavesCard saves={saves ?? []} unavailable={saves === null} />
 }
 
-export function MemoryTreePanel() {
+/**
+ * The memory tree and its filings to check. EPIC-22: Memory › Tree shows the tree, Memory › Check
+ * filings the S27 list; `both` keeps them together.
+ */
+export function MemoryTreePanel({ view = "both" }: { view?: "tree" | "check" | "both" } = {}) {
   const [state, setState] = React.useState<MemoryTreeState | null>(null)
   const [review, setReview] = React.useState<PlacementReview | null>(null)
   const [busy, setBusy] = React.useState(false)
@@ -176,7 +180,7 @@ export function MemoryTreePanel() {
   const groups = state.status === "ready" ? state.tree.groups : []
   return (
     <>
-      {review && groups.length > 0 && (
+      {view !== "tree" && review && groups.length > 0 && (
         <MemoryReviewCard
           review={review}
           groups={groups}
@@ -185,7 +189,12 @@ export function MemoryTreePanel() {
           onUndo={undo}
         />
       )}
-      <MemoryTreeCard state={state} busy={busy} onPlace={place} />
+      {view === "check" && !(review && groups.length > 0) ? (
+        <p className="text-sm text-muted-foreground" data-testid="check-filings-empty">
+          Nothing to check right now: every filing Zenod was unsure about has been looked at.
+        </p>
+      ) : null}
+      {view !== "check" ? <MemoryTreeCard state={state} busy={busy} onPlace={place} /> : null}
     </>
   )
 }

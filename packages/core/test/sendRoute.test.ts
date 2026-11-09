@@ -98,3 +98,52 @@ describe("the memory desk's job outcome (EPIC-14 S3)", () => {
     expect(sendRoutePrompt(message).system).toContain("job:");
   });
 });
+
+describe("Talk it over (EPIC-22 E22-2)", () => {
+  it("reads an invitation to think something through as a talk, never as a keep", () => {
+    for (const message of [
+      "Let's talk about my running this year. I feel I've gone backwards.",
+      "What do you think about moving to Lisbon?",
+      "Should I take the job in Berlin?",
+      "help me think through the flat decision",
+      "Why do I keep putting off the dentist?",
+      "hablemos de mi trabajo",
+      "¿Qué opinas del piso de Gràcia?",
+    ]) {
+      const route = ruleSendRoute(message);
+      expect(route, message).toMatchObject({ action: "talk", keep: null, question: null, talk: message.trim() });
+    }
+  });
+
+  it("leaves a recall question about what the person thought or felt a look-up", () => {
+    for (const message of ["What did I think about the tweet on moats?", "How did I feel waking up to seven things in my inbox?", "what should people see first when they land on cloud Zenod?"]) {
+      expect(ruleSendRoute(message).action, message).toBe("answer");
+      expect(parseSendRoute('{"keep": "", "ask": "", "talk": "x"}', message)?.action, message).not.toBe("talk");
+    }
+  });
+
+  it("takes the model's talk, and the guard passes a talk through untouched", () => {
+    const message = "I'm torn about the Valencia flat";
+    expect(parseSendRoute(`{"keep": "", "ask": "", "talk": "${message}"}`, message)).toEqual({ action: "talk", keep: null, question: null, talk: message, by: "model" });
+    const talk = ruleSendRoute("Let's talk about the garden");
+    expect(guardSendRoute(talk, "Let's talk about the garden")).toBe(talk);
+  });
+
+  it("does not change the desk rule the WhatsApp and Telegram chat shares (root L-6)", () => {
+    expect(looksLikeDeskJob("Let's talk about my running")).toBe(false);
+    expect(ruleSendRoute("Idealista and Poly-Maker are tangled, please split them").action).toBe("unsure");
+  });
+
+  it("still decides the 80 real-style messages as before", () => {
+    for (const name of ["send-route-40.json", "send-route-heldout-40.json"]) {
+      const talked = load(name).messages.filter(({ message }) => ruleSendRoute(message).action === "talk");
+      expect(talked.map(({ message }) => message), name).toEqual([]);
+    }
+  });
+
+  it("asks the model for a talk only when the person wants to think with it", () => {
+    const { system } = sendRoutePrompt("x");
+    expect(system).toContain("talk:");
+    expect(system).toContain("what did I think about");
+  });
+});

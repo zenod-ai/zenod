@@ -3,7 +3,7 @@
 // the prompt, the parse, the rules and the guard are plain functions the engine, server and tests share.
 // The guard is the promise the button makes: a question is never kept as a memory.
 
-export type SendAction = "keep" | "answer" | "both" | "job" | "unsure";
+export type SendAction = "keep" | "answer" | "both" | "job" | "unsure" | "talk";
 
 export interface SendRoute {
   action: SendAction;
@@ -18,6 +18,12 @@ export interface SendRoute {
    * a job?" and never runs a job on a guess). Nothing is kept or answered then.
    */
   job?: string | null;
+  /**
+   * EPIC-22 E22-2, Talk it over: the person wants to think something through with a persona that
+   * reads their memory (an opinion, a pattern, a decision), in their words. Read-only: nothing is
+   * kept or answered as a fact. Web app only; the WhatsApp and Telegram paths never use it (root L-6).
+   */
+  talk?: string | null;
   /** "model" when the chat model decided, "rules" when the plain rules did (no model, or it slipped). */
   by: "model" | "rules";
 }
@@ -37,6 +43,8 @@ const SYSTEM = [
   "- Answer in the message's own language; never add facts.",
   "- job: only when the person asks the app to reorganise their memory itself: split, untangle, join, merge, move or re-file topics, pages or notes, rename or relink them, clean up the tree, or says something is filed wrong. Copy the request in their words; then keep and ask are \"\". Use \"\" for anything else: moving furniture or renaming a company is news to keep, not a job.",
   "Reply shape when it is a job: {\"keep\": \"\", \"ask\": \"\", \"job\": \"...\"}",
+  "- talk: only when the person wants to think something through WITH the app, using their memory: asks for its opinion or advice (\"what do you think\", \"should I\"), a pattern it sees, or says \"let's talk about\". Copy it in their words; then keep and ask are \"\". A question about what they themselves said, thought or felt before (\"what did I think about ...\") is ask, not talk.",
+  "Reply shape when it is a talk: {\"keep\": \"\", \"ask\": \"\", \"talk\": \"...\"}",
 ].join("\n");
 
 const JOB_VERB = /^(?:(?:can you|could you|please|pls|zenod,?)\s+)*(?:split|untangle|separate|disentangle|merge|join|combine|move|re-?file|refile|put|rename|re-?link|relink|link|unlink|reorgani[sz]e|tidy(?: up)?|clean(?: up)?|sort(?: out)?|fix|group|nest|separa|separar|junta|juntar|une|unir|mueve|mover|renombra|renombrar|ordena|ordenar|reorganiza|limpia)(?![\p{L}\p{N}])/iu;
@@ -60,6 +68,23 @@ function deskRoute(message: string, modelJob: string | null, by: SendRoute["by"]
   if (!modelJob && !rules) return null;
   const job = message.trim();
   return { action: modelJob && rules ? "job" : "unsure", keep: null, question: null, job, by };
+}
+
+const TALK_START = /^(?:let'?s|let us|can we|could we|shall we|i want to|i'd like to|i would like to|i need to|help me)\s+(?:talk|think|discuss|chat|reflect|go over|work through|figure out|make sense|brainstorm|unpack|decide)(?![\p{L}\p{N}])|^talk (?:me through|it over|with me)(?![\p{L}\p{N}])|^how (?:do|should|can|could) (?:we|i) (?:progress|move (?:this )?forward|proceed|go about|approach|tackle|handle|think about|decide)(?![\p{L}\p{N}])|^(?:what do you (?:think|make of|reckon|suggest|recommend)|what'?s your (?:take|view|opinion|advice)|how do you see|do you think i)(?![\p{L}\p{N}])|^(?:should i|shall i|would it be (?:wise|smart|better)|is it (?:wise|a good idea))(?![\p{L}\p{N}])|^(?:why do i (?:keep|always)|what patterns?|do you (?:see|notice) (?:a |any )?(?:pattern|anything))(?![\p{L}\p{N}])|^(?:hablemos|podemos hablar|quiero (?:hablar|pensar|reflexionar)|ay[uú]dame a (?:pensar|entender|decidir)|qu[eé] (?:opinas|piensas|me recomiendas)|deber[ií]a)(?![\p{L}\p{N}])/iu;
+
+/**
+ * The plain rules' reading of Talk it over (EPIC-22 E22-2): the person opens a conversation about
+ * their memory (an opinion, advice, a pattern, "let's talk about"), not a fact to find or keep.
+ */
+export function looksLikeTalk(message: string): boolean {
+  const text = message.trim();
+  if (!text || text.length > 2_000) return false;
+  const first = text.split(/(?<=[.!?])\s+|\n+/)[0]!.trim().replace(/^[¿¡"'“(]+/, "").replace(/^(?:(?:ok|okay|so|hey|hi|zenod|well|hmm|vale|oye|bueno)[,!.]?\s+)+/iu, "");
+  return TALK_START.test(first);
+}
+
+function talkRoute(message: string, by: SendRoute["by"]): SendRoute {
+  return { action: "talk", keep: null, question: null, talk: message.trim(), by };
 }
 
 export function sendRoutePrompt(message: string): SendRoutePrompt {
@@ -105,15 +130,30 @@ function clauses(message: string): string[] {
 
 const stripLead = (text: string) => text.replace(KEEP_LEAD, "").trim();
 
+/** A spoken tag, not a question: "you know?", "right?", "though?" (EPIC-22 E22-3, voice-style notes). */
+const FILLER = /^(?:you know|y'?know|right|though|no|ok|okay|yeah|yes|eh|huh|man|bro|isn'?t it|don'?t you think|verdad|sabes|vale|no crees|¿?no)\s*[?!.]*$/iu;
+/** A message this long is a note, told: a question inside it is rhetorical unless the note ends on it. */
+const LONG_NOTE_CHARS = 600;
+/** A request to someone at the end of a note ("can you dispatch somebody?") is part of the note, not a look-up. */
+const REQUEST_START = /^(?:(?:so|and|but|also|then|y|pero)\s+)?(?:can|could|would|will) you(?![\p{L}\p{N}])|^(?:puedes|podr[ií]as)(?![\p{L}\p{N}])/iu;
+
 /** The plain rules: each sentence is a question to answer or information to keep. */
 export function ruleSendRoute(message: string): SendRoute {
   const text = message.trim();
   const desk = deskRoute(text, null, "rules");
   if (desk) return desk;
+  if (looksLikeTalk(text)) return talkRoute(text, "rules");
   if (!text || SMALL_TALK.test(text)) return finish(null, text || null, "rules");
   const keep: string[] = [];
   const ask: string[] = [];
-  for (const clause of clauses(text)) {
+  const parts = clauses(text).filter((clause) => !FILLER.test(clause.replace(/^[¿¡"'“(]+/, "")));
+  // EPIC-22 E22-3: a long note keeps every word; it is looked up only when it ends on a question.
+  if (text.length > LONG_NOTE_CHARS) {
+    const last = parts[parts.length - 1] ?? "";
+    const ends = isQuestionClause(last) && !REQUEST_START.test(last.replace(/^[¿¡"'“(]+/, ""));
+    return finish(stripLead(text), ends ? last : null, "rules");
+  }
+  for (const clause of parts) {
     const told = stripLead(clause);
     // A lead-in ("remember …") makes the clause information even when it reads like a question word.
     if (told !== clause && !/\?\s*$/.test(told)) keep.push(told);
@@ -149,9 +189,9 @@ function finish(keep: string | null, question: string | null, by: SendRoute["by"
 export function parseSendRoute(output: string, message: string): SendRoute | null {
   const match = output.match(/\{[\s\S]*\}/);
   if (!match) return null;
-  let value: { keep?: unknown; ask?: unknown; job?: unknown };
+  let value: { keep?: unknown; ask?: unknown; job?: unknown; talk?: unknown };
   try {
-    value = JSON.parse(match[0]) as { keep?: unknown; ask?: unknown; job?: unknown };
+    value = JSON.parse(match[0]) as { keep?: unknown; ask?: unknown; job?: unknown; talk?: unknown };
   } catch {
     return null;
   }
@@ -159,15 +199,19 @@ export function parseSendRoute(output: string, message: string): SendRoute | nul
   const keep = typeof value.keep === "string" ? value.keep.trim() : "";
   const ask = typeof value.ask === "string" ? value.ask.trim() : "";
   const job = typeof value.job === "string" ? value.job.trim() : "";
+  const talk = typeof value.talk === "string" ? value.talk.trim() : "";
   const desk = deskRoute(message, job || null, "model");
   if (desk) return desk;
+  // The rules' talk stands; the model's talk only for a message that asks nothing ("I'm torn about the
+  // flat"): a question ("what did I think about …", "what should people see first?") stays a look-up.
+  if (looksLikeTalk(message) || (talk && !clauses(message.trim()).some(isQuestionClause))) return talkRoute(message, "model");
   return guardSendRoute(finish(keep || null, ask || null, "model"), message);
 }
 
 /** The promise of the one Send button: nothing that is only asked is ever kept. */
 export function guardSendRoute(route: SendRoute, message: string): SendRoute {
   const text = message.trim();
-  if (route.action === "job" || route.action === "unsure") return route;
+  if (route.action === "job" || route.action === "unsure" || route.action === "talk") return route;
   const rules = ruleSendRoute(text);
   let keep = route.keep;
   let question = route.question;

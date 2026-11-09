@@ -4,6 +4,7 @@ import {ClassificationDecisions} from "./classificationDecisions.js";
 import { COMPACT_CLASSIFICATION_RETRY_HINT, checkTopicDestinations, ClassificationDestinationError, DESTINATION_CORRECTION_HINT, checkTopicSourceAddresses, ClassificationSourceAddressError, SOURCE_ADDRESS_CORRECTION_HINT, checkAssignedPassageCoverage, ClassificationSourceCoverageError, SOURCE_COVERAGE_CORRECTION_HINT } from "./classificationContract.js";
 import { ANSWER_PROTOCOL_FAILURE_TEXT } from "../llm/answerSupportProtocol.js";
 import { parseSendRoute, ruleSendRoute, sendRoutePrompt, type SendRoute } from "../llm/sendRoute.js";
+import { memoryTalkPrompt, talkCitations, type TalkMemory, type TalkPersona, type TalkTurn } from "../llm/memoryTalk.js";
 import { checkMemoryChatAnswer, memoryChatExcerpt, memoryChatFocus, memoryChatPrompt, memoryChatStreamFilter, MEMORY_CHAT_WHOLE_CONTEXT_CHARS, MEMORY_CHAT_TOP_CONTEXT_CHARS, MEMORY_CHAT_CONTEXT_CHARS, type MemoryChatCheck, type MemoryChatContext } from "../llm/memoryChatAnswer.js";
 import { captureOrigin, isPersonSource, outsideOpsRollup } from "../vault/captureOrigin.js";
 import { recentIntent } from "../vault/recentIntent.js";
@@ -3051,6 +3052,49 @@ export function createEngine(options: EngineOptions): BrainEngine {
   }
 
   /**
+   * EPIC-22 E22-2, Talk it over: one turn of a read-only talk with a persona. The ranked memories
+   * are read (an excerpt each, by the passages that match), then one streamed call answers. No
+   * tools, no store, no citation check: the reply is labelled Talking, not a checked answer.
+   */
+  async function talkOverMemories(
+    input: { persona: TalkPersona; message: string; history: readonly TalkTurn[]; memories: ReadonlyArray<{ n: number; path: string; title: string; snippet?: string }> },
+    onText?: (delta: string) => void,
+  ): Promise<{ text: string; cited: number[] } | null> {
+    if (!llm.streamMemoryChat) return null;
+    assertVault(repo);
+    await syncForRead();
+    const today = now();
+    const read: TalkMemory[] = [];
+    for (const [i, memory] of input.memories.entries()) {
+      const [file, anchor] = memory.path.split("#^") as [string, string | undefined];
+      try {
+        const note = await getNote(vaultPath, file, sourceResolver);
+        let body = note.body;
+        let when: string | undefined;
+        if (anchor) {
+          const start = body.search(new RegExp(`^## .*?\\s+\\^${anchor.replace(/[^\w-]/g, "")}\\s*$`, "m"));
+          if (start >= 0) {
+            const following = body.slice(start + 1).search(/^## /m);
+            body = body.slice(start, following < 0 ? body.length : start + 1 + following);
+            const day = /^Log\/(\d{4}-\d{2}-\d{2})\.md$/.exec(file)?.[1];
+            const type = /^- content-type: (\S+)/m.exec(body)?.[1]?.replace(/_/g, " ");
+            if (day) when = `${day}${type ? `, ${type}` : ""}`;
+            body = body.replace(/^## [^\n]*\n/, "");
+          }
+        }
+        read.push({ n: memory.n, title: memory.title, ...(when ? { when } : {}), text: memoryChatExcerpt(body, `${input.message} ${memory.snippet ?? ""}`, i < 3 ? MEMORY_CHAT_TOP_CONTEXT_CHARS : MEMORY_CHAT_CONTEXT_CHARS) });
+      } catch {
+        // A memory that cannot be read now is left out; the talk goes on with the rest.
+      }
+    }
+    const { system, prompt } = memoryTalkPrompt(input.persona, input.message, read, input.history, today.toISOString().slice(0, 10));
+    reportTokenCost("ask", [system, prompt]);
+    const output = (await llm.streamMemoryChat({ system, prompt }, (delta) => onText?.(delta))).trim();
+    const known = new Set(read.map((memory) => memory.n));
+    return { text: output, cited: talkCitations(output).filter((n) => known.has(n)) };
+  }
+
+  /**
    * E16-B1: the one Send button's decision. One small call on the chat model, no tools, no vault
    * read; the plain rules decide when there is no chat model or its reply does not parse. Read-only.
    */
@@ -4027,6 +4071,7 @@ export function createEngine(options: EngineOptions): BrainEngine {
     evidenceEnrichInput,
     ask,
     answerFromMemories,
+    talkOverMemories,
     routeSend,
     deskJob,
     undoDeskJob,
