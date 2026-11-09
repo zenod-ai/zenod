@@ -32,9 +32,10 @@
     {
      "id": "ask-zenod-about-itself",
      "title": "Ask Zenod who it is",
-     "text": "Ask the chat who it is or what it can do and it tells you directly. Weak matches and private notes on family, health or money stay out of the memories it shows.",
+     "text": "Ask the chat who it is or what it can do and it tells you directly. Weak matches stay out of the memories it shows, and so do notes on family, health or money, which Zenod marks private as it files them.",
      "rows": [
-      "E15-S1"
+      "E15-S1",
+      "E15-S2"
      ],
      "since": "2026-11-09",
      "draft": true
