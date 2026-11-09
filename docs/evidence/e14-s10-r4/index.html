@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zenod's background work on DeepSeek: setup, cost and switch-over</title>
+<!-- Built from the paper-deck kit (agent_team skill paper-deck). Arrow keys move one slide. EPIC-14 S10 round 4, run_1315ce13. -->
+<link rel="stylesheet" href="paper.css">
+<style>
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: 2rem; border-top: 1px solid var(--ink); }
+  .tiles div { padding: 1.1rem 1rem 1.2rem 0; border-bottom: 1px solid var(--line); font: 400 0.95rem/1.45 var(--sans); color: var(--muted); }
+  .tiles b { display: block; font: 400 clamp(2rem, 3.4vw, 2.8rem)/1 var(--serif); color: var(--ink); letter-spacing: -0.02em; margin-bottom: 0.45rem; }
+  .tiles span { display: block; font: 500 1rem var(--sans); color: var(--ink); margin-bottom: 0.2rem; }
+  .tiles .f b { color: var(--accent); }
+  @media (max-width: 900px) { .tiles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  td.n, th.n { text-align: right; }
+  td.n { font-variant-numeric: tabular-nums; }
+  td small { display: block; color: var(--muted); font-size: 0.85rem; }
+  .bottom { font: 400 1rem/1.5 var(--sans); color: var(--muted); max-width: 48rem; }
+  .bottom b { color: var(--ink); font-weight: 600; }
+  .verdict { display: inline-block; font: 600 0.85rem var(--sans); color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0.15rem 0.6rem; margin-right: 0.4rem; }
+  blockquote { margin: 0.8rem 0 0; padding: 0.2rem 0 0.2rem 1rem; border-left: 2px solid var(--accent); font: 400 1.05rem/1.5 var(--serif); color: var(--ink); }
+  blockquote cite { display: block; font: 400 0.85rem var(--sans); color: var(--muted); font-style: normal; margin-top: 0.25rem; }
+  .flow { display: grid; grid-template-columns: 1fr 2.2rem 1fr; gap: 0.6rem 0; align-items: stretch; margin-top: 1.6rem; }
+  .flow .box { margin: 0; }
+  .flow .arrow { display: flex; align-items: center; justify-content: center; font: 400 1.4rem var(--serif); color: var(--accent); }
+  .flow .box { border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.1rem; font: 400 1rem/1.5 var(--sans); color: var(--muted); background: transparent; }
+  .flow .box b { display: block; font: 500 1.1rem/1.3 var(--serif); color: var(--ink); margin-bottom: 0.35rem; }
+  .flow .box.ds { border-color: var(--accent); }
+  #cost td:first-child, #margin td:first-child { width: 36%; }
+  @media (max-width: 760px) { .flow { grid-template-columns: 1fr; } .flow .arrow { transform: rotate(90deg); } }
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 1.4rem 0 0; }
+  .steps li { counter-increment: s; padding: 0.7rem 0 0.7rem 2.6rem; border-top: 1px solid var(--line); position: relative; font: 400 1rem/1.5 var(--sans); color: var(--muted); }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0.55rem; font: 400 1.6rem/1 var(--serif); color: var(--accent); }
+  .steps li b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- 1. Bottom line -->
+<section class="slide" id="bottom">
+  <div class="in">
+    <p class="no">Background work on DeepSeek &nbsp;·&nbsp; 9 November 2026 <span class="tag soon">Built, waiting for a key</span></p>
+    <h2>Go can't serve our customers. DeepSeek's own account can, at the same price per token.</h2>
+    <p class="bottom"><span class="verdict">Bottom line</span>OpenCode's terms limit Go to <b>your own use</b> in coding agents. Paying customers' filing would break them and could cost you the Go plan you code with. DeepSeek's own API charges <b>exactly what Go meters</b> and allows serving customers. The route is built and live in code, switched off until its key exists. <b>$10 there lasts about 3 months</b> for you plus five testers.</p>
+    <div class="tiles">
+      <div class="f"><b>−42 to −79%</b><span>per background job</span>filing, personas, desk and self-reflection against OpenRouter today</div>
+      <div><b>$3.28</b><span>a month, you + 5 testers</span>all background work on DeepSeek; $10 lasts about 3 months</div>
+      <div><b>70% · 55%</b><span>kept on €9 and €19</span>even fully used, after AI and card fees</div>
+      <div class="f"><b>1 key</b><span>switches it on</span>removing it switches back; chat and calls never move</div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. The terms -->
+<section class="slide" id="terms">
+  <div class="in">
+    <p class="no">1 &nbsp; What the terms say, read on 9 November 2026</p>
+    <h2>Go is for you and your coding agents. DeepSeek is for your customers.</h2>
+    <blockquote>"You will only use the Services for your own internal use, and not on behalf of or for the benefit of any third party."<cite><a href="https://opencode.ai/legal/terms-of-service">OpenCode terms of service</a>, effective 8 November 2026. "Services" includes its inference product, so Go and Console credit alike.</cite></blockquote>
+    <blockquote>"OpenCode Go is designed for OpenCode and other coding agents that produce similar types of requests. Traffic is monitored for abuse that degrades the experience for other users."<cite><a href="https://opencode.ai/docs/go/">OpenCode Go docs</a>, Where can I use it. Go and Go Plus are for one-member workspaces.</cite></blockquote>
+    <blockquote>"You can integrate the capabilities of the DeepSeek models into various downstream systems, applications, or functionalities … providing services to both internal and external end users."<cite><a href="https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html">DeepSeek Open Platform terms</a>, effective 29 April 2026, section 1.1</cite></blockquote>
+    <p class="small" style="margin-top:1.2rem">What Go would have given: an OpenAI-style endpoint at opencode.ai/inference/go with <code>deepseek-v4.1-flash</code>, $100 of V4.1 Flash use a month for $10, capped at $20 per 5 hours and $50 a week. At the limit calls are blocked unless Extra Usage draws on Console credit. That tenfold is the part the terms keep for your own coding. Your Go key still fits the team's own test runs, which is your own use.</p>
+  </div>
+</section>
+
+<!-- 3. How it is set up -->
+<section class="slide" id="setup">
+  <div class="in">
+    <p class="no">2 &nbsp; How it is set up</p>
+    <h2>Background jobs go to DeepSeek. What a user waits for stays on OpenRouter.</h2>
+    <div class="flow">
+      <div class="box ds"><b>DeepSeek V4.1 Flash, own account</b>Filing a note, desk jobs, persona runs and, once it exists, nightly self-reflection. Each job type has its own switch.</div>
+      <div class="arrow">⇄</div>
+      <div class="box"><b>OpenRouter, as today</b>Chat answers, deeper questions and image reading. Calls stay on the OpenAI key. It also takes over any background call DeepSeek fails.</div>
+    </div>
+    <ul class="facts" style="margin-top:1.4rem">
+      <li><b>Nothing lost.</b> If DeepSeek errors, the same call runs on OpenRouter. If the balance runs out, DeepSeek is skipped for 10 minutes at a time and work carries on.</li>
+      <li><b>Caps unchanged.</b> Every DeepSeek call is checked against and counted in the same monthly AI allowance and feature caps.</li>
+      <li><b>Cost per provider.</b> Each call is logged with its provider and its real DeepSeek charge, peak hours included, so the usage log splits DeepSeek from OpenRouter.</li>
+      <li><b>Balance alert.</b> The health check reads the DeepSeek balance every 15 minutes and shows low under $5 and empty at $0, with one alert line in the logs.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 4. Cost per job -->
+<section class="slide" id="cost">
+  <div class="in">
+    <p class="no">3 &nbsp; What each job costs</p>
+    <h2>Every background job costs 42 to 79% less than on OpenRouter.</h2>
+    <table>
+      <thead><tr><th>One of each</th><th class="n">OpenRouter today</th><th class="n">DeepSeek own account</th><th class="n">Change</th><th class="n">Go, if it were allowed</th></tr></thead>
+      <tbody>
+        <tr><td>A text note filed, small memory</td><td class="n">0.58¢</td><td class="n">0.34¢</td><td class="n">−42%</td><td class="n">0.03¢</td></tr>
+        <tr><td>A text note filed, 500-page memory like yours</td><td class="n">4.8¢</td><td class="n">1.6¢</td><td class="n">−66%</td><td class="n">0.16¢</td></tr>
+        <tr><td>A persona run</td><td class="n">0.29¢</td><td class="n">0.07¢</td><td class="n">−75%</td><td class="n">0.007¢</td></tr>
+        <tr><td>A desk job</td><td class="n">0.45¢</td><td class="n">0.2¢</td><td class="n">−55%</td><td class="n">0.02¢</td></tr>
+        <tr><td>A self-reflection run, 30 steps</td><td class="n">7.3¢</td><td class="n">1.5¢</td><td class="n">−79%</td><td class="n">0.15¢</td></tr>
+        <tr><td>A chat answer, a call minute</td><td class="n">0.2¢, 2–3¢</td><td class="n">same</td><td class="n">—</td><td class="n">—</td></tr>
+      </tbody>
+    </table>
+    <p class="small">DeepSeek V4.1 Flash on its own API: 15¢ per million new input tokens, 0.3¢ for repeated input, 60¢ output, double on weekdays 01:00–04:00 and 06:00–10:00 UTC. Go meters the same rates and gives $100 of them for $10, hence the last column. Token sizes are round 3's, fitted to measured costs; the first week on the route measures them for real.</p>
+  </div>
+</section>
+
+<!-- 5. Margin and monthly cost -->
+<section class="slide" id="margin">
+  <div class="in">
+    <div>
+      <p class="no">4 &nbsp; The margin per plan and the monthly bill</p>
+      <h2>€9 keeps 70% and €19 keeps 55%, even fully used.</h2>
+      <p class="lede">About half of each plan's AI moves to DeepSeek. The DeepSeek bill stays small until there are dozens of users, and every dollar of it replaces two to five on OpenRouter.</p>
+    </div>
+    <table>
+      <thead><tr><th>Who</th><th class="n">On DeepSeek</th><th class="n">On OpenRouter</th><th class="n">Keeps</th></tr></thead>
+      <tbody>
+        <tr><td>Zenod €9, fully used<small>10 memories, 12 answers a day and the rest</small></td><td class="n">$1.41</td><td class="n">$1.58</td><td class="n">70% of $9.96</td></tr>
+        <tr><td>Zenod Plus €19, fully used<small>30 memories, 30 answers, six personas a day</small></td><td class="n">$4.90</td><td class="n">$4.70</td><td class="n">55% of $21.35</td></tr>
+        <tr><td>You<small>4 notes a day into 540 pages</small></td><td class="n">$2.06 a month</td><td class="n">answers as today</td><td class="n">—</td></tr>
+        <tr><td>A typical user<small>2 voice notes a day, a persona daily</small></td><td class="n">$0.24 a month</td><td class="n">answers as today</td><td class="n">—</td></tr>
+        <tr><td>You and 5 testers<small>what $10 covers</small></td><td class="n">$3.28 a month</td><td class="n"></td><td class="n">$10 ≈ 3 months</td></tr>
+        <tr><td>50 typical users</td><td class="n">$12 a month</td><td class="n"></td><td class="n">top up monthly</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 6. What you do, switch-over, rollback -->
+<section class="slide" id="switch">
+  <div class="in">
+    <p class="no">5 &nbsp; What you do, the switch-over and the way back</p>
+    <h2>One account, $10 and one key. We do the rest.</h2>
+    <ol class="steps">
+      <li><b>You: open a DeepSeek account and top up $10</b> at <a href="https://platform.deepseek.com/top_up">platform.deepseek.com</a>, instead of $10 on Go or OpenRouter. Then create an API key.</li>
+      <li><b>You: paste the key into the private secret card we send.</b> It lands as <code>DEEPSEEK_API_KEY</code> on production only, never in chat or the repo.</li>
+      <li><b>We: redeploy and watch.</b> The health check turns from off to ok with the balance, the first filings show up under DeepSeek in the usage log, and we compare a week of real costs against this page.</li>
+      <li><b>Way back: remove the key</b>, or set one job back to OpenRouter, and redeploy. Everything returns to today's route. No data moves either way.</li>
+    </ol>
+    <p class="small" style="margin-top:1.2rem">Keep the Go plan for your own coding and the team's test runs. If you want Go for customers anyway, the only clean way is to ask OpenCode in writing first. Nothing was bought and no model was called for this page.</p>
+  </div>
+</section>
+
+<p class="foot">Sources read on 9 November 2026: opencode.ai/docs/go, opencode.ai/legal/terms-of-service (effective 8 November 2026), api-docs.deepseek.com pricing, rate limits, balance and error codes, DeepSeek Open Platform terms (effective 29 April 2026). Per-job token sizes and plan mixes from round 3. €1 = $1.156, card fee 1.5% + €0.25. Margins before server and support.</p>
+<script src="scenes.js"></script>
+</body>
+</html>
