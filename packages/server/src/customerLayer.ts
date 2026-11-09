@@ -1417,6 +1417,25 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     }
   });
 
+  // EPIC-14 S28: Memory › At a glance, "What Zenod knows you mean": the quick index (places, the
+  // names you use for them, counts, this week, and what keeping it cost). Read only; no model call.
+  app.get("/api/console/quick-index", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      const view = await runtime.quickIndex();
+      return c.json(view ? { status: "ready", ...view } : { status: "empty" });
+    } catch (error) {
+      if ((error as Error | null)?.name === "NotConfiguredError") return c.json({ status: "empty" });
+      console.warn(`[quick-index] unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "quick index unavailable" }, 503);
+    }
+  });
+
   // EPIC-12 E12-S27: the person checks where Zenod filed things, on their own tree: the filings to
   // check (least sure first), "Right place", "Wrong place" with where it belongs, and Undo. Each
   // change is one commit in their vault with a correction record (S6 landing feedback shape); no model call.

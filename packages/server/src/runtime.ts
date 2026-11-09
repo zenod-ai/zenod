@@ -78,6 +78,7 @@ import { UsageStore, estimateCostUsd } from "./usageStore.js";
 import { closePersonasFor, personasFor } from "./personaStore.js";
 import { closeCallsFor } from "./memoryCall.js";
 import { duePersonas, runPersona, type PersonaDefinition, type PersonaModel } from "./personaRunner.js";
+import { QuickIndexStore, quickIndexView, updateQuickIndex, type QuickIndexModel, type QuickIndexUpdate, type QuickIndexView } from "./quickIndex.js";
 import type { PersonaRun } from "./personaStore.js";
 import { BUILT_IN_PERSONAS } from "./personaCatalog.js";
 import { NotificationStore } from "./notificationStore.js";
@@ -994,6 +995,8 @@ export class Runtime {
       }
       // EPIC-14 S4: personas wake in the same off-peak window, on the same clock.
       void this.wakePersonas().catch((error: unknown) => console.error("[persona] schedule check failed:", error));
+      // EPIC-14 S28: the quick index catches new filings and runs its nightly pass on the same clock.
+      void this.refreshQuickIndex().catch((error: unknown) => console.error("[quick-index] update failed:", error instanceof Error ? error.message : error));
     }, intervalMs);
     this.treeSweepTimer.unref();
   }
@@ -1039,6 +1042,70 @@ export class Runtime {
     }, trigger);
     if (run) console.log(`[persona] tenant=${this.tenantId} ${persona.id} ${run.trigger} ${run.status}: steps=${run.steps} calls=${run.modelCalls} tokens=${run.inputTokens}/${run.outputTokens} usd=${run.costUsd.toFixed(5)}`);
     return run;
+  }
+
+  private quickIndexRun: Promise<QuickIndexUpdate | null> | null = null;
+  private quickIndexStore: QuickIndexStore | null = null;
+
+  /**
+   * EPIC-14 S28: bring the quick index up to date (first build, new filings, or the nightly pass),
+   * single-flight per tenant. Vault agents only; without the DeepSeek route it is still built,
+   * with the names it already has. Logs counts and cost only, never a place or a name.
+   */
+  refreshQuickIndex(now: number = Date.now()): Promise<QuickIndexUpdate | null> {
+    if (this.quickIndexRun) return this.quickIndexRun;
+    if (this.agent.vaultless === true || !this.settings.vaultConfigured()) return Promise.resolve(null);
+    const active = (async () => {
+      const engine = await this.getEngine();
+      const base = engine.quickIndexBase ? await engine.quickIndexBase() : null;
+      if (!base) return null;
+      const store = (this.quickIndexStore ??= new QuickIndexStore(this.dataDir));
+      const { state, update } = await updateQuickIndex(base, store.read(), {
+        model: this.quickIndexModel(),
+        blocked: () => this.featureBlock("filing") !== null,
+        now,
+      });
+      store.write(state);
+      if (update.pass) {
+        const view = quickIndexView(base, state, now);
+        console.log(`[quick-index] tenant=${this.tenantId} ${update.pass}: calls=${update.calls} names+${update.names} usd=${update.costUsd.toFixed(5)} places=${view.totals.places} named=${view.totals.named} names=${view.totals.names} week=${view.totals.thisWeek} today_usd=${view.cost.todayUsd.toFixed(5)}`);
+      }
+      return update;
+    })();
+    this.quickIndexRun = active;
+    void active.catch(() => {}).finally(() => { if (this.quickIndexRun === active) this.quickIndexRun = null; });
+    return active;
+  }
+
+  /** The quick index as Memory › At a glance shows it; null without a tree. Reads only. */
+  async quickIndex(now: number = Date.now()): Promise<QuickIndexView | null> {
+    const engine = await this.getEngine();
+    const base = engine.quickIndexBase ? await engine.quickIndexBase() : null;
+    if (!base) return null;
+    return quickIndexView(base, (this.quickIndexStore ??= new QuickIndexStore(this.dataDir)).read(), now);
+  }
+
+  /**
+   * The quick index's model (EPIC-14 S28): DeepSeek only, one call, no tools; null when the
+   * background route is off or filing is kept on OpenRouter, so the index never spends chat money.
+   * Each call is counted in the tenant's AI allowance as filing.
+   */
+  private quickIndexModel(): QuickIndexModel | null {
+    if (this.backgroundRoute?.jobs.filing !== "deepseek") return null;
+    let last: { inputTokens: number; outputTokens: number; costUsd: number } | null = null;
+    const llm = this.backgroundLlm(undefined, (report) => {
+      this.usageStore.record(report, Date.now(), "filing");
+      if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report, "filing");
+      last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
+    }, "filing");
+    if (!llm?.streamMemoryChat) return null;
+    return {
+      complete: async (input) => {
+        last = null;
+        const text = await llm.streamMemoryChat!(input, () => {});
+        return { text, ...(last ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 }) };
+      },
+    };
   }
 
   /**

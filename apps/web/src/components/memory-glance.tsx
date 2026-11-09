@@ -3,6 +3,7 @@ import * as React from "react"
 import { api } from "@/lib/api"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RecentSavesPanel } from "@/views/ZenodPortalPanels"
+import { QuickIndexPanel } from "@/components/quick-index"
 
 // EPIC-22 E22-2, Memory › At a glance: totals, memories kept each week, the strongest places in the
 // tree, where memories come from, and the recent saves. Drawn from data Zenod already stores
@@ -50,6 +51,7 @@ export function MemoryGlanceView({ onOpenTree }: { onOpenTree?: () => void }) {
           </p>
         )}
       </section>
+      <QuickIndexPanel />
       <RecentSavesPanel />
     </div>
   )
