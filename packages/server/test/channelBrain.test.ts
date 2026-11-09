@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BrainEngine, Hit, SendRoute } from "zenod";
-import { channelTurn, CHANNEL_ANSWER_MAX_CHARS, formatChannelAnswer, type ChannelBrainDeps } from "../src/channelBrain.js";
+import { channelSourceTitle, channelTurn, CHANNEL_ANSWER_MAX_CHARS, formatChannelAnswer, type ChannelBrainDeps } from "../src/channelBrain.js";
 import type { MemoryChatAnswer } from "../src/memoryChat.js";
 import type { TaskJob } from "../src/taskJobStore.js";
 
@@ -117,5 +117,15 @@ describe("formatChannelAnswer", () => {
     expect(body.endsWith(".")).toBe(true);
     expect(body).not.toContain("**");
     expect(body).not.toContain("##");
+  });
+});
+
+describe("channelSourceTitle", () => {
+  it("names a captured entry by kind and day, and keeps a page's title", () => {
+    expect(channelSourceTitle("Log/2026-11-08.md#^e-eca5f6", 'Voice note "AC9D2840EB2A2B1FE525279C8CF99AEB.ogg" ingeste...')).toBe("Your voice note, 8 Nov");
+    expect(channelSourceTitle("Log/2026-07-04.md#^e-9bcb92", "WhatsApp voice-note raw transcript.")).toBe("Your voice note, 4 Jul");
+    expect(channelSourceTitle("Log/2026-11-04.md#^e-8cd832", 'Screenshot/image "3BA1.jpg" ingested')).toBe("Your screenshot, 4 Nov");
+    expect(channelSourceTitle("Log/2026-11-02.md#^e-1", "Paid the plumber")).toBe("Your note, 2 Nov");
+    expect(channelSourceTitle("Notes/Zenod pill counter discrepancy report.md", "Zenod pill counter discrepancy report")).toBe("Zenod pill counter discrepancy report");
   });
 });
