@@ -1,6 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { QuickIndexBase, QuickIndexPlace } from "zenod";
+import { sayableAlias, type QuickIndexBase, type QuickIndexPlace } from "zenod";
 
 /**
  * The quick index (EPIC-14 S28): what Zenod knows you mean. For each place in the memory tree, its
@@ -182,7 +182,7 @@ export function acceptName(raw: string, place: QuickIndexPlace, texts: readonly 
   const name = raw.replace(/^["'“”‘’]+|["'“”‘’.,;:!?]+$/g, "").replace(/\s+/g, " ").trim();
   const folded = fold(name);
   if (name.length < 2 || name.length > NAME_MAX_CHARS || name.split(" ").length > NAME_MAX_WORDS) return null;
-  if (GENERIC.has(folded) || /^\d+$/.test(folded)) return null;
+  if (GENERIC.has(folded) || /^\d+$/.test(folded) || !sayableAlias(name)) return null;
   if (bare(name) === bare(place.title) || known.some((other) => bare(other) === bare(name))) return null;
   const pattern = new RegExp(`(^|[^\\p{L}\\p{N}])${escape(folded)}($|[^\\p{L}\\p{N}])`, "u");
   if (!texts.some((text) => pattern.test(fold(text)))) return null;

@@ -9,8 +9,8 @@ import { pageCaptureDate } from "./treeOutline.js";
 
 /**
  * The quick index's model-free part (EPIC-14 S28): one entry per place in the memory tree with
- * the one-line summary the tree already keeps (Tree.md for a root, the page's `summary:` below
- * it), the page's own `aliases:`, counts, when the person last added to it, and what they added
+ * the one-line summary the tree already keeps (the page's `summary:`, else the root's Tree.md
+ * line), the page's own `aliases:` a person would say, counts, when the person last added to it, and what they added
  * to this week. The host adds nicknames found in the person's own words with a small model call
  * and keeps the result; this file reads the vault only and writes nothing.
  */
@@ -34,7 +34,7 @@ export interface QuickIndexPlace {
   /** Names from the root down to this place. */
   lineage: string[];
   root: boolean;
-  /** One line from the tree: Tree.md for a root, the page's `summary:` otherwise; "" when none. */
+  /** One line from the tree: the page's `summary:`, else the root's Tree.md line; "" when none. */
   summary: string;
   /** The page's own `aliases:`. */
   aliases: string[];
@@ -56,6 +56,26 @@ export interface QuickIndexBase {
   places: QuickIndexPlace[];
   /** First day (YYYY-MM-DD, UTC) counted as this week. */
   weekFrom: string;
+}
+
+/** Summaries are shown on one line: the first sentence, at most this long. */
+const SUMMARY_CHARS = 160;
+const ALIAS_CHARS = 40;
+
+/** One line: the first sentence when it fits, else cut at a word with an ellipsis. */
+export function oneLine(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= SUMMARY_CHARS) return flat;
+  const sentence = /^(.{20,}?[.!?])\s/.exec(flat)?.[1];
+  if (sentence && sentence.length <= SUMMARY_CHARS) return sentence;
+  return `${flat.slice(0, SUMMARY_CHARS).replace(/\s+\S*$/, "")}…`;
+}
+
+/** Aliases a person would say: short, and not a file name or id left by a merge (`AC23…F414.ogg`). */
+export function sayableAlias(alias: string): boolean {
+  if (alias.length > ALIAS_CHARS) return false;
+  if (/\.(ogg|oga|opus|m4a|mp3|mp4|wav|jpe?g|png|pdf|md)\b/i.test(alias)) return false;
+  return !alias.split(/\s+/).some((word) => word.length >= 12 && /\d/.test(word) && /^[A-Za-z0-9_-]+$/.test(word));
 }
 
 function frontmatterString(value: unknown): string {
@@ -107,8 +127,9 @@ export async function quickIndexBase(vaultPath: string, now: number = Date.now()
       memory,
       lineage: names,
       root: root !== null,
-      summary: root?.summary || page?.summary || "",
-      aliases: (page?.aliases ?? []).filter((alias) => alias.toLowerCase() !== title.toLowerCase()),
+      // The page's own summary first: a root's Tree.md line is often only counts ("1 page; 6 of your captures…").
+      summary: oneLine(page?.summary || root?.summary || ""),
+      aliases: (page?.aliases ?? []).filter((alias) => alias.toLowerCase() !== title.toLowerCase() && sayableAlias(alias)),
       pages: page ? 1 : 0,
       memories: page?.keys.length ?? 0,
       week: (page?.keys ?? []).filter((key) => key.slice(0, 10) >= weekFrom).length,

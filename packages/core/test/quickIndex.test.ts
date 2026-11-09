@@ -2,13 +2,13 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { quickIndexBase } from "../src/vault/quickIndex.js";
+import { oneLine, quickIndexBase, sayableAlias } from "../src/vault/quickIndex.js";
 
 // EPIC-14 S28: the quick index's model-free part, built from the tree, page frontmatter and the Log.
 const FILES: Record<string, string> = {
   "Tree.md": `---\ntitle: Tree\n---\n# Memory tree\n\n## Working memory\n\n- Moving to Valencia | working | [[Projects/Moving to Valencia]] | Looking for a one-year rental. ^n-1a2b3c4d\n\n## Long-term memory\n\n- Family | long-term | [[Areas/Family]] | The people closest to you.\n`,
-  "Projects/Moving to Valencia.md": `---\ntitle: Moving to Valencia\nparent: "[[Tree]]"\nmemory: working\nsummary: ignored for a root, Tree.md wins\naliases:\n  - The move\n  - Moving to Valencia\n---\nVisit [[2026-11-08#^e-aaaaaa]] and [[2026-10-01#^e-bbbbbb]].\n\n## Ops rollup\n\n- [[2026-11-08#^e-cccccc]]\n`,
-  "Notes/Ruzafa flats.md": `---\ntitle: Ruzafa flats\nparent: "[[Moving to Valencia]]"\nsummary: Two flats seen in Ruzafa.\n---\nSeen [[2026-11-08#^e-aaaaaa]] [[2026-11-07#^e-dddddd]] [[2026-11-07#^e-eeeeee]].\n`,
+  "Projects/Moving to Valencia.md": `---\ntitle: Moving to Valencia\nparent: "[[Tree]]"\nmemory: working\naliases:\n  - The move\n  - Moving to Valencia\n  - Voice note AC2334D9F38222011F8FFB0DB80CC414.ogg ingested thr\n---\nVisit [[2026-11-08#^e-aaaaaa]] and [[2026-10-01#^e-bbbbbb]].\n\n## Ops rollup\n\n- [[2026-11-08#^e-cccccc]]\n`,
+  "Notes/Ruzafa flats.md": `---\ntitle: Ruzafa flats\nparent: "[[Moving to Valencia]]"\nsummary: Two flats seen in Ruzafa. The second one has a balcony, a long lease and a landlord who answers quickly, which is more than the first one could say about itself in any of the visits.\n---\nSeen [[2026-11-08#^e-aaaaaa]] [[2026-11-07#^e-dddddd]] [[2026-11-07#^e-eeeeee]].\n`,
   "Areas/Family.md": `---\ntitle: Family\nparent: "[[Tree]]"\nmemory: long-term\nupdated: 2026-09-01\n---\nNo citations yet.\n`,
   "Notes/Loose.md": `---\ntitle: Loose\n---\nNot in the tree [[2026-11-08#^e-aaaaaa]].\n`,
   "Log/2026-11-08.md": `# 2026-11-08\n\n## 09:00 Flat visit ^e-aaaaaa\n- source: whatsapp\n\n> We saw the flat in Ruzafa again, the flat is perfect.\n\n## 10:00 Ops report ^e-cccccc\n- source: selftest\n\n> agent run done\n`,
@@ -51,8 +51,20 @@ describe("quick index base (E14-S28)", () => {
       captureKeys: ["2026-11-08#^e-aaaaaa", "2026-10-01#^e-bbbbbb"],
     });
     expect(move!.captures[0]).toEqual({ key: "2026-11-08#^e-aaaaaa", date: "2026-11-08", text: "Flat visit We saw the flat in Ruzafa again, the flat is perfect." });
+    // A long summary becomes its first sentence.
     expect(ruzafa).toMatchObject({ root: false, lineage: ["Moving to Valencia", "Ruzafa flats"], summary: "Two flats seen in Ruzafa.", memories: 2, week: 2, pages: 1 });
     expect(family).toMatchObject({ memory: "long-term", summary: "The people closest to you.", memories: 0, week: 0, lastTouched: "2026-09-01", captures: [] });
+  });
+
+  it("cuts a summary with no early sentence at a word, and drops aliases that are file ids", () => {
+    const long = "word ".repeat(60).trim();
+    expect(oneLine(long).endsWith("…")).toBe(true);
+    expect(oneLine(long).length).toBeLessThanOrEqual(161);
+    expect(oneLine("Short and sweet")).toBe("Short and sweet");
+    expect(sayableAlias("the flat")).toBe(true);
+    expect(sayableAlias("Zenot")).toBe(true);
+    expect(sayableAlias("Voice note 3B22F688808BB657ECE7C.ogg")).toBe(false);
+    expect(sayableAlias("draft AC2334D9F38222011F8FFB")).toBe(false);
   });
 
   it("is null without a tree", async () => {

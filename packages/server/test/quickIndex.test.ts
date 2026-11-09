@@ -52,6 +52,7 @@ describe("quick index names (E14-S28)", () => {
     expect(acceptName("Moving to Valencia", MOVE, texts, [])).toBeNull(); // its own name
     expect(acceptName("the move", MOVE, ["the move is on"], MOVE.aliases)).toBeNull(); // already an alias
     expect(acceptName("this", MOVE, ["this flat"], [])).toBeNull(); // generic
+    expect(acceptName("AC2334D9F38222011F8F", MOVE, ["note AC2334D9F38222011F8F"], [])).toBeNull(); // a file id
     expect(acceptName("we saw the flat in ruzafa again the flat", MOVE, texts, [])).toBeNull(); // too long
   });
 
