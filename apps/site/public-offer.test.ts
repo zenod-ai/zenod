@@ -41,7 +41,10 @@ describe("public Zenod offer", () => {
   it("keeps sign-in and storage claims provider- and edition-aware", () => {
     const copy = page.replace(/\s+/g, " ")
     expect(page).toContain('GOOGLE_SIGN_IN_PATH')
-    expect(page).toContain('aria-label="Sign in with GitHub"')
+    // The shared Paper header (ZAL-A17) signs in with Google; GitHub sign-in
+    // stays on the Hosted plan, beside Start with Google.
+    expect(page).toContain('customer.subscribe("monthly", SIGN_IN_PATH)')
+    expect(page).toContain("Start with GitHub")
     expect(copy).toMatch(/Self-hosted uses your GitHub vault; Hosted lets you choose/i)
     expect(copy).toMatch(/Hosted: GitHub or Drive · self-hosted: GitHub/i)
   })

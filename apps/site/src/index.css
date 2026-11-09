@@ -1148,3 +1148,41 @@ body:has(.v5-site) {
 @media (max-width: 860px) {
   .zc-clients { grid-template-columns: 1fr; }
 }
+
+/* ZAL-A17: /pricing and /connect on the home page's Paper ground (ink on
+   #f6f2e9, one deep green), under the shared Paper header. Only colours change
+   here; the layout and type stay until the restyle Jordi parked (A7, A11). */
+body:has(.v5-paper) { background: #f6f2e9; }
+.v5-site.v5-paper {
+  --v5-bg: #f6f2e9;
+  --v5-panel: #efe9dc;
+  --v5-panel-2: #e9e3d5;
+  --v5-ink: #18211c;
+  --v5-muted: #4a554e;
+  --v5-line: #ddd5c4;
+  --v5-line-2: #c9bfab;
+  --v5-acid: #1f4d3a;
+  --v5-cyan: #1f4d3a;
+  --v5-gold: #6b4a1f;
+  --v5-violet: #4a554e;
+  background: var(--v5-bg);
+}
+.v5-paper ::selection { background: #1f4d3a; color: #f6f2e9; }
+.v5-paper main, .zc-page.v5-paper main { padding-top: 0; }
+.v5-paper .v5-button { background: transparent; }
+.v5-paper .v5-button:hover { border-color: var(--v5-ink); }
+.v5-paper .v5-button-primary,
+.v5-paper a.v5-button-primary { background: var(--v5-acid); color: #f6f2e9; }
+.v5-paper .v5-button-primary:hover { border-color: #183d2e; background: #183d2e; }
+.v5-paper .v5-kicker::before { box-shadow: none; }
+.v5-paper .v5-lead,
+.v5-paper .zc-client ol,
+.v5-paper .zc-client > p,
+.v5-paper .zc-tools p,
+.v5-paper .zc-help > p:not(.v5-kicker) { color: #2f3a33; }
+.v5-paper .v5-section-no { color: #6b746e; }
+.v5-paper .v5-section-no::after { background: #c9bfab; }
+.v5-paper .v5-plan-hosted { background: #e9e3d5; }
+.v5-paper .v5-error { color: #a23a2a; }
+.v5-paper .v5-footer { color: #4a554e; }
+.v5-paper .zc-icon { border-color: transparent; }

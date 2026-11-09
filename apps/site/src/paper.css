@@ -269,3 +269,19 @@ body:has(.pp) {
 @media (prefers-reduced-motion: reduce) {
   .pp *, .pp *::before, .pp *::after { animation: none !important; transition: none !important; }
 }
+
+/* ZAL-A17: the home header on /pricing and /connect. The bar carries .pp only
+   for its colours and fonts; it stays one bar high and sticks over the page. */
+.pp.pp-bar { min-height: 0; position: sticky; top: 0; z-index: 50; overflow: visible; font-size: 1rem; }
+.pp-menu { display: none; position: relative; }
+.pp-menu summary { list-style: none; cursor: pointer; padding: 0.45rem 0.8rem; border: 1px solid var(--pp-ink); border-radius: 999px; font: 500 0.95rem var(--pp-sans); }
+.pp-menu summary::-webkit-details-marker { display: none; }
+.pp-nav .pp-menu nav { position: absolute; right: 0; top: calc(100% + 0.5rem); display: grid; gap: 0; min-width: 12rem; margin: 0; padding: 0.5rem 0; border: 1px solid #d9d1bf; background: var(--pp-bg); }
+.pp-nav .pp-menu nav a { padding: 0.6rem 1rem; }
+@media (max-width: 900px) {
+  .pp-menu { display: block; }
+}
+@media (max-width: 560px) {
+  .pp-bar .pp-nav-in { gap: 0.75rem; }
+  .pp-bar .pp-btn-small { padding: 0.5rem 0.9rem; }
+}

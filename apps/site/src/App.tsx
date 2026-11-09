@@ -2,8 +2,6 @@ import * as React from "react";
 import {
   ArrowUpRightIcon,
   BookOpenIcon,
-  KeyRoundIcon,
-  LayoutDashboardIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -13,7 +11,6 @@ import { ConnectPage } from "@/components/connect-page";
 import {
   consumePendingHostedTier,
   createHostedCheckout,
-  DASHBOARD_URL,
   DOCS_URL,
   GOOGLE_SIGN_IN_PATH,
   type CustomerSession,
@@ -129,19 +126,12 @@ function useCustomerJourney(): CustomerJourney {
   return { session, loading, busyTier, error, paidSignupReady, subscribe };
 }
 
-// The /pricing and /connect header (old style, kept until the restyle Jordi
-// parked). Its section links land on the home page's real sections, and below
-// 960 wide a Menu keeps them, with Sign in always visible.
-const SITE_LINKS = [
-  { href: "/#how", label: "How it works" },
-  { href: "/#mcp", label: "Your AI tools" },
-  { href: "/#yours", label: "Your library" },
-  { href: "/#start", label: "Run it your way" },
-  { href: "/connect", label: "Connect" },
-  { href: "/testers", label: "Testers" },
-];
-
-function SiteHeader({
+// /pricing and /connect wear the home page's header (ZAL-A17): the Paper bar
+// with the Newsreader Z wordmark, its section links landing on the home page,
+// Sign in always visible and, below 900 wide, a Menu with the same links.
+// Their content keeps the old layout on a Paper ground until the restyle
+// Jordi parked (A7, A11).
+function PaperBar({
   customer,
   getStartedHref = "/pricing",
 }: {
@@ -149,57 +139,14 @@ function SiteHeader({
   getStartedHref?: string;
 }) {
   return (
-    <header className="v5-nav">
-      <div className="v5-wrap v5-nav-inner">
-        <a className="v5-brand" href="/" aria-label="Zenod home">
-          ZENOD
-          <span aria-hidden="true" />
-        </a>
-        <nav className="v5-nav-links" aria-label="Primary">
-          {SITE_LINKS.map((link) => (
-            <a key={link.href} href={link.href}>
-              {link.label}
-            </a>
-          ))}
-        </nav>
-        <div className="v5-nav-actions">
-          {customer.session ? (
-            <a className="v5-button v5-button-small" href={DASHBOARD_URL}>
-              <LayoutDashboardIcon /> Dashboard
-            </a>
-          ) : (
-            <>
-              <a className="v5-signin" href={GOOGLE_SIGN_IN_PATH}>
-                <KeyRoundIcon /> Sign in
-              </a>
-              <a
-                className="v5-signin v5-github-signin"
-                href={SIGN_IN_PATH}
-                aria-label="Sign in with GitHub"
-              >
-                <GithubIcon />
-              </a>
-            </>
-          )}
-          <a
-            className="v5-button v5-button-small v5-button-primary"
-            href={getStartedHref}
-          >
-            Get started
-          </a>
-          <details className="v5-menu">
-            <summary>Menu</summary>
-            <nav aria-label="Menu">
-              {SITE_LINKS.map((link) => (
-                <a key={link.href} href={link.href}>
-                  {link.label}
-                </a>
-              ))}
-            </nav>
-          </details>
-        </div>
-      </div>
-    </header>
+    <div className="pp pp-bar">
+      <Nav
+        customer={{ signedIn: Boolean(customer.session) }}
+        base="/"
+        menu
+        getStartedHref={getStartedHref}
+      />
+    </div>
   );
 }
 
@@ -361,8 +308,8 @@ function LandingPage({ customer }: { customer: CustomerJourney }) {
 
 function PricingPage({ customer }: { customer: CustomerJourney }) {
   return (
-    <div className="v5-site v5-pricing-page">
-      <SiteHeader customer={customer} getStartedHref="#start" />
+    <div className="v5-site v5-paper v5-pricing-page">
+      <PaperBar customer={customer} getStartedHref="#start" />
       <main className="v5-wrap">
         <section className="v5-pricing-intro">
           <p className="v5-kicker">Zenod plans</p>
@@ -396,7 +343,7 @@ export default function App() {
   if (path === "/connect")
     return (
       <ConnectPage
-        header={<SiteHeader customer={customer} />}
+        header={<PaperBar customer={customer} />}
         footer={<SiteFooter />}
       />
     );
