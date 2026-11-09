@@ -110,6 +110,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | three informational desk notes closed | paper-deck skill live, paper deck adopted, EpicTeam Chat voice-note forwarding taken by agent_team (EPIC-21 V2 stays blocked on their E42-S39); nothing for Zenod to build | 76b3c20, 7eee459, e90564f |
 | 2026-11-09 | A13 and steward commits named | the ZAL- prefix is not read as a row code | A13: 3abe85e (#1550 testers page, apply form, sign-up path fixes, counter) ; steward: cbefb61 |
 | 2026-11-09 | commits named under their rows | desk-inbox closes and steward commits | A14: 471a883, 62024e5 ; A15: ac25126, 7097539 ; A13: cfbb005, 261634a, 184a1b6, 2156798, 8451f1f, 64c95c8 ; EPIC-12 S27: 7a432e4 |
+| 2026-11-09 | decided by Delivery Manager: local whisper fallback when paid transcription fails (A15, [#1555](https://github.com/zenod-ai/zenod/pull/1555)) | why: voice notes were being lost when OpenRouter refused them for credit — rollback: revert the PR and re-pin the previous Phylax digest | [zal-a15-2026-11-09](evidence/zal-a15-2026-11-09.md) |
 
 
 ## Spine Map
