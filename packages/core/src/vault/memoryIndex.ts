@@ -1445,6 +1445,10 @@ async function rowsOf(vaultPath: string, path: string): Promise<{ rows: RowDraft
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
   const title = typeof meta.title === "string" && meta.title.trim() ? meta.title : body.match(/^# +([^\n]+)/m)?.[1]?.trim() || basenameOf(path);
   const parent = pageTreeFields(frontmatter).parent;
+  // A merged leaf's pointer page (E12-S24): its words live on the page it points to; only the link stays.
+  if (pageTreeFields(frontmatter).merged) {
+    return { rows: [], edges: [{ from: path, target: String(meta["merged-into"]).replace(/^\[\[|\]\]$/g, ""), kind: "link" }] };
+  }
   const edges: StoredEdge[] = [
     ...(parent ? [{ from: path, target: parent, kind: "tree" as const }] : []),
     ...extractPageLinks(body).map((target) => ({ from: path, target, kind: "link" as const })),

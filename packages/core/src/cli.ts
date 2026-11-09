@@ -13,6 +13,7 @@ import type { VaultLocation } from "./vault/github.js";
 import { createEngine } from "./engine/engine.js";
 import { discoverTree } from "./engine/treeDiscover.js";
 import { rediscoverTree, refileAgentLeaves } from "./engine/treeSweep.js";
+import { mergeSmallLeaves } from "./engine/treeMergeLeaves.js";
 import { moveReportLines, planReportLines } from "./engine/reportLines.js";
 import { applyNoteLinks, planNoteLinks } from "./engine/noteLinker.js";
 import { TrackedWrites } from "./engine/treePlacement.js";
@@ -45,6 +46,7 @@ function usage(): string {
     "  tree seed [--out <dir>] [--date YYYY-MM-DD]  print an empty Tree.md (no roots), or write it into <dir>; `tree discover --apply` finds the roots",
     "  tree discover [--apply] [--fresh] [--today YYYY-MM-DD] [--json]  find the roots from content and your recent captures; --apply rewrites Tree.md and parent:/memory: lines (no commit)",
     "  tree link-notes [--apply] [--partial] [--skip REF,REF] [--today YYYY-MM-DD] [--json]  list your voice notes no topic page holds, whole or in part (dry run); --apply links each point of a note no page cites (with --partial also the dropped points of half-filed notes) as a provisional leaf on its subject's branch (no commit)",
+    "  tree merge-leaves [--apply] [--today YYYY-MM-DD] [--min-age DAYS] [--max-words N] [--json]  list small provisional leaves on the same subject as a sibling or parent page (dry run); --apply merges each into that page word for word and leaves a pointer page, as the weekly sweep does (no commit)",
     "  tree report-lines [--apply] [--today YYYY-MM-DD] [--json]  list agent-report lines on your pages (dry run); --apply moves them to Archive/Agent reports/ with their page and line (no commit)",
     "  index rebuild             rebuild the tier-0 memory index (SQLite FTS5 beside the vault) from scratch; idempotent",
     "  index search <query>      query the tier-0 index (refreshes changed files first), with tree paths and timing",
@@ -293,6 +295,24 @@ async function main(): Promise<number> {
           for (const point of note.points) console.log(`          ${point.topic ?? "(whole note)"}${point.anchors[0] ? ` → under ${point.anchors[0]}` : ""}`);
         }
         console.log(`${plan.voiceNotes} voice note(s) · ${plan.linked} linked · ${plan.unlinked} with no topic link · ${plan.partial} half filed · ${plan.evidenceOnly.length} kept as evidence only${written ? ` · ${written.length} leaf link(s) written` : " · dry run"}`);
+        return 0;
+      }
+      if (sub === "merge-leaves") {
+        const flag = (name: string) => { const i = rest.indexOf(name); return i >= 0 ? rest[i + 1] : undefined; };
+        const writes = new TrackedWrites(vaultPath());
+        const merged = await mergeSmallLeaves(vaultPath(), writes, {
+          today: flag("--today") ?? new Date().toISOString().slice(0, 10),
+          ...(flag("--min-age") !== undefined ? { minAgeDays: Number(flag("--min-age")) } : {}),
+          ...(flag("--max-words") !== undefined ? { maxWords: Number(flag("--max-words")) } : {}),
+        });
+        const applied = rest.includes("--apply");
+        if (!applied) await writes.revert();
+        if (rest.includes("--json")) {
+          console.log(JSON.stringify({ merged, applied, changed: applied ? writes.paths.sort() : null }, null, 2));
+          return 0;
+        }
+        for (const leaf of merged) console.log(`${leaf.relation.padEnd(7)}  ${leaf.path}  →  ${leaf.into}  (${leaf.captures} capture(s), ${leaf.words} words; shared: ${leaf.shared.join(", ")})`);
+        console.log(`${merged.length} small leaf(s) ${applied ? "merged" : "to merge · dry run"}`);
         return 0;
       }
       if (sub === "report-lines") {

@@ -168,6 +168,8 @@ export interface PageTreeFields {
   invalidParent?: unknown;
   /** Rule 4 of the audit: a node created because nothing fitted; reviewed by the sweep. */
   provisional?: boolean;
+  /** E12-S24: a leaf the sweep merged into another page; it stays only as a pointer (`merged-into:`). */
+  merged?: boolean;
 }
 
 export function pageTreeFields(frontmatter: Record<string, unknown> | null): PageTreeFields {
@@ -187,6 +189,7 @@ export function pageTreeFields(frontmatter: Record<string, unknown> | null): Pag
     else out.invalidMemory = memory;
   }
   if (frontmatter.provisional === true) out.provisional = true;
+  if (typeof frontmatter["merged-into"] === "string" && frontmatter["merged-into"].trim()) out.merged = true;
   return out;
 }
 
