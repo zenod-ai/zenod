@@ -3085,7 +3085,8 @@ export function createEngine(options: EngineOptions): BrainEngine {
         request: input.request,
         call: ({ system, prompt }) => {
           reportTokenCost("ask", [system, prompt], undefined, "memory_desk");
-          return llm.streamMemoryChat!({ system, prompt }, () => {});
+          // Background work: DeepSeek when the host routes desk jobs there (EPIC-14 S11).
+          return (llm.streamBackgroundChat ?? llm.streamMemoryChat)!.call(llm, { system, prompt }, () => {});
         },
         tools: deskReadTools(vaultPath, (query) => rankedSearch(query), now),
         check: (plan) => checkDeskPlan(vaultPath, plan),

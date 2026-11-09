@@ -160,6 +160,10 @@ export interface UsageCall {
   providerCostUsd: number | null;
   status: "succeeded" | "failed";
   errorCode: string | null;
+  /** What the call was spent on (filing, chat, personas, desk, calls). */
+  feature: string;
+  /** Wall time of the provider request in ms, when measured (EPIC-14 S11). */
+  latencyMs: number | null;
 }
 
 export interface UsageTimelineQuery {
@@ -259,6 +263,10 @@ export class UsageStore {
       // NULL and are read by their operation (FEATURE_SQL).
       this.db.exec("ALTER TABLE llm_usage ADD COLUMN feature TEXT");
     }
+    if (!columns.some((column) => column.name === "latency_ms")) {
+      // EPIC-14 S11: wall time of the provider request, to compare providers. NULL when not measured.
+      this.db.exec("ALTER TABLE llm_usage ADD COLUMN latency_ms INTEGER");
+    }
     this.backfillCosts();
   }
 
@@ -319,8 +327,8 @@ export class UsageStore {
     this.db
       .prepare(
         `INSERT INTO llm_usage
-           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id, feature, app)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (ts, operation, provider, model, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens, cost_usd, status, error_code, provider_cost_usd, generation_id, feature, app, latency_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         now,
@@ -338,6 +346,7 @@ export class UsageStore {
         report.generationId ?? null,
         feature ?? currentFeature() ?? featureForOperation(report.operation),
         this.app,
+        report.latencyMs ?? null,
       );
   }
 
@@ -410,7 +419,8 @@ export class UsageStore {
     const rows = this.db
       .prepare(
         `SELECT ts, COALESCE(app, '${DEFAULT_USAGE_APP}') || '/' || ${FEATURE_SQL} AS label, operation, provider, model, input_tokens, output_tokens,
-                cached_input_tokens, cache_creation_input_tokens, cost_usd, provider_cost_usd, status, error_code
+                cached_input_tokens, cache_creation_input_tokens, cost_usd, provider_cost_usd, status, error_code,
+                ${FEATURE_SQL} AS feature, latency_ms
          FROM llm_usage WHERE ${clauses.join(" AND ")}
          ORDER BY ts DESC, id DESC
          LIMIT ?`,
@@ -429,6 +439,8 @@ export class UsageStore {
       provider_cost_usd: number | null;
       status: "succeeded" | "failed";
       error_code: string | null;
+      feature: string;
+      latency_ms: number | null;
     }>;
     return rows.map((row) => ({
       ts: row.ts,
@@ -444,6 +456,8 @@ export class UsageStore {
       providerCostUsd: row.provider_cost_usd ?? null,
       status: row.status === "failed" ? "failed" : "succeeded",
       errorCode: row.error_code,
+      feature: row.feature,
+      latencyMs: row.latency_ms ?? null,
     }));
   }
 

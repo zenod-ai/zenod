@@ -45,7 +45,7 @@ import {
 } from "zenod";
 import { InboxError, inboxFor, type InboxDeskHooks } from "./inboxStore.js";
 import { channelTurn } from "./channelBrain.js";
-import { currentFeature, featureDecision, withFeature, zenodLimits, type UsageFeature } from "./limits.js";
+import { currentFeature, featureDecision, featureForOperation, withFeature, zenodLimits, type UsageFeature } from "./limits.js";
 import { answerDeskQuestion, DeskLimitError, deskJobFailed, offerDeskJobFromChat, runDeskJob, settleDeskItems, undoDeskItem } from "./memoryDesk.js";
 import { aiAllowanceExhaustedMessage, nextUtcMonthlyReset } from "./customerMetering.js";
 import {
@@ -1082,6 +1082,7 @@ export class Runtime {
     let last: { inputTokens: number; outputTokens: number; costUsd: number } | null = null;
     const record = (report: LlmUsageReport) => {
       this.usageStore.record(report, Date.now(), "personas");
+      if (process.env.ZENOD_LLM_COST_LOG === "1") logLlmUsage(report, "personas");
       last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
     };
     const background = this.backgroundRoute?.jobs.personas === "deepseek" ? this.backgroundLlm(undefined, record, "personas") : null;
@@ -2765,16 +2766,22 @@ function startOfUtcMonth(now: number): number {
 }
 
 /** One-line real-usage tail (opt-in via ZENOD_LLM_COST_LOG=1). */
-function logLlmUsage(report: LlmUsageReport): void {
+function logLlmUsage(report: LlmUsageReport, feature?: UsageFeature): void {
   console.log(
     [
       "[llm-usage]",
       `operation=${report.operation}`,
+      // EPIC-14 S11: which provider served which job, at what charge and speed. No content, no tenant.
+      `provider=${report.provider}`,
+      `feature=${feature ?? currentFeature() ?? featureForOperation(report.operation)}`,
+      `status=${report.status ?? "succeeded"}`,
       `model=${report.model}`,
       `input=${report.inputTokens}`,
       `output=${report.outputTokens}`,
       `cache_read=${report.cachedInputTokens}`,
       `cache_write=${report.cacheCreationInputTokens}`,
+      `cost_usd=${typeof report.providerCostUsd === "number" ? report.providerCostUsd.toFixed(6) : "none"}`,
+      `latency_ms=${report.latencyMs ?? "none"}`,
     ].join(" "),
   );
 }

@@ -48,6 +48,11 @@ export interface BrainLlm {
    * engine falls back to the read-only ask loop.
    */
   streamMemoryChat?(input: { system: string; prompt: string }, onText: (delta: string) => void): Promise<string>;
+  /**
+   * The same streamed call for background work (the memory desk agent, EPIC-14 S11): the background
+   * route sends it to the cheaper model; without a route it is absent and callers use streamMemoryChat.
+   */
+  streamBackgroundChat?(input: { system: string; prompt: string }, onText: (delta: string) => void): Promise<string>;
 }
 
 /**

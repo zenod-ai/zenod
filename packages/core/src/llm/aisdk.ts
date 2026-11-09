@@ -112,6 +112,8 @@ export interface LlmUsageReport {
   providerCostUsd?: number | null;
   /** Gateway generation id for reconciliation (OpenRouter response id), when reported. */
   generationId?: string | null;
+  /** Wall time of the provider request in ms, when the call went through a metering seam (EPIC-14 S11). */
+  latencyMs?: number;
   /** Estimated USD for calls that are not token-priced (audio transcription); used as cost_usd when no real cost was reported. */
   estimatedCostUsd?: number;
 }
@@ -396,6 +398,8 @@ export interface ProviderCallUsage {
   completionTokens: number | null;
   cachedTokens: number | null;
   cacheWriteTokens: number | null;
+  /** Wall time of the provider request, from send to the last byte (stream end for streams). */
+  latencyMs?: number;
 }
 
 function providerUsageFrom(recordedModel: string, body: Record<string, unknown>): ProviderCallUsage {
@@ -471,16 +475,18 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
     if (patched.stream === true) patched.stream_options = { include_usage: true, ...(body.stream_options as object | undefined) };
     if (providerOrder) patched.provider = { only: providerOrder, order: providerOrder, require_parameters: true };
     if (user) patched.user = user;
+    const started = Date.now();
     let response = await globalThis.fetch(request.url, {method: request.method, headers: request.headers, signal: request.signal, body: JSON.stringify(patched)});
     const recordedModel = typeof body.model === "string" ? body.model : "";
-    if (onProviderUsage && response.ok) {
+    const onUsage = onProviderUsage ? timed(onProviderUsage, started) : undefined;
+    if (onUsage && response.ok) {
       const contentType = response.headers.get("content-type") ?? "";
       if (contentType.includes("text/event-stream")) {
-        captureStreamUsage(response.clone(), recordedModel, onProviderUsage);
+        captureStreamUsage(response.clone(), recordedModel, onUsage);
       } else {
         // Buffer once so the authoritative cost is recorded before reportUsage runs.
         const bytes = await response.arrayBuffer();
-        try { onProviderUsage(providerUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>)); } catch { /* capture is best-effort */ }
+        try { onUsage(providerUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>)); } catch { /* capture is best-effort */ }
         response = new Response(bytes, {status: response.status, statusText: response.statusText, headers: response.headers});
       }
     }
@@ -497,6 +503,11 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
   const baseURL = baseUrl ?? OPENAI_COMPATIBLE_BASE_URLS[provider];
   const compatible = createOpenAI({... (baseURL ? { apiKey, baseURL } : { apiKey }), ...(headers ? { headers } : {}), ...(seam ? {fetch: seam} : {})});
   return apiFormat === "responses" ? (id: string) => compatible.responses(id) : (id: string) => compatible.chat(id);
+}
+
+/** Stamps each captured usage with the request's wall time (EPIC-14 S11: latency per provider). */
+function timed(onProviderUsage: (u: ProviderCallUsage) => void, started: number): (u: ProviderCallUsage) => void {
+  return (u) => onProviderUsage({ ...u, latencyMs: Date.now() - started });
 }
 
 /** DeepSeek usage for one call: its cache hit/miss split priced at the published rate for that hour. */
@@ -536,16 +547,18 @@ function deepseekSeam(baseURL: string, onProviderUsage?: (u: ProviderCallUsage) 
       delete patched.reasoning_effort;
       patched.thinking = { type: "disabled" };
     }
+    const started = Date.now();
     let response = await globalThis.fetch(request.url, { method: request.method, headers: request.headers, signal: request.signal, body: JSON.stringify(patched) });
     const recordedModel = typeof body.model === "string" ? body.model : "";
     const at = Date.now();
-    if (onProviderUsage && response.ok) {
+    const onUsage = onProviderUsage ? timed(onProviderUsage, started) : undefined;
+    if (onUsage && response.ok) {
       const contentType = response.headers.get("content-type") ?? "";
       if (contentType.includes("text/event-stream")) {
-        captureStreamUsage(response.clone(), recordedModel, (u) => onProviderUsage(u), (model, parsed) => deepseekUsageFrom(model, parsed, at));
+        captureStreamUsage(response.clone(), recordedModel, onUsage, (model, parsed) => deepseekUsageFrom(model, parsed, at));
       } else {
         const bytes = await response.arrayBuffer();
-        try { onProviderUsage(deepseekUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>, at)); } catch { /* capture is best-effort */ }
+        try { onUsage(deepseekUsageFrom(recordedModel, JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>, at)); } catch { /* capture is best-effort */ }
         response = new Response(bytes, { status: response.status, statusText: response.statusText, headers: response.headers });
       }
     }
@@ -929,6 +942,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
         ...(attempt.errorCode ? { errorCode: attempt.errorCode } : {}),
         ...(recorded && recorded.costUsd !== null ? { providerCostUsd: recorded.costUsd } : {}),
         ...(recorded?.generationId ? { generationId: recorded.generationId } : {}),
+        ...(recorded?.latencyMs !== undefined ? { latencyMs: recorded.latencyMs } : {}),
       });
     } catch {
       // Metering must never break the call path.

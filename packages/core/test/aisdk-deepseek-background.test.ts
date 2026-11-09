@@ -114,3 +114,35 @@ it("never falls back past a used-up AI allowance: caps hold on both routes", asy
   await expect(llm.classify(classifyInput as any)).rejects.toThrow("used up");
   expect(calls).toEqual(["deepseek.classify"]);
 });
+
+it("sends the memory desk agent's calls to the background model, falls back on failure, and keeps them on chat when desk is not routed (S11)", async () => {
+  const calls: string[] = [];
+  const routed = withBackgroundRoute(fakeLlm("openrouter", calls), fakeLlm("deepseek", calls), { filing: true, desk: true });
+  await routed.streamBackgroundChat!({ system: "", prompt: "" }, () => {});
+  await routed.streamMemoryChat!({ system: "", prompt: "" }, () => {});
+  expect(calls).toEqual(["deepseek.streamMemoryChat", "openrouter.streamMemoryChat"]);
+
+  const kept: string[] = [];
+  const off = withBackgroundRoute(fakeLlm("openrouter", kept), fakeLlm("deepseek", kept), { filing: true, desk: false });
+  await off.streamBackgroundChat!({ system: "", prompt: "" }, () => {});
+  expect(kept).toEqual(["openrouter.streamMemoryChat"]);
+
+  const fell: string[] = [];
+  const events: unknown[] = [];
+  const noBalance = Object.assign(new Error("Insufficient Balance"), { statusCode: 402 });
+  const failing = withBackgroundRoute(fakeLlm("openrouter", fell), fakeLlm("deepseek", fell, noBalance), { filing: true, desk: true, onFallback: (event) => events.push(event) });
+  await failing.streamBackgroundChat!({ system: "", prompt: "" }, () => {});
+  await failing.streamBackgroundChat!({ system: "", prompt: "" }, () => {});
+  expect(fell).toEqual(["deepseek.streamMemoryChat", "openrouter.streamMemoryChat", "openrouter.streamMemoryChat"]);
+  expect(events).toEqual([{ method: "streamBackgroundChat", status: 402, parked: true }]);
+});
+
+it("records each provider call's wall time with its usage (S11)", async () => {
+  deepseekTransport();
+  const reports: LlmUsageReport[] = [];
+  const llm = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused", onUsage: (report) => reports.push(report) });
+  await llm.classify(classifyInput);
+  expect(reports).toHaveLength(1);
+  expect(typeof reports[0]!.latencyMs).toBe("number");
+  expect(reports[0]!.latencyMs).toBeGreaterThanOrEqual(0);
+});
