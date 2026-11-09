@@ -415,7 +415,7 @@ export type ChatMode = "keep" | "lookup" | "talk" | "job"
 export const CHAT_MODES: Record<ChatMode, { label: string; verb: string; hint: string }> = {
   keep: { label: "Kept", verb: "Keep it", hint: "Save it as a new memory" },
   lookup: { label: "Looked up", verb: "Look it up", hint: "Answer it from your memory" },
-  talk: { label: "Talking", verb: "Talk it over", hint: "Think it through with a persona, nothing is changed" },
+  talk: { label: "Talking", verb: "Talk it over", hint: "Think it through with a helper, nothing is changed" },
   job: { label: "Job sent", verb: "Make it a job", hint: "The memory desk re-files, splits or joins" },
 }
 const MODE_ORDER: ChatMode[] = ["keep", "lookup", "talk", "job"]
@@ -688,7 +688,7 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
     window.history.replaceState(null, "", window.location.pathname + window.location.search + "#chat")
     const talk: Talking = { persona, name: persona, history: [] }
     setTalking(talk)
-    push({ kind: "note", text: about ? `You started a talk about “${about}”` : "You started a talk from Personas" })
+    push({ kind: "note", text: about ? `You started a talk about “${about}”` : "You started a talk from Helpers" })
     const id = push({ kind: "pending", message: about, route: null, keep: null, memories: null, text: "" })
     void talkTurn(id, about, talk, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps

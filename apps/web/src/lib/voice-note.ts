@@ -14,7 +14,7 @@ export const VOICE_NOTE_MIN_SECONDS = 1
 
 export type VoicePhase = "idle" | "starting" | "recording" | "paused" | "sending" | "failed"
 
-export type VoiceView = {
+export type VoiceView<R = MemoryKeepReceipt> = {
   phase: VoicePhase
   /** Seconds recorded (paused time not counted). */
   elapsedS: number
@@ -25,7 +25,7 @@ export type VoiceView = {
   /** A failed send still holds the recording: Send tries again. */
   retry?: boolean
   /** The last note sent, with its receipt (a new object per note). */
-  sent?: { receipt: MemoryKeepReceipt; seconds: number }
+  sent?: { receipt: R; seconds: number }
 }
 
 /** The part of MediaRecorder this engine uses. */
@@ -50,7 +50,8 @@ export interface VoiceClock {
   every(ms: number, fn: () => void): () => void
 }
 
-export type VoiceUpload = (audio: Blob, seconds: number) => Promise<MemoryKeepReceipt>
+/** Where a note goes: the chat's media seam (a Keep receipt), or elsewhere (S26: feedback on an inbox card). */
+export type VoiceUpload<R = MemoryKeepReceipt> = (audio: Blob, seconds: number) => Promise<R>
 
 export const INTERRUPTED_TEXT =
   "Recording stopped: the screen locked or another app took the microphone. What you said is kept. Tap Send, or Discard."
@@ -63,9 +64,9 @@ const realClock: VoiceClock = {
   },
 }
 
-export class VoiceNoteEngine {
-  private v: VoiceView = { phase: "idle", elapsedS: 0, level: 0 }
-  private subs = new Set<(v: VoiceView) => void>()
+export class VoiceNoteEngine<R = MemoryKeepReceipt> {
+  private v: VoiceView<R> = { phase: "idle", elapsedS: 0, level: 0 }
+  private subs = new Set<(v: VoiceView<R>) => void>()
   private stream?: MediaStream
   private rec?: RecorderLike
   private chunks: Blob[] = []
@@ -78,24 +79,24 @@ export class VoiceNoteEngine {
   private meter?: { read(): number; close(): void }
   private lock?: { release(): Promise<void> }
 
-  private upload: VoiceUpload
+  private upload: VoiceUpload<R>
   private media: VoiceMedia
   private clock: VoiceClock
   /** Called with the receipt of each note sent. */
-  onSent?: (receipt: MemoryKeepReceipt, seconds: number) => void
+  onSent?: (receipt: R, seconds: number) => void
 
-  constructor(upload: VoiceUpload, media: VoiceMedia, clock: VoiceClock = realClock) {
+  constructor(upload: VoiceUpload<R>, media: VoiceMedia, clock: VoiceClock = realClock) {
     this.upload = upload
     this.media = media
     this.clock = clock
   }
 
   view = () => this.v
-  subscribe(fn: (v: VoiceView) => void) {
+  subscribe(fn: (v: VoiceView<R>) => void) {
     this.subs.add(fn)
     return () => void this.subs.delete(fn)
   }
-  private set(change: Partial<VoiceView>) {
+  private set(change: Partial<VoiceView<R>>) {
     this.v = { ...this.v, ...change }
     for (const fn of this.subs) fn(this.v)
   }
@@ -144,7 +145,7 @@ export class VoiceNoteEngine {
 
   private tick() {
     if (this.v.phase !== "recording") return
-    const change: Partial<VoiceView> = { elapsedS: Math.floor(this.seconds()) }
+    const change: Partial<VoiceView<R>> = { elapsedS: Math.floor(this.seconds()) }
     if (this.meter) change.level = Math.max(0, Math.min(1, this.meter.read()))
     this.set(change)
     if (this.seconds() >= VOICE_NOTE_MAX_SECONDS) {

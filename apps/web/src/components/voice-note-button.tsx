@@ -25,25 +25,28 @@ function MicIcon() {
   )
 }
 
-export function VoiceNoteButton({
+export function VoiceNoteButton<R = MemoryKeepReceipt>({
   onSent,
   onNotice,
   disabled,
-  upload = sendVoiceNote,
+  upload = sendVoiceNote as unknown as VoiceUpload<R>,
   media,
+  label = "Record a voice note",
 }: {
-  onSent: (receipt: MemoryKeepReceipt, seconds: number) => void
+  onSent: (receipt: R, seconds: number) => void
   /** A note that did not start or was too short: the chat shows why. */
   onNotice?: (text: string, warn: boolean) => void
   disabled?: boolean
-  upload?: VoiceUpload
+  upload?: VoiceUpload<R>
   media?: VoiceMedia
+  /** The microphone's name (S26: "Leave a voice note" on an inbox card). */
+  label?: string
 }) {
   const engine = React.useMemo(
-    () => new VoiceNoteEngine(upload, media ?? browserVoiceMedia()),
+    () => new VoiceNoteEngine<R>(upload, media ?? browserVoiceMedia()),
     [upload, media]
   )
-  const [view, setView] = React.useState<VoiceView>(() => engine.view())
+  const [view, setView] = React.useState<VoiceView<R>>(() => engine.view())
   React.useEffect(() => engine.subscribe(setView), [engine])
   React.useEffect(() => () => void engine.discard(), [engine])
   const sentRef = React.useRef(onSent)
@@ -67,8 +70,8 @@ export function VoiceNoteButton({
       <button
         type="button"
         className="zp-mic"
-        aria-label="Record a voice note"
-        title="Record a voice note"
+        aria-label={label}
+        title={label}
         disabled={disabled || phase === "starting"}
         onClick={() => void engine.start()}
       >

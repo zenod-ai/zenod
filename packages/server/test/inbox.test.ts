@@ -10,6 +10,7 @@ import { createCustomerLayer } from "../src/customerLayer.js";
 import { customerUserId, type CustomerPrincipal } from "../src/customerIdentity.js";
 import { issueCustomerSession } from "../src/customerSession.js";
 import { InboxError, InboxStore, closeInboxFor, inboxFor, inboxNeedsYou } from "../src/inboxStore.js";
+import { registerInboxRoutes } from "../src/inboxRoutes.js";
 import { Runtime } from "../src/runtime.js";
 
 let dir: string;
@@ -204,11 +205,11 @@ describe("inbox routes (EPIC-14 S2)", () => {
     const t = await setup();
     try {
       const shown = await (await t.call("POST", "/api/console/inbox/examples", t.ada)).json();
-      expect(shown.items.map((item: { kind: string; status: string }) => `${item.kind}:${item.status}`).sort()).toEqual(["finding:open", "job:done", "job:working", "question:open"]);
+      expect(shown.items.map((item: { kind: string; status: string }) => `${item.kind}:${item.status}`).sort()).toEqual(["finding:open", "job:done", "job:working", "question:open", "suggestion:open"]);
       expect(shown.items.every((item: { example: boolean }) => item.example)).toBe(true);
-      expect(shown.needsYou).toBe(4);
+      expect(shown.needsYou).toBe(5);
       // Twice is still one of each.
-      expect((await (await t.call("POST", "/api/console/inbox/examples", t.ada)).json()).items).toHaveLength(4);
+      expect((await (await t.call("POST", "/api/console/inbox/examples", t.ada)).json()).items).toHaveLength(5);
 
       const byKind = (kind: string, status: string) => shown.items.find((item: { kind: string; status: string }) => item.kind === kind && item.status === status);
       const enqueue = vi.spyOn(t.runtimes.get("tenant-a")!.taskJobQueue, "enqueue");
@@ -218,6 +219,12 @@ describe("inbox routes (EPIC-14 S2)", () => {
       const undone = await (await t.call("POST", `/api/console/inbox/${byKind("job", "done").id}/undo`, t.ada)).json();
       expect(undone.item.status).toBe("undone");
       expect((await (await t.call("POST", `/api/console/inbox/${byKind("finding", "open").id}/dismiss`, t.ada)).json()).item.status).toBe("dismissed");
+      // S26: Do it on the example suggestion starts nothing; a made-up finished job shows, and its Undo works.
+      const did = await (await t.call("POST", `/api/console/inbox/${byKind("suggestion", "open").id}/do`, t.ada, {})).json();
+      expect(did.item).toMatchObject({ status: "accepted", done: { jobItemId: did.followUp.id } });
+      expect(did.followUp).toMatchObject({ kind: "job", example: true, status: "done" });
+      expect(enqueue).not.toHaveBeenCalled();
+      expect((await (await t.call("POST", `/api/console/inbox/${did.followUp.id}/undo`, t.ada)).json()).item.status).toBe("undone");
 
       const seen = await (await t.call("POST", "/api/console/inbox/seen", t.ada, {})).json();
       expect(seen.needsYou).toBe(0);
@@ -262,6 +269,65 @@ describe("inbox routes (EPIC-14 S2)", () => {
       expect(enqueue).toHaveBeenCalledTimes(1);
     } finally {
       await t.close();
+    }
+  });
+});
+
+describe("suggestions and voice feedback (EPIC-14 S26)", () => {
+  it("a suggestion needs you until Do it or Not now, keeps its change, and hands its helper the Not now reason once", () => {
+    const inbox = new InboxStore(join(dir, "inbox.sqlite"));
+    expect(() => inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Join them", action: "  " })).toThrow(/needs the change/);
+    const one = inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Join Flat and Apartment", action: "Join Apartment into Flat." });
+    expect(one).toMatchObject({ kind: "suggestion", status: "open", action: "Join Apartment into Flat.", done: null });
+    inbox.markSeen();
+    expect(inboxNeedsYou(inbox.get(one.id)!)).toBe(true);
+    expect(() => inbox.dismiss(one.id)).toThrow(InboxError);
+    const accepted = inbox.acceptSuggestion(one.id, "Join Apartment into Flat.", "job-item-1");
+    expect(accepted).toMatchObject({ status: "accepted", done: { jobItemId: "job-item-1", changed: false } });
+    expect(inboxNeedsYou(accepted)).toBe(false);
+    expect(() => inbox.declineSuggestion(one.id)).toThrow(/already settled/);
+
+    const two = inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Split Boat", action: "Split Boat." });
+    inbox.declineSuggestion(two.id, "Not this month");
+    inbox.addReply(two.id, { kind: "feedback", text: "Ask me again in spring", readAt: null, voice: { seconds: 6 } });
+    const unread = inbox.unreadFeedback("Topic gardener");
+    expect(unread.map((entry) => [entry.reply.kind, entry.reply.text])).toEqual([["notnow", "Not this month"], ["feedback", "Ask me again in spring"]]);
+    inbox.markFeedbackRead(unread);
+    expect(inbox.unreadFeedback("Topic gardener")).toEqual([]);
+    expect(inbox.get(two.id)!.replies[1]).toMatchObject({ voice: { seconds: 6 } });
+    inbox.close();
+  });
+
+  it("a voice note on a card is transcribed and kept as feedback for its helper, after what was typed", async () => {
+    const runtime = new Runtime(join(dir, "tenant-v"), undefined, { tenantId: "tenant-v", seedFromEnv: false, platformLlm: { apiKey: "sk-or-v1-test-platform" } });
+    const transcribe = vi.fn(async () => ({ success: true, transcript: "Good one, but keep the Ruzafa visits apart." }));
+    const app = new Hono();
+    registerInboxRoutes(app, async () => ({ runtime, tenantId: "tenant-v" }), { transcribe });
+    try {
+      const inbox = inboxFor(runtime);
+      const suggestion = inbox.post({ kind: "suggestion", from: "Topic gardener", title: "Join Flat hunt into Moving", action: "Join Flat hunt into Moving." });
+      const job = inbox.post({ kind: "job", title: "A desk job" });
+      const send = (id: string, type = "audio/webm", query = "") =>
+        app.request(`/api/console/inbox/${id}/voice-feedback${query}`, { method: "POST", headers: { "content-type": type, "x-seconds": "7.4" }, body: new Uint8Array([1, 2, 3]) });
+      expect((await send(suggestion.id, "text/plain")).status).toBe(415);
+      expect((await send(job.id)).status).toBe(404);
+      const sent = await send(suggestion.id, "audio/webm;codecs=opus", `?typed=${encodeURIComponent("Mostly yes.")}`);
+      expect(sent.status).toBe(200);
+      const body = await sent.json();
+      expect(body.item.replies).toMatchObject([{ kind: "feedback", text: "Mostly yes.\n\nGood one, but keep the Ruzafa visits apart.", voice: { seconds: 7 }, readAt: null }]);
+      expect(body.item.status).toBe("open");
+      expect(transcribe).toHaveBeenCalledTimes(1);
+      expect((transcribe.mock.calls[0] as unknown[])[2]).toBe(`zenod-app-feedback-${suggestion.id}.webm`);
+      expect(inbox.unreadFeedback("Topic gardener")).toHaveLength(1);
+
+      transcribe.mockResolvedValueOnce({ success: false, noSpeech: true } as never);
+      const silent = await send(suggestion.id);
+      expect(silent.status).toBe(422);
+      expect((await silent.json()).message).toMatch(/No words/);
+      expect(inbox.get(suggestion.id)!.replies).toHaveLength(1);
+    } finally {
+      closeInboxFor(runtime);
+      await runtime.close();
     }
   });
 });

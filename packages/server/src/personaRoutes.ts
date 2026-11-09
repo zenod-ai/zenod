@@ -38,7 +38,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     const found = await resolve(c);
     if ("response" in found) return found.response;
     const persona = personaById(c.req.param("id"));
-    if (!persona) return c.json({ error: "not_found", message: "no such persona" }, 404);
+    if (!persona) return c.json({ error: "not_found", message: "no such helper" }, 404);
     const body = await c.req.json<{ enabled?: unknown; cadence?: unknown }>().catch(() => ({}) as { enabled?: unknown; cadence?: unknown });
     if (body.enabled === undefined && body.cadence === undefined) return c.json({ error: "invalid", message: "send enabled or cadence" }, 400);
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") return c.json({ error: "invalid", message: "enabled must be true or false" }, 400);
@@ -57,7 +57,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
     const found = await resolve(c);
     if ("response" in found) return found.response;
     const persona = personaById(c.req.param("id"));
-    if (!persona) return c.json({ error: "not_found", message: "no such persona" }, 404);
+    if (!persona) return c.json({ error: "not_found", message: "no such helper" }, 404);
     // A persona runs only while it is switched on.
     if (!personaEnabled(personasFor(found.runtime), persona)) {
       return c.json({ error: "conflict", message: `Switch ${persona.name} on first` }, 409);
@@ -70,7 +70,7 @@ export function registerPersonaRoutes(app: Hono<any>, resolve: PersonaResolve): 
       return c.json({ run, ...list(found.runtime) });
     } catch (error) {
       console.warn(`[persona] run now unavailable: ${error instanceof Error ? error.message : String(error)}`);
-      return c.json({ error: "unavailable", message: "Your memory is not ready for personas yet" }, 503);
+      return c.json({ error: "unavailable", message: "Your memory is not ready for helpers yet" }, 503);
     }
   });
 }

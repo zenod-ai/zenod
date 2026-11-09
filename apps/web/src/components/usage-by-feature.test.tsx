@@ -27,7 +27,7 @@ const USAGE: UsageView = {
   features: [
     feature({ id: "filing", label: "Filing your notes", spentUsd: 1.2, stopsAtUsd: 6, atCap: "Never stops at the allowance." }),
     feature({ id: "chat", label: "Chat answers", spentUsd: 0.09 }),
-    feature({ id: "personas", label: "Personas", spentUsd: 0.02, shareUsd: 1, stopsAtUsd: 2.5 }),
+    feature({ id: "personas", label: "Helpers", spentUsd: 0.02, shareUsd: 1, stopsAtUsd: 2.5 }),
     feature({ id: "desk", label: "Memory desk jobs", shareUsd: 0.5, stopsAtUsd: 2.5 }),
     feature({ id: "calls", label: "Calls", shareUsd: 1, stopsAtUsd: 2.5, state: "paused", message: "This month's calls have reached their $1.00 limit." }),
   ],

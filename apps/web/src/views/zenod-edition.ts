@@ -39,7 +39,7 @@ export type ZenodEditionProfile = {
 const HOSTED_SECTIONS = Object.freeze([
   { id: "chat", label: "Chat" },
   { id: "inbox", label: "Inbox" },
-  { id: "personas", label: "Personas" },
+  { id: "personas", label: "Helpers" },
   { id: "memory", label: "Memory" },
   { id: "settings", label: "Settings" },
 ] as const)

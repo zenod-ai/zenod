@@ -147,8 +147,8 @@ export function pausedMessage(feature: UsageFeature, reason: "allowance" | "shar
       return `You have used this month's AI allowance, so I can't answer questions until the reset ${reset}. Everything you send is still kept.`;
     case "personas":
       return reason === "share"
-        ? `Personas have used their ${money(limits.personas.monthUsd)} for this month. They wake again ${reset}.`
-        : `Personas are paused to keep the rest of this month's AI allowance for your notes and answers. They wake again ${reset}.`;
+        ? `Helpers have used their ${money(limits.personas.monthUsd)} for this month. They wake again ${reset}.`
+        : `Helpers are paused to keep the rest of this month's AI allowance for your notes and answers. They wake again ${reset}.`;
     case "desk":
       return reason === "share"
         ? `The memory desk has used its ${money(limits.desk.monthUsd)} for this month. It takes jobs again ${reset}.`
@@ -192,7 +192,7 @@ function nearMessage(feature: UsageFeature): string {
   switch (feature) {
     case "filing": return "Most of this month's allowance is used. Filing carries on: your notes are always kept.";
     case "chat": return "Most of this month's allowance is used. Answers stop when it runs out; your notes are still kept.";
-    case "personas": return "Personas will pause soon to keep the rest of the month for your notes and answers.";
+    case "personas": return "Helpers will pause soon to keep the rest of the month for your notes and answers.";
     case "desk": return "The desk will pause soon to keep the rest of the month for your notes and answers.";
     case "calls": return "Calls will pause soon to keep the rest of the month for your notes and answers.";
   }
@@ -211,7 +211,7 @@ export const FEATURE_INFO: Record<UsageFeature, { label: string; costs: string; 
     atCap: "Stops when the allowance is used. What you send is still kept.",
   },
   personas: {
-    label: "Personas",
+    label: "Helpers",
     costs: "Under 1 cent for most runs, up to 2 cents for a weekly recap.",
     atCap: "Pause quietly at their own monthly share, or when the allowance is nearly used.",
   },

@@ -373,7 +373,7 @@ describe("MemoryChat as the librarian: four modes (EPIC-22 E22-2)", () => {
     window.history.replaceState(null, "", "/#chat?talk=weekly-recap")
     render(<MemoryChat />)
     expect((await screen.findByTestId("memory-talk")).textContent).toContain("Start there?")
-    expect(screen.getByText("You started a talk from Personas")).toBeTruthy()
+    expect(screen.getByText("You started a talk from Helpers")).toBeTruthy()
     expect(screen.getByTestId("memory-talkbar").textContent).toContain("Talking with Weekly recap")
     expect(window.location.hash).toBe("#chat")
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
