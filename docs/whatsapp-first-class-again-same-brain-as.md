@@ -51,7 +51,8 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| A1 | Ticket worker | run_b72ff779 | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | review | none | [#1530](https://github.com/zenod-ai/zenod/pull/1530) · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `a8f529c` · [#1553](https://github.com/zenod-ai/zenod/pull/1553) | main | [evidence](evidence/e20-a1-2026-11-08.md) · [card](cards/E20-A1.md) | 2026-11-09 | live on 468ee50; followups: start faster first answer after a restart — E20-3 needs replies within a few seconds, cold was 17.5 s; start voice notes wait behind slow filings — three notes waited 13 min; park keep and Run it? live check — would write into his memory and inbox; confirm: yes — Jordi sends a few WhatsApp messages and judges the replies |
+| A1 | Ticket worker | run_b72ff779 | Review the recent WhatsApp exchanges, then give WhatsApp the same brain as the cloud chat (decide, answer, job), proven on the live path (E20-1..3) | done (approved by Jordi 2026-11-09) | none | [#1530](https://github.com/zenod-ai/zenod/pull/1530) · [#1532](https://github.com/zenod-ai/zenod/pull/1532) `a8f529c` · [#1553](https://github.com/zenod-ai/zenod/pull/1553) | main | [evidence](evidence/e20-a1-2026-11-08.md) · [card](cards/E20-A1.md) | 2026-11-09 | live on 468ee50; followups: started A2 |
+| A2 | Ticket worker | unassigned | a faster first answer after each production restart: follow-up of A1 | draft | A1 | none | main | parked by Jordi when closing A1 2026-11-09 | 2026-11-09 | Jordi starts it from the goal when wanted |
 
 ## Decisions
 
