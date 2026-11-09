@@ -120,6 +120,12 @@ export function MovePicker({
   )
 }
 
+/** Where a page hangs: its place without its own name at the end. */
+export function hangsUnder(place: string, title: string): string {
+  const tail = ` › ${title}`
+  return place.endsWith(tail) ? `in ${place.slice(0, -tail.length)}` : place
+}
+
 export function ConfidenceBadge({ confidence }: { confidence: number | null }) {
   const low = confidence === null || confidence < LOW_CONFIDENCE
   return (
@@ -214,7 +220,7 @@ export function MemoryReviewCard({
                 <div className="min-w-0 flex-1">
                   <span className="font-medium break-words">{item.title}</span>{" "}
                   <span className="text-xs text-muted-foreground">
-                    {item.place}
+                    {hangsUnder(item.place, item.title)}
                   </span>
                 </div>
                 <div className="flex shrink-0 gap-1">
