@@ -190,6 +190,8 @@ export {
   type LlmUsageReport,
   type Provider,
 } from "./llm/aisdk.js";
+export { DEEPSEEK_BASE_URL, DEEPSEEK_PRICES, deepseekCostUsd, isDeepseekPeak } from "./llm/deepseek.js";
+export { withBackgroundRoute, type BackgroundRouteOptions } from "./llm/backgroundRoute.js";
 export {
   TURN_PLAN_COMPILER_VERSION,
   bindTurnPlan,

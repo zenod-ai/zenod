@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { LlmUsageReport } from "zenod";
+import { deepseekCostUsd, type LlmUsageReport } from "zenod";
 import { currentFeature, featureForOperation, USAGE_FEATURES, type UsageFeature } from "./limits.js";
 import { openZenodSqlite } from "./sqlite.js";
 
@@ -97,6 +97,12 @@ export function estimateCostUsd(report: LlmUsageReport): number {
   // Audio transcription is priced per minute by the caller, not per token; a call (EPIC-14 S8) is
   // priced from the Realtime API's audio and text tokens by memoryCall.ts.
   if (report.operation === "transcribe" || report.operation === "call") return report.estimatedCostUsd ?? 0;
+  // DeepSeek's own API (EPIC-14 S10 round 4): cache hits and misses at its published off-peak rate.
+  // The live charge (peak hours double) is recorded as provider_cost_usd by the call itself.
+  if (report.provider === "deepseek") {
+    const hit = report.cachedInputTokens;
+    return deepseekCostUsd({ model: report.model, hitTokens: hit, missTokens: Math.max(0, report.inputTokens - hit), outputTokens: report.outputTokens, at: Date.UTC(2026, 0, 3) });
+  }
   const rate = priceFor(report.model);
   if (!rate) return 0;
   const usd =
@@ -131,6 +137,8 @@ export interface UsageSummary {
   providerCostUsd: number;
   byOperation: UsageBucket[];
   byModel: UsageBucket[];
+  /** Spend per provider (real charge when reported, else estimate). */
+  byProvider: UsageBucket[];
 }
 
 /** One recorded LLM call, as returned by `UsageStore.timeline`. */
@@ -314,7 +322,7 @@ export class UsageStore {
     return featureTotals(rows);
   }
 
-  private aggregate(column: "operation" | "model", since: number): UsageBucket[] {
+  private aggregate(column: "operation" | "model" | "provider", since: number, cost = "cost_usd"): UsageBucket[] {
     const rows = this.db
       .prepare(
         `SELECT ${column} AS key,
@@ -323,7 +331,7 @@ export class UsageStore {
                 SUM(output_tokens) AS output_tokens,
                 SUM(cached_input_tokens) AS cached_input_tokens,
                 SUM(cache_creation_input_tokens) AS cache_creation_input_tokens,
-                SUM(cost_usd) AS cost_usd
+                SUM(${cost}) AS cost_usd
          FROM llm_usage INDEXED BY llm_usage_ts WHERE ts >= ?
          GROUP BY ${column}
          ORDER BY cost_usd DESC`,
@@ -439,6 +447,8 @@ export class UsageStore {
       providerCostUsd: (totals as unknown as { provider_cost_usd?: number }).provider_cost_usd ?? 0,
       byOperation: this.aggregate("operation", since),
       byModel: this.aggregate("model", since),
+      // EPIC-14 S10 round 4: what each provider (openrouter, deepseek) cost, at its real charge when reported.
+      byProvider: this.aggregate("provider", since, SPEND_SQL),
     };
   }
 

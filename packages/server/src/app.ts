@@ -62,6 +62,7 @@ import { prepareModel, transcribeAudio, transcriptionStatus, WHISPER_MODELS } fr
 import { transcriptPath } from "./executionTranscript.js";
 import { NotConfiguredError, Runtime, testGithub, testProviderKey } from "./runtime.js";
 import { PROVIDER_KEY, SETTING_KEYS, type Provider, type SettingKey } from "./settings.js";
+import { backgroundHealth } from "./backgroundRoute.js";
 import {
   runSyntheticChat,
   type ChatTestAuditStore,
@@ -327,7 +328,7 @@ export function createApp(runtime: Runtime, options: AppOptions = {}): Hono<{ Bi
   // --- public ---
 
   app.get("/api/health", (c) =>
-    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth() }),
+    c.json({ status: "ok", name: agent.name, version: VERSION, sha: resolvedGitSha(), eventLoop: eventLoopHealth(), background: backgroundHealth() }),
   );
 
   // Agent identity for the UI shell (title/subtitle) so the same UI renders
