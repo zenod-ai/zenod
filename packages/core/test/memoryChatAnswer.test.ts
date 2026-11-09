@@ -7,6 +7,7 @@ import { createEngine } from "../src/engine/engine.js";
 import { VaultRepo } from "../src/git/vaultRepo.js";
 import {
   checkMemoryChatAnswer,
+  memoryChatAboutNotes,
   memoryChatExcerpt,
   memoryChatFocus,
   memoryChatPrompt,
@@ -94,7 +95,9 @@ describe("memory chat answer protocol (E12-S1b)", () => {
     expect(system).toContain("NO_ANSWER");
     expect(prompt).toContain("[1] Spare key (Notes/Home/Spare key.md)");
     expect(prompt).toContain("[2] Car (Notes/Car.md)");
-    expect(prompt.endsWith("QUESTION\nWhere is the spare key?")).toBe(true);
+    expect(prompt).toContain("QUESTION\nWhere is the spare key?\n\n");
+    // E12-S32: the prompt ends by naming the parts of the reply, so the quotes are not left out.
+    expect(prompt.endsWith("then the SOURCES line and one quote line for every note number you cited.")).toBe(true);
     const long = `---\ntitle: x\n---\n${"filler words here. ".repeat(300)}The boiler was serviced by Rosa for 500 euros.${" more filler.".repeat(100)}`;
     const excerpt = memoryChatExcerpt(long, "The boiler was serviced by Rosa");
     expect(excerpt.length).toBeLessThan(1_900);
@@ -126,6 +129,39 @@ describe("answers stay on the asked note (E12-S16)", () => {
       checked: true, reason: null, cited: [2],
       text: "You wanted Airbnb prices:\n- One night, one week and one month [2].\n- In São Paulo, 300,000 euros near Paulista [2].",
     });
+  });
+
+  it("narrows an ABOUT line that names a neighbouring note to the asked one (E12-S32)", () => {
+    const output = [
+      "ABOUT [1], [2], [3]",
+      "You wanted Airbnb prices for one night, one week and one month [2].",
+      "",
+      "Regarding prices, you also said:",
+      "- Hell's Kitchen lofts sell for about 400,000 dollars [1].",
+      "- In São Paulo, 300,000 euros near Paulista [3].",
+      "SOURCES",
+      '[1] "Lofts in Hell\'s Kitchen sell for about 400,000 dollars"',
+      '[2] "the price of one night, one week and one month"',
+      '[3] "a budget of 300,000 euros near Paulista"',
+    ].join("\n");
+    // A question about what the person wanted: their own voice note, and the lead-in left with no points goes.
+    expect(checkMemoryChatAnswer(output, notes, { question: "What Airbnb prices did I want to know?" })).toEqual({
+      checked: true, reason: null, cited: [2], text: "You wanted Airbnb prices for one night, one week and one month [2].",
+    });
+    // The note the host read whole wins over the model's first; with no scope the ABOUT line stands as written.
+    expect(memoryChatAboutNotes([1, 3], notes, { question: "What do lofts cost?", picks: [3] })).toEqual([3]);
+    expect(memoryChatAboutNotes([1, 3], notes, { question: "What do lofts cost?" })).toEqual([1]);
+    expect(checkMemoryChatAnswer(output, notes).text).toContain("Hell's Kitchen");
+    // Questions over many notes keep every note named; the same note captured twice stays.
+    expect(memoryChatAboutNotes([1, 3], notes, { question: "What were my top topics?" })).toEqual([1, 3]);
+    const twice: MemoryChatContext[] = [...notes, { ...notes[1]!, n: 4, path: "Log/2026-11-08.md#^e-cccccc" }];
+    expect(memoryChatAboutNotes([2, 4], twice, { question: "What Airbnb prices did I want?" })).toEqual([2, 4]);
+  });
+
+  it("asks for one ABOUT note and fuller answers (E12-S32)", () => {
+    const { system } = memoryChatPrompt("How did I feel?", notes);
+    expect(system).toContain("almost always ONE note");
+    expect(system).toContain("four to eight points");
   });
 
   it("keeps the answer when the ABOUT line names no note the answer rests on, and reads NO_ANSWER after it", () => {
