@@ -123,6 +123,7 @@ Superseded from the history board: ZAL-4 #1061 (production gate) → A0/A5; ZAL-
 | 2026-11-09 | commits named under their rows | desk closes and worker commits | A16: d59c0ad ; A17: f2712e0, ec19bba ; Q4 follow-up desk closes: c39e072, 0669217 |
 | 2026-11-09 | decided by Delivery Manager: A18 opened ready from the infra-vps desk note | our checks re-read a 265 MB log every few minutes and burst VPS1 CPU at the hour marks; fixing our own load is tier do; rollback revert | desk/inbox/2026-11-09-infra-vps-vps1-load-spikes-zenod-probe-and-timelin.md, d6444350, row opened 5c05498, note answered b141b35 |
 | 2026-11-09 | accepted | Jordi approved ZAL-A14-A1 (one-time use of the relay admin key to mint the alerts-only key) and ZAL-A13-A1 (agents read the tester applications file only) | A14 mint run_039b6279; A13 read rule and private applications list run_0e46d4c7; each worker marks its ask consumed | b68941a7, 873fd0fe, A14 ask consumed 84cb5a2, agent_team confirmed 3f5c83b, note closed 5e56ee7 | when both report |
+| 2026-11-09 | commits named under their rows | worker spine commit | A19, A20: afd2a1b (live ba6b56e) |
 
 
 ## Spine Map
