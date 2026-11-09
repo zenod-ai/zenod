@@ -8,6 +8,7 @@ import {
   keepStatus,
   lookUpInMemory,
   MemoryChatError,
+  recordModeSwitch,
   presentAnswer,
   sendToMemory,
   talkFromHash,
@@ -74,6 +75,8 @@ type Turn =
       result: MemoryChatAnswer | null
       desk?: DeskState | null
       talk?: MemoryTalkReply | null
+      /** Zenod picked this reply's mode from the box (not a talk turn, not a redo). */
+      picked?: boolean
     }
   | { id: number; kind: "note"; text: string }
   | { id: number; kind: "voice-note"; seconds: number; keep: KeepState }
@@ -701,8 +704,10 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
   }, [startTalk])
 
   /** The label menu: redo the same message in another mode, in place of its reply. */
-  async function redo(id: number, message: string, mode: ChatMode) {
+  async function redo(id: number, message: string, mode: ChatMode, picked: MemorySendRoute | null = null) {
     if (sending) return
+    // E22-L3: each switch away from Zenod's pick is recorded, so the pick can be tuned from them.
+    if (picked) void recordModeSwitch(message, picked.action, picked.by, mode)
     if (mode !== "talk" && talkingRef.current) setTalking(null)
     replace(id, { kind: "pending", message, route: null, keep: null, memories: null, text: "" })
     const update = updatePendingOf(id)
@@ -761,6 +766,7 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
       replace(pendingId, {
         kind: "reply",
         message,
+        picked: true,
         route: sent.route,
         keep: !sent.kept
           ? sent.route.keep
@@ -851,7 +857,7 @@ export function MemoryChat({ call: callDeps }: { call?: { api?: CallApi; media?:
                   desk={turn.desk ?? null}
                   talk={turn.talk ?? null}
                   onDeskChoice={(choice) => void chooseDesk(turn.id, turn.route, choice)}
-                  onSwitch={(mode) => void redo(turn.id, turn.message, mode)}
+                  onSwitch={(mode) => void redo(turn.id, turn.message, mode, turn.picked ? turn.route : null)}
                 />
               )
             )}

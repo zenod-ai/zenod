@@ -79,6 +79,7 @@ import {
 } from "./memoryChat.js";
 import { ConsoleMemoryTreeCache } from "./consoleMemoryTree.js";
 import { parseTalkRequest, streamTalk, talkPersona } from "./memoryTalk.js";
+import { parseModeSwitch, recordModeSwitch } from "./modeSwitches.js";
 import { memoryGlance, MemoryGlanceCache } from "./memoryGlance.js";
 import { registerInboxRoutes } from "./inboxRoutes.js";
 import { registerPersonaRoutes } from "./personaRoutes.js";
@@ -1756,6 +1757,26 @@ export function createCustomerLayer(host: CustomerLayerHost, options: CustomerLa
     } catch (error) {
       console.warn(`[memory-keep] keep unavailable for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
       return c.json({ error: "keep unavailable" }, 503);
+    }
+  });
+
+  // EPIC-22 E22-L3: the person tapped a reply's label and redid the message another way. The
+  // switch is kept in their own data folder so the pick can be tuned from it (modeSwitches.ts).
+  app.post("/api/console/memory-switch", async (c) => {
+    const session = readCustomerSession(c, env);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const record = parseModeSwitch(await c.req.json().catch(() => null), new Date());
+    if (!record) return c.json({ error: "not a switch" }, 400);
+    const account = accounts.resolveActiveTenantForUser(session.user_id);
+    if (!account?.tenant_id) return c.json({ error: "no_account" }, 404);
+    const runtime = host.runtimeForAccount?.(account) ?? null;
+    if (!runtime) return c.json({ error: "tenant unavailable" }, 409);
+    try {
+      recordModeSwitch(runtime.dataDir, record);
+      return c.json({ ok: true }, 202);
+    } catch (error) {
+      console.warn(`[memory-switch] not recorded for ${account.tenant_id}: ${error instanceof Error ? error.message : String(error)}`);
+      return c.json({ error: "switch not recorded" }, 503);
     }
   });
 
