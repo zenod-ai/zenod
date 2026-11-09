@@ -372,9 +372,10 @@ describe("console memory chat routes (E12-S1)", () => {
       expect(blocked.status).toBe(429);
       expect(await blocked.json()).toMatchObject({ code: "ai_allowance_exhausted", message: expect.stringContaining("AI allowance") });
       expect(t.engines.get("tenant-a")!.askCalls).toHaveLength(0);
-      const keepBlocked = await t.call("POST", "/api/console/memory-keep", t.ada, { content: "keep me" });
-      expect(keepBlocked.status).toBe(429);
-      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+      // EPIC-14 S10: answers stop at the allowance, keeping does not; the question's words are kept too.
+      const keep = await t.call("POST", "/api/console/memory-keep", t.ada, { content: "keep me" });
+      expect(keep.status).toBe(202);
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(2);
 
       // Bob's ledger is his own: still under, so he is answered.
       expect((await t.call("POST", "/api/console/memory-chat", t.bob, { question: "notes" })).status).toBe(200);
@@ -385,6 +386,25 @@ describe("console memory chat routes (E12-S1)", () => {
       const midway = await t.call("POST", "/api/console/memory-chat", t.bob, { question: "notes" });
       expect(midway.status).toBe(429);
       expect(await midway.json()).toMatchObject({ code: "ai_allowance_exhausted", resetsAt });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("shows each customer only their own month's spend by feature, against the allowance (E14-S10)", async () => {
+    const t = await setup({ allowance: 3 });
+    try {
+      const a = t.runtimes.get("tenant-a")!;
+      a.usageStore.record({ operation: "classify", provider: "openrouter", model: "m", inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 0.9 });
+      a.usageStore.record({ operation: "answer", provider: "openrouter", model: "m", inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 0.06 }, Date.now(), "personas");
+      expect((await t.call("GET", "/api/console/usage")).status).toBe(401);
+      const mine = await (await t.call("GET", "/api/console/usage", t.ada)).json() as { allowanceUsd: number; percentageUsed: number; features: Array<{ id: string; spentUsd: number; costs: string; atCap: string }> };
+      expect(mine).toMatchObject({ allowanceUsd: 3, percentageUsed: 32 });
+      expect(mine.features.map((feature) => feature.id)).toEqual(["filing", "chat", "personas", "desk", "calls"]);
+      expect(mine.features.find((feature) => feature.id === "filing")).toMatchObject({ spentUsd: 0.9, atCap: expect.stringContaining("Never stops") });
+      expect(mine.features.find((feature) => feature.id === "personas")!.spentUsd).toBeCloseTo(0.06);
+      const bobs = await (await t.call("GET", "/api/console/usage", t.bob)).json() as { features: Array<{ spentUsd: number }> };
+      expect(bobs.features.every((feature) => feature.spentUsd === 0)).toBe(true);
     } finally {
       await t.close();
     }
@@ -515,8 +535,10 @@ describe("console memory chat routes (E12-S1)", () => {
       t.engines.get("tenant-a")!.routeSend = route;
       const blocked = await t.call("POST", "/api/console/memory-send/stream", t.ada, { message: "The shed is green." });
       expect(blocked.status).toBe(429);
+      expect(await blocked.json()).toMatchObject({ message: expect.stringContaining("still kept") });
       expect(route).not.toHaveBeenCalled();
-      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+      // EPIC-14 S10: nothing is decided, but the words are kept as a note.
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(1);
     } finally {
       await t.close();
     }
@@ -577,7 +599,7 @@ describe("console memory chat routes (E12-S1)", () => {
     }
   });
 
-  it("keeps a voice note out at the AI allowance (E14-S1)", async () => {
+  it("still takes a voice note at the AI allowance: capture is always kept (E14-S1, E14-S10)", async () => {
     const t = await setup({ allowance: 0.01 });
     try {
       t.runtimes.get("tenant-a")!.usageStore.record({
@@ -589,9 +611,8 @@ describe("console memory chat routes (E12-S1)", () => {
         headers: { cookie: await t.cookieFor(t.ada), "content-type": "audio/webm" },
         body: Buffer.from("audio"),
       });
-      expect(blocked.status).toBe(429);
-      expect(await blocked.json()).toMatchObject({ code: "ai_allowance_exhausted" });
-      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(0);
+      expect(blocked.status).toBe(202);
+      expect(t.runtimes.get("tenant-a")!.taskJobStore.recentCaptures(50)).toHaveLength(1);
     } finally {
       await t.close();
     }

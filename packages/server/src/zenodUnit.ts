@@ -3,6 +3,9 @@ import { eventLoopHealth } from "./eventLoopHealth.js";
 import type { HttpBindings } from "@hono/node-server";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { USAGE_FEATURES, usageView, zenodLimits } from "./limits.js";
+import { readFeatureSpend } from "./usageStore.js";
+import { nextUtcMonthlyReset } from "./customerMetering.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import {
@@ -1181,6 +1184,43 @@ export function createZenodUnit(options: CreateZenodUnitOptions) {
           currentPeriodEnd: account.current_period_end,
         })),
         generatedAt: new Date().toISOString(),
+      });
+    });
+    // EPIC-14 S10: this month's AI spend per feature per tenant, against each one's allowance and the
+    // limits model. Read straight from each tenant's usage file; no tenant runtime is booted for it.
+    app.get("/api/admin/usage", (c) => {
+      const now = Date.now();
+      const since = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
+      const allowanceUsd = tenantMonthlyAllowanceFromEnv(env);
+      const limits = zenodLimits();
+      const seen = new Set<string>();
+      const tenants = customer.accounts.list().flatMap((account) => {
+        if (!account.tenant_id || seen.has(account.tenant_id)) return [];
+        seen.add(account.tenant_id);
+        let path: string;
+        try {
+          path = join(storage.forTenant({ id: account.tenant_id }).rootDir, "usage.sqlite");
+        } catch {
+          return [];
+        }
+        const byFeature = readFeatureSpend(path, since);
+        const view = usageView({ byFeature: byFeature ?? {}, allowanceUsd, resetsAt: nextUtcMonthlyReset(now) }, limits);
+        return [{
+          tenantId: account.tenant_id,
+          githubLogin: account.github_login,
+          readable: byFeature !== null,
+          spentUsd: view.spentUsd,
+          percentageUsed: view.percentageUsed,
+          features: Object.fromEntries(view.features.map((feature) => [feature.id, { spentUsd: feature.spentUsd, state: feature.state }])),
+        }];
+      }).sort((left, right) => right.spentUsd - left.spentUsd);
+      return c.json({
+        month: new Date(since).toISOString().slice(0, 7),
+        allowanceUsd,
+        limits,
+        totals: Object.fromEntries(USAGE_FEATURES.map((feature) => [feature, tenants.reduce((sum, tenant) => sum + (tenant.features[feature]?.spentUsd ?? 0), 0)])),
+        tenants,
+        generatedAt: new Date(now).toISOString(),
       });
     });
     admin.mountRoutes?.(app);

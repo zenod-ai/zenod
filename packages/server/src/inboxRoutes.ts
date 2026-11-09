@@ -22,7 +22,8 @@ export interface InboxRuntime {
   readonly dataDir: string;
   readonly inboxDeskHooks?: import("./inboxStore.js").InboxDeskHooks;
   readonly tenantId?: string;
-  aiAllowanceBlock(): { message: string; resetsAt: string | null } | null;
+  /** The limits model's stop for a feature (limits.ts); the inbox only asks it for the memory desk. */
+  featureBlock(feature: "desk"): { message: string; resetsAt: string | null } | null;
   readonly taskJobQueue: { enqueue(kind: "store", input: { content: string; source: "web" }, idempotencyKey?: string): { id: string } } & Partial<DeskQueue>;
 }
 
@@ -87,8 +88,7 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
         return c.json({ item: view(inbox.answer(item.id, option.id, null)), needsYou: inbox.needsYouCount() });
       }
       if (!item.example) {
-        const block = found.runtime.aiAllowanceBlock();
-        if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
+        // Keeping the answer is filing, which the AI allowance never stops (EPIC-14 S10).
         const job = found.runtime.taskJobQueue.enqueue(
           "store",
           { content: inboxAnswerContent(item, option.label), source: "web" },
@@ -128,8 +128,6 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
       if (!toDesk) {
         let savedJobId: string | null = null;
         if (!item.example) {
-          const block = found.runtime.aiAllowanceBlock();
-          if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
           savedJobId = found.runtime.taskJobQueue.enqueue(
             "store",
             { content: inboxAnswerContent(item, words), source: "web" },
@@ -145,7 +143,7 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
         else inbox.addReply(item.id, { kind: "followup", text: words, followUpItemId: null });
         return done(item.id);
       }
-      const block = found.runtime.aiAllowanceBlock();
+      const block = found.runtime.featureBlock("desk");
       if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
       const queue = found.runtime.taskJobQueue;
       if (!queue.get || !queue.recent) return c.json({ error: "desk_unavailable", message: "The memory desk is not available here." }, 409);
@@ -196,7 +194,7 @@ export function registerInboxRoutes(app: Hono<any>, resolve: InboxResolve): void
     const request = typeof body.request === "string" ? body.request.trim() : "";
     if (!request) return c.json({ error: "invalid", message: "Say in a few words what the desk should do." }, 400);
     if (request.length > DESK_REQUEST_MAX_CHARS) return c.json({ error: "invalid", message: `Keep it under ${DESK_REQUEST_MAX_CHARS} characters.` }, 400);
-    const block = found.runtime.aiAllowanceBlock();
+    const block = found.runtime.featureBlock("desk");
     if (block) return c.json({ error: "ai_allowance_exhausted", code: "ai_allowance_exhausted", message: block.message, resetsAt: block.resetsAt }, 429);
     const queue = found.runtime.taskJobQueue;
     if (!queue.get || !queue.recent) return c.json({ error: "desk_unavailable", message: "The memory desk is not available here." }, 409);

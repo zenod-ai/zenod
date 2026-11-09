@@ -187,8 +187,8 @@ export function createVoiceNoteForwardServer(options: ForwardServerOptions): Mcp
     },
     async (args): Promise<ToolResult> => {
       if (Boolean(args.audioBase64) === Boolean(args.audioUrl)) return failure("invalid_input", "Send exactly one of audioBase64 or audioUrl.");
-      const block = runtime.aiAllowanceBlock();
-      if (block) return failure("ai_allowance_exhausted", "This Zenod has used its AI allowance for now; nothing was kept. Try again later.");
+      // Never refused for the AI allowance (EPIC-14 S10): filing runs past it, and far past it the queue
+      // still archives the audio raw.
       const key = forwardIdempotencyKey(tenantId, grant.clientId, args.idempotencyKey);
       let audio: Buffer;
       let contentType: string | null | undefined = args.mimeType;

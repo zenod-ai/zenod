@@ -145,20 +145,23 @@ function resetDateLabel(resetsAt: string | null): string | null {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-/** What a capped user is told (WhatsApp reply, MCP tool error, console) when their AI allowance is used up. */
+/**
+ * What a capped user is told (WhatsApp reply, MCP tool error, console) when answers stop at their AI
+ * allowance. Capture is always kept (EPIC-14 S10): the words they sent are kept as a note.
+ */
 export function aiAllowanceExhaustedMessage(resetsAt: string | null): string {
   const reset = resetDateLabel(resetsAt);
-  return "⚠️ You have used this month's AI allowance on your Zenod plan, so I can't process this message. "
-    + "It was not saved. "
-    + (reset ? `Your allowance resets on ${reset}; please send it again then.` : "Please send it again once your allowance resets.");
+  return "⚠️ You have used this month's AI allowance on your Zenod plan, so I can't answer questions "
+    + (reset ? `until ${reset}. ` : "until your allowance resets. ")
+    + "Everything you send is still kept in your memory.";
 }
 
-/** Media variant: the original is archived (no AI needed), but not transcribed, read or filed. */
+/** Media variant, far past the allowance: the original is archived (no AI needed), but not transcribed, read or filed. */
 export function aiAllowanceArchivedMediaMessage(resetsAt: string | null): string {
   const reset = resetDateLabel(resetsAt);
-  return "⚠️ You have used this month's AI allowance on your Zenod plan. "
+  return "⚠️ You have used well over this month's AI allowance on your Zenod plan. "
     + "I archived the original file, but did not read or file it into your memory. "
-    + (reset ? `Your allowance resets on ${reset}.` : "Filing resumes once your allowance resets.");
+    + (reset ? `Filing resumes on ${reset}.` : "Filing resumes once your allowance resets.");
 }
 
 export function projectCustomerUsage(

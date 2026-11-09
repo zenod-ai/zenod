@@ -1,6 +1,7 @@
 import type { Hit, MemoryEntry, MemoryEntryQuery, Note, PersonaNotesInput } from "zenod";
 import type { InboxItem, InboxLink, InboxOption, InboxStore } from "./inboxStore.js";
 import type { PersonaRun, PersonaRunEnd, PersonaStore, PersonaTrigger } from "./personaStore.js";
+import { zenodLimits } from "./limits.js";
 import { inTreeSweepWindow, treeSweepWeekStart, TREE_SWEEP_WINDOW_START_HOUR_UTC } from "./treeSweepSchedule.js";
 
 /**
@@ -169,8 +170,8 @@ export interface PersonaRunnerDeps {
   totalMonthUsd?: number;
 }
 
-/** $1 of the tenant's $3 monthly AI allowance (E7-A2), for all personas together. */
-export const PERSONA_TOTAL_MONTH_USD = 1;
+/** $1 of the tenant's $3 monthly AI allowance (E7-A2), for all personas together (limits.ts). */
+export const PERSONA_TOTAL_MONTH_USD = zenodLimits().personas.monthUsd;
 export const PERSONA_MAX_NOTES_PER_RUN = 5;
 export const PERSONA_MAX_POSTS_PER_RUN = 3;
 const MAX_NOTE_CHARS = 20_000;
@@ -278,7 +279,8 @@ export async function runPersona(
   const end = (status: PersonaRunEnd["status"], summary: string) => deps.store.finish(run.id, { ...tally, status, summary });
 
   const blocked = deps.aiAllowanceBlock?.();
-  if (blocked) return end("skipped", "The AI allowance for this month is used up");
+  // Paused at the allowance or its reserve (limits.ts): quietly, the run log says why.
+  if (blocked) return end("skipped", blocked.message || "The AI allowance for this month is used up");
   const budget = personaBudget(deps.store, persona, started, deps.totalMonthUsd);
   if (budget.totalUsd >= budget.totalCapUsd) return end("capped", "The personas' monthly budget is used up");
   if (budget.personaUsd >= budget.personaCapUsd) return end("capped", `${persona.name}'s monthly budget is used up`);

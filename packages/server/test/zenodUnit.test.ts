@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { UsageStore } from "../src/usageStore.js";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -1939,6 +1940,22 @@ describe("Zenod chassis unit", () => {
       expect(serialized).not.toContain("billing@example.test");
       expect(serialized).not.toContain("cus_secret");
       expect(serialized).not.toContain("plain-secret-token");
+
+      // EPIC-14 S10: the owner's view of this month's AI spend per feature per tenant, read from
+      // each tenant's own usage file; a customer gets nothing.
+      const ledger = new UsageStore(join(dataDir, "github-42", "usage.sqlite"));
+      ledger.record({ operation: "classify", provider: "openrouter", model: "m", inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 0.25 });
+      ledger.record({ operation: "call", provider: "openai", model: "m", inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, cacheCreationInputTokens: 0, providerCostUsd: 0.1 });
+      ledger.close();
+      expect((await unit.app.request("/api/admin/usage", { headers: { cookie: customerCookie } })).status).toBe(404);
+      const usage = await unit.app.request("/api/admin/usage", { headers: { cookie: ownerCookie } });
+      expect(usage.status).toBe(200);
+      const spend = await usage.json() as { tenants: Array<{ tenantId: string; readable: boolean; spentUsd: number; features: Record<string, { spentUsd: number }> }>; totals: Record<string, number>; limits: unknown };
+      expect(spend.tenants).toHaveLength(1);
+      expect(spend.tenants[0]).toMatchObject({ tenantId: "github-42", readable: true, features: { filing: { spentUsd: 0.25 }, calls: { spentUsd: 0.1 } } });
+      expect(spend.tenants[0]!.spentUsd).toBeCloseTo(0.35);
+      expect(spend.totals.filing).toBeCloseTo(0.25);
+      expect(spend.limits).toMatchObject({ personas: { monthUsd: 1 } });
     } finally {
       await unit.close();
     }

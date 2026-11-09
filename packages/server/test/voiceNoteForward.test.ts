@@ -279,8 +279,9 @@ describe("ingest_voice_note", () => {
     expect(await call({})).toMatchObject({ code: "invalid_input" });
     expect(await call({ audioBase64: AUDIO.toString("base64") })).toMatchObject({ code: "invalid_input" });
     expect(await call({ audioBase64: AUDIO.toString("base64"), mimeType: "video/mp4" })).toMatchObject({ code: "unsupported_audio" });
+    // EPIC-14 S10: a capped tenant's voice note is still taken; capture is always kept.
     h.block({ message: "capped", resetsAt: "2026-12-01T00:00:00Z" });
-    expect(await call({ audioBase64: AUDIO.toString("base64"), mimeType: "audio/ogg" })).toMatchObject({ code: "ai_allowance_exhausted" });
+    expect(await call({ idempotencyKey: "capped", audioBase64: AUDIO.toString("base64"), mimeType: "audio/ogg", transcript: "Kept anyway." })).toMatchObject({ duplicate: false });
     await client.close();
   });
 

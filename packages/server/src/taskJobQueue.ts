@@ -8,6 +8,7 @@ import {
 } from "zenod";
 import { recoverInterruptedFiling } from "./vaultRecovery.js";
 import { aiAllowanceArchivedMediaMessage } from "./customerMetering.js";
+import { withFeature, type UsageFeature } from "./limits.js";
 import { archiveRawArtifact, type ArtifactArchiveHandle } from "./artifactArchive.js";
 import { driveClientFromSettings } from "./drive.js";
 import { extractArtifact, isExtractableArtifactMimeType } from "./artifactExtraction.js";
@@ -72,12 +73,13 @@ export class TaskJobQueue {
     private readonly settings?: Settings,
     private readonly onCaptureComplete?: (result: StoreResult) => Promise<unknown> | void,
     /**
-     * The tenant's enforced AI allowance stop (null while AI work may run). Checked when a job starts so a
-     * capped tenant gets the reason as the job's answer, with no model call: chat completes with the
-     * message as its reply text (what a channel delivers verbatim), media is archived raw but not read or
-     * filed, and other kinds fail with the message.
+     * The tenant's enforced AI allowance stop for a feature (null while it may run; limits.ts). Checked
+     * when a job starts so a capped tenant gets the reason as the job's answer, with no model call: chat
+     * completes with the message as its reply text (what a channel delivers verbatim) and keeps a
+     * channel's words as a note, media is archived raw but not read or filed, a store always runs (the
+     * engine keeps the words even when filing is stopped), and other kinds fail with the message.
      */
-    private readonly aiAllowanceBlock?: () => { message: string; resetsAt: string } | null,
+    private readonly aiAllowanceBlock?: (feature: UsageFeature) => { message: string; resetsAt: string } | null,
     /** agent_team E42-S22: told (best effort, never awaited) when a capture is durably stored; see subscribers.ts. */
     private readonly onEntryStored?: EntryStoredListener,
   ) {}
@@ -210,7 +212,8 @@ export class TaskJobQueue {
       this.store.recoverExpiredRunning();
       let job: TaskJob | null;
       while ((job = this.store.claimNextQueued(Date.now(), kinds))) {
-        await this.process(job);
+        const claimed = job;
+        await withFeature(featureForJob(claimed.kind), () => this.process(claimed));
       }
     } finally {
       this.scheduleLeaseRecovery();
@@ -225,8 +228,12 @@ export class TaskJobQueue {
     leaseHeartbeat.unref?.();
     try {
       let completed = false;
-      // The tree sweep calls no model, so the AI allowance does not stop it.
-      const allowanceBlock = job.kind === "tree_sweep" ? null : this.aiAllowanceBlock?.() ?? null;
+      // The tree sweep calls no model, so the AI allowance does not stop it. A store is never stopped
+      // here: capture is always kept (EPIC-14 S10), and past the filing limit the engine keeps the
+      // words with filing pending when its model call is refused.
+      const allowanceBlock = job.kind === "tree_sweep" || job.kind === "store"
+        ? null
+        : this.aiAllowanceBlock?.(featureForJob(job.kind)) ?? null;
       if (job.kind === "tree_sweep") {
         completed = this.store.updateClaimed(job, { status: "done", result: await this.runTreeSweep(job) });
       } else if (allowanceBlock) {
@@ -379,6 +386,20 @@ export class TaskJobQueue {
   private async completeOverAllowance(job: TaskJob, block: { message: string; resetsAt: string }): Promise<boolean> {
     console.warn(`[task-job] ${job.id} stopped at the AI allowance: ${job.kind}`);
     if (job.kind === "chat") {
+      // Answers stopped, capture did not: a channel's or the app's words are kept as a note.
+      const source = job.input.source;
+      if ((source === "whatsapp" || source === "telegram" || source === "web") && job.input.text?.trim()) {
+        try {
+          this.enqueue("store", {
+            content: job.input.text,
+            source,
+            contentType: "text",
+            ...(job.input.capturedAt ? { capturedAt: job.input.capturedAt } : {}),
+          }, `${source}-keep:${job.idempotencyKey ?? job.id}`);
+        } catch (error) {
+          console.warn(`[task-job] ${job.id} could not keep the words while answers are stopped:`, (error as Error).message);
+        }
+      }
       const reply: Reply = { text: block.message, sources: [] };
       return this.store.updateClaimed(job, { status: "done", result: reply });
     }
@@ -916,4 +937,11 @@ function mediaIngestUnavailableReceipt(input: TaskJobInput, rawArtifact: Artifac
     digest: { evidenceRef: null, pagesTouched: [], revision: null, urls: [] },
     nextAdapterIssues: ["https://github.com/zenod-ai/zenod/issues/660", "https://github.com/zenod-ai/zenod/issues/661", "https://github.com/zenod-ai/zenod/issues/662"],
   };
+}
+
+/** The feature a job's model calls are counted and capped as (limits.ts). */
+export function featureForJob(kind: TaskJobKind): UsageFeature {
+  if (kind === "chat" || kind === "task") return "chat";
+  if (kind === "desk_job" || kind === "work") return "desk";
+  return "filing";
 }

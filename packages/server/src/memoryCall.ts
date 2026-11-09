@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import type { LlmUsageReport } from "zenod";
+import { zenodLimits } from "./limits.js";
 import { openZenodSqlite } from "./sqlite.js";
 
 /**
@@ -32,19 +33,19 @@ export const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
 /** The client key lives this long: enough to open the call, useless after. */
 export const KEY_TTL_S = 60;
 /** One call lasts at most this long; the voice warns a minute before. */
-export const CALL_MAX_S = 10 * 60;
-export const CALL_WARN_S = 9 * 60;
+export const CALL_MAX_S = Math.round(zenodLimits().calls.callMaxMinutes * 60);
+export const CALL_WARN_S = Math.max(0, CALL_MAX_S - 60);
 /** A call ends by itself after this long with nobody speaking. */
 export const QUIET_HANGUP_S = 60;
-/** Hard caps, in US$: one call, and all of one account's calls in a UTC month (inside the AI allowance). */
-export const CALL_CAP_USD = 0.5;
-export const MONTH_CAP_USD = 1;
+/** Hard caps, in US$: one call, and all of one account's calls in a UTC month (inside the AI allowance; limits.ts). */
+export const CALL_CAP_USD = zenodLimits().calls.callUsd;
+export const MONTH_CAP_USD = zenodLimits().calls.monthUsd;
 /**
  * All of Zenod's calls together stop at this much a UTC month (E14-A3: Zenod shares the team's OpenAI
  * key, agent-team-console's, which carries Jordi's $10 call credit; this keeps Zenod's share bounded
  * in Zenod's own meter, apart from the console's).
  */
-export const PLATFORM_MONTH_CAP_USD = 10;
+export const PLATFORM_MONTH_CAP_USD = zenodLimits().calls.allAccountsMonthUsd;
 /** The app name Zenod's calls are logged under, so its spend on the shared key shows apart. */
 export const CALL_APP = "zenod";
 /** Below this much left in the month no new call starts (a short call costs about this). */

@@ -42,6 +42,7 @@ import {
 } from "zenod";
 import { InboxError, inboxFor, type InboxDeskHooks } from "./inboxStore.js";
 import { channelTurn } from "./channelBrain.js";
+import { currentFeature, featureDecision, withFeature, zenodLimits, type UsageFeature } from "./limits.js";
 import { answerDeskQuestion, DeskLimitError, deskJobFailed, offerDeskJobFromChat, runDeskJob, settleDeskItems, undoDeskItem } from "./memoryDesk.js";
 import { aiAllowanceExhaustedMessage, nextUtcMonthlyReset } from "./customerMetering.js";
 import {
@@ -327,7 +328,7 @@ export class Runtime {
   readonly tenantId: string;
   private readonly tenantMonthlyAllowanceUsd: number | null;
   private readonly tenantAllowanceEnforced: boolean;
-  private allowanceCache: { at: number; spendUsd: number } | null = null;
+  private allowanceCache: { at: number; spendUsd: number; byFeature: Record<UsageFeature, number> } | null = null;
   private allowanceLoggedAt = 0;
   private readonly vaultBindingSource?: VaultProviderBindingSource;
   private readonly onVaultBindingUpdate?: (input: {
@@ -473,7 +474,7 @@ export class Runtime {
       text: formatFilingReceipt(result),
       severity: "info",
       dedupeKey: `filing:${result.revision?.provider ?? "legacy"}:${result.revision?.id ?? result.commitSha ?? result.evidenceRef}`,
-    }), () => this.aiAllowanceBlock(), this.subscriberDispatcher?.onEntryStored);
+    }), (feature) => this.featureBlock(feature), this.subscriberDispatcher?.onEntryStored);
     // EPIC-14 S3: the memory desk runs on this queue and reports in this tenant's inbox.
     this.taskJobQueue.setDeskHooks({
       run: (job, engine, assertActive) => runDeskJob(job, engine, inboxFor(this), assertActive),
@@ -1016,7 +1017,8 @@ export class Runtime {
         if (!engine.writePersonaNotes) throw new Error("this memory cannot take persona notes");
         return engine.writePersonaNotes(input);
       },
-      aiAllowanceBlock: () => this.aiAllowanceBlock(),
+      aiAllowanceBlock: () => this.featureBlock("personas"),
+      totalMonthUsd: zenodLimits().personas.monthUsd,
     }, trigger);
     if (run) console.log(`[persona] tenant=${this.tenantId} ${persona.id} ${run.trigger} ${run.status}: steps=${run.steps} calls=${run.modelCalls} tokens=${run.inputTokens}/${run.outputTokens} usd=${run.costUsd.toFixed(5)}`);
     return run;
@@ -1035,10 +1037,10 @@ export class Runtime {
       ...(this.settings.get("model_chat") ? { chatModel: this.settings.get("model_chat")! } : {}),
       ...(this.settings.llmBaseUrl() ? { baseUrl: this.settings.llmBaseUrl()! } : {}),
       ...(this.settings.platformLlmActive() && this.settings.openrouterUser()
-        ? { user: this.settings.openrouterUser()!, onBeforeCall: () => this.checkTenantAllowance() }
+        ? { user: this.settings.openrouterUser()!, onBeforeCall: () => withFeature("personas", () => this.checkTenantAllowance()) }
         : {}),
       onUsage: (report) => {
-        this.usageStore.record(report);
+        this.usageStore.record(report, Date.now(), "personas");
         last = { inputTokens: report.inputTokens, outputTokens: report.outputTokens, costUsd: report.providerCostUsd ?? estimateCostUsd(report) };
       },
     });
@@ -1169,7 +1171,8 @@ export class Runtime {
     if (allowance === null || !Number.isFinite(allowance) || allowance <= 0) return null;
     if (!this.settings.platformLlmActive()) return null;
     if (!this.allowanceCache || now - this.allowanceCache.at > 60_000 || now < this.allowanceCache.at) {
-      this.allowanceCache = { at: now, spendUsd: this.monthToDateSpendUsd(now) };
+      const since = startOfUtcMonth(now);
+      this.allowanceCache = { at: now, spendUsd: this.usageStore.spendSince(since), byFeature: this.usageStore.spendByFeatureSince(since) };
     }
     const spend = this.allowanceCache.spendUsd;
     return {
@@ -1181,12 +1184,35 @@ export class Runtime {
     };
   }
 
-  /** The user-facing stop when an enforced allowance is used up; null while AI work may run. Fails open. */
+  /** The user-facing stop for chat answers when an enforced allowance is used up; null while they may run. Fails open. */
   aiAllowanceBlock(now: number = Date.now()): { message: string; resetsAt: string } | null {
+    return this.featureBlock("chat", now);
+  }
+
+  /** This UTC month's spend by feature (filing, chat, personas, desk, calls), from the usage ledger. */
+  monthSpendByFeature(now: number = Date.now()): Record<UsageFeature, number> {
+    return this.usageStore.spendByFeatureSince(startOfUtcMonth(now));
+  }
+
+  /**
+   * One feature's stop under the limits model (limits.ts, EPIC-14 S10), or null while it may run:
+   * chat at the allowance, personas, desk and calls at their own share or once only the reserve is
+   * left, filing far past the allowance only (capture is kept even then). Applies where an enforced
+   * allowance applies (hosted platform key). Fails open.
+   */
+  featureBlock(feature: UsageFeature, now: number = Date.now()): { message: string; resetsAt: string; reason: "allowance" | "share" } | null {
     try {
       const status = this.aiAllowanceStatus(now);
-      if (!status?.enforced || !status.exhausted) return null;
-      return { message: aiAllowanceExhaustedMessage(status.resetsAt), resetsAt: status.resetsAt };
+      if (!status?.enforced) return null;
+      const decision = featureDecision(feature, {
+        totalUsd: status.spendUsd,
+        featureUsd: this.allowanceCache?.byFeature[feature] ?? 0,
+        allowanceUsd: status.allowanceUsd,
+        resetsAt: status.resetsAt,
+      });
+      if (decision.state !== "paused") return null;
+      const message = feature === "chat" ? aiAllowanceExhaustedMessage(status.resetsAt) : decision.message!;
+      return { message, resetsAt: status.resetsAt, reason: decision.reason ?? "allowance" };
     } catch {
       // A metering read failure must never stop a user's turn.
       return null;
@@ -1200,22 +1226,24 @@ export class Runtime {
    * (ZENOD_TENANT_ALLOWANCE_MODE=shadow) only logs. Any metering read failure fails open.
    */
   checkTenantAllowance(now: number = Date.now()): void {
+    // EPIC-14 S10: the call's feature (its context, else chat) decides where it stops; filing runs
+    // past the allowance, so a note's model calls go on while answers have stopped.
+    const feature = currentFeature() ?? "chat";
     let status: ReturnType<Runtime["aiAllowanceStatus"]>;
     try {
       status = this.aiAllowanceStatus(now);
     } catch {
       return;
     }
-    if (!status || status.spendUsd < status.allowanceUsd) return;
-    if (now - this.allowanceLoggedAt >= 3_600_000) {
+    if (!status) return;
+    if (status.spendUsd >= status.allowanceUsd && now - this.allowanceLoggedAt >= 3_600_000) {
       this.allowanceLoggedAt = now;
       console.warn(
-        `[llm.allowance.exceeded] tenant=${this.tenantId} month_to_date_usd=${status.spendUsd.toFixed(4)} allowance_usd=${status.allowanceUsd} mode=${status.enforced ? "enforce" : "shadow"}`,
+        `[llm.allowance.exceeded] tenant=${this.tenantId} month_to_date_usd=${status.spendUsd.toFixed(4)} allowance_usd=${status.allowanceUsd} mode=${status.enforced ? "enforce" : "shadow"} feature=${feature}`,
       );
     }
-    if (status.enforced) {
-      throw new LlmAllowanceExceededError(aiAllowanceExhaustedMessage(status.resetsAt), status.resetsAt);
-    }
+    const block = this.featureBlock(feature, now);
+    if (block) throw new LlmAllowanceExceededError(block.message, block.resetsAt);
   }
 
   private withJevClassification(llm: BrainLlm): BrainLlm {

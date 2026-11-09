@@ -80,7 +80,9 @@ describe("AI allowance config", () => {
     const message = aiAllowanceExhaustedMessage("2026-12-01T00:00:00.000Z");
     expect(message).toContain("used this month's AI allowance");
     expect(message).toContain("1 December 2026");
-    expect(message).toContain("not saved");
+    // EPIC-14 S10: answers stop, capture does not.
+    expect(message).toContain("still kept");
+    expect(message).not.toContain("not saved");
     expect(message).not.toMatch(/OpenRouter|\$|token|Phylax/i);
   });
 });
@@ -108,7 +110,7 @@ describe("Runtime AI allowance gate", () => {
 
       spend(runtime, 0.6);
       const later = NOW + 61_000; // past the 60s spend cache
-      expect(runtime.aiAllowanceBlock(later)).toEqual({ message: BLOCK.message, resetsAt: BLOCK.resetsAt });
+      expect(runtime.aiAllowanceBlock(later)).toMatchObject({ message: BLOCK.message, resetsAt: BLOCK.resetsAt });
       expect(() => runtime.checkTenantAllowance(later)).toThrow(LlmAllowanceExceededError);
       const logged = warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("llm.allowance.exceeded"));
       expect(logged).toHaveLength(1);
@@ -170,18 +172,20 @@ describe("TaskJobQueue over the AI allowance", () => {
     return { store, queue, getEngine };
   }
 
-  it("answers a chat turn with the reason and never starts the engine", async () => {
+  it("answers a chat turn with the reason, never asks the model, and keeps the words as a note", async () => {
     const chat = vi.fn();
-    const { store, queue, getEngine } = await queueWith(BLOCK, { chat } as Partial<BrainEngine>);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { store, queue } = await queueWith(BLOCK, { chat } as Partial<BrainEngine>);
+    const quiet = [vi.spyOn(console, "warn").mockImplementation(() => {}), vi.spyOn(console, "error").mockImplementation(() => {})];
     try {
       const job = queue.enqueue("chat", { text: "remember the blue lantern", source: "whatsapp", conversationKey: "whatsapp:1" }, "t:whatsapp:m1");
       const done = await waitTerminal(store, job.id);
       expect(done).toMatchObject({ status: "done", result: { text: BLOCK.message, sources: [] } });
-      expect(getEngine).not.toHaveBeenCalled();
       expect(chat).not.toHaveBeenCalled();
+      // EPIC-14 S10: capture is always kept, under the same key the channel brain keeps it with.
+      const kept = store.recent(10).find((other) => other.kind === "store");
+      expect(kept).toMatchObject({ input: { content: "remember the blue lantern", source: "whatsapp" }, idempotencyKey: "whatsapp-keep:t:whatsapp:m1" });
     } finally {
-      warn.mockRestore();
+      quiet.forEach((spy) => spy.mockRestore());
       await queue.close();
     }
   });
@@ -233,11 +237,11 @@ describe("TaskJobQueue over the AI allowance", () => {
   });
 
   it("fails other job kinds with the reason as the error", async () => {
-    const store_ = vi.fn();
-    const { store, queue, getEngine } = await queueWith(BLOCK, { store: store_ } as unknown as Partial<BrainEngine>);
+    const work = vi.fn();
+    const { store, queue, getEngine } = await queueWith(BLOCK, { work } as unknown as Partial<BrainEngine>);
     const quiet = [vi.spyOn(console, "warn").mockImplementation(() => {}), vi.spyOn(console, "error").mockImplementation(() => {})];
     try {
-      const job = queue.enqueue("store", { content: "a fact" });
+      const job = queue.enqueue("work", { objective: "tidy a topic" });
       expect(await waitTerminal(store, job.id)).toMatchObject({ status: "error", error: BLOCK.message });
       expect(getEngine).not.toHaveBeenCalled();
     } finally {

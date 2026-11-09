@@ -28,6 +28,8 @@ import { HostedLogin } from "@/views/HostedLogin"
 import { Settings } from "@/views/Settings"
 import { SetupWizard } from "@/views/SetupWizard"
 import type { ZenodEdition } from "@/views/zenod-edition"
+import type { UsageFeatureId } from "@/components/usage-by-feature"
+import { usd } from "@/lib/usage"
 
 type View =
   | { kind: "loading" }
@@ -304,16 +306,97 @@ interface ZenodAdminOverview {
   generatedAt: string
 }
 
+/** GET /api/admin/usage (EPIC-14 S10): this month's AI spend per feature per tenant. */
+interface ZenodAdminUsage {
+  month: string
+  allowanceUsd: number | null
+  totals: Record<UsageFeatureId, number>
+  tenants: Array<{
+    tenantId: string
+    githubLogin: string
+    readable: boolean
+    spentUsd: number
+    percentageUsed: number | null
+    features: Record<UsageFeatureId, { spentUsd: number; state: "ok" | "near" | "paused" }>
+  }>
+}
+
+const ADMIN_FEATURES: Array<[UsageFeatureId, string]> = [
+  ["filing", "Filing"],
+  ["chat", "Chat"],
+  ["personas", "Personas"],
+  ["desk", "Desk"],
+  ["calls", "Calls"],
+]
+
+function AdminUsageCard({ usage }: { usage: ZenodAdminUsage }) {
+  return (
+    <Card data-testid="admin-usage">
+      <CardHeader>
+        <CardTitle>AI spend by feature, {usage.month}</CardTitle>
+        <CardDescription>
+          Per tenant, against a{" "}
+          {usage.allowanceUsd === null ? "no" : usd(usage.allowanceUsd)}{" "}
+          monthly allowance. Paused features are marked.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full min-w-[680px] text-left text-sm tabular-nums">
+          <thead className="border-b text-muted-foreground">
+            <tr>
+              <th className="py-3 pr-4 font-medium">Tenant</th>
+              {ADMIN_FEATURES.map(([id, label]) => (
+                <th key={id} className="py-3 pr-4 font-medium">{label}</th>
+              ))}
+              <th className="py-3 font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {usage.tenants.map((tenant) => (
+              <tr key={tenant.tenantId} className="border-b last:border-0">
+                <td className="py-3 pr-4 font-medium">{tenant.githubLogin}</td>
+                {ADMIN_FEATURES.map(([id]) => (
+                  <td key={id} className="py-3 pr-4">
+                    {tenant.readable ? usd(tenant.features[id]?.spentUsd ?? 0) : "—"}
+                    {tenant.features[id]?.state === "paused" ? " · paused" : ""}
+                  </td>
+                ))}
+                <td className="py-3">
+                  {usd(tenant.spentUsd)}
+                  {tenant.percentageUsed !== null ? ` · ${tenant.percentageUsed}%` : ""}
+                </td>
+              </tr>
+            ))}
+            <tr className="font-medium">
+              <td className="py-3 pr-4">All tenants</td>
+              {ADMIN_FEATURES.map(([id]) => (
+                <td key={id} className="py-3 pr-4">{usd(usage.totals[id] ?? 0)}</td>
+              ))}
+              <td className="py-3">
+                {usd(Object.values(usage.totals).reduce((sum, value) => sum + value, 0))}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function ZenodAdmin() {
   const [overview, setOverview] = React.useState<ZenodAdminOverview | null>(
     null
   )
+  const [usage, setUsage] = React.useState<ZenodAdminUsage | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     api<ZenodAdminOverview>("/api/admin/overview")
       .then(setOverview)
       .catch((cause: unknown) => setError(errorMessage(cause)))
+    api<ZenodAdminUsage>("/api/admin/usage")
+      .then(setUsage)
+      .catch(() => {})
   }, [])
 
   return (
@@ -432,6 +515,7 @@ export function ZenodAdmin() {
                 </table>
               </CardContent>
             </Card>
+            {usage ? <AdminUsageCard usage={usage} /> : null}
           </>
         )}
       </main>
