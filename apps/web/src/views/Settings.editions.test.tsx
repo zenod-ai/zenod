@@ -115,7 +115,8 @@ describe("Zenod edition portal", () => {
   })
 
   it("opens an old ?tab= link in its new home (EPIC-22)", async () => {
-    mocks.api.mockResolvedValue(overview())
+    // Only the overview answers; the panels' own calls stay pending.
+    mocks.api.mockImplementation((path: string) => (path === "/api/overview" ? Promise.resolve(overview()) : new Promise(() => {})))
     window.history.replaceState(null, "", "/?tab=usage")
     render(
       <Settings
@@ -126,8 +127,8 @@ describe("Zenod edition portal", () => {
     )
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Usage & plan" }).getAttribute("aria-current")).toBe("true")
+      expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
     })
-    expect(screen.getByRole("tab", { name: "Settings" }).getAttribute("data-state")).toBe("active")
     window.history.replaceState(null, "", "/")
   })
 

@@ -481,6 +481,7 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
 .zp-chip-still { display: inline-block; border-radius: 999px; cursor: default; }
 .zp-direct, .zp-who { font-size: 0.86rem; color: var(--zp-faint); }
 .zp-modemenu { position: absolute; z-index: 20; top: calc(100% + 0.35rem); left: 0; width: min(17rem, 80vw); display: flex; flex-direction: column; background: var(--zp-bg); border: 1px solid var(--zp-line); border-radius: 8px; padding: 0.4rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
+.zp-modemenu-up { top: auto; bottom: calc(100% + 0.35rem); }
 .zp-modemenu-k { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--zp-faint); padding: 0.3rem 0.55rem; }
 .zp .zp-modemenu button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 0.1rem; padding: 0.45rem 0.55rem; border-radius: 6px; }
 .zp .zp-modemenu button:hover, .zp .zp-modemenu button:focus-visible { background: var(--zp-stage); }
@@ -514,6 +515,13 @@ svg.zp-gcompact .zp-gstrength { font-size: 20px; }
 @media (max-width: 900px) {
   .zg-grid { grid-template-columns: minmax(0, 1fr); }
   .zg-totals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  /* Five tabs fit a phone: words only, the gear alone. */
+  .zl-tabs [data-slot="tabs-trigger"] > svg { display: none; }
+  .zl-tabs .zl-gear > svg { display: inline-block; }
+  .zl-tabs .zl-gear .zl-gear-word { display: none; }
+  .zl-tabs [data-slot="tabs-trigger"] { padding-left: 0.45rem; padding-right: 0.45rem; }
 }
 @media (max-width: 480px) {
   .zg-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }

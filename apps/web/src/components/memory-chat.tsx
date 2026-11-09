@@ -430,6 +430,8 @@ export function replyModes(route: MemorySendRoute, result: MemoryChatAnswer | nu
 /** The label on a reply; a tap opens "Do it another way" and redoes the message in the mode picked. */
 function ModeChip({ modes, onSwitch }: { modes: ChatMode[]; onSwitch: (mode: ChatMode) => void }) {
   const [open, setOpen] = React.useState(false)
+  // Near the bottom of the chat the menu opens upward, so the scrolling log never cuts it off.
+  const [up, setUp] = React.useState(false)
   const ref = React.useRef<HTMLSpanElement>(null)
   React.useEffect(() => {
     if (!open) return
@@ -454,13 +456,18 @@ function ModeChip({ modes, onSwitch }: { modes: ChatMode[]; onSwitch: (mode: Cha
         data-testid="memory-mode"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
+        onClick={() => {
+          const log = ref.current?.closest(".zp-log")?.getBoundingClientRect()
+          const at = ref.current?.getBoundingClientRect()
+          setUp(Boolean(log && at && at.bottom > log.top + log.height / 2))
+          setOpen((was) => !was)
+        }}
       >
         {modes.map((mode) => CHAT_MODES[mode].label).join(" · ")}
         <span aria-hidden="true"> ▾</span>
       </button>
       {open ? (
-        <span className="zp-modemenu" role="menu" aria-label="Do it another way">
+        <span className={up ? "zp-modemenu zp-modemenu-up" : "zp-modemenu"} role="menu" aria-label="Do it another way">
           <span className="zp-modemenu-k">Do it another way</span>
           {MODE_ORDER.map((mode) => (
             <button

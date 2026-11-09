@@ -228,7 +228,7 @@ export function HostedApp({
           })}
           <TabsTrigger value="settings" className="zl-gear" aria-label="Settings">
             <SettingsIcon />
-            Settings
+            <span className="zl-gear-word">Settings</span>
           </TabsTrigger>
         </TabsList>
         {/* The chat stays mounted: a talk or an answer is still there after a look at Memory. */}
