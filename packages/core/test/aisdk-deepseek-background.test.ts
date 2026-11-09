@@ -44,6 +44,10 @@ it("sends filing to api.deepseek.com with the tenant as user_id, thinking off fo
   expect(requests[0]!.body.user_id).toBe("tenant-1");
   expect(requests[0]!.body.thinking).toEqual({ type: "disabled" });
   expect(requests[0]!.body).not.toHaveProperty("reasoning_effort");
+  // DeepSeek takes json_object only; the schema travels in the system prompt (S11: json_schema was refused in production).
+  expect(requests[0]!.body.response_format).toEqual({ type: "json_object" });
+  const system = requests[0]!.body.messages.find((message: { role: string }) => message.role === "system");
+  expect(system.content).toMatch(/Reply with one json object only[\s\S]*"topics"/);
   expect(reports).toHaveLength(1);
   expect(reports[0]!.provider).toBe("deepseek");
   expect(reports[0]!.operation).toBe("classify");
@@ -145,4 +149,15 @@ it("records each provider call's wall time with its usage (S11)", async () => {
   expect(reports).toHaveLength(1);
   expect(typeof reports[0]!.latencyMs).toBe("number");
   expect(reports[0]!.latencyMs).toBeGreaterThanOrEqual(0);
+});
+
+it("keeps the provider status when a filing step wraps the DeepSeek error, so the fallback log names it (S11)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "This response_format type is unavailable now", type: "invalid_request_error" } }), { status: 400, headers: { "content-type": "application/json" } })));
+  const deepseek = createBrainLlm({ provider: "deepseek", apiKey: "offline-unused" });
+  const calls: string[] = [];
+  const events: Array<{ method: string; status: number | null; parked: boolean }> = [];
+  const llm = withBackgroundRoute(fakeLlm("openrouter", calls), deepseek, { filing: true, desk: true, onFallback: (event) => events.push(event) });
+  await llm.classify(classifyInput as any);
+  expect(calls).toEqual(["openrouter.classify"]);
+  expect(events).toEqual([{ method: "classify", status: 400, parked: false }]);
 });

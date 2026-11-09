@@ -505,6 +505,24 @@ function createModelFactory(provider: Provider, apiKey: string, providerOrder?: 
   return apiFormat === "responses" ? (id: string) => compatible.responses(id) : (id: string) => compatible.chat(id);
 }
 
+/**
+ * DeepSeek's API takes `response_format: json_object` only (api-docs.deepseek.com/guides/json_mode);
+ * the AI SDK asks for strict `json_schema`, which DeepSeek refuses, so every structured call (filing)
+ * failed and fell back to OpenRouter (EPIC-14 S11, production 2026-11-09). Ask for JSON mode and give
+ * the schema in the system prompt instead; the SDK still validates the reply against the schema.
+ */
+export function deepseekJsonMode(body: Record<string, unknown>): void {
+  const format = body.response_format as { type?: unknown; json_schema?: { schema?: unknown } } | undefined;
+  if (format?.type !== "json_schema") return;
+  const instruction = "Reply with one json object only, no prose and no code fences, valid against this JSON schema:\n" + JSON.stringify(format.json_schema?.schema ?? {});
+  body.response_format = { type: "json_object" };
+  const messages = Array.isArray(body.messages) ? [...body.messages] as Array<Record<string, unknown>> : [];
+  const first = messages[0];
+  if (first?.role === "system" && typeof first.content === "string") messages[0] = { ...first, content: `${first.content}\n\n${instruction}` };
+  else messages.unshift({ role: "system", content: instruction });
+  body.messages = messages;
+}
+
 /** Stamps each captured usage with the request's wall time (EPIC-14 S11: latency per provider). */
 function timed(onProviderUsage: (u: ProviderCallUsage) => void, started: number): (u: ProviderCallUsage) => void {
   return (u) => onProviderUsage({ ...u, latencyMs: Date.now() - started });
@@ -543,6 +561,7 @@ function deepseekSeam(baseURL: string, onProviderUsage?: (u: ProviderCallUsage) 
     const patched: Record<string, unknown> = { ...body };
     if (patched.stream === true) patched.stream_options = { include_usage: true, ...(body.stream_options as object | undefined) };
     if (user) patched.user_id = user;
+    deepseekJsonMode(patched);
     if (patched.reasoning_effort === "none") {
       delete patched.reasoning_effort;
       patched.thinking = { type: "disabled" };
@@ -1182,7 +1201,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       // The engine safely saves to Inbox after exhausted attempts. Preserve enough
       // operator detail to diagnose why, without logging the model text or values.
       console.warn("[classify] " + JSON.stringify(classificationDiagnostic(err)));
-      throw new Error(structured ? "classify: structured_output_invalid" : "classify: provider_error");
+      throw new Error(structured ? "classify: structured_output_invalid" : "classify: provider_error", { cause: err });
     }
     const { object, usage, providerMetadata } = result;
     this.reportUsage("classify", this.classifyModelId, usage, providerMetadata);
@@ -1246,7 +1265,7 @@ export class AiSdkBrainLlm implements BrainLlm, TurnPlanCompiler {
       return result.object.operations;
     } catch (error) {
       this.reportUsage("compose", this.classifyModelId, NoObjectGeneratedError.isInstance(error) ? error.usage : undefined, undefined, {status:"failed",errorCode:"reconciliation_unavailable"});
-      throw new Error("reconciliation_unavailable");
+      throw new Error("reconciliation_unavailable", { cause: error });
     }
   }
 
