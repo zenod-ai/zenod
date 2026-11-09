@@ -51,7 +51,7 @@ Steps: each is independently testable and closes only with evidence.
 
 | Issue | Role | Owner / Assignment | Title | Status | Depends On | PR/Branch | Base | Latest Evidence | Last Verified | Next Action |
 |---|---|---|---|---|---|---|---|---|---|---|
-| U1 | Ticket worker | unassigned | E23-1: walk the whole new-user path on production as a stranger would and list every onboarding blocker on one page, with owner and state; fix every blocker agents can fix | ready | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
+| U1 | Ticket worker | run_b87fdf63-fc99-4576-88df-9f871a385785 — claimed 2026-11-09T23:23Z, lease until 2026-11-10T01:23Z | E23-1: walk the whole new-user path on production as a stranger would and list every onboarding blocker on one page, with owner and state; fix every blocker agents can fix | active | none | none | main | none | 2026-11-10 | dispatched 2026-11-10 |
 | U2 | Ticket worker | unassigned | E23-2: pick and onboard the first test user from the applications, then watch the first 7 days | draft | U1 | none | main | none | 2026-11-10 | after U1; picking and inviting a person is Jordi's call (ask) |
 | U3 | Ticket worker | unassigned | E23-3, E23-4: five, then ten testers | draft | U2 | none | main | none | 2026-11-10 | after U2 |
 
