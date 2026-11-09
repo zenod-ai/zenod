@@ -103,6 +103,7 @@ Verified at: 2026-11-09T05:10Z (child Current States and ledgers read from main;
 | untangle-idealista-and-poly-maker-in-the-memory | child | [EPIC-19: Untangle Idealista and Poly-Maker in the memory](untangle-idealista-and-poly-maker-in-the.md) | none | draft | none | fill Goal, Serves and Done means |
 | whatsapp-first-class-again-same-brain-as-the-chat | child | [EPIC-20: WhatsApp first-class again: same brain as the chat](whatsapp-first-class-again-same-brain-as.md) | none | draft | none | fill Goal, Serves and Done means |
 | one-home-for-all-your-voice-notes-other-apps-forward-to-zenod | child | [EPIC-21: One home for all your voice notes: other apps forward to Zenod](one-home-for-all-your-voice-notes-other.md) | none | draft | none | fill Goal, Serves and Done means |
+| zenod-is-the-librarian-of-your-memory-four-clear-modes | child | [EPIC-22: Zenod is the librarian of your memory: four clear modes](zenod-is-the-librarian-of-your-memory-fo.md) | none | draft | none | fill Goal, Serves and Done means |
 
 Full pre-2026-10-24 rows (purpose, evidence, last rollup): [history](archive/EPIC-0-FOUNDATION-HISTORY-2026-10.md#spine-map).
 
